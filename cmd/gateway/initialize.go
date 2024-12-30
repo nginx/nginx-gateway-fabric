@@ -8,9 +8,9 @@ import (
 
 	"github.com/go-logr/logr"
 
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
 )
 
 const (
@@ -58,7 +58,7 @@ func initialize(cfg initializeConfig) error {
 		return fmt.Errorf("failed to generate deployment context file: %w", err)
 	}
 
-	if err := file.WriteFile(cfg.fileManager, depCtxFile); err != nil {
+	if err := file.Write(cfg.fileManager, depCtxFile); err != nil {
 		return fmt.Errorf("failed to write deployment context file: %w", err)
 	}
 
