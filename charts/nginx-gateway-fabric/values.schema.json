@@ -287,6 +287,20 @@
           "title": "plus",
           "type": "boolean"
         },
+        "securityContext": {
+          "properties": {
+            "allowPrivilegeEscalation": {
+              "default": false,
+              "description": "Some environments may need this set to true in order for the control plane to successfully reload NGINX.",
+              "required": [],
+              "title": "allowPrivilegeEscalation",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "securityContext",
+          "type": "object"
+        },
         "usage": {
           "description": "Configuration for NGINX Plus usage reporting.",
           "properties": {
@@ -505,7 +519,7 @@
           "type": "object"
         },
         "readinessProbe": {
-          "description": "# Defines the settings for the control plane readiness probe. This probe returns Ready when the controller\n# has started and configured NGINX to serve traffic.",
+          "description": "# Defines the settings for the control plane readiness probe. This probe returns Ready when the controller\n# has started and is ready to configure NGINX.",
           "properties": {
             "enable": {
               "default": true,
@@ -548,18 +562,17 @@
           "title": "resources",
           "type": "object"
         },
-        "securityContext": {
+        "service": {
           "properties": {
-            "allowPrivilegeEscalation": {
-              "default": false,
-              "description": "Some environments may need this set to true in order for the control plane to successfully reload NGINX.",
+            "annotations": {
+              "description": "The annotations of the NGINX Gateway Fabric control plane service.",
               "required": [],
-              "title": "allowPrivilegeEscalation",
-              "type": "boolean"
+              "title": "annotations",
+              "type": "object"
             }
           },
           "required": [],
-          "title": "securityContext",
+          "title": "service",
           "type": "object"
         },
         "snippetsFilters": {

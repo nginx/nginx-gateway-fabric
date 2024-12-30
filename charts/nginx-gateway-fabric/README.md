@@ -268,6 +268,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginx.image.tag` |  | string | `"edge"` |
 | `nginx.lifecycle` | The lifecycle of the nginx container. | object | `{}` |
 | `nginx.plus` | Is NGINX Plus image being used | bool | `false` |
+| `nginx.securityContext.allowPrivilegeEscalation` | Some environments may need this set to true in order for the control plane to successfully reload NGINX. | bool | `false` |
 | `nginx.usage.caSecretName` | The name of the Secret containing the NGINX Instance Manager CA certificate. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `""` |
 | `nginx.usage.clientSSLSecretName` | The name of the Secret containing the client certificate and key for authenticating with NGINX Instance Manager. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `""` |
 | `nginx.usage.endpoint` | The endpoint of the NGINX Plus usage reporting server. Default: product.connect.nginx.com | string | `""` |
@@ -295,7 +296,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.readinessProbe.port` | Port in which the readiness endpoint is exposed. | int | `8081` |
 | `nginxGateway.replicaCount` | The number of replicas of the NGINX Gateway Fabric Deployment. | int | `1` |
 | `nginxGateway.resources` | The resource requests and/or limits of the nginx-gateway container. | object | `{}` |
-| `nginxGateway.securityContext.allowPrivilegeEscalation` | Some environments may need this set to true in order for the control plane to successfully reload NGINX. | bool | `false` |
+| `nginxGateway.service.annotations` | The annotations of the NGINX Gateway Fabric control plane service. | object | `{}` |
 | `nginxGateway.snippetsFilters.enable` | Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the generated NGINX config for HTTPRoute and GRPCRoute resources. | bool | `false` |
 | `nodeSelector` | The nodeSelector of the NGINX Gateway Fabric pod. | object | `{}` |
 | `service.annotations` | The annotations of the NGINX Gateway Fabric service. | object | `{}` |

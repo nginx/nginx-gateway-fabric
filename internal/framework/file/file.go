@@ -4,10 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
-
-	"github.com/go-logr/logr"
 )
 
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
@@ -49,13 +46,8 @@ type File struct {
 
 //counterfeiter:generate . OSFileManager
 
-// OSFileManager is an interface that exposes File I/O operations for ManagerImpl.
-// Used for unit testing.
+// OSFileManager is an interface that exposes File I/O operations.
 type OSFileManager interface {
-	// ReadDir returns the directory entries for the directory.
-	ReadDir(dirname string) ([]fs.DirEntry, error)
-	// Remove file with given name.
-	Remove(name string) error
 	// Create file at the provided filepath.
 	Create(name string) (*os.File, error)
 	// Chmod sets the mode of the file.
@@ -68,68 +60,7 @@ type OSFileManager interface {
 	Copy(dst io.Writer, src io.Reader) error
 }
 
-//counterfeiter:generate . Manager
-
-// Manager manages NGINX configuration files.
-type Manager interface {
-	// ReplaceFiles replaces the files on the file system with the given files removing any previous files.
-	ReplaceFiles(files []File) error
-}
-
-// ManagerImpl is an implementation of Manager.
-// Note: It is not thread safe.
-type ManagerImpl struct {
-	logger           logr.Logger
-	osFileManager    OSFileManager
-	lastWrittenPaths []string
-}
-
-// NewManagerImpl creates a new NewManagerImpl.
-func NewManagerImpl(logger logr.Logger, osFileManager OSFileManager) *ManagerImpl {
-	return &ManagerImpl{
-		logger:        logger,
-		osFileManager: osFileManager,
-	}
-}
-
-// ReplaceFiles replaces the files on the file system with the given files removing any previous files.
-// It panics if a file type is unknown.
-func (m *ManagerImpl) ReplaceFiles(files []File) error {
-	for _, path := range m.lastWrittenPaths {
-		if err := m.osFileManager.Remove(path); err != nil {
-			if os.IsNotExist(err) {
-				m.logger.Info(
-					"File not found when attempting to delete",
-					"path", path,
-					"error", err,
-				)
-				continue
-			}
-			return fmt.Errorf("failed to delete file %q: %w", path, err)
-		}
-
-		m.logger.V(1).Info("Deleted file", "path", path)
-	}
-
-	// In some cases, NGINX reads files in runtime, like a JWK. If you remove such file, NGINX will fail
-	// any request (return 500 status code) that involves reading the file.
-	// However, we don't have such files yet, so we're not considering this case.
-
-	m.lastWrittenPaths = make([]string, 0, len(files))
-
-	for _, file := range files {
-		if err := WriteFile(m.osFileManager, file); err != nil {
-			return fmt.Errorf("failed to write file %q of type %v: %w", file.Path, file.Type, err)
-		}
-
-		m.lastWrittenPaths = append(m.lastWrittenPaths, file.Path)
-		m.logger.V(1).Info("Wrote file", "path", file.Path)
-	}
-
-	return nil
-}
-
-func WriteFile(fileMgr OSFileManager, file File) error {
+func Write(fileMgr OSFileManager, file File) error {
 	ensureType(file.Type)
 
 	f, err := fileMgr.Create(file.Path)
