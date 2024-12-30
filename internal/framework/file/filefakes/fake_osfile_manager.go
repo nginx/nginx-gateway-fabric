@@ -3,11 +3,10 @@ package filefakes
 
 import (
 	"io"
-	"io/fs"
 	"os"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
 )
 
 type FakeOSFileManager struct {
@@ -60,30 +59,6 @@ type FakeOSFileManager struct {
 	openReturnsOnCall map[int]struct {
 		result1 *os.File
 		result2 error
-	}
-	ReadDirStub        func(string) ([]fs.DirEntry, error)
-	readDirMutex       sync.RWMutex
-	readDirArgsForCall []struct {
-		arg1 string
-	}
-	readDirReturns struct {
-		result1 []fs.DirEntry
-		result2 error
-	}
-	readDirReturnsOnCall map[int]struct {
-		result1 []fs.DirEntry
-		result2 error
-	}
-	RemoveStub        func(string) error
-	removeMutex       sync.RWMutex
-	removeArgsForCall []struct {
-		arg1 string
-	}
-	removeReturns struct {
-		result1 error
-	}
-	removeReturnsOnCall map[int]struct {
-		result1 error
 	}
 	WriteStub        func(*os.File, []byte) error
 	writeMutex       sync.RWMutex
@@ -353,131 +328,6 @@ func (fake *FakeOSFileManager) OpenReturnsOnCall(i int, result1 *os.File, result
 	}{result1, result2}
 }
 
-func (fake *FakeOSFileManager) ReadDir(arg1 string) ([]fs.DirEntry, error) {
-	fake.readDirMutex.Lock()
-	ret, specificReturn := fake.readDirReturnsOnCall[len(fake.readDirArgsForCall)]
-	fake.readDirArgsForCall = append(fake.readDirArgsForCall, struct {
-		arg1 string
-	}{arg1})
-	stub := fake.ReadDirStub
-	fakeReturns := fake.readDirReturns
-	fake.recordInvocation("ReadDir", []interface{}{arg1})
-	fake.readDirMutex.Unlock()
-	if stub != nil {
-		return stub(arg1)
-	}
-	if specificReturn {
-		return ret.result1, ret.result2
-	}
-	return fakeReturns.result1, fakeReturns.result2
-}
-
-func (fake *FakeOSFileManager) ReadDirCallCount() int {
-	fake.readDirMutex.RLock()
-	defer fake.readDirMutex.RUnlock()
-	return len(fake.readDirArgsForCall)
-}
-
-func (fake *FakeOSFileManager) ReadDirCalls(stub func(string) ([]fs.DirEntry, error)) {
-	fake.readDirMutex.Lock()
-	defer fake.readDirMutex.Unlock()
-	fake.ReadDirStub = stub
-}
-
-func (fake *FakeOSFileManager) ReadDirArgsForCall(i int) string {
-	fake.readDirMutex.RLock()
-	defer fake.readDirMutex.RUnlock()
-	argsForCall := fake.readDirArgsForCall[i]
-	return argsForCall.arg1
-}
-
-func (fake *FakeOSFileManager) ReadDirReturns(result1 []fs.DirEntry, result2 error) {
-	fake.readDirMutex.Lock()
-	defer fake.readDirMutex.Unlock()
-	fake.ReadDirStub = nil
-	fake.readDirReturns = struct {
-		result1 []fs.DirEntry
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *FakeOSFileManager) ReadDirReturnsOnCall(i int, result1 []fs.DirEntry, result2 error) {
-	fake.readDirMutex.Lock()
-	defer fake.readDirMutex.Unlock()
-	fake.ReadDirStub = nil
-	if fake.readDirReturnsOnCall == nil {
-		fake.readDirReturnsOnCall = make(map[int]struct {
-			result1 []fs.DirEntry
-			result2 error
-		})
-	}
-	fake.readDirReturnsOnCall[i] = struct {
-		result1 []fs.DirEntry
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *FakeOSFileManager) Remove(arg1 string) error {
-	fake.removeMutex.Lock()
-	ret, specificReturn := fake.removeReturnsOnCall[len(fake.removeArgsForCall)]
-	fake.removeArgsForCall = append(fake.removeArgsForCall, struct {
-		arg1 string
-	}{arg1})
-	stub := fake.RemoveStub
-	fakeReturns := fake.removeReturns
-	fake.recordInvocation("Remove", []interface{}{arg1})
-	fake.removeMutex.Unlock()
-	if stub != nil {
-		return stub(arg1)
-	}
-	if specificReturn {
-		return ret.result1
-	}
-	return fakeReturns.result1
-}
-
-func (fake *FakeOSFileManager) RemoveCallCount() int {
-	fake.removeMutex.RLock()
-	defer fake.removeMutex.RUnlock()
-	return len(fake.removeArgsForCall)
-}
-
-func (fake *FakeOSFileManager) RemoveCalls(stub func(string) error) {
-	fake.removeMutex.Lock()
-	defer fake.removeMutex.Unlock()
-	fake.RemoveStub = stub
-}
-
-func (fake *FakeOSFileManager) RemoveArgsForCall(i int) string {
-	fake.removeMutex.RLock()
-	defer fake.removeMutex.RUnlock()
-	argsForCall := fake.removeArgsForCall[i]
-	return argsForCall.arg1
-}
-
-func (fake *FakeOSFileManager) RemoveReturns(result1 error) {
-	fake.removeMutex.Lock()
-	defer fake.removeMutex.Unlock()
-	fake.RemoveStub = nil
-	fake.removeReturns = struct {
-		result1 error
-	}{result1}
-}
-
-func (fake *FakeOSFileManager) RemoveReturnsOnCall(i int, result1 error) {
-	fake.removeMutex.Lock()
-	defer fake.removeMutex.Unlock()
-	fake.RemoveStub = nil
-	if fake.removeReturnsOnCall == nil {
-		fake.removeReturnsOnCall = make(map[int]struct {
-			result1 error
-		})
-	}
-	fake.removeReturnsOnCall[i] = struct {
-		result1 error
-	}{result1}
-}
-
 func (fake *FakeOSFileManager) Write(arg1 *os.File, arg2 []byte) error {
 	var arg2Copy []byte
 	if arg2 != nil {
@@ -556,10 +406,6 @@ func (fake *FakeOSFileManager) Invocations() map[string][][]interface{} {
 	defer fake.createMutex.RUnlock()
 	fake.openMutex.RLock()
 	defer fake.openMutex.RUnlock()
-	fake.readDirMutex.RLock()
-	defer fake.readDirMutex.RUnlock()
-	fake.removeMutex.RLock()
-	defer fake.removeMutex.RUnlock()
 	fake.writeMutex.RLock()
 	defer fake.writeMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
