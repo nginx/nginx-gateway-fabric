@@ -8,6 +8,15 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/metrics"
 )
 
+// MetricsCollector is an interface for the metrics of the NGINX runtime manager.
+//
+//counterfeiter:generate . MetricsCollector
+type MetricsCollector interface {
+	IncReloadCount()
+	IncReloadErrors()
+	ObserveLastReloadTime(ms time.Duration)
+}
+
 // NginxRuntimeCollector implements runtime.Collector interface and prometheus.Collector interface.
 type NginxRuntimeCollector struct {
 	// Metrics
@@ -97,20 +106,3 @@ func (c *NginxRuntimeCollector) Collect(ch chan<- prometheus.Metric) {
 	c.configStale.Collect(ch)
 	c.reloadsDuration.Collect(ch)
 }
-
-// ManagerNoopCollector used to initialize the ManagerCollector when metrics are disabled to avoid nil pointer errors.
-type ManagerNoopCollector struct{}
-
-// NewManagerNoopCollector creates a no-op collector that implements ManagerCollector interface.
-func NewManagerNoopCollector() *ManagerNoopCollector {
-	return &ManagerNoopCollector{}
-}
-
-// IncReloadCount implements a no-op IncReloadCount.
-func (c *ManagerNoopCollector) IncReloadCount() {}
-
-// IncReloadErrors implements a no-op IncReloadErrors.
-func (c *ManagerNoopCollector) IncReloadErrors() {}
-
-// ObserveLastReloadTime implements a no-op ObserveLastReloadTime.
-func (c *ManagerNoopCollector) ObserveLastReloadTime(_ time.Duration) {}

@@ -47,6 +47,10 @@ nginxGateway:
   # -- Set of custom annotations for NginxGateway objects.
   configAnnotations: {}
 
+  service:
+    # -- The annotations of the NGINX Gateway Fabric control plane service.
+    annotations: {}
+
   # -- The number of replicas of the NGINX Gateway Fabric Deployment.
   replicaCount: 1
 
@@ -63,7 +67,7 @@ nginxGateway:
     lockName: ""
 
   ## Defines the settings for the control plane readiness probe. This probe returns Ready when the controller
-  ## has started and configured NGINX to serve traffic.
+  ## has started and is ready to configure NGINX.
   readinessProbe:
     # -- Enable the /readyz endpoint on the control plane.
     enable: true
@@ -90,10 +94,6 @@ nginxGateway:
     #   - Never
     # @schema
     pullPolicy: Always
-
-  securityContext:
-    # -- Some environments may need this set to true in order for the control plane to successfully reload NGINX.
-    allowPrivilegeEscalation: false
 
   productTelemetry:
     # -- Enable the collection of product telemetry.
@@ -130,6 +130,10 @@ nginx:
     #   - Never
     # @schema
     pullPolicy: Always
+
+  securityContext:
+    # -- Some environments may need this set to true in order for the control plane to successfully reload NGINX.
+    allowPrivilegeEscalation: false
 
   # -- Is NGINX Plus image being used
   plus: false

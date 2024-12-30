@@ -2,13 +2,11 @@ package static
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
-	ngxclient "github.com/nginxinc/nginx-plus-go-client/client"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,9 +20,8 @@ import (
 	frameworkStatus "github.com/nginx/nginx-gateway-fabric/internal/framework/status"
 	ngfConfig "github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent"
 	ngxConfig "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
@@ -38,12 +35,10 @@ type handlerMetricsCollector interface {
 
 // eventHandlerConfig holds configuration parameters for eventHandlerImpl.
 type eventHandlerConfig struct {
-	// nginxFileMgr is the file Manager for nginx.
-	nginxFileMgr file.Manager
+	// nginxUpdater updates nginx configuration using the NGINX agent.
+	nginxUpdater agent.NginxUpdater
 	// metricsCollector collects metrics for this controller.
 	metricsCollector handlerMetricsCollector
-	// nginxRuntimeMgr manages nginx runtime.
-	nginxRuntimeMgr runtime.Manager
 	// statusUpdater updates statuses on Kubernetes resources.
 	statusUpdater frameworkStatus.GroupUpdater
 	// processor is the state ChangeProcessor.
@@ -62,8 +57,8 @@ type eventHandlerConfig struct {
 	eventRecorder record.EventRecorder
 	// deployCtxCollector collects the deployment context for N+ licensing
 	deployCtxCollector licensing.Collector
-	// nginxConfiguredOnStartChecker sets the health of the Pod to Ready once we've written out our initial config.
-	nginxConfiguredOnStartChecker *nginxConfiguredOnStartChecker
+	// graphBuiltHealthChecker sets the health of the Pod to Ready once we've built our initial graph.
+	graphBuiltHealthChecker *graphBuiltHealthChecker
 	// gatewayPodConfig contains information about this Pod.
 	gatewayPodConfig ngfConfig.GatewayPodConfig
 	// controlConfigNSName is the NamespacedName of the NginxGateway config for this controller.
@@ -164,13 +159,15 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 
 	changeType, gr := h.cfg.processor.Process()
 
+	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
+	if !h.cfg.graphBuiltHealthChecker.ready {
+		h.cfg.graphBuiltHealthChecker.setAsReady()
+	}
+
 	var err error
 	switch changeType {
 	case state.NoChange:
 		logger.Info("Handling events didn't result into NGINX configuration changes")
-		if !h.cfg.nginxConfiguredOnStartChecker.ready && h.cfg.nginxConfiguredOnStartChecker.firstBatchError == nil {
-			h.cfg.nginxConfiguredOnStartChecker.setAsReady()
-		}
 		return
 	case state.EndpointsOnlyChange:
 		h.version++
@@ -184,9 +181,9 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		h.setLatestConfiguration(&cfg)
 
 		if h.cfg.plus {
-			err = h.updateUpstreamServers(cfg)
+			h.cfg.nginxUpdater.UpdateUpstreamServers()
 		} else {
-			err = h.updateNginxConf(ctx, cfg)
+			err = h.updateNginxConf(cfg)
 		}
 	case state.ClusterStateChange:
 		h.version++
@@ -199,21 +196,15 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 
 		h.setLatestConfiguration(&cfg)
 
-		err = h.updateNginxConf(ctx, cfg)
+		err = h.updateNginxConf(cfg)
 	}
 
 	var nginxReloadRes status.NginxReloadResult
 	if err != nil {
 		logger.Error(err, "Failed to update NGINX configuration")
 		nginxReloadRes.Error = err
-		if !h.cfg.nginxConfiguredOnStartChecker.ready {
-			h.cfg.nginxConfiguredOnStartChecker.firstBatchError = err
-		}
 	} else {
 		logger.Info("NGINX configuration was successfully updated")
-		if !h.cfg.nginxConfiguredOnStartChecker.ready {
-			h.cfg.nginxConfiguredOnStartChecker.setAsReady()
-		}
 	}
 
 	h.latestReloadResult = nginxReloadRes
@@ -304,132 +295,19 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 }
 
 // updateNginxConf updates nginx conf files and reloads nginx.
-func (h *eventHandlerImpl) updateNginxConf(
-	ctx context.Context,
-	conf dataplane.Configuration,
-) error {
+//
+//nolint:unparam // temporarily returning only nil
+func (h *eventHandlerImpl) updateNginxConf(conf dataplane.Configuration) error {
 	files := h.cfg.generator.Generate(conf)
-	if err := h.cfg.nginxFileMgr.ReplaceFiles(files); err != nil {
-		return fmt.Errorf("failed to replace NGINX configuration files: %w", err)
-	}
 
-	if err := h.cfg.nginxRuntimeMgr.Reload(ctx, conf.Version); err != nil {
-		return fmt.Errorf("failed to reload NGINX: %w", err)
-	}
+	h.cfg.nginxUpdater.UpdateConfig(len(files))
 
 	// If using NGINX Plus, update upstream servers using the API.
-	if err := h.updateUpstreamServers(conf); err != nil {
-		return fmt.Errorf("failed to update upstream servers: %w", err)
+	if h.cfg.plus {
+		h.cfg.nginxUpdater.UpdateUpstreamServers()
 	}
 
 	return nil
-}
-
-// updateUpstreamServers determines which servers have changed and uses the NGINX Plus API to update them.
-// Only applicable when using NGINX Plus.
-func (h *eventHandlerImpl) updateUpstreamServers(conf dataplane.Configuration) error {
-	if !h.cfg.plus {
-		return nil
-	}
-
-	prevUpstreams, prevStreamUpstreams, err := h.cfg.nginxRuntimeMgr.GetUpstreams()
-	if err != nil {
-		return fmt.Errorf("failed to get upstreams from API: %w", err)
-	}
-
-	type upstream struct {
-		name    string
-		servers []ngxclient.UpstreamServer
-	}
-	var upstreams []upstream
-
-	for _, u := range conf.Upstreams {
-		confUpstream := upstream{
-			name:    u.Name,
-			servers: ngxConfig.ConvertEndpoints(u.Endpoints),
-		}
-
-		if u, ok := prevUpstreams[confUpstream.name]; ok {
-			if !serversEqual(confUpstream.servers, u.Peers) {
-				upstreams = append(upstreams, confUpstream)
-			}
-		}
-	}
-
-	type streamUpstream struct {
-		name    string
-		servers []ngxclient.StreamUpstreamServer
-	}
-	var streamUpstreams []streamUpstream
-
-	for _, u := range conf.StreamUpstreams {
-		confUpstream := streamUpstream{
-			name:    u.Name,
-			servers: ngxConfig.ConvertStreamEndpoints(u.Endpoints),
-		}
-
-		if u, ok := prevStreamUpstreams[confUpstream.name]; ok {
-			if !serversEqual(confUpstream.servers, u.Peers) {
-				streamUpstreams = append(streamUpstreams, confUpstream)
-			}
-		}
-	}
-
-	var updateErr error
-	for _, upstream := range upstreams {
-		if err := h.cfg.nginxRuntimeMgr.UpdateHTTPServers(upstream.name, upstream.servers); err != nil {
-			updateErr = errors.Join(updateErr, fmt.Errorf(
-				"couldn't update upstream %q via the API: %w", upstream.name, err))
-		}
-	}
-
-	for _, upstream := range streamUpstreams {
-		if err := h.cfg.nginxRuntimeMgr.UpdateStreamServers(upstream.name, upstream.servers); err != nil {
-			updateErr = errors.Join(updateErr, fmt.Errorf(
-				"couldn't update stream upstream %q via the API: %w", upstream.name, err))
-		}
-	}
-
-	return updateErr
-}
-
-// serversEqual accepts lists of either UpstreamServer/Peer or StreamUpstreamServer/StreamPeer and determines
-// if the server names within these lists are equal.
-func serversEqual[
-	upstreamServer ngxclient.UpstreamServer | ngxclient.StreamUpstreamServer,
-	peer ngxclient.Peer | ngxclient.StreamPeer,
-](newServers []upstreamServer, oldServers []peer) bool {
-	if len(newServers) != len(oldServers) {
-		return false
-	}
-
-	getServerVal := func(T any) string {
-		var server string
-		switch t := T.(type) {
-		case ngxclient.UpstreamServer:
-			server = t.Server
-		case ngxclient.StreamUpstreamServer:
-			server = t.Server
-		case ngxclient.Peer:
-			server = t.Server
-		case ngxclient.StreamPeer:
-			server = t.Server
-		}
-		return server
-	}
-
-	diff := make(map[string]struct{}, len(newServers))
-	for _, s := range newServers {
-		diff[getServerVal(s)] = struct{}{}
-	}
-
-	for _, s := range oldServers {
-		if _, ok := diff[getServerVal(s)]; !ok {
-			return false
-		}
-	}
-
-	return true
 }
 
 // updateControlPlaneAndSetStatus updates the control plane configuration and then sets the status

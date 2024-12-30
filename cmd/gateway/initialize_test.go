@@ -11,11 +11,11 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/file/filefakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing/licensingfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/configfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file/filefakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
