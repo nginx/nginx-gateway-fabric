@@ -9,9 +9,9 @@ import (
 func TestReadyCheck(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
-	nginxChecker := newNginxConfiguredOnStartChecker()
-	g.Expect(nginxChecker.readyCheck(nil)).ToNot(Succeed())
+	healthChecker := newGraphBuiltHealthChecker()
+	g.Expect(healthChecker.readyCheck(nil)).ToNot(Succeed())
 
-	nginxChecker.ready = true
-	g.Expect(nginxChecker.readyCheck(nil)).To(Succeed())
+	healthChecker.ready = true
+	g.Expect(healthChecker.readyCheck(nil)).To(Succeed())
 }
