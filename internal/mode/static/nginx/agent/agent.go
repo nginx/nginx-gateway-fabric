@@ -16,8 +16,19 @@ type NginxUpdater interface {
 
 // NginxUpdaterImpl implements the NginxUpdater interface.
 type NginxUpdaterImpl struct {
-	Logger logr.Logger
-	Plus   bool
+	CommandService *commandService
+	FileService    *fileService
+	Logger         logr.Logger
+	Plus           bool
+}
+
+func NewNginxUpdater(logger logr.Logger, plus bool) *NginxUpdaterImpl {
+	return &NginxUpdaterImpl{
+		Logger:         logger,
+		Plus:           plus,
+		CommandService: newCommandService(),
+		FileService:    newFileService(),
+	}
 }
 
 // UpdateConfig sends the nginx configuration to the agent.

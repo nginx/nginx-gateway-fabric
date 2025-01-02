@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-agent-config
+  namespace: {{ .Release.Namespace }}
+data:
+  nginx-agent.conf: |-
+    command:
+      server:
+        host: {{ include "nginx-gateway.fullname" . }}.{{ .Release.Namespace }}.svc
+        port: 443
+    allowed_directories:
+    - /etc/nginx
+    - /usr/share/nginx
+    - /var/run/nginx
+    features:
+    - connection
+    log:
+      level: debug
