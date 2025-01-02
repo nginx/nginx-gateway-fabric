@@ -2,8 +2,7 @@
 ignore:
   - charts/nginx-gateway-fabric/templates
   - config/crd/bases/
-  - deploy/crds.yaml
-  - deploy/*nginx-plus
+  - deploy
   - site/static
 
 rules:
