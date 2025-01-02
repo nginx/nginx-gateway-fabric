@@ -9,6 +9,7 @@ import (
 	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
@@ -71,6 +72,7 @@ const (
 	plusCAField         = "ca.crt"
 	plusClientCertField = "tls.crt"
 	plusClientKeyField  = "tls.key"
+	grpcServerPort      = 8443
 )
 
 var scheme = runtime.NewScheme()
@@ -178,11 +180,24 @@ func StartManager(cfg config.Config) error {
 		Logger:          cfg.Logger.WithName("deployCtxCollector"),
 	})
 
-	eventHandler := newEventHandlerImpl(eventHandlerConfig{
-		nginxUpdater: &agent.NginxUpdaterImpl{
-			Logger: cfg.Logger.WithName("nginxUpdater"),
-			Plus:   cfg.Plus,
+	nginxUpdater := agent.NewNginxUpdater(cfg.Logger.WithName("nginxUpdater"), cfg.Plus)
+
+	grpcServer := &agent.GRPCServer{
+		Logger: cfg.Logger.WithName("agentGRPCServer"),
+		RegisterServices: []func(*grpc.Server){
+			nginxUpdater.CommandService.Register,
+			nginxUpdater.FileService.Register,
 		},
+		Port: grpcServerPort,
+	}
+
+	if err = mgr.Add(&runnables.LeaderOrNonLeader{Runnable: grpcServer}); err != nil {
+		return fmt.Errorf("cannot register grpc server: %w", err)
+	}
+
+	// TODO(sberman): event handler loop should wait on a channel until the grpc server has started
+	eventHandler := newEventHandlerImpl(eventHandlerConfig{
+		nginxUpdater:     nginxUpdater,
 		metricsCollector: handlerCollector,
 		statusUpdater:    groupStatusUpdater,
 		processor:        processor,

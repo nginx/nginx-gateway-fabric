@@ -156,6 +156,26 @@ subjects:
 ---
 apiVersion: v1
 data:
+  nginx-agent.conf: |-
+    command:
+      server:
+        host: nginx-gateway.nginx-gateway.svc
+        port: 443
+    allowed_directories:
+    - /etc/nginx
+    - /usr/share/nginx
+    - /var/run/nginx
+    features:
+    - connection
+    log:
+      level: debug
+kind: ConfigMap
+metadata:
+  name: nginx-agent-config
+  namespace: nginx-gateway
+---
+apiVersion: v1
+data:
   main.conf: |
     error_log stderr info;
   mgmt.conf: |
@@ -183,14 +203,39 @@ metadata:
   namespace: nginx-gateway
 spec:
   ports:
-  - name: grpc
+  - name: agent-grpc
+    port: 443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/instance: nginx-gateway
+    app.kubernetes.io/name: nginx-gateway
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: nginx-gateway
+    app.kubernetes.io/name: nginx-gateway
+    app.kubernetes.io/version: edge
+  name: tmp-nginx-deployment
+  namespace: nginx-gateway
+spec:
+  externalTrafficPolicy: Local
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  - name: https
     port: 443
     protocol: TCP
     targetPort: 443
   selector:
     app.kubernetes.io/instance: nginx-gateway
-    app.kubernetes.io/name: nginx-gateway
-  type: ClusterIP
+    app.kubernetes.io/name: tmp-nginx-deployment
+  type: LoadBalancer
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -250,6 +295,8 @@ spec:
         imagePullPolicy: Always
         name: nginx-gateway
         ports:
+        - containerPort: 8443
+          name: agent-grpc
         - containerPort: 9113
           name: metrics
         - containerPort: 8081
@@ -274,6 +321,137 @@ spec:
         runAsNonRoot: true
       serviceAccountName: nginx-gateway
       terminationGracePeriodSeconds: 30
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tmp-nginx-deployment
+  namespace: nginx-gateway
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: nginx-gateway
+      app.kubernetes.io/name: tmp-nginx-deployment
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: nginx-gateway
+        app.kubernetes.io/name: tmp-nginx-deployment
+    spec:
+      containers:
+      - image: private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:edge
+        imagePullPolicy: Always
+        name: nginx
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 443
+          name: https
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsUser: 101
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /etc/nginx-agent
+          name: nginx-agent
+        - mountPath: /etc/nginx/conf.d
+          name: nginx-conf
+        - mountPath: /etc/nginx/stream-conf.d
+          name: nginx-stream-conf
+        - mountPath: /etc/nginx/main-includes
+          name: nginx-main-includes
+        - mountPath: /etc/nginx/secrets
+          name: nginx-secrets
+        - mountPath: /var/run/nginx
+          name: nginx-run
+        - mountPath: /var/cache/nginx
+          name: nginx-cache
+        - mountPath: /etc/nginx/includes
+          name: nginx-includes
+        - mountPath: /var/lib/nginx/state
+          name: nginx-lib
+        - mountPath: /etc/nginx/license.jwt
+          name: nginx-plus-license
+          subPath: license.jwt
+      initContainers:
+      - command:
+        - /usr/bin/gateway
+        - sleep
+        - --duration=15s
+        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        imagePullPolicy: Always
+        name: sleep
+      - command:
+        - /usr/bin/gateway
+        - initialize
+        - --source
+        - /includes/main.conf
+        - --source
+        - /includes/mgmt.conf
+        - --nginx-plus
+        - --destination
+        - /etc/nginx/main-includes
+        env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        imagePullPolicy: Always
+        name: init
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsUser: 102
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /includes
+          name: nginx-includes-bootstrap
+        - mountPath: /etc/nginx/main-includes
+          name: nginx-main-includes
+      securityContext:
+        fsGroup: 1001
+        runAsNonRoot: true
+      serviceAccountName: nginx-gateway
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          name: nginx-agent-config
+        name: nginx-agent
+      - emptyDir: {}
+        name: nginx-conf
+      - emptyDir: {}
+        name: nginx-stream-conf
+      - emptyDir: {}
+        name: nginx-main-includes
+      - emptyDir: {}
+        name: nginx-secrets
+      - emptyDir: {}
+        name: nginx-run
+      - emptyDir: {}
+        name: nginx-cache
+      - emptyDir: {}
+        name: nginx-includes
+      - configMap:
+          name: nginx-includes-bootstrap
+        name: nginx-includes-bootstrap
+      - emptyDir: {}
+        name: nginx-lib
+      - name: nginx-plus-license
+        secret:
+          secretName: nplus-license
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
