@@ -4,6 +4,15 @@ FROM scratch AS nginx-files
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
+FROM golang:alpine AS builder
+
+WORKDIR /tmp
+
+RUN apk add --no-cache git make \
+    && git clone https://github.com/nginx/agent.git \
+    && cd agent \
+    && git checkout v3 \
+    && make build
 
 FROM alpine:3.20
 
@@ -18,7 +27,7 @@ RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
     addgroup -g 1001 -S nginx \
     && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
     && printf "%s\n" "https://pkgs.nginx.com/plus/${NGINX_PLUS_VERSION}/alpine/v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && apk add --no-cache nginx-plus nginx-plus-module-njs nginx-plus-module-otel libcap \
+    && apk add --no-cache nginx-plus nginx-plus-module-njs nginx-plus-module-otel libcap bash \
     && mkdir -p /usr/lib/nginx/modules \
 	&& setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx \
 	&& setcap -v 'cap_net_bind_service=+ep' /usr/sbin/nginx \
@@ -29,6 +38,9 @@ RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
     && ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log
 
+COPY --from=builder /tmp/agent/build/nginx-agent /usr/bin/nginx-agent
+
+COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/httpmatches.js /usr/lib/nginx/modules/njs/httpmatches.js
 COPY ${NGINX_CONF_DIR}/nginx-plus.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
@@ -40,4 +52,4 @@ USER 101:1001
 
 LABEL org.nginx.ngf.image.build.agent="${BUILD_AGENT}"
 
-CMD ["sh", "-c", "rm -rf /var/run/nginx/*.sock && nginx -g 'daemon off;'"]
+ENTRYPOINT ["/agent/entrypoint.sh"]

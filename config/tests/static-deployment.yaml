@@ -53,6 +53,8 @@ spec:
         imagePullPolicy: Always
         name: nginx-gateway
         ports:
+        - name: agent-grpc
+          containerPort: 8443
         - name: health
           containerPort: 8081
         readinessProbe:
