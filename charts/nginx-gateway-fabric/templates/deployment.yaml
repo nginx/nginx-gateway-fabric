@@ -117,6 +117,8 @@ spec:
         {{- toYaml .Values.nginxGateway.resources | nindent 10 }}
         {{- end }}
         ports:
+        - name: agent-grpc
+          containerPort: 8443
         {{- if .Values.metrics.enable }}
         - name: metrics
           containerPort: {{ .Values.metrics.port }}
