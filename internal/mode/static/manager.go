@@ -51,6 +51,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/metrics/collectors"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent"
+	agentgrpc "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent/grpc"
 	ngxcfg "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/clientsettings"
@@ -182,14 +183,14 @@ func StartManager(cfg config.Config) error {
 
 	nginxUpdater := agent.NewNginxUpdater(cfg.Logger.WithName("nginxUpdater"), cfg.Plus)
 
-	grpcServer := &agent.GRPCServer{
-		Logger: cfg.Logger.WithName("agentGRPCServer"),
-		RegisterServices: []func(*grpc.Server){
+	grpcServer := agentgrpc.NewServer(
+		cfg.Logger.WithName("agentGRPCServer"),
+		grpcServerPort,
+		[]func(*grpc.Server){
 			nginxUpdater.CommandService.Register,
 			nginxUpdater.FileService.Register,
 		},
-		Port: grpcServerPort,
-	}
+	)
 
 	if err = mgr.Add(&runnables.LeaderOrNonLeader{Runnable: grpcServer}); err != nil {
 		return fmt.Errorf("cannot register grpc server: %w", err)
