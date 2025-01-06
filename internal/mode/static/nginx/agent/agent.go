@@ -18,30 +18,31 @@ type NginxUpdater interface {
 type NginxUpdaterImpl struct {
 	CommandService *commandService
 	FileService    *fileService
-	Logger         logr.Logger
-	Plus           bool
+	logger         logr.Logger
+	plus           bool
 }
 
+// NewNginxUpdater returns a new NginxUpdaterImpl instance.
 func NewNginxUpdater(logger logr.Logger, plus bool) *NginxUpdaterImpl {
 	return &NginxUpdaterImpl{
-		Logger:         logger,
-		Plus:           plus,
-		CommandService: newCommandService(),
-		FileService:    newFileService(),
+		logger:         logger,
+		plus:           plus,
+		CommandService: newCommandService(logger.WithName("commandService")),
+		FileService:    newFileService(logger.WithName("fileService")),
 	}
 }
 
 // UpdateConfig sends the nginx configuration to the agent.
 func (n *NginxUpdaterImpl) UpdateConfig(files int) {
-	n.Logger.Info("Sending nginx configuration to agent", "numFiles", files)
+	n.logger.Info("Sending nginx configuration to agent", "numFiles", files)
 }
 
 // UpdateUpstreamServers sends an APIRequest to the agent to update upstream servers using the NGINX Plus API.
 // Only applicable when using NGINX Plus.
 func (n *NginxUpdaterImpl) UpdateUpstreamServers() {
-	if !n.Plus {
+	if !n.plus {
 		return
 	}
 
-	n.Logger.Info("Updating upstream servers using NGINX Plus API")
+	n.logger.Info("Updating upstream servers using NGINX Plus API")
 }
