@@ -45,19 +45,19 @@ For all the possible configuration options for `ClientSettingsPolicy`, see the [
 - Create the coffee and tea example applications:
 
   ```yaml
-  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.5.1/examples/client-settings-policy/app.yaml
+  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/examples/client-settings-policy/app.yaml
   ```
 
 - Create a Gateway:
 
   ```yaml
-  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.5.1/examples/client-settings-policy/gateway.yaml
+  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/examples/client-settings-policy/gateway.yaml
    ```
 
 - Create HTTPRoutes for the coffee and tea applications:
 
   ```yaml
-  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.5.1/examples/client-settings-policy/httproutes.yaml
+  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/examples/client-settings-policy/httproutes.yaml
    ```
 
 - Test the configuration:

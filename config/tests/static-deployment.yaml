@@ -8,7 +8,7 @@ metadata:
   labels:
     app.kubernetes.io/name: nginx-gateway
     app.kubernetes.io/instance: nginx-gateway
-    app.kubernetes.io/version: "edge"
+    app.kubernetes.io/version: "1.6.0"
 spec:
   replicas: 1
   selector:
@@ -23,8 +23,8 @@ spec:
     spec:
       initContainers:
       - name: init
-        image: ghcr.io/nginx/nginx-gateway-fabric:edge
-        imagePullPolicy: Always
+        image: ghcr.io/nginx/nginx-gateway-fabric:1.6.0
+        imagePullPolicy: IfNotPresent
         command:
         - /usr/bin/gateway
         - initialize
@@ -81,8 +81,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginx/nginx-gateway-fabric:edge
-        imagePullPolicy: Always
+        image: ghcr.io/nginx/nginx-gateway-fabric:1.6.0
+        imagePullPolicy: IfNotPresent
         name: nginx-gateway
         ports:
         - name: health
@@ -118,8 +118,8 @@ spec:
           mountPath: /var/run/nginx
         - name: nginx-includes
           mountPath: /etc/nginx/includes
-      - image: ghcr.io/nginx/nginx-gateway-fabric/nginx:edge
-        imagePullPolicy: Always
+      - image: ghcr.io/nginx/nginx-gateway-fabric/nginx:1.6.0
+        imagePullPolicy: IfNotPresent
         name: nginx
         ports:
         - containerPort: 80

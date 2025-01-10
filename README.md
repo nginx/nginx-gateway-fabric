@@ -34,7 +34,7 @@ You can find the comprehensive NGINX Gateway Fabric user documentation on the [N
 We publish NGINX Gateway Fabric releases on GitHub. See
 our [releases page](https://github.com/nginx/nginx-gateway-fabric/releases).
 
-The latest release is [1.5.1](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v1.5.1).
+The latest release is [1.6.0](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v1.6.0).
 
 The edge version is useful for experimenting with new features that are not yet published in a release. To use, choose
 the _edge_ version built from the [latest commit](https://github.com/nginx/nginx-gateway-fabric/commits/main)
@@ -45,7 +45,7 @@ to the correct versions:
 
 | Version        | Description                              | Installation Manifests                                                            | Documentation and Examples                                                                                                                                                 |
 |----------------|------------------------------------------|-----------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Latest release | For production use                       | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v1.5.1/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v1.5.1/examples).                           |
+| Latest release | For production use                       | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.0/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.0/examples).                           |
 | Edge           | For experimental use and latest features | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/main/deploy).   | [Documentation](https://github.com/nginx/nginx-gateway-fabric/tree/main/site/content). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/main/examples). |
 
 ### Versioning

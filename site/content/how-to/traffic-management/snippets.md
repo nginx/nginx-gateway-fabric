@@ -73,19 +73,19 @@ We have outlined a few best practices to keep in mind when using `SnippetsFilter
 - Create the coffee and tea example applications:
 
   ```yaml
-  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.5.1/examples/snippets-filter/app.yaml
+  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/examples/snippets-filter/app.yaml
   ```
 
 - Create a Gateway:
 
   ```yaml
-  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.5.1/examples/snippets-filter/gateway.yaml
+  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/examples/snippets-filter/gateway.yaml
    ```
 
 - Create HTTPRoutes for the coffee and tea applications:
 
   ```yaml
-  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.5.1/examples/snippets-filter/httproutes.yaml
+  kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/examples/snippets-filter/httproutes.yaml
    ```
 
 - Test the configuration:

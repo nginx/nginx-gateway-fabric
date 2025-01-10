@@ -82,14 +82,14 @@ nginxGateway:
   image:
     # -- The NGINX Gateway Fabric image to use
     repository: ghcr.io/nginx/nginx-gateway-fabric
-    tag: edge
+    tag: 1.6.0
     # @schema
     # enum:
     #   - Always
     #   - IfNotPresent
     #   - Never
     # @schema
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
 
   securityContext:
     # -- Some environments may need this set to true in order for the control plane to successfully reload NGINX.
@@ -122,14 +122,14 @@ nginx:
   image:
     # -- The NGINX image to use.
     repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
-    tag: edge
+    tag: 1.6.0
     # @schema
     # enum:
     #   - Always
     #   - IfNotPresent
     #   - Never
     # @schema
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
 
   # -- Is NGINX Plus image being used
   plus: false

@@ -11,7 +11,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 1.6.0
   name: nginx-gateway
   namespace: nginx-gateway
 ---
@@ -21,7 +21,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 1.6.0
   name: nginx-gateway
 rules:
 - apiGroups:
@@ -143,7 +143,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 1.6.0
   name: nginx-gateway
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -168,7 +168,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 1.6.0
   name: nginx-includes-bootstrap
   namespace: nginx-gateway
 ---
@@ -178,7 +178,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 1.6.0
   name: nginx-gateway
   namespace: nginx-gateway
 spec:
@@ -203,7 +203,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 1.6.0
   name: nginx-gateway
   namespace: nginx-gateway
 spec:
@@ -251,8 +251,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginx/nginx-gateway-fabric:edge
-        imagePullPolicy: Always
+        image: ghcr.io/nginx/nginx-gateway-fabric:1.6.0
+        imagePullPolicy: IfNotPresent
         name: nginx-gateway
         ports:
         - containerPort: 9113
@@ -290,8 +290,8 @@ spec:
           name: nginx-run
         - mountPath: /etc/nginx/includes
           name: nginx-includes
-      - image: private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:edge
-        imagePullPolicy: Always
+      - image: private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:1.6.0
+        imagePullPolicy: IfNotPresent
         name: nginx
         ports:
         - containerPort: 80
@@ -345,8 +345,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginx/nginx-gateway-fabric:edge
-        imagePullPolicy: Always
+        image: ghcr.io/nginx/nginx-gateway-fabric:1.6.0
+        imagePullPolicy: IfNotPresent
         name: init
         securityContext:
           capabilities:
@@ -400,7 +400,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 1.6.0
   name: nginx
 spec:
   controllerName: gateway.nginx.org/nginx-gateway-controller
@@ -411,7 +411,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 1.6.0
   name: nginx-gateway-config
   namespace: nginx-gateway
 spec:
