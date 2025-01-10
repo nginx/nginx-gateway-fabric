@@ -164,6 +164,10 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		h.cfg.graphBuiltHealthChecker.setAsReady()
 	}
 
+	// TODO(sberman): if nginx Deployment is scaled up, we need to trigger an update for it to send
+	// the config to the new pod
+	// If scaled down, we should remove the pod from the ConnectionsTracker
+	// If fully deleted, then delete the deployment from the Store
 	var err error
 	switch changeType {
 	case state.NoChange:
@@ -181,9 +185,14 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		h.setLatestConfiguration(&cfg)
 
 		if h.cfg.plus {
-			h.cfg.nginxUpdater.UpdateUpstreamServers()
+			// TODO(sberman): hardcode this deployment name until we support provisioning data planes
+			deployment := types.NamespacedName{
+				Name:      "tmp-nginx-deployment",
+				Namespace: h.cfg.gatewayPodConfig.Namespace,
+			}
+			err = h.cfg.nginxUpdater.UpdateUpstreamServers(ctx, deployment, cfg)
 		} else {
-			err = h.updateNginxConf(cfg)
+			err = h.updateNginxConf(ctx, cfg)
 		}
 	case state.ClusterStateChange:
 		h.version++
@@ -196,7 +205,7 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 
 		h.setLatestConfiguration(&cfg)
 
-		err = h.updateNginxConf(cfg)
+		err = h.updateNginxConf(ctx, cfg)
 	}
 
 	var nginxReloadRes status.NginxReloadResult
@@ -295,16 +304,24 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 }
 
 // updateNginxConf updates nginx conf files and reloads nginx.
-//
-//nolint:unparam // temporarily returning only nil
-func (h *eventHandlerImpl) updateNginxConf(conf dataplane.Configuration) error {
+func (h *eventHandlerImpl) updateNginxConf(ctx context.Context, conf dataplane.Configuration) error {
 	files := h.cfg.generator.Generate(conf)
 
-	h.cfg.nginxUpdater.UpdateConfig(len(files))
+	// TODO(sberman): hardcode this deployment name until we support provisioning data planes
+	deployment := types.NamespacedName{
+		Name:      "tmp-nginx-deployment",
+		Namespace: h.cfg.gatewayPodConfig.Namespace,
+	}
+
+	if err := h.cfg.nginxUpdater.UpdateConfig(ctx, deployment, files); err != nil {
+		return err
+	}
 
 	// If using NGINX Plus, update upstream servers using the API.
 	if h.cfg.plus {
-		h.cfg.nginxUpdater.UpdateUpstreamServers()
+		if err := h.cfg.nginxUpdater.UpdateUpstreamServers(ctx, deployment, conf); err != nil {
+			return err
+		}
 	}
 
 	return nil

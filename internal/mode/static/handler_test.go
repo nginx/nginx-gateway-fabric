@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
@@ -19,12 +20,12 @@ import (
 
 	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/file"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/status/statusfakes"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/licensing/licensingfakes"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/metrics/collectors"
+	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/agent"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/agent/agentfakes"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/configfakes"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state"
@@ -58,15 +59,15 @@ var _ = Describe("eventHandler", func() {
 		}
 	}
 
-	expectReconfig := func(expectedConf dataplane.Configuration, expectedFiles []file.File) {
+	expectReconfig := func(expectedConf dataplane.Configuration, expectedFiles []agent.File) {
 		Expect(fakeProcessor.ProcessCallCount()).Should(Equal(1))
 
 		Expect(fakeGenerator.GenerateCallCount()).Should(Equal(1))
 		Expect(fakeGenerator.GenerateArgsForCall(0)).Should(Equal(expectedConf))
 
 		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
-		lenFiles := fakeNginxUpdater.UpdateConfigArgsForCall(0)
-		Expect(expectedFiles).To(HaveLen(lenFiles))
+		_, _, files := fakeNginxUpdater.UpdateConfigArgsForCall(0)
+		Expect(expectedFiles).To(Equal(files))
 
 		Expect(fakeStatusUpdater.UpdateGroupCallCount()).Should(Equal(2))
 		_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
@@ -113,10 +114,11 @@ var _ = Describe("eventHandler", func() {
 	})
 
 	Describe("Process the Gateway API resources events", func() {
-		fakeCfgFiles := []file.File{
+		fakeCfgFiles := []agent.File{
 			{
-				Type: file.TypeRegular,
-				Path: "test.conf",
+				Meta: &pb.FileMeta{
+					Name: "test.conf",
+				},
 			},
 		}
 

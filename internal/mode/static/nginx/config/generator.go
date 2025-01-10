@@ -6,9 +6,12 @@ import (
 	"path/filepath"
 
 	"github.com/go-logr/logr"
+	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
+	filesHelper "github.com/nginx/agent/v3/pkg/files"
 
 	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/file"
 	ngfConfig "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/config"
+	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/agent"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/clientsettings"
@@ -61,9 +64,9 @@ const (
 // This interface is used for testing purposes only.
 type Generator interface {
 	// Generate generates NGINX configuration files from internal representation.
-	Generate(configuration dataplane.Configuration) []file.File
+	Generate(configuration dataplane.Configuration) []agent.File
 	// GenerateDeploymentContext generates the deployment context used for N+ licensing.
-	GenerateDeploymentContext(depCtx dataplane.DeploymentContext) (file.File, error)
+	GenerateDeploymentContext(depCtx dataplane.DeploymentContext) (agent.File, error)
 }
 
 // GeneratorImpl is an implementation of Generator.
@@ -103,8 +106,8 @@ type executeFunc func(configuration dataplane.Configuration) []executeResult
 // It is the responsibility of the caller to validate the configuration before calling this function.
 // In case of invalid configuration, NGINX will fail to reload or could be configured with malicious configuration.
 // To validate, use the validators from the validation package.
-func (g GeneratorImpl) Generate(conf dataplane.Configuration) []file.File {
-	files := make([]file.File, 0)
+func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
+	files := make([]agent.File, 0)
 
 	for id, pair := range conf.SSLKeyPairs {
 		files = append(files, generatePEM(id, pair.Cert, pair.Key))
@@ -126,16 +129,19 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []file.File {
 
 // GenerateDeploymentContext generates the deployment_ctx.json file needed for N+ licensing.
 // It's exported since it's used by the init container process.
-func (g GeneratorImpl) GenerateDeploymentContext(depCtx dataplane.DeploymentContext) (file.File, error) {
+func (g GeneratorImpl) GenerateDeploymentContext(depCtx dataplane.DeploymentContext) (agent.File, error) {
 	depCtxBytes, err := json.Marshal(depCtx)
 	if err != nil {
-		return file.File{}, fmt.Errorf("error building deployment context for mgmt block: %w", err)
+		return agent.File{}, fmt.Errorf("error building deployment context for mgmt block: %w", err)
 	}
 
-	deploymentCtxFile := file.File{
-		Content: depCtxBytes,
-		Path:    mainIncludesFolder + "/deployment_ctx.json",
-		Type:    file.TypeRegular,
+	deploymentCtxFile := agent.File{
+		Meta: &pb.FileMeta{
+			Name:        mainIncludesFolder + "/deployment_ctx.json",
+			Hash:        filesHelper.GenerateHash(depCtxBytes),
+			Permissions: file.RegularFileMode,
+		},
+		Contents: depCtxBytes,
 	}
 
 	return deploymentCtxFile, nil
@@ -144,7 +150,7 @@ func (g GeneratorImpl) GenerateDeploymentContext(depCtx dataplane.DeploymentCont
 func (g GeneratorImpl) executeConfigTemplates(
 	conf dataplane.Configuration,
 	generator policies.Generator,
-) []file.File {
+) []agent.File {
 	fileBytes := make(map[string][]byte)
 
 	httpUpstreams := g.createUpstreams(conf.Upstreams, upstreamsettings.NewProcessor())
@@ -157,17 +163,20 @@ func (g GeneratorImpl) executeConfigTemplates(
 		}
 	}
 
-	var mgmtFiles []file.File
+	var mgmtFiles []agent.File
 	if g.plus {
 		mgmtFiles = g.generateMgmtFiles(conf)
 	}
 
-	files := make([]file.File, 0, len(fileBytes)+len(mgmtFiles))
+	files := make([]agent.File, 0, len(fileBytes)+len(mgmtFiles))
 	for fp, bytes := range fileBytes {
-		files = append(files, file.File{
-			Path:    fp,
-			Content: bytes,
-			Type:    file.TypeRegular,
+		files = append(files, agent.File{
+			Meta: &pb.FileMeta{
+				Name:        fp,
+				Hash:        filesHelper.GenerateHash(bytes),
+				Permissions: file.RegularFileMode,
+			},
+			Contents: bytes,
 		})
 	}
 	files = append(files, mgmtFiles...)
@@ -194,16 +203,19 @@ func (g GeneratorImpl) getExecuteFuncs(
 	}
 }
 
-func generatePEM(id dataplane.SSLKeyPairID, cert []byte, key []byte) file.File {
+func generatePEM(id dataplane.SSLKeyPairID, cert []byte, key []byte) agent.File {
 	c := make([]byte, 0, len(cert)+len(key)+1)
 	c = append(c, cert...)
 	c = append(c, '\n')
 	c = append(c, key...)
 
-	return file.File{
-		Content: c,
-		Path:    generatePEMFileName(id),
-		Type:    file.TypeSecret,
+	return agent.File{
+		Meta: &pb.FileMeta{
+			Name:        generatePEMFileName(id),
+			Hash:        filesHelper.GenerateHash(c),
+			Permissions: file.SecretFileMode,
+		},
+		Contents: c,
 	}
 }
 
@@ -211,11 +223,14 @@ func generatePEMFileName(id dataplane.SSLKeyPairID) string {
 	return filepath.Join(secretsFolder, string(id)+".pem")
 }
 
-func generateCertBundle(id dataplane.CertBundleID, cert []byte) file.File {
-	return file.File{
-		Content: cert,
-		Path:    generateCertBundleFileName(id),
-		Type:    file.TypeRegular,
+func generateCertBundle(id dataplane.CertBundleID, cert []byte) agent.File {
+	return agent.File{
+		Meta: &pb.FileMeta{
+			Name:        generateCertBundleFileName(id),
+			Hash:        filesHelper.GenerateHash(cert),
+			Permissions: file.SecretFileMode,
+		},
+		Contents: cert,
 	}
 }
 

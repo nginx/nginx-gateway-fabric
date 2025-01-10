@@ -179,7 +179,7 @@ func StartManager(cfg config.Config) error {
 		Logger:          cfg.Logger.WithName("deployCtxCollector"),
 	})
 
-	nginxUpdater := agent.NewNginxUpdater(cfg.Logger.WithName("nginxUpdater"), cfg.Plus)
+	nginxUpdater := agent.NewNginxUpdater(cfg.Logger.WithName("nginxUpdater"), mgr.GetAPIReader(), cfg.Plus)
 
 	grpcServer := agentgrpc.NewServer(
 		cfg.Logger.WithName("agentGRPCServer"),

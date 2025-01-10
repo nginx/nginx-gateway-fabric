@@ -4,41 +4,41 @@ package configfakes
 import (
 	"sync"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/file"
+	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/agent"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
 type FakeGenerator struct {
-	GenerateStub        func(dataplane.Configuration) []file.File
+	GenerateStub        func(dataplane.Configuration) []agent.File
 	generateMutex       sync.RWMutex
 	generateArgsForCall []struct {
 		arg1 dataplane.Configuration
 	}
 	generateReturns struct {
-		result1 []file.File
+		result1 []agent.File
 	}
 	generateReturnsOnCall map[int]struct {
-		result1 []file.File
+		result1 []agent.File
 	}
-	GenerateDeploymentContextStub        func(dataplane.DeploymentContext) (file.File, error)
+	GenerateDeploymentContextStub        func(dataplane.DeploymentContext) (agent.File, error)
 	generateDeploymentContextMutex       sync.RWMutex
 	generateDeploymentContextArgsForCall []struct {
 		arg1 dataplane.DeploymentContext
 	}
 	generateDeploymentContextReturns struct {
-		result1 file.File
+		result1 agent.File
 		result2 error
 	}
 	generateDeploymentContextReturnsOnCall map[int]struct {
-		result1 file.File
+		result1 agent.File
 		result2 error
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeGenerator) Generate(arg1 dataplane.Configuration) []file.File {
+func (fake *FakeGenerator) Generate(arg1 dataplane.Configuration) []agent.File {
 	fake.generateMutex.Lock()
 	ret, specificReturn := fake.generateReturnsOnCall[len(fake.generateArgsForCall)]
 	fake.generateArgsForCall = append(fake.generateArgsForCall, struct {
@@ -63,7 +63,7 @@ func (fake *FakeGenerator) GenerateCallCount() int {
 	return len(fake.generateArgsForCall)
 }
 
-func (fake *FakeGenerator) GenerateCalls(stub func(dataplane.Configuration) []file.File) {
+func (fake *FakeGenerator) GenerateCalls(stub func(dataplane.Configuration) []agent.File) {
 	fake.generateMutex.Lock()
 	defer fake.generateMutex.Unlock()
 	fake.GenerateStub = stub
@@ -76,30 +76,30 @@ func (fake *FakeGenerator) GenerateArgsForCall(i int) dataplane.Configuration {
 	return argsForCall.arg1
 }
 
-func (fake *FakeGenerator) GenerateReturns(result1 []file.File) {
+func (fake *FakeGenerator) GenerateReturns(result1 []agent.File) {
 	fake.generateMutex.Lock()
 	defer fake.generateMutex.Unlock()
 	fake.GenerateStub = nil
 	fake.generateReturns = struct {
-		result1 []file.File
+		result1 []agent.File
 	}{result1}
 }
 
-func (fake *FakeGenerator) GenerateReturnsOnCall(i int, result1 []file.File) {
+func (fake *FakeGenerator) GenerateReturnsOnCall(i int, result1 []agent.File) {
 	fake.generateMutex.Lock()
 	defer fake.generateMutex.Unlock()
 	fake.GenerateStub = nil
 	if fake.generateReturnsOnCall == nil {
 		fake.generateReturnsOnCall = make(map[int]struct {
-			result1 []file.File
+			result1 []agent.File
 		})
 	}
 	fake.generateReturnsOnCall[i] = struct {
-		result1 []file.File
+		result1 []agent.File
 	}{result1}
 }
 
-func (fake *FakeGenerator) GenerateDeploymentContext(arg1 dataplane.DeploymentContext) (file.File, error) {
+func (fake *FakeGenerator) GenerateDeploymentContext(arg1 dataplane.DeploymentContext) (agent.File, error) {
 	fake.generateDeploymentContextMutex.Lock()
 	ret, specificReturn := fake.generateDeploymentContextReturnsOnCall[len(fake.generateDeploymentContextArgsForCall)]
 	fake.generateDeploymentContextArgsForCall = append(fake.generateDeploymentContextArgsForCall, struct {
@@ -124,7 +124,7 @@ func (fake *FakeGenerator) GenerateDeploymentContextCallCount() int {
 	return len(fake.generateDeploymentContextArgsForCall)
 }
 
-func (fake *FakeGenerator) GenerateDeploymentContextCalls(stub func(dataplane.DeploymentContext) (file.File, error)) {
+func (fake *FakeGenerator) GenerateDeploymentContextCalls(stub func(dataplane.DeploymentContext) (agent.File, error)) {
 	fake.generateDeploymentContextMutex.Lock()
 	defer fake.generateDeploymentContextMutex.Unlock()
 	fake.GenerateDeploymentContextStub = stub
@@ -137,28 +137,28 @@ func (fake *FakeGenerator) GenerateDeploymentContextArgsForCall(i int) dataplane
 	return argsForCall.arg1
 }
 
-func (fake *FakeGenerator) GenerateDeploymentContextReturns(result1 file.File, result2 error) {
+func (fake *FakeGenerator) GenerateDeploymentContextReturns(result1 agent.File, result2 error) {
 	fake.generateDeploymentContextMutex.Lock()
 	defer fake.generateDeploymentContextMutex.Unlock()
 	fake.GenerateDeploymentContextStub = nil
 	fake.generateDeploymentContextReturns = struct {
-		result1 file.File
+		result1 agent.File
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *FakeGenerator) GenerateDeploymentContextReturnsOnCall(i int, result1 file.File, result2 error) {
+func (fake *FakeGenerator) GenerateDeploymentContextReturnsOnCall(i int, result1 agent.File, result2 error) {
 	fake.generateDeploymentContextMutex.Lock()
 	defer fake.generateDeploymentContextMutex.Unlock()
 	fake.GenerateDeploymentContextStub = nil
 	if fake.generateDeploymentContextReturnsOnCall == nil {
 		fake.generateDeploymentContextReturnsOnCall = make(map[int]struct {
-			result1 file.File
+			result1 agent.File
 			result2 error
 		})
 	}
 	fake.generateDeploymentContextReturnsOnCall[i] = struct {
-		result1 file.File
+		result1 agent.File
 		result2 error
 	}{result1, result2}
 }

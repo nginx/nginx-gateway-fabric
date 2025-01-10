@@ -3,8 +3,12 @@ package config
 import (
 	gotemplate "text/template"
 
+	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
+	filesHelper "github.com/nginx/agent/v3/pkg/files"
+
 	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/file"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/agent"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/shared"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
@@ -50,7 +54,7 @@ type mgmtConf struct {
 
 // generateMgmtFiles generates the NGINX Plus configuration file for the mgmt block. As part of this,
 // it writes the secret and deployment context files that are referenced in the mgmt block.
-func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []file.File {
+func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.File {
 	if !g.plus {
 		return nil
 	}
@@ -60,47 +64,59 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []file.Fi
 		panic("nginx plus token not set in expected map")
 	}
 
-	tokenFile := file.File{
-		Content: tokenContent,
-		Path:    secretsFolder + "/license.jwt",
-		Type:    file.TypeSecret,
+	tokenFile := agent.File{
+		Meta: &pb.FileMeta{
+			Name:        secretsFolder + "/license.jwt",
+			Hash:        filesHelper.GenerateHash(tokenContent),
+			Permissions: file.SecretFileMode,
+		},
+		Contents: tokenContent,
 	}
-	files := []file.File{tokenFile}
+	files := []agent.File{tokenFile}
 
 	cfg := mgmtConf{
 		Endpoint:         g.usageReportConfig.Endpoint,
 		Resolver:         g.usageReportConfig.Resolver,
-		LicenseTokenFile: tokenFile.Path,
+		LicenseTokenFile: tokenFile.Meta.Name,
 		SkipVerify:       g.usageReportConfig.SkipVerify,
 	}
 
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportCACertificate]; ok {
-		caFile := file.File{
-			Content: content,
-			Path:    secretsFolder + "/mgmt-ca.crt",
-			Type:    file.TypeSecret,
+		caFile := agent.File{
+			Meta: &pb.FileMeta{
+				Name:        secretsFolder + "/mgmt-ca.crt",
+				Hash:        filesHelper.GenerateHash(content),
+				Permissions: file.SecretFileMode,
+			},
+			Contents: content,
 		}
-		cfg.CACertFile = caFile.Path
+		cfg.CACertFile = caFile.Meta.Name
 		files = append(files, caFile)
 	}
 
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportClientSSLCertificate]; ok {
-		certFile := file.File{
-			Content: content,
-			Path:    secretsFolder + "/mgmt-tls.crt",
-			Type:    file.TypeSecret,
+		certFile := agent.File{
+			Meta: &pb.FileMeta{
+				Name:        secretsFolder + "/mgmt-tls.crt",
+				Hash:        filesHelper.GenerateHash(content),
+				Permissions: file.SecretFileMode,
+			},
+			Contents: content,
 		}
-		cfg.ClientSSLCertFile = certFile.Path
+		cfg.ClientSSLCertFile = certFile.Meta.Name
 		files = append(files, certFile)
 	}
 
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportClientSSLKey]; ok {
-		keyFile := file.File{
-			Content: content,
-			Path:    secretsFolder + "/mgmt-tls.key",
-			Type:    file.TypeSecret,
+		keyFile := agent.File{
+			Meta: &pb.FileMeta{
+				Name:        secretsFolder + "/mgmt-tls.key",
+				Hash:        filesHelper.GenerateHash(content),
+				Permissions: file.SecretFileMode,
+			},
+			Contents: content,
 		}
-		cfg.ClientSSLKeyFile = keyFile.Path
+		cfg.ClientSSLKeyFile = keyFile.Meta.Name
 		files = append(files, keyFile)
 	}
 
@@ -111,10 +127,14 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []file.Fi
 		files = append(files, deploymentCtxFile)
 	}
 
-	mgmtBlockFile := file.File{
-		Content: helpers.MustExecuteTemplate(mgmtConfigTemplate, cfg),
-		Path:    mgmtIncludesFile,
-		Type:    file.TypeRegular,
+	mgmtContents := helpers.MustExecuteTemplate(mgmtConfigTemplate, cfg)
+	mgmtBlockFile := agent.File{
+		Meta: &pb.FileMeta{
+			Name:        mgmtIncludesFile,
+			Hash:        filesHelper.GenerateHash(mgmtContents),
+			Permissions: file.RegularFileMode,
+		},
+		Contents: mgmtContents,
 	}
 
 	return append(files, mgmtBlockFile)

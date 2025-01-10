@@ -2,23 +2,28 @@ package grpc
 
 import (
 	"sync"
+
+	"k8s.io/apimachinery/pkg/types"
 )
+
+type Connection struct {
+	PodName    string
+	InstanceID string
+	Parent     types.NamespacedName
+}
 
 // ConnectionsTracker keeps track of all connections between the control plane and nginx agents.
 type ConnectionsTracker struct {
-	// connections contains a map of all IP addresses that have connected and their associated pod names.
-	// TODO(sberman): we'll likely need to create a channel for each connection that can be stored in this map.
-	// Then the Subscription listens on the channel for its connection, while the nginxUpdater sends the config
-	// for the pod over that channel.
-	connections map[string]string
+	// connections contains a map of all IP addresses that have connected and their connection info.
+	connections map[string]Connection
 
-	lock sync.Mutex
+	lock sync.RWMutex
 }
 
 // NewConnectionsTracker returns a new ConnectionsTracker instance.
 func NewConnectionsTracker() *ConnectionsTracker {
 	return &ConnectionsTracker{
-		connections: make(map[string]string),
+		connections: make(map[string]Connection),
 	}
 }
 
@@ -26,25 +31,29 @@ func NewConnectionsTracker() *ConnectionsTracker {
 // TODO(sberman): we need to handle the case when the token expires (once we support the token).
 // This likely involves setting a callback to cancel a context when the token expires, which triggers
 // the connection to be removed from the tracking list.
-func (c *ConnectionsTracker) Track(address, hostname string) {
+func (c *ConnectionsTracker) Track(key string, conn Connection) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	c.connections[address] = hostname
+	c.connections[key] = conn
 }
 
-// GetConnections returns all connections that are currently tracked.
-func (c *ConnectionsTracker) GetConnections() map[string]string {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+// GetConnection returns the requested connection.
+func (c *ConnectionsTracker) GetConnection(key string) Connection {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 
-	return c.connections
+	return c.connections[key]
 }
 
-// GetConnection returns the hostname of the requested connection.
-func (c *ConnectionsTracker) GetConnection(address string) string {
+// UntrackConnectionsForParent removes all Connections that reference the specified parent.
+func (c *ConnectionsTracker) UntrackConnectionsForParent(parent types.NamespacedName) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	return c.connections[address]
+	for key, conn := range c.connections {
+		if conn.Parent == parent {
+			delete(c.connections, key)
+		}
+	}
 }

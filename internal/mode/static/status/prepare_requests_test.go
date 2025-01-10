@@ -3,6 +3,7 @@ package status
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -1087,7 +1088,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonInvalid),
-							Message:            staticConds.GatewayMessageFailedNginxReload,
+							Message:            fmt.Sprintf("%s: test error", staticConds.GatewayMessageFailedNginxReload),
 						},
 					},
 					Listeners: []v1.ListenerStatus{
@@ -1125,7 +1126,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.ListenerReasonInvalid),
-									Message:            staticConds.ListenerMessageFailedNginxReload,
+									Message:            fmt.Sprintf("%s: test error", staticConds.ListenerMessageFailedNginxReload),
 								},
 							},
 						},

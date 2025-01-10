@@ -272,9 +272,10 @@ func prepareGatewayRequest(
 		}
 
 		if nginxReloadRes.Error != nil {
+			msg := fmt.Sprintf("%s: %s", staticConds.ListenerMessageFailedNginxReload, nginxReloadRes.Error.Error())
 			conds = append(
 				conds,
-				staticConds.NewListenerNotProgrammedInvalid(staticConds.ListenerMessageFailedNginxReload),
+				staticConds.NewListenerNotProgrammedInvalid(msg),
 			)
 		}
 
@@ -300,9 +301,10 @@ func prepareGatewayRequest(
 	}
 
 	if nginxReloadRes.Error != nil {
+		msg := fmt.Sprintf("%s: %s", staticConds.GatewayMessageFailedNginxReload, nginxReloadRes.Error.Error())
 		gwConds = append(
 			gwConds,
-			staticConds.NewGatewayNotProgrammedInvalid(staticConds.GatewayMessageFailedNginxReload),
+			staticConds.NewGatewayNotProgrammedInvalid(msg),
 		)
 	}
 

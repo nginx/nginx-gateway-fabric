@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -58,7 +59,7 @@ func initialize(cfg initializeConfig) error {
 		return fmt.Errorf("failed to generate deployment context file: %w", err)
 	}
 
-	if err := file.Write(cfg.fileManager, depCtxFile); err != nil {
+	if err := file.Write(cfg.fileManager, file.Convert(depCtxFile)); err != nil {
 		return fmt.Errorf("failed to write deployment context file: %w", err)
 	}
 
@@ -82,6 +83,10 @@ func copyFile(osFileManager file.OSFileManager, src, dest string) error {
 
 	if err := osFileManager.Copy(destFile, srcFile); err != nil {
 		return fmt.Errorf("error copying file contents: %w", err)
+	}
+
+	if err := osFileManager.Chmod(destFile, os.FileMode(file.RegularFileModeInt)); err != nil {
+		return fmt.Errorf("error setting file permissions: %w", err)
 	}
 
 	return nil
