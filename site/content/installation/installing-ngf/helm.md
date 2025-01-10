@@ -158,7 +158,7 @@ helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namesp
 
 #### Examples
 
-You can find several examples of configuration options of the `values.yaml` file in the [helm examples](https://github.com/nginx/nginx-gateway-fabric/tree/v1.5.1/examples/helm) directory.
+You can find several examples of configuration options of the `values.yaml` file in the [helm examples](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.0/examples/helm) directory.
 
 ### Access NGINX Gateway Fabric
 
@@ -179,13 +179,13 @@ To upgrade your Gateway API resources, take the following steps:
 - To upgrade the Gateway API resources, run:
 
   ```shell
-  kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v1.5.1" | kubectl apply -f -
+  kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v1.6.0" | kubectl apply -f -
   ```
 
   or, if you installed the from the experimental channel:
 
   ```shell
-  kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/experimental?ref=v1.5.1" | kubectl apply -f -
+  kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/experimental?ref=v1.6.0" | kubectl apply -f -
   ```
 
 ### Upgrade NGINX Gateway Fabric CRDs
@@ -199,7 +199,7 @@ To upgrade the CRDs, take the following steps:
 2. Upgrade the CRDs:
 
    ```shell
-   kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.5.1/deploy/crds.yaml
+   kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/deploy/crds.yaml
    ```
 
    {{<note>}}Ignore the following warning, as it is expected.{{</note>}}
@@ -318,7 +318,7 @@ Follow these steps to uninstall NGINX Gateway Fabric and Gateway API from your K
 
      ```shell
      kubectl delete ns nginx-gateway
-     kubectl delete -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.5.1/deploy/crds.yaml
+     kubectl delete -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/deploy/crds.yaml
      ```
 
 3. **Remove the Gateway API resources:**
@@ -327,4 +327,4 @@ Follow these steps to uninstall NGINX Gateway Fabric and Gateway API from your K
 
 ## Additional configuration
 
-For a full list of the Helm Chart configuration parameters, read [the NGINX Gateway Fabric Helm Chart](https://github.com/nginx/nginx-gateway-fabric/blob/v1.5.1/charts/nginx-gateway-fabric/README.md#configuration).
+For a full list of the Helm Chart configuration parameters, read [the NGINX Gateway Fabric Helm Chart](https://github.com/nginx/nginx-gateway-fabric/blob/v1.6.0/charts/nginx-gateway-fabric/README.md#configuration).

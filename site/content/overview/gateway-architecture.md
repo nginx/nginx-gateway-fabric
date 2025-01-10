@@ -21,7 +21,7 @@ NGINX Gateway Fabric is an open source project that provides an implementation o
 
 For a list of supported Gateway API resources and features, see the [Gateway API Compatibility]({{< relref "/overview/gateway-api-compatibility.md" >}}) documentation.
 
-We have more information regarding our [design principles](https://github.com/nginx/nginx-gateway-fabric/blob/v1.5.1/docs/developer/design-principles.md) in the project's GitHub repository.
+We have more information regarding our [design principles](https://github.com/nginx/nginx-gateway-fabric/blob/v1.6.0/docs/developer/design-principles.md) in the project's GitHub repository.
 
 ## NGINX Gateway Fabric at a high level
 
@@ -72,7 +72,7 @@ The following list describes the connections, preceeded by their types in parent
 
 1. (HTTPS)
    - Read: _NGF_ reads the _Kubernetes API_ to get the latest versions of the resources in the cluster.
-   - Write: _NGF_ writes to the _Kubernetes API_ to update the handled resources' statuses and emit events. If there's more than one replica of _NGF_ and [leader election](https://github.com/nginx/nginx-gateway-fabric/tree/v1.5.1/charts/nginx-gateway-fabric#configuration) is enabled, only the _NGF_ pod that is leading will write statuses to the _Kubernetes API_.
+   - Write: _NGF_ writes to the _Kubernetes API_ to update the handled resources' statuses and emit events. If there's more than one replica of _NGF_ and [leader election](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.0/charts/nginx-gateway-fabric#configuration) is enabled, only the _NGF_ pod that is leading will write statuses to the _Kubernetes API_.
 1. (HTTP, HTTPS) _Prometheus_ fetches the `controller-runtime` and NGINX metrics via an HTTP endpoint that _NGF_ exposes (`:9113/metrics` by default). Prometheus is **not** required by NGINX Gateway Fabric, and its endpoint can be turned off.
 1. (File I/O)
    - Write: _NGF_ generates NGINX _configuration_ based on the cluster resources and writes them as `.conf` files to the mounted `nginx-conf` volume, located at `/etc/nginx/conf.d`. It also writes _TLS certificates_ and _keys_ from [TLS secrets](https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets) referenced in the accepted Gateway resource to the `nginx-secrets` volume at the path `/etc/nginx/secrets`.
@@ -86,7 +86,7 @@ The following list describes the connections, preceeded by their types in parent
 1. (File I/O)
    - Write: The _NGINX master_ writes to the auxiliary Unix sockets folder, which is located in the `/var/run/nginx`
      directory.
-   - Read: The _NGINX master_ reads the `nginx.conf` file from the `/etc/nginx` directory. This [file](https://github.com/nginx/nginx-gateway-fabric/blob/v1.5.1/internal/mode/static/nginx/conf/nginx.conf) contains the global and http configuration settings for NGINX. In addition, _NGINX master_ reads the NJS modules referenced in the configuration when it starts or during a reload. NJS modules are stored in the `/usr/lib/nginx/modules` directory.
+   - Read: The _NGINX master_ reads the `nginx.conf` file from the `/etc/nginx` directory. This [file](https://github.com/nginx/nginx-gateway-fabric/blob/v1.6.0/internal/mode/static/nginx/conf/nginx.conf) contains the global and http configuration settings for NGINX. In addition, _NGINX master_ reads the NJS modules referenced in the configuration when it starts or during a reload. NJS modules are stored in the `/usr/lib/nginx/modules` directory.
 1. (File I/O) The _NGINX master_ sends logs to its _stdout_ and _stderr_, which are collected by the container runtime.
 1. (File I/O) An _NGINX worker_ writes logs to its _stdout_ and _stderr_, which are collected by the container runtime.
 1. (Signal) The _NGINX master_ controls the [lifecycle of _NGINX workers_](https://nginx.org/en/docs/control.html#reconfiguration) it creates workers with the new configuration and shutdowns workers with the old configuration.

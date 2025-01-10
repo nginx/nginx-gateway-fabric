@@ -10,7 +10,7 @@ To use Gateway API experimental resources, the Gateway API resources from the ex
 To install the Gateway API resources from the experimental channel, run the following:
 
 ```shell
-kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/experimental?ref=v1.5.1" | kubectl apply -f -
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/experimental?ref=v1.6.0" | kubectl apply -f -
 ```
 
 {{< note >}}If you plan to use the `edge` version of NGINX Gateway Fabric, you can replace the version in `ref` with `main`, for example `ref=main`. {{</ note >}}

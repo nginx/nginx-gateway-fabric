@@ -219,7 +219,7 @@
         "image": {
           "properties": {
             "pullPolicy": {
-              "default": "Always",
+              "default": "IfNotPresent",
               "enum": [
                 "Always",
                 "IfNotPresent",
@@ -236,7 +236,7 @@
               "type": "string"
             },
             "tag": {
-              "default": "edge",
+              "default": "1.6.0",
               "required": [],
               "title": "tag",
               "type": "string"
@@ -394,7 +394,7 @@
         "image": {
           "properties": {
             "pullPolicy": {
-              "default": "Always",
+              "default": "IfNotPresent",
               "enum": [
                 "Always",
                 "IfNotPresent",
@@ -411,7 +411,7 @@
               "type": "string"
             },
             "tag": {
-              "default": "edge",
+              "default": "1.6.0",
               "required": [],
               "title": "tag",
               "type": "string"

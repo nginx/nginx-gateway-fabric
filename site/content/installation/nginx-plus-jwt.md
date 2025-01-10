@@ -230,7 +230,7 @@ Replace the contents of `<JWT Token>` with the contents of the JWT token itself.
 You can then pull the image:
 
 ```shell
-docker pull private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:1.5.1
+docker pull private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:1.6.0
 ```
 
 Once you have successfully pulled the image, you can tag it as needed, then push it to a different container registry.

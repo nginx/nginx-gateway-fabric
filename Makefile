@@ -1,5 +1,5 @@
 # variables that should not be overridden by the user
-VERSION = edge
+VERSION = 1.6.0
 SELF_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CHART_DIR = $(SELF_DIR)charts/nginx-gateway-fabric
 NGINX_CONF_DIR = internal/mode/static/nginx/conf
