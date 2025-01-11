@@ -1,17 +1,12 @@
 package graph
 
 import (
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/pem"
 	"errors"
 	"fmt"
 
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
-
-const CAKey = "ca.crt"
 
 // CaCertConfigMap represents a ConfigMap resource that holds CA Cert data.
 type CaCertConfigMap struct {
@@ -96,27 +91,4 @@ func (r *configMapResolver) getResolvedConfigMaps() map[types.NamespacedName]*Ca
 	}
 
 	return resolved
-}
-
-// validateCA validates the ca.crt entry in the ConfigMap. If it is valid, the function returns nil.
-func validateCA(caData []byte) error {
-	data := make([]byte, base64.StdEncoding.DecodedLen(len(caData)))
-	_, err := base64.StdEncoding.Decode(data, caData)
-	if err != nil {
-		data = caData
-	}
-	block, _ := pem.Decode(data)
-	if block == nil {
-		return fmt.Errorf("the data field %s must hold a valid CERTIFICATE PEM block", CAKey)
-	}
-	if block.Type != "CERTIFICATE" {
-		return fmt.Errorf("the data field %s must hold a valid CERTIFICATE PEM block, but got '%s'", CAKey, block.Type)
-	}
-
-	_, err = x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return fmt.Errorf("failed to validate certificate: %w", err)
-	}
-
-	return nil
 }

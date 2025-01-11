@@ -2,9 +2,11 @@ package graph
 
 import (
 	"fmt"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
@@ -31,6 +33,7 @@ type BackendTLSPolicy struct {
 func processBackendTLSPolicies(
 	backendTLSPolicies map[types.NamespacedName]*v1alpha3.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
+	secretResolver *secretResolver,
 	ctlrName string,
 	gateway *Gateway,
 ) map[types.NamespacedName]*BackendTLSPolicy {
@@ -42,7 +45,7 @@ func processBackendTLSPolicies(
 	for nsname, backendTLSPolicy := range backendTLSPolicies {
 		var caCertRef types.NamespacedName
 
-		valid, ignored, conds := validateBackendTLSPolicy(backendTLSPolicy, configMapResolver, ctlrName)
+		valid, ignored, conds := validateBackendTLSPolicy(backendTLSPolicy, configMapResolver, secretResolver, ctlrName)
 
 		if valid && !ignored && backendTLSPolicy.Spec.Validation.CACertificateRefs != nil {
 			caCertRef = types.NamespacedName{
@@ -68,6 +71,7 @@ func processBackendTLSPolicies(
 func validateBackendTLSPolicy(
 	backendTLSPolicy *v1alpha3.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
+	secretResolver *secretResolver,
 	ctlrName string,
 ) (valid, ignored bool, conds []conditions.Condition) {
 	valid = true
@@ -93,7 +97,7 @@ func validateBackendTLSPolicy(
 		conds = append(conds, staticConds.NewPolicyInvalid(msg))
 
 	case len(caCertRefs) > 0:
-		if err := validateBackendTLSCACertRef(backendTLSPolicy, configMapResolver); err != nil {
+		if err := validateBackendTLSCACertRef(backendTLSPolicy, configMapResolver, secretResolver); err != nil {
 			valid = false
 			conds = append(conds, staticConds.NewPolicyInvalid(
 				fmt.Sprintf("invalid CACertificateRef: %s", err.Error())))
@@ -124,30 +128,44 @@ func validateBackendTLSHostname(btp *v1alpha3.BackendTLSPolicy) error {
 	return nil
 }
 
-func validateBackendTLSCACertRef(btp *v1alpha3.BackendTLSPolicy, configMapResolver *configMapResolver) error {
+func validateBackendTLSCACertRef(btp *v1alpha3.BackendTLSPolicy, configMapResolver *configMapResolver, secretResolver *secretResolver) error {
 	if len(btp.Spec.Validation.CACertificateRefs) != 1 {
 		path := field.NewPath("tls.cacertrefs")
 		valErr := field.TooMany(path, len(btp.Spec.Validation.CACertificateRefs), 1)
 		return valErr
 	}
-	if btp.Spec.Validation.CACertificateRefs[0].Kind != "ConfigMap" {
+
+	selectedCertRef := btp.Spec.Validation.CACertificateRefs[0]
+	allowedCaCertKinds := []v1.Kind{"ConfigMap", "Secret"}
+
+	if !slices.Contains(allowedCaCertKinds, selectedCertRef.Kind) {
 		path := field.NewPath("tls.cacertrefs[0].kind")
-		valErr := field.NotSupported(path, btp.Spec.Validation.CACertificateRefs[0].Kind, []string{"ConfigMap"})
+		valErr := field.NotSupported(path, btp.Spec.Validation.CACertificateRefs[0].Kind, allowedCaCertKinds)
 		return valErr
 	}
-	if btp.Spec.Validation.CACertificateRefs[0].Group != "" &&
-		btp.Spec.Validation.CACertificateRefs[0].Group != "core" {
+	if selectedCertRef.Group != "" &&
+		selectedCertRef.Group != "core" {
 		path := field.NewPath("tls.cacertrefs[0].group")
-		valErr := field.NotSupported(path, btp.Spec.Validation.CACertificateRefs[0].Group, []string{"", "core"})
+		valErr := field.NotSupported(path, selectedCertRef.Group, []string{"", "core"})
 		return valErr
 	}
 	nsName := types.NamespacedName{
 		Namespace: btp.Namespace,
-		Name:      string(btp.Spec.Validation.CACertificateRefs[0].Name),
+		Name:      string(selectedCertRef.Name),
 	}
-	if err := configMapResolver.resolve(nsName); err != nil {
-		path := field.NewPath("tls.cacertrefs[0]")
-		return field.Invalid(path, btp.Spec.Validation.CACertificateRefs[0], err.Error())
+
+	if selectedCertRef.Kind == "ConfigMap" {
+		if err := configMapResolver.resolve(nsName); err != nil {
+			path := field.NewPath("tls.cacertrefs[0]")
+			return field.Invalid(path, selectedCertRef, err.Error())
+		}
+	} else if selectedCertRef.Kind == "Secret" {
+		if err := secretResolver.resolve(nsName); err != nil {
+			path := field.NewPath("tls.cacertrefs[0]")
+			return field.Invalid(path, selectedCertRef, err.Error())
+		}
+	} else {
+		return fmt.Errorf("`%s` invalid certificate reference supported", selectedCertRef.Kind)
 	}
 	return nil
 }

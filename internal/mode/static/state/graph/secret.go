@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 
@@ -13,6 +12,9 @@ import (
 type Secret struct {
 	// Source holds the actual Secret resource. Can be nil if the Secret does not exist.
 	Source *apiv1.Secret
+
+	// CertBundle holds actual certificate data.
+	CertBundle *CertificateBundle
 }
 
 type secretEntry struct {
@@ -43,6 +45,7 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 	secret, exist := r.clusterSecrets[nsname]
 
 	var validationErr error
+	var certBundle *CertificateBundle
 
 	switch {
 	case !exist:
@@ -53,15 +56,23 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 
 	default:
 		// A TLS Secret is guaranteed to have these data fields.
-		_, err := tls.X509KeyPair(secret.Data[apiv1.TLSCertKey], secret.Data[apiv1.TLSPrivateKeyKey])
-		if err != nil {
-			validationErr = fmt.Errorf("TLS secret is invalid: %w", err)
+		certBundle = &CertificateBundle{
+			TLSCert:       secret.Data[apiv1.TLSCertKey],
+			TLSPrivateKey: secret.Data[apiv1.TLSPrivateKeyKey],
 		}
+
+		// Not always guaranteed to have a ca certificate in the secret.
+		if _, exists := secret.Data[CAKey]; exists {
+			certBundle.CACert = secret.Data[CAKey]
+		}
+
+		validationErr = certBundle.validate()
 	}
 
 	r.resolvedSecrets[nsname] = &secretEntry{
 		Secret: Secret{
-			Source: secret,
+			Source:     secret,
+			CertBundle: certBundle,
 		},
 		err: validationErr,
 	}

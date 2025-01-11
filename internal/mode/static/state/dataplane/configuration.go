@@ -767,11 +767,11 @@ func generateSSLKeyPairID(secret types.NamespacedName) SSLKeyPairID {
 	return SSLKeyPairID(fmt.Sprintf("ssl_keypair_%s_%s", secret.Namespace, secret.Name))
 }
 
-// generateCertBundleID generates an ID for the certificate bundle based on the ConfigMap namespaced name.
+// generateCertBundleID generates an ID for the certificate bundle based on the ConfigMap/Secret namespaced name.
 // It is guaranteed to be unique per unique namespaced name.
 // The ID is safe to use as a file name.
-func generateCertBundleID(configMap types.NamespacedName) CertBundleID {
-	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", configMap.Namespace, configMap.Name))
+func generateCertBundleID(caCertRef types.NamespacedName) CertBundleID {
+	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", caCertRef.Namespace, caCertRef.Name))
 }
 
 // buildTelemetry generates the Otel configuration.
