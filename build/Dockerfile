@@ -11,7 +11,7 @@ RUN make build
 
 FROM golang:1.23 AS ca-certs-provider
 
-FROM alpine:3.20 AS capabilizer
+FROM alpine:3.21 AS capabilizer
 RUN apk add --no-cache libcap
 
 FROM capabilizer AS local-capabilizer
