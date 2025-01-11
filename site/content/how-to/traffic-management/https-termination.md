@@ -1,15 +1,21 @@
 ---
 title: "HTTPS termination"
-weight: 600
 toc: true
-docs: "DOCS-1421"
+weight: 500
+type: how-to
+product: NGF
+docs: DOCS-1421
 ---
 
 Learn how to terminate HTTPS traffic using NGINX Gateway Fabric.
 
+---
+
 ## Overview
 
 In this guide, we will show how to configure HTTPS termination for your application, using an [HTTPRoute](https://gateway-api.sigs.k8s.io/api-types/httproute/) redirect filter, secret, and [ReferenceGrant](https://gateway-api.sigs.k8s.io/api-types/referencegrant/).
+
+---
 
 ## Before you begin
 
@@ -29,6 +35,8 @@ In this guide, we will show how to configure HTTPS termination for your applicat
    ```
 
 {{< note >}}In a production environment, you should have a DNS record for the external IP address that is exposed, and it should refer to the hostname that the gateway will forward for.{{< /note >}}
+
+---
 
 ## Set up
 
@@ -87,6 +95,8 @@ pod/coffee-6b8b6d6486-7fc78   1/1     Running   0          40s
 NAME                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
 service/coffee       ClusterIP   10.96.189.37   <none>        80/TCP    40s
 ```
+
+---
 
 ## Configure HTTPS termination and routing
 
@@ -209,7 +219,9 @@ EOF
 
 The first route issues a `requestRedirect` from the `http` listener on port 80 to `https` on port 443. The second route binds the `coffee` route to the `https` listener.
 
-## Send Traffic
+---
+
+## Send traffic
 
 Using the external IP address and port for NGINX Gateway Fabric, we can send traffic to our coffee application.
 
@@ -241,7 +253,9 @@ Server address: 10.244.0.6:80
 Server name: coffee-6b8b6d6486-7fc78
 ```
 
-## Further reading
+---
+
+## See also
 
 To learn more about redirects using the Gateway API, see the following resource:
 

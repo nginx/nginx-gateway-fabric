@@ -1,17 +1,23 @@
 ---
 title: "Upgrade applications without downtime"
-weight: 500
 toc: true
+weight: 300
+type: how-to
+product: NGF
 docs: "DOCS-1420"
 ---
 
 Learn how to use NGINX Gateway Fabric to upgrade applications without downtime.
+
+---
 
 ## Overview
 
 {{< note >}} See the [Architecture document]({{< relref "/overview/gateway-architecture.md" >}}) to learn more about NGINX Gateway Fabric architecture.{{< /note >}}
 
 NGINX Gateway Fabric allows upgrading applications without downtime. To understand the upgrade methods, you need to be familiar with the NGINX features that help prevent application downtime: Graceful configuration reloads and upstream server updates.
+
+---
 
 ### Graceful configuration reloads
 
@@ -20,6 +26,8 @@ If a relevant gateway API or built-in Kubernetes resource is changed, NGINX Gate
 We call such an operation a "reload", during which client requests are not dropped - which defines it as a graceful reload.
 
 This process is further explained in the [NGINX configuration documentation](https://nginx.org/en/docs/control.html?#reconfiguration).
+
+---
 
 ### Upstream server updates
 
@@ -37,6 +45,8 @@ Adding and removing endpoints are two of the most common cases:
 As long as you have more than one endpoint ready, clients won't experience downtime during upgrades.
 
 {{< note >}}It is good practice to configure a [Readiness probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) in the deployment so that a pod can report when it is ready to receive traffic. Note that NGINX Gateway Fabric will not add any endpoint to NGINX that is not ready.{{< /note >}}
+
+---
 
 ## Prerequisites
 
@@ -64,6 +74,8 @@ The upgrade methods in the next sections cover:
 - Blue-green deployments
 - Canary releases
 
+---
+
 ## Rolling deployment upgrade
 
 To start a [rolling deployment upgrade](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-update-deployment), you update the deployment to use the new version tag of the application. As a result, Kubernetes terminates the pods with the old version and create new ones. By default, Kubernetes also ensures that some number of pods always stay available during the upgrade.
@@ -71,6 +83,8 @@ To start a [rolling deployment upgrade](https://kubernetes.io/docs/concepts/work
 This upgrade will add new upstream servers to NGINX and remove the old ones. As long as the number of pods (ready endpoints) during an upgrade does not reach zero, NGINX will be able to proxy traffic, and therefore prevent any downtime.
 
 This method does not require you to update the **HTTPRoute**.
+
+---
 
 ## Blue-green deployments
 
@@ -80,6 +94,8 @@ There are two ways to switch the traffic:
 
 - Update the service selector to select the pods of the blue version instead of the green. As a result, NGINX Gateway Fabric removes the green upstream servers from NGINX and adds the blue ones. With this approach, it is not necessary to update the **HTTPRoute**.
 - Create a separate service for the blue version and update the backend reference in the **HTTPRoute** to reference this service, which leads to the same result as with the previous option.
+
+---
 
 ## Canary releases
 

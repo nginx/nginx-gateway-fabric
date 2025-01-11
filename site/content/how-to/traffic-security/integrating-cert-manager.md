@@ -1,7 +1,9 @@
 ---
 title: "Secure traffic using Let's Encrypt and cert-manager"
-weight: 300
+weight: 100
 toc: true
+type: how-to
+product: NGF
 docs: "DOCS-1425"
 ---
 
@@ -17,6 +19,8 @@ Follow the steps in this guide to:
 - Use [Let’s Encrypt](https://letsencrypt.org) as the Certificate Authority (CA) issuing the TLS certificate.
 - Use [cert-manager](https://cert-manager.io) to automate the provisioning and management of the certificate.
 
+---
+
 ## Before you begin
 
 - Administrator access to a Kubernetes cluster.
@@ -24,7 +28,9 @@ Follow the steps in this guide to:
 - [NGINX Gateway Fabric deployed]({{< relref "/installation/" >}}) in the Kubernetes cluster.
 - A DNS-resolvable domain name is required. It must resolve to the public endpoint of the NGINX Gateway Fabric deployment, and this public endpoint must be an external IP address or alias accessible over the internet. The process here will depend on your DNS provider. This DNS name will need to be resolvable from the Let’s Encrypt servers, which may require that you wait for the record to propagate before it will work.
 
-## Secure traffic using Let's Encrypt and cert-manage
+---
+
+## Secure traffic using Let's Encrypt and cert-manager
 
 {{<img src="img/cert-manager-gateway-workflow.png" alt="cert-manager ACME challenge and certificate management with Gateway API">}}
 
@@ -39,6 +45,8 @@ At a high level, the process looks like this:
 1. We deploy our application and our HTTPRoute which defines our routing rules. The routing rules defined configure NGINX to direct requests to `https://cafe.example.com/coffee` to our coffee-app application, and to use the HTTPS listener defined in our gateway resource.
 1. When the client connects to `https://cafe.example.com/coffee`, the request is routed to the coffee-app application and the communication is secured using the signed keypair contained in the cafe-secret secret.
 1. The certificate will be automatically renewed when it is close to expiry, the secret will be updated using the new certificate, and NGINX Gateway Fabric will dynamically update the keypair on the filesystem used by NGINX for HTTPS termination once the secret is updated.
+
+---
 
 ## Securing traffic
 
@@ -64,6 +72,8 @@ The first step is to deploy cert-manager onto the cluster.
     --set installCRDs=true \
     --set "extraArgs={--feature-gates=ExperimentalGatewayAPISupport=true}"
   ```
+
+---
 
 ### Create a ClusterIssuer
 
@@ -95,6 +105,8 @@ spec:
             namespace: default
             kind: Gateway
 ```
+
+---
 
 ### Deploy our Gateway with the cert-manager annotation
 
@@ -143,6 +155,8 @@ kubectl get secret cafe-secret
 NAME          TYPE                DATA   AGE
 cafe-secret   kubernetes.io/tls   2      20s
 ```
+
+---
 
 ### Deploy our application and HTTPRoute
 
@@ -206,6 +220,8 @@ spec:
       port: 80
 ```
 
+---
+
 ## Testing
 
 To test everything has worked correctly, we can use curl to the navigate to our endpoint, for example, `https://cafe.example.com/coffee`. To verify using curl, we can use the `-v` option to increase verbosity and inspect the presented certificate.
@@ -261,6 +277,8 @@ Request ID: e64c54a2ac253375ac085d48980f000a
 * Connection #0 to host cafe.example.com left intact
 ```
 
+---
+
 ## Troubleshooting
 
 - To troubleshoot any issues related to the cert-manager installation or issuer setup, see [the cert-manager troubleshooting guide](https://cert-manager.io/docs/troubleshooting/).
@@ -282,7 +300,9 @@ Request ID: e64c54a2ac253375ac085d48980f000a
     <...>
     ```
 
-## Links
+---
+
+## See also
 
 - [Gateway docs](https://gateway-api.sigs.k8s.io)
 - [Cert-manager gateway usage](https://cert-manager.io/docs/usage/gateway/)

@@ -1,7 +1,10 @@
 ---
 title: "Modify HTTP request and response headers"
-weight: 500
 toc: true
+weight: 600
+type: how-to
+product: NGF
+docs: DOCS-000
 ---
 
 Learn how to modify the request and response headers of your application using NGINX Gateway Fabric.

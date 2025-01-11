@@ -1,22 +1,29 @@
 ---
 title: "Securing backend traffic"
-description:
-weight: 700
+weight: 200
 toc: true
+type: how-to
+product: NGF
 docs: "DOCS-1423"
 ---
 
 Learn how to encrypt HTTP traffic between NGINX Gateway Fabric and your backend pods.
 
+---
+
 ## Overview
 
 In this guide, we will show how to specify the TLS configuration of the connection from the Gateway to a backend pod/s via the Service API object using a [BackendTLSPolicy](https://gateway-api.sigs.k8s.io/api-types/backendtlspolicy/). This covers the use-case where the service or backend owner is doing their own TLS and NGINX Gateway Fabric needs to know how to connect to this backend pod that has its own certificate over HTTPS.
+
+---
 
 ## Note on Gateway API Experimental Features
 
 {{< important >}} BackendTLSPolicy is a Gateway API resource from the experimental release channel. {{< /important >}}
 
 {{<include "installation/install-gateway-api-experimental-features.md" >}}
+
+---
 
 ## Before you begin
 
@@ -29,6 +36,8 @@ In this guide, we will show how to specify the TLS configuration of the connecti
    ```
 
 {{< note >}}In a production environment, you should have a DNS record for the external IP address that is exposed, and it should refer to the hostname that the gateway will forward for.{{< /note >}}
+
+---
 
 ## Set up
 
@@ -132,6 +141,8 @@ NAME                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
 service/secure-app   ClusterIP   10.96.213.57   <none>        8443/TCP  9s
 ```
 
+---
+
 ## Configure routing rules
 
 First, we will create the Gateway resource with an HTTP listener:
@@ -176,6 +187,8 @@ spec:
 EOF
 ```
 
+---
+
 ## Send Traffic without backend TLS configuration
 
 Using the external IP address and port for NGINX Gateway Fabric, we can send traffic to our secure-app application. To show what happens if we send plain HTTP traffic from NGF to our `secure-app`, let's try sending a request before we create the backend TLS configuration.
@@ -198,6 +211,8 @@ curl --resolve secure-app.example.com:$GW_PORT:$GW_IP http://secure-app.example.
 ```
 
 We can see we a status 400 Bad Request message from NGINX.
+
+---
 
 ## Create the backend TLS configuration
 
@@ -303,7 +318,9 @@ Status:
 Events:                      <none>
 ```
 
-## Send Traffic with backend TLS configuration
+---
+
+## Send traffic with backend TLS configuration
 
 Now let's try sending traffic again:
 
@@ -315,7 +332,9 @@ curl --resolve secure-app.example.com:$GW_PORT:$GW_IP http://secure-app.example.
 hello from pod secure-app
 ```
 
-## Further reading
+---
+
+## See also
 
 To learn more about configuring backend TLS termination using the Gateway API, see the following resources:
 

@@ -1,15 +1,21 @@
 ---
 title: "Routing traffic to applications"
-weight: 100
 toc: true
-docs: "DOCS-1426"
+weight: 100
+type: how-to
+product: NGF
+docs: DOCS-1426
 ---
 
 Learn how to route external traffic to your Kubernetes applications using NGINX Gateway Fabric.
 
+---
+
 ## Overview
 
 You can route traffic to your Kubernetes applications using the Gateway API and NGINX Gateway Fabric. Whether you're managing a web application or a REST backend API, you can use NGINX Gateway Fabric to expose your application outside the cluster.
+
+---
 
 ## Before you begin
 
@@ -21,17 +27,21 @@ You can route traffic to your Kubernetes applications using the Gateway API and 
    GW_PORT=<port number>
    ```
 
+---
+
 ## Example application
 
 The application we are going to use in this guide is a simple **coffee** application comprised of one service and two pods:
 
-{{<img src="img/route-all-traffic-app.png" alt="">}}
+{{<img src="img/route-all-traffic-app.png" alt="This image shows a single 'coffee' Service connecting to two 'coffee' Pods.">}}
 
 Using this architecture, the **coffee** application is not accessible outside the cluster. We want to expose this application on the hostname "cafe.example.com" so that clients outside the cluster can access it.
 
 Install NGINX Gateway Fabric and create two Gateway API resources: a [gateway](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1.Gateway) and an [HTTPRoute](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1.HTTPRoute).
 
 Using these resources we will configure a simple routing rule to match all HTTP traffic with the hostname "cafe.example.com" and route it to the **coffee** service.
+
+---
 
 ## Set up
 
@@ -92,11 +102,13 @@ NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
 service/coffee       ClusterIP   198.51.100.1     <none>        80/TCP    77s
 ```
 
+---
+
 ## Application architecture with NGINX Gateway Fabric
 
 To route traffic to the **coffee** application, we will create a gateway and HTTPRoute. The following diagram shows the configuration we are creating in the next step:
 
-{{<img src="img/route-all-traffic-config.png" alt="Configuration">}}
+{{<img src="img/route-all-traffic-config.png" alt="">}}
 
 We need a gateway to create an entry point for HTTP traffic coming into the cluster. The **cafe** gateway we are going to create will open an entry point to the cluster on port 80 for HTTP traffic.
 
@@ -111,6 +123,8 @@ The **coffee** service is omitted from the diagram above because the NGINX Gatew
 {{< note >}}In the diagrams above, all resources that are the responsibility of the cluster operator are shown in blue. The orange resources are the responsibility of the application developers.
 
 See the [roles and personas](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#roles-and-personas_1) Gateway API document for more information on these roles.{{< /note >}}
+
+---
 
 ## Create the Gateway API resources
 
@@ -167,6 +181,8 @@ To attach the **coffee** HTTPRoute to the **cafe** gateway, we specify the gatew
 The [**hostnames**](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec) field allows you to list the hostnames that the HTTPRoute matches. In this case, incoming requests handled by the **http** listener with the HTTP host header "cafe.example.com" will match this HTTPRoute and will be routed according to the rules in the spec.
 
 The [**rules**](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1.HTTPRouteRule) field defines routing rules for the HTTPRoute. A rule is selected if the request satisfies one of the rule's **matches**. To forward traffic for all paths to the coffee service we specify a match with the PathPrefix "/" and target the coffee service using the **backendRef** field.
+
+---
 
 ## Test the configuration
 
@@ -225,6 +241,8 @@ You should receive a 404 Not Found error:
 </body>
 </html>
 ```
+
+---
 
 ## Troubleshooting
 
@@ -357,11 +375,13 @@ If you have any issues while testing the configuration, try the following to deb
   }
   ```
 
-{{< note >}}The entire configuration is not shown because it is subject to change. Ellipses indicate that there's configuration not shown.{{< /note >}}
+{{< note >}} The entire configuration is not shown because it is subject to change. Ellipses indicate that there's configuration not shown. {{< /note >}}
 
 If your issue persists, [contact us](https://github.com/nginx/nginx-gateway-fabric#contacts).
 
-## Further reading
+---
+
+## See also
 
 To learn more about the Gateway API and the resources we created in this guide, check out the following resources:
 
