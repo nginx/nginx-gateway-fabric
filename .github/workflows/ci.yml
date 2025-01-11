@@ -33,6 +33,7 @@ jobs:
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
       k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
       helm_changes: ${{ steps.filter.outputs.charts }}
+      docs_only_changes: ${{ steps.filter.outputs.docs && !steps.filter.outputs.code }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -55,6 +56,14 @@ jobs:
           filters: |
             charts:
             - charts/nginx-gateway-fabric/**/*
+            docs: &docs
+            - design/**
+            - docs/**
+            - examples/**
+            - site/**
+            code:
+            - '**'
+            - '!*docs'
 
       - name: Output Variables
         id: vars
@@ -78,6 +87,7 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-24.04
     needs: vars
+    if: ${{ needs.vars.outputs.docs_only_changes == 'true' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -109,6 +119,7 @@ jobs:
     name: NJS Unit Tests
     runs-on: ubuntu-24.04
     needs: vars
+    if: ${{ needs.vars.outputs.docs_only_changes == 'true' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -245,6 +256,7 @@ jobs:
   conformance-tests:
     name: Conformance tests
     needs: [vars, build-oss, build-plus]
+    if: ${{ ! failure() }}
     strategy:
       fail-fast: false
       matrix:
@@ -260,6 +272,7 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       enable-experimental: ${{ matrix.enable-experimental }}
+      if: ${{ (!github.event.pull_request.head.repo.fork || matrix.image != 'plus' ) && needs.vars.outputs.docs_only_changes != 'true' }}
     secrets: inherit
     permissions:
       contents: write
@@ -267,6 +280,7 @@ jobs:
   helm-tests:
     name: Helm Tests
     needs: [vars, build-oss, build-plus]
+    if: ${{ needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' }}
     strategy:
       fail-fast: false
       matrix:
@@ -281,7 +295,6 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
     secrets: inherit
-    if: ${{ needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' }}
 
   publish-helm:
     name: Package and Publish Helm Chart
