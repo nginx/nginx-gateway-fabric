@@ -28,22 +28,18 @@ rules:
   - namespaces
   - services
   - secrets
+  - pods
   verbs:
   - get
   - list
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
 - apiGroups:
   - apps
   resources:
   - replicasets
   verbs:
   - get
+  - list
 - apiGroups:
   - ""
   resources:
@@ -157,6 +153,9 @@ data:
     - /var/run/nginx
     features:
     - connection
+    - configuration
+    - certificates
+    - metrics
     log:
       level: debug
 kind: ConfigMap
@@ -290,12 +289,13 @@ spec:
           initialDelaySeconds: 3
           periodSeconds: 1
         securityContext:
+          allowPrivilegeEscalation: false
           capabilities:
             drop:
             - ALL
           readOnlyRootFilesystem: true
           runAsGroup: 1001
-          runAsUser: 102
+          runAsUser: 101
           seccompProfile:
             type: RuntimeDefault
       securityContext:
@@ -330,7 +330,6 @@ spec:
         - containerPort: 443
           name: https
         securityContext:
-          allowPrivilegeEscalation: false
           capabilities:
             add:
             - NET_BIND_SERVICE
@@ -362,7 +361,7 @@ spec:
       - command:
         - /usr/bin/gateway
         - sleep
-        - --duration=15s
+        - --duration=5s
         image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: sleep
@@ -387,7 +386,7 @@ spec:
             - ALL
           readOnlyRootFilesystem: true
           runAsGroup: 1001
-          runAsUser: 102
+          runAsUser: 101
           seccompProfile:
             type: RuntimeDefault
         volumeMounts:

@@ -15,5 +15,11 @@ data:
     - /var/run/nginx
     features:
     - connection
+    - configuration
+    - certificates
+    - metrics
+    {{- if .Values.nginx.plus }}
+    - api-action
+    {{- end }}
     log:
       level: debug

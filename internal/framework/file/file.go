@@ -5,15 +5,21 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/agent"
 )
 
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
 
 const (
-	// regularFileMode defines the default file mode for regular files.
-	regularFileMode = 0o644
-	// secretFileMode defines the default file mode for files with secrets.
-	secretFileMode = 0o640
+	// RegularFileModeInt defines the default file mode for regular files as an integer.
+	RegularFileModeInt = 0o644
+	// RegularFileMode defines the default file mode for regular files.
+	RegularFileMode = "0644"
+	// secretFileMode defines the default file mode for files with secrets as an integer.
+	secretFileModeInt = 0o640
+	// SecretFileMode defines the default file mode for files with secrets.
+	SecretFileMode = "0640"
 )
 
 // Type is the type of File.
@@ -78,14 +84,14 @@ func Write(fileMgr OSFileManager, file File) error {
 
 	switch file.Type {
 	case TypeRegular:
-		if err := fileMgr.Chmod(f, regularFileMode); err != nil {
+		if err := fileMgr.Chmod(f, RegularFileModeInt); err != nil {
 			resultErr = fmt.Errorf(
-				"failed to set file mode to %#o for %q: %w", regularFileMode, file.Path, err)
+				"failed to set file mode to %#o for %q: %w", RegularFileModeInt, file.Path, err)
 			return resultErr
 		}
 	case TypeSecret:
-		if err := fileMgr.Chmod(f, secretFileMode); err != nil {
-			resultErr = fmt.Errorf("failed to set file mode to %#o for %q: %w", secretFileMode, file.Path, err)
+		if err := fileMgr.Chmod(f, secretFileModeInt); err != nil {
+			resultErr = fmt.Errorf("failed to set file mode to %#o for %q: %w", secretFileModeInt, file.Path, err)
 			return resultErr
 		}
 	default:
@@ -103,5 +109,26 @@ func Write(fileMgr OSFileManager, file File) error {
 func ensureType(fileType Type) {
 	if fileType != TypeRegular && fileType != TypeSecret {
 		panic(fmt.Sprintf("unknown file type %d", fileType))
+	}
+}
+
+// Convert an agent File to an internal File type.
+func Convert(agentFile agent.File) File {
+	if agentFile.Meta == nil {
+		return File{}
+	}
+
+	var t Type
+	switch agentFile.Meta.Permissions {
+	case RegularFileMode:
+		t = TypeRegular
+	case SecretFileMode:
+		t = TypeSecret
+	}
+
+	return File{
+		Content: agentFile.Contents,
+		Path:    agentFile.Meta.Name,
+		Type:    t,
 	}
 }

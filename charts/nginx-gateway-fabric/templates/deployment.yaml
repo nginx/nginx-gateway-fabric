@@ -139,8 +139,9 @@ spec:
           capabilities:
             drop:
             - ALL
+          allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
-          runAsUser: 102
+          runAsUser: 101
           runAsGroup: 1001
         {{- with .Values.nginxGateway.extraVolumeMounts -}}
         {{ toYaml . | nindent 8 }}

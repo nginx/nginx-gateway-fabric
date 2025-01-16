@@ -5,11 +5,13 @@ import (
 	"os"
 	"path/filepath"
 
+	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/file"
 	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/file/filefakes"
+	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/agent"
 )
 
 var _ = Describe("Write files", Ordered, func() {
@@ -151,5 +153,36 @@ var _ = Describe("Write files", Ordered, func() {
 				},
 			),
 		)
+	})
+
+	It("converts agent files to internal files", func() {
+		agentFile := agent.File{
+			Contents: []byte("file contents"),
+			Meta: &pb.FileMeta{
+				Name:        "regular-file",
+				Permissions: file.RegularFileMode,
+			},
+		}
+		expFile := file.File{
+			Path:    "regular-file",
+			Content: []byte("file contents"),
+			Type:    file.TypeRegular,
+		}
+
+		secretAgentFile := agent.File{
+			Contents: []byte("secret contents"),
+			Meta: &pb.FileMeta{
+				Name:        "secret-file",
+				Permissions: file.SecretFileMode,
+			},
+		}
+		expSecretFile := file.File{
+			Path:    "secret-file",
+			Content: []byte("secret contents"),
+			Type:    file.TypeSecret,
+		}
+
+		Expect(file.Convert(agentFile)).To(Equal(expFile))
+		Expect(file.Convert(secretAgentFile)).To(Equal(expSecretFile))
 	})
 })

@@ -69,8 +69,9 @@ spec:
           capabilities:
             drop:
             - ALL
+          allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
-          runAsUser: 102
+          runAsUser: 101
           runAsGroup: 1001
       terminationGracePeriodSeconds: 30
       serviceAccountName: nginx-gateway

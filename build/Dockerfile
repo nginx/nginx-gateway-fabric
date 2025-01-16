@@ -14,7 +14,7 @@ FROM golang:1.23 AS ca-certs-provider
 FROM scratch AS common
 # CA certs are needed for telemetry report so that NGF can verify the server's certificate.
 COPY --from=ca-certs-provider --link /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-USER 102:1001
+USER 101:1001
 ARG BUILD_AGENT
 ENV BUILD_AGENT=${BUILD_AGENT}
 ENTRYPOINT [ "/usr/bin/gateway" ]

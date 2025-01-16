@@ -5,33 +5,61 @@ import (
 	"sync"
 
 	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/agent"
+	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
 type FakeNginxUpdater struct {
-	UpdateConfigStub        func(int)
+	UpdateConfigStub        func(*agent.Deployment, []agent.File) bool
 	updateConfigMutex       sync.RWMutex
 	updateConfigArgsForCall []struct {
-		arg1 int
+		arg1 *agent.Deployment
+		arg2 []agent.File
 	}
-	UpdateUpstreamServersStub        func()
+	updateConfigReturns struct {
+		result1 bool
+	}
+	updateConfigReturnsOnCall map[int]struct {
+		result1 bool
+	}
+	UpdateUpstreamServersStub        func(*agent.Deployment, dataplane.Configuration) bool
 	updateUpstreamServersMutex       sync.RWMutex
 	updateUpstreamServersArgsForCall []struct {
+		arg1 *agent.Deployment
+		arg2 dataplane.Configuration
+	}
+	updateUpstreamServersReturns struct {
+		result1 bool
+	}
+	updateUpstreamServersReturnsOnCall map[int]struct {
+		result1 bool
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeNginxUpdater) UpdateConfig(arg1 int) {
+func (fake *FakeNginxUpdater) UpdateConfig(arg1 *agent.Deployment, arg2 []agent.File) bool {
+	var arg2Copy []agent.File
+	if arg2 != nil {
+		arg2Copy = make([]agent.File, len(arg2))
+		copy(arg2Copy, arg2)
+	}
 	fake.updateConfigMutex.Lock()
+	ret, specificReturn := fake.updateConfigReturnsOnCall[len(fake.updateConfigArgsForCall)]
 	fake.updateConfigArgsForCall = append(fake.updateConfigArgsForCall, struct {
-		arg1 int
-	}{arg1})
+		arg1 *agent.Deployment
+		arg2 []agent.File
+	}{arg1, arg2Copy})
 	stub := fake.UpdateConfigStub
-	fake.recordInvocation("UpdateConfig", []interface{}{arg1})
+	fakeReturns := fake.updateConfigReturns
+	fake.recordInvocation("UpdateConfig", []interface{}{arg1, arg2Copy})
 	fake.updateConfigMutex.Unlock()
 	if stub != nil {
-		fake.UpdateConfigStub(arg1)
+		return stub(arg1, arg2)
 	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
 }
 
 func (fake *FakeNginxUpdater) UpdateConfigCallCount() int {
@@ -40,29 +68,60 @@ func (fake *FakeNginxUpdater) UpdateConfigCallCount() int {
 	return len(fake.updateConfigArgsForCall)
 }
 
-func (fake *FakeNginxUpdater) UpdateConfigCalls(stub func(int)) {
+func (fake *FakeNginxUpdater) UpdateConfigCalls(stub func(*agent.Deployment, []agent.File) bool) {
 	fake.updateConfigMutex.Lock()
 	defer fake.updateConfigMutex.Unlock()
 	fake.UpdateConfigStub = stub
 }
 
-func (fake *FakeNginxUpdater) UpdateConfigArgsForCall(i int) int {
+func (fake *FakeNginxUpdater) UpdateConfigArgsForCall(i int) (*agent.Deployment, []agent.File) {
 	fake.updateConfigMutex.RLock()
 	defer fake.updateConfigMutex.RUnlock()
 	argsForCall := fake.updateConfigArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.arg1, argsForCall.arg2
 }
 
-func (fake *FakeNginxUpdater) UpdateUpstreamServers() {
+func (fake *FakeNginxUpdater) UpdateConfigReturns(result1 bool) {
+	fake.updateConfigMutex.Lock()
+	defer fake.updateConfigMutex.Unlock()
+	fake.UpdateConfigStub = nil
+	fake.updateConfigReturns = struct {
+		result1 bool
+	}{result1}
+}
+
+func (fake *FakeNginxUpdater) UpdateConfigReturnsOnCall(i int, result1 bool) {
+	fake.updateConfigMutex.Lock()
+	defer fake.updateConfigMutex.Unlock()
+	fake.UpdateConfigStub = nil
+	if fake.updateConfigReturnsOnCall == nil {
+		fake.updateConfigReturnsOnCall = make(map[int]struct {
+			result1 bool
+		})
+	}
+	fake.updateConfigReturnsOnCall[i] = struct {
+		result1 bool
+	}{result1}
+}
+
+func (fake *FakeNginxUpdater) UpdateUpstreamServers(arg1 *agent.Deployment, arg2 dataplane.Configuration) bool {
 	fake.updateUpstreamServersMutex.Lock()
+	ret, specificReturn := fake.updateUpstreamServersReturnsOnCall[len(fake.updateUpstreamServersArgsForCall)]
 	fake.updateUpstreamServersArgsForCall = append(fake.updateUpstreamServersArgsForCall, struct {
-	}{})
+		arg1 *agent.Deployment
+		arg2 dataplane.Configuration
+	}{arg1, arg2})
 	stub := fake.UpdateUpstreamServersStub
-	fake.recordInvocation("UpdateUpstreamServers", []interface{}{})
+	fakeReturns := fake.updateUpstreamServersReturns
+	fake.recordInvocation("UpdateUpstreamServers", []interface{}{arg1, arg2})
 	fake.updateUpstreamServersMutex.Unlock()
 	if stub != nil {
-		fake.UpdateUpstreamServersStub()
+		return stub(arg1, arg2)
 	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
 }
 
 func (fake *FakeNginxUpdater) UpdateUpstreamServersCallCount() int {
@@ -71,10 +130,40 @@ func (fake *FakeNginxUpdater) UpdateUpstreamServersCallCount() int {
 	return len(fake.updateUpstreamServersArgsForCall)
 }
 
-func (fake *FakeNginxUpdater) UpdateUpstreamServersCalls(stub func()) {
+func (fake *FakeNginxUpdater) UpdateUpstreamServersCalls(stub func(*agent.Deployment, dataplane.Configuration) bool) {
 	fake.updateUpstreamServersMutex.Lock()
 	defer fake.updateUpstreamServersMutex.Unlock()
 	fake.UpdateUpstreamServersStub = stub
+}
+
+func (fake *FakeNginxUpdater) UpdateUpstreamServersArgsForCall(i int) (*agent.Deployment, dataplane.Configuration) {
+	fake.updateUpstreamServersMutex.RLock()
+	defer fake.updateUpstreamServersMutex.RUnlock()
+	argsForCall := fake.updateUpstreamServersArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *FakeNginxUpdater) UpdateUpstreamServersReturns(result1 bool) {
+	fake.updateUpstreamServersMutex.Lock()
+	defer fake.updateUpstreamServersMutex.Unlock()
+	fake.UpdateUpstreamServersStub = nil
+	fake.updateUpstreamServersReturns = struct {
+		result1 bool
+	}{result1}
+}
+
+func (fake *FakeNginxUpdater) UpdateUpstreamServersReturnsOnCall(i int, result1 bool) {
+	fake.updateUpstreamServersMutex.Lock()
+	defer fake.updateUpstreamServersMutex.Unlock()
+	fake.UpdateUpstreamServersStub = nil
+	if fake.updateUpstreamServersReturnsOnCall == nil {
+		fake.updateUpstreamServersReturnsOnCall = make(map[int]struct {
+			result1 bool
+		})
+	}
+	fake.updateUpstreamServersReturnsOnCall[i] = struct {
+		result1 bool
+	}{result1}
 }
 
 func (fake *FakeNginxUpdater) Invocations() map[string][][]interface{} {

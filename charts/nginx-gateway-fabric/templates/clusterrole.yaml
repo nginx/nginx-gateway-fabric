@@ -11,6 +11,7 @@ rules:
   - namespaces
   - services
   - secrets
+  - pods
 {{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - configmaps
 {{- end }}
@@ -18,28 +19,13 @@ rules:
   - get
   - list
   - watch
-{{- if or .Values.nginxGateway.productTelemetry.enable .Values.nginx.plus }}
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
 - apiGroups:
   - apps
   resources:
   - replicasets
   verbs:
   - get
-{{- end }}
-{{- if .Values.nginx.plus }}
-- apiGroups:
-  - apps
-  resources:
-  - replicasets
-  verbs:
   - list
-{{- end }}
 {{- if or .Values.nginxGateway.productTelemetry.enable .Values.nginx.plus }}
 - apiGroups:
   - ""
