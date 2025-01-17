@@ -88,7 +88,6 @@ jobs:
         id: auth
         uses: google-github-actions/auth@6fc4af4b145ae7821d527454aa9bd537d1f2dc5f # v2.1.7
         with:
-          token_format: access_token
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
@@ -98,44 +97,48 @@ jobs:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           install_components: kubectl
 
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@592200bd4b9bbf4772ace78f887668b1aee8f716 # v1.0.5
+        with:
+          tofu_version: 1.9.0 # renovate: datasource=github-tags depName=opentofu/opentofu
+          tofu_wrapper: false
+
+      - name: Initialize OpenTofu
+        working-directory: ./tests/tofu
+        run: |
+          tofu version
+          tofu init
+
+      - name: Setup tfvars file
+        working-directory: ./tests/tofu
+        run: |
+          cat <<EOF > terraform.tfvars
+          gke_project = "${{ secrets.GCP_PROJECT_ID }}"
+          gke_cluster_name = "nfr-tests-${{ github.run_id }}-${{ matrix.type }}"
+          gke_num_nodes = 12
+          gke_machine_type = "n2d-standard-16"
+          gke_nodes_service_account = "${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}"
+          vm_service_account = "${{ secrets.GCP_SERVICE_ACCOUNT }}"
+          ngf_branch = "${{ github.ref_name }}"
+          EOF
+
       - name: Setup dotenv file
         working-directory: ./tests/scripts
         run: |
-          echo "RESOURCE_NAME=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
           echo "PREFIX=ghcr.io/nginx/nginx-gateway-fabric" >> vars.env
           echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
           echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
-          echo "GKE_CLUSTER_NAME=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
-          echo "GKE_CLUSTER_ZONE=us-west1-b" >> vars.env
-          echo "GKE_CLUSTER_REGION=us-west1" >> vars.env
           echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
-          echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
-          echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
-          echo "NETWORK_TAGS=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
-          echo "NGF_BRANCH=${{ github.ref_name }}" >> vars.env
-          echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
-          echo "ADD_VM_IP_AUTH_NETWORKS=true" >> vars.env
           echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
           echo "GINKGO_LABEL=" >> vars.env
           echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
-          echo "GKE_NUM_NODES=12" >> vars.env
-          echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
           echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
 
-      - name: Setup license file for plus
-        if: matrix.type == 'plus'
-        env:
-          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
-        run: echo "${PLUS_LICENSE}" > license.jwt
-
-      - name: Create GKE cluster
-        working-directory: ./tests
-        run: make create-gke-cluster CI=true
-
-      - name: Create and setup VM
-        working-directory: ./tests
-        run: make create-and-setup-vm
+      - name: Create GKE cluster and VM
+        working-directory: ./tests/tofu
+        run: |
+          tofu apply --auto-approve
 
       - name: Run Tests
         working-directory: ./tests
@@ -153,12 +156,10 @@ jobs:
           path: tests/results/**/*-${{ matrix.type }}.*
 
       - name: Cleanup
-        working-directory: ./tests
+        working-directory: ./tests/tofu
         if: always()
         run: |
-          bash scripts/cleanup-vm.sh true
-          make delete-gke-cluster
-          rm -rf scripts/vars.env
+          tofu destroy --auto-approve
 
   pr-results:
     name: Open PR with results
