@@ -12,6 +12,10 @@ on:
       enable-experimental:
         required: true
         type: boolean
+      if:
+        required: false
+        type: boolean
+        default: true
 
 defaults:
   run:
@@ -28,7 +32,7 @@ jobs:
   conformance-tests:
     name: Run Tests
     runs-on: ubuntu-24.04
-    if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
+    if: ${{ inputs.if }}
     permissions:
       contents: write # needed for uploading release artifacts
     env:
