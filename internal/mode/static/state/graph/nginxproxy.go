@@ -133,6 +133,8 @@ func validateNginxProxy(
 
 	allErrs = append(allErrs, validateRewriteClientIP(npCfg)...)
 
+	allErrs = append(allErrs, validateNginxPlus(npCfg)...)
+
 	return allErrs
 }
 
@@ -242,6 +244,46 @@ func validateRewriteClientIP(npCfg *ngfAPI.NginxProxy) field.ErrorList {
 						},
 					),
 				)
+			}
+		}
+	}
+
+	return allErrs
+}
+
+func validateNginxPlus(npCfg *ngfAPI.NginxProxy) field.ErrorList {
+	var allErrs field.ErrorList
+	spec := field.NewPath("spec")
+
+	if npCfg.Spec.NginxPlus != nil {
+		nginxPlus := npCfg.Spec.NginxPlus
+		nginxPlusPath := spec.Child("nginxPlus")
+
+		if nginxPlus.AllowedAddresses != nil {
+			for _, addr := range nginxPlus.AllowedAddresses {
+				valuePath := nginxPlusPath.Child("value")
+				switch addr.Type {
+				case ngfAPI.CIDRAddressType:
+					if err := k8svalidation.IsValidCIDR(valuePath, addr.Value); err != nil {
+						allErrs = append(allErrs, err...)
+					}
+				case ngfAPI.IPAddressType:
+
+					if err := k8svalidation.IsValidIP(valuePath, addr.Value); err != nil {
+						allErrs = append(allErrs, err...)
+					}
+				default:
+					allErrs = append(
+						allErrs,
+						field.NotSupported(nginxPlusPath.Child("type"),
+							addr.Type,
+							[]string{
+								string(ngfAPI.CIDRAddressType),
+								string(ngfAPI.IPAddressType),
+							},
+						),
+					)
+				}
 			}
 		}
 	}

@@ -364,13 +364,26 @@ NginxLogging
 </tr>
 <tr>
 <td>
+<code>nginxPlus</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlus">
+NginxPlus
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NginxPlus specifies NGINX Plus additional settings.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>disableHTTP2</code><br/>
 <em>
 bool
 </em>
 </td>
 <td>
-<em>(Optional)</em>
 <p>DisableHTTP2 defines if http2 should be disabled for all servers.
 Default is false, meaning http2 will be enabled for all servers.</p>
 </td>
@@ -712,6 +725,7 @@ sigs.k8s.io/gateway-api/apis/v1alpha2.PolicyStatus
 </h3>
 <p>
 (<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlus">NginxPlus</a>,
 <a href="#gateway.nginx.org/v1alpha1.RewriteClientIP">RewriteClientIP</a>)
 </p>
 <p>
@@ -1399,6 +1413,40 @@ crit, alert, and emerg messages to be logged. <a href="https://nginx.org/en/docs
 </tr>
 </tbody>
 </table>
+<h3 id="gateway.nginx.org/v1alpha1.NginxPlus">NginxPlus
+<a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.NginxPlus" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.NginxProxySpec">NginxProxySpec</a>)
+</p>
+<p>
+<p>NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>allowedAddresses</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.Address">
+[]Address
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AllowedAddresses specifies IPAddresses or CIDR blocks to the allow list for accessing the NGINX Plus API.</p>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="gateway.nginx.org/v1alpha1.NginxProxySpec">NginxProxySpec
 <a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.NginxProxySpec" title="Permanent link">¶</a>
 </h3>
@@ -1476,13 +1524,26 @@ NginxLogging
 </tr>
 <tr>
 <td>
+<code>nginxPlus</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlus">
+NginxPlus
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NginxPlus specifies NGINX Plus additional settings.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>disableHTTP2</code><br/>
 <em>
 bool
 </em>
 </td>
 <td>
-<em>(Optional)</em>
 <p>DisableHTTP2 defines if http2 should be disabled for all servers.
 Default is false, meaning http2 will be enabled for all servers.</p>
 </td>

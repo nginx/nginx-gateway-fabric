@@ -63,6 +63,7 @@ func BuildConfiguration(
 		Telemetry:             buildTelemetry(g),
 		BaseHTTPConfig:        baseHTTPConfig,
 		Logging:               buildLogging(g),
+		NginxPlus:             buildNginxPlus(g),
 		MainSnippets:          buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
 		AuxiliarySecrets:      buildAuxiliarySecrets(g.PlusSecrets),
 	}
@@ -986,10 +987,24 @@ func buildAuxiliarySecrets(
 	return auxSecrets
 }
 
+func buildNginxPlus(g *graph.Graph) NginxPlus {
+	nginxPlusSettings := NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
+
+	ngfProxy := g.NginxProxy
+	if ngfProxy != nil && ngfProxy.Source.Spec.NginxPlus != nil {
+		if ngfProxy.Source.Spec.NginxPlus.AllowedAddresses != nil {
+			nginxPlusSettings.AllowedAddresses = convertAddresses(ngfProxy.Source.Spec.NginxPlus.AllowedAddresses)
+		}
+	}
+
+	return nginxPlusSettings
+}
+
 func GetDefaultConfiguration(g *graph.Graph, configVersion int) Configuration {
 	return Configuration{
 		Version:          configVersion,
 		Logging:          buildLogging(g),
+		NginxPlus:        buildNginxPlus(g),
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
 	}
 }

@@ -668,6 +668,35 @@ spec:
                     - emerg
                     type: string
                 type: object
+              nginxPlus:
+                description: NginxPlus specifies NGINX Plus additional settings.
+                properties:
+                  allowedAddresses:
+                    description: AllowedAddresses specifies IPAddresses or CIDR blocks
+                      to the allow list for accessing the NGINX Plus API.
+                    items:
+                      description: Address is a struct that specifies address type
+                        and value.
+                      properties:
+                        type:
+                          description: Type specifies the type of address.
+                          enum:
+                          - CIDR
+                          - IPAddress
+                          - Hostname
+                          type: string
+                        value:
+                          description: Value specifies the address value.
+                          type: string
+                      required:
+                      - type
+                      - value
+                      type: object
+                      x-kubernetes-validations:
+                      - message: Address Type must be either CIDR or IPAddress
+                        rule: (self.type=='CIDR' || self.type=='IPAddress')
+                    type: array
+                type: object
               rewriteClientIP:
                 description: RewriteClientIP defines configuration for rewriting the
                   client IP to the original client's IP.

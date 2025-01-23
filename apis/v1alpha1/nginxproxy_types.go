@@ -49,11 +49,23 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	Logging *NginxLogging `json:"logging,omitempty"`
-	// DisableHTTP2 defines if http2 should be disabled for all servers.
-	// Default is false, meaning http2 will be enabled for all servers.
+	// NginxPlus specifies NGINX Plus additional settings.
 	//
 	// +optional
+	NginxPlus *NginxPlus `json:"nginxPlus,omitempty"`
+	// DisableHTTP2 defines if http2 should be disabled for all servers.
+	// Default is false, meaning http2 will be enabled for all servers.
 	DisableHTTP2 bool `json:"disableHTTP2,omitempty"`
+}
+
+// NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.
+type NginxPlus struct {
+	// AllowedAddresses specifies IPAddresses or CIDR blocks to the allow list for accessing the NGINX Plus API.
+	//
+	//nolint:lll
+	// +optional
+	// +kubebuilder:validation:items:XValidation:message="Address Type must be either CIDR or IPAddress",rule="(self.type=='CIDR' || self.type=='IPAddress')"
+	AllowedAddresses []Address `json:"allowedAddresses,omitempty"`
 }
 
 // Telemetry specifies the OpenTelemetry configuration.

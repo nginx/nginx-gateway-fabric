@@ -66,6 +66,9 @@ func getExpectedConfiguration() Configuration {
 		Logging: Logging{
 			ErrorLevel: defaultErrorLogLevel,
 		},
+		NginxPlus: NginxPlus{
+			AllowedAddresses: []string{"127.0.0.1"},
+		},
 	}
 }
 
@@ -865,6 +868,11 @@ func TestBuildConfiguration(t *testing.T) {
 		Valid: true,
 	}
 
+	defaultConfig := Configuration{
+		Logging:   Logging{ErrorLevel: defaultErrorLogLevel},
+		NginxPlus: NginxPlus{AllowedAddresses: []string{"127.0.0.1"}},
+	}
+
 	tests := []struct {
 		graph   *graph.Graph
 		msg     string
@@ -1564,7 +1572,7 @@ func TestBuildConfiguration(t *testing.T) {
 				}
 				return g
 			}),
-			expConf: Configuration{Logging: Logging{ErrorLevel: defaultErrorLogLevel}},
+			expConf: defaultConfig,
 			msg:     "invalid gatewayclass",
 		},
 		{
@@ -1583,7 +1591,7 @@ func TestBuildConfiguration(t *testing.T) {
 				}
 				return g
 			}),
-			expConf: Configuration{Logging: Logging{ErrorLevel: defaultErrorLogLevel}},
+			expConf: defaultConfig,
 			msg:     "missing gatewayclass",
 		},
 		{
@@ -1591,7 +1599,7 @@ func TestBuildConfiguration(t *testing.T) {
 				g.Gateway = nil
 				return g
 			}),
-			expConf: Configuration{Logging: Logging{ErrorLevel: defaultErrorLogLevel}},
+			expConf: defaultConfig,
 			msg:     "missing gateway",
 		},
 		{
@@ -2366,6 +2374,41 @@ func TestBuildConfiguration(t *testing.T) {
 			}),
 			msg: "SnippetsFilters with main and http snippet",
 		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+					Name:      "gw",
+					Namespace: "ns",
+				}
+				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+					Name:   "listener-80-1",
+					Source: listener80,
+					Valid:  true,
+					Routes: map[graph.RouteKey]*graph.L7Route{},
+				})
+				g.NginxProxy = &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
+								AllowedAddresses: []ngfAPIv1alpha1.Address{
+									{Type: ngfAPIv1alpha1.IPAddressType, Value: "127.0.0.3"},
+									{Type: ngfAPIv1alpha1.IPAddressType, Value: "25.0.0.3"},
+								},
+							},
+						},
+					},
+				}
+				return g
+			}),
+			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.SSLServers = []VirtualServer{}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
+				conf.NginxPlus = NginxPlus{AllowedAddresses: []string{"127.0.0.3", "25.0.0.3"}}
+				return conf
+			}),
+			msg: "NginxProxy with NginxPlus allowed addresses configured",
+		},
 	}
 
 	for _, test := range tests {
@@ -2391,6 +2434,7 @@ func TestBuildConfiguration(t *testing.T) {
 			g.Expect(result.Telemetry).To(Equal(test.expConf.Telemetry))
 			g.Expect(result.BaseHTTPConfig).To(Equal(test.expConf.BaseHTTPConfig))
 			g.Expect(result.Logging).To(Equal(test.expConf.Logging))
+			g.Expect(result.NginxPlus).To(Equal(test.expConf.NginxPlus))
 		})
 	}
 }
@@ -4382,4 +4426,97 @@ func TestBuildAuxiliarySecrets(t *testing.T) {
 	g := NewWithT(t)
 
 	g.Expect(buildAuxiliarySecrets(secrets)).To(Equal(expSecrets))
+}
+
+func TestBuildNginxPlus(t *testing.T) {
+	defaultNginxPlus := NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
+
+	t.Parallel()
+	tests := []struct {
+		msg          string
+		g            *graph.Graph
+		expNginxPlus NginxPlus
+	}{
+		{
+			msg:          "NginxProxy is nil",
+			g:            &graph.Graph{},
+			expNginxPlus: defaultNginxPlus,
+		},
+		{
+			msg: "NginxProxy does not specify Nginx Plus settings",
+			g: &graph.Graph{
+				NginxProxy: &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{},
+					},
+				},
+			},
+			expNginxPlus: defaultNginxPlus,
+		},
+		{
+			msg: "NginxProxy specifies one allowed address",
+			g: &graph.Graph{
+				NginxProxy: &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
+								AllowedAddresses: []ngfAPIv1alpha1.Address{
+									{Type: ngfAPIv1alpha1.IPAddressType, Value: "127.0.0.3"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expNginxPlus: NginxPlus{AllowedAddresses: []string{"127.0.0.3"}},
+		},
+		{
+			msg: "NginxProxy specifies multiple allowed addresses",
+			g: &graph.Graph{
+				NginxProxy: &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
+								AllowedAddresses: []ngfAPIv1alpha1.Address{
+									{Type: ngfAPIv1alpha1.IPAddressType, Value: "127.0.0.3"},
+									{Type: ngfAPIv1alpha1.IPAddressType, Value: "25.0.0.3"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expNginxPlus: NginxPlus{AllowedAddresses: []string{"127.0.0.3", "25.0.0.3"}},
+		},
+		{
+			msg: "NginxProxy specifies 127.0.0.1 as allowed address",
+			g: &graph.Graph{
+				NginxProxy: &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
+								AllowedAddresses: []ngfAPIv1alpha1.Address{
+									{Type: ngfAPIv1alpha1.IPAddressType, Value: "127.0.0.1"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expNginxPlus: defaultNginxPlus,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildNginxPlus(tc.g)).To(Equal(tc.expNginxPlus))
+		})
+	}
 }
