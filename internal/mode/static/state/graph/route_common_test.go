@@ -2209,35 +2209,36 @@ func TestIsolateL4Listeners(t *testing.T) {
 		}
 	}
 
+	routeHostnames := []gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}
 	tr1 := createTLSRouteWithSectionNameAndPort(
 		"tr1",
 		helpers.GetPointer[gatewayv1.SectionName]("empty-hostname"),
 		"test",
-		[]gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}...,
+		routeHostnames...,
 	)
 	tr2 := createTLSRouteWithSectionNameAndPort(
 		"tr2",
 		helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 		"test",
-		[]gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}...,
+		routeHostnames...,
 	)
 	tr3 := createTLSRouteWithSectionNameAndPort(
 		"tr3",
 		helpers.GetPointer[gatewayv1.SectionName]("foo-wildcard-example-com"),
 		"test",
-		[]gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}...,
+		routeHostnames...,
 	)
 	tr4 := createTLSRouteWithSectionNameAndPort(
 		"tr4",
 		helpers.GetPointer[gatewayv1.SectionName]("abc-com"),
 		"test",
-		[]gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}...,
+		routeHostnames...,
 	)
 	tr5 := createTLSRouteWithSectionNameAndPort(
 		"tr5",
 		helpers.GetPointer[gatewayv1.SectionName]("no-match"),
 		"test",
-		[]gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}...,
+		routeHostnames...,
 	)
 
 	createL4RoutewithAcceptedHostnames := func(
@@ -2280,160 +2281,148 @@ func TestIsolateL4Listeners(t *testing.T) {
 		}
 	}
 
-	acceptedHostnames1 := map[string][]string{
+	acceptedHostnamesEmptyHostname := map[string][]string{
 		"empty-hostname": {
 			"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com",
 		},
 	}
-	acceptedHostnames2 := map[string][]string{
+	acceptedHostnamesWildcardExample := map[string][]string{
 		"wildcard-example-com": {
 			"*.example.com", "*.foo.example.com", "abc.foo.example.com",
 		},
 	}
 
-	acceptedHostnames3 := map[string][]string{
+	acceptedHostnamesFooWildcardExample := map[string][]string{
 		"foo-wildcard-example-com": {
 			"*.foo.example.com", "abc.foo.example.com",
 		},
 	}
 
-	acceptedHostnames4 := map[string][]string{
+	acceptedHostnamesAbcCom := map[string][]string{
 		"abc-com": {
 			"abc.foo.example.com",
 		},
 	}
-	acceptedHostnames5 := map[string][]string{
+	acceptedHostnamesNoMatch := map[string][]string{
 		"no-match": {},
 	}
 
-	tests := []struct {
-		expectedResult map[string][]ParentRef
-		name           string
-		routes         []*L4Route
-		listeners      []*Listener
-	}{
-		{
-			name: "l4 routes with hostname intersection",
-			routes: []*L4Route{
-				createL4RoutewithAcceptedHostnames(
-					tr1, acceptedHostnames1,
-					[]gatewayv1.Hostname{"bar.com"},
-					helpers.GetPointer[gatewayv1.SectionName]("empty-hostname"),
-				),
-				createL4RoutewithAcceptedHostnames(
-					tr2,
-					acceptedHostnames2,
-					[]gatewayv1.Hostname{"*.example.com"},
-					helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
-				),
-				createL4RoutewithAcceptedHostnames(
-					tr3,
-					acceptedHostnames3,
-					[]gatewayv1.Hostname{"*.foo.example.com"},
-					helpers.GetPointer[gatewayv1.SectionName]("foo-wildcard-example-com"),
-				),
-				createL4RoutewithAcceptedHostnames(
-					tr4,
-					acceptedHostnames4,
-					[]gatewayv1.Hostname{"abc.foo.example.com"},
-					helpers.GetPointer[gatewayv1.SectionName]("abc-com"),
-				),
-				createL4RoutewithAcceptedHostnames(
-					tr5,
-					acceptedHostnames5,
-					[]gatewayv1.Hostname{"cafe.example.com"},
-					helpers.GetPointer[gatewayv1.SectionName]("no-match"),
-				),
+	routes := []*L4Route{
+		createL4RoutewithAcceptedHostnames(
+			tr1, acceptedHostnamesEmptyHostname,
+			[]gatewayv1.Hostname{"bar.com"},
+			helpers.GetPointer[gatewayv1.SectionName]("empty-hostname"),
+		),
+		createL4RoutewithAcceptedHostnames(
+			tr2,
+			acceptedHostnamesWildcardExample,
+			[]gatewayv1.Hostname{"*.example.com"},
+			helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
+		),
+		createL4RoutewithAcceptedHostnames(
+			tr3,
+			acceptedHostnamesFooWildcardExample,
+			[]gatewayv1.Hostname{"*.foo.example.com"},
+			helpers.GetPointer[gatewayv1.SectionName]("foo-wildcard-example-com"),
+		),
+		createL4RoutewithAcceptedHostnames(
+			tr4,
+			acceptedHostnamesAbcCom,
+			[]gatewayv1.Hostname{"abc.foo.example.com"},
+			helpers.GetPointer[gatewayv1.SectionName]("abc-com"),
+		),
+		createL4RoutewithAcceptedHostnames(
+			tr5,
+			acceptedHostnamesNoMatch,
+			[]gatewayv1.Hostname{"cafe.example.com"},
+			helpers.GetPointer[gatewayv1.SectionName]("no-match"),
+		),
+	}
+
+	listeners := []*Listener{
+		createListener("empty-hostname", ""),
+		createListener("wildcard-example-com", "*.example.com"),
+		createListener("foo-wildcard-example-com", "*.foo.example.com"),
+		createListener("abc-com", "abc.foo.example.com"),
+		createListener("no-match", "no-match.cafe.com"),
+	}
+
+	expectedResult := map[string][]ParentRef{
+		"tr1": {
+			{
+				Idx:         0,
+				Gateway:     client.ObjectKeyFromObject(gw),
+				SectionName: tr1.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						"empty-hostname": {"bar.com"},
+					},
+					Attached: true,
+				},
 			},
-			listeners: []*Listener{
-				createListener("empty-hostname", ""),
-				createListener("wildcard-example-com", "*.example.com"),
-				createListener("foo-wildcard-example-com", "*.foo.example.com"),
-				createListener("abc-com", "abc.foo.example.com"),
-				createListener("no-match", "no-match.cafe.com"),
+		},
+		"tr2": {
+			{
+				Idx:         0,
+				Gateway:     client.ObjectKeyFromObject(gw),
+				SectionName: tr2.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						"wildcard-example-com": {"*.example.com"},
+					},
+					Attached: true,
+				},
 			},
-			expectedResult: map[string][]ParentRef{
-				"tr1": {
-					{
-						Idx:         0,
-						Gateway:     client.ObjectKeyFromObject(gw),
-						SectionName: tr1.Spec.ParentRefs[0].SectionName,
-						Attachment: &ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								"empty-hostname": {"bar.com"},
-							},
-							Attached: true,
-						},
+		},
+		"tr3": {
+			{
+				Idx:         0,
+				Gateway:     client.ObjectKeyFromObject(gw),
+				SectionName: tr3.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						"foo-wildcard-example-com": {"*.foo.example.com"},
 					},
+					Attached: true,
 				},
-				"tr2": {
-					{
-						Idx:         0,
-						Gateway:     client.ObjectKeyFromObject(gw),
-						SectionName: tr2.Spec.ParentRefs[0].SectionName,
-						Attachment: &ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								"wildcard-example-com": {"*.example.com"},
-							},
-							Attached: true,
-						},
+			},
+		},
+		"tr4": {
+			{
+				Idx:         0,
+				Gateway:     client.ObjectKeyFromObject(gw),
+				SectionName: tr4.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						"abc-com": {"abc.foo.example.com"},
 					},
+					Attached: true,
 				},
-				"tr3": {
-					{
-						Idx:         0,
-						Gateway:     client.ObjectKeyFromObject(gw),
-						SectionName: tr3.Spec.ParentRefs[0].SectionName,
-						Attachment: &ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								"foo-wildcard-example-com": {"*.foo.example.com"},
-							},
-							Attached: true,
-						},
+			},
+		},
+		"tr5": {
+			{
+				Idx:         0,
+				Gateway:     client.ObjectKeyFromObject(gw),
+				SectionName: tr5.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						"no-match": {},
 					},
-				},
-				"tr4": {
-					{
-						Idx:         0,
-						Gateway:     client.ObjectKeyFromObject(gw),
-						SectionName: tr4.Spec.ParentRefs[0].SectionName,
-						Attachment: &ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								"abc-com": {"abc.foo.example.com"},
-							},
-							Attached: true,
-						},
-					},
-				},
-				"tr5": {
-					{
-						Idx:         0,
-						Gateway:     client.ObjectKeyFromObject(gw),
-						SectionName: tr5.Spec.ParentRefs[0].SectionName,
-						Attachment: &ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								"no-match": {},
-							},
-							Attached: true,
-						},
-					},
+					Attached: true,
 				},
 			},
 		},
 	}
 
-	for _, tt := range tests {
-		g := NewWithT(t)
-		isolateL4RouteListeners(tt.routes, tt.listeners)
+	g := NewWithT(t)
+	isolateL4RouteListeners(routes, listeners)
 
-		for _, route := range tt.routes {
-			for routeName, refs := range tt.expectedResult {
-				if route.Source.GetName() == routeName {
-					g.Expect(helpers.Diff(route.ParentRefs, refs)).To(BeEmpty())
-				}
-			}
-		}
+	result := map[string][]ParentRef{}
+	for _, route := range routes {
+		result[route.Source.GetName()] = route.ParentRefs
 	}
+	g.Expect(helpers.Diff(result, expectedResult)).To(BeEmpty())
 }
 
 func TestIsolateL7Listeners(t *testing.T) {
@@ -2469,35 +2458,36 @@ func TestIsolateL7Listeners(t *testing.T) {
 		}
 	}
 
+	routeHostnames := []gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}
 	hr1 := createHTTPRouteWithSectionNameAndPort(
 		"hr1",
 		helpers.GetPointer[gatewayv1.SectionName]("empty-hostname"),
 		"test",
-		[]gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}...,
+		routeHostnames...,
 	)
 	hr2 := createHTTPRouteWithSectionNameAndPort(
 		"hr2",
 		helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 		"test",
-		[]gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}...,
+		routeHostnames...,
 	)
 	hr3 := createHTTPRouteWithSectionNameAndPort(
 		"hr3",
 		helpers.GetPointer[gatewayv1.SectionName]("foo-wildcard-example-com"),
 		"test",
-		[]gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}...,
+		routeHostnames...,
 	)
 	hr4 := createHTTPRouteWithSectionNameAndPort(
 		"hr4",
 		helpers.GetPointer[gatewayv1.SectionName]("abc-com"),
 		"test",
-		[]gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}...,
+		routeHostnames...,
 	)
 	hr5 := createHTTPRouteWithSectionNameAndPort(
 		"hr5",
 		helpers.GetPointer[gatewayv1.SectionName]("no-match"),
 		"test",
-		[]gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}...,
+		routeHostnames..., // no matching hostname
 	)
 
 	createL7RoutewithAcceptedHostnames := func(
@@ -2540,161 +2530,150 @@ func TestIsolateL7Listeners(t *testing.T) {
 		}
 	}
 
-	acceptedHostnames1 := map[string][]string{
+	acceptedHostnamesEmptyHostname := map[string][]string{
 		"empty-hostname": {
 			"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com",
 		},
 	}
-	acceptedHostnames2 := map[string][]string{
+	acceptedHostnamesWildcardExample := map[string][]string{
 		"wildcard-example-com": {
 			"*.example.com", "*.foo.example.com", "abc.foo.example.com",
 		},
 	}
 
-	acceptedHostnames3 := map[string][]string{
+	acceptedHostnamesFooWildcardExample := map[string][]string{
 		"foo-wildcard-example-com": {
 			"*.foo.example.com", "abc.foo.example.com",
 		},
 	}
 
-	acceptedHostnames4 := map[string][]string{
+	acceptedHostnamesAbcCom := map[string][]string{
 		"abc-com": {
 			"abc.foo.example.com",
 		},
 	}
-	acceptedHostnames5 := map[string][]string{
+	acceptedHostnamesNoMatch := map[string][]string{
 		"no-match": {},
 	}
 
-	tests := []struct {
-		expectedResult map[string][]ParentRef
-		name           string
-		routes         []*L7Route
-		listeners      []*Listener
-	}{
-		{
-			name: "l7 routes with hostname intersection",
-			routes: []*L7Route{
-				createL7RoutewithAcceptedHostnames(
-					hr1,
-					acceptedHostnames1,
-					[]gatewayv1.Hostname{"bar.com"},
-					helpers.GetPointer[gatewayv1.SectionName]("empty-hostname"),
-				),
-				createL7RoutewithAcceptedHostnames(
-					hr2,
-					acceptedHostnames2,
-					[]gatewayv1.Hostname{"*.example.com"},
-					helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
-				),
-				createL7RoutewithAcceptedHostnames(
-					hr3,
-					acceptedHostnames3,
-					[]gatewayv1.Hostname{"*.foo.example.com"},
-					helpers.GetPointer[gatewayv1.SectionName]("foo-wildcard-example-com"),
-				),
-				createL7RoutewithAcceptedHostnames(
-					hr4,
-					acceptedHostnames4,
-					[]gatewayv1.Hostname{"abc.foo.example.com"},
-					helpers.GetPointer[gatewayv1.SectionName]("abc-com"),
-				),
-				createL7RoutewithAcceptedHostnames(
-					hr5,
-					acceptedHostnames5,
-					[]gatewayv1.Hostname{"cafe.example.com"},
-					helpers.GetPointer[gatewayv1.SectionName]("no-match"),
-				),
+	routes := []*L7Route{
+		createL7RoutewithAcceptedHostnames(
+			hr1,
+			acceptedHostnamesEmptyHostname,
+			[]gatewayv1.Hostname{"bar.com"},
+			helpers.GetPointer[gatewayv1.SectionName]("empty-hostname"),
+		),
+		createL7RoutewithAcceptedHostnames(
+			hr2,
+			acceptedHostnamesWildcardExample,
+			[]gatewayv1.Hostname{"*.example.com"},
+			helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
+		),
+		createL7RoutewithAcceptedHostnames(
+			hr3,
+			acceptedHostnamesFooWildcardExample,
+			[]gatewayv1.Hostname{"*.foo.example.com"},
+			helpers.GetPointer[gatewayv1.SectionName]("foo-wildcard-example-com"),
+		),
+		createL7RoutewithAcceptedHostnames(
+			hr4,
+			acceptedHostnamesAbcCom,
+			[]gatewayv1.Hostname{"abc.foo.example.com"},
+			helpers.GetPointer[gatewayv1.SectionName]("abc-com"),
+		),
+		createL7RoutewithAcceptedHostnames(
+			hr5,
+			acceptedHostnamesNoMatch,
+			[]gatewayv1.Hostname{"cafe.example.com"},
+			helpers.GetPointer[gatewayv1.SectionName]("no-match"),
+		),
+	}
+
+	listeners := []*Listener{
+		createListener("empty-hostname", ""),
+		createListener("wildcard-example-com", "*.example.com"),
+		createListener("foo-wildcard-example-com", "*.foo.example.com"),
+		createListener("abc-com", "abc.foo.example.com"),
+		createListener("no-match", "no-match.cafe.com"),
+	}
+
+	expectedResult := map[string][]ParentRef{
+		"hr1": {
+			{
+				Idx:         0,
+				Gateway:     client.ObjectKeyFromObject(gw),
+				SectionName: hr1.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						"empty-hostname": {"bar.com"},
+					},
+					Attached: true,
+				},
 			},
-			listeners: []*Listener{
-				createListener("empty-hostname", ""),
-				createListener("wildcard-example-com", "*.example.com"),
-				createListener("foo-wildcard-example-com", "*.foo.example.com"),
-				createListener("abc-com", "abc.foo.example.com"),
-				createListener("no-match", "no-match.cafe.com"),
+		},
+		"hr2": {
+			{
+				Idx:         0,
+				Gateway:     client.ObjectKeyFromObject(gw),
+				SectionName: hr2.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						"wildcard-example-com": {"*.example.com"},
+					},
+					Attached: true,
+				},
 			},
-			expectedResult: map[string][]ParentRef{
-				"hr1": {
-					{
-						Idx:         0,
-						Gateway:     client.ObjectKeyFromObject(gw),
-						SectionName: hr1.Spec.ParentRefs[0].SectionName,
-						Attachment: &ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								"empty-hostname": {"bar.com"},
-							},
-							Attached: true,
-						},
+		},
+		"hr3": {
+			{
+				Idx:         0,
+				Gateway:     client.ObjectKeyFromObject(gw),
+				SectionName: hr3.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						"foo-wildcard-example-com": {"*.foo.example.com"},
 					},
+					Attached: true,
 				},
-				"hr2": {
-					{
-						Idx:         0,
-						Gateway:     client.ObjectKeyFromObject(gw),
-						SectionName: hr2.Spec.ParentRefs[0].SectionName,
-						Attachment: &ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								"wildcard-example-com": {"*.example.com"},
-							},
-							Attached: true,
-						},
+			},
+		},
+		"hr4": {
+			{
+				Idx:         0,
+				Gateway:     client.ObjectKeyFromObject(gw),
+				SectionName: hr4.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						"abc-com": {"abc.foo.example.com"},
 					},
+					Attached: true,
 				},
-				"hr3": {
-					{
-						Idx:         0,
-						Gateway:     client.ObjectKeyFromObject(gw),
-						SectionName: hr3.Spec.ParentRefs[0].SectionName,
-						Attachment: &ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								"foo-wildcard-example-com": {"*.foo.example.com"},
-							},
-							Attached: true,
-						},
+			},
+		},
+		"hr5": {
+			{
+				Idx:         0,
+				Gateway:     client.ObjectKeyFromObject(gw),
+				SectionName: hr5.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						"no-match": {},
 					},
-				},
-				"hr4": {
-					{
-						Idx:         0,
-						Gateway:     client.ObjectKeyFromObject(gw),
-						SectionName: hr4.Spec.ParentRefs[0].SectionName,
-						Attachment: &ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								"abc-com": {"abc.foo.example.com"},
-							},
-							Attached: true,
-						},
-					},
-				},
-				"hr5": {
-					{
-						Idx:         0,
-						Gateway:     client.ObjectKeyFromObject(gw),
-						SectionName: hr5.Spec.ParentRefs[0].SectionName,
-						Attachment: &ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								"no-match": {},
-							},
-							Attached: true,
-						},
-					},
+					Attached: true,
 				},
 			},
 		},
 	}
 
-	for _, tt := range tests {
-		g := NewWithT(t)
-		isolateL7RouteListeners(tt.routes, tt.listeners)
+	g := NewWithT(t)
+	isolateL7RouteListeners(routes, listeners)
 
-		for _, route := range tt.routes {
-			for routeName, refs := range tt.expectedResult {
-				if route.Source.GetName() == routeName {
-					g.Expect(helpers.Diff(route.ParentRefs, refs)).To(BeEmpty())
-				}
-			}
-		}
+	result := map[string][]ParentRef{}
+	for _, route := range routes {
+		result[route.Source.GetName()] = route.ParentRefs
 	}
+
+	g.Expect(helpers.Diff(result, expectedResult)).To(BeEmpty())
 }
 
 func TestRemoveHostnames(t *testing.T) {
@@ -2705,7 +2684,7 @@ func TestRemoveHostnames(t *testing.T) {
 		expectedHostnames []string
 	}{
 		{
-			name:              "remove one hostname",
+			name:              "remove multiple hostnames",
 			hostnames:         []string{"foo.example.com", "bar.example.com", "bar.com", "*.wildcard.com"},
 			removeHostnames:   []string{"foo.example.com", "bar.example.com"},
 			expectedHostnames: []string{"bar.com", "*.wildcard.com"},

@@ -337,12 +337,12 @@ func bindRoutesToListeners(
 		bindL7RouteToListeners(r, gw, namespaces)
 	}
 
-	l7routes := make([]*L7Route, 0, len(l7Routes))
+	routes := make([]*L7Route, 0, len(l7Routes))
 	for _, r := range l7Routes {
-		l7routes = append(l7routes, r)
+		routes = append(routes, r)
 	}
 
-	isolateL7RouteListeners(l7routes, gw.Listeners)
+	isolateL7RouteListeners(routes, gw.Listeners)
 
 	l4routes := make([]*L4Route, 0, len(l4Routes))
 	for _, r := range l4Routes {
@@ -697,11 +697,6 @@ func tryToAttachL7RouteToListeners(
 	}
 
 	rk := CreateRouteKey(route.Source)
-
-	listenerHostnameMap := make(map[string]string, len(attachableListeners))
-	for _, l := range attachableListeners {
-		listenerHostnameMap[l.Name] = getHostname(l.Source.Hostname)
-	}
 
 	bind := func(l *Listener) (allowed, attached bool) {
 		if !isRouteNamespaceAllowedByListener(l, route.Source.GetNamespace(), gw.Source.Namespace, namespaces) {
