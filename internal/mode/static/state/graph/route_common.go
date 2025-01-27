@@ -344,24 +344,24 @@ func bindRoutesToListeners(
 
 	isolateL7RouteListeners(routes, gw.Listeners)
 
-	l4routes := make([]*L4Route, 0, len(l4Routes))
+	l4RouteSlice := make([]*L4Route, 0, len(l4Routes))
 	for _, r := range l4Routes {
-		l4routes = append(l4routes, r)
+		l4RouteSlice = append(l4RouteSlice, r)
 	}
 
 	// Sort the slice by timestamp and name so that we process the routes in the priority order
-	sort.Slice(l4routes, func(i, j int) bool {
-		return ngfSort.LessClientObject(l4routes[i].Source, l4routes[j].Source)
+	sort.Slice(l4RouteSlice, func(i, j int) bool {
+		return ngfSort.LessClientObject(l4RouteSlice[i].Source, l4RouteSlice[j].Source)
 	})
 
 	// portHostnamesMap exists to detect duplicate hostnames on the same port
 	portHostnamesMap := make(map[string]struct{})
 
-	for _, r := range l4routes {
+	for _, r := range l4RouteSlice {
 		bindL4RouteToListeners(r, gw, namespaces, portHostnamesMap)
 	}
 
-	isolateL4RouteListeners(l4routes, gw.Listeners)
+	isolateL4RouteListeners(l4RouteSlice, gw.Listeners)
 }
 
 // isolateL7RouteListeners ensures listener isolation for all L7Routes.
@@ -395,7 +395,7 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 	for _, ref := range parentRef {
 		acceptedHostnames := ref.Attachment.AcceptedHostnames
 
-		hostnamesToRemoves := make([]string, 0, len(acceptedHostnames))
+		hostnamesToRemoves := make(map[string]struct{}, len(acceptedHostnames))
 		for listenerName, hostnames := range acceptedHostnames {
 			if len(hostnames) == 0 {
 				continue
@@ -407,7 +407,7 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 						continue
 					}
 					if h == lHostname && listenerName != lName {
-						hostnamesToRemoves = append(hostnamesToRemoves, h)
+						hostnamesToRemoves[h] = struct{}{}
 					}
 				}
 			}
@@ -419,18 +419,11 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 }
 
 // removeHostnames removes the hostnames that are part of toRemove slice.
-func removeHostnames(hostnames []string, toRemove []string) []string {
+func removeHostnames(hostnames []string, toRemove map[string]struct{}) []string {
 	result := make([]string, 0, len(hostnames))
-	for _, h := range hostnames {
-		keep := true
-		for _, r := range toRemove {
-			if h == r {
-				keep = false
-				break
-			}
-		}
-		if keep {
-			result = append(result, h)
+	for _, hostname := range hostnames {
+		if _, exists := toRemove[hostname]; !exists {
+			result = append(result, hostname)
 		}
 	}
 	return result

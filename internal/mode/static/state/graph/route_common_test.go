@@ -2680,25 +2680,33 @@ func TestRemoveHostnames(t *testing.T) {
 	tests := []struct {
 		name              string
 		hostnames         []string
-		removeHostnames   []string
+		removeHostnames   map[string]struct{}
 		expectedHostnames []string
 	}{
 		{
-			name:              "remove multiple hostnames",
-			hostnames:         []string{"foo.example.com", "bar.example.com", "bar.com", "*.wildcard.com"},
-			removeHostnames:   []string{"foo.example.com", "bar.example.com"},
+			name:      "remove multiple hostnames",
+			hostnames: []string{"foo.example.com", "bar.example.com", "bar.com", "*.wildcard.com"},
+			removeHostnames: map[string]struct{}{
+				"foo.example.com": {},
+				"bar.example.com": {},
+			},
 			expectedHostnames: []string{"bar.com", "*.wildcard.com"},
 		},
 		{
-			name:              "remove all hostnames",
-			hostnames:         []string{"foo.example.com", "bar.example.com", "bar.com", "*.wildcard.com"},
-			removeHostnames:   []string{"foo.example.com", "bar.example.com", "bar.com", "*.wildcard.com"},
+			name:      "remove all hostnames",
+			hostnames: []string{"foo.example.com", "bar.example.com", "bar.com", "*.wildcard.com"},
+			removeHostnames: map[string]struct{}{
+				"foo.example.com": {},
+				"bar.example.com": {},
+				"bar.com":         {},
+				"*.wildcard.com":  {},
+			},
 			expectedHostnames: []string{},
 		},
 		{
 			name:              "remove no hostnames",
 			hostnames:         []string{"foo.example.com", "bar.example.com", "bar.com", "*.wildcard.com"},
-			removeHostnames:   []string{},
+			removeHostnames:   map[string]struct{}{},
 			expectedHostnames: []string{"foo.example.com", "bar.example.com", "bar.com", "*.wildcard.com"},
 		},
 	}
