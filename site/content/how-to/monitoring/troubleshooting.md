@@ -354,17 +354,6 @@ Events:
   Normal  Started    39s   kubelet            Started container nginx
 ```
 
-##### Insufficient Privileges errors
-
-Depending on your environment's configuration, the control plane may not have the proper permissions to reload NGINX. The NGINX configuration will not be applied and you will see the following error in the _nginx-gateway_ logs:
-
-`failed to reload NGINX: failed to send the HUP signal to NGINX main: operation not permitted`
-
-To **resolve** this issue you will need to set `allowPrivilegeEscalation` to `true`.
-
-- If using Helm, you can set the `nginxGateway.securityContext.allowPrivilegeEscalation` value.
-- If using the manifests directly, you can update this field under the `nginx-gateway` container's `securityContext`.
-
 ##### NGINX Plus failure to start or traffic interruptions
 
 Beginning with NGINX Gateway Fabric 1.5.0, NGINX Plus requires a valid JSON Web Token (JWT) to run. If this is not set up properly, or your JWT token has expired, you may see errors in the NGINX logs that look like the following:

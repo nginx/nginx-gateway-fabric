@@ -206,12 +206,15 @@ func ensureNoPortCollisions(ports ...int) error {
 	return nil
 }
 
-// validateCopyArgs ensures that arguments to the sleep command are set.
-func validateCopyArgs(srcFiles []string, dest string) error {
+// validateCopyArgs ensures that arguments to the initialize command are set.
+func validateCopyArgs(srcFiles []string, destDirs []string) error {
+	if len(srcFiles) != len(destDirs) {
+		return errors.New("source and destination must have the same number of elements")
+	}
 	if len(srcFiles) == 0 {
 		return errors.New("source must not be empty")
 	}
-	if len(dest) == 0 {
+	if len(destDirs) == 0 {
 		return errors.New("destination must not be empty")
 	}
 

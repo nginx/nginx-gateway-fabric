@@ -3,6 +3,7 @@ package status
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -274,7 +275,7 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 		map[graph.L4RouteKey]*graph.L4Route{},
 		routes,
 		transitionTime,
-		NginxReloadResult{},
+		graph.NginxReloadResult{},
 		gatewayCtlrName,
 	)
 
@@ -353,7 +354,7 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 		map[graph.L4RouteKey]*graph.L4Route{},
 		routes,
 		transitionTime,
-		NginxReloadResult{},
+		graph.NginxReloadResult{},
 		gatewayCtlrName,
 	)
 
@@ -430,7 +431,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 		routes,
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
-		NginxReloadResult{},
+		graph.NginxReloadResult{},
 		gatewayCtlrName,
 	)
 
@@ -534,7 +535,7 @@ func TestBuildRouteStatusesNginxErr(t *testing.T) {
 		map[graph.L4RouteKey]*graph.L4Route{},
 		routes,
 		transitionTime,
-		NginxReloadResult{Error: errors.New("test error")},
+		graph.NginxReloadResult{Error: errors.New("test error")},
 		gatewayCtlrName,
 	)
 
@@ -740,7 +741,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 	routeKey := graph.RouteKey{NamespacedName: types.NamespacedName{Namespace: "test", Name: "hr-1"}}
 
 	tests := []struct {
-		nginxReloadRes  NginxReloadResult
+		nginxReloadRes  graph.NginxReloadResult
 		gateway         *graph.Gateway
 		ignoredGateways map[types.NamespacedName]*v1.Gateway
 		expected        map[types.NamespacedName]v1.GatewayStatus
@@ -1087,7 +1088,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonInvalid),
-							Message:            staticConds.GatewayMessageFailedNginxReload,
+							Message:            fmt.Sprintf("%s: test error", staticConds.GatewayMessageFailedNginxReload),
 						},
 					},
 					Listeners: []v1.ListenerStatus{
@@ -1125,14 +1126,14 @@ func TestBuildGatewayStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.ListenerReasonInvalid),
-									Message:            staticConds.ListenerMessageFailedNginxReload,
+									Message:            fmt.Sprintf("%s: test error", staticConds.ListenerMessageFailedNginxReload),
 								},
 							},
 						},
 					},
 				},
 			},
-			nginxReloadRes: NginxReloadResult{Error: errors.New("test error")},
+			nginxReloadRes: graph.NginxReloadResult{Error: errors.New("test error")},
 		},
 		{
 			name: "valid gateway with valid parametersRef; all valid listeners",

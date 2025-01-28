@@ -28,9 +28,15 @@ func TestInitialize_OSS(t *testing.T) {
 	ic := initializeConfig{
 		fileManager: fakeFileMgr,
 		logger:      zap.New(),
-		copy: copyFiles{
-			destDirName:  "destDir",
-			srcFileNames: []string{"src1", "src2"},
+		copy: []fileToCopy{
+			{
+				destDirName: "destDir",
+				srcFileName: "src1",
+			},
+			{
+				destDirName: "destDir2",
+				srcFileName: "src2",
+			},
 		},
 		plus: false,
 	}
@@ -56,9 +62,15 @@ func TestInitialize_OSS_Error(t *testing.T) {
 	ic := initializeConfig{
 		fileManager: fakeFileMgr,
 		logger:      zap.New(),
-		copy: copyFiles{
-			destDirName:  "destDir",
-			srcFileNames: []string{"src1", "src2"},
+		copy: []fileToCopy{
+			{
+				destDirName: "destDir",
+				srcFileName: "src1",
+			},
+			{
+				destDirName: "destDir2",
+				srcFileName: "src2",
+			},
 		},
 		plus: false,
 	}
@@ -114,9 +126,15 @@ func TestInitialize_Plus(t *testing.T) {
 				logger:        zap.New(),
 				collector:     fakeCollector,
 				fileGenerator: fakeGenerator,
-				copy: copyFiles{
-					destDirName:  "destDir",
-					srcFileNames: []string{"src1", "src2"},
+				copy: []fileToCopy{
+					{
+						destDirName: "destDir",
+						srcFileName: "src1",
+					},
+					{
+						destDirName: "destDir2",
+						srcFileName: "src2",
+					},
 				},
 				plus: true,
 			}
@@ -133,7 +151,7 @@ func TestInitialize_Plus(t *testing.T) {
 			g.Expect(fakeGenerator.GenerateDeploymentContextArgsForCall(0)).To(Equal(test.depCtx))
 			g.Expect(fakeCollector.CollectCallCount()).To(Equal(1))
 			g.Expect(fakeFileMgr.WriteCallCount()).To(Equal(1))
-			g.Expect(fakeFileMgr.ChmodCallCount()).To(Equal(1))
+			g.Expect(fakeFileMgr.ChmodCallCount()).To(Equal(3))
 		})
 	}
 }
@@ -161,6 +179,7 @@ func TestCopyFileErrors(t *testing.T) {
 	openErr := errors.New("open error")
 	createErr := errors.New("create error")
 	copyErr := errors.New("copy error")
+	chmodErr := errors.New("chmod error")
 
 	tests := []struct {
 		fileMgr *filefakes.FakeOSFileManager
@@ -193,6 +212,15 @@ func TestCopyFileErrors(t *testing.T) {
 				},
 			},
 			expErr: copyErr,
+		},
+		{
+			name: "can't set permissions",
+			fileMgr: &filefakes.FakeOSFileManager{
+				ChmodStub: func(_ *os.File, _ os.FileMode) error {
+					return chmodErr
+				},
+			},
+			expErr: chmodErr,
 		},
 	}
 

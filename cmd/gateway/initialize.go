@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -17,9 +18,9 @@ const (
 	collectDeployCtxTimeout = 10 * time.Second
 )
 
-type copyFiles struct {
-	destDirName  string
-	srcFileNames []string
+type fileToCopy struct {
+	destDirName string
+	srcFileName string
 }
 
 type initializeConfig struct {
@@ -27,13 +28,13 @@ type initializeConfig struct {
 	fileManager   file.OSFileManager
 	fileGenerator config.Generator
 	logger        logr.Logger
-	copy          copyFiles
+	copy          []fileToCopy
 	plus          bool
 }
 
 func initialize(cfg initializeConfig) error {
-	for _, src := range cfg.copy.srcFileNames {
-		if err := copyFile(cfg.fileManager, src, cfg.copy.destDirName); err != nil {
+	for _, f := range cfg.copy {
+		if err := copyFile(cfg.fileManager, f.srcFileName, f.destDirName); err != nil {
 			return err
 		}
 	}
@@ -58,7 +59,7 @@ func initialize(cfg initializeConfig) error {
 		return fmt.Errorf("failed to generate deployment context file: %w", err)
 	}
 
-	if err := file.Write(cfg.fileManager, depCtxFile); err != nil {
+	if err := file.Write(cfg.fileManager, file.Convert(depCtxFile)); err != nil {
 		return fmt.Errorf("failed to write deployment context file: %w", err)
 	}
 
@@ -82,6 +83,10 @@ func copyFile(osFileManager file.OSFileManager, src, dest string) error {
 
 	if err := osFileManager.Copy(destFile, srcFile); err != nil {
 		return fmt.Errorf("error copying file contents: %w", err)
+	}
+
+	if err := osFileManager.Chmod(destFile, os.FileMode(file.RegularFileModeInt)); err != nil {
+		return fmt.Errorf("error setting file permissions: %w", err)
 	}
 
 	return nil

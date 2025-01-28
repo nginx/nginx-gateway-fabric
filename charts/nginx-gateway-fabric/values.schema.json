@@ -298,20 +298,6 @@
           "title": "plus",
           "type": "boolean"
         },
-        "securityContext": {
-          "properties": {
-            "allowPrivilegeEscalation": {
-              "default": false,
-              "description": "Some environments may need this set to true in order for the control plane to successfully reload NGINX.",
-              "required": [],
-              "title": "allowPrivilegeEscalation",
-              "type": "boolean"
-            }
-          },
-          "required": [],
-          "title": "securityContext",
-          "type": "object"
-        },
         "usage": {
           "description": "Configuration for NGINX Plus usage reporting.",
           "properties": {
