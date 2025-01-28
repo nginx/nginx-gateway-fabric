@@ -10,7 +10,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
@@ -271,9 +271,9 @@ func TestBuildTLSRoute(t *testing.T) {
 		gtr            *v1alpha2.TLSRoute
 		services       map[types.NamespacedName]*apiv1.Service
 		resolver       func(resource toResource) bool
+		npCfg          *EffectiveNginxProxy
 		name           string
 		gatewayNsNames []types.NamespacedName
-		npCfg          NginxProxy
 	}{
 		{
 			gtr: duplicateParentRefsGtr,
@@ -492,10 +492,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			services: map[types.NamespacedName]*apiv1.Service{
 				svcNsName: ipv4Svc,
 			},
-			npCfg: NginxProxy{
-				Source: &ngfAPI.NginxProxy{Spec: ngfAPI.NginxProxySpec{IPFamily: helpers.GetPointer(ngfAPI.IPv6)}},
-				Valid:  true,
-			},
+			npCfg:    &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPI.IPv6)},
 			resolver: alwaysTrueRefGrantResolver,
 			name:     "service and npcfg ip family mismatch",
 		},
@@ -560,7 +557,7 @@ func TestBuildTLSRoute(t *testing.T) {
 				test.gtr,
 				test.gatewayNsNames,
 				test.services,
-				&test.npCfg,
+				test.npCfg,
 				test.resolver,
 			)
 			g.Expect(helpers.Diff(test.expected, r)).To(BeEmpty())

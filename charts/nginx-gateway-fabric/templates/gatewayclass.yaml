@@ -17,4 +17,5 @@ spec:
     group: gateway.nginx.org
     kind: NginxProxy
     name: {{ include "nginx-gateway.proxy-config-name" . }}
+    namespace: {{ .Release.Namespace }}
   {{- end }}

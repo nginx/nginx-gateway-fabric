@@ -1,15 +1,23 @@
-package v1alpha1
+package v1alpha2
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+)
 
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
-// +kubebuilder:resource:categories=nginx-gateway-fabric,scope=Cluster
+// +kubebuilder:resource:categories=nginx-gateway-fabric,scope=Namespaced
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// NginxProxy is a configuration object that is attached to a GatewayClass parametersRef. It provides a way
-// to configure global settings for all Gateways defined from the GatewayClass.
+// NginxProxy is a configuration object that can be referenced from a GatewayClass parametersRef
+// or a Gateway infrastructure.parametersRef. It provides a way to configure data plane settings.
+// If referenced from a GatewayClass, the settings apply to all Gateways attached to the GatewayClass.
+// If referenced from a Gateway, the settings apply to that Gateway alone. If both a Gateway and its GatewayClass
+// reference an NginxProxy, the settings are merged. Settings specified on the Gateway NginxProxy override those
+// set on the GatewayClass NginxProxy.
 type NginxProxy struct { //nolint:govet // standard field alignment, don't change it
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -54,8 +62,10 @@ type NginxProxySpec struct {
 	// +optional
 	NginxPlus *NginxPlus `json:"nginxPlus,omitempty"`
 	// DisableHTTP2 defines if http2 should be disabled for all servers.
-	// Default is false, meaning http2 will be enabled for all servers.
-	DisableHTTP2 bool `json:"disableHTTP2,omitempty"`
+	// If not specified, or set to false, http2 will be enabled for all servers.
+	//
+	// +optional
+	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
 }
 
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.
@@ -68,6 +78,10 @@ type NginxPlus struct {
 
 // Telemetry specifies the OpenTelemetry configuration.
 type Telemetry struct {
+	// DisabledFeatures specifies OpenTelemetry features to be disabled.
+	//
+	// +optional
+	DisabledFeatures []DisableTelemetryFeature `json:"disabledFeatures,omitempty"`
 	// Exporter specifies OpenTelemetry export parameters.
 	//
 	// +optional
@@ -88,7 +102,7 @@ type Telemetry struct {
 	// +listType=map
 	// +listMapKey=key
 	// +kubebuilder:validation:MaxItems=64
-	SpanAttributes []SpanAttribute `json:"spanAttributes,omitempty"`
+	SpanAttributes []v1alpha1.SpanAttribute `json:"spanAttributes,omitempty"`
 }
 
 // TelemetryExporter specifies OpenTelemetry export parameters.
@@ -97,7 +111,7 @@ type TelemetryExporter struct {
 	// Default: https://nginx.org/en/docs/ngx_otel_module.html#otel_exporter
 	//
 	// +optional
-	Interval *Duration `json:"interval,omitempty"`
+	Interval *v1alpha1.Duration `json:"interval,omitempty"`
 
 	// BatchSize is the maximum number of spans to be sent in one batch per worker.
 	// Default: https://nginx.org/en/docs/ngx_otel_module.html#otel_exporter
@@ -117,8 +131,9 @@ type TelemetryExporter struct {
 	// Format: alphanumeric hostname with optional http scheme and optional port.
 	//
 	//nolint:lll
+	// +optional
 	// +kubebuilder:validation:Pattern=`^(?:http?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?$`
-	Endpoint string `json:"endpoint"`
+	Endpoint *string `json:"endpoint,omitempty"`
 }
 
 // RewriteClientIP specifies the configuration for rewriting the client's IP address.
@@ -149,15 +164,12 @@ type RewriteClientIP struct {
 	// If a request comes from a trusted address, NGINX will rewrite the client IP information,
 	// and forward it to the backend in the X-Forwarded-For* and X-Real-IP headers.
 	// If the request does not come from a trusted address, NGINX will not rewrite the client IP information.
-	// TrustedAddresses only supports CIDR blocks: 192.33.21.1/24, fe80::1/64.
 	// To trust all addresses (not recommended for production), set to 0.0.0.0/0.
 	// If no addresses are provided, NGINX will not rewrite the client IP information.
 	// Sets NGINX directive set_real_ip_from: https://nginx.org/en/docs/http/ngx_http_realip_module.html#set_real_ip_from
 	// This field is required if mode is set.
 	//
 	// +optional
-	// +listType=map
-	// +listMapKey=type
 	// +kubebuilder:validation:MaxItems=16
 	TrustedAddresses []RewriteClientIPAddress `json:"trustedAddresses,omitempty"`
 }
@@ -279,4 +291,14 @@ const (
 
 	// NginxLogLevelEmerg is the emerg level for NGINX error logs.
 	NginxLogLevelEmerg NginxErrorLogLevel = "emerg"
+)
+
+// DisableTelemetryFeature is a telemetry feature that can be disabled.
+//
+// +kubebuilder:validation:Enum=DisableTracing
+type DisableTelemetryFeature string
+
+const (
+	// DisableTracing disables the OpenTelemetry tracing feature.
+	DisableTracing DisableTelemetryFeature = "DisableTracing"
 )
