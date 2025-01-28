@@ -9,6 +9,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	ngfsort "github.com/nginx/nginx-gateway-fabric/internal/mode/static/sort"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
@@ -17,6 +18,12 @@ import (
 type Gateway struct {
 	// Source is the corresponding Gateway resource.
 	Source *v1.Gateway
+	// NginxProxy is the NginxProxy referenced by this Gateway.
+	NginxProxy *NginxProxy
+	/// EffectiveNginxProxy holds the result of merging the NginxProxySpec on this resource with the NginxProxySpec on
+	// the GatewayClass resource. This is the effective set of config that should be applied to the Gateway.
+	// If non-nil, then this config is valid.
+	EffectiveNginxProxy *EffectiveNginxProxy
 	// Listeners include the listeners of the Gateway.
 	Listeners []*Listener
 	// Conditions holds the conditions for the Gateway.
@@ -98,29 +105,91 @@ func buildGateway(
 	gc *GatewayClass,
 	refGrantResolver *referenceGrantResolver,
 	protectedPorts ProtectedPorts,
+	nps map[types.NamespacedName]*NginxProxy,
 ) *Gateway {
 	if gw == nil {
 		return nil
 	}
 
-	conds := validateGateway(gw, gc)
+	var np *NginxProxy
+	if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
+		npName := types.NamespacedName{Namespace: gw.Namespace, Name: gw.Spec.Infrastructure.ParametersRef.Name}
+		np = nps[npName]
+	}
 
-	if len(conds) > 0 {
+	var gcNp *NginxProxy
+	if gc != nil {
+		gcNp = gc.NginxProxy
+	}
+
+	effectiveNginxProxy := buildEffectiveNginxProxy(gcNp, np)
+
+	conds, valid := validateGateway(gw, gc, np)
+
+	if !valid {
 		return &Gateway{
-			Source:     gw,
-			Valid:      false,
-			Conditions: conds,
+			Source:              gw,
+			Valid:               false,
+			NginxProxy:          np,
+			EffectiveNginxProxy: effectiveNginxProxy,
+			Conditions:          conds,
 		}
 	}
 
 	return &Gateway{
-		Source:    gw,
-		Listeners: buildListeners(gw, secretResolver, refGrantResolver, protectedPorts),
-		Valid:     true,
+		Source:              gw,
+		Listeners:           buildListeners(gw, secretResolver, refGrantResolver, protectedPorts),
+		NginxProxy:          np,
+		EffectiveNginxProxy: effectiveNginxProxy,
+		Valid:               true,
+		Conditions:          conds,
 	}
 }
 
-func validateGateway(gw *v1.Gateway, gc *GatewayClass) []conditions.Condition {
+func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersReference) []conditions.Condition {
+	var conds []conditions.Condition
+
+	path := field.NewPath("spec.infrastructure.parametersRef")
+
+	if _, ok := supportedParamKinds[string(ref.Kind)]; !ok {
+		err := field.NotSupported(path.Child("kind"), string(ref.Kind), []string{kinds.NginxProxy})
+		conds = append(
+			conds,
+			staticConds.NewGatewayRefInvalid(err.Error()),
+			staticConds.NewGatewayInvalidParameters(err.Error()),
+		)
+
+		return conds
+	}
+
+	if npCfg == nil {
+		conds = append(
+			conds,
+			staticConds.NewGatewayRefNotFound(),
+			staticConds.NewGatewayInvalidParameters(
+				field.NotFound(path.Child("name"), ref.Name).Error(),
+			),
+		)
+
+		return conds
+	}
+
+	if !npCfg.Valid {
+		msg := npCfg.ErrMsgs.ToAggregate().Error()
+		conds = append(
+			conds,
+			staticConds.NewGatewayRefInvalid(msg),
+			staticConds.NewGatewayInvalidParameters(msg),
+		)
+
+		return conds
+	}
+
+	conds = append(conds, staticConds.NewGatewayResolvedRefs())
+	return conds
+}
+
+func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]conditions.Condition, bool) {
 	var conds []conditions.Condition
 
 	if gc == nil {
@@ -136,5 +205,17 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass) []conditions.Condition {
 		conds = append(conds, staticConds.NewGatewayUnsupportedValue(valErr.Error())...)
 	}
 
-	return conds
+	valid := true
+	// we evaluate validity before validating parametersRef because an invalid parametersRef/NginxProxy does not
+	// invalidate the entire Gateway.
+	if len(conds) > 0 {
+		valid = false
+	}
+
+	if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
+		paramConds := validateGatewayParametersRef(npCfg, *gw.Spec.Infrastructure.ParametersRef)
+		conds = append(conds, paramConds...)
+	}
+
+	return conds, valid
 }

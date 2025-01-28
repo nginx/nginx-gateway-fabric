@@ -109,7 +109,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		CRDMetadata:        make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
 		BackendTLSPolicies: make(map[types.NamespacedName]*v1alpha3.BackendTLSPolicy),
 		ConfigMaps:         make(map[types.NamespacedName]*apiv1.ConfigMap),
-		NginxProxies:       make(map[types.NamespacedName]*ngfAPIv1alpha1.NginxProxy),
+		NginxProxies:       make(map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy),
 		GRPCRoutes:         make(map[types.NamespacedName]*v1.GRPCRoute),
 		TLSRoutes:          make(map[types.NamespacedName]*v1alpha2.TLSRoute),
 		NGFPolicies:        make(map[graph.PolicyKey]policies.Policy),
@@ -203,7 +203,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 				predicate: annotationChangedPredicate{annotation: gatewayclass.BundleVersionAnnotation},
 			},
 			{
-				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.NginxProxy{}),
+				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha2.NginxProxy{}),
 				store:     newObjectStoreMapAdapter(clusterStore.NginxProxies),
 				predicate: funcPredicate{stateChanged: isReferenced},
 			},

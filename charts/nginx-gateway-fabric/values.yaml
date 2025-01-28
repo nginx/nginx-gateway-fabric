@@ -233,6 +233,12 @@ nginx:
   #               pattern: ^([^"$\\]|\\[^$])*$
   #               minLength: 1
   #               maxLength: 255
+  #       disabledFeatures:
+  #         type: array
+  #         items:
+  #           type: string
+  #           enum:
+  #             - DisableTracing
   #   logging:
   #     type: object
   #     description: Logging defines logging related settings for NGINX.

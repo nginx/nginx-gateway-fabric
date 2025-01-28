@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
@@ -88,7 +88,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		ExtensionRef: &v1.LocalObjectReference{
 			Name:  "sf",
 			Kind:  kinds.SnippetsFilter,
-			Group: ngfAPI.GroupName,
+			Group: ngfAPIv1alpha1.GroupName,
 		},
 	}
 
@@ -110,15 +110,15 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		client.ObjectKeyFromObject(grWrongGateway): grWrongGateway,
 	}
 
-	sf := &ngfAPI.SnippetsFilter{
+	sf := &ngfAPIv1alpha1.SnippetsFilter{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test",
 			Name:      "sf",
 		},
-		Spec: ngfAPI.SnippetsFilterSpec{
-			Snippets: []ngfAPI.Snippet{
+		Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
+			Snippets: []ngfAPIv1alpha1.Snippet{
 				{
-					Context: ngfAPI.NginxContextHTTP,
+					Context: ngfAPIv1alpha1.NginxContextHTTP,
 					Value:   "http snippet",
 				},
 			},
@@ -158,8 +158,8 @@ func TestBuildGRPCRoutes(t *testing.T) {
 											ResolvedExtensionRef: &ExtensionRefFilter{
 												SnippetsFilter: &SnippetsFilter{
 													Source: sf,
-													Snippets: map[ngfAPI.NginxContext]string{
-														ngfAPI.NginxContextHTTP: "http snippet",
+													Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+														ngfAPIv1alpha1.NginxContextHTTP: "http snippet",
 													},
 													Valid:      true,
 													Referenced: true,
@@ -194,12 +194,8 @@ func TestBuildGRPCRoutes(t *testing.T) {
 
 	validator := &validationfakes.FakeHTTPFieldsValidator{}
 
-	npCfg := &NginxProxy{
-		Source: &ngfAPI.NginxProxy{
-			Spec: ngfAPI.NginxProxySpec{
-				DisableHTTP2: false,
-			},
-		},
+	npCfg := &EffectiveNginxProxy{
+		DisableHTTP2: helpers.GetPointer(false),
 	}
 
 	for _, test := range tests {
@@ -211,8 +207,8 @@ func TestBuildGRPCRoutes(t *testing.T) {
 				client.ObjectKeyFromObject(sf): {
 					Source: sf,
 					Valid:  true,
-					Snippets: map[ngfAPI.NginxContext]string{
-						ngfAPI.NginxContextHTTP: "http snippet",
+					Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+						ngfAPIv1alpha1.NginxContextHTTP: "http snippet",
 					},
 				},
 			}
@@ -352,7 +348,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	grValidFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
 	grValidHeaderMatch := createGRPCHeadersMatch("RegularExpression", "MyHeader", "headers-[a-z]+")
 	validSnippetsFilterRef := &v1.LocalObjectReference{
-		Group: ngfAPI.GroupName,
+		Group: ngfAPIv1alpha1.GroupName,
 		Kind:  kinds.SnippetsFilter,
 		Name:  "sf",
 	}
@@ -413,7 +409,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
 			ExtensionRef: &v1.LocalObjectReference{
-				Group: ngfAPI.GroupName,
+				Group: ngfAPIv1alpha1.GroupName,
 				Kind:  kinds.SnippetsFilter,
 				Name:  "does-not-exist",
 			},
@@ -432,7 +428,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
 			ExtensionRef: &v1.LocalObjectReference{
-				Group: ngfAPI.GroupName,
+				Group: ngfAPIv1alpha1.GroupName,
 				Kind:  kinds.SnippetsFilter,
 				Name:  "does-not-exist",
 			},

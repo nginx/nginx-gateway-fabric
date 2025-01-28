@@ -321,7 +321,7 @@ spec:
         app.kubernetes.io/name: tmp-nginx-deployment
     spec:
       containers:
-      - image: ghcr.io/nginxinc/nginx-gateway-fabric/nginx:edge
+      - image: ghcr.io/nginx/nginx-gateway-fabric/nginx:edge
         imagePullPolicy: Always
         name: nginx
         ports:
@@ -363,7 +363,7 @@ spec:
         - /usr/bin/gateway
         - sleep
         - --duration=15s
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: sleep
       - command:
@@ -378,7 +378,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: init
         securityContext:

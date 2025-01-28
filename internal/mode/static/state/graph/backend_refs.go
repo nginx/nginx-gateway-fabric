@@ -11,8 +11,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/sort"
@@ -47,7 +46,7 @@ func addBackendRefsToRouteRules(
 	refGrantResolver *referenceGrantResolver,
 	services map[types.NamespacedName]*v1.Service,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
-	npCfg *NginxProxy,
+	npCfg *EffectiveNginxProxy,
 ) {
 	for _, r := range routes {
 		addBackendRefsToRules(r, refGrantResolver, services, backendTLSPolicies, npCfg)
@@ -61,7 +60,7 @@ func addBackendRefsToRules(
 	refGrantResolver *referenceGrantResolver,
 	services map[types.NamespacedName]*v1.Service,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
-	npCfg *NginxProxy,
+	npCfg *EffectiveNginxProxy,
 ) {
 	if !route.Valid {
 		return
@@ -123,7 +122,7 @@ func createBackendRef(
 	services map[types.NamespacedName]*v1.Service,
 	refPath *field.Path,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
-	npCfg *NginxProxy,
+	npCfg *EffectiveNginxProxy,
 ) (BackendRef, *conditions.Condition) {
 	// Data plane will handle invalid ref by responding with 500.
 	// Because of that, we always need to add a BackendRef to group.Backends, even if the ref is invalid.
@@ -316,30 +315,32 @@ func getIPFamilyAndPortFromRef(
 	return svc.Spec.IPFamilies, svcPort, nil
 }
 
-func verifyIPFamily(npCfg *NginxProxy, svcIPFamily []v1.IPFamily) error {
-	if npCfg == nil || npCfg.Source == nil || !npCfg.Valid {
+func verifyIPFamily(npCfg *EffectiveNginxProxy, svcIPFamily []v1.IPFamily) error {
+	if npCfg == nil {
 		return nil
 	}
 
-	// we can access this field since we have already validated that ipFamily is not nil in validateNginxProxy.
-	npIPFamily := npCfg.Source.Spec.IPFamily
-	if *npIPFamily == ngfAPI.IPv4 {
-		if slices.Contains(svcIPFamily, v1.IPv6Protocol) {
-			// capitalizing error message to match the rest of the error messages associated with a condition
-			//nolint: stylecheck
-			return errors.New(
-				"Service configured with IPv6 family but NginxProxy is configured with IPv4",
-			)
-		}
+	containsIPv6 := slices.Contains(svcIPFamily, v1.IPv6Protocol)
+	containsIPv4 := slices.Contains(svcIPFamily, v1.IPv4Protocol)
+
+	//nolint: stylecheck // used in status condition which is normally capitalized
+	errIPv6Mismatch := errors.New("Service configured with IPv6 family but NginxProxy is configured with IPv4")
+	//nolint: stylecheck // used in status condition which is normally capitalized
+	errIPv4Mismatch := errors.New("Service configured with IPv4 family but NginxProxy is configured with IPv6")
+
+	npIPFamily := npCfg.IPFamily
+
+	if npIPFamily == nil {
+		// default is dual so we don't need to check the service IPFamily.
+		return nil
 	}
-	if *npIPFamily == ngfAPI.IPv6 {
-		if slices.Contains(svcIPFamily, v1.IPv4Protocol) {
-			// capitalizing error message to match the rest of the error messages associated with a condition
-			//nolint: stylecheck
-			return errors.New(
-				"Service configured with IPv4 family but NginxProxy is configured with IPv6",
-			)
-		}
+
+	if *npIPFamily == ngfAPIv1alpha2.IPv4 && containsIPv6 {
+		return errIPv6Mismatch
+	}
+
+	if *npIPFamily == ngfAPIv1alpha2.IPv6 && containsIPv4 {
+		return errIPv4Mismatch
 	}
 
 	return nil

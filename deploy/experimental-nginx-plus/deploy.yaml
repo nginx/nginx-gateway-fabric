@@ -389,7 +389,7 @@ spec:
         - /usr/bin/gateway
         - sleep
         - --duration=15s
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: sleep
       - command:
@@ -407,7 +407,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: init
         securityContext:

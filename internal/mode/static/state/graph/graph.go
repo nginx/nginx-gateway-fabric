@@ -14,7 +14,8 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
@@ -35,10 +36,10 @@ type ClusterState struct {
 	CRDMetadata        map[types.NamespacedName]*metav1.PartialObjectMetadata
 	BackendTLSPolicies map[types.NamespacedName]*v1alpha3.BackendTLSPolicy
 	ConfigMaps         map[types.NamespacedName]*v1.ConfigMap
-	NginxProxies       map[types.NamespacedName]*ngfAPI.NginxProxy
+	NginxProxies       map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy
 	GRPCRoutes         map[types.NamespacedName]*gatewayv1.GRPCRoute
 	NGFPolicies        map[PolicyKey]policies.Policy
-	SnippetsFilters    map[types.NamespacedName]*ngfAPI.SnippetsFilter
+	SnippetsFilters    map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
 }
 
 // Graph is a Graph-like representation of Gateway API resources.
@@ -70,10 +71,10 @@ type Graph struct {
 	ReferencedServices map[types.NamespacedName]*ReferencedService
 	// ReferencedCaCertConfigMaps includes ConfigMaps that have been referenced by any BackendTLSPolicies.
 	ReferencedCaCertConfigMaps map[types.NamespacedName]*CaCertConfigMap
+	// ReferencedNginxProxies includes NginxProxies that have been referenced by a GatewayClass or the winning Gateway.
+	ReferencedNginxProxies map[types.NamespacedName]*NginxProxy
 	// BackendTLSPolicies holds BackendTLSPolicy resources.
 	BackendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy
-	// NginxProxy holds the NginxProxy config for the GatewayClass.
-	NginxProxy *NginxProxy
 	// NGFPolicies holds all NGF Policies.
 	NGFPolicies map[PolicyKey]*Policy
 	// GlobalSettings contains global settings from the current state of the graph that may be
@@ -126,9 +127,10 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 		// Service Namespace should be the same Namespace as the EndpointSlice
 		_, exists := g.ReferencedServices[types.NamespacedName{Namespace: nsname.Namespace, Name: svcName}]
 		return exists
-	// NginxProxy reference exists if it is linked to a GatewayClass.
-	case *ngfAPI.NginxProxy:
-		return isNginxProxyReferenced(nsname, g.GatewayClass)
+	// NginxProxy reference exists if the GatewayClass or winning Gateway references it.
+	case *ngfAPIv1alpha2.NginxProxy:
+		_, exists := g.ReferencedNginxProxies[nsname]
+		return exists
 	default:
 		return false
 	}
@@ -200,32 +202,39 @@ func BuildGraph(
 	validators validation.Validators,
 	protectedPorts ProtectedPorts,
 ) *Graph {
-	var globalSettings *policies.GlobalSettings
-
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
 		// configured GatewayClass does not reference this controller
 		return &Graph{}
 	}
 
-	npCfg := buildNginxProxy(state.NginxProxies, processedGwClasses.Winner, validators.GenericValidator)
-	gc := buildGatewayClass(processedGwClasses.Winner, npCfg, state.CRDMetadata)
-	if gc != nil && npCfg != nil && npCfg.Source != nil {
-		spec := npCfg.Source.Spec
-		globalSettings = &policies.GlobalSettings{
-			NginxProxyValid:  npCfg.Valid,
-			TelemetryEnabled: spec.Telemetry != nil && spec.Telemetry.Exporter != nil,
-		}
-	}
+	processedGws := processGateways(state.Gateways, gcName)
+	processedNginxProxies := processNginxProxies(
+		state.NginxProxies,
+		validators.GenericValidator,
+		processedGwClasses.Winner,
+		processedGws.Winner,
+	)
+
+	gc := buildGatewayClass(
+		processedGwClasses.Winner,
+		processedNginxProxies,
+		state.CRDMetadata,
+	)
 
 	secretResolver := newSecretResolver(state.Secrets)
 	configMapResolver := newConfigMapResolver(state.ConfigMaps)
 
-	processedGws := processGateways(state.Gateways, gcName)
-
 	refGrantResolver := newReferenceGrantResolver(state.ReferenceGrants)
 
-	gw := buildGateway(processedGws.Winner, secretResolver, gc, refGrantResolver, protectedPorts)
+	gw := buildGateway(
+		processedGws.Winner,
+		secretResolver,
+		gc,
+		refGrantResolver,
+		protectedPorts,
+		processedNginxProxies,
+	)
 
 	processedBackendTLSPolicies := processBackendTLSPolicies(
 		state.BackendTLSPolicies,
@@ -235,13 +244,17 @@ func BuildGraph(
 	)
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
+	var effectiveNginxProxy *EffectiveNginxProxy
+	if gw != nil {
+		effectiveNginxProxy = gw.EffectiveNginxProxy
+	}
 
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
 		state.HTTPRoutes,
 		state.GRPCRoutes,
 		processedGws.GetAllNsNames(),
-		npCfg,
+		effectiveNginxProxy,
 		processedSnippetsFilters,
 	)
 
@@ -249,17 +262,30 @@ func BuildGraph(
 		state.TLSRoutes,
 		processedGws.GetAllNsNames(),
 		state.Services,
-		npCfg,
+		effectiveNginxProxy,
 		refGrantResolver,
 	)
 
 	bindRoutesToListeners(routes, l4routes, gw, state.Namespaces)
-	addBackendRefsToRouteRules(routes, refGrantResolver, state.Services, processedBackendTLSPolicies, npCfg)
+	addBackendRefsToRouteRules(
+		routes,
+		refGrantResolver,
+		state.Services,
+		processedBackendTLSPolicies,
+		effectiveNginxProxy,
+	)
 
 	referencedNamespaces := buildReferencedNamespaces(state.Namespaces, gw)
 
 	referencedServices := buildReferencedServices(routes, l4routes, gw)
 
+	var globalSettings *policies.GlobalSettings
+	if gw != nil && gw.EffectiveNginxProxy != nil {
+		globalSettings = &policies.GlobalSettings{
+			NginxProxyValid:  true, // for effective nginx proxy to be set, the config must be valid
+			TelemetryEnabled: telemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+		}
+	}
 	// policies must be processed last because they rely on the state of the other resources in the graph
 	processedPolicies := processPolicies(
 		state.NGFPolicies,
@@ -283,8 +309,8 @@ func BuildGraph(
 		ReferencedNamespaces:       referencedNamespaces,
 		ReferencedServices:         referencedServices,
 		ReferencedCaCertConfigMaps: configMapResolver.getResolvedConfigMaps(),
+		ReferencedNginxProxies:     processedNginxProxies,
 		BackendTLSPolicies:         processedBackendTLSPolicies,
-		NginxProxy:                 npCfg,
 		NGFPolicies:                processedPolicies,
 		GlobalSettings:             globalSettings,
 		SnippetsFilters:            processedSnippetsFilters,
