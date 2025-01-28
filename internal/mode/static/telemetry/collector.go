@@ -246,10 +246,7 @@ func collectGraphResourceCount(
 		}
 	}
 
-	if g.NginxProxy != nil {
-		ngfResourceCounts.NginxProxyCount = 1
-	}
-
+	ngfResourceCounts.NginxProxyCount = int64(len(g.ReferencedNginxProxies))
 	ngfResourceCounts.SnippetsFilterCount = int64(len(g.SnippetsFilters))
 
 	return ngfResourceCounts, nil

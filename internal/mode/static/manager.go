@@ -447,7 +447,7 @@ func registerControllers(
 			},
 		},
 		{
-			objectType: &ngfAPIv1alpha1.NginxProxy{},
+			objectType: &ngfAPIv1alpha2.NginxProxy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -708,7 +708,7 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 		&discoveryV1.EndpointSliceList{},
 		&gatewayv1.HTTPRouteList{},
 		&gatewayv1beta1.ReferenceGrantList{},
-		&ngfAPIv1alpha1.NginxProxyList{},
+		&ngfAPIv1alpha2.NginxProxyList{},
 		&gatewayv1.GRPCRouteList{},
 		&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 		&ngfAPIv1alpha2.ObservabilityPolicyList{},

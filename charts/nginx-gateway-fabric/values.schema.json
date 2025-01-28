@@ -165,6 +165,17 @@
             "telemetry": {
               "description": "Telemetry specifies the OpenTelemetry configuration.",
               "properties": {
+                "disabledFeatures": {
+                  "items": {
+                    "enum": [
+                      "DisableTracing"
+                    ],
+                    "required": [],
+                    "type": "string"
+                  },
+                  "required": [],
+                  "type": "array"
+                },
                 "exporter": {
                   "properties": {
                     "batchCount": {
