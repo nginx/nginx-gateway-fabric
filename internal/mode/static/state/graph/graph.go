@@ -84,6 +84,14 @@ type Graph struct {
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// PlusSecrets holds the secrets related to NGINX Plus licensing.
 	PlusSecrets map[types.NamespacedName][]PlusSecretFile
+
+	LatestReloadResult NginxReloadResult
+}
+
+// NginxReloadResult describes the result of an NGINX reload.
+type NginxReloadResult struct {
+	// Error is the error that occurred during the reload.
+	Error error
 }
 
 // ProtectedPorts are the ports that may not be configured by a listener with a descriptive name of each port.

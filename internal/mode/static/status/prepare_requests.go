@@ -19,18 +19,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 )
 
-// NginxReloadResult describes the result of an NGINX reload.
-type NginxReloadResult struct {
-	// Error is the error that occurred during the reload.
-	Error error
-}
-
 // PrepareRouteRequests prepares status UpdateRequests for the given Routes.
 func PrepareRouteRequests(
 	l4routes map[graph.L4RouteKey]*graph.L4Route,
 	routes map[graph.RouteKey]*graph.L7Route,
 	transitionTime metav1.Time,
-	nginxReloadRes NginxReloadResult,
+	nginxReloadRes graph.NginxReloadResult,
 	gatewayCtlrName string,
 ) []frameworkStatus.UpdateRequest {
 	reqs := make([]frameworkStatus.UpdateRequest, 0, len(routes))
@@ -107,7 +101,7 @@ func prepareRouteStatus(
 	gatewayCtlrName string,
 	parentRefs []graph.ParentRef,
 	conds []conditions.Condition,
-	nginxReloadRes NginxReloadResult,
+	nginxReloadRes graph.NginxReloadResult,
 	transitionTime metav1.Time,
 	srcGeneration int64,
 ) v1.RouteStatus {
@@ -214,7 +208,7 @@ func PrepareGatewayRequests(
 	ignoredGateways map[types.NamespacedName]*v1.Gateway,
 	transitionTime metav1.Time,
 	gwAddresses []v1.GatewayStatusAddress,
-	nginxReloadRes NginxReloadResult,
+	nginxReloadRes graph.NginxReloadResult,
 ) []frameworkStatus.UpdateRequest {
 	reqs := make([]frameworkStatus.UpdateRequest, 0, 1+len(ignoredGateways))
 
@@ -240,7 +234,7 @@ func prepareGatewayRequest(
 	gateway *graph.Gateway,
 	transitionTime metav1.Time,
 	gwAddresses []v1.GatewayStatusAddress,
-	nginxReloadRes NginxReloadResult,
+	nginxReloadRes graph.NginxReloadResult,
 ) frameworkStatus.UpdateRequest {
 	if !gateway.Valid {
 		conds := conditions.ConvertConditions(
@@ -272,9 +266,10 @@ func prepareGatewayRequest(
 		}
 
 		if nginxReloadRes.Error != nil {
+			msg := fmt.Sprintf("%s: %s", staticConds.ListenerMessageFailedNginxReload, nginxReloadRes.Error.Error())
 			conds = append(
 				conds,
-				staticConds.NewListenerNotProgrammedInvalid(staticConds.ListenerMessageFailedNginxReload),
+				staticConds.NewListenerNotProgrammedInvalid(msg),
 			)
 		}
 
@@ -302,9 +297,10 @@ func prepareGatewayRequest(
 	}
 
 	if nginxReloadRes.Error != nil {
+		msg := fmt.Sprintf("%s: %s", staticConds.GatewayMessageFailedNginxReload, nginxReloadRes.Error.Error())
 		gwConds = append(
 			gwConds,
-			staticConds.NewGatewayNotProgrammedInvalid(staticConds.GatewayMessageFailedNginxReload),
+			staticConds.NewGatewayNotProgrammedInvalid(msg),
 		)
 	}
 
