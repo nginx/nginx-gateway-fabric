@@ -1134,6 +1134,117 @@ func TestBuildGatewayStatuses(t *testing.T) {
 			},
 			nginxReloadRes: NginxReloadResult{Error: errors.New("test error")},
 		},
+		{
+			name: "valid gateway with valid parametersRef; all valid listeners",
+			gateway: &graph.Gateway{
+				Source: createGateway(),
+				Listeners: []*graph.Listener{
+					{
+						Name:   "listener-valid-1",
+						Valid:  true,
+						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+					},
+				},
+				Valid: true,
+				Conditions: []conditions.Condition{
+					staticConds.NewGatewayResolvedRefs(),
+				},
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonAccepted),
+							Message:            "Gateway is accepted",
+						},
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonProgrammed),
+							Message:            "Gateway is programmed",
+						},
+						{
+							Type:               string(staticConds.GatewayResolvedRefs),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(staticConds.GatewayReasonResolvedRefs),
+							Message:            "ParametersRef resource is resolved",
+						},
+					},
+					Listeners: []v1.ListenerStatus{
+						{
+							Name:           "listener-valid-1",
+							AttachedRoutes: 1,
+							Conditions:     validListenerConditions,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "valid gateway with invalid parametersRef; all valid listeners",
+			gateway: &graph.Gateway{
+				Source: createGateway(),
+				Listeners: []*graph.Listener{
+					{
+						Name:   "listener-valid-1",
+						Valid:  true,
+						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+					},
+				},
+				Valid: true,
+				Conditions: []conditions.Condition{
+					staticConds.NewGatewayRefNotFound(),
+					staticConds.NewGatewayInvalidParameters("ParametersRef not found"),
+				},
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonProgrammed),
+							Message:            "Gateway is programmed",
+						},
+						{
+							Type:               string(staticConds.GatewayResolvedRefs),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(staticConds.GatewayReasonParamsRefNotFound),
+							Message:            "ParametersRef resource could not be found",
+						},
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonInvalidParameters),
+							Message:            "Gateway is accepted, but ParametersRef is ignored due to an error: ParametersRef not found",
+						},
+					},
+					Listeners: []v1.ListenerStatus{
+						{
+							Name:           "listener-valid-1",
+							AttachedRoutes: 1,
+							Conditions:     validListenerConditions,
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {

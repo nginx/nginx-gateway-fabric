@@ -15,7 +15,7 @@ func buildTLSRoute(
 	gtr *v1alpha2.TLSRoute,
 	gatewayNsNames []types.NamespacedName,
 	services map[types.NamespacedName]*apiv1.Service,
-	npCfg *NginxProxy,
+	npCfg *EffectiveNginxProxy,
 	refGrantResolver func(resource toResource) bool,
 ) *L4Route {
 	r := &L4Route{
@@ -69,7 +69,7 @@ func buildTLSRoute(
 
 func validateBackendRefTLSRoute(gtr *v1alpha2.TLSRoute,
 	services map[types.NamespacedName]*apiv1.Service,
-	npCfg *NginxProxy,
+	npCfg *EffectiveNginxProxy,
 	refGrantResolver func(resource toResource) bool,
 ) (BackendRef, *conditions.Condition) {
 	// Length of BackendRefs and Rules is guaranteed to be one due to earlier check in buildTLSRoute

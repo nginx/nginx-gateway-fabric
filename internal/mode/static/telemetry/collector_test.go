@@ -334,8 +334,10 @@ var _ = Describe("Collector", Ordered, func() {
 							GVK:    schema.GroupVersionKind{Kind: kinds.UpstreamSettingsPolicy},
 						}: {},
 					},
-					NginxProxy: &graph.NginxProxy{},
-					SnippetsFilters: map[types.NamespacedName]*graph.SnippetsFilter{
+					ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
+						{Namespace: "test", Name: "NginxProxy-1"}: {},
+						{Namespace: "test", Name: "NginxProxy-2"}: {},
+					}, SnippetsFilters: map[types.NamespacedName]*graph.SnippetsFilter{
 						{Namespace: "test", Name: "sf-1"}: {
 							Snippets: map[ngfAPI.NginxContext]string{
 								ngfAPI.NginxContextMain:               "worker_priority 0;",
@@ -414,7 +416,7 @@ var _ = Describe("Collector", Ordered, func() {
 					GatewayAttachedClientSettingsPolicyCount: 1,
 					RouteAttachedClientSettingsPolicyCount:   2,
 					ObservabilityPolicyCount:                 1,
-					NginxProxyCount:                          1,
+					NginxProxyCount:                          2,
 					SnippetsFilterCount:                      3,
 					UpstreamSettingsPolicyCount:              1,
 				}
@@ -613,7 +615,10 @@ var _ = Describe("Collector", Ordered, func() {
 						GVK:    schema.GroupVersionKind{Kind: kinds.UpstreamSettingsPolicy},
 					}: {},
 				},
-				NginxProxy: &graph.NginxProxy{},
+				ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
+					{Namespace: "test", Name: "NginxProxy-1"}: {},
+					{Namespace: "test", Name: "NginxProxy-2"}: {},
+				},
 				SnippetsFilters: map[types.NamespacedName]*graph.SnippetsFilter{
 					{Namespace: "test", Name: "sf-1"}: {},
 				},
@@ -689,7 +694,7 @@ var _ = Describe("Collector", Ordered, func() {
 					GatewayAttachedClientSettingsPolicyCount: 1,
 					RouteAttachedClientSettingsPolicyCount:   1,
 					ObservabilityPolicyCount:                 1,
-					NginxProxyCount:                          1,
+					NginxProxyCount:                          2,
 					SnippetsFilterCount:                      1,
 					UpstreamSettingsPolicyCount:              1,
 				}
