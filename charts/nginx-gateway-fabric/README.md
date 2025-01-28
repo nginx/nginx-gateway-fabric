@@ -268,7 +268,6 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginx.image.tag` |  | string | `"edge"` |
 | `nginx.lifecycle` | The lifecycle of the nginx container. | object | `{}` |
 | `nginx.plus` | Is NGINX Plus image being used | bool | `false` |
-| `nginx.securityContext.allowPrivilegeEscalation` | Some environments may need this set to true in order for the control plane to successfully reload NGINX. | bool | `false` |
 | `nginx.usage.caSecretName` | The name of the Secret containing the NGINX Instance Manager CA certificate. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `""` |
 | `nginx.usage.clientSSLSecretName` | The name of the Secret containing the client certificate and key for authenticating with NGINX Instance Manager. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `""` |
 | `nginx.usage.endpoint` | The endpoint of the NGINX Plus usage reporting server. Default: product.connect.nginx.com | string | `""` |

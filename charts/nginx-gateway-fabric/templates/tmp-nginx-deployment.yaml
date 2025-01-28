@@ -13,15 +13,16 @@ spec:
       labels:
         app.kubernetes.io/name: tmp-nginx-deployment
         app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        {{- if .Values.metrics.enable }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.metrics.port }}"
+        {{- if .Values.metrics.secure }}
+        prometheus.io/scheme: "https"
+        {{- end }}
+        {{- end }}
     spec:
       initContainers:
-      - name: sleep # wait for a bit for control plane to be ready
-        image: {{ .Values.nginxGateway.image.repository }}:{{ default .Chart.AppVersion .Values.nginxGateway.image.tag }}
-        imagePullPolicy: {{ .Values.nginxGateway.image.pullPolicy }}
-        command:
-        - /usr/bin/gateway
-        - sleep
-        - --duration=15s
       - name: init
         image: {{ .Values.nginxGateway.image.repository }}:{{ default .Chart.AppVersion .Values.nginxGateway.image.tag }}
         imagePullPolicy: {{ .Values.nginxGateway.image.pullPolicy }}
@@ -29,14 +30,20 @@ spec:
         - /usr/bin/gateway
         - initialize
         - --source
+        - /agent/nginx-agent.conf
+        - --destination
+        - /etc/nginx-agent
+        - --source
         - /includes/main.conf
+        - --destination
+        - /etc/nginx/main-includes
         {{- if .Values.nginx.plus }}
         - --source
         - /includes/mgmt.conf
         - --nginx-plus
-        {{- end }}
         - --destination
         - /etc/nginx/main-includes
+        {{- end }}
         env:
           - name: POD_UID
             valueFrom:
@@ -49,9 +56,13 @@ spec:
             drop:
             - ALL
           readOnlyRootFilesystem: true
-          runAsUser: 102
+          runAsUser: 101
           runAsGroup: 1001
         volumeMounts:
+        - name: nginx-agent-config
+          mountPath: /agent
+        - name: nginx-agent
+          mountPath: /etc/nginx-agent
         - name: nginx-includes-bootstrap
           mountPath: /includes
         - name: nginx-main-includes
@@ -69,10 +80,11 @@ spec:
           name: http
         - containerPort: 443
           name: https
+        - name: metrics
+          containerPort: {{ .Values.metrics.port }}
         securityContext:
           seccompProfile:
             type: RuntimeDefault
-          allowPrivilegeEscalation: {{ .Values.nginx.securityContext.allowPrivilegeEscalation }}
           capabilities:
             add:
             - NET_BIND_SERVICE
@@ -84,6 +96,8 @@ spec:
         volumeMounts:
         - name: nginx-agent
           mountPath: /etc/nginx-agent
+        - name: nginx-agent-log
+          mountPath: /var/log/nginx-agent
         - name: nginx-conf
           mountPath: /etc/nginx/conf.d
         - name: nginx-stream-conf
@@ -140,8 +154,12 @@ spec:
       {{- end }}
       volumes:
       - name: nginx-agent
+        emptyDir: {}
+      - name: nginx-agent-config
         configMap:
           name: nginx-agent-config
+      - name: nginx-agent-log
+        emptyDir: {}
       - name: nginx-conf
         emptyDir: {}
       - name: nginx-stream-conf

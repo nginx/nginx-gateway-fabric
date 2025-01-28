@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/go-logr/logr"
+	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
@@ -19,18 +20,20 @@ import (
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/status/statusfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing/licensingfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/metrics/collectors"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent/agentfakes"
+	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent/grpc/grpcfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/configfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/statefakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/status"
 )
 
 var _ = Describe("eventHandler", func() {
@@ -42,9 +45,12 @@ var _ = Describe("eventHandler", func() {
 		fakeStatusUpdater *statusfakes.FakeGroupUpdater
 		fakeEventRecorder *record.FakeRecorder
 		fakeK8sClient     client.WithWatch
+		queue             *status.Queue
 		namespace         = "nginx-gateway"
 		configName        = "nginx-gateway-config"
 		zapLogLevelSetter zapLogLevelSetter
+		ctx               context.Context
+		cancel            context.CancelFunc
 	)
 
 	const nginxGatewayServiceName = "nginx-gateway"
@@ -58,17 +64,20 @@ var _ = Describe("eventHandler", func() {
 		}
 	}
 
-	expectReconfig := func(expectedConf dataplane.Configuration, expectedFiles []file.File) {
+	expectReconfig := func(expectedConf dataplane.Configuration, expectedFiles []agent.File) {
 		Expect(fakeProcessor.ProcessCallCount()).Should(Equal(1))
 
 		Expect(fakeGenerator.GenerateCallCount()).Should(Equal(1))
 		Expect(fakeGenerator.GenerateArgsForCall(0)).Should(Equal(expectedConf))
 
 		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
-		lenFiles := fakeNginxUpdater.UpdateConfigArgsForCall(0)
-		Expect(expectedFiles).To(HaveLen(lenFiles))
+		_, files := fakeNginxUpdater.UpdateConfigArgsForCall(0)
+		Expect(expectedFiles).To(Equal(files))
 
-		Expect(fakeStatusUpdater.UpdateGroupCallCount()).Should(Equal(2))
+		Eventually(
+			func() int {
+				return fakeStatusUpdater.UpdateGroupCallCount()
+			}).Should(Equal(2))
 		_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 		Expect(name).To(Equal(groupAllExceptGateways))
 		Expect(reqs).To(BeEmpty())
@@ -79,19 +88,25 @@ var _ = Describe("eventHandler", func() {
 	}
 
 	BeforeEach(func() {
+		ctx, cancel = context.WithCancel(context.Background()) //nolint:fatcontext // ignore for test
+
 		fakeProcessor = &statefakes.FakeChangeProcessor{}
 		fakeProcessor.ProcessReturns(state.NoChange, &graph.Graph{})
+		fakeProcessor.GetLatestGraphReturns(&graph.Graph{})
 		fakeGenerator = &configfakes.FakeGenerator{}
 		fakeNginxUpdater = &agentfakes.FakeNginxUpdater{}
+		fakeNginxUpdater.UpdateConfigReturns(true)
 		fakeStatusUpdater = &statusfakes.FakeGroupUpdater{}
 		fakeEventRecorder = record.NewFakeRecorder(1)
 		zapLogLevelSetter = newZapLogLevelSetter(zap.NewAtomicLevel())
 		fakeK8sClient = fake.NewFakeClient()
+		queue = status.NewQueue()
 
 		// Needed because handler checks the service from the API on every HandleEventBatch
 		Expect(fakeK8sClient.Create(context.Background(), createService(nginxGatewayServiceName))).To(Succeed())
 
 		handler = newEventHandlerImpl(eventHandlerConfig{
+			ctx:                     ctx,
 			k8sClient:               fakeK8sClient,
 			processor:               fakeProcessor,
 			generator:               fakeGenerator,
@@ -101,6 +116,8 @@ var _ = Describe("eventHandler", func() {
 			eventRecorder:           fakeEventRecorder,
 			deployCtxCollector:      &licensingfakes.FakeCollector{},
 			graphBuiltHealthChecker: newGraphBuiltHealthChecker(),
+			statusQueue:             queue,
+			nginxDeployments:        agent.NewDeploymentStore(&agentgrpcfakes.FakeConnectionsTracker{}),
 			controlConfigNSName:     types.NamespacedName{Namespace: namespace, Name: configName},
 			gatewayPodConfig: config.GatewayPodConfig{
 				ServiceName: "nginx-gateway",
@@ -112,11 +129,16 @@ var _ = Describe("eventHandler", func() {
 		Expect(handler.cfg.graphBuiltHealthChecker.ready).To(BeFalse())
 	})
 
+	AfterEach(func() {
+		cancel()
+	})
+
 	Describe("Process the Gateway API resources events", func() {
-		fakeCfgFiles := []file.File{
+		fakeCfgFiles := []agent.File{
 			{
-				Type: file.TypeRegular,
-				Path: "test.conf",
+				Meta: &pb.FileMeta{
+					Name: "test.conf",
+				},
 			},
 		}
 
@@ -211,7 +233,7 @@ var _ = Describe("eventHandler", func() {
 				},
 			}
 
-			fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{
+			gr := &graph.Graph{
 				GatewayClass: &graph.GatewayClass{
 					Source: gc,
 					Valid:  true,
@@ -219,7 +241,10 @@ var _ = Describe("eventHandler", func() {
 				IgnoredGatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
 					client.ObjectKeyFromObject(ignoredGC): ignoredGC,
 				},
-			})
+			}
+
+			fakeProcessor.ProcessReturns(state.ClusterStateChange, gr)
+			fakeProcessor.GetLatestGraphReturns(gr)
 
 			e := &events.UpsertEvent{
 				Resource: &gatewayv1.HTTPRoute{}, // any supported is OK
@@ -234,7 +259,10 @@ var _ = Describe("eventHandler", func() {
 
 			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(2))
+			Eventually(
+				func() int {
+					return fakeStatusUpdater.UpdateGroupCallCount()
+				}).Should(Equal(2))
 
 			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupAllExceptGateways))
@@ -440,6 +468,22 @@ var _ = Describe("eventHandler", func() {
 		})
 	})
 
+	It("should update status when receiving a queue event", func() {
+		obj := &status.QueueObject{
+			Deployment: types.NamespacedName{},
+			Error:      errors.New("status error"),
+		}
+		queue.Enqueue(obj)
+
+		Eventually(
+			func() int {
+				return fakeStatusUpdater.UpdateGroupCallCount()
+			}).Should(Equal(2))
+
+		gr := handler.cfg.processor.GetLatestGraph()
+		Expect(gr.LatestReloadResult.Error.Error()).To(Equal("status error"))
+	})
+
 	It("should set the health checker status properly", func() {
 		e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
 		batch := []interface{}{e}
@@ -532,6 +576,17 @@ var _ = Describe("getDeploymentContext", func() {
 	})
 
 	When("nginx plus is true", func() {
+		var ctx context.Context
+		var cancel context.CancelFunc
+
+		BeforeEach(func() {
+			ctx, cancel = context.WithCancel(context.Background()) //nolint:fatcontext
+		})
+
+		AfterEach(func() {
+			cancel()
+		})
+
 		It("returns deployment context", func() {
 			expDepCtx := dataplane.DeploymentContext{
 				Integration:      "ngf",
@@ -541,7 +596,9 @@ var _ = Describe("getDeploymentContext", func() {
 			}
 
 			handler := newEventHandlerImpl(eventHandlerConfig{
-				plus: true,
+				ctx:         ctx,
+				statusQueue: status.NewQueue(),
+				plus:        true,
 				deployCtxCollector: &licensingfakes.FakeCollector{
 					CollectStub: func(_ context.Context) (dataplane.DeploymentContext, error) {
 						return expDepCtx, nil
@@ -557,7 +614,9 @@ var _ = Describe("getDeploymentContext", func() {
 			expErr := errors.New("collect error")
 
 			handler := newEventHandlerImpl(eventHandlerConfig{
-				plus: true,
+				ctx:         ctx,
+				statusQueue: status.NewQueue(),
+				plus:        true,
 				deployCtxCollector: &licensingfakes.FakeCollector{
 					CollectStub: func(_ context.Context) (dataplane.DeploymentContext, error) {
 						return dataplane.DeploymentContext{}, expErr

@@ -15,5 +15,29 @@ data:
     - /var/run/nginx
     features:
     - connection
+    - configuration
+    - certificates
+    - metrics
+    {{- if .Values.nginx.plus }}
+    - api-action
+    {{- end }}
     log:
       level: debug
+    collector:
+      receivers:
+        host_metrics:
+          collection_interval: 1m0s
+          initial_delay: 1s
+          scrapers:
+            cpu: {}
+            memory: {}
+            disk: {}
+            network: {}
+            filesystem: {}
+      processors:
+        batch: {}
+      exporters:
+        prometheus_exporter:
+          server:
+            host: "0.0.0.0"
+            port: 9113

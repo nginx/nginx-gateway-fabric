@@ -554,31 +554,37 @@ func TestEnsureNoPortCollisions(t *testing.T) {
 	g.Expect(ensureNoPortCollisions(9113, 9113)).ToNot(Succeed())
 }
 
-func TestValidateSleepArgs(t *testing.T) {
+func TestValidateInitializeArgs(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name     string
-		dest     string
+		destDirs []string
 		srcFiles []string
 		expErr   bool
 	}{
 		{
 			name:     "valid values",
-			dest:     "/dest/file",
+			destDirs: []string{"/dest/"},
 			srcFiles: []string{"/src/file"},
 			expErr:   false,
 		},
 		{
 			name:     "invalid dest",
-			dest:     "",
+			destDirs: []string{},
 			srcFiles: []string{"/src/file"},
 			expErr:   true,
 		},
 		{
 			name:     "invalid src",
-			dest:     "/dest/file",
+			destDirs: []string{"/dest/"},
 			srcFiles: []string{},
+			expErr:   true,
+		},
+		{
+			name:     "different lengths",
+			destDirs: []string{"/dest/"},
+			srcFiles: []string{"src1", "src2"},
 			expErr:   true,
 		},
 	}
@@ -588,7 +594,7 @@ func TestValidateSleepArgs(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			err := validateCopyArgs(tc.srcFiles, tc.dest)
+			err := validateCopyArgs(tc.srcFiles, tc.destDirs)
 			if !tc.expErr {
 				g.Expect(err).ToNot(HaveOccurred())
 			} else {
