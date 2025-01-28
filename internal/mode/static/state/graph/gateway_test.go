@@ -8,10 +8,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
@@ -338,6 +341,7 @@ func TestBuildGateway(t *testing.T) {
 	)
 
 	type gatewayCfg struct {
+		ref       *v1.LocalParametersReference
 		listeners []v1.Listener
 		addresses []v1.GatewayAddress
 	}
@@ -354,10 +358,62 @@ func TestBuildGateway(t *testing.T) {
 				Addresses:        cfg.addresses,
 			},
 		}
+
+		if cfg.ref != nil {
+			lastCreatedGateway.Spec.Infrastructure = &v1.GatewayInfrastructure{
+				ParametersRef: cfg.ref,
+			}
+		}
 		return lastCreatedGateway
 	}
 	getLastCreatedGateway := func() *v1.Gateway {
 		return lastCreatedGateway
+	}
+
+	validGwNp := &ngfAPIv1alpha2.NginxProxy{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test",
+			Name:      "valid-gw-np",
+		},
+		Spec: ngfAPIv1alpha2.NginxProxySpec{
+			Logging: &ngfAPIv1alpha2.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError)},
+		},
+	}
+	validGwNpRef := &v1.LocalParametersReference{
+		Group: ngfAPIv1alpha2.GroupName,
+		Kind:  kinds.NginxProxy,
+		Name:  validGwNp.Name,
+	}
+	invalidGwNp := &ngfAPIv1alpha2.NginxProxy{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test",
+			Name:      "invalid-gw-np",
+		},
+	}
+	invalidGwNpRef := &v1.LocalParametersReference{
+		Group: ngfAPIv1alpha2.GroupName,
+		Kind:  kinds.NginxProxy,
+		Name:  invalidGwNp.Name,
+	}
+	invalidKindRef := &v1.LocalParametersReference{
+		Group: ngfAPIv1alpha2.GroupName,
+		Kind:  "Invalid",
+		Name:  "invalid-kind",
+	}
+	npDoesNotExistRef := &v1.LocalParametersReference{
+		Group: ngfAPIv1alpha2.GroupName,
+		Kind:  kinds.NginxProxy,
+		Name:  "does-not-exist",
+	}
+
+	validGcNp := &ngfAPIv1alpha2.NginxProxy{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test",
+			Name:      "valid-gc-np",
+		},
+		Spec: ngfAPIv1alpha2.NginxProxySpec{
+			IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
+		},
 	}
 
 	validGC := &GatewayClass{
@@ -365,6 +421,14 @@ func TestBuildGateway(t *testing.T) {
 	}
 	invalidGC := &GatewayClass{
 		Valid: false,
+	}
+
+	validGCWithNp := &GatewayClass{
+		Valid: true,
+		NginxProxy: &NginxProxy{
+			Source: validGcNp,
+			Valid:  true,
+		},
 	}
 
 	supportedKindsForListeners := []v1.RouteGroupKind{
@@ -508,6 +572,90 @@ func TestBuildGateway(t *testing.T) {
 				Valid: true,
 			},
 			name: "valid https listener with cross-namespace secret; allowed by reference grant",
+		},
+		{
+			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{foo80Listener1}, ref: validGwNpRef}),
+			gatewayClass: validGC,
+			expected: &Gateway{
+				Source: getLastCreatedGateway(),
+				Listeners: []*Listener{
+					{
+						Name:           "foo-80-1",
+						Source:         foo80Listener1,
+						Valid:          true,
+						Attachable:     true,
+						Routes:         map[RouteKey]*L7Route{},
+						L4Routes:       map[L4RouteKey]*L4Route{},
+						SupportedKinds: supportedKindsForListeners,
+					},
+				},
+				Valid: true,
+				NginxProxy: &NginxProxy{
+					Source: validGwNp,
+					Valid:  true,
+				},
+				EffectiveNginxProxy: &EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
+					},
+				},
+				Conditions: []conditions.Condition{staticConds.NewGatewayResolvedRefs()},
+			},
+			name: "valid http listener with valid NginxProxy; GatewayClass has no NginxProxy",
+		},
+		{
+			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{foo80Listener1}, ref: validGwNpRef}),
+			gatewayClass: validGCWithNp,
+			expected: &Gateway{
+				Source: getLastCreatedGateway(),
+				Listeners: []*Listener{
+					{
+						Name:           "foo-80-1",
+						Source:         foo80Listener1,
+						Valid:          true,
+						Attachable:     true,
+						Routes:         map[RouteKey]*L7Route{},
+						L4Routes:       map[L4RouteKey]*L4Route{},
+						SupportedKinds: supportedKindsForListeners,
+					},
+				},
+				Valid: true,
+				NginxProxy: &NginxProxy{
+					Source: validGwNp,
+					Valid:  true,
+				},
+				EffectiveNginxProxy: &EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
+					},
+					IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
+				},
+				Conditions: []conditions.Condition{staticConds.NewGatewayResolvedRefs()},
+			},
+			name: "valid http listener with valid NginxProxy; GatewayClass has valid NginxProxy too",
+		},
+		{
+			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{foo80Listener1}}),
+			gatewayClass: validGCWithNp,
+			expected: &Gateway{
+				Source: getLastCreatedGateway(),
+				Listeners: []*Listener{
+					{
+						Name:           "foo-80-1",
+						Source:         foo80Listener1,
+						Valid:          true,
+						Attachable:     true,
+						Routes:         map[RouteKey]*L7Route{},
+						L4Routes:       map[L4RouteKey]*L4Route{},
+						SupportedKinds: supportedKindsForListeners,
+					},
+				},
+				Valid: true,
+				EffectiveNginxProxy: &EffectiveNginxProxy{
+					IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
+				},
+			},
+			name: "valid http listener; GatewayClass has valid NginxProxy",
 		},
 		{
 			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{crossNamespaceSecretListener}}),
@@ -1024,6 +1172,116 @@ func TestBuildGateway(t *testing.T) {
 			},
 			name: "https listener and tls listener with non overlapping hostnames",
 		},
+		{
+			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{foo80Listener1}, ref: invalidKindRef}),
+			gatewayClass: validGC,
+			expected: &Gateway{
+				Source: getLastCreatedGateway(),
+				Listeners: []*Listener{
+					{
+						Name:           "foo-80-1",
+						Source:         foo80Listener1,
+						Valid:          true,
+						Attachable:     true,
+						Routes:         map[RouteKey]*L7Route{},
+						L4Routes:       map[L4RouteKey]*L4Route{},
+						SupportedKinds: supportedKindsForListeners,
+					},
+				},
+				Valid: true, // invalid parametersRef does not invalidate Gateway.
+				Conditions: []conditions.Condition{
+					staticConds.NewGatewayRefInvalid(
+						"spec.infrastructure.parametersRef.kind: Unsupported value: \"Invalid\": " +
+							"supported values: \"NginxProxy\"",
+					),
+					staticConds.NewGatewayInvalidParameters(
+						"spec.infrastructure.parametersRef.kind: Unsupported value: \"Invalid\": " +
+							"supported values: \"NginxProxy\"",
+					),
+				},
+			},
+			name: "invalid parameters ref kind",
+		},
+		{
+			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{foo80Listener1}, ref: npDoesNotExistRef}),
+			gatewayClass: validGC,
+			expected: &Gateway{
+				Source: getLastCreatedGateway(),
+				Listeners: []*Listener{
+					{
+						Name:           "foo-80-1",
+						Source:         foo80Listener1,
+						Valid:          true,
+						Attachable:     true,
+						Routes:         map[RouteKey]*L7Route{},
+						L4Routes:       map[L4RouteKey]*L4Route{},
+						SupportedKinds: supportedKindsForListeners,
+					},
+				},
+				Valid: true, // invalid parametersRef does not invalidate Gateway.
+				Conditions: []conditions.Condition{
+					staticConds.NewGatewayRefNotFound(),
+					staticConds.NewGatewayInvalidParameters(
+						"spec.infrastructure.parametersRef.name: Not found: \"does-not-exist\"",
+					),
+				},
+			},
+			name: "referenced NginxProxy doesn't exist",
+		},
+		{
+			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{foo80Listener1}, ref: invalidGwNpRef}),
+			gatewayClass: validGC,
+			expected: &Gateway{
+				Source: getLastCreatedGateway(),
+				Listeners: []*Listener{
+					{
+						Name:           "foo-80-1",
+						Source:         foo80Listener1,
+						Valid:          true,
+						Attachable:     true,
+						Routes:         map[RouteKey]*L7Route{},
+						L4Routes:       map[L4RouteKey]*L4Route{},
+						SupportedKinds: supportedKindsForListeners,
+					},
+				},
+				Valid: true, // invalid NginxProxy does not invalidate Gateway.
+				NginxProxy: &NginxProxy{
+					Source: invalidGwNp,
+					ErrMsgs: field.ErrorList{
+						field.Required(field.NewPath("somePath"), "someField"), // fake error
+					},
+					Valid: false,
+				},
+				Conditions: []conditions.Condition{
+					staticConds.NewGatewayRefInvalid("somePath: Required value: someField"),
+					staticConds.NewGatewayInvalidParameters("somePath: Required value: someField"),
+				},
+			},
+			name: "invalid NginxProxy",
+		},
+		{
+			gateway: createGateway(
+				gatewayCfg{listeners: []v1.Listener{foo80Listener1, invalidProtocolListener}, ref: invalidGwNpRef},
+			),
+			gatewayClass: invalidGC,
+			expected: &Gateway{
+				Source: getLastCreatedGateway(),
+				Valid:  false,
+				NginxProxy: &NginxProxy{
+					Source: invalidGwNp,
+					ErrMsgs: field.ErrorList{
+						field.Required(field.NewPath("somePath"), "someField"), // fake error
+					},
+					Valid: false,
+				},
+				Conditions: append(
+					staticConds.NewGatewayInvalid("GatewayClass is invalid"),
+					staticConds.NewGatewayRefInvalid("somePath: Required value: someField"),
+					staticConds.NewGatewayInvalidParameters("somePath: Required value: someField"),
+				),
+			},
+			name: "invalid gatewayclass and invalid NginxProxy",
+		},
 	}
 
 	secretResolver := newSecretResolver(
@@ -1032,12 +1290,106 @@ func TestBuildGateway(t *testing.T) {
 			client.ObjectKeyFromObject(secretDiffNamespace): secretDiffNamespace,
 		})
 
+	nginxProxies := map[types.NamespacedName]*NginxProxy{
+		client.ObjectKeyFromObject(validGwNp): {Valid: true, Source: validGwNp},
+		client.ObjectKeyFromObject(validGcNp): {Valid: true, Source: validGcNp},
+		client.ObjectKeyFromObject(invalidGwNp): {
+			Source:  invalidGwNp,
+			ErrMsgs: append(field.ErrorList{}, field.Required(field.NewPath("somePath"), "someField")),
+			Valid:   false,
+		},
+	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			resolver := newReferenceGrantResolver(test.refGrants)
-			result := buildGateway(test.gateway, secretResolver, test.gatewayClass, resolver, protectedPorts)
+			result := buildGateway(test.gateway, secretResolver, test.gatewayClass, resolver, protectedPorts, nginxProxies)
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
+		})
+	}
+}
+
+func TestValidateGatewayParametersRef(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		np       *NginxProxy
+		ref      v1.LocalParametersReference
+		expConds []conditions.Condition
+	}{
+		{
+			name: "unsupported parameter ref kind",
+			ref: v1.LocalParametersReference{
+				Kind: "wrong-kind",
+			},
+			expConds: []conditions.Condition{
+				staticConds.NewGatewayRefInvalid(
+					"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": " +
+						"supported values: \"NginxProxy\"",
+				),
+				staticConds.NewGatewayInvalidParameters(
+					"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": " +
+						"supported values: \"NginxProxy\"",
+				),
+			},
+		},
+		{
+			name: "nil nginx proxy",
+			ref: v1.LocalParametersReference{
+				Group: ngfAPIv1alpha2.GroupName,
+				Kind:  kinds.NginxProxy,
+				Name:  "np",
+			},
+			expConds: []conditions.Condition{
+				staticConds.NewGatewayRefNotFound(),
+				staticConds.NewGatewayInvalidParameters("spec.infrastructure.parametersRef.name: Not found: \"np\""),
+			},
+		},
+		{
+			name: "invalid nginx proxy",
+			np: &NginxProxy{
+				Source: &ngfAPIv1alpha2.NginxProxy{},
+				ErrMsgs: field.ErrorList{
+					field.Required(field.NewPath("somePath"), "someField"), // fake error
+				},
+				Valid: false,
+			},
+			ref: v1.LocalParametersReference{
+				Group: ngfAPIv1alpha2.GroupName,
+				Kind:  kinds.NginxProxy,
+				Name:  "np",
+			},
+			expConds: []conditions.Condition{
+				staticConds.NewGatewayRefInvalid("somePath: Required value: someField"),
+				staticConds.NewGatewayInvalidParameters("somePath: Required value: someField"),
+			},
+		},
+		{
+			name: "valid",
+			np: &NginxProxy{
+				Source: &ngfAPIv1alpha2.NginxProxy{},
+				Valid:  true,
+			},
+			ref: v1.LocalParametersReference{
+				Group: ngfAPIv1alpha2.GroupName,
+				Kind:  kinds.NginxProxy,
+				Name:  "np",
+			},
+			expConds: []conditions.Condition{
+				staticConds.NewGatewayResolvedRefs(),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conds := validateGatewayParametersRef(test.np, test.ref)
+			g.Expect(conds).To(BeEquivalentTo(test.expConds))
 		})
 	}
 }

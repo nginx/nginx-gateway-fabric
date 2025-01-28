@@ -1,8 +1,6 @@
 package graph
 
 import (
-	"errors"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -19,6 +17,8 @@ import (
 type GatewayClass struct {
 	// Source is the source resource.
 	Source *v1.GatewayClass
+	// NginxProxy is the NginxProxy resource referenced by this GatewayClass.
+	NginxProxy *NginxProxy
 	// Conditions include Conditions for the GatewayClass.
 	Conditions []conditions.Condition
 	// Valid shows whether the GatewayClass is valid.
@@ -34,7 +34,7 @@ type processedGatewayClasses struct {
 // processGatewayClasses returns the "Winner" GatewayClass, which is defined in
 // the command-line argument and references this controller, and a list of "Ignored" GatewayClasses
 // that reference this controller, but are not named in the command-line argument.
-// Also returns a boolean that says whether or not the GatewayClass defined
+// Also returns a boolean that says whether the GatewayClass defined
 // in the command-line argument exists, regardless of which controller it references.
 func processGatewayClasses(
 	gcs map[types.NamespacedName]*v1.GatewayClass,
@@ -63,20 +63,64 @@ func processGatewayClasses(
 
 func buildGatewayClass(
 	gc *v1.GatewayClass,
-	npCfg *NginxProxy,
+	nps map[types.NamespacedName]*NginxProxy,
 	crdVersions map[types.NamespacedName]*metav1.PartialObjectMetadata,
 ) *GatewayClass {
 	if gc == nil {
 		return nil
 	}
 
-	conds, valid := validateGatewayClass(gc, npCfg, crdVersions)
+	var np *NginxProxy
+	if gc.Spec.ParametersRef != nil {
+		np = getNginxProxyForGatewayClass(*gc.Spec.ParametersRef, nps)
+	}
+
+	conds, valid := validateGatewayClass(gc, np, crdVersions)
 
 	return &GatewayClass{
 		Source:     gc,
+		NginxProxy: np,
 		Valid:      valid,
 		Conditions: conds,
 	}
+}
+
+func getNginxProxyForGatewayClass(
+	ref v1.ParametersReference,
+	nps map[types.NamespacedName]*NginxProxy,
+) *NginxProxy {
+	if ref.Namespace == nil {
+		return nil
+	}
+
+	npName := types.NamespacedName{Name: ref.Name, Namespace: string(*ref.Namespace)}
+
+	return nps[npName]
+}
+
+func validateGatewayClassParametersRef(path *field.Path, ref v1.ParametersReference) []conditions.Condition {
+	var errs field.ErrorList
+
+	if _, ok := supportedParamKinds[string(ref.Kind)]; !ok {
+		errs = append(
+			errs,
+			field.NotSupported(path.Child("kind"), string(ref.Kind), []string{kinds.NginxProxy}),
+		)
+	}
+
+	if ref.Namespace == nil {
+		errs = append(errs, field.Required(path.Child("namespace"), "ParametersRef must specify Namespace"))
+	}
+
+	if len(errs) > 0 {
+		msg := errs.ToAggregate().Error()
+		return []conditions.Condition{
+			staticConds.NewGatewayClassRefInvalid(msg),
+			staticConds.NewGatewayClassInvalidParameters(msg),
+		}
+	}
+
+	return nil
 }
 
 func validateGatewayClass(
@@ -86,28 +130,44 @@ func validateGatewayClass(
 ) ([]conditions.Condition, bool) {
 	var conds []conditions.Condition
 
-	if gc.Spec.ParametersRef != nil {
-		var err error
-		path := field.NewPath("spec").Child("parametersRef")
-		if _, ok := supportedParamKinds[string(gc.Spec.ParametersRef.Kind)]; !ok {
-			err = field.NotSupported(path.Child("kind"), string(gc.Spec.ParametersRef.Kind), []string{kinds.NginxProxy})
-		} else if npCfg == nil {
-			err = field.NotFound(path.Child("name"), gc.Spec.ParametersRef.Name)
-			conds = append(conds, staticConds.NewGatewayClassRefNotFound())
-		} else if !npCfg.Valid {
-			err = errors.New(npCfg.ErrMsgs.ToAggregate().Error())
-		}
+	supportedVersionConds, versionsValid := gatewayclass.ValidateCRDVersions(crdVersions)
+	conds = append(conds, supportedVersionConds...)
 
-		if err != nil {
-			conds = append(conds, staticConds.NewGatewayClassInvalidParameters(err.Error()))
-		} else {
-			conds = append(conds, staticConds.NewGatewayClassResolvedRefs())
-		}
+	if gc.Spec.ParametersRef == nil {
+		return conds, versionsValid
 	}
 
-	supportedVersionConds, versionsValid := gatewayclass.ValidateCRDVersions(crdVersions)
+	path := field.NewPath("spec").Child("parametersRef")
+	refConds := validateGatewayClassParametersRef(path, *gc.Spec.ParametersRef)
 
-	return append(conds, supportedVersionConds...), versionsValid
+	// return early since parametersRef isn't valid
+	if len(refConds) > 0 {
+		conds = append(conds, refConds...)
+		return conds, versionsValid
+	}
+
+	if npCfg == nil {
+		conds = append(
+			conds,
+			staticConds.NewGatewayClassRefNotFound(),
+			staticConds.NewGatewayClassInvalidParameters(
+				field.NotFound(path.Child("name"), gc.Spec.ParametersRef.Name).Error(),
+			),
+		)
+		return conds, versionsValid
+	}
+
+	if !npCfg.Valid {
+		msg := npCfg.ErrMsgs.ToAggregate().Error()
+		conds = append(
+			conds,
+			staticConds.NewGatewayClassRefInvalid(msg),
+			staticConds.NewGatewayClassInvalidParameters(msg),
+		)
+		return conds, versionsValid
+	}
+
+	return append(conds, staticConds.NewGatewayClassResolvedRefs()), versionsValid
 }
 
 var supportedParamKinds = map[string]struct{}{

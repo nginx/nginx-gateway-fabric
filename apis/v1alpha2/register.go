@@ -32,11 +32,12 @@ var (
 // Adds the list of known types to Scheme.
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
+		&NginxProxy{},
+		&NginxProxyList{},
 		&ObservabilityPolicy{},
 		&ObservabilityPolicyList{},
 	)
 	// AddToGroupVersion allows the serialization of client types like ListOptions.
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
-
 	return nil
 }

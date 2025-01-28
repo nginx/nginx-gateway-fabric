@@ -855,43 +855,26 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	}
 
-	nginxProxy := &graph.NginxProxy{
-		Source: &ngfAPIv1alpha1.NginxProxy{
-			Spec: ngfAPIv1alpha1.NginxProxySpec{
-				Telemetry: &ngfAPIv1alpha1.Telemetry{
-					Exporter: &ngfAPIv1alpha1.TelemetryExporter{
-						Endpoint:   "my-otel.svc:4563",
-						BatchSize:  helpers.GetPointer(int32(512)),
-						BatchCount: helpers.GetPointer(int32(4)),
-						Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
-					},
-					ServiceName: helpers.GetPointer("my-svc"),
-				},
-				DisableHTTP2: true,
-				IPFamily:     helpers.GetPointer(ngfAPIv1alpha1.Dual),
+	nginxProxy := &graph.EffectiveNginxProxy{
+		Telemetry: &ngfAPIv1alpha2.Telemetry{
+			Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+				Endpoint:   helpers.GetPointer("my-otel.svc:4563"),
+				BatchSize:  helpers.GetPointer(int32(512)),
+				BatchCount: helpers.GetPointer(int32(4)),
+				Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
 			},
+			ServiceName: helpers.GetPointer("my-svc"),
 		},
-		Valid: true,
+		DisableHTTP2: helpers.GetPointer(true),
+		IPFamily:     helpers.GetPointer(ngfAPIv1alpha2.Dual),
 	}
 
-	nginxProxyIPv4 := &graph.NginxProxy{
-		Source: &ngfAPIv1alpha1.NginxProxy{
-			Spec: ngfAPIv1alpha1.NginxProxySpec{
-				Telemetry: &ngfAPIv1alpha1.Telemetry{},
-				IPFamily:  helpers.GetPointer(ngfAPIv1alpha1.IPv4),
-			},
-		},
-		Valid: true,
+	nginxProxyIPv4 := &graph.EffectiveNginxProxy{
+		IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv4),
 	}
 
-	nginxProxyIPv6 := &graph.NginxProxy{
-		Source: &ngfAPIv1alpha1.NginxProxy{
-			Spec: ngfAPIv1alpha1.NginxProxySpec{
-				Telemetry: &ngfAPIv1alpha1.Telemetry{},
-				IPFamily:  helpers.GetPointer(ngfAPIv1alpha1.IPv6),
-			},
-		},
-		Valid: true,
+	nginxProxyIPv6 := &graph.EffectiveNginxProxy{
+		IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6),
 	}
 
 	defaultConfig := Configuration{
@@ -2069,7 +2052,7 @@ func TestBuildConfiguration(t *testing.T) {
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.NginxProxy = nginxProxy
+				g.Gateway.EffectiveNginxProxy = nginxProxy
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
@@ -2087,42 +2070,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.BaseHTTPConfig = BaseHTTPConfig{HTTP2: false, IPFamily: Dual}
 				return conf
 			}),
-			msg: "NginxProxy with tracing config and http2 disabled",
-		},
-		{
-			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
-					Name:      "gw",
-					Namespace: "ns",
-				}
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
-					Name:   "listener-80-1",
-					Source: listener80,
-					Valid:  true,
-					Routes: map[graph.RouteKey]*graph.L7Route{},
-				})
-				g.NginxProxy = &graph.NginxProxy{
-					Valid: false,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							DisableHTTP2: true,
-							IPFamily:     helpers.GetPointer(ngfAPIv1alpha1.Dual),
-							Telemetry: &ngfAPIv1alpha1.Telemetry{
-								Exporter: &ngfAPIv1alpha1.TelemetryExporter{
-									Endpoint: "some-endpoint",
-								},
-							},
-						},
-					},
-				}
-				return g
-			}),
-			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
-				conf.SSLServers = []VirtualServer{}
-				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
-				return conf
-			}),
-			msg: "invalid NginxProxy",
+			msg: "EffectiveNginxProxy with tracing config and http2 disabled",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
@@ -2231,7 +2179,7 @@ func TestBuildConfiguration(t *testing.T) {
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.NginxProxy = nginxProxyIPv4
+				g.Gateway.EffectiveNginxProxy = nginxProxyIPv4
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
@@ -2240,7 +2188,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.BaseHTTPConfig = BaseHTTPConfig{HTTP2: true, IPFamily: IPv4}
 				return conf
 			}),
-			msg: "NginxProxy with IPv4 IPFamily and no routes",
+			msg: "GatewayClass has NginxProxy with IPv4 IPFamily and no routes",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
@@ -2254,7 +2202,7 @@ func TestBuildConfiguration(t *testing.T) {
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.NginxProxy = nginxProxyIPv6
+				g.Gateway.EffectiveNginxProxy = nginxProxyIPv6
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
@@ -2263,7 +2211,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.BaseHTTPConfig = BaseHTTPConfig{HTTP2: true, IPFamily: IPv6}
 				return conf
 			}),
-			msg: "NginxProxy with IPv6 IPFamily and no routes",
+			msg: "GatewayClass has NginxProxy with IPv6 IPFamily and no routes",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
@@ -2277,21 +2225,16 @@ func TestBuildConfiguration(t *testing.T) {
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.NginxProxy = &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
-								SetIPRecursively: helpers.GetPointer(true),
-								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
-									{
-										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
-										Value: "1.1.1.1/32",
-									},
-								},
-								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeProxyProtocol),
+				g.Gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
+					RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
+						SetIPRecursively: helpers.GetPointer(true),
+						TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
+							{
+								Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+								Value: "1.1.1.1/32",
 							},
 						},
+						Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
 					},
 				}
 				return g
@@ -2310,7 +2253,7 @@ func TestBuildConfiguration(t *testing.T) {
 				}
 				return conf
 			}),
-			msg: "NginxProxy with rewriteClientIP details set",
+			msg: "GatewayClass has NginxProxy with rewriteClientIP details set",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
@@ -2324,12 +2267,9 @@ func TestBuildConfiguration(t *testing.T) {
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.NginxProxy = &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelDebug)},
-						},
+				g.Gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
 					},
 				}
 				return g
@@ -2340,7 +2280,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.Logging = Logging{ErrorLevel: "debug"}
 				return conf
 			}),
-			msg: "NginxProxy with error log level set to debug",
+			msg: "GatewayClass has NginxProxy with error log level set to debug",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
@@ -2390,16 +2330,11 @@ func TestBuildConfiguration(t *testing.T) {
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.NginxProxy = &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
-								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
-									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
-									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
-								},
-							},
+				g.Gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
+					NginxPlus: &ngfAPIv1alpha2.NginxPlus{
+						AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
+							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
 						},
 					},
 				}
@@ -2484,16 +2419,11 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.NginxProxy = &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
-								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
-									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
-									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
-								},
-							},
+				g.Gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
+					NginxPlus: &ngfAPIv1alpha2.NginxPlus{
+						AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
+							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
 						},
 					},
 				}
@@ -3445,24 +3375,19 @@ func TestConvertBackendTLS(t *testing.T) {
 
 func TestBuildTelemetry(t *testing.T) {
 	t.Parallel()
-	telemetryConfigured := &graph.NginxProxy{
-		Source: &ngfAPIv1alpha1.NginxProxy{
-			Spec: ngfAPIv1alpha1.NginxProxySpec{
-				Telemetry: &ngfAPIv1alpha1.Telemetry{
-					Exporter: &ngfAPIv1alpha1.TelemetryExporter{
-						Endpoint:   "my-otel.svc:4563",
-						BatchSize:  helpers.GetPointer(int32(512)),
-						BatchCount: helpers.GetPointer(int32(4)),
-						Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
-					},
-					ServiceName: helpers.GetPointer("my-svc"),
-					SpanAttributes: []ngfAPIv1alpha1.SpanAttribute{
-						{Key: "key", Value: "value"},
-					},
-				},
+	telemetryConfigured := &graph.EffectiveNginxProxy{
+		Telemetry: &ngfAPIv1alpha2.Telemetry{
+			Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+				Endpoint:   helpers.GetPointer("my-otel.svc:4563"),
+				BatchSize:  helpers.GetPointer(int32(512)),
+				BatchCount: helpers.GetPointer(int32(4)),
+				Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
+			},
+			ServiceName: helpers.GetPointer("my-svc"),
+			SpanAttributes: []ngfAPIv1alpha1.SpanAttribute{
+				{Key: "key", Value: "value"},
 			},
 		},
-		Valid: true,
 	}
 
 	createTelemetry := func() Telemetry {
@@ -3489,9 +3414,23 @@ func TestBuildTelemetry(t *testing.T) {
 		expTelemetry Telemetry
 	}{
 		{
+			g:            &graph.Graph{},
+			expTelemetry: Telemetry{},
+			msg:          "nil Gateway",
+		},
+		{
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Source: &ngfAPIv1alpha1.NginxProxy{},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: nil,
+				},
+			},
+			expTelemetry: Telemetry{},
+			msg:          "nil effective NginxProxy",
+		},
+		{
+			g: &graph.Graph{
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
 				},
 			},
 			expTelemetry: Telemetry{},
@@ -3499,19 +3438,49 @@ func TestBuildTelemetry(t *testing.T) {
 		},
 		{
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							Telemetry: &ngfAPIv1alpha1.Telemetry{
-								Exporter: &ngfAPIv1alpha1.TelemetryExporter{},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Telemetry: &ngfAPIv1alpha2.Telemetry{
+							Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+								Endpoint: helpers.GetPointer("my-otel.svc:4563"),
+							},
+							DisabledFeatures: []ngfAPIv1alpha2.DisableTelemetryFeature{
+								ngfAPIv1alpha2.DisableTracing,
 							},
 						},
 					},
-					Valid: false,
 				},
 			},
 			expTelemetry: Telemetry{},
-			msg:          "Invalid NginxProxy configured",
+			msg:          "Telemetry disabled explicitly",
+		},
+		{
+			g: &graph.Graph{
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Telemetry: &ngfAPIv1alpha2.Telemetry{
+							Exporter: nil,
+						},
+					},
+				},
+			},
+			expTelemetry: Telemetry{},
+			msg:          "Telemetry disabled implicitly (nil exporter)",
+		},
+		{
+			g: &graph.Graph{
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Telemetry: &ngfAPIv1alpha2.Telemetry{
+							Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+								Endpoint: nil,
+							},
+						},
+					},
+				},
+			},
+			expTelemetry: Telemetry{},
+			msg:          "Telemetry disabled implicitly (nil exporter endpoint)",
 		},
 		{
 			g: &graph.Graph{
@@ -3522,8 +3491,8 @@ func TestBuildTelemetry(t *testing.T) {
 							Namespace: "ns",
 						},
 					},
+					EffectiveNginxProxy: telemetryConfigured,
 				},
-				NginxProxy: telemetryConfigured,
 			},
 			expTelemetry: createTelemetry(),
 			msg:          "Telemetry configured",
@@ -3537,8 +3506,8 @@ func TestBuildTelemetry(t *testing.T) {
 							Namespace: "ns",
 						},
 					},
+					EffectiveNginxProxy: telemetryConfigured,
 				},
-				NginxProxy: telemetryConfigured,
 				NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 					{NsName: types.NamespacedName{Name: "obsPolicy"}}: {
 						Source: &ngfAPIv1alpha2.ObservabilityPolicy{
@@ -3572,8 +3541,8 @@ func TestBuildTelemetry(t *testing.T) {
 							Namespace: "ns",
 						},
 					},
+					EffectiveNginxProxy: telemetryConfigured,
 				},
-				NginxProxy: telemetryConfigured,
 				NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 					{NsName: types.NamespacedName{Name: "obsPolicy"}}: {
 						Source: &ngfAPIv1alpha2.ObservabilityPolicy{
@@ -3642,8 +3611,8 @@ func TestBuildTelemetry(t *testing.T) {
 							Namespace: "ns",
 						},
 					},
+					EffectiveNginxProxy: telemetryConfigured,
 				},
-				NginxProxy: telemetryConfigured,
 				NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 					{NsName: types.NamespacedName{Name: "obsPolicy"}}: {
 						Source: &ngfAPIv1alpha2.ObservabilityPolicy{
@@ -4079,9 +4048,8 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 		{
 			msg: "no rewrite IP settings configured",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid:  true,
-					Source: &ngfAPIv1alpha1.NginxProxy{},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
 				},
 			},
 			expRewriteIPSettings: RewriteClientIPSettings{},
@@ -4089,20 +4057,17 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 		{
 			msg: "rewrite IP settings configured with proxyProtocol",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
-								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeProxyProtocol),
-								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
-									{
-										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
-										Value: "10.9.9.4/32",
-									},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
+							Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
+							TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
+								{
+									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+									Value: "10.9.9.4/32",
 								},
-								SetIPRecursively: helpers.GetPointer(true),
 							},
+							SetIPRecursively: helpers.GetPointer(true),
 						},
 					},
 				},
@@ -4116,20 +4081,17 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 		{
 			msg: "rewrite IP settings configured with xForwardedFor",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
-								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeXForwardedFor),
-								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
-									{
-										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
-										Value: "76.89.90.11/24",
-									},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
+							Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeXForwardedFor),
+							TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
+								{
+									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+									Value: "76.89.90.11/24",
 								},
-								SetIPRecursively: helpers.GetPointer(true),
 							},
+							SetIPRecursively: helpers.GetPointer(true),
 						},
 					},
 				},
@@ -4143,32 +4105,29 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 		{
 			msg: "rewrite IP settings configured with recursive set to false and multiple trusted addresses",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
-								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeXForwardedFor),
-								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
-									{
-										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
-										Value: "5.5.5.5/12",
-									},
-									{
-										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
-										Value: "1.1.1.1/26",
-									},
-									{
-										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
-										Value: "2.2.2.2/32",
-									},
-									{
-										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
-										Value: "3.3.3.3/24",
-									},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
+							Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeXForwardedFor),
+							TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
+								{
+									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+									Value: "5.5.5.5/12",
 								},
-								SetIPRecursively: helpers.GetPointer(false),
+								{
+									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+									Value: "1.1.1.1/26",
+								},
+								{
+									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+									Value: "2.2.2.2/32",
+								},
+								{
+									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+									Value: "3.3.3.3/24",
+								},
 							},
+							SetIPRecursively: helpers.GetPointer(false),
 						},
 					},
 				},
@@ -4201,30 +4160,39 @@ func TestBuildLogging(t *testing.T) {
 		expLoggingSettings Logging
 	}{
 		{
-			msg:                "NginxProxy is nil",
-			g:                  &graph.Graph{},
+			msg: "Gateway is nil",
+			g: &graph.Graph{
+				Gateway: nil,
+			},
 			expLoggingSettings: defaultLogging,
 		},
 		{
-			msg: "NginxProxy does not specify log level",
+			msg: "Gateway has no effective NginxProxy",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: nil,
+				},
+			},
+			expLoggingSettings: defaultLogging,
+		},
+		{
+			msg: "Effective NginxProxy does not specify log level",
+			g: &graph.Graph{
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
 					},
 				},
 			},
 			expLoggingSettings: defaultLogging,
 		},
 		{
-			msg: "NginxProxy log level set to debug",
+			msg: "Effective NginxProxy log level set to debug",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelDebug)},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Logging: &ngfAPIv1alpha2.NginxLogging{
+							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
 						},
 					},
 				},
@@ -4232,13 +4200,12 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{ErrorLevel: "debug"},
 		},
 		{
-			msg: "NginxProxy log level set to info",
+			msg: "Effective NginxProxy log level set to info",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelInfo)},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Logging: &ngfAPIv1alpha2.NginxLogging{
+							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
 						},
 					},
 				},
@@ -4246,13 +4213,12 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{ErrorLevel: defaultErrorLogLevel},
 		},
 		{
-			msg: "NginxProxy log level set to notice",
+			msg: "Effective NginxProxy log level set to notice",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelNotice)},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Logging: &ngfAPIv1alpha2.NginxLogging{
+							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelNotice),
 						},
 					},
 				},
@@ -4260,13 +4226,12 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{ErrorLevel: "notice"},
 		},
 		{
-			msg: "NginxProxy log level set to warn",
+			msg: "Effective NginxProxy log level set to warn",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelWarn)},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Logging: &ngfAPIv1alpha2.NginxLogging{
+							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelWarn),
 						},
 					},
 				},
@@ -4274,13 +4239,12 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{ErrorLevel: "warn"},
 		},
 		{
-			msg: "NginxProxy log level set to error",
+			msg: "Effective NginxProxy log level set to error",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelError)},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Logging: &ngfAPIv1alpha2.NginxLogging{
+							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
 						},
 					},
 				},
@@ -4288,13 +4252,12 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{ErrorLevel: "error"},
 		},
 		{
-			msg: "NginxProxy log level set to crit",
+			msg: "Effective NginxProxy log level set to crit",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelCrit)},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Logging: &ngfAPIv1alpha2.NginxLogging{
+							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelCrit),
 						},
 					},
 				},
@@ -4302,13 +4265,12 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{ErrorLevel: "crit"},
 		},
 		{
-			msg: "NginxProxy log level set to alert",
+			msg: "Effective NginxProxy log level set to alert",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelAlert)},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Logging: &ngfAPIv1alpha2.NginxLogging{
+							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelAlert),
 						},
 					},
 				},
@@ -4316,13 +4278,12 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{ErrorLevel: "alert"},
 		},
 		{
-			msg: "NginxProxy log level set to emerg",
+			msg: "Effective NginxProxy log level set to emerg",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelEmerg)},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Logging: &ngfAPIv1alpha2.NginxLogging{
+							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelEmerg),
 						},
 					},
 				},
@@ -4568,11 +4529,8 @@ func TestBuildNginxPlus(t *testing.T) {
 		{
 			msg: "NginxPlus default values are used when NginxProxy doesn't specify NginxPlus settings",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{},
-					},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
 				},
 			},
 			expNginxPlus: defaultNginxPlus,
@@ -4580,14 +4538,11 @@ func TestBuildNginxPlus(t *testing.T) {
 		{
 			msg: "NginxProxy specifies one allowed address",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
-								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
-									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
-								},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						NginxPlus: &ngfAPIv1alpha2.NginxPlus{
+							AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
+								{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
 							},
 						},
 					},
@@ -4598,15 +4553,12 @@ func TestBuildNginxPlus(t *testing.T) {
 		{
 			msg: "NginxProxy specifies multiple allowed addresses",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
-								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
-									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
-									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
-								},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						NginxPlus: &ngfAPIv1alpha2.NginxPlus{
+							AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
+								{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+								{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
 							},
 						},
 					},
@@ -4617,14 +4569,11 @@ func TestBuildNginxPlus(t *testing.T) {
 		{
 			msg: "NginxProxy specifies 127.0.0.1 as allowed address",
 			g: &graph.Graph{
-				NginxProxy: &graph.NginxProxy{
-					Valid: true,
-					Source: &ngfAPIv1alpha1.NginxProxy{
-						Spec: ngfAPIv1alpha1.NginxProxySpec{
-							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
-								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
-									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.1"},
-								},
+				Gateway: &graph.Gateway{
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						NginxPlus: &ngfAPIv1alpha2.NginxPlus{
+							AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
+								{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.1"},
 							},
 						},
 					},

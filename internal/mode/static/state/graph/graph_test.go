@@ -17,7 +17,8 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
@@ -113,35 +114,35 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	refSnippetsFilterExtensionRef := &gatewayv1.LocalObjectReference{
-		Group: ngfAPI.GroupName,
+		Group: ngfAPIv1alpha1.GroupName,
 		Kind:  kinds.SnippetsFilter,
 		Name:  "ref-snippets-filter",
 	}
 
-	unreferencedSnippetsFilter := &ngfAPI.SnippetsFilter{
+	unreferencedSnippetsFilter := &ngfAPIv1alpha1.SnippetsFilter{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "unref-snippets-filter",
 			Namespace: testNs,
 		},
-		Spec: ngfAPI.SnippetsFilterSpec{
-			Snippets: []ngfAPI.Snippet{
+		Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
+			Snippets: []ngfAPIv1alpha1.Snippet{
 				{
-					Context: ngfAPI.NginxContextMain,
+					Context: ngfAPIv1alpha1.NginxContextMain,
 					Value:   "main snippet",
 				},
 			},
 		},
 	}
 
-	referencedSnippetsFilter := &ngfAPI.SnippetsFilter{
+	referencedSnippetsFilter := &ngfAPIv1alpha1.SnippetsFilter{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ref-snippets-filter",
 			Namespace: testNs,
 		},
-		Spec: ngfAPI.SnippetsFilterSpec{
-			Snippets: []ngfAPI.Snippet{
+		Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
+			Snippets: []ngfAPIv1alpha1.Snippet{
 				{
-					Context: ngfAPI.NginxContextHTTPServer,
+					Context: ngfAPIv1alpha1.NginxContextHTTPServer,
 					Value:   "server snippet",
 				},
 			},
@@ -152,8 +153,8 @@ func TestBuildGraph(t *testing.T) {
 		Source:     unreferencedSnippetsFilter,
 		Valid:      true,
 		Referenced: false,
-		Snippets: map[ngfAPI.NginxContext]string{
-			ngfAPI.NginxContextMain: "main snippet",
+		Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+			ngfAPIv1alpha1.NginxContextMain: "main snippet",
 		},
 	}
 
@@ -161,8 +162,8 @@ func TestBuildGraph(t *testing.T) {
 		Source:     referencedSnippetsFilter,
 		Valid:      true,
 		Referenced: true,
-		Snippets: map[ngfAPI.NginxContext]string{
-			ngfAPI.NginxContextHTTPServer: "server snippet",
+		Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+			ngfAPIv1alpha1.NginxContextHTTPServer: "server snippet",
 		},
 	}
 
@@ -374,7 +375,7 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
-	createGateway := func(name string) *gatewayv1.Gateway {
+	createGateway := func(name, nginxProxyName string) *gatewayv1.Gateway {
 		return &gatewayv1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: testNs,
@@ -382,6 +383,13 @@ func TestBuildGraph(t *testing.T) {
 			},
 			Spec: gatewayv1.GatewaySpec{
 				GatewayClassName: gcName,
+				Infrastructure: &gatewayv1.GatewayInfrastructure{
+					ParametersRef: &gatewayv1.LocalParametersReference{
+						Group: ngfAPIv1alpha2.GroupName,
+						Kind:  kinds.NginxProxy,
+						Name:  nginxProxyName,
+					},
+				},
 				Listeners: []gatewayv1.Listener{
 					{
 						Name:     "listener-80-1",
@@ -440,8 +448,35 @@ func TestBuildGraph(t *testing.T) {
 		}
 	}
 
-	gw1 := createGateway("gateway-1")
-	gw2 := createGateway("gateway-2")
+	gw1 := createGateway("gateway-1", "np-1")
+	gw2 := createGateway("gateway-2", "np-2")
+
+	// np1 is referenced by gw1 and sets the nginx error log to error.
+	// Since gw1 is the winning gateway, we expect this nginx proxy to be configured and merged with the gateway class
+	// nginx proxy configuration.
+	np1 := &ngfAPIv1alpha2.NginxProxy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "np-1",
+			Namespace: testNs,
+		},
+		Spec: ngfAPIv1alpha2.NginxProxySpec{
+			Logging: &ngfAPIv1alpha2.NginxLogging{
+				ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
+			},
+		},
+	}
+
+	// np2 is referenced by gw2 and sets the IPFamily to IPv6.
+	// Since gw2 is not the winning gateway, we do not expect this nginx proxy to be configured.
+	np2 := &ngfAPIv1alpha2.NginxProxy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "np-2",
+			Namespace: testNs,
+		},
+		Spec: ngfAPIv1alpha2.NginxProxySpec{
+			IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6),
+		},
+	}
 
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -532,20 +567,22 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
-	proxy := &ngfAPI.NginxProxy{
+	// npGlobal is referenced by the gateway class, and we expect it to be configured and merged with np1.
+	npGlobal := &ngfAPIv1alpha2.NginxProxy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "nginx-proxy",
+			Name:      "np-global",
+			Namespace: testNs,
 		},
-		Spec: ngfAPI.NginxProxySpec{
-			Telemetry: &ngfAPI.Telemetry{
-				Exporter: &ngfAPI.TelemetryExporter{
-					Endpoint:   "1.2.3.4:123",
-					Interval:   helpers.GetPointer(ngfAPI.Duration("5s")),
+		Spec: ngfAPIv1alpha2.NginxProxySpec{
+			Telemetry: &ngfAPIv1alpha2.Telemetry{
+				Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+					Endpoint:   helpers.GetPointer("1.2.3.4:123"),
+					Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
 					BatchSize:  helpers.GetPointer(int32(512)),
 					BatchCount: helpers.GetPointer(int32(4)),
 				},
 				ServiceName: helpers.GetPointer("my-svc"),
-				SpanAttributes: []ngfAPI.SpanAttribute{
+				SpanAttributes: []ngfAPIv1alpha1.SpanAttribute{
 					{Key: "key", Value: "value"},
 				},
 			},
@@ -559,13 +596,13 @@ func TestBuildGraph(t *testing.T) {
 	// Testing one type of policy per attachment point should suffice.
 	polGVK := schema.GroupVersionKind{Kind: kinds.ClientSettingsPolicy}
 	hrPolicyKey := PolicyKey{GVK: polGVK, NsName: types.NamespacedName{Namespace: testNs, Name: "hrPolicy"}}
-	hrPolicy := &ngfAPI.ClientSettingsPolicy{
+	hrPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "hrPolicy",
 			Namespace: testNs,
 		},
 		TypeMeta: metav1.TypeMeta{Kind: kinds.ClientSettingsPolicy},
-		Spec: ngfAPI.ClientSettingsPolicySpec{
+		Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 			TargetRef: createTestRef(kinds.HTTPRoute, gatewayv1.GroupName, "hr-1"),
 		},
 	}
@@ -592,13 +629,13 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	gwPolicyKey := PolicyKey{GVK: polGVK, NsName: types.NamespacedName{Namespace: testNs, Name: "gwPolicy"}}
-	gwPolicy := &ngfAPI.ClientSettingsPolicy{
+	gwPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "gwPolicy",
 			Namespace: testNs,
 		},
 		TypeMeta: metav1.TypeMeta{Kind: kinds.ClientSettingsPolicy},
-		Spec: ngfAPI.ClientSettingsPolicySpec{
+		Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 			TargetRef: createTestRef(kinds.Gateway, gatewayv1.GroupName, "gateway-1"),
 		},
 	}
@@ -667,14 +704,16 @@ func TestBuildGraph(t *testing.T) {
 			ConfigMaps: map[types.NamespacedName]*v1.ConfigMap{
 				client.ObjectKeyFromObject(cm): cm,
 			},
-			NginxProxies: map[types.NamespacedName]*ngfAPI.NginxProxy{
-				client.ObjectKeyFromObject(proxy): proxy,
+			NginxProxies: map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy{
+				client.ObjectKeyFromObject(npGlobal): npGlobal,
+				client.ObjectKeyFromObject(np1):      np1,
+				client.ObjectKeyFromObject(np2):      np2,
 			},
 			NGFPolicies: map[PolicyKey]policies.Policy{
 				hrPolicyKey: hrPolicy,
 				gwPolicyKey: gwPolicy,
 			},
-			SnippetsFilters: map[types.NamespacedName]*ngfAPI.SnippetsFilter{
+			SnippetsFilters: map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter{
 				client.ObjectKeyFromObject(unreferencedSnippetsFilter): unreferencedSnippetsFilter,
 				client.ObjectKeyFromObject(referencedSnippetsFilter):   referencedSnippetsFilter,
 			},
@@ -826,6 +865,10 @@ func TestBuildGraph(t *testing.T) {
 				Source:     gc,
 				Valid:      true,
 				Conditions: []conditions.Condition{staticConds.NewGatewayClassResolvedRefs()},
+				NginxProxy: &NginxProxy{
+					Source: npGlobal,
+					Valid:  true,
+				},
 			},
 			Gateway: &Gateway{
 				Source: gw1,
@@ -878,6 +921,28 @@ func TestBuildGraph(t *testing.T) {
 				},
 				Valid:    true,
 				Policies: []*Policy{processedGwPolicy},
+				NginxProxy: &NginxProxy{
+					Source: np1,
+					Valid:  true,
+				},
+				EffectiveNginxProxy: &EffectiveNginxProxy{
+					Telemetry: &ngfAPIv1alpha2.Telemetry{
+						Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+							Endpoint:   helpers.GetPointer("1.2.3.4:123"),
+							Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
+							BatchSize:  helpers.GetPointer(int32(512)),
+							BatchCount: helpers.GetPointer(int32(4)),
+						},
+						ServiceName: helpers.GetPointer("my-svc"),
+						SpanAttributes: []ngfAPIv1alpha1.SpanAttribute{
+							{Key: "key", Value: "value"},
+						},
+					},
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
+					},
+				},
+				Conditions: []conditions.Condition{staticConds.NewGatewayResolvedRefs()},
 			},
 			IgnoredGateways: map[types.NamespacedName]*gatewayv1.Gateway{
 				{Namespace: testNs, Name: "gateway-2"}: gw2,
@@ -918,9 +983,15 @@ func TestBuildGraph(t *testing.T) {
 			BackendTLSPolicies: map[types.NamespacedName]*BackendTLSPolicy{
 				client.ObjectKeyFromObject(btp.Source): &btp,
 			},
-			NginxProxy: &NginxProxy{
-				Source: proxy,
-				Valid:  true,
+			ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{
+				client.ObjectKeyFromObject(npGlobal): {
+					Source: npGlobal,
+					Valid:  true,
+				},
+				client.ObjectKeyFromObject(np1): {
+					Source: np1,
+					Valid:  true,
+				},
 			},
 			NGFPolicies: map[PolicyKey]*Policy{
 				hrPolicyKey: processedRoutePolicy,
@@ -953,9 +1024,10 @@ func TestBuildGraph(t *testing.T) {
 		Spec: gatewayv1.GatewayClassSpec{
 			ControllerName: controllerName,
 			ParametersRef: &gatewayv1.ParametersReference{
-				Group: gatewayv1.Group("gateway.nginx.org"),
-				Kind:  gatewayv1.Kind(kinds.NginxProxy),
-				Name:  "nginx-proxy",
+				Group:     gatewayv1.Group("gateway.nginx.org"),
+				Kind:      gatewayv1.Kind(kinds.NginxProxy),
+				Name:      "np-global",
+				Namespace: helpers.GetPointer(gatewayv1.Namespace(testNs)),
 			},
 		},
 	}
@@ -1134,27 +1206,15 @@ func TestIsReferenced(t *testing.T) {
 		},
 	}
 
-	gcWithNginxProxy := &GatewayClass{
-		Source: &gatewayv1.GatewayClass{
-			Spec: gatewayv1.GatewayClassSpec{
-				ParametersRef: &gatewayv1.ParametersReference{
-					Group: ngfAPI.GroupName,
-					Kind:  gatewayv1.Kind(kinds.NginxProxy),
-					Name:  "nginx-proxy-in-gc",
-				},
-			},
+	npNotReferenced := &ngfAPIv1alpha2.NginxProxy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "nginx-proxy-not-ref",
 		},
 	}
 
-	npNotInGatewayClass := &ngfAPI.NginxProxy{
+	npReferenced := &ngfAPIv1alpha2.NginxProxy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "nginx-proxy",
-		},
-	}
-
-	npInGatewayClass := &ngfAPI.NginxProxy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "nginx-proxy-in-gc",
+			Name: "nginx-proxy-ref",
 		},
 	}
 
@@ -1177,6 +1237,11 @@ func TestIsReferenced(t *testing.T) {
 				CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(baseConfigMap), "ConfigMap", &Certificate{
 					CACert: []byte(caBlock),
 				}),
+			},
+		},
+		ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{
+			client.ObjectKeyFromObject(npReferenced): {
+				Source: npReferenced,
 			},
 		},
 	}
@@ -1309,16 +1374,14 @@ func TestIsReferenced(t *testing.T) {
 
 		// NginxProxy tests
 		{
-			name:     "NginxProxy is referenced in GatewayClass",
-			resource: npInGatewayClass,
-			gc:       gcWithNginxProxy,
+			name:     "NginxProxy is referenced",
+			resource: npReferenced,
 			graph:    graph,
 			expected: true,
 		},
 		{
-			name:     "NginxProxy is not referenced in GatewayClass",
-			resource: npNotInGatewayClass,
-			gc:       gcWithNginxProxy,
+			name:     "NginxProxy is not referenced",
+			resource: npNotReferenced,
 			graph:    graph,
 			expected: false,
 		},

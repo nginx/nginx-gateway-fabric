@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
@@ -324,55 +324,35 @@ func TestVerifyIPFamily(t *testing.T) {
 	test := []struct {
 		name        string
 		expErr      error
-		npCfg       *NginxProxy
+		npCfg       *EffectiveNginxProxy
 		svcIPFamily []v1.IPFamily
 	}{
 		{
 			name: "Valid - IPv6 and IPv4 configured for NGINX, service has only IPv4",
-			npCfg: &NginxProxy{
-				Source: &ngfAPI.NginxProxy{
-					Spec: ngfAPI.NginxProxySpec{
-						IPFamily: helpers.GetPointer(ngfAPI.Dual),
-					},
-				},
-				Valid: true,
+			npCfg: &EffectiveNginxProxy{
+				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
 			},
 			svcIPFamily: []v1.IPFamily{v1.IPv4Protocol},
 		},
 		{
 			name: "Valid - IPv6 and IPv4 configured for NGINX, service has only IPv6",
-			npCfg: &NginxProxy{
-				Source: &ngfAPI.NginxProxy{
-					Spec: ngfAPI.NginxProxySpec{
-						IPFamily: helpers.GetPointer(ngfAPI.Dual),
-					},
-				},
-				Valid: true,
+			npCfg: &EffectiveNginxProxy{
+				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
 			},
 			svcIPFamily: []v1.IPFamily{v1.IPv6Protocol},
 		},
 		{
 			name: "Invalid - IPv4 configured for NGINX, service has only IPv6",
-			npCfg: &NginxProxy{
-				Source: &ngfAPI.NginxProxy{
-					Spec: ngfAPI.NginxProxySpec{
-						IPFamily: helpers.GetPointer(ngfAPI.IPv4),
-					},
-				},
-				Valid: true,
+			npCfg: &EffectiveNginxProxy{
+				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv4),
 			},
 			svcIPFamily: []v1.IPFamily{v1.IPv6Protocol},
 			expErr:      errors.New("Service configured with IPv6 family but NginxProxy is configured with IPv4"),
 		},
 		{
 			name: "Invalid - IPv6 configured for NGINX, service has only IPv4",
-			npCfg: &NginxProxy{
-				Source: &ngfAPI.NginxProxy{
-					Spec: ngfAPI.NginxProxySpec{
-						IPFamily: helpers.GetPointer(ngfAPI.IPv6),
-					},
-				},
-				Valid: true,
+			npCfg: &EffectiveNginxProxy{
+				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6),
 			},
 			svcIPFamily: []v1.IPFamily{v1.IPv4Protocol},
 			expErr:      errors.New("Service configured with IPv4 family but NginxProxy is configured with IPv6"),
@@ -845,7 +825,7 @@ func TestCreateBackend(t *testing.T) {
 
 	tests := []struct {
 		expectedCondition            *conditions.Condition
-		nginxProxy                   *NginxProxy
+		nginxProxySpec               *EffectiveNginxProxy
 		name                         string
 		expectedServicePortReference string
 		ref                          gatewayv1.HTTPBackendRef
@@ -958,12 +938,7 @@ func TestCreateBackend(t *testing.T) {
 				Weight:      5,
 				Valid:       false,
 			},
-			nginxProxy: &NginxProxy{
-				Source: &ngfAPI.NginxProxy{
-					Spec: ngfAPI.NginxProxySpec{IPFamily: helpers.GetPointer(ngfAPI.IPv6)},
-				},
-				Valid: true,
-			},
+			nginxProxySpec: &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6)},
 			expectedCondition: helpers.GetPointer(
 				staticConds.NewRouteInvalidIPFamily(`Service configured with IPv4 family but NginxProxy is configured with IPv6`),
 			),
@@ -1042,7 +1017,7 @@ func TestCreateBackend(t *testing.T) {
 				services,
 				refPath,
 				policies,
-				test.nginxProxy,
+				test.nginxProxySpec,
 			)
 
 			g.Expect(helpers.Diff(test.expectedBackend, backend)).To(BeEmpty())

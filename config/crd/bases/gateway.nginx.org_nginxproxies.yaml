@@ -14,18 +14,22 @@ spec:
     listKind: NginxProxyList
     plural: nginxproxies
     singular: nginxproxy
-  scope: Cluster
+  scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1alpha2
     schema:
       openAPIV3Schema:
         description: |-
-          NginxProxy is a configuration object that is attached to a GatewayClass parametersRef. It provides a way
-          to configure global settings for all Gateways defined from the GatewayClass.
+          NginxProxy is a configuration object that can be referenced from a GatewayClass parametersRef
+          or a Gateway infrastructure.parametersRef. It provides a way to configure data plane settings.
+          If referenced from a GatewayClass, the settings apply to all Gateways attached to the GatewayClass.
+          If referenced from a Gateway, the settings apply to that Gateway alone. If both a Gateway and its GatewayClass
+          reference an NginxProxy, the settings are merged. Settings specified on the Gateway NginxProxy override those
+          set on the GatewayClass NginxProxy.
         properties:
           apiVersion:
             description: |-
@@ -50,7 +54,7 @@ spec:
               disableHTTP2:
                 description: |-
                   DisableHTTP2 defines if http2 should be disabled for all servers.
-                  Default is false, meaning http2 will be enabled for all servers.
+                  If not specified, or set to false, http2 will be enabled for all servers.
                 type: boolean
               ipFamily:
                 default: dual
@@ -141,7 +145,6 @@ spec:
                       If a request comes from a trusted address, NGINX will rewrite the client IP information,
                       and forward it to the backend in the X-Forwarded-For* and X-Real-IP headers.
                       If the request does not come from a trusted address, NGINX will not rewrite the client IP information.
-                      TrustedAddresses only supports CIDR blocks: 192.33.21.1/24, fe80::1/64.
                       To trust all addresses (not recommended for production), set to 0.0.0.0/0.
                       If no addresses are provided, NGINX will not rewrite the client IP information.
                       Sets NGINX directive set_real_ip_from: https://nginx.org/en/docs/http/ngx_http_realip_module.html#set_real_ip_from
@@ -166,9 +169,6 @@ spec:
                       type: object
                     maxItems: 16
                     type: array
-                    x-kubernetes-list-map-keys:
-                    - type
-                    x-kubernetes-list-type: map
                 type: object
                 x-kubernetes-validations:
                 - message: if mode is set, trustedAddresses is a required field
@@ -177,6 +177,16 @@ spec:
               telemetry:
                 description: Telemetry specifies the OpenTelemetry configuration.
                 properties:
+                  disabledFeatures:
+                    description: DisabledFeatures specifies OpenTelemetry features
+                      to be disabled.
+                    items:
+                      description: DisableTelemetryFeature is a telemetry feature
+                        that can be disabled.
+                      enum:
+                      - DisableTracing
+                      type: string
+                    type: array
                   exporter:
                     description: Exporter specifies OpenTelemetry export parameters.
                     properties:
@@ -206,8 +216,6 @@ spec:
                           Default: https://nginx.org/en/docs/ngx_otel_module.html#otel_exporter
                         pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                         type: string
-                    required:
-                    - endpoint
                     type: object
                   serviceName:
                     description: |-

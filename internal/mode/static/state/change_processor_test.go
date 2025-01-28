@@ -2356,56 +2356,135 @@ var _ = Describe("ChangeProcessor", func() {
 		})
 
 		Describe("NginxProxy resource changes", Ordered, func() {
-			paramGC := gc.DeepCopy()
-			paramGC.Spec.ParametersRef = &v1beta1.ParametersReference{
-				Group: ngfAPIv1alpha1.GroupName,
-				Kind:  kinds.NginxProxy,
-				Name:  "np",
-			}
+			Context("referenced by a GatewayClass", func() {
+				paramGC := gc.DeepCopy()
+				paramGC.Spec.ParametersRef = &v1beta1.ParametersReference{
+					Group:     ngfAPIv1alpha1.GroupName,
+					Kind:      kinds.NginxProxy,
+					Name:      "np",
+					Namespace: helpers.GetPointer[v1.Namespace]("test"),
+				}
 
-			np := &ngfAPIv1alpha1.NginxProxy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "np",
-				},
-			}
+				np := &ngfAPIv1alpha2.NginxProxy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "np",
+						Namespace: "test",
+					},
+				}
 
-			npUpdated := &ngfAPIv1alpha1.NginxProxy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "np",
-				},
-				Spec: ngfAPIv1alpha1.NginxProxySpec{
-					Telemetry: &ngfAPIv1alpha1.Telemetry{
-						Exporter: &ngfAPIv1alpha1.TelemetryExporter{
-							Endpoint:   "my-svc:123",
-							BatchSize:  helpers.GetPointer(int32(512)),
-							BatchCount: helpers.GetPointer(int32(4)),
-							Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
+				npUpdated := &ngfAPIv1alpha2.NginxProxy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "np",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						Telemetry: &ngfAPIv1alpha2.Telemetry{
+							Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+								Endpoint:   helpers.GetPointer("my-svc:123"),
+								BatchSize:  helpers.GetPointer(int32(512)),
+								BatchCount: helpers.GetPointer(int32(4)),
+								Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
+							},
 						},
 					},
-				},
-			}
-			It("handles upserts for an NginxProxy", func() {
-				processor.CaptureUpsertChange(np)
-				processor.CaptureUpsertChange(paramGC)
+				}
+				It("handles upserts for an NginxProxy", func() {
+					processor.CaptureUpsertChange(np)
+					processor.CaptureUpsertChange(paramGC)
 
-				changed, graph := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
-				Expect(graph.NginxProxy.Source).To(Equal(np))
+					changed, graph := processor.Process()
+					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(graph.GatewayClass.NginxProxy.Source).To(Equal(np))
+				})
+				It("captures changes for an NginxProxy", func() {
+					processor.CaptureUpsertChange(npUpdated)
+					processor.CaptureUpsertChange(paramGC)
+
+					changed, graph := processor.Process()
+					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(graph.GatewayClass.NginxProxy.Source).To(Equal(npUpdated))
+				})
+				It("handles deletes for an NginxProxy", func() {
+					processor.CaptureDeleteChange(np, client.ObjectKeyFromObject(np))
+
+					changed, graph := processor.Process()
+					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(graph.GatewayClass.NginxProxy).To(BeNil())
+				})
 			})
-			It("captures changes for an NginxProxy", func() {
-				processor.CaptureUpsertChange(npUpdated)
-				processor.CaptureUpsertChange(paramGC)
+			Context("referenced by a Gateway", func() {
+				paramGW := &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:  "test",
+						Name:       "param-gw",
+						Generation: 1,
+					},
+					Spec: v1.GatewaySpec{
+						GatewayClassName: gcName,
+						Listeners: []v1.Listener{
+							{
+								Name:     httpListenerName,
+								Hostname: nil,
+								Port:     80,
+								Protocol: v1.HTTPProtocolType,
+							},
+						},
+						Infrastructure: &v1.GatewayInfrastructure{
+							ParametersRef: &v1.LocalParametersReference{
+								Group: ngfAPIv1alpha1.GroupName,
+								Kind:  kinds.NginxProxy,
+								Name:  "np-gw",
+							},
+						},
+					},
+				}
 
-				changed, graph := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
-				Expect(graph.NginxProxy.Source).To(Equal(npUpdated))
-			})
-			It("handles deletes for an NginxProxy", func() {
-				processor.CaptureDeleteChange(np, client.ObjectKeyFromObject(np))
+				np := &ngfAPIv1alpha2.NginxProxy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "np-gw",
+						Namespace: "test",
+					},
+				}
 
-				changed, graph := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
-				Expect(graph.NginxProxy).To(BeNil())
+				npUpdated := &ngfAPIv1alpha2.NginxProxy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "np-gw",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						Telemetry: &ngfAPIv1alpha2.Telemetry{
+							Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+								Endpoint:   helpers.GetPointer("my-svc:123"),
+								BatchSize:  helpers.GetPointer(int32(512)),
+								BatchCount: helpers.GetPointer(int32(4)),
+								Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
+							},
+						},
+					},
+				}
+				It("handles upserts for an NginxProxy", func() {
+					processor.CaptureUpsertChange(np)
+					processor.CaptureUpsertChange(paramGW)
+
+					changed, graph := processor.Process()
+					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(graph.Gateway.NginxProxy.Source).To(Equal(np))
+				})
+				It("captures changes for an NginxProxy", func() {
+					processor.CaptureUpsertChange(npUpdated)
+					processor.CaptureUpsertChange(paramGW)
+
+					changed, graph := processor.Process()
+					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(graph.Gateway.NginxProxy.Source).To(Equal(npUpdated))
+				})
+				It("handles deletes for an NginxProxy", func() {
+					processor.CaptureDeleteChange(np, client.ObjectKeyFromObject(np))
+
+					changed, graph := processor.Process()
+					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(graph.Gateway.NginxProxy).To(BeNil())
+				})
 			})
 		})
 
@@ -2698,7 +2777,7 @@ var _ = Describe("ChangeProcessor", func() {
 			secret, secretUpdated, unrelatedSecret, barSecret, barSecretUpdated               *apiv1.Secret
 			cm, cmUpdated, unrelatedCM                                                        *apiv1.ConfigMap
 			btls, btlsUpdated                                                                 *v1alpha3.BackendTLSPolicy
-			np, npUpdated                                                                     *ngfAPIv1alpha1.NginxProxy
+			np, npUpdated                                                                     *ngfAPIv1alpha2.NginxProxy
 		)
 
 		BeforeEach(OncePerOrdered, func() {
@@ -2997,12 +3076,12 @@ var _ = Describe("ChangeProcessor", func() {
 			btlsUpdated = btls.DeepCopy()
 
 			npNsName = types.NamespacedName{Name: "np-1"}
-			np = &ngfAPIv1alpha1.NginxProxy{
+			np = &ngfAPIv1alpha2.NginxProxy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: npNsName.Name,
 				},
-				Spec: ngfAPIv1alpha1.NginxProxySpec{
-					Telemetry: &ngfAPIv1alpha1.Telemetry{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Telemetry: &ngfAPIv1alpha2.Telemetry{
 						ServiceName: helpers.GetPointer("my-svc"),
 					},
 				},
@@ -3077,7 +3156,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureDeleteChange(&v1beta1.ReferenceGrant{}, rgNsName)
 					processor.CaptureDeleteChange(&v1alpha3.BackendTLSPolicy{}, btlsNsName)
 					processor.CaptureDeleteChange(&apiv1.ConfigMap{}, cmNsName)
-					processor.CaptureDeleteChange(&ngfAPIv1alpha1.NginxProxy{}, npNsName)
+					processor.CaptureDeleteChange(&ngfAPIv1alpha2.NginxProxy{}, npNsName)
 
 					// these are non-changing changes
 					processor.CaptureUpsertChange(gw2)
