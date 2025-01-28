@@ -132,7 +132,7 @@ func TestGenerate(t *testing.T) {
 			graph.PlusReportClientSSLCertificate: []byte("cert"),
 			graph.PlusReportClientSSLKey:         []byte("key"),
 		},
-		NginxPlus: dataplane.NginxPlus{AllowedAddresses: []string{"127.0.0.3", "25.0.0.3"}},
+		NginxPlus: dataplane.NginxPlus{AllowedAddresses: []string{"127.0.0.3", "25.0.0.3", "24.0.0.3/32"}},
 	}
 	g := NewWithT(t)
 
@@ -211,6 +211,7 @@ func TestGenerate(t *testing.T) {
 	g.Expect(httpCfg).To(ContainSubstring("root /usr/share/nginx/html;"))
 	g.Expect(httpCfg).To(ContainSubstring("allow 127.0.0.3;"))
 	g.Expect(httpCfg).To(ContainSubstring("allow 25.0.0.3;"))
+	g.Expect(httpCfg).To(ContainSubstring("allow 24.0.0.3/32;"))
 	g.Expect(httpCfg).To(ContainSubstring("deny all;"))
 	g.Expect(httpCfg).To(ContainSubstring("location = /dashboard.html {}"))
 
