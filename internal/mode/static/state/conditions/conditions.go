@@ -87,6 +87,10 @@ const (
 	// parametersRef resource does not exist.
 	GatewayClassReasonParamsRefNotFound v1.GatewayClassConditionReason = "ParametersRefNotFound"
 
+	// GatewayClassReasonParamsRefInvalid is used with the "GatewayClassResolvedRefs" condition when the
+	// parametersRef resource is invalid.
+	GatewayClassReasonParamsRefInvalid v1.GatewayClassConditionReason = "ParametersRefInvalid"
+
 	// PolicyReasonNginxProxyConfigNotSet is used with the "PolicyAccepted" condition when the
 	// NginxProxy resource is missing or invalid.
 	PolicyReasonNginxProxyConfigNotSet v1alpha2.PolicyConditionReason = "NginxProxyConfigNotSet"
@@ -106,6 +110,21 @@ const (
 	// GatewayIgnoredReason is used with v1.RouteConditionAccepted when the route references a Gateway that is ignored
 	// by NGF.
 	GatewayIgnoredReason v1.RouteConditionReason = "GatewayIgnored"
+
+	// GatewayResolvedRefs condition indicates whether the controller was able to resolve the
+	// parametersRef on the Gateway.
+	GatewayResolvedRefs v1.GatewayConditionType = "ResolvedRefs"
+
+	// GatewayReasonResolvedRefs is used with the "GatewayResolvedRefs" condition when the condition is true.
+	GatewayReasonResolvedRefs v1.GatewayConditionReason = "ResolvedRefs"
+
+	// GatewayReasonParamsRefNotFound is used with the "GatewayResolvedRefs" condition when the
+	// parametersRef resource does not exist.
+	GatewayReasonParamsRefNotFound v1.GatewayConditionReason = "ParametersRefNotFound"
+
+	// GatewayReasonParamsRefInvalid is used with the "GatewayResolvedRefs" condition when the
+	// parametersRef resource is invalid.
+	GatewayReasonParamsRefInvalid v1.GatewayConditionReason = "ParametersRefInvalid"
 )
 
 // NewRouteNotAcceptedGatewayIgnored returns a Condition that indicates that the Route is not accepted by the Gateway
@@ -514,7 +533,7 @@ func NewGatewayClassResolvedRefs() conditions.Condition {
 		Type:    string(GatewayClassResolvedRefs),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(GatewayClassReasonResolvedRefs),
-		Message: "parametersRef resource is resolved",
+		Message: "ParametersRef resource is resolved",
 	}
 }
 
@@ -525,7 +544,18 @@ func NewGatewayClassRefNotFound() conditions.Condition {
 		Type:    string(GatewayClassResolvedRefs),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(GatewayClassReasonParamsRefNotFound),
-		Message: "parametersRef resource could not be found",
+		Message: "ParametersRef resource could not be found",
+	}
+}
+
+// NewGatewayClassRefInvalid returns a Condition that indicates that the parametersRef
+// on the GatewayClass could not be resolved because the resource it references is invalid.
+func NewGatewayClassRefInvalid(msg string) conditions.Condition {
+	return conditions.Condition{
+		Type:    string(GatewayClassResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(GatewayClassReasonParamsRefInvalid),
+		Message: msg,
 	}
 }
 
@@ -537,7 +567,7 @@ func NewGatewayClassInvalidParameters(msg string) conditions.Condition {
 		Type:    string(v1.GatewayClassConditionStatusAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.GatewayClassReasonInvalidParameters),
-		Message: fmt.Sprintf("GatewayClass is accepted, but parametersRef is ignored due to an error: %s", msg),
+		Message: fmt.Sprintf("GatewayClass is accepted, but ParametersRef is ignored due to an error: %s", msg),
 	}
 }
 
@@ -681,6 +711,51 @@ func NewNginxGatewayInvalid(msg string) conditions.Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(ngfAPI.NginxGatewayReasonInvalid),
 		Message: msg,
+	}
+}
+
+// NewGatewayResolvedRefs returns a Condition that indicates that the parametersRef
+// on the Gateway is resolved.
+func NewGatewayResolvedRefs() conditions.Condition {
+	return conditions.Condition{
+		Type:    string(GatewayResolvedRefs),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(GatewayReasonResolvedRefs),
+		Message: "ParametersRef resource is resolved",
+	}
+}
+
+// NewGatewayRefNotFound returns a Condition that indicates that the parametersRef
+// on the Gateway could not be resolved.
+func NewGatewayRefNotFound() conditions.Condition {
+	return conditions.Condition{
+		Type:    string(GatewayResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(GatewayReasonParamsRefNotFound),
+		Message: "ParametersRef resource could not be found",
+	}
+}
+
+// NewGatewayRefInvalid returns a Condition that indicates that the parametersRef
+// on the Gateway could not be resolved because the referenced resource is invalid.
+func NewGatewayRefInvalid(msg string) conditions.Condition {
+	return conditions.Condition{
+		Type:    string(GatewayResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(GatewayReasonParamsRefInvalid),
+		Message: msg,
+	}
+}
+
+// NewGatewayInvalidParameters returns a Condition that indicates that the Gateway has invalid parameters.
+// We are allowing Accepted to still be true to prevent nullifying the entire Gateway config if a parametersRef
+// is updated to something invalid.
+func NewGatewayInvalidParameters(msg string) conditions.Condition {
+	return conditions.Condition{
+		Type:    string(v1.GatewayConditionAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(v1.GatewayReasonInvalidParameters),
+		Message: fmt.Sprintf("Gateway is accepted, but ParametersRef is ignored due to an error: %s", msg),
 	}
 }
 

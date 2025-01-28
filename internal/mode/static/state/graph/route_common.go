@@ -190,7 +190,7 @@ func buildL4RoutesForGateways(
 	tlsRoutes map[types.NamespacedName]*v1alpha.TLSRoute,
 	gatewayNsNames []types.NamespacedName,
 	services map[types.NamespacedName]*apiv1.Service,
-	npCfg *NginxProxy,
+	npCfg *EffectiveNginxProxy,
 	resolver *referenceGrantResolver,
 ) map[L4RouteKey]*L4Route {
 	if len(gatewayNsNames) == 0 {
@@ -219,7 +219,7 @@ func buildRoutesForGateways(
 	httpRoutes map[types.NamespacedName]*v1.HTTPRoute,
 	grpcRoutes map[types.NamespacedName]*v1.GRPCRoute,
 	gatewayNsNames []types.NamespacedName,
-	npCfg *NginxProxy,
+	effectiveNginxProxy *EffectiveNginxProxy,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 ) map[RouteKey]*L7Route {
 	if len(gatewayNsNames) == 0 {
@@ -228,7 +228,7 @@ func buildRoutesForGateways(
 
 	routes := make(map[RouteKey]*L7Route)
 
-	http2disabled := isHTTP2Disabled(npCfg)
+	http2disabled := isHTTP2Disabled(effectiveNginxProxy)
 
 	for _, route := range httpRoutes {
 		r := buildHTTPRoute(validator, route, gatewayNsNames, snippetsFilters)
@@ -257,11 +257,16 @@ func buildRoutesForGateways(
 	return routes
 }
 
-func isHTTP2Disabled(npCfg *NginxProxy) bool {
+func isHTTP2Disabled(npCfg *EffectiveNginxProxy) bool {
 	if npCfg == nil {
 		return false
 	}
-	return npCfg.Source.Spec.DisableHTTP2
+
+	if npCfg.DisableHTTP2 == nil {
+		return false
+	}
+
+	return *npCfg.DisableHTTP2
 }
 
 func buildSectionNameRefs(
