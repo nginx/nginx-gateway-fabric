@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	keepAliveTime    = 10 * time.Second
+	keepAliveTime    = 15 * time.Second
 	keepAliveTimeout = 10 * time.Second
 )
 
@@ -82,7 +82,8 @@ func (g *Server) Start(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		g.logger.Info("Shutting down GRPC Server")
-		server.GracefulStop()
+		// Since we use a long-lived stream, GracefulStop does not terminate. Therefore we use Stop.
+		server.Stop()
 	}()
 
 	return server.Serve(listener)

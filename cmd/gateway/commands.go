@@ -519,14 +519,14 @@ func createInitializeCommand() *cobra.Command {
 
 	// flag values
 	var srcFiles []string
-	var dest string
+	var destDirs []string
 	var plus bool
 
 	cmd := &cobra.Command{
 		Use:   "initialize",
 		Short: "Write initial configuration files",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := validateCopyArgs(srcFiles, dest); err != nil {
+			if err := validateCopyArgs(srcFiles, destDirs); err != nil {
 				return err
 			}
 
@@ -546,7 +546,7 @@ func createInitializeCommand() *cobra.Command {
 			logger.Info(
 				"Starting init container",
 				"source filenames to copy", srcFiles,
-				"destination directory", dest,
+				"destination directories", destDirs,
 				"nginx-plus",
 				plus,
 			)
@@ -558,16 +558,21 @@ func createInitializeCommand() *cobra.Command {
 				Logger:          logger.WithName("deployCtxCollector"),
 			})
 
+			files := make([]fileToCopy, 0, len(srcFiles))
+			for i, src := range srcFiles {
+				files = append(files, fileToCopy{
+					destDirName: destDirs[i],
+					srcFileName: src,
+				})
+			}
+
 			return initialize(initializeConfig{
 				fileManager:   file.NewStdLibOSFileManager(),
 				fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil, logger.WithName("generator")),
 				logger:        logger,
 				plus:          plus,
 				collector:     dcc,
-				copy: copyFiles{
-					srcFileNames: srcFiles,
-					destDirName:  dest,
-				},
+				copy:          files,
 			})
 		},
 	}
@@ -579,11 +584,11 @@ func createInitializeCommand() *cobra.Command {
 		"The source files to be copied",
 	)
 
-	cmd.Flags().StringVar(
-		&dest,
+	cmd.Flags().StringSliceVar(
+		&destDirs,
 		destFlag,
-		"",
-		"The destination directory for the source files to be copied to",
+		[]string{},
+		"The destination directories for the source files at the same array index to be copied to",
 	)
 
 	cmd.Flags().BoolVar(

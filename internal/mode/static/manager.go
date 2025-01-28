@@ -45,7 +45,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/runnables"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/status"
+	frameworkStatus "github.com/nginx/nginx-gateway-fabric/internal/framework/status"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
@@ -62,6 +62,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/status"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/telemetry"
 )
 
@@ -160,7 +161,7 @@ func StartManager(cfg config.Config) error {
 
 		handlerCollector, ok := handlerCollector.(prometheus.Collector)
 		if !ok {
-			return fmt.Errorf("handlerCollector is not a prometheus.Collector: %w", status.ErrFailedAssert)
+			return fmt.Errorf("handlerCollector is not a prometheus.Collector: %w", frameworkStatus.ErrFailedAssert)
 		}
 
 		metrics.Registry.MustRegister(
@@ -169,19 +170,25 @@ func StartManager(cfg config.Config) error {
 		)
 	}
 
-	statusUpdater := status.NewUpdater(
+	statusUpdater := frameworkStatus.NewUpdater(
 		mgr.GetClient(),
 		cfg.Logger.WithName("statusUpdater"),
 	)
 
-	groupStatusUpdater := status.NewLeaderAwareGroupUpdater(statusUpdater)
+	groupStatusUpdater := frameworkStatus.NewLeaderAwareGroupUpdater(statusUpdater)
 	deployCtxCollector := licensing.NewDeploymentContextCollector(licensing.DeploymentContextCollectorConfig{
 		K8sClientReader: mgr.GetAPIReader(),
 		PodUID:          cfg.GatewayPodConfig.UID,
 		Logger:          cfg.Logger.WithName("deployCtxCollector"),
 	})
 
-	nginxUpdater := agent.NewNginxUpdater(cfg.Logger.WithName("nginxUpdater"), cfg.Plus)
+	statusQueue := status.NewQueue()
+	nginxUpdater := agent.NewNginxUpdater(
+		cfg.Logger.WithName("nginxUpdater"),
+		mgr.GetAPIReader(),
+		statusQueue,
+		cfg.Plus,
+	)
 
 	grpcServer := agentgrpc.NewServer(
 		cfg.Logger.WithName("agentGRPCServer"),
@@ -196,8 +203,8 @@ func StartManager(cfg config.Config) error {
 		return fmt.Errorf("cannot register grpc server: %w", err)
 	}
 
-	// TODO(sberman): event handler loop should wait on a channel until the grpc server has started
 	eventHandler := newEventHandlerImpl(eventHandlerConfig{
+		ctx:              ctx,
 		nginxUpdater:     nginxUpdater,
 		metricsCollector: handlerCollector,
 		statusUpdater:    groupStatusUpdater,
@@ -210,6 +217,7 @@ func StartManager(cfg config.Config) error {
 		),
 		k8sClient:                mgr.GetClient(),
 		k8sReader:                mgr.GetAPIReader(),
+		logger:                   cfg.Logger.WithName("eventHandler"),
 		logLevelSetter:           logLevelSetter,
 		eventRecorder:            recorder,
 		deployCtxCollector:       deployCtxCollector,
@@ -219,6 +227,8 @@ func StartManager(cfg config.Config) error {
 		gatewayCtlrName:          cfg.GatewayCtlrName,
 		updateGatewayClassStatus: cfg.UpdateGatewayClassStatus,
 		plus:                     cfg.Plus,
+		statusQueue:              statusQueue,
+		nginxDeployments:         nginxUpdater.NginxDeployments,
 	})
 
 	objects, objectLists := prepareFirstEventBatchPreparerArgs(cfg)
@@ -507,6 +517,7 @@ func registerControllers(
 				objectType: &ngfAPIv1alpha1.NginxGateway{},
 				options: []controller.Option{
 					controller.WithNamespacedNameFilter(filter.CreateSingleResourceFilter(controlConfigNSName)),
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
 			})
 		if err := setInitialConfig(
