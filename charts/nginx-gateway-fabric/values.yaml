@@ -131,10 +131,6 @@ nginx:
     # @schema
     pullPolicy: Always
 
-  securityContext:
-    # -- Some environments may need this set to true in order for the control plane to successfully reload NGINX.
-    allowPrivilegeEscalation: false
-
   # -- Is NGINX Plus image being used
   plus: false
 
