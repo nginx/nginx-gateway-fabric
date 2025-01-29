@@ -337,22 +337,96 @@ func bindRoutesToListeners(
 		bindL7RouteToListeners(r, gw, namespaces)
 	}
 
-	var routes []*L4Route
-	for _, r := range l4Routes {
+	routes := make([]*L7Route, 0, len(l7Routes))
+	for _, r := range l7Routes {
 		routes = append(routes, r)
 	}
 
+	isolateL7RouteListeners(routes, gw.Listeners)
+
+	l4RouteSlice := make([]*L4Route, 0, len(l4Routes))
+	for _, r := range l4Routes {
+		l4RouteSlice = append(l4RouteSlice, r)
+	}
+
 	// Sort the slice by timestamp and name so that we process the routes in the priority order
-	sort.Slice(routes, func(i, j int) bool {
-		return ngfSort.LessClientObject(routes[i].Source, routes[j].Source)
+	sort.Slice(l4RouteSlice, func(i, j int) bool {
+		return ngfSort.LessClientObject(l4RouteSlice[i].Source, l4RouteSlice[j].Source)
 	})
 
 	// portHostnamesMap exists to detect duplicate hostnames on the same port
 	portHostnamesMap := make(map[string]struct{})
 
-	for _, r := range routes {
+	for _, r := range l4RouteSlice {
 		bindL4RouteToListeners(r, gw, namespaces, portHostnamesMap)
 	}
+
+	isolateL4RouteListeners(l4RouteSlice, gw.Listeners)
+}
+
+// isolateL7RouteListeners ensures listener isolation for all L7Routes.
+func isolateL7RouteListeners(routes []*L7Route, listeners []*Listener) {
+	listenerHostnameMap := make(map[string]string, len(listeners))
+	for _, l := range listeners {
+		listenerHostnameMap[l.Name] = getHostname(l.Source.Hostname)
+	}
+
+	for _, route := range routes {
+		isolateHostnamesForParentRefs(route.ParentRefs, listenerHostnameMap)
+	}
+}
+
+// isolateL4RouteListeners ensures listener isolation for all L4Routes.
+func isolateL4RouteListeners(routes []*L4Route, listeners []*Listener) {
+	listenerHostnameMap := make(map[string]string, len(listeners))
+	for _, l := range listeners {
+		listenerHostnameMap[l.Name] = getHostname(l.Source.Hostname)
+	}
+
+	for _, route := range routes {
+		isolateHostnamesForParentRefs(route.ParentRefs, listenerHostnameMap)
+	}
+}
+
+// isolateHostnamesForParentRefs iterates through the parentRefs of a route to identify the list of accepted hostnames
+// for each listener. If any accepted hostname belongs to another listener,
+// it removes those hostnames to ensure listener isolation.
+func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap map[string]string) {
+	for _, ref := range parentRef {
+		acceptedHostnames := ref.Attachment.AcceptedHostnames
+
+		hostnamesToRemoves := make(map[string]struct{})
+		for listenerName, hostnames := range acceptedHostnames {
+			if len(hostnames) == 0 {
+				continue
+			}
+			for _, h := range hostnames {
+				for lName, lHostname := range listenerHostnameMap {
+					// skip comparison if it is a catch all listener block
+					if lHostname == "" {
+						continue
+					}
+					if h == lHostname && listenerName != lName {
+						hostnamesToRemoves[h] = struct{}{}
+					}
+				}
+			}
+
+			isolatedHostnames := removeHostnames(hostnames, hostnamesToRemoves)
+			ref.Attachment.AcceptedHostnames[listenerName] = isolatedHostnames
+		}
+	}
+}
+
+// removeHostnames removes the hostnames that are part of toRemove slice.
+func removeHostnames(hostnames []string, toRemove map[string]struct{}) []string {
+	result := make([]string, 0, len(hostnames))
+	for _, hostname := range hostnames {
+		if _, exists := toRemove[hostname]; !exists {
+			result = append(result, hostname)
+		}
+	}
+	return result
 }
 
 func validateParentRef(
