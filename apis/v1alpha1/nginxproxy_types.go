@@ -62,10 +62,8 @@ type NginxProxySpec struct {
 type NginxPlus struct {
 	// AllowedAddresses specifies IPAddresses or CIDR blocks to the allow list for accessing the NGINX Plus API.
 	//
-	//nolint:lll
 	// +optional
-	// +kubebuilder:validation:items:XValidation:message="Address Type must be either CIDR or IPAddress",rule="(self.type=='CIDR' || self.type=='IPAddress')"
-	AllowedAddresses []Address `json:"allowedAddresses,omitempty"`
+	AllowedAddresses []NginxPlusAllowAddress `json:"allowedAddresses,omitempty"`
 }
 
 // Telemetry specifies the OpenTelemetry configuration.
@@ -161,7 +159,7 @@ type RewriteClientIP struct {
 	// +listType=map
 	// +listMapKey=type
 	// +kubebuilder:validation:MaxItems=16
-	TrustedAddresses []Address `json:"trustedAddresses,omitempty"`
+	TrustedAddresses []RewriteClientIPAddress `json:"trustedAddresses,omitempty"`
 }
 
 // RewriteClientIPModeType defines how NGINX Gateway Fabric will determine the client's original IP address.
@@ -195,28 +193,49 @@ const (
 	IPv6 IPFamilyType = "ipv6"
 )
 
-// Address is a struct that specifies address type and value.
-type Address struct {
+// RewriteClientIPAddress is a struct that specifies address type and value.
+type RewriteClientIPAddress struct {
 	// Type specifies the type of address.
-	Type AddressType `json:"type"`
+	Type RewriteClientIPAddressType `json:"type"`
 
 	// Value specifies the address value.
 	Value string `json:"value"`
 }
 
-// AddressType specifies the type of address.
+// RewriteClientIPAddressType specifies the type of address.
 // +kubebuilder:validation:Enum=CIDR;IPAddress;Hostname
-type AddressType string
+type RewriteClientIPAddressType string
 
 const (
-	// CIDRAddressType specifies that the address is a CIDR block.
-	CIDRAddressType AddressType = "CIDR"
+	// RewriteClientIPCIDRAddressType specifies that the address is a CIDR block.
+	RewriteClientIPCIDRAddressType RewriteClientIPAddressType = "CIDR"
 
-	// IPAddressType specifies that the address is an IP address.
-	IPAddressType AddressType = "IPAddress"
+	// RewriteClientIPIPAddressType specifies that the address is an IP address.
+	RewriteClientIPIPAddressType RewriteClientIPAddressType = "IPAddress"
 
-	// HostnameAddressType specifies that the address is a Hostname.
-	HostnameAddressType AddressType = "Hostname"
+	// RewriteClientIPHostnameAddressType specifies that the address is a Hostname.
+	RewriteClientIPHostnameAddressType RewriteClientIPAddressType = "Hostname"
+)
+
+// NginxPlusAllowAddress is a struct that specifies address type and value.
+type NginxPlusAllowAddress struct {
+	// Type specifies the type of address.
+	Type NginxPlusAllowAddressType `json:"type"`
+
+	// Value specifies the address value.
+	Value string `json:"value"`
+}
+
+// NginxPlusAllowAddressType specifies the type of address.
+// +kubebuilder:validation:Enum=CIDR;IPAddress
+type NginxPlusAllowAddressType string
+
+const (
+	// NginxPlusAllowCIDRAddressType specifies that the address is a CIDR block.
+	NginxPlusAllowCIDRAddressType NginxPlusAllowAddressType = "CIDR"
+
+	// NginxPlusAllowIPAddressType specifies that the address is an IP address.
+	NginxPlusAllowIPAddressType NginxPlusAllowAddressType = "IPAddress"
 )
 
 // NginxLogging defines logging related settings for NGINX.

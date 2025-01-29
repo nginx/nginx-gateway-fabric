@@ -952,7 +952,7 @@ func buildPolicies(graphPolicies []*graph.Policy) []policies.Policy {
 	return finalPolicies
 }
 
-func convertAddresses(addresses []ngfAPIv1alpha1.Address) []string {
+func convertAddresses(addresses []ngfAPIv1alpha1.RewriteClientIPAddress) []string {
 	trustedAddresses := make([]string, len(addresses))
 	for i, addr := range addresses {
 		trustedAddresses[i] = addr.Value
@@ -993,7 +993,12 @@ func buildNginxPlus(g *graph.Graph) NginxPlus {
 	ngfProxy := g.NginxProxy
 	if ngfProxy != nil && ngfProxy.Source.Spec.NginxPlus != nil {
 		if ngfProxy.Source.Spec.NginxPlus.AllowedAddresses != nil {
-			nginxPlusSettings.AllowedAddresses = convertAddresses(ngfProxy.Source.Spec.NginxPlus.AllowedAddresses)
+			addresses := make([]string, len(ngfProxy.Source.Spec.NginxPlus.AllowedAddresses))
+			for i, addr := range ngfProxy.Source.Spec.NginxPlus.AllowedAddresses {
+				addresses[i] = addr.Value
+			}
+
+			nginxPlusSettings.AllowedAddresses = addresses
 		}
 	}
 

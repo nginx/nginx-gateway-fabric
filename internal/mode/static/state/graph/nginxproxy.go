@@ -218,15 +218,15 @@ func validateRewriteClientIP(npCfg *ngfAPI.NginxProxy) field.ErrorList {
 			valuePath := trustedAddressesPath.Child("value")
 
 			switch addr.Type {
-			case ngfAPI.CIDRAddressType:
+			case ngfAPI.RewriteClientIPCIDRAddressType:
 				if err := k8svalidation.IsValidCIDR(valuePath, addr.Value); err != nil {
 					allErrs = append(allErrs, err...)
 				}
-			case ngfAPI.IPAddressType:
+			case ngfAPI.RewriteClientIPIPAddressType:
 				if err := k8svalidation.IsValidIP(valuePath, addr.Value); err != nil {
 					allErrs = append(allErrs, err...)
 				}
-			case ngfAPI.HostnameAddressType:
+			case ngfAPI.RewriteClientIPHostnameAddressType:
 				if errs := k8svalidation.IsDNS1123Subdomain(addr.Value); len(errs) > 0 {
 					for _, e := range errs {
 						allErrs = append(allErrs, field.Invalid(valuePath, addr.Value, e))
@@ -238,9 +238,9 @@ func validateRewriteClientIP(npCfg *ngfAPI.NginxProxy) field.ErrorList {
 					field.NotSupported(trustedAddressesPath.Child("type"),
 						addr.Type,
 						[]string{
-							string(ngfAPI.CIDRAddressType),
-							string(ngfAPI.IPAddressType),
-							string(ngfAPI.HostnameAddressType),
+							string(ngfAPI.RewriteClientIPCIDRAddressType),
+							string(ngfAPI.RewriteClientIPIPAddressType),
+							string(ngfAPI.RewriteClientIPHostnameAddressType),
 						},
 					),
 				)
@@ -262,13 +262,13 @@ func validateNginxPlus(npCfg *ngfAPI.NginxProxy) field.ErrorList {
 		if nginxPlus.AllowedAddresses != nil {
 			for _, addr := range nginxPlus.AllowedAddresses {
 				valuePath := nginxPlusPath.Child("value")
+
 				switch addr.Type {
-				case ngfAPI.CIDRAddressType:
+				case ngfAPI.NginxPlusAllowCIDRAddressType:
 					if err := k8svalidation.IsValidCIDR(valuePath, addr.Value); err != nil {
 						allErrs = append(allErrs, err...)
 					}
-				case ngfAPI.IPAddressType:
-
+				case ngfAPI.NginxPlusAllowIPAddressType:
 					if err := k8svalidation.IsValidIP(valuePath, addr.Value); err != nil {
 						allErrs = append(allErrs, err...)
 					}
@@ -278,8 +278,8 @@ func validateNginxPlus(npCfg *ngfAPI.NginxProxy) field.ErrorList {
 						field.NotSupported(nginxPlusPath.Child("type"),
 							addr.Type,
 							[]string{
-								string(ngfAPI.CIDRAddressType),
-								string(ngfAPI.IPAddressType),
+								string(ngfAPI.NginxPlusAllowCIDRAddressType),
+								string(ngfAPI.NginxPlusAllowIPAddressType),
 							},
 						),
 					)

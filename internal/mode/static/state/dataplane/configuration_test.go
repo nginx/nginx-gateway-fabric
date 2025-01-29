@@ -2279,9 +2279,9 @@ func TestBuildConfiguration(t *testing.T) {
 						Spec: ngfAPIv1alpha1.NginxProxySpec{
 							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
 								SetIPRecursively: helpers.GetPointer(true),
-								TrustedAddresses: []ngfAPIv1alpha1.Address{
+								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
 									{
-										Type:  ngfAPIv1alpha1.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "1.1.1.1/32",
 									},
 								},
@@ -2391,9 +2391,9 @@ func TestBuildConfiguration(t *testing.T) {
 					Source: &ngfAPIv1alpha1.NginxProxy{
 						Spec: ngfAPIv1alpha1.NginxProxySpec{
 							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
-								AllowedAddresses: []ngfAPIv1alpha1.Address{
-									{Type: ngfAPIv1alpha1.IPAddressType, Value: "127.0.0.3"},
-									{Type: ngfAPIv1alpha1.IPAddressType, Value: "25.0.0.3"},
+								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
 								},
 							},
 						},
@@ -3972,9 +3972,9 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 						Spec: ngfAPIv1alpha1.NginxProxySpec{
 							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
 								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeProxyProtocol),
-								TrustedAddresses: []ngfAPIv1alpha1.Address{
+								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
 									{
-										Type:  ngfAPIv1alpha1.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "10.9.9.4/32",
 									},
 								},
@@ -3999,9 +3999,9 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 						Spec: ngfAPIv1alpha1.NginxProxySpec{
 							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
 								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeXForwardedFor),
-								TrustedAddresses: []ngfAPIv1alpha1.Address{
+								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
 									{
-										Type:  ngfAPIv1alpha1.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "76.89.90.11/24",
 									},
 								},
@@ -4026,21 +4026,21 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 						Spec: ngfAPIv1alpha1.NginxProxySpec{
 							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
 								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeXForwardedFor),
-								TrustedAddresses: []ngfAPIv1alpha1.Address{
+								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
 									{
-										Type:  ngfAPIv1alpha1.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "5.5.5.5/12",
 									},
 									{
-										Type:  ngfAPIv1alpha1.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "1.1.1.1/26",
 									},
 									{
-										Type:  ngfAPIv1alpha1.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "2.2.2.2/32",
 									},
 									{
-										Type:  ngfAPIv1alpha1.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "3.3.3.3/24",
 									},
 								},
@@ -4462,8 +4462,8 @@ func TestBuildNginxPlus(t *testing.T) {
 					Source: &ngfAPIv1alpha1.NginxProxy{
 						Spec: ngfAPIv1alpha1.NginxProxySpec{
 							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
-								AllowedAddresses: []ngfAPIv1alpha1.Address{
-									{Type: ngfAPIv1alpha1.IPAddressType, Value: "127.0.0.3"},
+								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
 								},
 							},
 						},
@@ -4480,9 +4480,9 @@ func TestBuildNginxPlus(t *testing.T) {
 					Source: &ngfAPIv1alpha1.NginxProxy{
 						Spec: ngfAPIv1alpha1.NginxProxySpec{
 							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
-								AllowedAddresses: []ngfAPIv1alpha1.Address{
-									{Type: ngfAPIv1alpha1.IPAddressType, Value: "127.0.0.3"},
-									{Type: ngfAPIv1alpha1.IPAddressType, Value: "25.0.0.3"},
+								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
 								},
 							},
 						},
@@ -4499,8 +4499,8 @@ func TestBuildNginxPlus(t *testing.T) {
 					Source: &ngfAPIv1alpha1.NginxProxy{
 						Spec: ngfAPIv1alpha1.NginxProxySpec{
 							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
-								AllowedAddresses: []ngfAPIv1alpha1.Address{
-									{Type: ngfAPIv1alpha1.IPAddressType, Value: "127.0.0.1"},
+								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.1"},
 								},
 							},
 						},
