@@ -6,7 +6,7 @@ server {
     access_log off;
 
     location /api {
-	    api write=on;
+      api write=on;
     }
 }
 
