@@ -395,7 +395,7 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 	for _, ref := range parentRef {
 		acceptedHostnames := ref.Attachment.AcceptedHostnames
 
-		hostnamesToRemoves := make(map[string]struct{}, len(acceptedHostnames))
+		hostnamesToRemoves := make(map[string]struct{})
 		for listenerName, hostnames := range acceptedHostnames {
 			if len(hostnames) == 0 {
 				continue

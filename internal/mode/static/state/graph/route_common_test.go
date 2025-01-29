@@ -2177,6 +2177,7 @@ func TestTryToAttachL4RouteToListeners_NoAttachableListeners(t *testing.T) {
 }
 
 func TestIsolateL4Listeners(t *testing.T) {
+	t.Parallel()
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test",
@@ -2426,6 +2427,7 @@ func TestIsolateL4Listeners(t *testing.T) {
 }
 
 func TestIsolateL7Listeners(t *testing.T) {
+	t.Parallel()
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test",
@@ -2677,6 +2679,7 @@ func TestIsolateL7Listeners(t *testing.T) {
 }
 
 func TestRemoveHostnames(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		hostnames         []string
@@ -2713,6 +2716,7 @@ func TestRemoveHostnames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 			result := removeHostnames(tt.hostnames, tt.removeHostnames)
 			g.Expect(result).To(Equal(tt.expectedHostnames))
