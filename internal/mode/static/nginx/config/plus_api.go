@@ -12,7 +12,13 @@ var plusAPITemplate = gotemplate.Must(gotemplate.New("plusAPI").Parse(plusAPITem
 func executePlusAPI(conf dataplane.Configuration) []executeResult {
 	result := executeResult{
 		dest: nginxPlusConfigFile,
-		data: helpers.MustExecuteTemplate(plusAPITemplate, conf.NginxPlus),
+	}
+	// if AllowedAddresses is empty, it means that we are not running on nginx plus, and we don't want this generated
+	if conf.NginxPlus.AllowedAddresses != nil {
+		result = executeResult{
+			dest: nginxPlusConfigFile,
+			data: helpers.MustExecuteTemplate(plusAPITemplate, conf.NginxPlus),
+		}
 	}
 
 	return []executeResult{result}

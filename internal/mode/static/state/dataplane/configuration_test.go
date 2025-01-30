@@ -66,9 +66,7 @@ func getExpectedConfiguration() Configuration {
 		Logging: Logging{
 			ErrorLevel: defaultErrorLogLevel,
 		},
-		NginxPlus: NginxPlus{
-			AllowedAddresses: []string{"127.0.0.1"},
-		},
+		NginxPlus: NginxPlus{},
 	}
 }
 
@@ -870,7 +868,7 @@ func TestBuildConfiguration(t *testing.T) {
 
 	defaultConfig := Configuration{
 		Logging:   Logging{ErrorLevel: defaultErrorLogLevel},
-		NginxPlus: NginxPlus{AllowedAddresses: []string{"127.0.0.1"}},
+		NginxPlus: NginxPlus{},
 	}
 
 	tests := []struct {
@@ -1559,17 +1557,6 @@ func TestBuildConfiguration(t *testing.T) {
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
 				g.GatewayClass.Valid = false
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
-					Name:   "listener-80-1",
-					Source: listener80,
-					Valid:  true,
-					Routes: map[graph.RouteKey]*graph.L7Route{
-						graph.CreateRouteKey(hr1): routeHR1,
-					},
-				})
-				g.Routes = map[graph.RouteKey]*graph.L7Route{
-					graph.CreateRouteKey(hr1): routeHR1,
-				}
 				return g
 			}),
 			expConf: defaultConfig,
@@ -1577,18 +1564,7 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.GatewayClass.Valid = false
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
-					Name:   "listener-80-1",
-					Source: listener80,
-					Valid:  true,
-					Routes: map[graph.RouteKey]*graph.L7Route{
-						graph.CreateRouteKey(hr1): routeHR1,
-					},
-				})
-				g.Routes = map[graph.RouteKey]*graph.L7Route{
-					graph.CreateRouteKey(hr1): routeHR1,
-				}
+				g.GatewayClass = nil
 				return g
 			}),
 			expConf: defaultConfig,
@@ -2404,10 +2380,9 @@ func TestBuildConfiguration(t *testing.T) {
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
-				conf.NginxPlus = NginxPlus{AllowedAddresses: []string{"127.0.0.3", "25.0.0.3"}}
 				return conf
 			}),
-			msg: "NginxProxy with NginxPlus allowed addresses configured",
+			msg: "NginxProxy with NginxPlus allowed addresses configured but running on nginx oss",
 		},
 	}
 
@@ -2421,6 +2396,126 @@ func TestBuildConfiguration(t *testing.T) {
 				test.graph,
 				fakeResolver,
 				1,
+				false,
+			)
+
+			g.Expect(result.BackendGroups).To(ConsistOf(test.expConf.BackendGroups))
+			g.Expect(result.Upstreams).To(ConsistOf(test.expConf.Upstreams))
+			g.Expect(result.HTTPServers).To(ConsistOf(test.expConf.HTTPServers))
+			g.Expect(result.SSLServers).To(ConsistOf(test.expConf.SSLServers))
+			g.Expect(result.TLSPassthroughServers).To(ConsistOf(test.expConf.TLSPassthroughServers))
+			g.Expect(result.SSLKeyPairs).To(Equal(test.expConf.SSLKeyPairs))
+			g.Expect(result.Version).To(Equal(1))
+			g.Expect(result.CertBundles).To(Equal(test.expConf.CertBundles))
+			g.Expect(result.Telemetry).To(Equal(test.expConf.Telemetry))
+			g.Expect(result.BaseHTTPConfig).To(Equal(test.expConf.BaseHTTPConfig))
+			g.Expect(result.Logging).To(Equal(test.expConf.Logging))
+			g.Expect(result.NginxPlus).To(Equal(test.expConf.NginxPlus))
+		})
+	}
+}
+
+func TestBuildConfiguration_Plus(t *testing.T) {
+	t.Parallel()
+	fooEndpoints := []resolver.Endpoint{
+		{
+			Address: "10.0.0.0",
+			Port:    8080,
+		},
+	}
+
+	fakeResolver := &resolverfakes.FakeServiceResolver{}
+	fakeResolver.ResolveReturns(fooEndpoints, nil)
+
+	listener80 := v1.Listener{
+		Name:     "listener-80-1",
+		Hostname: nil,
+		Port:     80,
+		Protocol: v1.HTTPProtocolType,
+	}
+
+	defaultPlusConfig := Configuration{
+		Logging:   Logging{ErrorLevel: defaultErrorLogLevel},
+		NginxPlus: NginxPlus{AllowedAddresses: []string{"127.0.0.1"}},
+	}
+
+	tests := []struct {
+		graph   *graph.Graph
+		msg     string
+		expConf Configuration
+	}{
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+					Name:      "gw",
+					Namespace: "ns",
+				}
+				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+					Name:   "listener-80-1",
+					Source: listener80,
+					Valid:  true,
+					Routes: map[graph.RouteKey]*graph.L7Route{},
+				})
+				g.NginxProxy = &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
+								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
+								},
+							},
+						},
+					},
+				}
+				return g
+			}),
+			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.SSLServers = []VirtualServer{}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
+				conf.NginxPlus = NginxPlus{AllowedAddresses: []string{"127.0.0.3", "25.0.0.3"}}
+				return conf
+			}),
+			msg: "NginxProxy with NginxPlus allowed addresses configured",
+		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.GatewayClass.Valid = false
+				return g
+			}),
+			expConf: defaultPlusConfig,
+			msg:     "invalid gatewayclass",
+		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.GatewayClass = nil
+				return g
+			}),
+			expConf: defaultPlusConfig,
+			msg:     "missing gatewayclass",
+		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.Gateway = nil
+				return g
+			}),
+			expConf: defaultPlusConfig,
+			msg:     "missing gateway",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := BuildConfiguration(
+				context.TODO(),
+				test.graph,
+				fakeResolver,
+				1,
+				true,
 			)
 
 			g.Expect(result.BackendGroups).To(ConsistOf(test.expConf.BackendGroups))

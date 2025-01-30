@@ -33,9 +33,15 @@ func BuildConfiguration(
 	g *graph.Graph,
 	serviceResolver resolver.ServiceResolver,
 	configVersion int,
+	plus bool,
 ) Configuration {
 	if g.GatewayClass == nil || !g.GatewayClass.Valid || g.Gateway == nil {
-		return GetDefaultConfiguration(g, configVersion)
+		config := GetDefaultConfiguration(g, configVersion)
+		if plus {
+			config.NginxPlus = buildNginxPlus(g)
+		}
+
+		return config
 	}
 
 	baseHTTPConfig := buildBaseHTTPConfig(g)
@@ -50,6 +56,11 @@ func BuildConfiguration(
 		baseHTTPConfig.IPFamily,
 	)
 
+	var nginxPlus NginxPlus
+	if plus {
+		nginxPlus = buildNginxPlus(g)
+	}
+
 	config := Configuration{
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
@@ -63,7 +74,7 @@ func BuildConfiguration(
 		Telemetry:             buildTelemetry(g),
 		BaseHTTPConfig:        baseHTTPConfig,
 		Logging:               buildLogging(g),
-		NginxPlus:             buildNginxPlus(g),
+		NginxPlus:             nginxPlus,
 		MainSnippets:          buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
 		AuxiliarySecrets:      buildAuxiliarySecrets(g.PlusSecrets),
 	}
@@ -1009,7 +1020,7 @@ func GetDefaultConfiguration(g *graph.Graph, configVersion int) Configuration {
 	return Configuration{
 		Version:          configVersion,
 		Logging:          buildLogging(g),
-		NginxPlus:        buildNginxPlus(g),
+		NginxPlus:        NginxPlus{},
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
 	}
 }

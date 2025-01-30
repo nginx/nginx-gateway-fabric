@@ -442,6 +442,7 @@ var _ = Describe("eventHandler", func() {
 				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				dcfg.NginxPlus = dataplane.NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 
 				Expect(fakeGenerator.GenerateCallCount()).To(Equal(0))
