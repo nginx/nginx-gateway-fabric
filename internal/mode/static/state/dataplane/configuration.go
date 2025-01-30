@@ -1004,9 +1004,9 @@ func buildNginxPlus(g *graph.Graph) NginxPlus {
 	ngfProxy := g.NginxProxy
 	if ngfProxy != nil && ngfProxy.Source.Spec.NginxPlus != nil {
 		if ngfProxy.Source.Spec.NginxPlus.AllowedAddresses != nil {
-			addresses := make([]string, len(ngfProxy.Source.Spec.NginxPlus.AllowedAddresses))
-			for i, addr := range ngfProxy.Source.Spec.NginxPlus.AllowedAddresses {
-				addresses[i] = addr.Value
+			addresses := make([]string, 0, len(ngfProxy.Source.Spec.NginxPlus.AllowedAddresses))
+			for _, addr := range ngfProxy.Source.Spec.NginxPlus.AllowedAddresses {
+				addresses = append(addresses, addr.Value)
 			}
 
 			nginxPlusSettings.AllowedAddresses = addresses
