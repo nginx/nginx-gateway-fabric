@@ -1382,7 +1382,7 @@ crit, alert, and emerg messages to be logged. <a href="https://nginx.org/en/docs
 <a href="#gateway.nginx.org/v1alpha1.NginxPlus">NginxPlus</a>)
 </p>
 <p>
-<p>NginxPlusAllowAddress is a struct that specifies address type and value.</p>
+<p>NginxPlusAllowAddress specifies the address type and value for an NginxPlus allow address.</p>
 </p>
 <table class="table table-bordered table-striped">
 <thead>
@@ -1683,7 +1683,7 @@ This field is required if mode is set.</p>
 <a href="#gateway.nginx.org/v1alpha1.RewriteClientIP">RewriteClientIP</a>)
 </p>
 <p>
-<p>RewriteClientIPAddress is a struct that specifies address type and value.</p>
+<p>RewriteClientIPAddress specifies the address type and value for a RewriteClientIP address.</p>
 </p>
 <table class="table table-bordered table-striped">
 <thead>

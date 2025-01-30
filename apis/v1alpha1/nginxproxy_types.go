@@ -193,7 +193,7 @@ const (
 	IPv6 IPFamilyType = "ipv6"
 )
 
-// RewriteClientIPAddress is a struct that specifies address type and value.
+// RewriteClientIPAddress specifies the address type and value for a RewriteClientIP address.
 type RewriteClientIPAddress struct {
 	// Type specifies the type of address.
 	Type RewriteClientIPAddressType `json:"type"`
@@ -217,7 +217,7 @@ const (
 	RewriteClientIPHostnameAddressType RewriteClientIPAddressType = "Hostname"
 )
 
-// NginxPlusAllowAddress is a struct that specifies address type and value.
+// NginxPlusAllowAddress specifies the address type and value for an NginxPlus allow address.
 type NginxPlusAllowAddress struct {
 	// Type specifies the type of address.
 	Type NginxPlusAllowAddressType `json:"type"`

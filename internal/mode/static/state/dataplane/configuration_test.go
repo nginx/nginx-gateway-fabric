@@ -4538,7 +4538,7 @@ func TestBuildNginxPlus(t *testing.T) {
 			expNginxPlus: defaultNginxPlus,
 		},
 		{
-			msg: "NginxProxy does not specify Nginx Plus settings",
+			msg: "NginxPlus default values are used when NginxProxy doesn't specify NginxPlus settings",
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
