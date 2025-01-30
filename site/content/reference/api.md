@@ -364,13 +364,26 @@ NginxLogging
 </tr>
 <tr>
 <td>
+<code>nginxPlus</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlus">
+NginxPlus
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NginxPlus specifies NGINX Plus additional settings.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>disableHTTP2</code><br/>
 <em>
 bool
 </em>
 </td>
 <td>
-<em>(Optional)</em>
 <p>DisableHTTP2 defines if http2 should be disabled for all servers.
 Default is false, meaning http2 will be enabled for all servers.</p>
 </td>
@@ -706,78 +719,6 @@ sigs.k8s.io/gateway-api/apis/v1alpha2.PolicyStatus
 </td>
 </tr>
 </tbody>
-</table>
-<h3 id="gateway.nginx.org/v1alpha1.Address">Address
-<a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.Address" title="Permanent link">¶</a>
-</h3>
-<p>
-(<em>Appears on: </em>
-<a href="#gateway.nginx.org/v1alpha1.RewriteClientIP">RewriteClientIP</a>)
-</p>
-<p>
-<p>Address is a struct that specifies address type and value.</p>
-</p>
-<table class="table table-bordered table-striped">
-<thead>
-<tr>
-<th>Field</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-<code>type</code><br/>
-<em>
-<a href="#gateway.nginx.org/v1alpha1.AddressType">
-AddressType
-</a>
-</em>
-</td>
-<td>
-<p>Type specifies the type of address.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>value</code><br/>
-<em>
-string
-</em>
-</td>
-<td>
-<p>Value specifies the address value.</p>
-</td>
-</tr>
-</tbody>
-</table>
-<h3 id="gateway.nginx.org/v1alpha1.AddressType">AddressType
-(<code>string</code> alias)</p><a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.AddressType" title="Permanent link">¶</a>
-</h3>
-<p>
-(<em>Appears on: </em>
-<a href="#gateway.nginx.org/v1alpha1.Address">Address</a>)
-</p>
-<p>
-<p>AddressType specifies the type of address.</p>
-</p>
-<table class="table table-bordered table-striped">
-<thead>
-<tr>
-<th>Value</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr><td><p>&#34;CIDR&#34;</p></td>
-<td><p>CIDRAddressType specifies that the address is a CIDR block.</p>
-</td>
-</tr><tr><td><p>&#34;Hostname&#34;</p></td>
-<td><p>HostnameAddressType specifies that the address is a Hostname.</p>
-</td>
-</tr><tr><td><p>&#34;IPAddress&#34;</p></td>
-<td><p>IPAddressType specifies that the address is an IP address.</p>
-</td>
-</tr></tbody>
 </table>
 <h3 id="gateway.nginx.org/v1alpha1.ClientBody">ClientBody
 <a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.ClientBody" title="Permanent link">¶</a>
@@ -1399,6 +1340,109 @@ crit, alert, and emerg messages to be logged. <a href="https://nginx.org/en/docs
 </tr>
 </tbody>
 </table>
+<h3 id="gateway.nginx.org/v1alpha1.NginxPlus">NginxPlus
+<a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.NginxPlus" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.NginxProxySpec">NginxProxySpec</a>)
+</p>
+<p>
+<p>NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>allowedAddresses</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlusAllowAddress">
+[]NginxPlusAllowAddress
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AllowedAddresses specifies IPAddresses or CIDR blocks to the allow list for accessing the NGINX Plus API.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha1.NginxPlusAllowAddress">NginxPlusAllowAddress
+<a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.NginxPlusAllowAddress" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlus">NginxPlus</a>)
+</p>
+<p>
+<p>NginxPlusAllowAddress specifies the address type and value for an NginxPlus allow address.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>type</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlusAllowAddressType">
+NginxPlusAllowAddressType
+</a>
+</em>
+</td>
+<td>
+<p>Type specifies the type of address.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>value</code><br/>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Value specifies the address value.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha1.NginxPlusAllowAddressType">NginxPlusAllowAddressType
+(<code>string</code> alias)</p><a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.NginxPlusAllowAddressType" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlusAllowAddress">NginxPlusAllowAddress</a>)
+</p>
+<p>
+<p>NginxPlusAllowAddressType specifies the type of address.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr><td><p>&#34;CIDR&#34;</p></td>
+<td><p>NginxPlusAllowCIDRAddressType specifies that the address is a CIDR block.</p>
+</td>
+</tr><tr><td><p>&#34;IPAddress&#34;</p></td>
+<td><p>NginxPlusAllowIPAddressType specifies that the address is an IP address.</p>
+</td>
+</tr></tbody>
+</table>
 <h3 id="gateway.nginx.org/v1alpha1.NginxProxySpec">NginxProxySpec
 <a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.NginxProxySpec" title="Permanent link">¶</a>
 </h3>
@@ -1476,13 +1520,26 @@ NginxLogging
 </tr>
 <tr>
 <td>
+<code>nginxPlus</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlus">
+NginxPlus
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NginxPlus specifies NGINX Plus additional settings.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>disableHTTP2</code><br/>
 <em>
 bool
 </em>
 </td>
 <td>
-<em>(Optional)</em>
 <p>DisableHTTP2 defines if http2 should be disabled for all servers.
 Default is false, meaning http2 will be enabled for all servers.</p>
 </td>
@@ -1598,8 +1655,8 @@ Sets NGINX directive real_ip_recursive: <a href="https://nginx.org/en/docs/http/
 <td>
 <code>trustedAddresses</code><br/>
 <em>
-<a href="#gateway.nginx.org/v1alpha1.Address">
-[]Address
+<a href="#gateway.nginx.org/v1alpha1.RewriteClientIPAddress">
+[]RewriteClientIPAddress
 </a>
 </em>
 </td>
@@ -1617,6 +1674,78 @@ This field is required if mode is set.</p>
 </td>
 </tr>
 </tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha1.RewriteClientIPAddress">RewriteClientIPAddress
+<a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.RewriteClientIPAddress" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.RewriteClientIP">RewriteClientIP</a>)
+</p>
+<p>
+<p>RewriteClientIPAddress specifies the address type and value for a RewriteClientIP address.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>type</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.RewriteClientIPAddressType">
+RewriteClientIPAddressType
+</a>
+</em>
+</td>
+<td>
+<p>Type specifies the type of address.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>value</code><br/>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Value specifies the address value.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha1.RewriteClientIPAddressType">RewriteClientIPAddressType
+(<code>string</code> alias)</p><a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.RewriteClientIPAddressType" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.RewriteClientIPAddress">RewriteClientIPAddress</a>)
+</p>
+<p>
+<p>RewriteClientIPAddressType specifies the type of address.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr><td><p>&#34;CIDR&#34;</p></td>
+<td><p>RewriteClientIPCIDRAddressType specifies that the address is a CIDR block.</p>
+</td>
+</tr><tr><td><p>&#34;Hostname&#34;</p></td>
+<td><p>RewriteClientIPHostnameAddressType specifies that the address is a Hostname.</p>
+</td>
+</tr><tr><td><p>&#34;IPAddress&#34;</p></td>
+<td><p>RewriteClientIPIPAddressType specifies that the address is an IP address.</p>
+</td>
+</tr></tbody>
 </table>
 <h3 id="gateway.nginx.org/v1alpha1.RewriteClientIPModeType">RewriteClientIPModeType
 (<code>string</code> alias)</p><a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.RewriteClientIPModeType" title="Permanent link">¶</a>

@@ -58,6 +58,9 @@ const (
 
 	// mgmtIncludesFile is the path to the file containing the NGINX Plus mgmt config.
 	mgmtIncludesFile = mainIncludesFolder + "/mgmt.conf"
+
+	// nginxPlusConfigFile is the path to the file containing the NGINX Plus API config.
+	nginxPlusConfigFile = httpFolder + "/plus-api.conf"
 )
 
 // ConfigFolders is a list of folders where NGINX configuration files are stored.
@@ -199,6 +202,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 		g.executeStreamUpstreams,
 		executeStreamMaps,
 		executeVersion,
+		executePlusAPI,
 	}
 }
 

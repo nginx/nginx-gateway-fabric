@@ -33,9 +33,15 @@ func BuildConfiguration(
 	g *graph.Graph,
 	serviceResolver resolver.ServiceResolver,
 	configVersion int,
+	plus bool,
 ) Configuration {
 	if g.GatewayClass == nil || !g.GatewayClass.Valid || g.Gateway == nil {
-		return GetDefaultConfiguration(g, configVersion)
+		config := GetDefaultConfiguration(g, configVersion)
+		if plus {
+			config.NginxPlus = buildNginxPlus(g)
+		}
+
+		return config
 	}
 
 	baseHTTPConfig := buildBaseHTTPConfig(g)
@@ -50,6 +56,11 @@ func BuildConfiguration(
 		baseHTTPConfig.IPFamily,
 	)
 
+	var nginxPlus NginxPlus
+	if plus {
+		nginxPlus = buildNginxPlus(g)
+	}
+
 	config := Configuration{
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
@@ -63,6 +74,7 @@ func BuildConfiguration(
 		Telemetry:             buildTelemetry(g),
 		BaseHTTPConfig:        baseHTTPConfig,
 		Logging:               buildLogging(g),
+		NginxPlus:             nginxPlus,
 		MainSnippets:          buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
 		AuxiliarySecrets:      buildAuxiliarySecrets(g.PlusSecrets),
 	}
@@ -951,7 +963,7 @@ func buildPolicies(graphPolicies []*graph.Policy) []policies.Policy {
 	return finalPolicies
 }
 
-func convertAddresses(addresses []ngfAPIv1alpha1.Address) []string {
+func convertAddresses(addresses []ngfAPIv1alpha1.RewriteClientIPAddress) []string {
 	trustedAddresses := make([]string, len(addresses))
 	for i, addr := range addresses {
 		trustedAddresses[i] = addr.Value
@@ -986,10 +998,29 @@ func buildAuxiliarySecrets(
 	return auxSecrets
 }
 
+func buildNginxPlus(g *graph.Graph) NginxPlus {
+	nginxPlusSettings := NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
+
+	ngfProxy := g.NginxProxy
+	if ngfProxy != nil && ngfProxy.Source.Spec.NginxPlus != nil {
+		if ngfProxy.Source.Spec.NginxPlus.AllowedAddresses != nil {
+			addresses := make([]string, 0, len(ngfProxy.Source.Spec.NginxPlus.AllowedAddresses))
+			for _, addr := range ngfProxy.Source.Spec.NginxPlus.AllowedAddresses {
+				addresses = append(addresses, addr.Value)
+			}
+
+			nginxPlusSettings.AllowedAddresses = addresses
+		}
+	}
+
+	return nginxPlusSettings
+}
+
 func GetDefaultConfiguration(g *graph.Graph, configVersion int) Configuration {
 	return Configuration{
 		Version:          configVersion,
 		Logging:          buildLogging(g),
+		NginxPlus:        NginxPlus{},
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
 	}
 }

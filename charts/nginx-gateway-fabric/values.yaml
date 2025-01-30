@@ -244,6 +244,21 @@ nginx:
   #           - crit
   #           - alert
   #           - emerg
+  #   nginxPlus:
+  #     type: object
+  #     description: NginxPlus specifies NGINX Plus additional settings.
+  #     properties:
+  #       allowedAddresses:
+  #         type: array
+  #         items:
+  #           properties:
+  #             type:
+  #               type: string
+  #               enum:
+  #                 - CIDR
+  #                 - IPAddress
+  #             value:
+  #               type: string
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource.
   config: {}

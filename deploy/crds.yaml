@@ -668,6 +668,31 @@ spec:
                     - emerg
                     type: string
                 type: object
+              nginxPlus:
+                description: NginxPlus specifies NGINX Plus additional settings.
+                properties:
+                  allowedAddresses:
+                    description: AllowedAddresses specifies IPAddresses or CIDR blocks
+                      to the allow list for accessing the NGINX Plus API.
+                    items:
+                      description: NginxPlusAllowAddress specifies the address type
+                        and value for an NginxPlus allow address.
+                      properties:
+                        type:
+                          description: Type specifies the type of address.
+                          enum:
+                          - CIDR
+                          - IPAddress
+                          type: string
+                        value:
+                          description: Value specifies the address value.
+                          type: string
+                      required:
+                      - type
+                      - value
+                      type: object
+                    type: array
+                type: object
               rewriteClientIP:
                 description: RewriteClientIP defines configuration for rewriting the
                   client IP to the original client's IP.
@@ -707,8 +732,8 @@ spec:
                       Sets NGINX directive set_real_ip_from: https://nginx.org/en/docs/http/ngx_http_realip_module.html#set_real_ip_from
                       This field is required if mode is set.
                     items:
-                      description: Address is a struct that specifies address type
-                        and value.
+                      description: RewriteClientIPAddress specifies the address type
+                        and value for a RewriteClientIP address.
                       properties:
                         type:
                           description: Type specifies the type of address.
