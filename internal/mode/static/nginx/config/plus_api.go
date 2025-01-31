@@ -19,6 +19,8 @@ func executePlusAPI(conf dataplane.Configuration) []executeResult {
 			dest: nginxPlusConfigFile,
 			data: helpers.MustExecuteTemplate(plusAPITemplate, conf.NginxPlus),
 		}
+	} else {
+		return nil
 	}
 
 	return []executeResult{result}
