@@ -393,8 +393,9 @@ func buildRequest(fileOverviews []*pb.File, instanceID, version string) *pb.Mana
 }
 
 func isRollbackMessage(msg string) bool {
-	return strings.Contains(msg, "rollback successful") ||
-		strings.Contains(strings.ToLower(msg), "rollback failed")
+	msgToLower := strings.ToLower(msg)
+	return strings.Contains(msgToLower, "rollback successful") ||
+		strings.Contains(msgToLower, "rollback failed")
 }
 
 func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.ManagementPlaneRequest {
