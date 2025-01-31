@@ -119,6 +119,8 @@ func (cs *commandService) CreateConnection(
 // If any connection or unrecoverable errors occur, return and agent should re-establish a subscription.
 // If errors occur with applying the config, log and put those errors into the status queue to be written
 // to the Gateway status.
+//
+//nolint:gocyclo // could be room for improvement here
 func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error {
 	ctx := in.Context()
 
@@ -179,6 +181,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 				panic(fmt.Sprintf("unknown request type %d", msg.Type))
 			}
 
+			cs.logger.V(1).Info("Sending configuration to agent", "requestType", msg.Type)
 			if err := msgr.Send(ctx, req); err != nil {
 				cs.logger.Error(err, "error sending request to agent")
 				deployment.SetPodErrorStatus(conn.PodName, err)
@@ -189,7 +192,10 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		case err = <-msgr.Errors():
 			cs.logger.Error(err, "connection error", "pod", conn.PodName)
 			deployment.SetPodErrorStatus(conn.PodName, err)
-			channels.ResponseCh <- struct{}{}
+			select {
+			case channels.ResponseCh <- struct{}{}:
+			default:
+			}
 
 			if errors.Is(err, io.EOF) {
 				return grpcStatus.Error(codes.Aborted, err.Error())
@@ -198,7 +204,11 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		case msg := <-msgr.Messages():
 			res := msg.GetCommandResponse()
 			if res.GetStatus() != pb.CommandResponse_COMMAND_STATUS_OK {
-				err := fmt.Errorf("bad response from agent: msg: %s; error: %s", res.GetMessage(), res.GetError())
+				if isRollbackMessage(res.GetMessage()) {
+					// we don't care about these messages, so ignore them
+					continue
+				}
+				err := fmt.Errorf("msg: %s; error: %s", res.GetMessage(), res.GetError())
 				deployment.SetPodErrorStatus(conn.PodName, err)
 			} else {
 				deployment.SetPodErrorStatus(conn.PodName, nil)
@@ -268,6 +278,8 @@ func (cs *commandService) setInitialConfig(
 	for _, action := range deployment.GetNGINXPlusActions() {
 		// retry the API update request because sometimes nginx isn't quite ready after the config apply reload
 		timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		var overallUpstreamApplyErr error
+
 		if err := wait.PollUntilContextCancel(
 			timeoutCtx,
 			500*time.Millisecond,
@@ -287,13 +299,14 @@ func (cs *commandService) setInitialConfig(
 				}
 
 				if upstreamApplyErr != nil {
-					return false, nil //nolint:nilerr // this error is collected at the end
+					overallUpstreamApplyErr = errors.Join(overallUpstreamApplyErr, upstreamApplyErr)
+					return false, nil
 				}
 				return true, nil
 			},
 		); err != nil {
-			if strings.Contains(err.Error(), "bad response from agent") {
-				errs = append(errs, err)
+			if overallUpstreamApplyErr != nil {
+				errs = append(errs, overallUpstreamApplyErr)
 			} else {
 				cancel()
 				return err
@@ -330,7 +343,7 @@ func (cs *commandService) waitForInitialConfigApply(
 		case msg := <-msgr.Messages():
 			res := msg.GetCommandResponse()
 			if res.GetStatus() != pb.CommandResponse_COMMAND_STATUS_OK {
-				applyErr := fmt.Errorf("bad response from agent: msg: %s; error: %s", res.GetMessage(), res.GetError())
+				applyErr := fmt.Errorf("msg: %s; error: %s", res.GetMessage(), res.GetError())
 				return applyErr, nil
 			}
 
@@ -377,6 +390,12 @@ func buildRequest(fileOverviews []*pb.File, instanceID, version string) *pb.Mana
 			},
 		},
 	}
+}
+
+func isRollbackMessage(msg string) bool {
+	msgToLower := strings.ToLower(msg)
+	return strings.Contains(msgToLower, "rollback successful") ||
+		strings.Contains(msgToLower, "rollback failed")
 }
 
 func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.ManagementPlaneRequest {
