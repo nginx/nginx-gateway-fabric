@@ -119,6 +119,8 @@ func (cs *commandService) CreateConnection(
 // If any connection or unrecoverable errors occur, return and agent should re-establish a subscription.
 // If errors occur with applying the config, log and put those errors into the status queue to be written
 // to the Gateway status.
+//
+//nolint:gocyclo // could be room for improvement here
 func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error {
 	ctx := in.Context()
 
@@ -202,8 +204,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		case msg := <-msgr.Messages():
 			res := msg.GetCommandResponse()
 			if res.GetStatus() != pb.CommandResponse_COMMAND_STATUS_OK {
-				if strings.Contains(res.GetMessage(), "rollback successful") ||
-					strings.Contains(strings.ToLower(res.GetMessage()), "rollback failed") {
+				if isRollbackMessage(res.GetMessage()) {
 					// we don't care about these messages, so ignore them
 					continue
 				}
@@ -299,7 +300,7 @@ func (cs *commandService) setInitialConfig(
 
 				if upstreamApplyErr != nil {
 					overallUpstreamApplyErr = errors.Join(overallUpstreamApplyErr, upstreamApplyErr)
-					return false, nil //nolint:nilerr // this error is collected at the end
+					return false, nil
 				}
 				return true, nil
 			},
@@ -389,6 +390,11 @@ func buildRequest(fileOverviews []*pb.File, instanceID, version string) *pb.Mana
 			},
 		},
 	}
+}
+
+func isRollbackMessage(msg string) bool {
+	return strings.Contains(msg, "rollback successful") ||
+		strings.Contains(strings.ToLower(msg), "rollback failed")
 }
 
 func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.ManagementPlaneRequest {
