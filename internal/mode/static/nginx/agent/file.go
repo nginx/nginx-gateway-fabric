@@ -75,6 +75,8 @@ func (fs *fileService) GetFile(
 		return nil, status.Errorf(codes.NotFound, "file not found")
 	}
 
+	fs.logger.V(1).Info("Getting file for agent", "file", filename)
+
 	return &pb.GetFileResponse{
 		Contents: &pb.FileContents{
 			Contents: contents,

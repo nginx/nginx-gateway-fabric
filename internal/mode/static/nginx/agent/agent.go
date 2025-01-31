@@ -85,10 +85,11 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 	deployment *Deployment,
 	files []File,
 ) bool {
-	n.logger.Info("Sending nginx configuration to agent")
-
 	msg := deployment.SetFiles(files)
 	applied := deployment.GetBroadcaster().Send(msg)
+	if applied {
+		n.logger.Info("Sent nginx configuration to agent")
+	}
 
 	deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
 
