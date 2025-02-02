@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	v1 "k8s.io/api/apps/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -12,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	. "github.com/onsi/gomega"
@@ -60,7 +60,7 @@ var _ = Describe("handler", func() {
 			return fakeTime
 		}
 
-		statusUpdater = status.NewUpdater(k8sclient, zap.New())
+		statusUpdater = status.NewUpdater(k8sclient, logr.Discard())
 
 		// Add GatewayClass CRD to the cluster
 		crd = &metav1.PartialObjectMetadata{
@@ -114,7 +114,7 @@ var _ = Describe("handler", func() {
 				Resource: crd,
 			},
 		}
-		handler.HandleEventBatch(context.Background(), zap.New(), batch)
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 		// Ensure GatewayClass is accepted
 
@@ -152,7 +152,7 @@ var _ = Describe("handler", func() {
 			},
 		}
 
-		handler.HandleEventBatch(context.Background(), zap.New(), batch)
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 		depNsName := types.NamespacedName{
 			Namespace: "nginx-gateway",
@@ -187,7 +187,7 @@ var _ = Describe("handler", func() {
 			},
 		}
 
-		handler.HandleEventBatch(context.Background(), zap.New(), batch)
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 		updatedGC := &gatewayv1.GatewayClass{}
 
@@ -249,7 +249,7 @@ var _ = Describe("handler", func() {
 		}
 
 		handle := func() {
-			handler.HandleEventBatch(context.Background(), zap.New(), batch)
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 		}
 
 		Expect(handle).Should(Panic())
@@ -310,7 +310,7 @@ var _ = Describe("handler", func() {
 					},
 				}
 
-				handler.HandleEventBatch(context.Background(), zap.New(), batch)
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 				deps := &v1.DeploymentList{}
 
 				err := k8sclient.List(context.Background(), deps)
@@ -330,7 +330,7 @@ var _ = Describe("handler", func() {
 					},
 				}
 
-				handler.HandleEventBatch(context.Background(), zap.New(), batch)
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 				deps := &v1.DeploymentList{}
 
@@ -359,7 +359,7 @@ var _ = Describe("handler", func() {
 					},
 				}
 
-				handler.HandleEventBatch(context.Background(), zap.New(), batch)
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 				deps := &v1.DeploymentList{}
 				err := k8sclient.List(context.Background(), deps)
@@ -392,7 +392,7 @@ var _ = Describe("handler", func() {
 					},
 				}
 
-				handler.HandleEventBatch(context.Background(), zap.New(), batch)
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 				unknownGC := &gatewayv1.GatewayClass{}
 				err = k8sclient.Get(context.Background(), client.ObjectKeyFromObject(newGC), unknownGC)
@@ -456,7 +456,7 @@ var _ = Describe("handler", func() {
 				batch := []interface{}{e}
 
 				handle := func() {
-					handler.HandleEventBatch(context.Background(), zap.New(), batch)
+					handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 				}
 
 				Expect(handle).Should(Panic())
@@ -524,7 +524,7 @@ var _ = Describe("handler", func() {
 				}
 
 				handle := func() {
-					handler.HandleEventBatch(context.Background(), zap.New(), batch)
+					handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 				}
 
 				Expect(handle).Should(Panic())
@@ -545,7 +545,7 @@ var _ = Describe("handler", func() {
 				}
 
 				handle := func() {
-					handler.HandleEventBatch(context.Background(), zap.New(), batch)
+					handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 				}
 
 				Expect(handle).Should(Panic())

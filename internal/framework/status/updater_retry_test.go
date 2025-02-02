@@ -5,12 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/controllerfakes"
@@ -86,7 +86,7 @@ func TestNewRetryUpdateFunc(t *testing.T) {
 				fakeStatusUpdater,
 				types.NamespacedName{},
 				&v1.GatewayClass{},
-				zap.New(),
+				logr.Discard(),
 				func(client.Object) bool { return test.statusSetterReturns },
 			)
 

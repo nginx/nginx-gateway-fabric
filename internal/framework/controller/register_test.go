@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gcustom"
 	gtypes "github.com/onsi/gomega/types"
@@ -14,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
@@ -43,7 +43,7 @@ func TestRegister(t *testing.T) {
 		mgr := &controllerfakes.FakeManager{}
 		mgr.GetClientReturns(fake.NewClientBuilder().Build())
 		mgr.GetSchemeReturns(scheme)
-		mgr.GetLoggerReturns(zap.New())
+		mgr.GetLoggerReturns(logr.Discard())
 		mgr.GetFieldIndexerReturns(indexer)
 
 		return fakes{

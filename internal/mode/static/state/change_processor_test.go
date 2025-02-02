@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
@@ -13,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -414,7 +414,7 @@ var _ = Describe("ChangeProcessor", func() {
 			processor = state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 				GatewayCtlrName:  controllerName,
 				GatewayClassName: gcName,
-				Logger:           zap.New(),
+				Logger:           logr.Discard(),
 				Validators:       createAlwaysValidValidators(),
 				MustExtractGVK:   kinds.NewMustExtractGKV(createScheme()),
 			})
@@ -2181,7 +2181,7 @@ var _ = Describe("ChangeProcessor", func() {
 				processor = state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 					GatewayCtlrName:  controllerName,
 					GatewayClassName: gcName,
-					Logger:           zap.New(),
+					Logger:           logr.Discard(),
 					Validators:       createAlwaysValidValidators(),
 					MustExtractGVK:   kinds.NewMustExtractGKV(createScheme()),
 				})
