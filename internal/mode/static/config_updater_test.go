@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
@@ -33,7 +33,7 @@ func TestUpdateControlPlane(t *testing.T) {
 		},
 	}
 
-	logger := zap.New()
+	logger := logr.Discard()
 	nsname := types.NamespacedName{Namespace: "test", Name: "test"}
 
 	tests := []struct {

@@ -3,14 +3,14 @@ package events
 import (
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func TestEventLoop_SwapBatches(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
-	eventLoop := NewEventLoop(nil, zap.New(), nil, nil)
+	eventLoop := NewEventLoop(nil, logr.Discard(), nil, nil)
 
 	eventLoop.currentBatch = EventBatch{
 		"event0",

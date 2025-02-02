@@ -3,13 +3,13 @@ package status
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -46,7 +46,7 @@ var _ = Describe("LeaderAwareGroupUpdater", func() {
 		)
 
 		BeforeAll(func() {
-			updater = NewLeaderAwareGroupUpdater(NewUpdater(k8sClient, zap.New()))
+			updater = NewLeaderAwareGroupUpdater(NewUpdater(k8sClient, logr.Discard()))
 
 			for _, name := range allGCNames {
 				gc := createGC(name)

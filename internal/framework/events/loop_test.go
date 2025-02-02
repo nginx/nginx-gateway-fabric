@@ -8,7 +8,6 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/events/eventsfakes"
@@ -28,7 +27,7 @@ var _ = Describe("EventLoop", func() {
 		eventCh = make(chan interface{})
 		fakePreparer = &eventsfakes.FakeFirstEventBatchPreparer{}
 
-		eventLoop = events.NewEventLoop(eventCh, zap.New(), fakeHandler, fakePreparer)
+		eventLoop = events.NewEventLoop(eventCh, logr.Discard(), fakeHandler, fakePreparer)
 
 		errorCh = make(chan error)
 	})

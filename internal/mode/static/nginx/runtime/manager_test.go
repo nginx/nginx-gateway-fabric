@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	ngxclient "github.com/nginxinc/nginx-plus-go-client/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime/runtimefakes"
@@ -19,10 +19,10 @@ import (
 
 var _ = Describe("NGINX Runtime Manager", func() {
 	It("returns whether or not we're using NGINX Plus", func() {
-		mgr := runtime.NewManagerImpl(nil, nil, zap.New(), nil, nil)
+		mgr := runtime.NewManagerImpl(nil, nil, logr.Discard(), nil, nil)
 		Expect(mgr.IsPlus()).To(BeFalse())
 
-		mgr = runtime.NewManagerImpl(&ngxclient.NginxClient{}, nil, zap.New(), nil, nil)
+		mgr = runtime.NewManagerImpl(&ngxclient.NginxClient{}, nil, logr.Discard(), nil, nil)
 		Expect(mgr.IsPlus()).To(BeTrue())
 	})
 
@@ -53,7 +53,7 @@ var _ = Describe("NGINX Runtime Manager", func() {
 			process = &runtimefakes.FakeProcessHandler{}
 			metrics = &runtimefakes.FakeMetricsCollector{}
 			verifyClient = &runtimefakes.FakeVerifyClient{}
-			manager = runtime.NewManagerImpl(ngxPlusClient, metrics, zap.New(), process, verifyClient)
+			manager = runtime.NewManagerImpl(ngxPlusClient, metrics, logr.Discard(), process, verifyClient)
 		})
 
 		It("Is successful", func() {
@@ -117,7 +117,7 @@ var _ = Describe("NGINX Runtime Manager", func() {
 		When("MetricsCollector is nil", func() {
 			It("panics", func() {
 				metrics = nil
-				manager = runtime.NewManagerImpl(ngxPlusClient, metrics, zap.New(), process, verifyClient)
+				manager = runtime.NewManagerImpl(ngxPlusClient, metrics, logr.Discard(), process, verifyClient)
 
 				reload := func() {
 					err = manager.Reload(context.Background(), 0)
@@ -132,7 +132,7 @@ var _ = Describe("NGINX Runtime Manager", func() {
 			It("panics", func() {
 				metrics = &runtimefakes.FakeMetricsCollector{}
 				verifyClient = nil
-				manager = runtime.NewManagerImpl(ngxPlusClient, metrics, zap.New(), process, verifyClient)
+				manager = runtime.NewManagerImpl(ngxPlusClient, metrics, logr.Discard(), process, verifyClient)
 
 				reload := func() {
 					err = manager.Reload(context.Background(), 0)
@@ -147,7 +147,7 @@ var _ = Describe("NGINX Runtime Manager", func() {
 	When("running NGINX plus", func() {
 		BeforeEach(func() {
 			ngxPlusClient = &runtimefakes.FakeNginxPlusClient{}
-			manager = runtime.NewManagerImpl(ngxPlusClient, nil, zap.New(), nil, nil)
+			manager = runtime.NewManagerImpl(ngxPlusClient, nil, logr.Discard(), nil, nil)
 		})
 
 		It("successfully updates HTTP server upstream", func() {
@@ -263,7 +263,7 @@ var _ = Describe("NGINX Runtime Manager", func() {
 	When("not running NGINX plus", func() {
 		BeforeEach(func() {
 			ngxPlusClient = nil
-			manager = runtime.NewManagerImpl(ngxPlusClient, nil, zap.New(), nil, nil)
+			manager = runtime.NewManagerImpl(ngxPlusClient, nil, logr.Discard(), nil, nil)
 		})
 
 		It("should panic when fetching upstream servers", func() {

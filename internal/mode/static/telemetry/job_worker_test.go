@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/telemetry/telemetryfakes"
@@ -21,7 +21,7 @@ func TestCreateTelemetryJobWorker_Succeeds(t *testing.T) {
 	exporter := &telemetryfakes.FakeExporter{}
 	dataCollector := &telemetryfakes.FakeDataCollector{}
 
-	worker := telemetry.CreateTelemetryJobWorker(zap.New(), exporter, dataCollector)
+	worker := telemetry.CreateTelemetryJobWorker(logr.Discard(), exporter, dataCollector)
 
 	expData := telemetry.Data{
 		Data: tel.Data{
@@ -46,7 +46,7 @@ func TestCreateTelemetryJobWorker_CollectFails(t *testing.T) {
 	exporter := &telemetryfakes.FakeExporter{}
 	dataCollector := &telemetryfakes.FakeDataCollector{}
 
-	worker := telemetry.CreateTelemetryJobWorker(zap.New(), exporter, dataCollector)
+	worker := telemetry.CreateTelemetryJobWorker(logr.Discard(), exporter, dataCollector)
 
 	expData := telemetry.Data{}
 	dataCollector.CollectReturns(expData, errors.New("failed to collect cluster information"))
