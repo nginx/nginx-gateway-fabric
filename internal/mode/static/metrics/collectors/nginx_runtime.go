@@ -5,7 +5,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/metrics"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/metrics"
 )
 
 // NginxRuntimeCollector implements runtime.Collector interface and prometheus.Collector interface.

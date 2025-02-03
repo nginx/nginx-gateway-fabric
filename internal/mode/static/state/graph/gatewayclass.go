@@ -9,10 +9,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/gatewayclass"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	staticConds "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/gatewayclass"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
 
 // GatewayClass represents the GatewayClass resource.

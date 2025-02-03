@@ -1,6 +1,6 @@
 # Enhancement Proposal-2035: Advanced NGINX Extensions
 
-- Issue: https://github.com/nginxinc/nginx-gateway-fabric/issues/2035
+- Issue: https://github.com/nginx/nginx-gateway-fabric/issues/2035
 - Status: Implementable
 
 ## Summary
@@ -195,8 +195,8 @@ SnippetsPolicy supports the following NGINX configuration contexts:
 - http module - there are not enough features in https://nginx.org/en/docs/http/ngx_http_upstream_module.html
   - There are a few `keepalive`-related directives. But they also require `proxy_set_header Connection "";`, which
     is possible to configure with location snippets, but it will conflict with the generated Connection header (see
-    https://github.com/nginxinc/nginx-gateway-fabric/blob/5968bc348213a8470f6aaaa1a9bd51f2e90523ac/internal/mode/static/nginx/config/servers.go#L39-L40
-    and https://github.com/nginxinc/nginx-gateway-fabric/blob/5968bc348213a8470f6aaaa1a9bd51f2e90523ac/internal/mode/static/nginx/config/maps_template.go#L21-L26)
+    https://github.com/nginx/nginx-gateway-fabric/blob/5968bc348213a8470f6aaaa1a9bd51f2e90523ac/internal/mode/static/nginx/config/servers.go#L39-L40
+    and https://github.com/nginx/nginx-gateway-fabric/blob/5968bc348213a8470f6aaaa1a9bd51f2e90523ac/internal/mode/static/nginx/config/maps_template.go#L21-L26)
     so those keepalive directives won't work.
   - Session persistence ([`sticky`](https://nginx.org/en/docs/http/ngx_http_upstream_module.html#sticky)). Those are  valid use cases. But at the same time, they only apply to
     NGINX Plus. Additionally, Gateway API started introducing session persistence.
@@ -218,9 +218,9 @@ SnippetsFilter supports `http`, `server`, and `location` contexts of the http mo
 > TLSRoute, TCPRoute, and UPDRoute don't support filters. As a result, SnippetsFilter doesn't support stream-related
 > contexts.
 >
-> Snippets for location might share the same problem as mentioned in the issue https://github.com/nginxinc/nginx-gateway-fabric/issues/207,
+> Snippets for location might share the same problem as mentioned in the issue https://github.com/nginx/nginx-gateway-fabric/issues/207,
 > depending on the NGINX directives being used in the snippets. This proposal doesn't address the problem but
-> anticipates the solution to https://github.com/nginxinc/nginx-gateway-fabric/issues/2079 will also solve the problem
+> anticipates the solution to https://github.com/nginx/nginx-gateway-fabric/issues/2079 will also solve the problem
 > for Snippets.
 
 #### Examples
@@ -756,7 +756,7 @@ type TemplateMetadata struct {
 
 If requested by users, NGF can provide additional context. For example, for a template for the `location` context,
 it can pass the data from
-the [`Location`](https://github.com/nginxinc/nginx-gateway-fabric/blob/7bc0b6e6c5131920ac18f41359dd1eba7f53a8ba/internal/mode/static/nginx/config/http/config.go#L16)
+the [`Location`](https://github.com/nginx/nginx-gateway-fabric/blob/7bc0b6e6c5131920ac18f41359dd1eba7f53a8ba/internal/mode/static/nginx/config/http/config.go#L16)
 struct, which NGF uses to generate location config.
 
 NGF will unmarshal the values CRD spec into the `Spec` field of `TemplateData`. This way the template can access

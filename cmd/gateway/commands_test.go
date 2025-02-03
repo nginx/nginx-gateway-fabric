@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 )
 
 type flagTestCase struct {

@@ -3,8 +3,8 @@ package validation
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
 
 import (
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
 )
 
 // Validators include validators for API resources from the perspective of a data-plane.
@@ -32,9 +32,9 @@ type HTTPFieldsValidator interface {
 	ValidateRedirectPort(port int32) error
 	ValidateRedirectStatusCode(statusCode int) (valid bool, supportedValues []string)
 	ValidateHostname(hostname string) error
-	ValidateRewritePath(path string) error
 	ValidateFilterHeaderName(name string) error
 	ValidateFilterHeaderValue(value string) error
+	ValidatePath(path string) error
 }
 
 // GenericValidator validates any generic values from NGF API resources from the perspective of a data-plane.

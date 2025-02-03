@@ -2,7 +2,7 @@ linters-settings:
   ginkgolinter:
     forbid-focus-container: true
   goimports:
-    local-prefixes: github.com/nginxinc/nginx-gateway-fabric
+    local-prefixes: github.com/nginx/nginx-gateway-fabric
   misspell:
     locale: US
   revive:

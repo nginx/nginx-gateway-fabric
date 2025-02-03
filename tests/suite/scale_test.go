@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/tests/framework"
+	"github.com/nginx/nginx-gateway-fabric/tests/framework"
 )
 
 var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {

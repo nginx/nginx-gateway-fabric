@@ -11,12 +11,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	staticConds "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/validation/validationfakes"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation/validationfakes"
 )
 
 const (
@@ -1207,6 +1207,10 @@ func TestValidateFilterRedirect(t *testing.T) {
 				Hostname:   helpers.GetPointer[gatewayv1.PreciseHostname]("example.com"),
 				Port:       helpers.GetPointer[gatewayv1.PortNumber](80),
 				StatusCode: helpers.GetPointer(301),
+				Path: &gatewayv1.HTTPPathModifier{
+					Type:            gatewayv1.FullPathHTTPPathModifier,
+					ReplaceFullPath: helpers.GetPointer("/path"),
+				},
 			},
 			expectErrCount: 0,
 			name:           "valid redirect filter",
@@ -1256,14 +1260,6 @@ func TestValidateFilterRedirect(t *testing.T) {
 			name:           "redirect filter with invalid port",
 		},
 		{
-			validator: createAllValidValidator(),
-			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
-				Path: &gatewayv1.HTTPPathModifier{},
-			},
-			expectErrCount: 1,
-			name:           "redirect filter with unsupported path modifier",
-		},
-		{
 			validator: func() *validationfakes.FakeHTTPFieldsValidator {
 				validator := createAllValidValidator()
 				validator.ValidateRedirectStatusCodeReturns(false, []string{"200"})
@@ -1274,6 +1270,46 @@ func TestValidateFilterRedirect(t *testing.T) {
 			},
 			expectErrCount: 1,
 			name:           "redirect filter with invalid status code",
+		},
+		{
+			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+				validator := &validationfakes.FakeHTTPFieldsValidator{}
+				validator.ValidatePathReturns(errors.New("invalid path value"))
+				return validator
+			}(),
+			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
+				Path: &gatewayv1.HTTPPathModifier{
+					Type:            gatewayv1.FullPathHTTPPathModifier,
+					ReplaceFullPath: helpers.GetPointer("/path"),
+				}, // any value is invalid by the validator
+			},
+			expectErrCount: 1,
+			name:           "redirect filter with invalid full path",
+		},
+		{
+			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+				validator := &validationfakes.FakeHTTPFieldsValidator{}
+				validator.ValidatePathReturns(errors.New("invalid path"))
+				return validator
+			}(),
+			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
+				Path: &gatewayv1.HTTPPathModifier{
+					Type:               gatewayv1.PrefixMatchHTTPPathModifier,
+					ReplacePrefixMatch: helpers.GetPointer("/path"),
+				}, // any value is invalid by the validator
+			},
+			expectErrCount: 1,
+			name:           "redirect filter with invalid prefix path",
+		},
+		{
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
+				Path: &gatewayv1.HTTPPathModifier{
+					Type: "invalid-type",
+				},
+			},
+			expectErrCount: 1,
+			name:           "redirect filter with invalid path type",
 		},
 		{
 			validator: func() *validationfakes.FakeHTTPFieldsValidator {
@@ -1367,7 +1403,7 @@ func TestValidateFilterRewrite(t *testing.T) {
 		{
 			validator: func() *validationfakes.FakeHTTPFieldsValidator {
 				validator := &validationfakes.FakeHTTPFieldsValidator{}
-				validator.ValidateRewritePathReturns(errors.New("invalid path value"))
+				validator.ValidatePathReturns(errors.New("invalid path value"))
 				return validator
 			}(),
 			urlRewrite: &gatewayv1.HTTPURLRewriteFilter{
@@ -1382,7 +1418,7 @@ func TestValidateFilterRewrite(t *testing.T) {
 		{
 			validator: func() *validationfakes.FakeHTTPFieldsValidator {
 				validator := &validationfakes.FakeHTTPFieldsValidator{}
-				validator.ValidateRewritePathReturns(errors.New("invalid path"))
+				validator.ValidatePathReturns(errors.New("invalid path"))
 				return validator
 			}(),
 			urlRewrite: &gatewayv1.HTTPURLRewriteFilter{
@@ -1398,7 +1434,7 @@ func TestValidateFilterRewrite(t *testing.T) {
 			validator: func() *validationfakes.FakeHTTPFieldsValidator {
 				validator := &validationfakes.FakeHTTPFieldsValidator{}
 				validator.ValidateHostnameReturns(errors.New("invalid hostname"))
-				validator.ValidateRewritePathReturns(errors.New("invalid path"))
+				validator.ValidatePathReturns(errors.New("invalid path"))
 				return validator
 			}(),
 			urlRewrite: &gatewayv1.HTTPURLRewriteFilter{

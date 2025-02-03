@@ -38,7 +38,7 @@ jobs:
         uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96 # v5.6.1
         with:
           images: |
-            name=ghcr.io/nginxinc/nginx-gateway-fabric
+            name=ghcr.io/nginx/nginx-gateway-fabric
           tags: |
             type=semver,pattern={{version}}
             type=edge
@@ -51,7 +51,7 @@ jobs:
         uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96 # v5.6.1
         with:
           images: |
-            name=ghcr.io/nginxinc/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
+            name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
           tags: |
             type=semver,pattern={{version}}
             type=edge
@@ -60,7 +60,7 @@ jobs:
             type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
 
       - name: Build NGF Docker Image
-        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991 # v6.13.0
         with:
           file: build/Dockerfile
           tags: ${{ steps.ngf-meta.outputs.tags }}
@@ -71,7 +71,7 @@ jobs:
           pull: true
 
       - name: Build NGINX Docker Image
-        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991 # v6.13.0
         with:
           file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || ''}}
           tags: ${{ steps.nginx-meta.outputs.tags }}
@@ -86,7 +86,7 @@ jobs:
 
       - name: Install cloud-provider-kind
         run: |
-          CLOUD_PROVIDER_KIND_VERSION=v0.4.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
+          CLOUD_PROVIDER_KIND_VERSION=v0.5.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
           go install sigs.k8s.io/cloud-provider-kind@${CLOUD_PROVIDER_KIND_VERSION}
 
       - name: Run cloud-provider-kind
@@ -109,18 +109,18 @@ jobs:
           kubectl create secret generic nplus-license --from-file license.jwt -n nginx-gateway
 
       - name: Set up Python
-        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.x"
           check-latest: true
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@e6669bcd63d7cb57cb4380c33043eebe5d111992 # v2.6.1
+        uses: helm/chart-testing-action@0d28d3144d3a25ea2cc349d6e59901c4ff469b3b # v2.7.0
 
       - name: Install Chart
         run: |
           ct install --config .ct.yaml --namespace nginx-gateway --helm-extra-set-args="--set=nginxGateway.image.tag=${{ steps.ngf-meta.outputs.version }} \
-          --set=nginx.image.repository=ghcr.io/nginxinc/nginx-gateway-fabric/nginx${{ inputs.image == 'plus' && '-plus' || ''}} \
+          --set=nginx.image.repository=ghcr.io/nginx/nginx-gateway-fabric/nginx${{ inputs.image == 'plus' && '-plus' || ''}} \
           --set=nginx.plus=${{ inputs.image == 'plus' }} \
           --set=nginx.image.tag=${{ steps.nginx-meta.outputs.version }} \
           --set=nginxGateway.image.pullPolicy=Never \
@@ -139,7 +139,7 @@ jobs:
 
       - name: Install cloud-provider-kind
         run: |
-          CLOUD_PROVIDER_KIND_VERSION=v0.4.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
+          CLOUD_PROVIDER_KIND_VERSION=v0.5.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
           go install sigs.k8s.io/cloud-provider-kind@${CLOUD_PROVIDER_KIND_VERSION}
 
       - name: Run cloud-provider-kind
@@ -162,13 +162,13 @@ jobs:
           kubectl create secret generic nplus-license --from-file license.jwt -n nginx-gateway
 
       - name: Set up Python
-        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.x"
           check-latest: true
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@e6669bcd63d7cb57cb4380c33043eebe5d111992 # v2.6.1
+        uses: helm/chart-testing-action@0d28d3144d3a25ea2cc349d6e59901c4ff469b3b # v2.7.0
 
       - name: Install Chart
         run: |

@@ -13,11 +13,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/resolver"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
 )
 
 const (
@@ -32,9 +33,15 @@ func BuildConfiguration(
 	g *graph.Graph,
 	serviceResolver resolver.ServiceResolver,
 	configVersion int,
+	plus bool,
 ) Configuration {
 	if g.GatewayClass == nil || !g.GatewayClass.Valid || g.Gateway == nil {
-		return GetDefaultConfiguration(g, configVersion)
+		config := GetDefaultConfiguration(g, configVersion)
+		if plus {
+			config.NginxPlus = buildNginxPlus(g)
+		}
+
+		return config
 	}
 
 	baseHTTPConfig := buildBaseHTTPConfig(g)
@@ -48,6 +55,11 @@ func BuildConfiguration(
 		g.ReferencedServices,
 		baseHTTPConfig.IPFamily,
 	)
+
+	var nginxPlus NginxPlus
+	if plus {
+		nginxPlus = buildNginxPlus(g)
+	}
 
 	config := Configuration{
 		HTTPServers:           httpServers,
@@ -64,7 +76,8 @@ func BuildConfiguration(
 		Telemetry:        buildTelemetry(g),
 		BaseHTTPConfig:   baseHTTPConfig,
 		Logging:          buildLogging(g),
-		MainSnippets:     buildSnippetsForContext(g.SnippetsFilters, ngfAPI.NginxContextMain),
+		NginxPlus:        nginxPlus,
+		MainSnippets:     buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
 	}
 
@@ -824,12 +837,12 @@ func buildTelemetry(g *graph.Graph) Telemetry {
 
 	tel.SpanAttributes = setSpanAttributes(telemetry.SpanAttributes)
 
-	// FIXME(sberman): https://github.com/nginxinc/nginx-gateway-fabric/issues/2038
+	// FIXME(sberman): https://github.com/nginx/nginx-gateway-fabric/issues/2038
 	// Find a generic way to include relevant policy info at the http context so we don't need policy-specific
 	// logic in this function
 	ratioMap := make(map[string]int32)
 	for _, pol := range g.NGFPolicies {
-		if obsPol, ok := pol.Source.(*ngfAPI.ObservabilityPolicy); ok {
+		if obsPol, ok := pol.Source.(*ngfAPIv1alpha2.ObservabilityPolicy); ok {
 			if obsPol.Spec.Tracing != nil && obsPol.Spec.Tracing.Ratio != nil && *obsPol.Spec.Tracing.Ratio > 0 {
 				ratioName := CreateRatioVarName(*obsPol.Spec.Tracing.Ratio)
 				ratioMap[ratioName] = *obsPol.Spec.Tracing.Ratio
@@ -845,7 +858,7 @@ func buildTelemetry(g *graph.Graph) Telemetry {
 	return tel
 }
 
-func setSpanAttributes(spanAttributes []ngfAPI.SpanAttribute) []SpanAttribute {
+func setSpanAttributes(spanAttributes []ngfAPIv1alpha1.SpanAttribute) []SpanAttribute {
 	spanAttrs := make([]SpanAttribute, 0, len(spanAttributes))
 	for _, spanAttr := range spanAttributes {
 		sa := SpanAttribute{
@@ -870,7 +883,7 @@ func buildBaseHTTPConfig(g *graph.Graph) BaseHTTPConfig {
 		// HTTP2 should be enabled by default
 		HTTP2:    true,
 		IPFamily: Dual,
-		Snippets: buildSnippetsForContext(g.SnippetsFilters, ngfAPI.NginxContextHTTP),
+		Snippets: buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
 	}
 	if g.NginxProxy == nil || !g.NginxProxy.Valid {
 		return baseConfig
@@ -882,9 +895,9 @@ func buildBaseHTTPConfig(g *graph.Graph) BaseHTTPConfig {
 
 	if g.NginxProxy.Source.Spec.IPFamily != nil {
 		switch *g.NginxProxy.Source.Spec.IPFamily {
-		case ngfAPI.IPv4:
+		case ngfAPIv1alpha1.IPv4:
 			baseConfig.IPFamily = IPv4
-		case ngfAPI.IPv6:
+		case ngfAPIv1alpha1.IPv6:
 			baseConfig.IPFamily = IPv6
 		}
 	}
@@ -892,9 +905,9 @@ func buildBaseHTTPConfig(g *graph.Graph) BaseHTTPConfig {
 	if g.NginxProxy.Source.Spec.RewriteClientIP != nil {
 		if g.NginxProxy.Source.Spec.RewriteClientIP.Mode != nil {
 			switch *g.NginxProxy.Source.Spec.RewriteClientIP.Mode {
-			case ngfAPI.RewriteClientIPModeProxyProtocol:
+			case ngfAPIv1alpha1.RewriteClientIPModeProxyProtocol:
 				baseConfig.RewriteClientIPSettings.Mode = RewriteIPModeProxyProtocol
-			case ngfAPI.RewriteClientIPModeXForwardedFor:
+			case ngfAPIv1alpha1.RewriteClientIPModeXForwardedFor:
 				baseConfig.RewriteClientIPSettings.Mode = RewriteIPModeXForwardedFor
 			}
 		}
@@ -913,7 +926,7 @@ func buildBaseHTTPConfig(g *graph.Graph) BaseHTTPConfig {
 	return baseConfig
 }
 
-func createSnippetName(nc ngfAPI.NginxContext, nsname types.NamespacedName) string {
+func createSnippetName(nc ngfAPIv1alpha1.NginxContext, nsname types.NamespacedName) string {
 	return fmt.Sprintf(
 		"SnippetsFilter_%s_%s_%s",
 		nc,
@@ -924,7 +937,7 @@ func createSnippetName(nc ngfAPI.NginxContext, nsname types.NamespacedName) stri
 
 func buildSnippetsForContext(
 	snippetFilters map[types.NamespacedName]*graph.SnippetsFilter,
-	nc ngfAPI.NginxContext,
+	nc ngfAPIv1alpha1.NginxContext,
 ) []Snippet {
 	if len(snippetFilters) == 0 {
 		return nil
@@ -970,7 +983,7 @@ func buildPolicies(graphPolicies []*graph.Policy) []policies.Policy {
 	return finalPolicies
 }
 
-func convertAddresses(addresses []ngfAPI.Address) []string {
+func convertAddresses(addresses []ngfAPIv1alpha1.RewriteClientIPAddress) []string {
 	trustedAddresses := make([]string, len(addresses))
 	for i, addr := range addresses {
 		trustedAddresses[i] = addr.Value
@@ -1005,10 +1018,29 @@ func buildAuxiliarySecrets(
 	return auxSecrets
 }
 
+func buildNginxPlus(g *graph.Graph) NginxPlus {
+	nginxPlusSettings := NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
+
+	ngfProxy := g.NginxProxy
+	if ngfProxy != nil && ngfProxy.Source.Spec.NginxPlus != nil {
+		if ngfProxy.Source.Spec.NginxPlus.AllowedAddresses != nil {
+			addresses := make([]string, 0, len(ngfProxy.Source.Spec.NginxPlus.AllowedAddresses))
+			for _, addr := range ngfProxy.Source.Spec.NginxPlus.AllowedAddresses {
+				addresses = append(addresses, addr.Value)
+			}
+
+			nginxPlusSettings.AllowedAddresses = addresses
+		}
+	}
+
+	return nginxPlusSettings
+}
+
 func GetDefaultConfiguration(g *graph.Graph, configVersion int) Configuration {
 	return Configuration{
 		Version:          configVersion,
 		Logging:          buildLogging(g),
+		NginxPlus:        NginxPlus{},
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
 	}
 }

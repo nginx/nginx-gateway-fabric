@@ -19,9 +19,10 @@ import (
 	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/config"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 )
 
 func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
@@ -62,12 +63,12 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&gatewayv1.HTTPRouteList{},
 				&gatewayv1.GatewayList{},
 				&gatewayv1beta1.ReferenceGrantList{},
-				&ngfAPI.NginxProxyList{},
+				&ngfAPIv1alpha1.NginxProxyList{},
 				&gatewayv1.GRPCRouteList{},
 				partialObjectMetadataList,
-				&ngfAPI.ClientSettingsPolicyList{},
-				&ngfAPI.ObservabilityPolicyList{},
-				&ngfAPI.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 			},
 		},
 		{
@@ -92,12 +93,12 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&discoveryV1.EndpointSliceList{},
 				&gatewayv1.HTTPRouteList{},
 				&gatewayv1beta1.ReferenceGrantList{},
-				&ngfAPI.NginxProxyList{},
+				&ngfAPIv1alpha1.NginxProxyList{},
 				&gatewayv1.GRPCRouteList{},
 				partialObjectMetadataList,
-				&ngfAPI.ClientSettingsPolicyList{},
-				&ngfAPI.ObservabilityPolicyList{},
-				&ngfAPI.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 			},
 		},
 		{
@@ -123,14 +124,14 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&discoveryV1.EndpointSliceList{},
 				&gatewayv1.HTTPRouteList{},
 				&gatewayv1beta1.ReferenceGrantList{},
-				&ngfAPI.NginxProxyList{},
+				&ngfAPIv1alpha1.NginxProxyList{},
 				partialObjectMetadataList,
 				&gatewayv1alpha3.BackendTLSPolicyList{},
 				&gatewayv1alpha2.TLSRouteList{},
 				&gatewayv1.GRPCRouteList{},
-				&ngfAPI.ClientSettingsPolicyList{},
-				&ngfAPI.ObservabilityPolicyList{},
-				&ngfAPI.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 			},
 		},
 		{
@@ -155,13 +156,13 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&discoveryV1.EndpointSliceList{},
 				&gatewayv1.HTTPRouteList{},
 				&gatewayv1beta1.ReferenceGrantList{},
-				&ngfAPI.NginxProxyList{},
+				&ngfAPIv1alpha1.NginxProxyList{},
 				partialObjectMetadataList,
 				&gatewayv1.GRPCRouteList{},
-				&ngfAPI.ClientSettingsPolicyList{},
-				&ngfAPI.ObservabilityPolicyList{},
-				&ngfAPI.SnippetsFilterList{},
-				&ngfAPI.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.SnippetsFilterList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 			},
 		},
 		{
@@ -187,15 +188,15 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&discoveryV1.EndpointSliceList{},
 				&gatewayv1.HTTPRouteList{},
 				&gatewayv1beta1.ReferenceGrantList{},
-				&ngfAPI.NginxProxyList{},
+				&ngfAPIv1alpha1.NginxProxyList{},
 				partialObjectMetadataList,
 				&gatewayv1alpha3.BackendTLSPolicyList{},
 				&gatewayv1alpha2.TLSRouteList{},
 				&gatewayv1.GRPCRouteList{},
-				&ngfAPI.ClientSettingsPolicyList{},
-				&ngfAPI.ObservabilityPolicyList{},
-				&ngfAPI.SnippetsFilterList{},
-				&ngfAPI.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.SnippetsFilterList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 			},
 		},
 	}

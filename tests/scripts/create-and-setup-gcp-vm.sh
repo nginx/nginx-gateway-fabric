@@ -48,7 +48,7 @@ done
 
 gcloud compute scp --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" "${SCRIPT_DIR}"/vars.env username@"${RESOURCE_NAME}":~
 
-if [ -n "${NGF_REPO}" ] && [ "${NGF_REPO}" != "nginxinc" ]; then
+if [ -n "${NGF_REPO}" ] && [ "${NGF_REPO}" != "nginx" ]; then
     gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
         --command="bash -i <<EOF
 rm -rf nginx-gateway-fabric

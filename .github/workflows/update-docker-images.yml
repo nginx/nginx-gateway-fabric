@@ -70,7 +70,7 @@ jobs:
         uses: lucacome/docker-image-update-checker@a233de0585661c019fb71f9601328db37051cc66 # v2.0.0
         with:
           base-image: ${{ needs.variables.outputs.nginx_version }}
-          image: ghcr.io/nginxinc/nginx-gateway-fabric/nginx:${{ needs.variables.outputs.ngf_tag }}
+          image: ghcr.io/nginx/nginx-gateway-fabric/nginx:${{ needs.variables.outputs.ngf_tag }}
 
   build:
     name: Build Image

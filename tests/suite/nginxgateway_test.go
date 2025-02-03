@@ -12,8 +12,8 @@ import (
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/tests/framework"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/tests/framework"
 )
 
 var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), func() {

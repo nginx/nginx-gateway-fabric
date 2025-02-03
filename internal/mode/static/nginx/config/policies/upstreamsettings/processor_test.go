@@ -6,10 +6,11 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
 )
 
 func TestProcess(t *testing.T) {
@@ -23,18 +24,18 @@ func TestProcess(t *testing.T) {
 		{
 			name: "all fields populated",
 			policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
 							Connections: helpers.GetPointer(int32(1)),
 							Requests:    helpers.GetPointer(int32(1)),
-							Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
-							Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
+							Time:        helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
+							Timeout:     helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
 						}),
 					},
 				},
@@ -52,13 +53,13 @@ func TestProcess(t *testing.T) {
 		{
 			name: "zone size set",
 			policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
 					},
 				},
 			},
@@ -69,13 +70,13 @@ func TestProcess(t *testing.T) {
 		{
 			name: "keep alive connections set",
 			policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
 							Connections: helpers.GetPointer(int32(1)),
 						}),
 					},
@@ -90,13 +91,13 @@ func TestProcess(t *testing.T) {
 		{
 			name: "keep alive requests set",
 			policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
 							Requests: helpers.GetPointer(int32(1)),
 						}),
 					},
@@ -111,14 +112,14 @@ func TestProcess(t *testing.T) {
 		{
 			name: "keep alive time set",
 			policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Time: helpers.GetPointer[ngfAPI.Duration]("5s"),
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
+							Time: helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
 						}),
 					},
 				},
@@ -132,14 +133,14 @@ func TestProcess(t *testing.T) {
 		{
 			name: "keep alive timeout set",
 			policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Timeout: helpers.GetPointer[ngfAPI.Duration]("10s"),
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
+							Timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
 						}),
 					},
 				},
@@ -153,12 +154,12 @@ func TestProcess(t *testing.T) {
 		{
 			name: "no fields populated",
 			policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{},
 				},
 			},
 			expUpstreamSettings: UpstreamSettings{},
@@ -166,56 +167,56 @@ func TestProcess(t *testing.T) {
 		{
 			name: "multiple UpstreamSettingsPolicies",
 			policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp-zonesize",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
 					},
 				},
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp-keepalive-connections",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
 							Connections: helpers.GetPointer(int32(1)),
 						}),
 					},
 				},
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp-keepalive-requests",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
 							Requests: helpers.GetPointer(int32(1)),
 						}),
 					},
 				},
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp-keepalive-time",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Time: helpers.GetPointer[ngfAPI.Duration]("5s"),
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
+							Time: helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
 						}),
 					},
 				},
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp-keepalive-timeout",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Timeout: helpers.GetPointer[ngfAPI.Duration]("10s"),
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
+							Timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
 						}),
 					},
 				},
@@ -233,78 +234,78 @@ func TestProcess(t *testing.T) {
 		{
 			name: "multiple UpstreamSettingsPolicies along with other policies",
 			policies: []policies.Policy{
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp-zonesize",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
 					},
 				},
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp-keepalive-connections",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
 							Connections: helpers.GetPointer(int32(1)),
 						}),
 					},
 				},
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp-keepalive-requests",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
 							Requests: helpers.GetPointer(int32(1)),
 						}),
 					},
 				},
-				&ngfAPI.ClientSettingsPolicy{
+				&ngfAPIv1alpha1.ClientSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "client-settings-policy",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.ClientSettingsPolicySpec{
-						Body: &ngfAPI.ClientBody{
-							MaxSize: helpers.GetPointer[ngfAPI.Size]("1m"),
+					Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+						Body: &ngfAPIv1alpha1.ClientBody{
+							MaxSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("1m"),
 						},
 					},
 				},
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp-keepalive-time",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Time: helpers.GetPointer[ngfAPI.Duration]("5s"),
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
+							Time: helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
 						}),
 					},
 				},
-				&ngfAPI.UpstreamSettingsPolicy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp-keepalive-timeout",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
-							Timeout: helpers.GetPointer[ngfAPI.Duration]("10s"),
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
+							Timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
 						}),
 					},
 				},
-				&ngfAPI.ObservabilityPolicy{
+				&ngfAPIv1alpha2.ObservabilityPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "observability-policy",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.ObservabilityPolicySpec{
-						Tracing: &ngfAPI.Tracing{
-							Strategy: ngfAPI.TraceStrategyRatio,
+					Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+						Tracing: &ngfAPIv1alpha2.Tracing{
+							Strategy: ngfAPIv1alpha2.TraceStrategyRatio,
 							Ratio:    helpers.GetPointer(int32(1)),
 						},
 					},

@@ -5,8 +5,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/licensing"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
 type FakeCollector struct {

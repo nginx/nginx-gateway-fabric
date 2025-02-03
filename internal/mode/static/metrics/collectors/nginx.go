@@ -9,8 +9,8 @@ import (
 	nginxCollector "github.com/nginxinc/nginx-prometheus-exporter/collector"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/metrics"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/metrics"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
 )
 
 const (

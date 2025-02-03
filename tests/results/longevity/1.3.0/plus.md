@@ -127,7 +127,7 @@ All successful reloads took less than 1 seconds, with most under 0.5 second.
 ## Comparison with previous runs
 
 Graphs look similar to 1.2.0 results.
-As https://github.com/nginxinc/nginx-gateway-fabric/issues/1112 was fixed, we no longer see the corresponding
+As https://github.com/nginx/nginx-gateway-fabric/issues/1112 was fixed, we no longer see the corresponding
 reload spikes.
 
 Memory usage is flat, but ~1 Mb higher than in 1.2.0.

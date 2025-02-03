@@ -6,7 +6,7 @@ import (
 	ngxclient "github.com/nginxinc/nginx-plus-go-client/client"
 	. "github.com/onsi/gomega"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
 )
 
 func TestConvertEndpoints(t *testing.T) {

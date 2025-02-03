@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
 )
 
 type FakeVerifyClient struct {

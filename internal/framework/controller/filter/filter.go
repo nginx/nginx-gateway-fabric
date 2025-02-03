@@ -5,7 +5,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 )
 
 // CreateSingleResourceFilter creates a filter function that filters out all resources except the one

@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/nginxinc/nginx-gateway-fabric/tests/framework"
+	"github.com/nginx/nginx-gateway-fabric/tests/framework"
 )
 
 // Longevity test is an NFR test, but does not include the "nfr" label. It needs to run on its own,

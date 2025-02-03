@@ -7,7 +7,7 @@ import (
 
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
 )
 
 // HTTPNJSMatchValidator validates values used for matching a request.

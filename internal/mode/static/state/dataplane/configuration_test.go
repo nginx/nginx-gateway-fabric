@@ -19,14 +19,15 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/policiesfakes"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/resolver"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/resolver/resolverfakes"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver/resolverfakes"
 )
 
 func getNormalBackendRef() graph.BackendRef {
@@ -65,6 +66,7 @@ func getExpectedConfiguration() Configuration {
 		Logging: Logging{
 			ErrorLevel: defaultErrorLogLevel,
 		},
+		NginxPlus: NginxPlus{},
 	}
 }
 
@@ -337,7 +339,7 @@ func TestBuildConfiguration(t *testing.T) {
 	)
 
 	sf1 := &graph.SnippetsFilter{
-		Source: &ngfAPI.SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "sf",
 				Namespace: "test",
@@ -345,16 +347,16 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		Valid:      true,
 		Referenced: true,
-		Snippets: map[ngfAPI.NginxContext]string{
-			ngfAPI.NginxContextHTTPServerLocation: "location snippet",
-			ngfAPI.NginxContextHTTPServer:         "server snippet",
-			ngfAPI.NginxContextMain:               "main snippet",
-			ngfAPI.NginxContextHTTP:               "http snippet",
+		Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+			ngfAPIv1alpha1.NginxContextHTTPServerLocation: "location snippet",
+			ngfAPIv1alpha1.NginxContextHTTPServer:         "server snippet",
+			ngfAPIv1alpha1.NginxContextMain:               "main snippet",
+			ngfAPIv1alpha1.NginxContextHTTP:               "http snippet",
 		},
 	}
 
 	sfNotReferenced := &graph.SnippetsFilter{
-		Source: &ngfAPI.SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "sf-not-referenced",
 				Namespace: "test",
@@ -362,9 +364,9 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		Valid:      true,
 		Referenced: false,
-		Snippets: map[ngfAPI.NginxContext]string{
-			ngfAPI.NginxContextMain: "main snippet no ref",
-			ngfAPI.NginxContextHTTP: "http snippet no ref",
+		Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+			ngfAPIv1alpha1.NginxContextMain: "main snippet no ref",
+			ngfAPIv1alpha1.NginxContextHTTP: "http snippet no ref",
 		},
 	}
 
@@ -377,7 +379,7 @@ func TestBuildConfiguration(t *testing.T) {
 	extRefFilter := graph.Filter{
 		FilterType: graph.FilterExtensionRef,
 		ExtensionRef: &v1.LocalObjectReference{
-			Group: ngfAPI.GroupName,
+			Group: ngfAPIv1alpha1.GroupName,
 			Kind:  kinds.SnippetsFilter,
 			Name:  "sf",
 		},
@@ -393,14 +395,14 @@ func TestBuildConfiguration(t *testing.T) {
 	expExtRefFilter := SnippetsFilter{
 		LocationSnippet: &Snippet{
 			Name: createSnippetName(
-				ngfAPI.NginxContextHTTPServerLocation,
+				ngfAPIv1alpha1.NginxContextHTTPServerLocation,
 				client.ObjectKeyFromObject(extRefFilter.ResolvedExtensionRef.SnippetsFilter.Source),
 			),
 			Contents: "location snippet",
 		},
 		ServerSnippet: &Snippet{
 			Name: createSnippetName(
-				ngfAPI.NginxContextHTTPServer,
+				ngfAPIv1alpha1.NginxContextHTTPServer,
 				client.ObjectKeyFromObject(extRefFilter.ResolvedExtensionRef.SnippetsFilter.Source),
 			),
 			Contents: "server snippet",
@@ -838,42 +840,47 @@ func TestBuildConfiguration(t *testing.T) {
 	}
 
 	nginxProxy := &graph.NginxProxy{
-		Source: &ngfAPI.NginxProxy{
-			Spec: ngfAPI.NginxProxySpec{
-				Telemetry: &ngfAPI.Telemetry{
-					Exporter: &ngfAPI.TelemetryExporter{
+		Source: &ngfAPIv1alpha1.NginxProxy{
+			Spec: ngfAPIv1alpha1.NginxProxySpec{
+				Telemetry: &ngfAPIv1alpha1.Telemetry{
+					Exporter: &ngfAPIv1alpha1.TelemetryExporter{
 						Endpoint:   "my-otel.svc:4563",
 						BatchSize:  helpers.GetPointer(int32(512)),
 						BatchCount: helpers.GetPointer(int32(4)),
-						Interval:   helpers.GetPointer(ngfAPI.Duration("5s")),
+						Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
 					},
 					ServiceName: helpers.GetPointer("my-svc"),
 				},
 				DisableHTTP2: true,
-				IPFamily:     helpers.GetPointer(ngfAPI.Dual),
+				IPFamily:     helpers.GetPointer(ngfAPIv1alpha1.Dual),
 			},
 		},
 		Valid: true,
 	}
 
 	nginxProxyIPv4 := &graph.NginxProxy{
-		Source: &ngfAPI.NginxProxy{
-			Spec: ngfAPI.NginxProxySpec{
-				Telemetry: &ngfAPI.Telemetry{},
-				IPFamily:  helpers.GetPointer(ngfAPI.IPv4),
+		Source: &ngfAPIv1alpha1.NginxProxy{
+			Spec: ngfAPIv1alpha1.NginxProxySpec{
+				Telemetry: &ngfAPIv1alpha1.Telemetry{},
+				IPFamily:  helpers.GetPointer(ngfAPIv1alpha1.IPv4),
 			},
 		},
 		Valid: true,
 	}
 
 	nginxProxyIPv6 := &graph.NginxProxy{
-		Source: &ngfAPI.NginxProxy{
-			Spec: ngfAPI.NginxProxySpec{
-				Telemetry: &ngfAPI.Telemetry{},
-				IPFamily:  helpers.GetPointer(ngfAPI.IPv6),
+		Source: &ngfAPIv1alpha1.NginxProxy{
+			Spec: ngfAPIv1alpha1.NginxProxySpec{
+				Telemetry: &ngfAPIv1alpha1.Telemetry{},
+				IPFamily:  helpers.GetPointer(ngfAPIv1alpha1.IPv6),
 			},
 		},
 		Valid: true,
+	}
+
+	defaultConfig := Configuration{
+		Logging:   Logging{ErrorLevel: defaultErrorLogLevel},
+		NginxPlus: NginxPlus{},
 	}
 
 	tests := []struct {
@@ -1562,39 +1569,17 @@ func TestBuildConfiguration(t *testing.T) {
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
 				g.GatewayClass.Valid = false
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
-					Name:   "listener-80-1",
-					Source: listener80,
-					Valid:  true,
-					Routes: map[graph.RouteKey]*graph.L7Route{
-						graph.CreateRouteKey(hr1): routeHR1,
-					},
-				})
-				g.Routes = map[graph.RouteKey]*graph.L7Route{
-					graph.CreateRouteKey(hr1): routeHR1,
-				}
 				return g
 			}),
-			expConf: Configuration{Logging: Logging{ErrorLevel: defaultErrorLogLevel}},
+			expConf: defaultConfig,
 			msg:     "invalid gatewayclass",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.GatewayClass.Valid = false
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
-					Name:   "listener-80-1",
-					Source: listener80,
-					Valid:  true,
-					Routes: map[graph.RouteKey]*graph.L7Route{
-						graph.CreateRouteKey(hr1): routeHR1,
-					},
-				})
-				g.Routes = map[graph.RouteKey]*graph.L7Route{
-					graph.CreateRouteKey(hr1): routeHR1,
-				}
+				g.GatewayClass = nil
 				return g
 			}),
-			expConf: Configuration{Logging: Logging{ErrorLevel: defaultErrorLogLevel}},
+			expConf: defaultConfig,
 			msg:     "missing gatewayclass",
 		},
 		{
@@ -1602,7 +1587,7 @@ func TestBuildConfiguration(t *testing.T) {
 				g.Gateway = nil
 				return g
 			}),
-			expConf: Configuration{Logging: Logging{ErrorLevel: defaultErrorLogLevel}},
+			expConf: defaultConfig,
 			msg:     "missing gateway",
 		},
 		{
@@ -2102,12 +2087,12 @@ func TestBuildConfiguration(t *testing.T) {
 				})
 				g.NginxProxy = &graph.NginxProxy{
 					Valid: false,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
 							DisableHTTP2: true,
-							IPFamily:     helpers.GetPointer(ngfAPI.Dual),
-							Telemetry: &ngfAPI.Telemetry{
-								Exporter: &ngfAPI.TelemetryExporter{
+							IPFamily:     helpers.GetPointer(ngfAPIv1alpha1.Dual),
+							Telemetry: &ngfAPIv1alpha1.Telemetry{
+								Exporter: &ngfAPIv1alpha1.TelemetryExporter{
 									Endpoint: "some-endpoint",
 								},
 							},
@@ -2278,17 +2263,17 @@ func TestBuildConfiguration(t *testing.T) {
 				})
 				g.NginxProxy = &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							RewriteClientIP: &ngfAPI.RewriteClientIP{
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
 								SetIPRecursively: helpers.GetPointer(true),
-								TrustedAddresses: []ngfAPI.Address{
+								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
 									{
-										Type:  ngfAPI.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "1.1.1.1/32",
 									},
 								},
-								Mode: helpers.GetPointer(ngfAPI.RewriteClientIPModeProxyProtocol),
+								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeProxyProtocol),
 							},
 						},
 					},
@@ -2325,9 +2310,9 @@ func TestBuildConfiguration(t *testing.T) {
 				})
 				g.NginxProxy = &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							Logging: &ngfAPI.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPI.NginxLogLevelDebug)},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelDebug)},
 						},
 					},
 				}
@@ -2354,7 +2339,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.MainSnippets = []Snippet{
 					{
 						Name: createSnippetName(
-							ngfAPI.NginxContextMain,
+							ngfAPIv1alpha1.NginxContextMain,
 							client.ObjectKeyFromObject(sf1.Source),
 						),
 						Contents: "main snippet",
@@ -2363,7 +2348,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.BaseHTTPConfig.Snippets = []Snippet{
 					{
 						Name: createSnippetName(
-							ngfAPI.NginxContextHTTP,
+							ngfAPIv1alpha1.NginxContextHTTP,
 							client.ObjectKeyFromObject(sf1.Source),
 						),
 						Contents: "http snippet",
@@ -2377,6 +2362,40 @@ func TestBuildConfiguration(t *testing.T) {
 			}),
 			msg: "SnippetsFilters with main and http snippet",
 		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+					Name:      "gw",
+					Namespace: "ns",
+				}
+				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+					Name:   "listener-80-1",
+					Source: listener80,
+					Valid:  true,
+					Routes: map[graph.RouteKey]*graph.L7Route{},
+				})
+				g.NginxProxy = &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
+								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
+								},
+							},
+						},
+					},
+				}
+				return g
+			}),
+			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.SSLServers = []VirtualServer{}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
+				return conf
+			}),
+			msg: "NginxProxy with NginxPlus allowed addresses configured but running on nginx oss",
+		},
 	}
 
 	for _, test := range tests {
@@ -2389,6 +2408,7 @@ func TestBuildConfiguration(t *testing.T) {
 				test.graph,
 				fakeResolver,
 				1,
+				false,
 			)
 
 			g.Expect(result.BackendGroups).To(ConsistOf(test.expConf.BackendGroups))
@@ -2402,6 +2422,126 @@ func TestBuildConfiguration(t *testing.T) {
 			g.Expect(result.Telemetry).To(Equal(test.expConf.Telemetry))
 			g.Expect(result.BaseHTTPConfig).To(Equal(test.expConf.BaseHTTPConfig))
 			g.Expect(result.Logging).To(Equal(test.expConf.Logging))
+			g.Expect(result.NginxPlus).To(Equal(test.expConf.NginxPlus))
+		})
+	}
+}
+
+func TestBuildConfiguration_Plus(t *testing.T) {
+	t.Parallel()
+	fooEndpoints := []resolver.Endpoint{
+		{
+			Address: "10.0.0.0",
+			Port:    8080,
+		},
+	}
+
+	fakeResolver := &resolverfakes.FakeServiceResolver{}
+	fakeResolver.ResolveReturns(fooEndpoints, nil)
+
+	listener80 := v1.Listener{
+		Name:     "listener-80-1",
+		Hostname: nil,
+		Port:     80,
+		Protocol: v1.HTTPProtocolType,
+	}
+
+	defaultPlusConfig := Configuration{
+		Logging:   Logging{ErrorLevel: defaultErrorLogLevel},
+		NginxPlus: NginxPlus{AllowedAddresses: []string{"127.0.0.1"}},
+	}
+
+	tests := []struct {
+		graph   *graph.Graph
+		msg     string
+		expConf Configuration
+	}{
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+					Name:      "gw",
+					Namespace: "ns",
+				}
+				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+					Name:   "listener-80-1",
+					Source: listener80,
+					Valid:  true,
+					Routes: map[graph.RouteKey]*graph.L7Route{},
+				})
+				g.NginxProxy = &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
+								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
+								},
+							},
+						},
+					},
+				}
+				return g
+			}),
+			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.SSLServers = []VirtualServer{}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
+				conf.NginxPlus = NginxPlus{AllowedAddresses: []string{"127.0.0.3", "25.0.0.3"}}
+				return conf
+			}),
+			msg: "NginxProxy with NginxPlus allowed addresses configured",
+		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.GatewayClass.Valid = false
+				return g
+			}),
+			expConf: defaultPlusConfig,
+			msg:     "invalid gatewayclass",
+		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.GatewayClass = nil
+				return g
+			}),
+			expConf: defaultPlusConfig,
+			msg:     "missing gatewayclass",
+		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.Gateway = nil
+				return g
+			}),
+			expConf: defaultPlusConfig,
+			msg:     "missing gateway",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := BuildConfiguration(
+				context.TODO(),
+				test.graph,
+				fakeResolver,
+				1,
+				true,
+			)
+
+			g.Expect(result.BackendGroups).To(ConsistOf(test.expConf.BackendGroups))
+			g.Expect(result.Upstreams).To(ConsistOf(test.expConf.Upstreams))
+			g.Expect(result.HTTPServers).To(ConsistOf(test.expConf.HTTPServers))
+			g.Expect(result.SSLServers).To(ConsistOf(test.expConf.SSLServers))
+			g.Expect(result.TLSPassthroughServers).To(ConsistOf(test.expConf.TLSPassthroughServers))
+			g.Expect(result.SSLKeyPairs).To(Equal(test.expConf.SSLKeyPairs))
+			g.Expect(result.Version).To(Equal(1))
+			g.Expect(result.CertBundles).To(Equal(test.expConf.CertBundles))
+			g.Expect(result.Telemetry).To(Equal(test.expConf.Telemetry))
+			g.Expect(result.BaseHTTPConfig).To(Equal(test.expConf.BaseHTTPConfig))
+			g.Expect(result.Logging).To(Equal(test.expConf.Logging))
+			g.Expect(result.NginxPlus).To(Equal(test.expConf.NginxPlus))
 		})
 	}
 }
@@ -2546,14 +2686,14 @@ func TestCreateFilters(t *testing.T) {
 	snippetsFilter1 := graph.Filter{
 		FilterType: graph.FilterExtensionRef,
 		ExtensionRef: &v1.LocalObjectReference{
-			Group: ngfAPI.GroupName,
+			Group: ngfAPIv1alpha1.GroupName,
 			Kind:  kinds.SnippetsFilter,
 			Name:  "sf1",
 		},
 		ResolvedExtensionRef: &graph.ExtensionRefFilter{
 			Valid: true,
 			SnippetsFilter: &graph.SnippetsFilter{
-				Source: &ngfAPI.SnippetsFilter{
+				Source: &ngfAPIv1alpha1.SnippetsFilter{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "sf1",
 						Namespace: "default",
@@ -2561,11 +2701,11 @@ func TestCreateFilters(t *testing.T) {
 				},
 				Valid:      true,
 				Referenced: true,
-				Snippets: map[ngfAPI.NginxContext]string{
-					ngfAPI.NginxContextHTTPServerLocation: "location snippet 1",
-					ngfAPI.NginxContextMain:               "main snippet 1",
-					ngfAPI.NginxContextHTTPServer:         "server snippet 1",
-					ngfAPI.NginxContextHTTP:               "http snippet 1",
+				Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+					ngfAPIv1alpha1.NginxContextHTTPServerLocation: "location snippet 1",
+					ngfAPIv1alpha1.NginxContextMain:               "main snippet 1",
+					ngfAPIv1alpha1.NginxContextHTTPServer:         "server snippet 1",
+					ngfAPIv1alpha1.NginxContextHTTP:               "http snippet 1",
 				},
 			},
 		},
@@ -2574,14 +2714,14 @@ func TestCreateFilters(t *testing.T) {
 	snippetsFilter2 := graph.Filter{
 		FilterType: graph.FilterExtensionRef,
 		ExtensionRef: &v1.LocalObjectReference{
-			Group: ngfAPI.GroupName,
+			Group: ngfAPIv1alpha1.GroupName,
 			Kind:  kinds.SnippetsFilter,
 			Name:  "sf2",
 		},
 		ResolvedExtensionRef: &graph.ExtensionRefFilter{
 			Valid: true,
 			SnippetsFilter: &graph.SnippetsFilter{
-				Source: &ngfAPI.SnippetsFilter{
+				Source: &ngfAPIv1alpha1.SnippetsFilter{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "sf2",
 						Namespace: "default",
@@ -2589,11 +2729,11 @@ func TestCreateFilters(t *testing.T) {
 				},
 				Valid:      true,
 				Referenced: true,
-				Snippets: map[ngfAPI.NginxContext]string{
-					ngfAPI.NginxContextHTTPServerLocation: "location snippet 2",
-					ngfAPI.NginxContextMain:               "main snippet 2",
-					ngfAPI.NginxContextHTTPServer:         "server snippet 2",
-					ngfAPI.NginxContextHTTP:               "http snippet 2",
+				Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+					ngfAPIv1alpha1.NginxContextHTTPServerLocation: "location snippet 2",
+					ngfAPIv1alpha1.NginxContextMain:               "main snippet 2",
+					ngfAPIv1alpha1.NginxContextHTTPServer:         "server snippet 2",
+					ngfAPIv1alpha1.NginxContextHTTP:               "http snippet 2",
 				},
 			},
 		},
@@ -2640,14 +2780,14 @@ func TestCreateFilters(t *testing.T) {
 					{
 						LocationSnippet: &Snippet{
 							Name: createSnippetName(
-								ngfAPI.NginxContextHTTPServerLocation,
+								ngfAPIv1alpha1.NginxContextHTTPServerLocation,
 								types.NamespacedName{Namespace: "default", Name: "sf1"},
 							),
 							Contents: "location snippet 1",
 						},
 						ServerSnippet: &Snippet{
 							Name: createSnippetName(
-								ngfAPI.NginxContextHTTPServer,
+								ngfAPIv1alpha1.NginxContextHTTPServer,
 								types.NamespacedName{Namespace: "default", Name: "sf1"},
 							),
 							Contents: "server snippet 1",
@@ -2656,14 +2796,14 @@ func TestCreateFilters(t *testing.T) {
 					{
 						LocationSnippet: &Snippet{
 							Name: createSnippetName(
-								ngfAPI.NginxContextHTTPServerLocation,
+								ngfAPIv1alpha1.NginxContextHTTPServerLocation,
 								types.NamespacedName{Namespace: "default", Name: "sf2"},
 							),
 							Contents: "location snippet 2",
 						},
 						ServerSnippet: &Snippet{
 							Name: createSnippetName(
-								ngfAPI.NginxContextHTTPServer,
+								ngfAPIv1alpha1.NginxContextHTTPServer,
 								types.NamespacedName{Namespace: "default", Name: "sf2"},
 							),
 							Contents: "server snippet 2",
@@ -3290,17 +3430,17 @@ func TestConvertBackendTLS(t *testing.T) {
 func TestBuildTelemetry(t *testing.T) {
 	t.Parallel()
 	telemetryConfigured := &graph.NginxProxy{
-		Source: &ngfAPI.NginxProxy{
-			Spec: ngfAPI.NginxProxySpec{
-				Telemetry: &ngfAPI.Telemetry{
-					Exporter: &ngfAPI.TelemetryExporter{
+		Source: &ngfAPIv1alpha1.NginxProxy{
+			Spec: ngfAPIv1alpha1.NginxProxySpec{
+				Telemetry: &ngfAPIv1alpha1.Telemetry{
+					Exporter: &ngfAPIv1alpha1.TelemetryExporter{
 						Endpoint:   "my-otel.svc:4563",
 						BatchSize:  helpers.GetPointer(int32(512)),
 						BatchCount: helpers.GetPointer(int32(4)),
-						Interval:   helpers.GetPointer(ngfAPI.Duration("5s")),
+						Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
 					},
 					ServiceName: helpers.GetPointer("my-svc"),
-					SpanAttributes: []ngfAPI.SpanAttribute{
+					SpanAttributes: []ngfAPIv1alpha1.SpanAttribute{
 						{Key: "key", Value: "value"},
 					},
 				},
@@ -3335,7 +3475,7 @@ func TestBuildTelemetry(t *testing.T) {
 		{
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
-					Source: &ngfAPI.NginxProxy{},
+					Source: &ngfAPIv1alpha1.NginxProxy{},
 				},
 			},
 			expTelemetry: Telemetry{},
@@ -3344,10 +3484,10 @@ func TestBuildTelemetry(t *testing.T) {
 		{
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							Telemetry: &ngfAPI.Telemetry{
-								Exporter: &ngfAPI.TelemetryExporter{},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							Telemetry: &ngfAPIv1alpha1.Telemetry{
+								Exporter: &ngfAPIv1alpha1.TelemetryExporter{},
 							},
 						},
 					},
@@ -3385,13 +3525,13 @@ func TestBuildTelemetry(t *testing.T) {
 				NginxProxy: telemetryConfigured,
 				NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 					{NsName: types.NamespacedName{Name: "obsPolicy"}}: {
-						Source: &ngfAPI.ObservabilityPolicy{
+						Source: &ngfAPIv1alpha2.ObservabilityPolicy{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      "obsPolicy",
 								Namespace: "custom-ns",
 							},
-							Spec: ngfAPI.ObservabilityPolicySpec{
-								Tracing: &ngfAPI.Tracing{
+							Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+								Tracing: &ngfAPIv1alpha2.Tracing{
 									Ratio: helpers.GetPointer[int32](25),
 								},
 							},
@@ -3420,46 +3560,46 @@ func TestBuildTelemetry(t *testing.T) {
 				NginxProxy: telemetryConfigured,
 				NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 					{NsName: types.NamespacedName{Name: "obsPolicy"}}: {
-						Source: &ngfAPI.ObservabilityPolicy{
+						Source: &ngfAPIv1alpha2.ObservabilityPolicy{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      "obsPolicy",
 								Namespace: "custom-ns",
 							},
-							Spec: ngfAPI.ObservabilityPolicySpec{
-								Tracing: &ngfAPI.Tracing{
+							Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+								Tracing: &ngfAPIv1alpha2.Tracing{
 									Ratio: helpers.GetPointer[int32](25),
 								},
 							},
 						},
 					},
 					{NsName: types.NamespacedName{Name: "obsPolicy2"}}: {
-						Source: &ngfAPI.ObservabilityPolicy{
+						Source: &ngfAPIv1alpha2.ObservabilityPolicy{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      "obsPolicy2",
 								Namespace: "custom-ns",
 							},
-							Spec: ngfAPI.ObservabilityPolicySpec{
-								Tracing: &ngfAPI.Tracing{
+							Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+								Tracing: &ngfAPIv1alpha2.Tracing{
 									Ratio: helpers.GetPointer[int32](50),
 								},
 							},
 						},
 					},
 					{NsName: types.NamespacedName{Name: "obsPolicy3"}}: {
-						Source: &ngfAPI.ObservabilityPolicy{
+						Source: &ngfAPIv1alpha2.ObservabilityPolicy{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      "obsPolicy3",
 								Namespace: "custom-ns",
 							},
-							Spec: ngfAPI.ObservabilityPolicySpec{
-								Tracing: &ngfAPI.Tracing{
+							Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+								Tracing: &ngfAPIv1alpha2.Tracing{
 									Ratio: helpers.GetPointer[int32](25),
 								},
 							},
 						},
 					},
 					{NsName: types.NamespacedName{Name: "csPolicy"}}: {
-						Source: &ngfAPI.ClientSettingsPolicy{
+						Source: &ngfAPIv1alpha1.ClientSettingsPolicy{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      "csPolicy",
 								Namespace: "custom-ns",
@@ -3490,13 +3630,13 @@ func TestBuildTelemetry(t *testing.T) {
 				NginxProxy: telemetryConfigured,
 				NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 					{NsName: types.NamespacedName{Name: "obsPolicy"}}: {
-						Source: &ngfAPI.ObservabilityPolicy{
+						Source: &ngfAPIv1alpha2.ObservabilityPolicy{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      "obsPolicy",
 								Namespace: "custom-ns",
 							},
-							Spec: ngfAPI.ObservabilityPolicySpec{
-								Tracing: &ngfAPI.Tracing{
+							Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+								Tracing: &ngfAPIv1alpha2.Tracing{
 									Ratio: helpers.GetPointer[int32](0),
 								},
 							},
@@ -3925,7 +4065,7 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid:  true,
-					Source: &ngfAPI.NginxProxy{},
+					Source: &ngfAPIv1alpha1.NginxProxy{},
 				},
 			},
 			expRewriteIPSettings: RewriteClientIPSettings{},
@@ -3935,13 +4075,13 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							RewriteClientIP: &ngfAPI.RewriteClientIP{
-								Mode: helpers.GetPointer(ngfAPI.RewriteClientIPModeProxyProtocol),
-								TrustedAddresses: []ngfAPI.Address{
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
+								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeProxyProtocol),
+								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
 									{
-										Type:  ngfAPI.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "10.9.9.4/32",
 									},
 								},
@@ -3962,13 +4102,13 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							RewriteClientIP: &ngfAPI.RewriteClientIP{
-								Mode: helpers.GetPointer(ngfAPI.RewriteClientIPModeXForwardedFor),
-								TrustedAddresses: []ngfAPI.Address{
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
+								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeXForwardedFor),
+								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
 									{
-										Type:  ngfAPI.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "76.89.90.11/24",
 									},
 								},
@@ -3989,25 +4129,25 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							RewriteClientIP: &ngfAPI.RewriteClientIP{
-								Mode: helpers.GetPointer(ngfAPI.RewriteClientIPModeXForwardedFor),
-								TrustedAddresses: []ngfAPI.Address{
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							RewriteClientIP: &ngfAPIv1alpha1.RewriteClientIP{
+								Mode: helpers.GetPointer(ngfAPIv1alpha1.RewriteClientIPModeXForwardedFor),
+								TrustedAddresses: []ngfAPIv1alpha1.RewriteClientIPAddress{
 									{
-										Type:  ngfAPI.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "5.5.5.5/12",
 									},
 									{
-										Type:  ngfAPI.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "1.1.1.1/26",
 									},
 									{
-										Type:  ngfAPI.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "2.2.2.2/32",
 									},
 									{
-										Type:  ngfAPI.CIDRAddressType,
+										Type:  ngfAPIv1alpha1.RewriteClientIPCIDRAddressType,
 										Value: "3.3.3.3/24",
 									},
 								},
@@ -4054,8 +4194,8 @@ func TestBuildLogging(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{},
 					},
 				},
 			},
@@ -4066,9 +4206,9 @@ func TestBuildLogging(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							Logging: &ngfAPI.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPI.NginxLogLevelDebug)},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelDebug)},
 						},
 					},
 				},
@@ -4080,9 +4220,9 @@ func TestBuildLogging(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							Logging: &ngfAPI.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPI.NginxLogLevelInfo)},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelInfo)},
 						},
 					},
 				},
@@ -4094,9 +4234,9 @@ func TestBuildLogging(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							Logging: &ngfAPI.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPI.NginxLogLevelNotice)},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelNotice)},
 						},
 					},
 				},
@@ -4108,9 +4248,9 @@ func TestBuildLogging(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							Logging: &ngfAPI.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPI.NginxLogLevelWarn)},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelWarn)},
 						},
 					},
 				},
@@ -4122,9 +4262,9 @@ func TestBuildLogging(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							Logging: &ngfAPI.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPI.NginxLogLevelError)},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelError)},
 						},
 					},
 				},
@@ -4136,9 +4276,9 @@ func TestBuildLogging(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							Logging: &ngfAPI.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPI.NginxLogLevelCrit)},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelCrit)},
 						},
 					},
 				},
@@ -4150,9 +4290,9 @@ func TestBuildLogging(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							Logging: &ngfAPI.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPI.NginxLogLevelAlert)},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelAlert)},
 						},
 					},
 				},
@@ -4164,9 +4304,9 @@ func TestBuildLogging(t *testing.T) {
 			g: &graph.Graph{
 				NginxProxy: &graph.NginxProxy{
 					Valid: true,
-					Source: &ngfAPI.NginxProxy{
-						Spec: ngfAPI.NginxProxySpec{
-							Logging: &ngfAPI.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPI.NginxLogLevelEmerg)},
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							Logging: &ngfAPIv1alpha1.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha1.NginxLogLevelEmerg)},
 						},
 					},
 				},
@@ -4191,7 +4331,7 @@ func TestCreateSnippetName(t *testing.T) {
 	g := NewWithT(t)
 
 	name := createSnippetName(
-		ngfAPI.NginxContextHTTPServerLocation,
+		ngfAPIv1alpha1.NginxContextHTTPServerLocation,
 		types.NamespacedName{Namespace: "some-ns", Name: "some-name"},
 	)
 	g.Expect(name).To(Equal("SnippetsFilter_http.server.location_some-ns_some-name"))
@@ -4201,7 +4341,7 @@ func TestBuildSnippetForContext(t *testing.T) {
 	t.Parallel()
 
 	validUnreferenced := &graph.SnippetsFilter{
-		Source: &ngfAPI.SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "valid-unreferenced",
 				Namespace: "default",
@@ -4209,13 +4349,13 @@ func TestBuildSnippetForContext(t *testing.T) {
 		},
 		Valid:      true,
 		Referenced: false,
-		Snippets: map[ngfAPI.NginxContext]string{
-			ngfAPI.NginxContextHTTPServerLocation: "valid unreferenced",
+		Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+			ngfAPIv1alpha1.NginxContextHTTPServerLocation: "valid unreferenced",
 		},
 	}
 
 	invalidUnreferenced := &graph.SnippetsFilter{
-		Source: &ngfAPI.SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "invalid-unreferenced",
 				Namespace: "default",
@@ -4223,13 +4363,13 @@ func TestBuildSnippetForContext(t *testing.T) {
 		},
 		Valid:      false,
 		Referenced: false,
-		Snippets: map[ngfAPI.NginxContext]string{
-			ngfAPI.NginxContextHTTPServerLocation: "invalid unreferenced",
+		Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+			ngfAPIv1alpha1.NginxContextHTTPServerLocation: "invalid unreferenced",
 		},
 	}
 
 	invalidReferenced := &graph.SnippetsFilter{
-		Source: &ngfAPI.SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "invalid-referenced",
 				Namespace: "default",
@@ -4237,13 +4377,13 @@ func TestBuildSnippetForContext(t *testing.T) {
 		},
 		Valid:      false,
 		Referenced: true,
-		Snippets: map[ngfAPI.NginxContext]string{
-			ngfAPI.NginxContextHTTPServerLocation: "invalid referenced",
+		Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+			ngfAPIv1alpha1.NginxContextHTTPServerLocation: "invalid referenced",
 		},
 	}
 
 	validReferenced1 := &graph.SnippetsFilter{
-		Source: &ngfAPI.SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "valid-referenced1",
 				Namespace: "default",
@@ -4251,14 +4391,14 @@ func TestBuildSnippetForContext(t *testing.T) {
 		},
 		Valid:      true,
 		Referenced: true,
-		Snippets: map[ngfAPI.NginxContext]string{
-			ngfAPI.NginxContextHTTP: "http valid referenced 1",
-			ngfAPI.NginxContextMain: "main valid referenced 1",
+		Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+			ngfAPIv1alpha1.NginxContextHTTP: "http valid referenced 1",
+			ngfAPIv1alpha1.NginxContextMain: "main valid referenced 1",
 		},
 	}
 
 	validReferenced2 := &graph.SnippetsFilter{
-		Source: &ngfAPI.SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "valid-referenced2",
 				Namespace: "other-ns",
@@ -4266,14 +4406,14 @@ func TestBuildSnippetForContext(t *testing.T) {
 		},
 		Valid:      true,
 		Referenced: true,
-		Snippets: map[ngfAPI.NginxContext]string{
-			ngfAPI.NginxContextMain: "main valid referenced 2",
-			ngfAPI.NginxContextHTTP: "http valid referenced 2",
+		Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+			ngfAPIv1alpha1.NginxContextMain: "main valid referenced 2",
+			ngfAPIv1alpha1.NginxContextHTTP: "http valid referenced 2",
 		},
 	}
 
 	validReferenced3 := &graph.SnippetsFilter{
-		Source: &ngfAPI.SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "valid-referenced3",
 				Namespace: "other-ns",
@@ -4281,29 +4421,29 @@ func TestBuildSnippetForContext(t *testing.T) {
 		},
 		Valid:      true,
 		Referenced: true,
-		Snippets: map[ngfAPI.NginxContext]string{
-			ngfAPI.NginxContextHTTPServerLocation: "location valid referenced 2",
+		Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+			ngfAPIv1alpha1.NginxContextHTTPServerLocation: "location valid referenced 2",
 		},
 	}
 
 	expMainSnippets := []Snippet{
 		{
-			Name:     createSnippetName(ngfAPI.NginxContextMain, client.ObjectKeyFromObject(validReferenced1.Source)),
+			Name:     createSnippetName(ngfAPIv1alpha1.NginxContextMain, client.ObjectKeyFromObject(validReferenced1.Source)),
 			Contents: "main valid referenced 1",
 		},
 		{
-			Name:     createSnippetName(ngfAPI.NginxContextMain, client.ObjectKeyFromObject(validReferenced2.Source)),
+			Name:     createSnippetName(ngfAPIv1alpha1.NginxContextMain, client.ObjectKeyFromObject(validReferenced2.Source)),
 			Contents: "main valid referenced 2",
 		},
 	}
 
 	expHTTPSnippets := []Snippet{
 		{
-			Name:     createSnippetName(ngfAPI.NginxContextHTTP, client.ObjectKeyFromObject(validReferenced1.Source)),
+			Name:     createSnippetName(ngfAPIv1alpha1.NginxContextHTTP, client.ObjectKeyFromObject(validReferenced1.Source)),
 			Contents: "http valid referenced 1",
 		},
 		{
-			Name:     createSnippetName(ngfAPI.NginxContextHTTP, client.ObjectKeyFromObject(validReferenced2.Source)),
+			Name:     createSnippetName(ngfAPIv1alpha1.NginxContextHTTP, client.ObjectKeyFromObject(validReferenced2.Source)),
 			Contents: "http valid referenced 2",
 		},
 	}
@@ -4322,25 +4462,25 @@ func TestBuildSnippetForContext(t *testing.T) {
 	tests := []struct {
 		name            string
 		snippetsFilters map[types.NamespacedName]*graph.SnippetsFilter
-		ctx             ngfAPI.NginxContext
+		ctx             ngfAPIv1alpha1.NginxContext
 		expSnippets     []Snippet
 	}{
 		{
 			name:            "no snippets filters",
 			snippetsFilters: nil,
-			ctx:             ngfAPI.NginxContextMain,
+			ctx:             ngfAPIv1alpha1.NginxContextMain,
 			expSnippets:     nil,
 		},
 		{
 			name:            "main context: mix of invalid, unreferenced, and valid, referenced snippets filters",
 			snippetsFilters: getSnippetsFilters(),
-			ctx:             ngfAPI.NginxContextMain,
+			ctx:             ngfAPIv1alpha1.NginxContextMain,
 			expSnippets:     expMainSnippets,
 		},
 		{
 			name:            "http context: mix of invalid, unreferenced, and valid, referenced snippets filters",
 			snippetsFilters: getSnippetsFilters(),
-			ctx:             ngfAPI.NginxContextHTTP,
+			ctx:             ngfAPIv1alpha1.NginxContextHTTP,
 			expSnippets:     expHTTPSnippets,
 		},
 	}
@@ -4393,4 +4533,97 @@ func TestBuildAuxiliarySecrets(t *testing.T) {
 	g := NewWithT(t)
 
 	g.Expect(buildAuxiliarySecrets(secrets)).To(Equal(expSecrets))
+}
+
+func TestBuildNginxPlus(t *testing.T) {
+	defaultNginxPlus := NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
+
+	t.Parallel()
+	tests := []struct {
+		msg          string
+		g            *graph.Graph
+		expNginxPlus NginxPlus
+	}{
+		{
+			msg:          "NginxProxy is nil",
+			g:            &graph.Graph{},
+			expNginxPlus: defaultNginxPlus,
+		},
+		{
+			msg: "NginxPlus default values are used when NginxProxy doesn't specify NginxPlus settings",
+			g: &graph.Graph{
+				NginxProxy: &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{},
+					},
+				},
+			},
+			expNginxPlus: defaultNginxPlus,
+		},
+		{
+			msg: "NginxProxy specifies one allowed address",
+			g: &graph.Graph{
+				NginxProxy: &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
+								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expNginxPlus: NginxPlus{AllowedAddresses: []string{"127.0.0.3"}},
+		},
+		{
+			msg: "NginxProxy specifies multiple allowed addresses",
+			g: &graph.Graph{
+				NginxProxy: &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
+								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expNginxPlus: NginxPlus{AllowedAddresses: []string{"127.0.0.3", "25.0.0.3"}},
+		},
+		{
+			msg: "NginxProxy specifies 127.0.0.1 as allowed address",
+			g: &graph.Graph{
+				NginxProxy: &graph.NginxProxy{
+					Valid: true,
+					Source: &ngfAPIv1alpha1.NginxProxy{
+						Spec: ngfAPIv1alpha1.NginxProxySpec{
+							NginxPlus: &ngfAPIv1alpha1.NginxPlus{
+								AllowedAddresses: []ngfAPIv1alpha1.NginxPlusAllowAddress{
+									{Type: ngfAPIv1alpha1.NginxPlusAllowIPAddressType, Value: "127.0.0.1"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expNginxPlus: defaultNginxPlus,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildNginxPlus(tc.g)).To(Equal(tc.expNginxPlus))
+		})
+	}
 }

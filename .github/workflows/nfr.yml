@@ -103,8 +103,8 @@ jobs:
         run: |
           echo "RESOURCE_NAME=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
-          echo "PREFIX=ghcr.io/nginxinc/nginx-gateway-fabric" >> vars.env
-          echo "NGINX_PREFIX=ghcr.io/nginxinc/nginx-gateway-fabric/nginx" >> vars.env
+          echo "PREFIX=ghcr.io/nginx/nginx-gateway-fabric" >> vars.env
+          echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
           echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
           echo "GKE_CLUSTER_NAME=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "GKE_CLUSTER_ZONE=us-west1-b" >> vars.env
@@ -147,7 +147,7 @@ jobs:
           fi
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: results-${{ matrix.type }}
           path: tests/results/**/*-${{ matrix.type }}.*

@@ -2,7 +2,7 @@
 
 This document proposes a design for separating the control and data planes.
 
-- Issue https://github.com/nginxinc/nginx-gateway-fabric/issues/1508
+- Issue https://github.com/nginx/nginx-gateway-fabric/issues/1508
 - Status: Implementable
 
 ## Background
@@ -53,8 +53,10 @@ Whenever a user creates a Gateway resource, the control plane will provision an 
 - Both deployments should have the minimal permissions required to perform their functions.
 - The nginx deployment should be configurable via the helm chart and NginxProxy CRD.
   - The NginxProxy CRD needs to be enhanced to work at the Gateway level. The nginx Deployment/Service configuration can then live in the NginxProxy CRD and either be applied globally (GatewayClass) or per Gateway. Certain fields (like a Service's `loadBalancerIP`) would have to be applied per-Gateway, so a user needs to be aware of where to attach the NginxProxy resource for these types of cases.
-  - The helm chart should allow for both globally setting configuration, as well as per Gateway. To start, we could just have the per-Gateway section of the values file contain the Gateway name, and it's up to a user to reference the resulting NginxProxy resource when they create that Gateway resource.
+  - The helm chart should allow for setting the global NginxProxy configuration, which we'll create in the control plane namespace at installation and link to the GatewayClass (as we do today).
+  - For per-Gateway configuration, a user will need to manually create their NginxProxy resources in the proper namespaces and link to their Gateways.
   - A user can update the NginxProxy at runtime to change the Deployment/Service config, and we'll attempt to patch the Deployment and/or Service. If it fails, logs, events, and status are written.
+  - If a user creates a Gateway resource that references an NginxProxy configuration that doesn't exist, then we should wait until that resource exists before deploying nginx. Status and logs should be written in this scenario.
 - Resources created for the nginx deployment (Service, Secrets, ConfigMap, etc.) should have configurable labels and annotations via the GatewayInfrastructure field in the Gateway resource. See [the GEP](https://gateway-api.sigs.k8s.io/geps/gep-1762/#automated-deployments).
 - Control plane creates the nginx deployment and service when a Gateway resource is created, in the same namespace as the Gateway resource. When the Gateway is deleted, the control plane deletes nginx deployment and service.
 - Control plane should label the nginx service and deployment with something related to the name of the Gateway so it can easily be linked. See [the GEP](https://gateway-api.sigs.k8s.io/geps/gep-1762/#automated-deployments).
@@ -89,6 +91,7 @@ not an issue. The gRPC runtime will handle the connection establishment and mana
 - Whenever the control plane sees an nginx instance become Ready, we send its config to it (it doesn't matter if this is a new pod or a restarted pod).
 - If no nginx instances exist, control plane should not send any configuration.
 - The control plane should check if a connection exists first before sending the config.
+  - If a new config is built while waiting for a connection, the new config should replace the old config.
 - If the control plane is scaled, then we should mark non-leaders as Unready (return non-200 readiness probe). This will prevent nginx agents from connecting to the non-leaders (k8s removes the Unready Pods from the Endpoint pool), and therefore only the leader will send config and write statuses.
   - We will need to ensure that the leader Pod can handle many nginx connections.
 

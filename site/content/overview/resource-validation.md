@@ -1,6 +1,6 @@
 ---
 title: "Resource validation"
-weight: 400
+weight: 600
 toc: true
 docs: "DOCS-1414"
 ---

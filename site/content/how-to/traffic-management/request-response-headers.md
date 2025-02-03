@@ -1,7 +1,10 @@
 ---
 title: "Modify HTTP request and response headers"
-weight: 500
 toc: true
+weight: 600
+type: how-to
+product: NGF
+docs: DOCS-000
 ---
 
 Learn how to modify the request and response headers of your application using NGINX Gateway Fabric.
@@ -64,7 +67,7 @@ This examples demonstrates how to configure traffic routing for a simple echo se
 Begin by deploying the example application `headers`. It is a simple application that returns the request headers which will be modified later.
 
 ```shell
-kubectl apply -f https://raw.githubusercontent.com/nginxinc/nginx-gateway-fabric/v1.5.1/examples/http-request-header-filter/headers.yaml
+kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/examples/http-request-header-filter/headers.yaml
 ```
 
 This will create the headers Service and a Deployment with one Pod. Run the following command to verify the resources were created:
@@ -176,7 +179,7 @@ kubectl delete httproutes.gateway.networking.k8s.io headers
 ```
 
 ```shell
-kubectl delete -f https://raw.githubusercontent.com/nginxinc/nginx-gateway-fabric/v1.5.1/examples/http-request-header-filter/headers.yaml
+kubectl delete -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/examples/http-request-header-filter/headers.yaml
 ```
 
 ## ResponseHeaderModifier example
@@ -188,7 +191,7 @@ Begin by configuring an application with custom headers and a simple HTTPRoute. 
 Begin by deploying the example application `headers`. It is a simple application that adds response headers that will be modified later.
 
 ```shell
-kubectl apply -f https://raw.githubusercontent.com/nginxinc/nginx-gateway-fabric/v1.5.1/examples/http-response-header-filter/headers.yaml
+kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v1.6.0/examples/http-response-header-filter/headers.yaml
 ```
 
 This will create the headers Service and a Deployment with one Pod. Run the following command to verify the resources were created:

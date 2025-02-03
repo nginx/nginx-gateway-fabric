@@ -6,7 +6,7 @@ labels: 'enhancement'
 
 <!--
 WARNING: Prior to submitting an enhancement request, we ask that you create a discussion. If you have not yet
-created a discussion related to your request, please do so now: https://github.com/nginxinc/nginx-gateway-fabric/discussions/new?category=ideas
+created a discussion related to your request, please do so now: https://github.com/nginx/nginx-gateway-fabric/discussions/new?category=ideas
 -->
 
 **Is your enhancement request related to a problem? Please describe.**
@@ -23,5 +23,5 @@ Add any other context or screenshots about the enhancement request here.
 
 <!--
 NOTE: depending on the scope of the enhancement, you may be asked to use the Enhancement Proposal
-process to document your work: https://github.com/nginxinc/nginx-gateway-fabric/blob/main/eps/README.md
+process to document your work: https://github.com/nginx/nginx-gateway-fabric/blob/main/eps/README.md
 -->

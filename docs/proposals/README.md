@@ -21,7 +21,7 @@ Enhancement Proposal. For example, here are some examples of requests that may n
 - Small changes (validation, documentation, fixups). It is always possible that the maintainers will determine a "small"
   change ends up requiring a Enhancement Proposal.
 
-[discussion]: https://github.com/nginxinc/nginx-gateway-fabric/discussions
+[discussion]: https://github.com/nginx/nginx-gateway-fabric/discussions
 
 ## Process
 
@@ -41,7 +41,7 @@ Before creating an issue or Enhancement Proposal, [open an idea][idea] on GitHub
 you would like, any use cases you have, and other relevant details. Beginning with a discussion allows you to get
 feedback from the maintainers and the community before you invest time in writing an Enhancement Proposal.
 
-[idea]: https://github.com/nginxinc/nginx-gateway-fabric/discussions/new?category=ideas
+[idea]: https://github.com/nginx/nginx-gateway-fabric/discussions/new?category=ideas
 
 ### 2. Create an Issue
 
@@ -51,7 +51,7 @@ maintainer will ask you to [open an issue][issue] on GitHub.
 Not every enhancement warrants an Enhancement Proposal. _If_ the enhancement issue requires an Enhancement Proposals,
 the maintainers will add the label `enhancement-proposal` to the issue.
 
-[issue]: https://github.com/nginxinc/nginx-gateway-fabric/issues/new?assignees=&labels=proposal&projects=&template=enhancement.md&title=
+[issue]: https://github.com/nginx/nginx-gateway-fabric/issues/new?assignees=&labels=proposal&projects=&template=enhancement.md&title=
 
 ### 3. Agree on the Goals (Provisional)
 
@@ -80,7 +80,7 @@ with the changes and update the status field of the corresponding Enhancement Pr
 
 > Note:
 >
-> Make sure to read the [Development Guide](https://github.com/nginxinc/nginx-gateway-fabric/blob/main/CONTRIBUTING.md#development-guide)
+> Make sure to read the [Development Guide](https://github.com/nginx/nginx-gateway-fabric/blob/main/CONTRIBUTING.md#development-guide)
 > before making any code changes.
 
 ## Status

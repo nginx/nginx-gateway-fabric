@@ -10,8 +10,8 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events/eventsfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/events/eventsfakes"
 )
 
 var _ = Describe("EventLoop", func() {

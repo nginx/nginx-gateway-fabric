@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"text/template"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
 var (
@@ -83,7 +83,7 @@ func (g Generator) GenerateForLocation(pols []policies.Policy, location http.Loc
 		includeGlobalAttrs bool,
 	) policies.GenerateResultFiles {
 		for _, pol := range pols {
-			obs, ok := pol.(*ngfAPI.ObservabilityPolicy)
+			obs, ok := pol.(*ngfAPIv1alpha2.ObservabilityPolicy)
 			if !ok {
 				continue
 			}
@@ -118,7 +118,7 @@ func (g Generator) GenerateForLocation(pols []policies.Policy, location http.Loc
 // being specified in the external location that redirects to the internal location.
 func (g Generator) GenerateForInternalLocation(pols []policies.Policy) policies.GenerateResultFiles {
 	for _, pol := range pols {
-		obs, ok := pol.(*ngfAPI.ObservabilityPolicy)
+		obs, ok := pol.(*ngfAPIv1alpha2.ObservabilityPolicy)
 		if !ok {
 			continue
 		}
@@ -139,13 +139,13 @@ func (g Generator) GenerateForInternalLocation(pols []policies.Policy) policies.
 	return nil
 }
 
-func getStrategy(obs *ngfAPI.ObservabilityPolicy) string {
+func getStrategy(obs *ngfAPIv1alpha2.ObservabilityPolicy) string {
 	var strategy string
 	if obs.Spec.Tracing != nil {
 		switch obs.Spec.Tracing.Strategy {
-		case ngfAPI.TraceStrategyParent:
+		case ngfAPIv1alpha2.TraceStrategyParent:
 			strategy = "$otel_parent_sampled"
-		case ngfAPI.TraceStrategyRatio:
+		case ngfAPIv1alpha2.TraceStrategyRatio:
 			strategy = "on"
 			if obs.Spec.Tracing.Ratio != nil {
 				if *obs.Spec.Tracing.Ratio > 0 {

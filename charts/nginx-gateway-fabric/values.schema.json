@@ -93,6 +93,34 @@
               "required": [],
               "type": "object"
             },
+            "nginxPlus": {
+              "description": "NginxPlus specifies NGINX Plus additional settings.",
+              "properties": {
+                "allowedAddresses": {
+                  "items": {
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "CIDR",
+                          "IPAddress"
+                        ],
+                        "required": [],
+                        "type": "string"
+                      },
+                      "value": {
+                        "required": [],
+                        "type": "string"
+                      }
+                    },
+                    "required": []
+                  },
+                  "required": [],
+                  "type": "array"
+                }
+              },
+              "required": [],
+              "type": "object"
+            },
             "rewriteClientIP": {
               "description": "RewriteClientIP defines configuration for rewriting the client IP to the original client's IP.",
               "properties": {
@@ -229,7 +257,7 @@
               "title": "pullPolicy"
             },
             "repository": {
-              "default": "ghcr.io/nginxinc/nginx-gateway-fabric/nginx",
+              "default": "ghcr.io/nginx/nginx-gateway-fabric/nginx",
               "description": "The NGINX image to use.",
               "required": [],
               "title": "repository",
@@ -404,7 +432,7 @@
               "title": "pullPolicy"
             },
             "repository": {
-              "default": "ghcr.io/nginxinc/nginx-gateway-fabric",
+              "default": "ghcr.io/nginx/nginx-gateway-fabric",
               "description": "The NGINX Gateway Fabric image to use",
               "required": [],
               "title": "repository",

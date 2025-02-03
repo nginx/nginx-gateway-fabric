@@ -74,3 +74,24 @@ func TestValidateValidHeaderName(t *testing.T) {
 		strings.Repeat("very-long-header", 16)+"1",
 	)
 }
+
+func TestValidatePathForFilters(t *testing.T) {
+	t.Parallel()
+	validator := validatePath
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator,
+		`/path`,
+		`/longer/path`,
+		`/trailing/`,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator,
+		`path`,
+		`$path`,
+		"/path$",
+	)
+}

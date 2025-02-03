@@ -4,9 +4,9 @@ package configfakes
 import (
 	"sync"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/file"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
 type FakeGenerator struct {

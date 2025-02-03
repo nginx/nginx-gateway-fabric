@@ -71,13 +71,13 @@ func TestValidateHostname(t *testing.T) {
 	)
 }
 
-func TestValidateRewritePath(t *testing.T) {
+func TestValidatePath(t *testing.T) {
 	t.Parallel()
-	validator := HTTPURLRewriteValidator{}
+	validator := HTTPPathValidator{}
 
 	testValidValuesForSimpleValidator(
 		t,
-		validator.ValidateRewritePath,
+		validator.ValidatePath,
 		"",
 		"/path",
 		"/longer/path",
@@ -86,7 +86,7 @@ func TestValidateRewritePath(t *testing.T) {
 
 	testInvalidValuesForSimpleValidator(
 		t,
-		validator.ValidateRewritePath,
+		validator.ValidatePath,
 		"path",
 		"$path",
 		"/path$",

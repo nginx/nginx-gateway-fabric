@@ -19,18 +19,19 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller/index"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/gatewayclass"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	ngftypes "github.com/nginxinc/nginx-gateway-fabric/internal/framework/types"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state"
-	staticConds "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/validation"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/validation/validationfakes"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/gatewayclass"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
+	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation/validationfakes"
 )
 
 const (
@@ -326,7 +327,8 @@ func createScheme() *runtime.Scheme {
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 	utilruntime.Must(discoveryV1.AddToScheme(scheme))
 	utilruntime.Must(apiext.AddToScheme(scheme))
-	utilruntime.Must(ngfAPI.AddToScheme(scheme))
+	utilruntime.Must(ngfAPIv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(ngfAPIv1alpha2.AddToScheme(scheme))
 
 	return scheme
 }
@@ -2356,28 +2358,28 @@ var _ = Describe("ChangeProcessor", func() {
 		Describe("NginxProxy resource changes", Ordered, func() {
 			paramGC := gc.DeepCopy()
 			paramGC.Spec.ParametersRef = &v1beta1.ParametersReference{
-				Group: ngfAPI.GroupName,
+				Group: ngfAPIv1alpha1.GroupName,
 				Kind:  kinds.NginxProxy,
 				Name:  "np",
 			}
 
-			np := &ngfAPI.NginxProxy{
+			np := &ngfAPIv1alpha1.NginxProxy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "np",
 				},
 			}
 
-			npUpdated := &ngfAPI.NginxProxy{
+			npUpdated := &ngfAPIv1alpha1.NginxProxy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "np",
 				},
-				Spec: ngfAPI.NginxProxySpec{
-					Telemetry: &ngfAPI.Telemetry{
-						Exporter: &ngfAPI.TelemetryExporter{
+				Spec: ngfAPIv1alpha1.NginxProxySpec{
+					Telemetry: &ngfAPIv1alpha1.Telemetry{
+						Exporter: &ngfAPIv1alpha1.TelemetryExporter{
 							Endpoint:   "my-svc:123",
 							BatchSize:  helpers.GetPointer(int32(512)),
 							BatchCount: helpers.GetPointer(int32(4)),
-							Interval:   helpers.GetPointer(ngfAPI.Duration("5s")),
+							Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
 						},
 					},
 				},
@@ -2412,9 +2414,9 @@ var _ = Describe("ChangeProcessor", func() {
 				gw                     *v1.Gateway
 				route                  *v1.HTTPRoute
 				svc                    *apiv1.Service
-				csp, cspUpdated        *ngfAPI.ClientSettingsPolicy
-				obs, obsUpdated        *ngfAPI.ObservabilityPolicy
-				usp, uspUpdated        *ngfAPI.UpstreamSettingsPolicy
+				csp, cspUpdated        *ngfAPIv1alpha1.ClientSettingsPolicy
+				obs, obsUpdated        *ngfAPIv1alpha2.ObservabilityPolicy
+				usp, uspUpdated        *ngfAPIv1alpha1.UpstreamSettingsPolicy
 				cspKey, obsKey, uspKey graph.PolicyKey
 			)
 
@@ -2449,41 +2451,41 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 				}
 
-				csp = &ngfAPI.ClientSettingsPolicy{
+				csp = &ngfAPIv1alpha1.ClientSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "csp",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.ClientSettingsPolicySpec{
+					Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 						TargetRef: v1alpha2.LocalPolicyTargetReference{
 							Group: v1.GroupName,
 							Kind:  kinds.Gateway,
 							Name:  "gw",
 						},
-						Body: &ngfAPI.ClientBody{
-							MaxSize: helpers.GetPointer[ngfAPI.Size]("10m"),
+						Body: &ngfAPIv1alpha1.ClientBody{
+							MaxSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("10m"),
 						},
 					},
 				}
 
 				cspUpdated = csp.DeepCopy()
-				cspUpdated.Spec.Body.MaxSize = helpers.GetPointer[ngfAPI.Size]("20m")
+				cspUpdated.Spec.Body.MaxSize = helpers.GetPointer[ngfAPIv1alpha1.Size]("20m")
 
 				cspKey = graph.PolicyKey{
 					NsName: types.NamespacedName{Name: "csp", Namespace: "test"},
 					GVK: schema.GroupVersionKind{
-						Group:   ngfAPI.GroupName,
+						Group:   ngfAPIv1alpha1.GroupName,
 						Kind:    kinds.ClientSettingsPolicy,
 						Version: "v1alpha1",
 					},
 				}
 
-				obs = &ngfAPI.ObservabilityPolicy{
+				obs = &ngfAPIv1alpha2.ObservabilityPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "obs",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.ObservabilityPolicySpec{
+					Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
 						TargetRefs: []v1alpha2.LocalPolicyTargetReference{
 							{
 								Group: v1.GroupName,
@@ -2491,31 +2493,31 @@ var _ = Describe("ChangeProcessor", func() {
 								Name:  "hr-1",
 							},
 						},
-						Tracing: &ngfAPI.Tracing{
-							Strategy: ngfAPI.TraceStrategyRatio,
+						Tracing: &ngfAPIv1alpha2.Tracing{
+							Strategy: ngfAPIv1alpha2.TraceStrategyRatio,
 						},
 					},
 				}
 
 				obsUpdated = obs.DeepCopy()
-				obsUpdated.Spec.Tracing.Strategy = ngfAPI.TraceStrategyParent
+				obsUpdated.Spec.Tracing.Strategy = ngfAPIv1alpha2.TraceStrategyParent
 
 				obsKey = graph.PolicyKey{
 					NsName: types.NamespacedName{Name: "obs", Namespace: "test"},
 					GVK: schema.GroupVersionKind{
-						Group:   ngfAPI.GroupName,
+						Group:   ngfAPIv1alpha1.GroupName,
 						Kind:    kinds.ObservabilityPolicy,
-						Version: "v1alpha1",
+						Version: "v1alpha2",
 					},
 				}
 
-				usp = &ngfAPI.UpstreamSettingsPolicy{
+				usp = &ngfAPIv1alpha1.UpstreamSettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "usp",
 						Namespace: "test",
 					},
-					Spec: ngfAPI.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPI.Size]("10m"),
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("10m"),
 						TargetRefs: []v1alpha2.LocalPolicyTargetReference{
 							{
 								Group: "core",
@@ -2527,12 +2529,12 @@ var _ = Describe("ChangeProcessor", func() {
 				}
 
 				uspUpdated = usp.DeepCopy()
-				uspUpdated.Spec.ZoneSize = helpers.GetPointer[ngfAPI.Size]("20m")
+				uspUpdated.Spec.ZoneSize = helpers.GetPointer[ngfAPIv1alpha1.Size]("20m")
 
 				uspKey = graph.PolicyKey{
 					NsName: types.NamespacedName{Name: "usp", Namespace: "test"},
 					GVK: schema.GroupVersionKind{
-						Group:   ngfAPI.GroupName,
+						Group:   ngfAPIv1alpha1.GroupName,
 						Kind:    kinds.UpstreamSettingsPolicy,
 						Version: "v1alpha1",
 					},
@@ -2596,9 +2598,9 @@ var _ = Describe("ChangeProcessor", func() {
 			})
 			When("the policy is deleted", func() {
 				It("removes the policy from the graph", func() {
-					processor.CaptureDeleteChange(&ngfAPI.ClientSettingsPolicy{}, client.ObjectKeyFromObject(csp))
-					processor.CaptureDeleteChange(&ngfAPI.ObservabilityPolicy{}, client.ObjectKeyFromObject(obs))
-					processor.CaptureDeleteChange(&ngfAPI.UpstreamSettingsPolicy{}, client.ObjectKeyFromObject(usp))
+					processor.CaptureDeleteChange(&ngfAPIv1alpha1.ClientSettingsPolicy{}, client.ObjectKeyFromObject(csp))
+					processor.CaptureDeleteChange(&ngfAPIv1alpha2.ObservabilityPolicy{}, client.ObjectKeyFromObject(obs))
+					processor.CaptureDeleteChange(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}, client.ObjectKeyFromObject(usp))
 
 					changed, graph := processor.Process()
 					Expect(changed).To(Equal(state.ClusterStateChange))
@@ -2613,34 +2615,34 @@ var _ = Describe("ChangeProcessor", func() {
 				Namespace: "test",
 			}
 
-			sf := &ngfAPI.SnippetsFilter{
+			sf := &ngfAPIv1alpha1.SnippetsFilter{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      sfNsName.Name,
 					Namespace: sfNsName.Namespace,
 				},
-				Spec: ngfAPI.SnippetsFilterSpec{
-					Snippets: []ngfAPI.Snippet{
+				Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
+					Snippets: []ngfAPIv1alpha1.Snippet{
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPIv1alpha1.NginxContextMain,
 							Value:   "main snippet",
 						},
 					},
 				},
 			}
 
-			sfUpdated := &ngfAPI.SnippetsFilter{
+			sfUpdated := &ngfAPIv1alpha1.SnippetsFilter{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      sfNsName.Name,
 					Namespace: sfNsName.Namespace,
 				},
-				Spec: ngfAPI.SnippetsFilterSpec{
-					Snippets: []ngfAPI.Snippet{
+				Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
+					Snippets: []ngfAPIv1alpha1.Snippet{
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPIv1alpha1.NginxContextMain,
 							Value:   "main snippet",
 						},
 						{
-							Context: ngfAPI.NginxContextHTTP,
+							Context: ngfAPIv1alpha1.NginxContextHTTP,
 							Value:   "http snippet",
 						},
 					},
@@ -2696,7 +2698,7 @@ var _ = Describe("ChangeProcessor", func() {
 			secret, secretUpdated, unrelatedSecret, barSecret, barSecretUpdated               *apiv1.Secret
 			cm, cmUpdated, unrelatedCM                                                        *apiv1.ConfigMap
 			btls, btlsUpdated                                                                 *v1alpha3.BackendTLSPolicy
-			np, npUpdated                                                                     *ngfAPI.NginxProxy
+			np, npUpdated                                                                     *ngfAPIv1alpha1.NginxProxy
 		)
 
 		BeforeEach(OncePerOrdered, func() {
@@ -2995,12 +2997,12 @@ var _ = Describe("ChangeProcessor", func() {
 			btlsUpdated = btls.DeepCopy()
 
 			npNsName = types.NamespacedName{Name: "np-1"}
-			np = &ngfAPI.NginxProxy{
+			np = &ngfAPIv1alpha1.NginxProxy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: npNsName.Name,
 				},
-				Spec: ngfAPI.NginxProxySpec{
-					Telemetry: &ngfAPI.Telemetry{
+				Spec: ngfAPIv1alpha1.NginxProxySpec{
+					Telemetry: &ngfAPIv1alpha1.Telemetry{
 						ServiceName: helpers.GetPointer("my-svc"),
 					},
 				},
@@ -3075,7 +3077,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureDeleteChange(&v1beta1.ReferenceGrant{}, rgNsName)
 					processor.CaptureDeleteChange(&v1alpha3.BackendTLSPolicy{}, btlsNsName)
 					processor.CaptureDeleteChange(&apiv1.ConfigMap{}, cmNsName)
-					processor.CaptureDeleteChange(&ngfAPI.NginxProxy{}, npNsName)
+					processor.CaptureDeleteChange(&ngfAPIv1alpha1.NginxProxy{}, npNsName)
 
 					// these are non-changing changes
 					processor.CaptureUpsertChange(gw2)

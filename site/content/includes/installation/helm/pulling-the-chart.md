@@ -5,7 +5,7 @@ docs: "DOCS-1439"
 Pull the latest stable release of the NGINX Gateway Fabric chart:
 
    ```shell
-   helm pull oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --untar
+   helm pull oci://ghcr.io/nginx/charts/nginx-gateway-fabric --untar
    cd nginx-gateway-fabric
    ```
 

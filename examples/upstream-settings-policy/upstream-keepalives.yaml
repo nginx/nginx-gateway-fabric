@@ -1,15 +1,11 @@
 apiVersion: gateway.nginx.org/v1alpha1
 kind: UpstreamSettingsPolicy
 metadata:
-  name: upstream-settings-policy
+  name: upstream-keepalives
 spec:
-  zoneSize: 512k
   targetRefs:
     - group: core
       kind: Service
       name: coffee
   keepAlive:
     connections: 32
-    requests: 1001
-    time: 300s
-    timeout: 60s

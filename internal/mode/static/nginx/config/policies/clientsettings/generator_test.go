@@ -5,21 +5,22 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/clientsettings"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/clientsettings"
 )
 
 func TestGenerate(t *testing.T) {
 	t.Parallel()
-	maxSize := helpers.GetPointer[ngfAPI.Size]("10m")
-	bodyTimeout := helpers.GetPointer[ngfAPI.Duration]("600ms")
+	maxSize := helpers.GetPointer[ngfAPIv1alpha1.Size]("10m")
+	bodyTimeout := helpers.GetPointer[ngfAPIv1alpha1.Duration]("600ms")
 	keepaliveRequests := helpers.GetPointer[int32](900)
-	keepaliveTime := helpers.GetPointer[ngfAPI.Duration]("50s")
-	keepaliveServerTimeout := helpers.GetPointer[ngfAPI.Duration]("30s")
-	keepaliveHeaderTimeout := helpers.GetPointer[ngfAPI.Duration]("60s")
+	keepaliveTime := helpers.GetPointer[ngfAPIv1alpha1.Duration]("50s")
+	keepaliveServerTimeout := helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s")
+	keepaliveHeaderTimeout := helpers.GetPointer[ngfAPIv1alpha1.Duration]("60s")
 
 	tests := []struct {
 		name       string
@@ -28,9 +29,9 @@ func TestGenerate(t *testing.T) {
 	}{
 		{
 			name: "body max size populated",
-			policy: &ngfAPI.ClientSettingsPolicy{
-				Spec: ngfAPI.ClientSettingsPolicySpec{
-					Body: &ngfAPI.ClientBody{
+			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					Body: &ngfAPIv1alpha1.ClientBody{
 						MaxSize: maxSize,
 					},
 				},
@@ -41,9 +42,9 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "body timeout populated",
-			policy: &ngfAPI.ClientSettingsPolicy{
-				Spec: ngfAPI.ClientSettingsPolicySpec{
-					Body: &ngfAPI.ClientBody{
+			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					Body: &ngfAPIv1alpha1.ClientBody{
 						Timeout: bodyTimeout,
 					},
 				},
@@ -54,9 +55,9 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "keepalive requests populated",
-			policy: &ngfAPI.ClientSettingsPolicy{
-				Spec: ngfAPI.ClientSettingsPolicySpec{
-					KeepAlive: &ngfAPI.ClientKeepAlive{
+			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
 						Requests: keepaliveRequests,
 					},
 				},
@@ -67,9 +68,9 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "keepalive time populated",
-			policy: &ngfAPI.ClientSettingsPolicy{
-				Spec: ngfAPI.ClientSettingsPolicySpec{
-					KeepAlive: &ngfAPI.ClientKeepAlive{
+			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
 						Time: keepaliveTime,
 					},
 				},
@@ -80,10 +81,10 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "keepalive timeout server populated",
-			policy: &ngfAPI.ClientSettingsPolicy{
-				Spec: ngfAPI.ClientSettingsPolicySpec{
-					KeepAlive: &ngfAPI.ClientKeepAlive{
-						Timeout: &ngfAPI.ClientKeepAliveTimeout{
+			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
+						Timeout: &ngfAPIv1alpha1.ClientKeepAliveTimeout{
 							Server: keepaliveServerTimeout,
 						},
 					},
@@ -95,10 +96,10 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "keepalive timeout server and header populated",
-			policy: &ngfAPI.ClientSettingsPolicy{
-				Spec: ngfAPI.ClientSettingsPolicySpec{
-					KeepAlive: &ngfAPI.ClientKeepAlive{
-						Timeout: &ngfAPI.ClientKeepAliveTimeout{
+			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
+						Timeout: &ngfAPIv1alpha1.ClientKeepAliveTimeout{
 							Server: keepaliveServerTimeout,
 							Header: keepaliveHeaderTimeout,
 						},
@@ -111,10 +112,10 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "keepalive timeout header populated",
-			policy: &ngfAPI.ClientSettingsPolicy{
-				Spec: ngfAPI.ClientSettingsPolicySpec{
-					KeepAlive: &ngfAPI.ClientKeepAlive{
-						Timeout: &ngfAPI.ClientKeepAliveTimeout{
+			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
+						Timeout: &ngfAPIv1alpha1.ClientKeepAliveTimeout{
 							Header: keepaliveHeaderTimeout,
 						},
 					},
@@ -124,16 +125,16 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "all fields populated",
-			policy: &ngfAPI.ClientSettingsPolicy{
-				Spec: ngfAPI.ClientSettingsPolicySpec{
-					Body: &ngfAPI.ClientBody{
+			policy: &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					Body: &ngfAPIv1alpha1.ClientBody{
 						MaxSize: maxSize,
 						Timeout: bodyTimeout,
 					},
-					KeepAlive: &ngfAPI.ClientKeepAlive{
+					KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
 						Requests: keepaliveRequests,
 						Time:     keepaliveTime,
-						Timeout: &ngfAPI.ClientKeepAliveTimeout{
+						Timeout: &ngfAPIv1alpha1.ClientKeepAliveTimeout{
 							Server: keepaliveServerTimeout,
 							Header: keepaliveHeaderTimeout,
 						},
@@ -186,18 +187,18 @@ func TestGenerateNoPolicies(t *testing.T) {
 	resFiles := generator.GenerateForServer([]policies.Policy{}, http.Server{})
 	g.Expect(resFiles).To(BeEmpty())
 
-	resFiles = generator.GenerateForServer([]policies.Policy{&ngfAPI.ObservabilityPolicy{}}, http.Server{})
+	resFiles = generator.GenerateForServer([]policies.Policy{&ngfAPIv1alpha2.ObservabilityPolicy{}}, http.Server{})
 	g.Expect(resFiles).To(BeEmpty())
 
 	resFiles = generator.GenerateForLocation([]policies.Policy{}, http.Location{})
 	g.Expect(resFiles).To(BeEmpty())
 
-	resFiles = generator.GenerateForLocation([]policies.Policy{&ngfAPI.ObservabilityPolicy{}}, http.Location{})
+	resFiles = generator.GenerateForLocation([]policies.Policy{&ngfAPIv1alpha2.ObservabilityPolicy{}}, http.Location{})
 	g.Expect(resFiles).To(BeEmpty())
 
 	resFiles = generator.GenerateForInternalLocation([]policies.Policy{})
 	g.Expect(resFiles).To(BeEmpty())
 
-	resFiles = generator.GenerateForInternalLocation([]policies.Policy{&ngfAPI.ObservabilityPolicy{}})
+	resFiles = generator.GenerateForInternalLocation([]policies.Policy{&ngfAPIv1alpha2.ObservabilityPolicy{}})
 	g.Expect(resFiles).To(BeEmpty())
 }

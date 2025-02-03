@@ -5,7 +5,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 )
 
 // referenceGrantResolver resolves references from one resource to another.

@@ -6,8 +6,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 )
 
 func convertMatch(m v1.HTTPRouteMatch) Match {
@@ -47,6 +47,7 @@ func convertHTTPRequestRedirectFilter(filter *v1.HTTPRequestRedirectFilter) *HTT
 		Hostname:   (*string)(filter.Hostname),
 		Port:       (*int32)(filter.Port),
 		StatusCode: filter.StatusCode,
+		Path:       convertPathModifier(filter.Path),
 	}
 }
 

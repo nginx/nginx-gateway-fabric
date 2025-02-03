@@ -6,7 +6,7 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
 func TestExecuteTelemetry(t *testing.T) {

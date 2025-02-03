@@ -50,10 +50,10 @@ spec:
         - --destination
         - /etc/nginx/main-includes
         env:
-          - name: POD_UID
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.uid
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
         securityContext:
           seccompProfile:
             type: RuntimeDefault

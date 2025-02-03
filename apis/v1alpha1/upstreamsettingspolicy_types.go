@@ -55,10 +55,13 @@ type UpstreamSettingsPolicySpec struct {
 	// Objects must be in the same namespace as the policy.
 	// Support: Service
 	//
+	// TargetRefs must be _distinct_. The `name` field must be unique for all targetRef entries in the UpstreamSettingsPolicy.
+	//
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=16
 	// +kubebuilder:validation:XValidation:message="TargetRefs Kind must be: Service",rule="self.all(t, t.kind=='Service')"
 	// +kubebuilder:validation:XValidation:message="TargetRefs Group must be core",rule="self.exists(t, t.group=='') || self.exists(t, t.group=='core')"
+	// +kubebuilder:validation:XValidation:message="TargetRef Name must be unique",rule="self.all(p1, self.exists_one(p2, p1.name == p2.name))"
 	//nolint:lll
 	TargetRefs []gatewayv1alpha2.LocalPolicyTargetReference `json:"targetRefs"`
 }

@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	tel "github.com/nginxinc/telemetry-exporter/pkg/telemetry"
+	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/telemetry"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/telemetry/telemetryfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/telemetry"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/telemetry/telemetryfakes"
 )
 
 func TestCreateTelemetryJobWorker_Succeeds(t *testing.T) {

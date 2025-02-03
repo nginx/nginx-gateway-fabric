@@ -1,7 +1,7 @@
 package http
 
 import (
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/shared"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/shared"
 )
 
 const (

@@ -4,13 +4,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	staticConds "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/validation"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
 )
 
 // Validator validates an ObservabilityPolicy.
@@ -29,7 +29,7 @@ func (v *Validator) Validate(
 	policy policies.Policy,
 	globalSettings *policies.GlobalSettings,
 ) []conditions.Condition {
-	obs := helpers.MustCastObject[*ngfAPI.ObservabilityPolicy](policy)
+	obs := helpers.MustCastObject[*ngfAPIv1alpha2.ObservabilityPolicy](policy)
 
 	if globalSettings == nil || !globalSettings.NginxProxyValid {
 		return []conditions.Condition{
@@ -62,13 +62,13 @@ func (v *Validator) Validate(
 
 // Conflicts returns true if the two ObservabilityPolicies conflict.
 func (v *Validator) Conflicts(polA, polB policies.Policy) bool {
-	a := helpers.MustCastObject[*ngfAPI.ObservabilityPolicy](polA)
-	b := helpers.MustCastObject[*ngfAPI.ObservabilityPolicy](polB)
+	a := helpers.MustCastObject[*ngfAPIv1alpha2.ObservabilityPolicy](polA)
+	b := helpers.MustCastObject[*ngfAPIv1alpha2.ObservabilityPolicy](polB)
 
 	return a.Spec.Tracing != nil && b.Spec.Tracing != nil
 }
 
-func (v *Validator) validateSettings(spec ngfAPI.ObservabilityPolicySpec) error {
+func (v *Validator) validateSettings(spec ngfAPIv1alpha2.ObservabilityPolicySpec) error {
 	var allErrs field.ErrorList
 	fieldPath := field.NewPath("spec")
 
@@ -76,7 +76,7 @@ func (v *Validator) validateSettings(spec ngfAPI.ObservabilityPolicySpec) error 
 		tracePath := fieldPath.Child("tracing")
 
 		switch spec.Tracing.Strategy {
-		case ngfAPI.TraceStrategyRatio, ngfAPI.TraceStrategyParent:
+		case ngfAPIv1alpha2.TraceStrategyRatio, ngfAPIv1alpha2.TraceStrategyParent:
 		default:
 			allErrs = append(
 				allErrs,
@@ -84,18 +84,18 @@ func (v *Validator) validateSettings(spec ngfAPI.ObservabilityPolicySpec) error 
 					tracePath.Child("strategy"),
 					spec.Tracing.Strategy,
 					[]string{
-						string(ngfAPI.TraceStrategyRatio),
-						string(ngfAPI.TraceStrategyParent),
+						string(ngfAPIv1alpha2.TraceStrategyRatio),
+						string(ngfAPIv1alpha2.TraceStrategyParent),
 					}),
 			)
 		}
 
 		if spec.Tracing.Context != nil {
 			switch *spec.Tracing.Context {
-			case ngfAPI.TraceContextExtract,
-				ngfAPI.TraceContextInject,
-				ngfAPI.TraceContextPropagate,
-				ngfAPI.TraceContextIgnore:
+			case ngfAPIv1alpha2.TraceContextExtract,
+				ngfAPIv1alpha2.TraceContextInject,
+				ngfAPIv1alpha2.TraceContextPropagate,
+				ngfAPIv1alpha2.TraceContextIgnore:
 			default:
 				allErrs = append(
 					allErrs,
@@ -103,10 +103,10 @@ func (v *Validator) validateSettings(spec ngfAPI.ObservabilityPolicySpec) error 
 						tracePath.Child("context"),
 						spec.Tracing.Context,
 						[]string{
-							string(ngfAPI.TraceContextExtract),
-							string(ngfAPI.TraceContextInject),
-							string(ngfAPI.TraceContextPropagate),
-							string(ngfAPI.TraceContextIgnore),
+							string(ngfAPIv1alpha2.TraceContextExtract),
+							string(ngfAPIv1alpha2.TraceContextInject),
+							string(ngfAPIv1alpha2.TraceContextPropagate),
+							string(ngfAPIv1alpha2.TraceContextIgnore),
 						}),
 				)
 			}

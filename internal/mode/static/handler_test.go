@@ -18,21 +18,21 @@ import (
 	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/status/statusfakes"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/config"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/licensing/licensingfakes"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/metrics/collectors"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/configfakes"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/file"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/file/filefakes"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/runtime/runtimefakes"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/statefakes"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/status/statusfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing/licensingfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/metrics/collectors"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/configfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file/filefakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime/runtimefakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/statefakes"
 )
 
 var _ = Describe("eventHandler", func() {
@@ -442,6 +442,7 @@ var _ = Describe("eventHandler", func() {
 				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				dcfg.NginxPlus = dataplane.NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 
 				Expect(fakeGenerator.GenerateCallCount()).To(Equal(0))

@@ -15,13 +15,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	embeddedfiles "github.com/nginxinc/nginx-gateway-fabric"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller/predicate"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/gatewayclass"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/status"
-	ngftypes "github.com/nginxinc/nginx-gateway-fabric/internal/framework/types"
+	embeddedfiles "github.com/nginx/nginx-gateway-fabric"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/predicate"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/gatewayclass"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/status"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
 )
 
 // Config is configuration for the provisioner mode.
@@ -38,7 +38,7 @@ type Config struct {
 // an independent data plane instance being provisioned for each Gateway.
 //
 // The provisioner mode is not intended to be used in production (in the short term), as it lacks support for
-// many important features. See https://github.com/nginxinc/nginx-gateway-fabric/issues/634 for more details.
+// many important features. See https://github.com/nginx/nginx-gateway-fabric/issues/634 for more details.
 func StartManager(cfg Config) error {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(gatewayv1.Install(scheme))

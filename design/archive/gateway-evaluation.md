@@ -75,7 +75,7 @@ between an ingress point and the final backend Pod endpoints. Required supplemen
 
 ### Non-Goals
 
-- Replace or supplant current [NGINX Ingress Controller](https://github.com/nginxinc/kubernetes-ingress) (NIC) use-cases
+- Replace or supplant current [NGINX Ingress Controller](https://github.com/nginx/kubernetes-ingress) (NIC) use-cases
   and will not work to achieve feature parity.
 - The Gateway evaluation will not support Ingress v1 APIs or the set of NIC CRDs (e.g. VirtualServer and
   VirtualServerRoute).

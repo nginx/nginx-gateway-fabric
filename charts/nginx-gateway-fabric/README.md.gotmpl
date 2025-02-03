@@ -41,10 +41,10 @@ This chart deploys the NGINX Gateway Fabric in your Kubernetes cluster.
 > The [Gateway API resources](https://github.com/kubernetes-sigs/gateway-api) from the standard channel must be
 > installed before deploying NGINX Gateway Fabric. If they are already installed in your cluster, please ensure
 > they are the correct version as supported by the NGINX Gateway Fabric -
-> [see the Technical Specifications](https://github.com/nginxinc/nginx-gateway-fabric/blob/main/README.md#technical-specifications).
+> [see the Technical Specifications](https://github.com/nginx/nginx-gateway-fabric/blob/main/README.md#technical-specifications).
 
 ```shell
-kubectl kustomize https://github.com/nginxinc/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl apply -f -
+kubectl kustomize https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl apply -f -
 ```
 
 {{ template "chart.requirementsSection" . }}
@@ -56,7 +56,7 @@ kubectl kustomize https://github.com/nginxinc/nginx-gateway-fabric/config/crd/ga
 To install the latest stable release of NGINX Gateway Fabric in the `nginx-gateway` namespace, run the following command:
 
 ```shell
-helm install ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway
 ```
 
 `ngf` is the name of the release, and can be changed to any name you want. This name is added as a prefix to the Deployment name.
@@ -75,7 +75,7 @@ kubectl wait --timeout=5m -n nginx-gateway deployment/ngf-nginx-gateway-fabric -
 #### Pulling the Chart
 
 ```shell
-helm pull oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --untar
+helm pull oci://ghcr.io/nginx/charts/nginx-gateway-fabric --untar
 cd nginx-gateway-fabric
 ```
 
@@ -110,13 +110,13 @@ By default, the NGINX Gateway Fabric helm chart deploys a LoadBalancer Service.
 To use a NodePort Service instead:
 
 ```shell
-helm install ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.type=NodePort
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.type=NodePort
 ```
 
 To disable the creation of a Service:
 
 ```shell
-helm install ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.create=false
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.create=false
 ```
 
 ## Upgrading the Chart
@@ -134,7 +134,7 @@ Gateway Fabric - [see the Technical Specifications](../../README.md#technical-sp
 To upgrade the Gateway CRDs from [the Gateway API repo](https://github.com/kubernetes-sigs/gateway-api), run:
 
 ```shell
-kubectl kustomize https://github.com/nginxinc/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl apply -f -
+kubectl kustomize https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl apply -f -
 ```
 
 ### Upgrading the CRDs
@@ -157,7 +157,7 @@ Warning: kubectl apply should be used on resource created by either kubectl crea
 To upgrade the release `ngf`, run:
 
 ```shell
-helm upgrade ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric -n nginx-gateway
+helm upgrade ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric -n nginx-gateway
 ```
 
 This will upgrade to the latest stable release. To upgrade to the latest version from the `main` branch, specify
@@ -230,7 +230,7 @@ To uninstall/delete the release `ngf`:
 ```shell
 helm uninstall ngf -n nginx-gateway
 kubectl delete ns nginx-gateway
-kubectl delete -f https://raw.githubusercontent.com/nginxinc/nginx-gateway-fabric/main/deploy/crds.yaml
+kubectl delete -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/main/deploy/crds.yaml
 ```
 
 These commands remove all the Kubernetes components associated with the release and deletes the release.
@@ -244,7 +244,7 @@ These commands remove all the Kubernetes components associated with the release 
 To delete the Gateway API CRDs from [the Gateway API repo](https://github.com/kubernetes-sigs/gateway-api), run:
 
 ```shell
-kubectl kustomize https://github.com/nginxinc/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl delete -f -
+kubectl kustomize https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl delete -f -
 ```
 
 ## Configuration

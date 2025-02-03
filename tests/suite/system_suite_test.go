@@ -31,8 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/tests/framework"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/tests/framework"
 )
 
 func TestNGF(t *testing.T) {
@@ -117,7 +118,8 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 	Expect(coordination.AddToScheme(scheme)).To(Succeed())
 	Expect(v1.Install(scheme)).To(Succeed())
 	Expect(batchv1.AddToScheme(scheme)).To(Succeed())
-	Expect(ngfAPI.AddToScheme(scheme)).To(Succeed())
+	Expect(ngfAPIv1alpha1.AddToScheme(scheme)).To(Succeed())
+	Expect(ngfAPIv1alpha2.AddToScheme(scheme)).To(Succeed())
 
 	options := client.Options{
 		Scheme: scheme,

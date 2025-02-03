@@ -11,7 +11,7 @@ spec:
   rules:
   - matches:
     - path:
-        type: PathPrefix
+        type: Exact
         value: /coffee
     backendRefs:
     - name: coffee

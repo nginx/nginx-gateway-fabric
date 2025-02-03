@@ -4,9 +4,9 @@ package statefakes
 import (
 	"sync"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/types"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 	typesa "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

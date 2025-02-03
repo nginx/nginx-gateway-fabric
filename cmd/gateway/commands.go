@@ -19,12 +19,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/provisioner"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/config"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/licensing"
-	ngxConfig "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/file"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/provisioner"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
+	ngxConfig "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
 )
 
 // These flags are shared by multiple commands.

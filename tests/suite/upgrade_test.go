@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/tests/framework"
+	"github.com/nginx/nginx-gateway-fabric/tests/framework"
 )
 
 // This test installs the latest released version of NGF, then upgrades to the edge version (or dev version).
@@ -49,7 +49,7 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 
 		cfg := setupConfig{
 			releaseName:   releaseName,
-			chartPath:     "oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric",
+			chartPath:     "oci://ghcr.io/nginx/charts/nginx-gateway-fabric",
 			gwAPIVersion:  *gatewayAPIPrevVersion,
 			deploy:        true,
 			nfr:           true,

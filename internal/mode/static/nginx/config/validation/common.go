@@ -84,3 +84,20 @@ func validateHeaderName(name string) error {
 	}
 	return nil
 }
+
+func validatePath(path string) error {
+	if path == "" {
+		return nil
+	}
+
+	if !pathRegexp.MatchString(path) {
+		msg := k8svalidation.RegexError(pathErrMsg, pathFmt, pathExamples...)
+		return errors.New(msg)
+	}
+
+	if strings.Contains(path, "$") {
+		return errors.New("cannot contain $")
+	}
+
+	return nil
+}

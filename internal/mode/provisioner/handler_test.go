@@ -17,12 +17,12 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	embeddedfiles "github.com/nginxinc/nginx-gateway-fabric"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/gatewayclass"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/status"
+	embeddedfiles "github.com/nginx/nginx-gateway-fabric"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/gatewayclass"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/status"
 )
 
 var _ = Describe("handler", func() {

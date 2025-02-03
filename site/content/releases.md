@@ -8,4 +8,4 @@ docs: "DOCS-1359"
 
 See the NGINX Gateway Fabric changelog page:
 
-<https://github.com/nginxinc/nginx-gateway-fabric/blob/main/CHANGELOG.md>
+<https://github.com/nginx/nginx-gateway-fabric/blob/main/CHANGELOG.md>

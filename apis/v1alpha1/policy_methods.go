@@ -4,7 +4,7 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-// FIXME(kate-osborn): https://github.com/nginxinc/nginx-gateway-fabric/issues/1939.
+// FIXME(kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1939.
 // Figure out a way to generate these methods for all our policies.
 // These methods implement the policies.Policy interface which extends client.Object to add the following methods.
 

@@ -9,12 +9,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	ngfsort "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/sort"
-	staticConds "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	ngfsort "github.com/nginx/nginx-gateway-fabric/internal/mode/static/sort"
+	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
 )
 
 // Policy represents an NGF Policy.
@@ -140,7 +140,7 @@ func attachPolicyToRoute(policy *Policy, route *L7Route, ctlrName string) {
 	}
 
 	if ngfPolicyAncestorsFull(policy, ctlrName) {
-		// FIXME (kate-osborn): https://github.com/nginxinc/nginx-gateway-fabric/issues/1987
+		// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
 		return
 	}
 
@@ -172,7 +172,7 @@ func attachPolicyToGateway(
 	}
 
 	if ngfPolicyAncestorsFull(policy, ctlrName) {
-		// FIXME (kate-osborn): https://github.com/nginxinc/nginx-gateway-fabric/issues/1987
+		// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
 		return
 	}
 

@@ -9,12 +9,12 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/policiesfakes"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/shared"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/shared"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
 var (
@@ -998,6 +998,27 @@ func TestCreateServers(t *testing.T) {
 				},
 			},
 		},
+		{
+			Path:     "/redirect-with-path",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{},
+					Filters: dataplane.HTTPFilters{
+						RequestRedirect: &dataplane.HTTPRequestRedirectFilter{
+							Hostname:   helpers.GetPointer("redirect.example.com"),
+							StatusCode: helpers.GetPointer[int](301),
+							Port:       helpers.GetPointer[int32](8080),
+							Path: &dataplane.HTTPPathModifier{
+								Type:        dataplane.ReplaceFullPath,
+								Replacement: "/replacement",
+							},
+						},
+					},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
 	}
 
 	conf := dataplane.Configuration{
@@ -1460,6 +1481,26 @@ func TestCreateServers(t *testing.T) {
 				ProxySetHeaders: createBaseProxySetHeaders(httpUpgradeHeader, unsetHTTPConnectionHeader),
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
+			},
+			{
+				Path: "/redirect-with-path/",
+				Type: http.ExternalLocationType,
+				Return: &http.Return{
+					Code: 301,
+					Body: "$scheme://redirect.example.com:8080$uri$is_args$args",
+				},
+				Rewrites: []string{"^ /replacement"},
+				Includes: externalIncludes,
+			},
+			{
+				Path: "= /redirect-with-path",
+				Type: http.ExternalLocationType,
+				Return: &http.Return{
+					Code: 301,
+					Body: "$scheme://redirect.example.com:8080$uri$is_args$args",
+				},
+				Rewrites: []string{"^ /replacement"},
+				Includes: externalIncludes,
 			},
 		}
 	}
@@ -2259,53 +2300,82 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 	const listenerPortHTTP = 80
 	const listenerPortHTTPS = 443
 
+	createBasicHTTPRequestRedirectFilter := func() *dataplane.HTTPRequestRedirectFilter {
+		return &dataplane.HTTPRequestRedirectFilter{
+			Scheme:     helpers.GetPointer("http"),
+			Hostname:   helpers.GetPointer("foo.example.com"),
+			StatusCode: helpers.GetPointer(301),
+		}
+	}
+
+	modifiedHTTPRequestRedirectFilter := func(
+		mod func(
+			filter *dataplane.HTTPRequestRedirectFilter,
+		) *dataplane.HTTPRequestRedirectFilter,
+	) *dataplane.HTTPRequestRedirectFilter {
+		return mod(createBasicHTTPRequestRedirectFilter())
+	}
+
 	tests := []struct {
-		filter       *dataplane.HTTPRequestRedirectFilter
-		expected     *http.Return
-		msg          string
-		listenerPort int32
+		filter          *dataplane.HTTPRequestRedirectFilter
+		expectedReturn  *http.Return
+		expectedRewrite *rewriteConfig
+		msg             string
+		path            string
+		listenerPort    int32
 	}{
 		{
-			filter:       nil,
-			expected:     nil,
-			listenerPort: listenerPortCustom,
-			msg:          "filter is nil",
+			filter:         nil,
+			expectedReturn: nil,
+			listenerPort:   listenerPortCustom,
+			msg:            "filter is nil",
 		},
 		{
 			filter:       &dataplane.HTTPRequestRedirectFilter{},
 			listenerPort: listenerPortCustom,
-			expected: &http.Return{
+			expectedReturn: &http.Return{
 				Code: http.StatusFound,
 				Body: "$scheme://$host:123$request_uri",
 			},
-			msg: "all fields are empty",
+			expectedRewrite: &rewriteConfig{},
+			msg:             "all fields are empty",
 		},
 		{
-			filter: &dataplane.HTTPRequestRedirectFilter{
-				Scheme:     helpers.GetPointer("https"),
-				Hostname:   helpers.GetPointer("foo.example.com"),
-				Port:       helpers.GetPointer[int32](2022),
-				StatusCode: helpers.GetPointer(301),
-			},
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Scheme = helpers.GetPointer("https")
+				filter.Port = helpers.GetPointer[int32](2022)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplaceFullPath,
+					Replacement: "/full-path",
+				}
+				return filter
+			}),
 			listenerPort: listenerPortCustom,
-			expected: &http.Return{
+			expectedReturn: &http.Return{
 				Code: 301,
-				Body: "https://foo.example.com:2022$request_uri",
+				Body: "https://foo.example.com:2022$uri$is_args$args",
+			},
+			expectedRewrite: &rewriteConfig{
+				MainRewrite: "^ /full-path",
 			},
 			msg: "all fields are set",
 		},
 		{
-			filter: &dataplane.HTTPRequestRedirectFilter{
-				Scheme:     helpers.GetPointer("https"),
-				Hostname:   helpers.GetPointer("foo.example.com"),
-				StatusCode: helpers.GetPointer(301),
-			},
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Scheme = helpers.GetPointer("https")
+				return filter
+			}),
 			listenerPort: listenerPortCustom,
-			expected: &http.Return{
+			expectedReturn: &http.Return{
 				Code: 301,
 				Body: "https://foo.example.com$request_uri",
 			},
-			msg: "listenerPort is custom, scheme is set, no port",
+			expectedRewrite: &rewriteConfig{},
+			msg:             "listenerPort is custom, scheme is set, no port",
 		},
 		{
 			filter: &dataplane.HTTPRequestRedirectFilter{
@@ -2313,65 +2383,173 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 				StatusCode: helpers.GetPointer(301),
 			},
 			listenerPort: listenerPortHTTPS,
-			expected: &http.Return{
+			expectedReturn: &http.Return{
 				Code: 301,
 				Body: "$scheme://foo.example.com:443$request_uri",
 			},
-			msg: "no scheme, listenerPort https, no port is set",
+			expectedRewrite: &rewriteConfig{},
+			msg:             "no scheme, listenerPort https, no port is set",
 		},
 		{
-			filter: &dataplane.HTTPRequestRedirectFilter{
-				Scheme:     helpers.GetPointer("https"),
-				Hostname:   helpers.GetPointer("foo.example.com"),
-				StatusCode: helpers.GetPointer(301),
-			},
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Scheme = helpers.GetPointer("https")
+				return filter
+			}),
 			listenerPort: listenerPortHTTPS,
-			expected: &http.Return{
+			expectedReturn: &http.Return{
 				Code: 301,
 				Body: "https://foo.example.com$request_uri",
 			},
-			msg: "scheme is https, listenerPort https, no port is set",
+			expectedRewrite: &rewriteConfig{},
+			msg:             "scheme is https, listenerPort https, no port is set",
 		},
 		{
-			filter: &dataplane.HTTPRequestRedirectFilter{
-				Scheme:     helpers.GetPointer("http"),
-				Hostname:   helpers.GetPointer("foo.example.com"),
-				StatusCode: helpers.GetPointer(301),
-			},
+			filter:       createBasicHTTPRequestRedirectFilter(),
 			listenerPort: listenerPortHTTP,
-			expected: &http.Return{
+			expectedReturn: &http.Return{
 				Code: 301,
 				Body: "http://foo.example.com$request_uri",
 			},
-			msg: "scheme is http, listenerPort http, no port is set",
+			expectedRewrite: &rewriteConfig{},
+			msg:             "scheme is http, listenerPort http, no port is set",
 		},
 		{
-			filter: &dataplane.HTTPRequestRedirectFilter{
-				Scheme:     helpers.GetPointer("http"),
-				Hostname:   helpers.GetPointer("foo.example.com"),
-				Port:       helpers.GetPointer[int32](80),
-				StatusCode: helpers.GetPointer(301),
-			},
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Port = helpers.GetPointer[int32](80)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "",
+				}
+				return filter
+			}),
+			path:         "/original",
 			listenerPort: listenerPortCustom,
-			expected: &http.Return{
+			expectedReturn: &http.Return{
 				Code: 301,
-				Body: "http://foo.example.com$request_uri",
+				Body: "http://foo.example.com$uri$is_args$args",
 			},
-			msg: "scheme is http, port http",
+			expectedRewrite: &rewriteConfig{
+				MainRewrite: "^/original(?:/([^?]*))? /$1?$args?",
+			},
+			msg: "scheme is http, port http, prefix path is empty",
 		},
 		{
-			filter: &dataplane.HTTPRequestRedirectFilter{
-				Scheme:     helpers.GetPointer("https"),
-				Hostname:   helpers.GetPointer("foo.example.com"),
-				Port:       helpers.GetPointer[int32](443),
-				StatusCode: helpers.GetPointer(301),
-			},
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Port = helpers.GetPointer[int32](443)
+				filter.Scheme = helpers.GetPointer("https")
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "/",
+				}
+				return filter
+			}),
+			path:         "/original",
 			listenerPort: listenerPortCustom,
-			expected: &http.Return{
+			expectedReturn: &http.Return{
 				Code: 301,
-				Body: "https://foo.example.com$request_uri",
+				Body: "https://foo.example.com$uri$is_args$args",
 			},
-			msg: "scheme is https, port https",
+			expectedRewrite: &rewriteConfig{
+				MainRewrite: "^/original(?:/([^?]*))? /$1?$args?",
+			},
+			msg: "scheme is https, port https and prefix path is /",
+		},
+		{
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Port = helpers.GetPointer[int32](80)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "/prefix-path",
+				}
+				return filter
+			}),
+			path:         "/original",
+			listenerPort: listenerPortCustom,
+			expectedReturn: &http.Return{
+				Code: 301,
+				Body: "http://foo.example.com$uri$is_args$args",
+			},
+			expectedRewrite: &rewriteConfig{
+				MainRewrite: "^/original([^?]*)? /prefix-path$1?$args?",
+			},
+			msg: "scheme is http, port http, prefix path with no trailing slashes",
+		},
+		{
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Port = helpers.GetPointer[int32](80)
+				filter.StatusCode = helpers.GetPointer(302)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "/trailing/",
+				}
+				return filter
+			}),
+			path:         "/original",
+			listenerPort: listenerPortCustom,
+			expectedReturn: &http.Return{
+				Code: 302,
+				Body: "http://foo.example.com$uri$is_args$args",
+			},
+			expectedRewrite: &rewriteConfig{
+				MainRewrite: "^/original(?:/([^?]*))? /trailing/$1?$args?",
+			},
+			msg: "scheme is http, port http, prefix path replacement with trailing /",
+		},
+		{
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Port = helpers.GetPointer[int32](80)
+				filter.StatusCode = helpers.GetPointer(301)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "/trailing",
+				}
+				return filter
+			}),
+			path:         "/original/",
+			listenerPort: listenerPortCustom,
+			expectedReturn: &http.Return{
+				Code: 301,
+				Body: "http://foo.example.com$uri$is_args$args",
+			},
+			expectedRewrite: &rewriteConfig{
+				MainRewrite: "^/original/([^?]*)? /trailing/$1?$args?",
+			},
+			msg: "scheme is http, port http, prefix path original with trailing /",
+		},
+		{
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Port = helpers.GetPointer[int32](80)
+				filter.StatusCode = helpers.GetPointer(301)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "/trailing/",
+				}
+				return filter
+			}),
+			path:         "/original/",
+			listenerPort: listenerPortCustom,
+			expectedReturn: &http.Return{
+				Code: 301,
+				Body: "http://foo.example.com$uri$is_args$args",
+			},
+			expectedRewrite: &rewriteConfig{
+				MainRewrite: "^/original/([^?]*)? /trailing/$1?$args?",
+			},
+			msg: "scheme is http, port http, prefix path both with trailing slashes",
 		},
 	}
 
@@ -2380,8 +2558,9 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := createReturnValForRedirectFilter(test.filter, test.listenerPort)
-			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
+			result, rewriteConfig := createReturnAndRewriteConfigForRedirectFilter(test.filter, test.listenerPort, test.path)
+			g.Expect(helpers.Diff(test.expectedReturn, result)).To(BeEmpty())
+			g.Expect(helpers.Diff(test.expectedRewrite, rewriteConfig)).To(BeEmpty())
 		})
 	}
 }

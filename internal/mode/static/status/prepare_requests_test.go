@@ -18,14 +18,14 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	statusFramework "github.com/nginxinc/nginx-gateway-fabric/internal/framework/status"
-	ngftypes "github.com/nginxinc/nginx-gateway-fabric/internal/framework/types"
-	staticConds "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	statusFramework "github.com/nginx/nginx-gateway-fabric/internal/framework/status"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
+	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 )
 
 func createK8sClientFor(resourceType ngftypes.ObjectType) client.Client {

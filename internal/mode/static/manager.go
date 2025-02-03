@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	tel "github.com/nginxinc/telemetry-exporter/pkg/telemetry"
+	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	appsv1 "k8s.io/api/apps/v1"
@@ -34,34 +34,35 @@ import (
 	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller/filter"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller/index"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller/predicate"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/gatewayclass"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/runnables"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/status"
-	ngftypes "github.com/nginxinc/nginx-gateway-fabric/internal/framework/types"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/config"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/licensing"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/metrics/collectors"
-	ngxcfg "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/clientsettings"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/observability"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/upstreamsettings"
-	ngxvalidation "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/validation"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/file"
-	ngxruntime "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/resolver"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/validation"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/telemetry"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/filter"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/predicate"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/gatewayclass"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/runnables"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/status"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/metrics/collectors"
+	ngxcfg "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/clientsettings"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/upstreamsettings"
+	ngxvalidation "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
+	ngxruntime "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/telemetry"
 )
 
 const (
@@ -83,7 +84,8 @@ func init() {
 	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 	utilruntime.Must(discoveryV1.AddToScheme(scheme))
-	utilruntime.Must(ngfAPI.AddToScheme(scheme))
+	utilruntime.Must(ngfAPIv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(ngfAPIv1alpha2.AddToScheme(scheme))
 	utilruntime.Must(apiext.AddToScheme(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 }
@@ -314,15 +316,15 @@ func createPolicyManager(
 ) *policies.CompositeValidator {
 	cfgs := []policies.ManagerConfig{
 		{
-			GVK:       mustExtractGVK(&ngfAPI.ClientSettingsPolicy{}),
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.ClientSettingsPolicy{}),
 			Validator: clientsettings.NewValidator(validator),
 		},
 		{
-			GVK:       mustExtractGVK(&ngfAPI.ObservabilityPolicy{}),
+			GVK:       mustExtractGVK(&ngfAPIv1alpha2.ObservabilityPolicy{}),
 			Validator: observability.NewValidator(validator),
 		},
 		{
-			GVK:       mustExtractGVK(&ngfAPI.UpstreamSettingsPolicy{}),
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
 			Validator: upstreamsettings.NewValidator(validator),
 		},
 	}
@@ -483,7 +485,7 @@ func registerControllers(
 			},
 		},
 		{
-			objectType: &ngfAPI.NginxProxy{},
+			objectType: &ngfAPIv1alpha1.NginxProxy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -495,19 +497,19 @@ func registerControllers(
 			},
 		},
 		{
-			objectType: &ngfAPI.ClientSettingsPolicy{},
+			objectType: &ngfAPIv1alpha1.ClientSettingsPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
 		},
 		{
-			objectType: &ngfAPI.ObservabilityPolicy{},
+			objectType: &ngfAPIv1alpha2.ObservabilityPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
 		},
 		{
-			objectType: &ngfAPI.UpstreamSettingsPolicy{},
+			objectType: &ngfAPIv1alpha1.UpstreamSettingsPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -524,7 +526,7 @@ func registerControllers(
 			},
 			{
 				// FIXME(ciarams87): If possible, use only metadata predicate
-				// https://github.com/nginxinc/nginx-gateway-fabric/issues/1545
+				// https://github.com/nginx/nginx-gateway-fabric/issues/1545
 				objectType: &apiv1.ConfigMap{},
 			},
 			{
@@ -540,7 +542,7 @@ func registerControllers(
 	if cfg.ConfigName != "" {
 		controllerRegCfgs = append(controllerRegCfgs,
 			ctlrCfg{
-				objectType: &ngfAPI.NginxGateway{},
+				objectType: &ngfAPIv1alpha1.NginxGateway{},
 				options: []controller.Option{
 					controller.WithNamespacedNameFilter(filter.CreateSingleResourceFilter(controlConfigNSName)),
 				},
@@ -559,7 +561,7 @@ func registerControllers(
 	if cfg.SnippetsFilters {
 		controllerRegCfgs = append(controllerRegCfgs,
 			ctlrCfg{
-				objectType: &ngfAPI.SnippetsFilter{},
+				objectType: &ngfAPIv1alpha1.SnippetsFilter{},
 				options: []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
@@ -744,11 +746,11 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 		&discoveryV1.EndpointSliceList{},
 		&gatewayv1.HTTPRouteList{},
 		&gatewayv1beta1.ReferenceGrantList{},
-		&ngfAPI.NginxProxyList{},
+		&ngfAPIv1alpha1.NginxProxyList{},
 		&gatewayv1.GRPCRouteList{},
-		&ngfAPI.ClientSettingsPolicyList{},
-		&ngfAPI.ObservabilityPolicyList{},
-		&ngfAPI.UpstreamSettingsPolicyList{},
+		&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+		&ngfAPIv1alpha2.ObservabilityPolicyList{},
+		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 		partialObjectMetadataList,
 	}
 
@@ -764,7 +766,7 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 	if cfg.SnippetsFilters {
 		objectLists = append(
 			objectLists,
-			&ngfAPI.SnippetsFilterList{},
+			&ngfAPIv1alpha1.SnippetsFilterList{},
 		)
 	}
 
@@ -792,7 +794,7 @@ func setInitialConfig(
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var conf ngfAPI.NginxGateway
+	var conf ngfAPIv1alpha1.NginxGateway
 	// Polling to wait for CRD to exist if the Deployment is created first.
 	if err := wait.PollUntilContextCancel(
 		ctx,

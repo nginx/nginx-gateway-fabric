@@ -10,6 +10,9 @@ NGINX Gateway API Reference
 <li>
 <a href="#gateway.nginx.org%2fv1alpha1">gateway.nginx.org/v1alpha1</a>
 </li>
+<li>
+<a href="#gateway.nginx.org%2fv1alpha2">gateway.nginx.org/v1alpha2</a>
+</li>
 </ul>
 <h2 id="gateway.nginx.org/v1alpha1">gateway.nginx.org/v1alpha1</h2>
 <p>
@@ -361,13 +364,26 @@ NginxLogging
 </tr>
 <tr>
 <td>
+<code>nginxPlus</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlus">
+NginxPlus
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NginxPlus specifies NGINX Plus additional settings.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>disableHTTP2</code><br/>
 <em>
 bool
 </em>
 </td>
 <td>
-<em>(Optional)</em>
 <p>DisableHTTP2 defines if http2 should be disabled for all servers.
 Default is false, meaning http2 will be enabled for all servers.</p>
 </td>
@@ -683,6 +699,7 @@ UpstreamKeepAlive
 <p>TargetRefs identifies API object(s) to apply the policy to.
 Objects must be in the same namespace as the policy.
 Support: Service</p>
+<p>TargetRefs must be <em>distinct</em>. The <code>name</code> field must be unique for all targetRef entries in the UpstreamSettingsPolicy.</p>
 </td>
 </tr>
 </table>
@@ -702,78 +719,6 @@ sigs.k8s.io/gateway-api/apis/v1alpha2.PolicyStatus
 </td>
 </tr>
 </tbody>
-</table>
-<h3 id="gateway.nginx.org/v1alpha1.Address">Address
-<a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.Address" title="Permanent link">¶</a>
-</h3>
-<p>
-(<em>Appears on: </em>
-<a href="#gateway.nginx.org/v1alpha1.RewriteClientIP">RewriteClientIP</a>)
-</p>
-<p>
-<p>Address is a struct that specifies address type and value.</p>
-</p>
-<table class="table table-bordered table-striped">
-<thead>
-<tr>
-<th>Field</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-<code>type</code><br/>
-<em>
-<a href="#gateway.nginx.org/v1alpha1.AddressType">
-AddressType
-</a>
-</em>
-</td>
-<td>
-<p>Type specifies the type of address.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>value</code><br/>
-<em>
-string
-</em>
-</td>
-<td>
-<p>Value specifies the address value.</p>
-</td>
-</tr>
-</tbody>
-</table>
-<h3 id="gateway.nginx.org/v1alpha1.AddressType">AddressType
-(<code>string</code> alias)</p><a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.AddressType" title="Permanent link">¶</a>
-</h3>
-<p>
-(<em>Appears on: </em>
-<a href="#gateway.nginx.org/v1alpha1.Address">Address</a>)
-</p>
-<p>
-<p>AddressType specifies the type of address.</p>
-</p>
-<table class="table table-bordered table-striped">
-<thead>
-<tr>
-<th>Value</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody><tr><td><p>&#34;CIDR&#34;</p></td>
-<td><p>CIDRAddressType specifies that the address is a CIDR block.</p>
-</td>
-</tr><tr><td><p>&#34;Hostname&#34;</p></td>
-<td><p>HostnameAddressType specifies that the address is a Hostname.</p>
-</td>
-</tr><tr><td><p>&#34;IPAddress&#34;</p></td>
-<td><p>IPAddressType specifies that the address is an IP address.</p>
-</td>
-</tr></tbody>
 </table>
 <h3 id="gateway.nginx.org/v1alpha1.ClientBody">ClientBody
 <a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.ClientBody" title="Permanent link">¶</a>
@@ -1395,6 +1340,109 @@ crit, alert, and emerg messages to be logged. <a href="https://nginx.org/en/docs
 </tr>
 </tbody>
 </table>
+<h3 id="gateway.nginx.org/v1alpha1.NginxPlus">NginxPlus
+<a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.NginxPlus" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.NginxProxySpec">NginxProxySpec</a>)
+</p>
+<p>
+<p>NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>allowedAddresses</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlusAllowAddress">
+[]NginxPlusAllowAddress
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AllowedAddresses specifies IPAddresses or CIDR blocks to the allow list for accessing the NGINX Plus API.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha1.NginxPlusAllowAddress">NginxPlusAllowAddress
+<a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.NginxPlusAllowAddress" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlus">NginxPlus</a>)
+</p>
+<p>
+<p>NginxPlusAllowAddress specifies the address type and value for an NginxPlus allow address.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>type</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlusAllowAddressType">
+NginxPlusAllowAddressType
+</a>
+</em>
+</td>
+<td>
+<p>Type specifies the type of address.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>value</code><br/>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Value specifies the address value.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha1.NginxPlusAllowAddressType">NginxPlusAllowAddressType
+(<code>string</code> alias)</p><a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.NginxPlusAllowAddressType" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlusAllowAddress">NginxPlusAllowAddress</a>)
+</p>
+<p>
+<p>NginxPlusAllowAddressType specifies the type of address.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr><td><p>&#34;CIDR&#34;</p></td>
+<td><p>NginxPlusAllowCIDRAddressType specifies that the address is a CIDR block.</p>
+</td>
+</tr><tr><td><p>&#34;IPAddress&#34;</p></td>
+<td><p>NginxPlusAllowIPAddressType specifies that the address is an IP address.</p>
+</td>
+</tr></tbody>
+</table>
 <h3 id="gateway.nginx.org/v1alpha1.NginxProxySpec">NginxProxySpec
 <a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.NginxProxySpec" title="Permanent link">¶</a>
 </h3>
@@ -1472,13 +1520,26 @@ NginxLogging
 </tr>
 <tr>
 <td>
+<code>nginxPlus</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.NginxPlus">
+NginxPlus
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NginxPlus specifies NGINX Plus additional settings.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>disableHTTP2</code><br/>
 <em>
 bool
 </em>
 </td>
 <td>
-<em>(Optional)</em>
 <p>DisableHTTP2 defines if http2 should be disabled for all servers.
 Default is false, meaning http2 will be enabled for all servers.</p>
 </td>
@@ -1594,8 +1655,8 @@ Sets NGINX directive real_ip_recursive: <a href="https://nginx.org/en/docs/http/
 <td>
 <code>trustedAddresses</code><br/>
 <em>
-<a href="#gateway.nginx.org/v1alpha1.Address">
-[]Address
+<a href="#gateway.nginx.org/v1alpha1.RewriteClientIPAddress">
+[]RewriteClientIPAddress
 </a>
 </em>
 </td>
@@ -1613,6 +1674,78 @@ This field is required if mode is set.</p>
 </td>
 </tr>
 </tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha1.RewriteClientIPAddress">RewriteClientIPAddress
+<a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.RewriteClientIPAddress" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.RewriteClientIP">RewriteClientIP</a>)
+</p>
+<p>
+<p>RewriteClientIPAddress specifies the address type and value for a RewriteClientIP address.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>type</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.RewriteClientIPAddressType">
+RewriteClientIPAddressType
+</a>
+</em>
+</td>
+<td>
+<p>Type specifies the type of address.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>value</code><br/>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Value specifies the address value.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha1.RewriteClientIPAddressType">RewriteClientIPAddressType
+(<code>string</code> alias)</p><a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.RewriteClientIPAddressType" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha1.RewriteClientIPAddress">RewriteClientIPAddress</a>)
+</p>
+<p>
+<p>RewriteClientIPAddressType specifies the type of address.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr><td><p>&#34;CIDR&#34;</p></td>
+<td><p>RewriteClientIPCIDRAddressType specifies that the address is a CIDR block.</p>
+</td>
+</tr><tr><td><p>&#34;Hostname&#34;</p></td>
+<td><p>RewriteClientIPHostnameAddressType specifies that the address is a Hostname.</p>
+</td>
+</tr><tr><td><p>&#34;IPAddress&#34;</p></td>
+<td><p>RewriteClientIPIPAddressType specifies that the address is an IP address.</p>
+</td>
+</tr></tbody>
 </table>
 <h3 id="gateway.nginx.org/v1alpha1.RewriteClientIPModeType">RewriteClientIPModeType
 (<code>string</code> alias)</p><a class="headerlink" href="#gateway.nginx.org%2fv1alpha1.RewriteClientIPModeType" title="Permanent link">¶</a>
@@ -1825,7 +1958,8 @@ and the status of the SnippetsFilter with respect to each controller.</p>
 <p>
 (<em>Appears on: </em>
 <a href="#gateway.nginx.org/v1alpha1.Telemetry">Telemetry</a>,
-<a href="#gateway.nginx.org/v1alpha1.Tracing">Tracing</a>)
+<a href="#gateway.nginx.org/v1alpha1.Tracing">Tracing</a>,
+<a href="#gateway.nginx.org/v1alpha2.Tracing">Tracing</a>)
 </p>
 <p>
 <p>SpanAttribute is a key value pair to be added to a tracing span.</p>
@@ -2290,6 +2424,326 @@ UpstreamKeepAlive
 <p>TargetRefs identifies API object(s) to apply the policy to.
 Objects must be in the same namespace as the policy.
 Support: Service</p>
+<p>TargetRefs must be <em>distinct</em>. The <code>name</code> field must be unique for all targetRef entries in the UpstreamSettingsPolicy.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<h2 id="gateway.nginx.org/v1alpha2">gateway.nginx.org/v1alpha2</h2>
+<p>
+<p>Package v1alpha2 contains API Schema definitions for the
+gateway.nginx.org API group.</p>
+</p>
+Resource Types:
+<ul><li>
+<a href="#gateway.nginx.org/v1alpha2.ObservabilityPolicy">ObservabilityPolicy</a>
+</li></ul>
+<h3 id="gateway.nginx.org/v1alpha2.ObservabilityPolicy">ObservabilityPolicy
+<a class="headerlink" href="#gateway.nginx.org%2fv1alpha2.ObservabilityPolicy" title="Permanent link">¶</a>
+</h3>
+<p>
+<p>ObservabilityPolicy is a Direct Attached Policy. It provides a way to configure observability settings for
+the NGINX Gateway Fabric data plane. Used in conjunction with the NginxProxy CRD that is attached to the
+GatewayClass parametersRef.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code><br/>
+string</td>
+<td>
+<code>
+gateway.nginx.org/v1alpha2
+</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code><br/>
+string
+</td>
+<td><code>ObservabilityPolicy</code></td>
+</tr>
+<tr>
+<td>
+<code>metadata</code><br/>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha2.ObservabilityPolicySpec">
+ObservabilityPolicySpec
+</a>
+</em>
+</td>
+<td>
+<p>Spec defines the desired state of the ObservabilityPolicy.</p>
+<br/>
+<br/>
+<table class="table table-bordered table-striped">
+<tr>
+<td>
+<code>tracing</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha2.Tracing">
+Tracing
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Tracing allows for enabling and configuring tracing.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>targetRefs</code><br/>
+<em>
+<a href="https://pkg.go.dev/sigs.k8s.io/gateway-api/apis/v1alpha2#LocalPolicyTargetReference">
+[]sigs.k8s.io/gateway-api/apis/v1alpha2.LocalPolicyTargetReference
+</a>
+</em>
+</td>
+<td>
+<p>TargetRefs identifies the API object(s) to apply the policy to.
+Objects must be in the same namespace as the policy.
+Support: HTTPRoute, GRPCRoute.</p>
+<p>TargetRefs must be <em>distinct</em>. This means that the multi-part key defined by <code>kind</code> and <code>name</code> must
+be unique across all targetRef entries in the ObservabilityPolicy.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code><br/>
+<em>
+<a href="https://pkg.go.dev/sigs.k8s.io/gateway-api/apis/v1alpha2#PolicyStatus">
+sigs.k8s.io/gateway-api/apis/v1alpha2.PolicyStatus
+</a>
+</em>
+</td>
+<td>
+<p>Status defines the state of the ObservabilityPolicy.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha2.ObservabilityPolicySpec">ObservabilityPolicySpec
+<a class="headerlink" href="#gateway.nginx.org%2fv1alpha2.ObservabilityPolicySpec" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha2.ObservabilityPolicy">ObservabilityPolicy</a>)
+</p>
+<p>
+<p>ObservabilityPolicySpec defines the desired state of the ObservabilityPolicy.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>tracing</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha2.Tracing">
+Tracing
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Tracing allows for enabling and configuring tracing.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>targetRefs</code><br/>
+<em>
+<a href="https://pkg.go.dev/sigs.k8s.io/gateway-api/apis/v1alpha2#LocalPolicyTargetReference">
+[]sigs.k8s.io/gateway-api/apis/v1alpha2.LocalPolicyTargetReference
+</a>
+</em>
+</td>
+<td>
+<p>TargetRefs identifies the API object(s) to apply the policy to.
+Objects must be in the same namespace as the policy.
+Support: HTTPRoute, GRPCRoute.</p>
+<p>TargetRefs must be <em>distinct</em>. This means that the multi-part key defined by <code>kind</code> and <code>name</code> must
+be unique across all targetRef entries in the ObservabilityPolicy.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha2.TraceContext">TraceContext
+(<code>string</code> alias)</p><a class="headerlink" href="#gateway.nginx.org%2fv1alpha2.TraceContext" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha2.Tracing">Tracing</a>)
+</p>
+<p>
+<p>TraceContext specifies how to propagate traceparent/tracestate headers.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr><td><p>&#34;extract&#34;</p></td>
+<td><p>TraceContextExtract uses an existing trace context from the request, so that the identifiers
+of a trace and the parent span are inherited from the incoming request.</p>
+</td>
+</tr><tr><td><p>&#34;ignore&#34;</p></td>
+<td><p>TraceContextIgnore skips context headers processing.</p>
+</td>
+</tr><tr><td><p>&#34;inject&#34;</p></td>
+<td><p>TraceContextInject adds a new context to the request, overwriting existing headers, if any.</p>
+</td>
+</tr><tr><td><p>&#34;propagate&#34;</p></td>
+<td><p>TraceContextPropagate updates the existing context (combines extract and inject).</p>
+</td>
+</tr></tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha2.TraceStrategy">TraceStrategy
+(<code>string</code> alias)</p><a class="headerlink" href="#gateway.nginx.org%2fv1alpha2.TraceStrategy" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha2.Tracing">Tracing</a>)
+</p>
+<p>
+<p>TraceStrategy defines the tracing strategy.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr><td><p>&#34;parent&#34;</p></td>
+<td><p>TraceStrategyParent enables tracing and only records spans if the parent span was sampled.</p>
+</td>
+</tr><tr><td><p>&#34;ratio&#34;</p></td>
+<td><p>TraceStrategyRatio enables ratio-based tracing, defaulting to 100% sampling rate.</p>
+</td>
+</tr></tbody>
+</table>
+<h3 id="gateway.nginx.org/v1alpha2.Tracing">Tracing
+<a class="headerlink" href="#gateway.nginx.org%2fv1alpha2.Tracing" title="Permanent link">¶</a>
+</h3>
+<p>
+(<em>Appears on: </em>
+<a href="#gateway.nginx.org/v1alpha2.ObservabilityPolicySpec">ObservabilityPolicySpec</a>)
+</p>
+<p>
+<p>Tracing allows for enabling and configuring OpenTelemetry tracing.</p>
+</p>
+<table class="table table-bordered table-striped">
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>strategy</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha2.TraceStrategy">
+TraceStrategy
+</a>
+</em>
+</td>
+<td>
+<p>Strategy defines if tracing is ratio-based or parent-based.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ratio</code><br/>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ratio is the percentage of traffic that should be sampled. Integer from 0 to 100.
+By default, 100% of http requests are traced. Not applicable for parent-based tracing.
+If ratio is set to 0, tracing is disabled.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>context</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha2.TraceContext">
+TraceContext
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Context specifies how to propagate traceparent/tracestate headers.
+Default: <a href="https://nginx.org/en/docs/ngx_otel_module.html#otel_trace_context">https://nginx.org/en/docs/ngx_otel_module.html#otel_trace_context</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>spanName</code><br/>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SpanName defines the name of the Otel span. By default is the name of the location for a request.
+If specified, applies to all locations that are created for a route.
+Format: must have all &lsquo;&ldquo;&rsquo; escaped and must not contain any &lsquo;$&rsquo; or end with an unescaped &lsquo;\&rsquo;
+Examples of invalid names: some-$value, quoted-&ldquo;value&rdquo;-name, unescaped</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>spanAttributes</code><br/>
+<em>
+<a href="#gateway.nginx.org/v1alpha1.SpanAttribute">
+[]SpanAttribute
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SpanAttributes are custom key/value attributes that are added to each span.</p>
 </td>
 </tr>
 </tbody>

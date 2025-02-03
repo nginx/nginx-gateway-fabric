@@ -35,10 +35,10 @@ resources:
 
 images:
 # NGF image
-- name: ghcr.io/nginxinc/nginx-gateway-fabric
+- name: ghcr.io/nginx/nginx-gateway-fabric
   newName: my-registry/nginx-gateway-fabric
   newTag: new-tag
 # NGINX image
-- name: ghcr.io/nginxinc/nginx-gateway-fabric/nginx
+- name: ghcr.io/nginx/nginx-gateway-fabric/nginx
   newName: my-registry/nginx-gateway-fabric/nginx
   newTag: new-tag

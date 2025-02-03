@@ -16,20 +16,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	frameworkStatus "github.com/nginxinc/nginx-gateway-fabric/internal/framework/status"
-	ngfConfig "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/config"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/licensing"
-	ngxConfig "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/file"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/resolver"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/status"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	frameworkStatus "github.com/nginx/nginx-gateway-fabric/internal/framework/status"
+	ngfConfig "github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
+	ngxConfig "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/status"
 )
 
 type handlerMetricsCollector interface {
@@ -174,7 +174,7 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		return
 	case state.EndpointsOnlyChange:
 		h.version++
-		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version)
+		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version, h.cfg.plus)
 		depCtx, getErr := h.getDeploymentContext(ctx)
 		if getErr != nil {
 			logger.Error(getErr, "error getting deployment context for usage reporting")
@@ -190,7 +190,7 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		}
 	case state.ClusterStateChange:
 		h.version++
-		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version)
+		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version, h.cfg.plus)
 		depCtx, getErr := h.getDeploymentContext(ctx)
 		if getErr != nil {
 			logger.Error(getErr, "error getting deployment context for usage reporting")

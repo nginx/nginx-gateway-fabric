@@ -8,9 +8,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	ngfsort "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/sort"
-	staticConds "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	ngfsort "github.com/nginx/nginx-gateway-fabric/internal/mode/static/sort"
+	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
 
 // Gateway represents the winning Gateway resource.

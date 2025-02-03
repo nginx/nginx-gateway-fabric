@@ -1,7 +1,7 @@
 package validation
 
 import (
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
 )
 
 // HTTPValidator validates values that will propagate into the NGINX configuration http context.
@@ -12,6 +12,7 @@ type HTTPValidator struct {
 	HTTPRedirectValidator
 	HTTPURLRewriteValidator
 	HTTPHeaderValidator
+	HTTPPathValidator
 }
 
 var _ validation.HTTPFieldsValidator = HTTPValidator{}

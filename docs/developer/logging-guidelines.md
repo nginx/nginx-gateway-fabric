@@ -363,7 +363,7 @@ because the runtime adds context to that logger with the group, kind, namespace 
 more key-value pairs. Note that the runtime creates that logger from the one we inject into it during the runtime
 initialization (see [External Libraries](#external-libraries)). Also note that logger is compatible with our logging guidelines.
 
-[reconciler-logger]:https://github.com/nginxinc/nginx-gateway-fabric/blob/5547fe5472d1742a937c8adbbd399893ee30f9e1/internal/framework/controller/reconciler.go#L63
+[reconciler-logger]:https://github.com/nginx/nginx-gateway-fabric/blob/5547fe5472d1742a937c8adbbd399893ee30f9e1/internal/framework/controller/reconciler.go#L63
 
 #### Unit Tests
 
@@ -388,7 +388,7 @@ There are two critical libraries for NGF that log:
       verbosity. However, errors are logged at the default verbosity like
       in [this line](https://github.com/kubernetes/client-go/blob/c5b1c13ccbedeb03c00ba162ef27566b0dfb512d/tools/record/event.go#L240).
 
-[inject]:https://github.com/nginxinc/nginx-gateway-fabric/blob/9b3ae2c7c59f28213a7690e049d9996443dbd3fc/internal/mode/static/manager.go#L54
+[inject]:https://github.com/nginx/nginx-gateway-fabric/blob/9b3ae2c7c59f28213a7690e049d9996443dbd3fc/internal/mode/static/manager.go#L54
 
 [cr-logging-guidelines]:https://github.com/kubernetes-sigs/controller-runtime/blob/b1d6919d3e12fa85a119dd9792bdfdc17bdf8c3b/TMP-LOGGING.md
 

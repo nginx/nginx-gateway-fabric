@@ -8,7 +8,7 @@ docs: DOCS-000
 This is a guide for getting started with NGINX Gateway Fabric. It explains how to:
 
 - Set up a [kind (Kubernetes in Docker)](https://kind.sigs.k8s.io/) cluster
-- Install [NGINX Gateway Fabric](https://github.com/nginxinc/nginx-gateway-fabric) with [NGINX](https://nginx.org/)
+- Install [NGINX Gateway Fabric](https://github.com/nginx/nginx-gateway-fabric) with [NGINX](https://nginx.org/)
 - Test NGINX Gateway Fabric with an example application
 
 By following the steps in order, you will finish with a functional NGINX Gateway Fabric cluster.
@@ -71,7 +71,7 @@ Thanks for using kind! 😊
 ```
 
 {{< note >}}
-If you have cloned [the NGINX Gateway Fabric repository](https://github.com/nginxinc/nginx-gateway-fabric/tree/main), you can also create a kind cluster from the root folder with the following *make* command:
+If you have cloned [the NGINX Gateway Fabric repository](https://github.com/nginx/nginx-gateway-fabric/tree/main), you can also create a kind cluster from the root folder with the following *make* command:
 
 ```shell
 make create-kind-cluster
@@ -88,7 +88,7 @@ make create-kind-cluster
 Use `kubectl` to add the API resources for NGINX Gateway Fabric with the following command:
 
 ```shell
-kubectl kustomize "https://github.com/nginxinc/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v1.5.1" | kubectl apply -f -
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v1.6.0" | kubectl apply -f -
 ```
 
 ```text
@@ -103,7 +103,7 @@ customresourcedefinition.apiextensions.k8s.io/referencegrants.gateway.networking
 To use experimental features, you'll need to install the API resources from the experimental channel instead.
 
 ```shell
-kubectl kustomize "https://github.com/nginxinc/nginx-gateway-fabric/config/crd/gateway-api/experimental?ref=v1.5.1" | kubectl apply -f -
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/experimental?ref=v1.6.0" | kubectl apply -f -
 ```
 
 {{< /note >}}
@@ -115,11 +115,11 @@ kubectl kustomize "https://github.com/nginxinc/nginx-gateway-fabric/config/crd/g
 Use `helm` to install NGINX Gateway Fabric with the following command:
 
 ```shell
-helm install ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.create=false
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.create=false
 ```
 
 ```text
-Pulled: ghcr.io/nginxinc/charts/nginx-gateway-fabric:1.5.1
+Pulled: ghcr.io/nginx/charts/nginx-gateway-fabric:1.6.0
 Digest: sha256:9bbd1a2fcbfd5407ad6be39f796f582e6263512f1f3a8969b427d39063cc6fee
 NAME: ngf
 LAST DEPLOYED: Mon Oct 21 14:45:14 2024
@@ -133,7 +133,7 @@ TEST SUITE: None
 If you installed the API resources from the experimental channel during the last step, you will need to enable the _nginxGateway.gwAPIExperimentalFeatures_ option:
 
 ```shell
-helm install ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.create=false --set nginxGateway.gwAPIExperimentalFeatures.enable=true
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.create=false --set nginxGateway.gwAPIExperimentalFeatures.enable=true
 ```
 
 {{< /note >}}
@@ -157,7 +157,7 @@ metadata:
   labels:
     app.kubernetes.io/name: nginx-gateway-fabric
     app.kubernetes.io/instance: ngf
-    app.kubernetes.io/version: "1.5.1"
+    app.kubernetes.io/version: "1.6.0"
 spec:
   type: NodePort
   selector:
@@ -199,7 +199,7 @@ If you are making customizations, ensure your `labels:` and `selectors:` also ma
 In the previous section, you deployed NGINX Gateway Fabric to a local cluster. This section shows you how to deploy a simple web application to test that NGINX Gateway Fabric works.
 
 {{< note >}}
-The YAML code in the following sections can be found in the [cafe-example folder](https://github.com/nginxinc/nginx-gateway-fabric/tree/main/examples/cafe-example) of the GitHub repository.
+The YAML code in the following sections can be found in the [cafe-example folder](https://github.com/nginx/nginx-gateway-fabric/tree/main/examples/cafe-example) of the GitHub repository.
 {{< /note >}}
 
 ---
@@ -208,7 +208,7 @@ The YAML code in the following sections can be found in the [cafe-example folder
 
 Create the file _cafe.yaml_ with the following contents:
 
-{{< ghcode `https://raw.githubusercontent.com/nginxinc/nginx-gateway-fabric/refs/heads/main/examples/cafe-example/cafe.yaml`>}}
+{{< ghcode `https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/refs/heads/main/examples/cafe-example/cafe.yaml`>}}
 
 Apply it using `kubectl`:
 
@@ -241,7 +241,7 @@ tea-7b7d6c947d-d4qcf      1/1     Running   0          10s
 
 Create the file _gateway.yaml_ with the following contents:
 
-{{< ghcode `https://raw.githubusercontent.com/nginxinc/nginx-gateway-fabric/refs/heads/main/examples/cafe-example/gateway.yaml`>}}
+{{< ghcode `https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/refs/heads/main/examples/cafe-example/gateway.yaml`>}}
 
 Apply it using `kubectl`:
 
@@ -255,7 +255,7 @@ gateway.gateway.networking.k8s.io/gateway created
 
 Create the file _cafe-routes.yaml_ with the following contents:
 
-{{< ghcode `https://raw.githubusercontent.com/nginxinc/nginx-gateway-fabric/refs/heads/main/examples/cafe-example/cafe-routes.yaml`>}}
+{{< ghcode `https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/refs/heads/main/examples/cafe-example/cafe-routes.yaml`>}}
 
 Apply it using `kubectl`:
 

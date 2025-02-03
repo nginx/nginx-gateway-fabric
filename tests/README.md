@@ -318,7 +318,7 @@ make nfr-test
 This test is run on its own (and also not in a pipeline) due to its long-running nature. It will run for 4 days before
 the tester must collect the results and complete the test.
 
-To start the longevity test, set up your VM (`create-and-setup-vm`) and run
+To start the longevity test, set up your VM (`create-and-setup-vm`), router (`create-gke-router`), and run
 
 ```makefile
 make start-longevity-test

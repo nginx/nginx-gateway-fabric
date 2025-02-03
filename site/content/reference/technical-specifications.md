@@ -10,4 +10,4 @@ docs: "DOCS-1434"
 
 See the NGINX Gateway Fabric technical specifications page:
 
-<https://github.com/nginxinc/nginx-gateway-fabric#technical-specifications>
+<https://github.com/nginx/nginx-gateway-fabric#technical-specifications>

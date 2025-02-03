@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
 )
 
 type FakeFirstEventBatchPreparer struct {

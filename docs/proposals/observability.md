@@ -1,6 +1,6 @@
 # Enhancement Proposal-1778: Observability Policy
 
-- Issue: https://github.com/nginxinc/nginx-gateway-fabric/issues/1778
+- Issue: https://github.com/nginx/nginx-gateway-fabric/issues/1778
 - Status: Completed
 
 ## Summary
@@ -148,7 +148,7 @@ type SpanAttribute struct {
 Below is an example YAML version of an `ObservabilityPolicy`:
 
 ```yaml
-apiVersion: gateway.nginx.org/v1alpha1
+apiVersion: gateway.nginx.org/v1alpha2
 kind: ObservabilityPolicy
 metadata:
   name: example-observability-policy

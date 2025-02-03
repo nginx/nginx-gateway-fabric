@@ -16,13 +16,14 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/gatewayclass"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	ngftypes "github.com/nginxinc/nginx-gateway-fabric/internal/framework/types"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/validation"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/gatewayclass"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
 )
 
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
@@ -108,11 +109,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		CRDMetadata:        make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
 		BackendTLSPolicies: make(map[types.NamespacedName]*v1alpha3.BackendTLSPolicy),
 		ConfigMaps:         make(map[types.NamespacedName]*apiv1.ConfigMap),
-		NginxProxies:       make(map[types.NamespacedName]*ngfAPI.NginxProxy),
+		NginxProxies:       make(map[types.NamespacedName]*ngfAPIv1alpha1.NginxProxy),
 		GRPCRoutes:         make(map[types.NamespacedName]*v1.GRPCRoute),
 		TLSRoutes:          make(map[types.NamespacedName]*v1alpha2.TLSRoute),
 		NGFPolicies:        make(map[graph.PolicyKey]policies.Policy),
-		SnippetsFilters:    make(map[types.NamespacedName]*ngfAPI.SnippetsFilter),
+		SnippetsFilters:    make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
 	}
 
 	processor := &ChangeProcessorImpl{
@@ -202,22 +203,22 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 				predicate: annotationChangedPredicate{annotation: gatewayclass.BundleVersionAnnotation},
 			},
 			{
-				gvk:       cfg.MustExtractGVK(&ngfAPI.NginxProxy{}),
+				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.NginxProxy{}),
 				store:     newObjectStoreMapAdapter(clusterStore.NginxProxies),
 				predicate: funcPredicate{stateChanged: isReferenced},
 			},
 			{
-				gvk:       cfg.MustExtractGVK(&ngfAPI.ClientSettingsPolicy{}),
+				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.ClientSettingsPolicy{}),
 				store:     commonPolicyObjectStore,
 				predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 			},
 			{
-				gvk:       cfg.MustExtractGVK(&ngfAPI.ObservabilityPolicy{}),
+				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha2.ObservabilityPolicy{}),
 				store:     commonPolicyObjectStore,
 				predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 			},
 			{
-				gvk:       cfg.MustExtractGVK(&ngfAPI.UpstreamSettingsPolicy{}),
+				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
 				store:     commonPolicyObjectStore,
 				predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 			},
@@ -227,7 +228,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 				predicate: nil,
 			},
 			{
-				gvk:       cfg.MustExtractGVK(&ngfAPI.SnippetsFilter{}),
+				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.SnippetsFilter{}),
 				store:     newObjectStoreMapAdapter(clusterStore.SnippetsFilters),
 				predicate: nil, // we always want to write status to SnippetsFilters so we don't filter them out
 			},
@@ -245,9 +246,9 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 // belong to the NGINX Gateway Fabric or an HTTPRoute that doesn't belong to any of the Gateways of the
 // NGINX Gateway Fabric. Find a way to ignore changes that don't affect the configuration and/or statuses of
 // the resources.
-// Tracking issues: https://github.com/nginxinc/nginx-gateway-fabric/issues/1123,
-// https://github.com/nginxinc/nginx-gateway-fabric/issues/1124,
-// https://github.com/nginxinc/nginx-gateway-fabric/issues/1577
+// Tracking issues: https://github.com/nginx/nginx-gateway-fabric/issues/1123,
+// https://github.com/nginx/nginx-gateway-fabric/issues/1124,
+// https://github.com/nginx/nginx-gateway-fabric/issues/1577
 
 // FIXME(pleshakov)
 // Remove CaptureUpsertChange() and CaptureDeleteChange() from ChangeProcessor and pass all changes directly to

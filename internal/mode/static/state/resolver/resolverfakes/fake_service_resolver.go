@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
 	v1 "k8s.io/api/core/v1"
 	v1a "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/types"

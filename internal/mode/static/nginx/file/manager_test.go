@@ -9,8 +9,8 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/file"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/file/filefakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file/filefakes"
 )
 
 var _ = Describe("EventHandler", func() {

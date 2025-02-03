@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/status"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

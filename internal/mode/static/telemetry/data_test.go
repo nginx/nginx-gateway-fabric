@@ -3,7 +3,7 @@ package telemetry
 import (
 	"testing"
 
-	tel "github.com/nginxinc/telemetry-exporter/pkg/telemetry"
+	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
 	. "github.com/onsi/gomega"
 	"go.opentelemetry.io/otel/attribute"
 )

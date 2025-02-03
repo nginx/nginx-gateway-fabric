@@ -23,7 +23,7 @@ spec:
     spec:
       initContainers:
       - name: init
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         command:
         - /usr/bin/gateway
@@ -33,10 +33,10 @@ spec:
         - --destination
         - /etc/nginx/main-includes
         env:
-          - name: POD_UID
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.uid
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
         securityContext:
           seccompProfile:
             type: RuntimeDefault
@@ -81,7 +81,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: nginx-gateway
         ports:
@@ -118,7 +118,7 @@ spec:
           mountPath: /var/run/nginx
         - name: nginx-includes
           mountPath: /etc/nginx/includes
-      - image: ghcr.io/nginxinc/nginx-gateway-fabric/nginx:edge
+      - image: ghcr.io/nginx/nginx-gateway-fabric/nginx:edge
         imagePullPolicy: Always
         name: nginx
         ports:

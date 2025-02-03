@@ -1,7 +1,7 @@
 
 # NGINX Gateway Fabric Helm Chart
 
-![Version: 1.5.1](https://img.shields.io/badge/Version-1.5.1-informational?style=flat-square) ![AppVersion: edge](https://img.shields.io/badge/AppVersion-edge-informational?style=flat-square)
+![Version: 1.6.0](https://img.shields.io/badge/Version-1.6.0-informational?style=flat-square) ![AppVersion: edge](https://img.shields.io/badge/AppVersion-edge-informational?style=flat-square)
 
 - [NGINX Gateway Fabric Helm Chart](#nginx-gateway-fabric-helm-chart)
   - [Introduction](#introduction)
@@ -41,10 +41,10 @@ This chart deploys the NGINX Gateway Fabric in your Kubernetes cluster.
 > The [Gateway API resources](https://github.com/kubernetes-sigs/gateway-api) from the standard channel must be
 > installed before deploying NGINX Gateway Fabric. If they are already installed in your cluster, please ensure
 > they are the correct version as supported by the NGINX Gateway Fabric -
-> [see the Technical Specifications](https://github.com/nginxinc/nginx-gateway-fabric/blob/main/README.md#technical-specifications).
+> [see the Technical Specifications](https://github.com/nginx/nginx-gateway-fabric/blob/main/README.md#technical-specifications).
 
 ```shell
-kubectl kustomize https://github.com/nginxinc/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl apply -f -
+kubectl kustomize https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl apply -f -
 ```
 
 ## Requirements
@@ -58,7 +58,7 @@ Kubernetes: `>= 1.25.0-0`
 To install the latest stable release of NGINX Gateway Fabric in the `nginx-gateway` namespace, run the following command:
 
 ```shell
-helm install ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway
 ```
 
 `ngf` is the name of the release, and can be changed to any name you want. This name is added as a prefix to the Deployment name.
@@ -77,7 +77,7 @@ kubectl wait --timeout=5m -n nginx-gateway deployment/ngf-nginx-gateway-fabric -
 #### Pulling the Chart
 
 ```shell
-helm pull oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --untar
+helm pull oci://ghcr.io/nginx/charts/nginx-gateway-fabric --untar
 cd nginx-gateway-fabric
 ```
 
@@ -112,13 +112,13 @@ By default, the NGINX Gateway Fabric helm chart deploys a LoadBalancer Service.
 To use a NodePort Service instead:
 
 ```shell
-helm install ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.type=NodePort
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.type=NodePort
 ```
 
 To disable the creation of a Service:
 
 ```shell
-helm install ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.create=false
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set service.create=false
 ```
 
 ## Upgrading the Chart
@@ -136,7 +136,7 @@ Gateway Fabric - [see the Technical Specifications](../../README.md#technical-sp
 To upgrade the Gateway CRDs from [the Gateway API repo](https://github.com/kubernetes-sigs/gateway-api), run:
 
 ```shell
-kubectl kustomize https://github.com/nginxinc/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl apply -f -
+kubectl kustomize https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl apply -f -
 ```
 
 ### Upgrading the CRDs
@@ -159,7 +159,7 @@ Warning: kubectl apply should be used on resource created by either kubectl crea
 To upgrade the release `ngf`, run:
 
 ```shell
-helm upgrade ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric -n nginx-gateway
+helm upgrade ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric -n nginx-gateway
 ```
 
 This will upgrade to the latest stable release. To upgrade to the latest version from the `main` branch, specify
@@ -232,7 +232,7 @@ To uninstall/delete the release `ngf`:
 ```shell
 helm uninstall ngf -n nginx-gateway
 kubectl delete ns nginx-gateway
-kubectl delete -f https://raw.githubusercontent.com/nginxinc/nginx-gateway-fabric/main/deploy/crds.yaml
+kubectl delete -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/main/deploy/crds.yaml
 ```
 
 These commands remove all the Kubernetes components associated with the release and deletes the release.
@@ -246,7 +246,7 @@ These commands remove all the Kubernetes components associated with the release 
 To delete the Gateway API CRDs from [the Gateway API repo](https://github.com/kubernetes-sigs/gateway-api), run:
 
 ```shell
-kubectl kustomize https://github.com/nginxinc/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl delete -f -
+kubectl kustomize https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard | kubectl delete -f -
 ```
 
 ## Configuration
@@ -264,7 +264,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginx.debug` | Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource. | bool | `false` |
 | `nginx.extraVolumeMounts` | extraVolumeMounts are the additional volume mounts for the nginx container. | list | `[]` |
 | `nginx.image.pullPolicy` |  | string | `"Always"` |
-| `nginx.image.repository` | The NGINX image to use. | string | `"ghcr.io/nginxinc/nginx-gateway-fabric/nginx"` |
+| `nginx.image.repository` | The NGINX image to use. | string | `"ghcr.io/nginx/nginx-gateway-fabric/nginx"` |
 | `nginx.image.tag` |  | string | `"edge"` |
 | `nginx.lifecycle` | The lifecycle of the nginx container. | object | `{}` |
 | `nginx.plus` | Is NGINX Plus image being used | bool | `false` |
@@ -282,7 +282,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.gatewayControllerName` | The name of the Gateway controller. The controller name must be of the form: DOMAIN/PATH. The controller's domain is gateway.nginx.org. | string | `"gateway.nginx.org/nginx-gateway-controller"` |
 | `nginxGateway.gwAPIExperimentalFeatures.enable` | Enable the experimental features of Gateway API which are supported by NGINX Gateway Fabric. Requires the Gateway APIs installed from the experimental channel. | bool | `false` |
 | `nginxGateway.image.pullPolicy` |  | string | `"Always"` |
-| `nginxGateway.image.repository` | The NGINX Gateway Fabric image to use | string | `"ghcr.io/nginxinc/nginx-gateway-fabric"` |
+| `nginxGateway.image.repository` | The NGINX Gateway Fabric image to use | string | `"ghcr.io/nginx/nginx-gateway-fabric"` |
 | `nginxGateway.image.tag` |  | string | `"edge"` |
 | `nginxGateway.kind` | The kind of the NGINX Gateway Fabric installation - currently, only deployment is supported. | string | `"deployment"` |
 | `nginxGateway.leaderElection.enable` | Enable leader election. Leader election is used to avoid multiple replicas of the NGINX Gateway Fabric reporting the status of the Gateway API resources. If not enabled, all replicas of NGINX Gateway Fabric will update the statuses of the Gateway API resources. | bool | `true` |

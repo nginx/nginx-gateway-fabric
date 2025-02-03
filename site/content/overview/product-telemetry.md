@@ -37,7 +37,7 @@ This data is used to identify the following information:
 - The scale of Gateway API resources.
 - The used features of NGINX Gateway Fabric.
 
-Our goal is to publicly discuss data trends to drive roadmap discussions in our [Community Meeting](https://github.com/nginxinc/nginx-gateway-fabric/discussions/1472).
+Our goal is to publicly discuss data trends to drive roadmap discussions in our [Community Meeting](https://github.com/nginx/nginx-gateway-fabric/discussions/1472).
 
 ## Opt out
 

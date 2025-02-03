@@ -1,9 +1,9 @@
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/nginxinc/nginx-gateway-fabric/badge)](https://scorecard.dev/viewer/?uri=github.com/nginxinc/nginx-gateway-fabric)
-[![FOSSA Status](https://app.fossa.com/api/projects/custom%2B5618%2Fgithub.com%2Fnginxinc%2Fnginx-gateway-fabric.svg?type=shield)](https://app.fossa.com/projects/custom%2B5618%2Fgithub.com%2Fnginxinc%2Fnginx-gateway-fabric?ref=badge_shield)
-[![Continuous Integration](https://github.com/nginxinc/nginx-gateway-fabric/actions/workflows/ci.yml/badge.svg)](https://github.com/nginxinc/nginx-gateway-fabric/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/nginxinc/nginx-gateway-fabric)](https://goreportcard.com/report/github.com/nginxinc/nginx-gateway-fabric)
-[![codecov](https://codecov.io/gh/nginxinc/nginx-gateway-fabric/graph/badge.svg?token=32ULC8F13Z)](https://codecov.io/gh/nginxinc/nginx-gateway-fabric)
-[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/nginxinc/nginx-gateway-fabric?logo=github&sort=semver)](https://github.com/nginxinc/nginx-gateway-fabric/releases/latest)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/nginx/nginx-gateway-fabric/badge)](https://scorecard.dev/viewer/?uri=github.com/nginx/nginx-gateway-fabric)
+[![FOSSA Status](https://app.fossa.com/api/projects/custom%2B5618%2Fgithub.com%2Fnginx%2Fnginx-gateway-fabric.svg?type=shield)](https://app.fossa.com/projects/custom%2B5618%2Fgithub.com%2Fnginx%2Fnginx-gateway-fabric?ref=badge_shield)
+[![Continuous Integration](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/ci.yml/badge.svg)](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/nginx/nginx-gateway-fabric)](https://goreportcard.com/report/github.com/nginx/nginx-gateway-fabric)
+[![codecov](https://codecov.io/gh/nginx/nginx-gateway-fabric/graph/badge.svg?token=32ULC8F13Z)](https://codecov.io/gh/nginx/nginx-gateway-fabric)
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/nginx/nginx-gateway-fabric?logo=github&sort=semver)](https://github.com/nginx/nginx-gateway-fabric/releases/latest)
 [![Slack](https://img.shields.io/badge/slack-%23nginx--gateway--fabric-green?logo=slack)](https://nginxcommunity.slack.com/channels/nginx-gateway-fabric)
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 
@@ -22,7 +22,7 @@ Learn about our [design principles](/docs/developer/design-principles.md) and [a
 
 ## Getting Started
 
-1. [Quick Start on a kind cluster](https://docs.nginx.com/nginx-gateway-fabric/installation/running-on-kind/).
+1. [Quick Start on a kind cluster](https://docs.nginx.com/nginx-gateway-fabric/get-started/).
 2. [Install](https://docs.nginx.com/nginx-gateway-fabric/installation/) NGINX Gateway Fabric.
 3. Deploy various [examples](examples).
 4. Read our [How-to guides](https://docs.nginx.com/nginx-gateway-fabric/how-to/).
@@ -32,21 +32,21 @@ You can find the comprehensive NGINX Gateway Fabric user documentation on the [N
 ## NGINX Gateway Fabric Releases
 
 We publish NGINX Gateway Fabric releases on GitHub. See
-our [releases page](https://github.com/nginxinc/nginx-gateway-fabric/releases).
+our [releases page](https://github.com/nginx/nginx-gateway-fabric/releases).
 
-The latest release is [1.5.1](https://github.com/nginxinc/nginx-gateway-fabric/releases/tag/v1.5.1).
+The latest release is [1.6.0](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v1.6.0).
 
 The edge version is useful for experimenting with new features that are not yet published in a release. To use, choose
-the _edge_ version built from the [latest commit](https://github.com/nginxinc/nginx-gateway-fabric/commits/main)
+the _edge_ version built from the [latest commit](https://github.com/nginx/nginx-gateway-fabric/commits/main)
 from the main branch.
 
 The table below summarizes the options regarding the images, manifests, documentation and examples and gives your links
 to the correct versions:
 
-| Version        | Description                              | Installation Manifests                                                            | Documentation and Examples                                                                                                                                                 |
-|----------------|------------------------------------------|-----------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Latest release | For production use                       | [Manifests](https://github.com/nginxinc/nginx-gateway-fabric/tree/v1.5.1/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginxinc/nginx-gateway-fabric/tree/v1.5.1/examples).                           |
-| Edge           | For experimental use and latest features | [Manifests](https://github.com/nginxinc/nginx-gateway-fabric/tree/main/deploy).   | [Documentation](https://github.com/nginxinc/nginx-gateway-fabric/tree/main/site/content). [Examples](https://github.com/nginxinc/nginx-gateway-fabric/tree/main/examples). |
+| Version        | Description                              | Installation Manifests                                                         | Documentation and Examples                                                                                                                                           |
+|----------------|------------------------------------------|--------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Latest release | For production use                       | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.0/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.0/examples).                        |
+| Edge           | For experimental use and latest features | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/main/deploy).   | [Documentation](https://github.com/nginx/nginx-gateway-fabric/tree/main/site/content). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/main/examples). |
 
 ### Versioning
 
@@ -57,7 +57,7 @@ NGF uses semantic versioning for its releases. For more information, see https:/
 ### Release Planning and Development
 
 The features that will go into the next release are reflected in the
-corresponding [milestone](https://github.com/nginxinc/nginx-gateway-fabric/milestones). Refer to
+corresponding [milestone](https://github.com/nginx/nginx-gateway-fabric/milestones). Refer to
 the [Issue Lifecycle](ISSUE_LIFECYCLE.md) document for information on issue creation and assignment to releases.
 
 ## Technical Specifications
@@ -67,6 +67,7 @@ The following table lists the software versions NGINX Gateway Fabric supports.
 | NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS | NGINX Plus |
 |----------------------|-------------|------------|-----------|------------|
 | Edge                 | 1.2.1       | 1.25+      | 1.27.3    | R33        |
+| 1.6.0                | 1.2.1       | 1.25+      | 1.27.3    | R33        |
 | 1.5.1                | 1.2.0       | 1.25+      | 1.27.2    | R33        |
 | 1.5.0                | 1.2.0       | 1.25+      | 1.27.2    | R33        |
 | 1.4.0                | 1.1.0       | 1.25+      | 1.27.1    | R32        |
@@ -87,7 +88,7 @@ using [syft](https://github.com/anchore/syft) and are available in SPDX format.
 ### Docker Images
 
 The SBOM for the Docker image is available in
-the [GitHub Container](https://github.com/nginxinc/nginx-gateway-fabric/pkgs/container/nginx-gateway-fabric)
+the [GitHub Container](https://github.com/nginx/nginx-gateway-fabric/pkgs/container/nginx-gateway-fabric)
 repository. The SBOM is generated using [syft](https://github.com/anchore/syft) and stored as an attestation in the
 image manifest.
 
@@ -95,7 +96,7 @@ For example to retrieve the SBOM for `linux/amd64` and analyze it using [grype](
 can run the following command:
 
 ```shell
-docker buildx imagetools inspect ghcr.io/nginxinc/nginx-gateway-fabric:edge --format '{{ json (index .SBOM "linux/amd64").SPDX }}' | grype
+docker buildx imagetools inspect ghcr.io/nginx/nginx-gateway-fabric:edge --format '{{ json (index .SBOM "linux/amd64").SPDX }}' | grype
 ```
 
 ## Troubleshooting
@@ -110,8 +111,8 @@ contact us directly on the [NGINX Community Slack][slack] in
 the `#nginx-gateway-fabric`
 channel.
 
-[bug]: https://github.com/nginxinc/nginx-gateway-fabric/issues/new?assignees=&labels=&projects=&template=bug_report.md&title=
-[idea]: https://github.com/nginxinc/nginx-gateway-fabric/discussions/categories/ideas
+[bug]: https://github.com/nginx/nginx-gateway-fabric/issues/new?assignees=&labels=&projects=&template=bug_report.md&title=
+[idea]: https://github.com/nginx/nginx-gateway-fabric/discussions/categories/ideas
 [slack]: https://nginxcommunity.slack.com/channels/nginx-gateway-fabric
 
 ## Community Meetings

@@ -32,7 +32,7 @@ practices to ensure a successful feature development process.
    the [testing](/docs/developer/testing.md#unit-test-guidelines) documentation.
 9. **Manually verify your changes**: Refer to the [manual testing](/docs/developer/testing.md#manual-testing) section of
    the testing documentation for instructions on how to manually test your changes.
-10. **Update any relevant documentation**: See the [documentation](https://github.com/nginxinc/nginx-gateway-fabric/blob/main/site/README.md) guide for in-depth information about the workflow to update the docs and how we publish them.
+10. **Update any relevant documentation**: See the [documentation](https://github.com/nginx/nginx-gateway-fabric/blob/main/site/README.md) guide for in-depth information about the workflow to update the docs and how we publish them.
    Here are some basic guidelines for updating documentation:
     - **Gateway API Feature**: If you are implementing a Gateway API feature, make sure to update
       the [Gateway API Compatibility](/site/content/concepts/gateway-api-compatibility.md) documentation.
@@ -54,7 +54,7 @@ practices to ensure a successful feature development process.
     [Update Generated Manifests](/docs/developer/quickstart.md#update-generated-manifests) sections of the
     quickstart guide for instructions.
 13. **Open pull request**: Open a pull request targeting the `main` branch of
-    the [nginx-gateway-fabric](https://github.com/nginxinc/nginx-gateway-fabric/tree/main) repository. The
+    the [nginx-gateway-fabric](https://github.com/nginx/nginx-gateway-fabric/tree/main) repository. The
     entire `nginx-gateway-fabric` group will be automatically requested for review. If you have a specific or
     different reviewer in mind, you can request them as well. Refer to
     the [pull request](/docs/developer/pull-request.md) documentation for expectations and guidelines.

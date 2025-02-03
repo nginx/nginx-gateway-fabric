@@ -8,25 +8,26 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/observability"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/policiesfakes"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/validation"
-	staticConds "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/validation"
+	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
 
-type policyModFunc func(policy *ngfAPI.ObservabilityPolicy) *ngfAPI.ObservabilityPolicy
+type policyModFunc func(policy *ngfAPIv1alpha2.ObservabilityPolicy) *ngfAPIv1alpha2.ObservabilityPolicy
 
-func createValidPolicy() *ngfAPI.ObservabilityPolicy {
-	return &ngfAPI.ObservabilityPolicy{
+func createValidPolicy() *ngfAPIv1alpha2.ObservabilityPolicy {
+	return &ngfAPIv1alpha2.ObservabilityPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
 		},
-		Spec: ngfAPI.ObservabilityPolicySpec{
+		Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
 			TargetRefs: []v1alpha2.LocalPolicyTargetReference{
 				{
 					Group: gatewayv1.GroupName,
@@ -34,11 +35,11 @@ func createValidPolicy() *ngfAPI.ObservabilityPolicy {
 					Name:  "route",
 				},
 			},
-			Tracing: &ngfAPI.Tracing{
-				Strategy: ngfAPI.TraceStrategyRatio,
-				Context:  helpers.GetPointer(ngfAPI.TraceContextExtract),
+			Tracing: &ngfAPIv1alpha2.Tracing{
+				Strategy: ngfAPIv1alpha2.TraceStrategyRatio,
+				Context:  helpers.GetPointer(ngfAPIv1alpha2.TraceContextExtract),
 				SpanName: helpers.GetPointer("spanName"),
-				SpanAttributes: []ngfAPI.SpanAttribute{
+				SpanAttributes: []ngfAPIv1alpha1.SpanAttribute{
 					{Key: "key", Value: "value"},
 				},
 			},
@@ -47,7 +48,7 @@ func createValidPolicy() *ngfAPI.ObservabilityPolicy {
 	}
 }
 
-func createModifiedPolicy(mod policyModFunc) *ngfAPI.ObservabilityPolicy {
+func createModifiedPolicy(mod policyModFunc) *ngfAPIv1alpha2.ObservabilityPolicy {
 	return mod(createValidPolicy())
 }
 
@@ -60,7 +61,7 @@ func TestValidator_Validate(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		policy         *ngfAPI.ObservabilityPolicy
+		policy         *ngfAPIv1alpha2.ObservabilityPolicy
 		globalSettings *policies.GlobalSettings
 		expConditions  []conditions.Condition
 	}{
@@ -89,7 +90,7 @@ func TestValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid target ref; unsupported group",
-			policy: createModifiedPolicy(func(p *ngfAPI.ObservabilityPolicy) *ngfAPI.ObservabilityPolicy {
+			policy: createModifiedPolicy(func(p *ngfAPIv1alpha2.ObservabilityPolicy) *ngfAPIv1alpha2.ObservabilityPolicy {
 				p.Spec.TargetRefs[0].Group = "Unsupported"
 				return p
 			}),
@@ -101,7 +102,7 @@ func TestValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid target ref; unsupported kind",
-			policy: createModifiedPolicy(func(p *ngfAPI.ObservabilityPolicy) *ngfAPI.ObservabilityPolicy {
+			policy: createModifiedPolicy(func(p *ngfAPIv1alpha2.ObservabilityPolicy) *ngfAPIv1alpha2.ObservabilityPolicy {
 				p.Spec.TargetRefs[0].Kind = "Unsupported"
 				return p
 			}),
@@ -113,7 +114,7 @@ func TestValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid strategy",
-			policy: createModifiedPolicy(func(p *ngfAPI.ObservabilityPolicy) *ngfAPI.ObservabilityPolicy {
+			policy: createModifiedPolicy(func(p *ngfAPIv1alpha2.ObservabilityPolicy) *ngfAPIv1alpha2.ObservabilityPolicy {
 				p.Spec.Tracing.Strategy = "invalid"
 				return p
 			}),
@@ -125,8 +126,8 @@ func TestValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid context",
-			policy: createModifiedPolicy(func(p *ngfAPI.ObservabilityPolicy) *ngfAPI.ObservabilityPolicy {
-				p.Spec.Tracing.Context = helpers.GetPointer[ngfAPI.TraceContext]("invalid")
+			policy: createModifiedPolicy(func(p *ngfAPIv1alpha2.ObservabilityPolicy) *ngfAPIv1alpha2.ObservabilityPolicy {
+				p.Spec.Tracing.Context = helpers.GetPointer[ngfAPIv1alpha2.TraceContext]("invalid")
 				return p
 			}),
 			globalSettings: globalSettings,
@@ -137,7 +138,7 @@ func TestValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid span name",
-			policy: createModifiedPolicy(func(p *ngfAPI.ObservabilityPolicy) *ngfAPI.ObservabilityPolicy {
+			policy: createModifiedPolicy(func(p *ngfAPIv1alpha2.ObservabilityPolicy) *ngfAPIv1alpha2.ObservabilityPolicy {
 				p.Spec.Tracing.SpanName = helpers.GetPointer("invalid$$$")
 				return p
 			}),
@@ -150,7 +151,7 @@ func TestValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid span attribute key",
-			policy: createModifiedPolicy(func(p *ngfAPI.ObservabilityPolicy) *ngfAPI.ObservabilityPolicy {
+			policy: createModifiedPolicy(func(p *ngfAPIv1alpha2.ObservabilityPolicy) *ngfAPIv1alpha2.ObservabilityPolicy {
 				p.Spec.Tracing.SpanAttributes[0].Key = "invalid$$$"
 				return p
 			}),
@@ -163,7 +164,7 @@ func TestValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid span attribute value",
-			policy: createModifiedPolicy(func(p *ngfAPI.ObservabilityPolicy) *ngfAPI.ObservabilityPolicy {
+			policy: createModifiedPolicy(func(p *ngfAPIv1alpha2.ObservabilityPolicy) *ngfAPIv1alpha2.ObservabilityPolicy {
 				p.Spec.Tracing.SpanAttributes[0].Value = "invalid$$$"
 				return p
 			}),
@@ -211,33 +212,33 @@ func TestValidator_ValidatePanics(t *testing.T) {
 func TestValidator_Conflicts(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		polA      *ngfAPI.ObservabilityPolicy
-		polB      *ngfAPI.ObservabilityPolicy
+		polA      *ngfAPIv1alpha2.ObservabilityPolicy
+		polB      *ngfAPIv1alpha2.ObservabilityPolicy
 		name      string
 		conflicts bool
 	}{
 		{
 			name: "no conflicts",
-			polA: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{},
+			polA: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{},
 				},
 			},
-			polB: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{},
+			polB: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{},
 			},
 			conflicts: false,
 		},
 		{
 			name: "conflicts",
-			polA: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{},
+			polA: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{},
 				},
 			},
-			polB: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{},
+			polB: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{},
 				},
 			},
 			conflicts: true,

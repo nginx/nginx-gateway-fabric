@@ -1,7 +1,7 @@
 
 # Extensions for NGINX Features
 
-- Issue: https://github.com/nginxinc/nginx-gateway-fabric/issues/1566
+- Issue: https://github.com/nginx/nginx-gateway-fabric/issues/1566
 - Status: Implementable
 
 ## Summary
@@ -121,7 +121,7 @@ spec:
 [GEP-1867](https://gateway-api.sigs.k8s.io/geps/gep-1867/) raises the following operational challenges with `parameterRefs`:
 
 1. _Permissions_: To make declarative changes to a Gateway, the Gateway owner (who has RBAC permissions to a specific Gateway) must have access to GatewayClass, a cluster-scoped resource.
-2. _Scope_: If a change is made on a GatewayClass, _all_ Gateways are affected by that change. This will become an issue once we [support multiple Gateways](https://github.com/nginxinc/nginx-gateway-fabric/issues/1443).
+2. _Scope_: If a change is made on a GatewayClass, _all_ Gateways are affected by that change. This will become an issue once we [support multiple Gateways](https://github.com/nginx/nginx-gateway-fabric/issues/1443).
 3. _Dynamic Changes_: GatewayClasses are meant to be templates, so changes made to the GatewayClass are not expected to change deployed Gateways. This means the configuration is not dynamic. However, this is just a recommendation by the spec and is not required. If we propagate the changes from a GatewayClass to existing Gateways, we must clearly document this behavior.
 
 ### Infrastructure API
@@ -615,7 +615,7 @@ NGINX Plus directives:
 
 These features are grouped because they are all the responsibility of the Cluster Operator and should not be set or changed by Application Developers.
 
-All the Gateways attached to the GatewayClass will inherit these settings. This is acceptable since NGINX Gateway Fabric supports a single Gateway per GatewayClass. However, once we [support multiple Gateways](https://github.com/nginxinc/nginx-gateway-fabric/issues/1443), this could become an issue. It may force users to create multiple GatewayClasses in order to create Gateways with different settings.
+All the Gateways attached to the GatewayClass will inherit these settings. This is acceptable since NGINX Gateway Fabric supports a single Gateway per GatewayClass. However, once we [support multiple Gateways](https://github.com/nginx/nginx-gateway-fabric/issues/1443), this could become an issue. It may force users to create multiple GatewayClasses in order to create Gateways with different settings.
 
 #### Future Work
 

@@ -23,7 +23,7 @@ considering contributing!
 
 ## Ask a Question
 
-To ask a question, use [Github Discussions](https://github.com/nginxinc/nginx-gateway-fabric/discussions).
+To ask a question, use [Github Discussions](https://github.com/nginx/nginx-gateway-fabric/discussions).
 
 [NGINX Community Slack](https://community.nginx.org/joinslack) has a dedicated channel for this
 project -- `#nginx-gateway-fabric`.
@@ -55,7 +55,7 @@ Follow our [Installation Instructions](https://docs.nginx.com/nginx-gateway-fabr
 #### Open a Discussion
 
 If you have any questions, ideas, or simply want to engage in a conversation with the community and maintainers, we
-encourage you to open a [discussion](https://github.com/nginxinc/nginx-gateway-fabric/discussions) on GitHub.
+encourage you to open a [discussion](https://github.com/nginx/nginx-gateway-fabric/discussions) on GitHub.
 
 #### Report a Bug
 
@@ -71,7 +71,7 @@ regarding the idea and its use cases, while also giving the community an opportu
 In some cases, the maintainers may ask you to write an Enhancement Proposal. For details on this process, see
 the [Enhancement Proposal](/docs/proposals/README.md) README.
 
-[idea]: https://github.com/nginxinc/nginx-gateway-fabric/discussions/new?category=ideas
+[idea]: https://github.com/nginx/nginx-gateway-fabric/discussions/new?category=ideas
 
 #### Issue lifecycle
 

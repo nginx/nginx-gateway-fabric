@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	"github.com/nginxinc/nginx-gateway-fabric/tests/framework"
+	"github.com/nginx/nginx-gateway-fabric/tests/framework"
 )
 
 const (
@@ -397,7 +397,7 @@ func getUnexpectedNginxErrorLogs(ngfPodName string) string {
 		"could not be resolved (host not found) during usage report",
 		"server returned 429",
 		// FIXME(salonichf5) remove this error message check
-		// when https://github.com/nginxinc/nginx-gateway-fabric/issues/2090 is completed.
+		// when https://github.com/nginx/nginx-gateway-fabric/issues/2090 is completed.
 		"no live upstreams while connecting to upstream",
 	}
 

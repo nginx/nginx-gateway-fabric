@@ -18,12 +18,12 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller/controllerfakes"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller/index"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller/predicate"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	ngftypes "github.com/nginxinc/nginx-gateway-fabric/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/controllerfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/predicate"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
 )
 
 func TestRegister(t *testing.T) {

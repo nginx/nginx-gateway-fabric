@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	tel "github.com/nginxinc/telemetry-exporter/pkg/telemetry"
+	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,11 +16,11 @@ import (
 	k8sversion "k8s.io/apimachinery/pkg/util/version"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/kinds"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/config"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 )
 
 //counterfeiter:generate . GraphGetter
@@ -39,7 +39,7 @@ type ConfigurationGetter interface {
 
 // Data is telemetry data.
 //
-//go:generate go run -tags generator github.com/nginxinc/telemetry-exporter/cmd/generator -type=Data -scheme -scheme-protocol=NGFProductTelemetry -scheme-df-datatype=ngf-product-telemetry
+//go:generate go run -tags generator github.com/nginx/telemetry-exporter/cmd/generator -type=Data -scheme -scheme-protocol=NGFProductTelemetry -scheme-df-datatype=ngf-product-telemetry
 type Data struct {
 	// ImageSource tells whether the image was built by GitHub or locally (values are 'gha', 'local', or 'unknown')
 	ImageSource string
@@ -66,7 +66,7 @@ type Data struct {
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.
 //
-//go:generate go run -tags generator github.com/nginxinc/telemetry-exporter/cmd/generator -type=NGFResourceCounts
+//go:generate go run -tags generator github.com/nginx/telemetry-exporter/cmd/generator -type=NGFResourceCounts
 type NGFResourceCounts struct {
 	// GatewayCount is the number of relevant Gateways.
 	GatewayCount int64

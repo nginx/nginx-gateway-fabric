@@ -1,12 +1,5 @@
 package validation
 
-import (
-	"errors"
-	"strings"
-
-	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
-)
-
 // HTTPRedirectValidator validates values for a redirect, which in NGINX is done with the return directive.
 // For example, return 302 "https://example.com:8080";
 type HTTPRedirectValidator struct{}
@@ -17,6 +10,9 @@ type HTTPURLRewriteValidator struct{}
 // HTTPHeaderValidator validates values for request headers,
 // which in NGINX is done with the proxy_set_header directive.
 type HTTPHeaderValidator struct{}
+
+// HTTPPathValidator validates values for path used in filters.
+type HTTPPathValidator struct{}
 
 var supportedRedirectSchemes = map[string]struct{}{
 	"http":  {},
@@ -54,22 +50,9 @@ func (HTTPRedirectValidator) ValidateHostname(hostname string) error {
 	return validateEscapedStringNoVarExpansion(hostname, hostnameExamples)
 }
 
-// ValidateRewritePath validates a path used in a URL Rewrite filter.
-func (HTTPURLRewriteValidator) ValidateRewritePath(path string) error {
-	if path == "" {
-		return nil
-	}
-
-	if !pathRegexp.MatchString(path) {
-		msg := k8svalidation.RegexError(pathErrMsg, pathFmt, pathExamples...)
-		return errors.New(msg)
-	}
-
-	if strings.Contains(path, "$") {
-		return errors.New("cannot contain $")
-	}
-
-	return nil
+// ValidatePath validates a path used in filters.
+func (HTTPPathValidator) ValidatePath(path string) error {
+	return validatePath(path)
 }
 
 func (HTTPHeaderValidator) ValidateFilterHeaderName(name string) error {

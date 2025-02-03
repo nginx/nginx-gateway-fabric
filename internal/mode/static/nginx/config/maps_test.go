@@ -6,9 +6,9 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/shared"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/shared"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
 )
 
 func TestExecuteMaps(t *testing.T) {

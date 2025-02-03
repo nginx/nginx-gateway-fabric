@@ -236,7 +236,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: nginx-gateway
         ports:
@@ -275,7 +275,7 @@ spec:
           name: nginx-run
         - mountPath: /etc/nginx/includes
           name: nginx-includes
-      - image: ghcr.io/nginxinc/nginx-gateway-fabric/nginx:edge
+      - image: ghcr.io/nginx/nginx-gateway-fabric/nginx:edge
         imagePullPolicy: Always
         name: nginx
         ports:
@@ -322,7 +322,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: init
         securityContext:

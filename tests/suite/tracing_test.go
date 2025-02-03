@@ -17,9 +17,10 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/tests/framework"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/tests/framework"
 )
 
 // This test can be flaky when waiting to see traces show up in the collector logs.
@@ -101,7 +102,7 @@ var _ = Describe("Tracing", FlakeAttempts(2), Label("functional", "tracing"), fu
 		}
 
 		gwClass.Spec.ParametersRef = &gatewayv1.ParametersReference{
-			Group: ngfAPI.GroupName,
+			Group: ngfAPIv1alpha1.GroupName,
 			Kind:  gatewayv1.Kind("NginxProxy"),
 			Name:  "nginx-proxy",
 		}
@@ -235,7 +236,7 @@ func verifyPolicyStatus() error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
 	defer cancel()
 
-	var pol ngfAPI.ObservabilityPolicy
+	var pol ngfAPIv1alpha2.ObservabilityPolicy
 	key := types.NamespacedName{Name: "test-observability-policy", Namespace: "helloworld"}
 	if err := k8sClient.Get(ctx, key, &pol); err != nil {
 		return err

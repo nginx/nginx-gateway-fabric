@@ -8,11 +8,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
-	staticConds "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
+	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
 )
 
 var (
@@ -328,8 +328,22 @@ func validateFilterRedirect(
 	}
 
 	if redirect.Path != nil {
-		valErr := field.Forbidden(redirectPath.Child("path"), "path is not supported")
-		allErrs = append(allErrs, valErr)
+		var path string
+		switch redirect.Path.Type {
+		case v1.FullPathHTTPPathModifier:
+			path = *redirect.Path.ReplaceFullPath
+		case v1.PrefixMatchHTTPPathModifier:
+			path = *redirect.Path.ReplacePrefixMatch
+		default:
+			msg := fmt.Sprintf("requestRedirect path type %s not supported", redirect.Path.Type)
+			valErr := field.Invalid(redirectPath.Child("path"), *redirect.Path, msg)
+			return append(allErrs, valErr)
+		}
+
+		if err := validator.ValidatePath(path); err != nil {
+			valErr := field.Invalid(redirectPath.Child("path"), *redirect.Path, err.Error())
+			allErrs = append(allErrs, valErr)
+		}
 	}
 
 	if redirect.StatusCode != nil {
@@ -372,10 +386,10 @@ func validateFilterRewrite(
 		default:
 			msg := fmt.Sprintf("urlRewrite path type %s not supported", rewrite.Path.Type)
 			valErr := field.Invalid(rewritePath.Child("path"), *rewrite.Path, msg)
-			return append(allErrs, valErr)
+			allErrs = append(allErrs, valErr)
 		}
 
-		if err := validator.ValidateRewritePath(path); err != nil {
+		if err := validator.ValidatePath(path); err != nil {
 			valErr := field.Invalid(rewritePath.Child("path"), *rewrite.Path, err.Error())
 			allErrs = append(allErrs, valErr)
 		}

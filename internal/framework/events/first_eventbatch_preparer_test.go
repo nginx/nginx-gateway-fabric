@@ -16,20 +16,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/events/eventsfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kubernetes/kubernetesfakes"
 )
 
 var _ = Describe("FirstEventBatchPreparer", func() {
 	var (
-		fakeReader *eventsfakes.FakeReader
+		fakeReader *kubernetesfakes.FakeReader
 		preparer   *events.FirstEventBatchPreparerImpl
 	)
 
 	const gcName = "my-class"
 
 	BeforeEach(func() {
-		fakeReader = &eventsfakes.FakeReader{}
+		fakeReader = &kubernetesfakes.FakeReader{}
 		preparer = events.NewFirstEventBatchPreparerImpl(
 			fakeReader,
 			[]client.Object{&v1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: gcName}}},

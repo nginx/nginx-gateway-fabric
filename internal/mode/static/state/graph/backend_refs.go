@@ -11,12 +11,12 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/sort"
-	staticConds "github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/sort"
+	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
 
 // BackendRef is an internal representation of a backendRef in an HTTP/GRPC/TLSRoute.
@@ -214,7 +214,7 @@ func createBackendRef(
 // The backend TLS policy configuration is considered matching if: 1. CACertRefs reference the same ConfigMap, or
 // 2. WellKnownCACerts are the same, and 3. Hostname is the same.
 // FIXME (ciarams87): This is a temporary solution until we can support multiple backend TLS policies per group.
-// https://github.com/nginxinc/nginx-gateway-fabric/issues/1546
+// https://github.com/nginx/nginx-gateway-fabric/issues/1546
 func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *conditions.Condition {
 	var mismatch bool
 	var referencePolicy *BackendTLSPolicy

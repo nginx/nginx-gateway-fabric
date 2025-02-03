@@ -21,7 +21,7 @@ import (
 // (2) A reload can have side-effects for data plane traffic.
 // FIXME(pleshakov): better document the side effects and how to prevent and mitigate them.
 // So when the EventLoop have 100 saved events, it is better to process them at once rather than one by one.
-// https://github.com/nginxinc/nginx-gateway-fabric/issues/551
+// https://github.com/nginx/nginx-gateway-fabric/issues/551
 type EventLoop struct {
 	handler  EventHandler
 	preparer FirstEventBatchPreparer

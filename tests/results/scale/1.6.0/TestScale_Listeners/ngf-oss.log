@@ -1,0 +1,1 @@
+{"level":"debug","ts":"2025-01-13T22:48:04Z","logger":"statusUpdater","msg":"Encountered error updating status","error":"Operation cannot be fulfilled on gateways.gateway.networking.k8s.io \"gateway\": the object has been modified; please apply your changes to the latest version and try again","namespace":"scale","name":"gateway","kind":"Gateway"}

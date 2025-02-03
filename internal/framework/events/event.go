@@ -4,7 +4,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	ngftypes "github.com/nginxinc/nginx-gateway-fabric/internal/framework/types"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
 )
 
 // EventBatch is a batch of events to be handled at once.

@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginxinc/nginx-gateway-fabric/tests/framework"
+	"github.com/nginx/nginx-gateway-fabric/tests/framework"
 )
 
 // Cluster node size must be greater than or equal to 4 for test to perform correctly.
@@ -208,7 +208,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 	cleanupResources := func() error {
 		var err error
 
-		// FIXME (bjee19): https://github.com/nginxinc/nginx-gateway-fabric/issues/2376
+		// FIXME (bjee19): https://github.com/nginx/nginx-gateway-fabric/issues/2376
 		// Find a way to bulk delete these namespaces.
 		for i := 1; i <= maxResourceCount; i++ {
 			nsName := "namespace" + strconv.Itoa(i)
@@ -431,7 +431,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		})
 		Expect(err).ToNot(HaveOccurred())
 
-		// FIXME (bjee19): https://github.com/nginxinc/nginx-gateway-fabric/issues/2374
+		// FIXME (bjee19): https://github.com/nginx/nginx-gateway-fabric/issues/2374
 		// Find a way to calculate time to ready metrics without having to rely on specific log lines.
 		timeToReadyTotal, err := calculateTimeToReadyTotal(logs, timeToReadyStartingLogSubstring)
 		Expect(err).ToNot(HaveOccurred())

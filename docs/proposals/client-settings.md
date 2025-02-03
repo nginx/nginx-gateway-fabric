@@ -1,6 +1,6 @@
 # Enhancement Proposal-1632: Client Settings Policy
 
-- Issue: https://github.com/nginxinc/nginx-gateway-fabric/issues/1632
+- Issue: https://github.com/nginx/nginx-gateway-fabric/issues/1632
 - Status: Completed
 
 ## Summary
@@ -350,7 +350,7 @@ B. Same Hostname:
 C. Internal Redirect:
 ![example-c1](/docs/images/client-settings/example-c1.png)
 
-For this attachment scenario, specifying the directives in every server context creates the effective policies for the attached HTTPRoutes. Specifying the directives in the http context would have the same effect, but this would not work once we add support for [multiple Gateway resources](https://github.com/nginxinc/nginx-gateway-fabric/issues/1443).
+For this attachment scenario, specifying the directives in every server context creates the effective policies for the attached HTTPRoutes. Specifying the directives in the http context would have the same effect, but this would not work once we add support for [multiple Gateway resources](https://github.com/nginx/nginx-gateway-fabric/issues/1443).
 
 **2. HTTPRoute Attachment**
 
@@ -404,7 +404,7 @@ All fields in the `ClientSettingsPolicy` will be validated with Open API Schema.
 
 - Add support for more client-related directives, such as `client_body_buffer_size`, `client_header_buffer_size`, or `keepalive_disable`.
 - Extend implementation to support multiple Gateways.
-- Allow attaching to GRPCRoutes. [GRPCRoute implementation](https://github.com/nginxinc/nginx-gateway-fabric/issues/1139) is scheduled for the 1.3 release. All the directives included in this policy are applicable to gRPC servers (HTTP/2 server). For streams, the `client_max_body_size` directive applies to the entire stream, not individual messages. Therefore, for streaming methods it is recommended that this be set to a large value or 0 to disable checking.
+- Allow attaching to GRPCRoutes. [GRPCRoute implementation](https://github.com/nginx/nginx-gateway-fabric/issues/1139) is scheduled for the 1.3 release. All the directives included in this policy are applicable to gRPC servers (HTTP/2 server). For streams, the `client_max_body_size` directive applies to the entire stream, not individual messages. Therefore, for streaming methods it is recommended that this be set to a large value or 0 to disable checking.
 - Extend with HTTP/2 and HTTP/3 directives. For example, `http2_preread_size`, `http2_chunk_size`, `http2_max_concurrent_streams`, etc. See the [HTTP/2](https://nginx.org/en/docs/http/ngx_http_v2_module.html) and [HTTP/3](https://nginx.org/en/docs/http/ngx_http_v3_module.html) modules for more directives.
 - Add more attachment points. For example, allowing attachment to GatewayClasses or Gateway Listeners.
 - Improve on status and discoverability.

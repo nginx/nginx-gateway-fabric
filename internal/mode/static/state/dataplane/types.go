@@ -6,9 +6,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/graph"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
 )
 
 // PathType is the type of the path in a PathRule.
@@ -50,6 +50,8 @@ type Configuration struct {
 	Telemetry Telemetry
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
+	// NginxPlus specifies NGINX Plus additional settings.
+	NginxPlus NginxPlus
 	// BaseHTTPConfig holds the configuration options at the http context.
 	BaseHTTPConfig BaseHTTPConfig
 	// Version represents the version of the generated configuration.
@@ -193,6 +195,8 @@ type HTTPRequestRedirectFilter struct {
 	Port *int32
 	// StatusCode is the HTTP status code of the redirect.
 	StatusCode *int
+	// Path is the path of the redirect.
+	Path *HTTPPathModifier
 }
 
 // HTTPURLRewriteFilter rewrites HTTP requests.
@@ -396,6 +400,12 @@ type Ratio struct {
 type Logging struct {
 	// ErrorLevel defines the error log level.
 	ErrorLevel string
+}
+
+// NginxPlus specifies NGINX Plus additional settings.
+type NginxPlus struct {
+	// AllowedAddresses specifies IPAddresses or CIDR blocks to the allow list for accessing the NGINX Plus API.
+	AllowedAddresses []string
 }
 
 // DeploymentContext contains metadata about NGF and the cluster.

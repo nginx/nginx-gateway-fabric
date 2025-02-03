@@ -13,8 +13,8 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/runtime/runtimefakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime/runtimefakes"
 )
 
 var _ = Describe("NGINX Runtime Manager", func() {

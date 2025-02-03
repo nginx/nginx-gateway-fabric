@@ -1,6 +1,6 @@
 # Enhancement Proposal-1775: Gateway Settings
 
-- Issue: https://github.com/nginxinc/nginx-gateway-fabric/issues/1775
+- Issue: https://github.com/nginx/nginx-gateway-fabric/issues/1775
 - Status: Completed
 
 ## Summary

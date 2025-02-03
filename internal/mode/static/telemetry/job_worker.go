@@ -23,7 +23,7 @@ func CreateTelemetryJobWorker(
 		// Gather telemetry
 		logger.V(1).Info("Gathering telemetry data")
 
-		// We will need to gather data as defined in https://github.com/nginxinc/nginx-gateway-fabric/issues/793
+		// We will need to gather data as defined in https://github.com/nginx/nginx-gateway-fabric/issues/793
 		data, err := dataCollector.Collect(ctx)
 		if err != nil {
 			logger.Error(err, "Failed to collect telemetry data")

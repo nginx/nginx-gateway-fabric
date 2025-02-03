@@ -1,8 +1,10 @@
 ---
 title: "Data plane configuration"
-weight: 400
 toc: true
-docs: "DOCS-000"
+weight: 500
+type: how-to
+product: NGF
+docs: DOCS-000
 ---
 
 Learn how to dynamically update the NGINX Gateway Fabric global data plane configuration.

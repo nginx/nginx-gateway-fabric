@@ -12,8 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller"
-	ngftypes "github.com/nginxinc/nginx-gateway-fabric/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
 )
 
 // UpdateRequest is a request to update the status of a resource.
@@ -38,17 +38,17 @@ type Setter func(client.Object) (wasSet bool)
 // status API calls sequentially will take time.
 // (b) k8s API can become slow or even timeout. This will increase every update status API call.
 // Making Updater asynchronous will prevent it from adding variable delays to the event loop.
-// FIXME(pleshakov): https://github.com/nginxinc/nginx-gateway-fabric/issues/1014
+// FIXME(pleshakov): https://github.com/nginx/nginx-gateway-fabric/issues/1014
 //
 // (2) It doesn't clear the statuses of a resources that are no longer handled by the Gateway. For example, if
 // an HTTPRoute resource no longer has the parentRef to the Gateway resources, the Gateway must update the status
 // of the resource to remove the status about the removed parentRef.
-// FIXME(pleshakov): https://github.com/nginxinc/nginx-gateway-fabric/issues/1015
+// FIXME(pleshakov): https://github.com/nginx/nginx-gateway-fabric/issues/1015
 //
 // (3) If another controllers changes the status of the Gateway/HTTPRoute resource so that the information set by our
 // Gateway is removed, our Gateway will not restore the status until the EventLoop invokes the StatusUpdater as a
 // result of processing some other new change to a resource(s).
-// FIXME(pleshakov): https://github.com/nginxinc/nginx-gateway-fabric/issues/1813
+// FIXME(pleshakov): https://github.com/nginx/nginx-gateway-fabric/issues/1813
 type Updater struct {
 	client client.Client
 	logger logr.Logger

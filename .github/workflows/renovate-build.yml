@@ -52,7 +52,7 @@ jobs:
           token: ${{ secrets.NGINX_PAT }}
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
           go-version: stable
           cache-dependency-path: |
@@ -67,7 +67,7 @@ jobs:
 
       - name: Commit changes
         id: commit
-        uses: stefanzweifel/git-auto-commit-action@8621497c8c39c72f3e2a999a26b4ca1b5058a842 # v5.0.1
+        uses: stefanzweifel/git-auto-commit-action@e348103e9026cc0eee72ae06630dbe30c8bf7a79 # v5.1.0
         with:
           commit_message: "Update files for renovate"
           commit_author: "renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>"

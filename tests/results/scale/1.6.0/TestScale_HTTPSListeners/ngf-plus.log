@@ -1,0 +1,3 @@
+{"level":"debug","ts":"2025-01-13T22:51:14Z","logger":"controller-runtime.healthz","msg":"healthz check failed","checker":"readyz","error":"nginx has not yet become ready to accept traffic"}
+{"level":"debug","ts":"2025-01-13T22:51:14Z","logger":"controller-runtime.healthz","msg":"healthz check failed","checker":"readyz","error":"nginx has not yet become ready to accept traffic"}
+{"level":"debug","ts":"2025-01-13T22:51:15Z","logger":"controller-runtime.healthz","msg":"healthz check failed","checker":"readyz","error":"nginx has not yet become ready to accept traffic"}

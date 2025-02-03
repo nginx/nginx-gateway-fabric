@@ -6,19 +6,20 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	ngfAPI "github.com/nginxinc/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/observability"
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/dataplane"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 	ratio := helpers.GetPointer[int32](25)
 	zeroRatio := helpers.GetPointer[int32](0)
-	context := helpers.GetPointer[ngfAPI.TraceContext](ngfAPI.TraceContextExtract)
+	context := helpers.GetPointer[ngfAPIv1alpha2.TraceContext](ngfAPIv1alpha2.TraceContextExtract)
 	spanName := helpers.GetPointer("my-span")
 
 	tests := []struct {
@@ -31,10 +32,10 @@ func TestGenerate(t *testing.T) {
 	}{
 		{
 			name: "strategy set to default ratio",
-			policy: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{
-						Strategy: ngfAPI.TraceStrategyRatio,
+			policy: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{
+						Strategy: ngfAPIv1alpha2.TraceStrategyRatio,
 					},
 				},
 			},
@@ -50,14 +51,14 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "strategy set to custom ratio",
-			policy: &ngfAPI.ObservabilityPolicy{
+			policy: &ngfAPIv1alpha2.ObservabilityPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-policy",
 					Namespace: "test-namespace",
 				},
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{
-						Strategy: ngfAPI.TraceStrategyRatio,
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{
+						Strategy: ngfAPIv1alpha2.TraceStrategyRatio,
 						Ratio:    ratio,
 					},
 				},
@@ -74,14 +75,14 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "strategy set to zero ratio",
-			policy: &ngfAPI.ObservabilityPolicy{
+			policy: &ngfAPIv1alpha2.ObservabilityPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-policy",
 					Namespace: "test-namespace",
 				},
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{
-						Strategy: ngfAPI.TraceStrategyRatio,
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{
+						Strategy: ngfAPIv1alpha2.TraceStrategyRatio,
 						Ratio:    zeroRatio,
 					},
 				},
@@ -98,10 +99,10 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "strategy set to parent",
-			policy: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{
-						Strategy: ngfAPI.TraceStrategyParent,
+			policy: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{
+						Strategy: ngfAPIv1alpha2.TraceStrategyParent,
 					},
 				},
 			},
@@ -117,9 +118,9 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "context is set",
-			policy: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{
+			policy: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{
 						Context: context,
 					},
 				},
@@ -138,9 +139,9 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "spanName is set",
-			policy: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{
+			policy: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{
 						SpanName: spanName,
 					},
 				},
@@ -158,10 +159,10 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "span attributes set",
-			policy: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{
-						SpanAttributes: []ngfAPI.SpanAttribute{
+			policy: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{
+						SpanAttributes: []ngfAPIv1alpha1.SpanAttribute{
 							{Key: "test-key", Value: "test-value"},
 						},
 					},
@@ -181,9 +182,9 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "global span attributes set",
-			policy: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{},
+			policy: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{},
 				},
 			},
 			telemetryConf: dataplane.Telemetry{
@@ -205,13 +206,13 @@ func TestGenerate(t *testing.T) {
 		},
 		{
 			name: "all fields populated",
-			policy: &ngfAPI.ObservabilityPolicy{
-				Spec: ngfAPI.ObservabilityPolicySpec{
-					Tracing: &ngfAPI.Tracing{
-						Strategy: ngfAPI.TraceStrategyRatio,
+			policy: &ngfAPIv1alpha2.ObservabilityPolicy{
+				Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+					Tracing: &ngfAPIv1alpha2.Tracing{
+						Strategy: ngfAPIv1alpha2.TraceStrategyRatio,
 						Context:  context,
 						SpanName: spanName,
-						SpanAttributes: []ngfAPI.SpanAttribute{
+						SpanAttributes: []ngfAPIv1alpha1.SpanAttribute{
 							{Key: "test-key", Value: "test-value"},
 						},
 					},
@@ -290,12 +291,12 @@ func TestGenerateNoPolicies(t *testing.T) {
 	resFiles := generator.GenerateForLocation([]policies.Policy{}, http.Location{})
 	g.Expect(resFiles).To(BeEmpty())
 
-	resFiles = generator.GenerateForLocation([]policies.Policy{&ngfAPI.ClientSettingsPolicy{}}, http.Location{})
+	resFiles = generator.GenerateForLocation([]policies.Policy{&ngfAPIv1alpha1.ClientSettingsPolicy{}}, http.Location{})
 	g.Expect(resFiles).To(BeEmpty())
 
 	resFiles = generator.GenerateForInternalLocation([]policies.Policy{})
 	g.Expect(resFiles).To(BeEmpty())
 
-	resFiles = generator.GenerateForInternalLocation([]policies.Policy{&ngfAPI.ClientSettingsPolicy{}})
+	resFiles = generator.GenerateForInternalLocation([]policies.Policy{&ngfAPIv1alpha1.ClientSettingsPolicy{}})
 	g.Expect(resFiles).To(BeEmpty())
 }

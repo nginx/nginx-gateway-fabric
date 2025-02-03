@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/framework/controller/index"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
 )
 
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate

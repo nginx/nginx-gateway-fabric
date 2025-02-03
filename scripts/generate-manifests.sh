@@ -32,7 +32,7 @@ done
 generate_manifests openshift
 
 # FIXME(lucacome): Implement a better way to generate the static deployment file
-# https://github.com/nginxinc/nginx-gateway-fabric/issues/2326
+# https://github.com/nginx/nginx-gateway-fabric/issues/2326
 helm template nginx-gateway charts/nginx-gateway-fabric --set nameOverride=nginx-gateway --set metrics.enable=false --set nginxGateway.productTelemetry.enable=false -n nginx-gateway -s templates/deployment.yaml >config/tests/static-deployment.yaml
 sed -i.bak '/app.kubernetes.io\/managed-by: Helm/d' config/tests/static-deployment.yaml
 sed -i.bak '/helm.sh/d' config/tests/static-deployment.yaml

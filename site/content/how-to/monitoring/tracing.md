@@ -64,7 +64,7 @@ To enable tracing, you must configure two resources:
 
   The `NginxProxy` resource contains configuration for the collector, and applies to all Gateways and routes under the GatewayClass. It does not enable tracing, but is a prerequisite to the next piece of configuration.
 
-- `ObservabilityPolicy`: This resource is a [Direct PolicyAttachment](https://gateway-api.sigs.k8s.io/reference/policy-attachment/) that targets HTTPRoutes or GRPCRoutes. It is created by the [application developer](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/) and enables tracing for a specific route or routes. It requires the `NginxProxy` resource to exist in order to complete the tracing configuration.
+- `ObservabilityPolicy`: This resource is a [Direct Policy Attachment](https://gateway-api.sigs.k8s.io/reference/policy-attachment/) that targets HTTPRoutes or GRPCRoutes. It is created by the [application developer](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/) and enables tracing for a specific route or routes. It requires the `NginxProxy` resource to exist in order to complete the tracing configuration.
 
 For all the possible configuration options for these resources, see the [API reference]({{< relref "reference/api.md" >}}).
 
@@ -92,7 +92,7 @@ The span attribute will be added to all tracing spans.
 To install:
 
 ```shell
-helm install ngf oci://ghcr.io/nginxinc/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway -f values.yaml
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway -f values.yaml
 ```
 
 You should see the following configuration:
@@ -267,7 +267,7 @@ To enable tracing for the coffee HTTPRoute, create the following policy:
 
 ```yaml
 kubectl apply -f - <<EOF
-apiVersion: gateway.nginx.org/v1alpha1
+apiVersion: gateway.nginx.org/v1alpha2
 kind: ObservabilityPolicy
 metadata:
   name: coffee

@@ -1,10 +1,10 @@
 # Separation of control and data plane
 
-**Archived; Superseded by [Proposal 1508](https://github.com/nginxinc/nginx-gateway-fabric/tree/main/docs/proposals/control-data-plane-split/README.md)**
+**Archived; Superseded by [Proposal 1508](https://github.com/nginx/nginx-gateway-fabric/tree/main/docs/proposals/control-data-plane-split/README.md)**
 
 This document proposes a design for separating the control and data planes.
 
-Issue #292: https://github.com/nginxinc/nginx-gateway-fabric/issues/292
+Issue #292: https://github.com/nginx/nginx-gateway-fabric/issues/292
 
 > Note: I use data plane and agent interchangeably in this document.
 
@@ -666,7 +666,7 @@ command and then download the config chunks over the `DownloadChannel .`It will 
 configuration and attempt to apply it. It will send the status of the configuration application over
 the `CommandChannel` in a `NginxConfigResponse` message.
 
-[internal-config]: https://github.com/nginxinc/nginx-gateway-fabric/blob/main/internal/nginx/config/http/config.go
+[internal-config]: https://github.com/nginx/nginx-gateway-fabric/blob/main/internal/nginx/config/http/config.go
 
 [zip-file]: https://github.com/nginx/agent/blob/ea3a1b4df5d7ecf95bd3d9297d26e420f5e1dd57/sdk/proto/common.pb.go#L668
 

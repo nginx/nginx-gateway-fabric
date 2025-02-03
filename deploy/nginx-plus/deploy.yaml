@@ -248,7 +248,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: nginx-gateway
         ports:
@@ -342,7 +342,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: init
         securityContext:

@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
           go-version: stable
 
@@ -49,7 +49,7 @@ jobs:
         uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96 # v5.6.1
         with:
           images: |
-            name=ghcr.io/nginxinc/nginx-gateway-fabric
+            name=ghcr.io/nginx/nginx-gateway-fabric
           tags: |
             type=semver,pattern={{version}}
             type=schedule
@@ -62,7 +62,7 @@ jobs:
         uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96 # v5.6.1
         with:
           images: |
-            name=ghcr.io/nginxinc/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
+            name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
           tags: |
             type=semver,pattern={{version}}
             type=edge
@@ -73,14 +73,14 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@9ed2f89a662bf1735a48bc8557fd212fa902bebf # v6.1.0
         with:
-          version: v2.5.1 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.6.1 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           args: build --single-target --snapshot --clean
         env:
           TELEMETRY_ENDPOINT: otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317
           TELEMETRY_ENDPOINT_INSECURE: "true"
 
       - name: Build NGF Docker Image
-        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991 # v6.13.0
         with:
           file: build/Dockerfile
           tags: ${{ steps.ngf-meta.outputs.tags }}
@@ -91,7 +91,7 @@ jobs:
           target: goreleaser
 
       - name: Build NGINX Docker Image
-        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991 # v6.13.0
         with:
           file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || ''}}
           tags: ${{ steps.nginx-meta.outputs.tags }}
@@ -112,7 +112,7 @@ jobs:
 
       - name: Install cloud-provider-kind
         run: |
-          CLOUD_PROVIDER_KIND_VERSION=v0.4.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
+          CLOUD_PROVIDER_KIND_VERSION=v0.5.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
           go install sigs.k8s.io/cloud-provider-kind@${CLOUD_PROVIDER_KIND_VERSION}
 
       - name: Run cloud-provider-kind
@@ -126,21 +126,21 @@ jobs:
 
       - name: Run functional telemetry tests
         run: |
-          ngf_prefix=ghcr.io/nginxinc/nginx-gateway-fabric
+          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
           make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
         working-directory: ./tests
 
       - name: Run functional graceful-recovery tests
         run: |
-          ngf_prefix=ghcr.io/nginxinc/nginx-gateway-fabric
+          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
           make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=graceful-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
         working-directory: ./tests
 
       - name: Run functional tests
         run: |
-          ngf_prefix=ghcr.io/nginxinc/nginx-gateway-fabric
+          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
           make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
         working-directory: ./tests

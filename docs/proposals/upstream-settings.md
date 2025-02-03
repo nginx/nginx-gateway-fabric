@@ -1,6 +1,6 @@
 # Enhancement Proposal-2467: Upstream Settings Policy
 
-- Issue: https://github.com/nginxinc/nginx-gateway-fabric/issues/2467
+- Issue: https://github.com/nginx/nginx-gateway-fabric/issues/2467
 - Status: Implementable
 
 ## Summary

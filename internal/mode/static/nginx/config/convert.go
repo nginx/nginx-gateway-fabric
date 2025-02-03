@@ -5,7 +5,7 @@ import (
 
 	ngxclient "github.com/nginxinc/nginx-plus-go-client/client"
 
-	"github.com/nginxinc/nginx-gateway-fabric/internal/mode/static/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
 )
 
 // ConvertEndpoints converts a list of Endpoints into a list of NGINX Plus SDK UpstreamServers.
