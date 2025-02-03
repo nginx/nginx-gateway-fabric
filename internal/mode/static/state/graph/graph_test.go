@@ -41,6 +41,9 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	cm := &v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ConfigMap",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "configmap",
 			Namespace: "service",
@@ -338,6 +341,9 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	secret := &v1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Secret",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: testNs,
 			Name:      "secret",
@@ -888,6 +894,10 @@ func TestBuildGraph(t *testing.T) {
 			ReferencedSecrets: map[types.NamespacedName]*Secret{
 				client.ObjectKeyFromObject(secret): {
 					Source: secret,
+					CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", &Certificate{
+						TLSCert:       cert,
+						TLSPrivateKey: key,
+					}),
 				},
 			},
 			ReferencedNamespaces: map[types.NamespacedName]*v1.Namespace{
@@ -900,7 +910,9 @@ func TestBuildGraph(t *testing.T) {
 			ReferencedCaCertConfigMaps: map[types.NamespacedName]*CaCertConfigMap{
 				client.ObjectKeyFromObject(cm): {
 					Source: cm,
-					CACert: []byte(caBlock),
+					CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(cm), "ConfigMap", &Certificate{
+						CACert: []byte(caBlock),
+					}),
 				},
 			},
 			BackendTLSPolicies: map[types.NamespacedName]*BackendTLSPolicy{
@@ -1162,7 +1174,9 @@ func TestIsReferenced(t *testing.T) {
 		ReferencedCaCertConfigMaps: map[types.NamespacedName]*CaCertConfigMap{
 			client.ObjectKeyFromObject(baseConfigMap): {
 				Source: baseConfigMap,
-				CACert: []byte(caBlock),
+				CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(baseConfigMap), "ConfigMap", &Certificate{
+					CACert: []byte(caBlock),
+				}),
 			},
 		},
 	}

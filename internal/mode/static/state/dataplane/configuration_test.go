@@ -809,7 +809,13 @@ func TestBuildConfiguration(t *testing.T) {
 					"ca.crt": "cert-1",
 				},
 			},
-			CACert: []byte("cert-1"),
+			CertBundle: graph.NewCertificateBundle(
+				types.NamespacedName{Namespace: "test", Name: "configmap-1"},
+				"ConfigMap",
+				&graph.Certificate{
+					CACert: []byte("cert-1"),
+				},
+			),
 		},
 		{Namespace: "test", Name: "configmap-2"}: {
 			Source: &apiv1.ConfigMap{
@@ -821,7 +827,13 @@ func TestBuildConfiguration(t *testing.T) {
 					"ca.crt": []byte("cert-2"),
 				},
 			},
-			CACert: []byte("cert-2"),
+			CertBundle: graph.NewCertificateBundle(
+				types.NamespacedName{Namespace: "test", Name: "configmap-2"},
+				"ConfigMap",
+				&graph.Certificate{
+					CACert: []byte("cert-2"),
+				},
+			),
 		},
 	}
 

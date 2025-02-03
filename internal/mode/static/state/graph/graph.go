@@ -59,7 +59,7 @@ type Graph struct {
 	Routes map[RouteKey]*L7Route
 	// L4Routes hold L4Route resources.
 	L4Routes map[L4RouteKey]*L4Route
-	// ReferencedSecrets includes Secrets referenced by Gateway Listeners, including invalid ones.
+	// ReferencedSecrets includes Secrets referenced by Gateway Listeners or BackendTLSPolicies, including invalid ones.
 	// It is different from the other maps, because it includes entries for Secrets that do not exist
 	// in the cluster. We need such entries so that we can query the Graph to determine if a Secret is referenced
 	// by the Gateway, including the case when the Secret is newly created.
@@ -230,6 +230,7 @@ func BuildGraph(
 	processedBackendTLSPolicies := processBackendTLSPolicies(
 		state.BackendTLSPolicies,
 		configMapResolver,
+		secretResolver,
 		controllerName,
 		gw,
 	)

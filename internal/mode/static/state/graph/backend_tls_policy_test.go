@@ -75,7 +75,7 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, "test", test.gateway)
+			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, nil, "test", test.gateway)
 
 			g.Expect(processed).To(Equal(test.expected))
 		})
@@ -404,13 +404,31 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 	}
 
+	secretMaps := map[types.NamespacedName]*v1.Secret{
+		{Namespace: "test", Name: "test-secret"}: {
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "test",
+			},
+			// FILL IN
+		},
+		{Namespace: "test", Name: "invalid-secret"}: {
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "invalid-secret",
+				Namespace: "test",
+			},
+		},
+		// FILL IN
+	}
+
 	configMapResolver := newConfigMapResolver(configMaps)
+	secretMapResolver := newSecretResolver(secretMaps)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			valid, ignored, conds := validateBackendTLSPolicy(test.tlsPolicy, configMapResolver, "test")
+			valid, ignored, conds := validateBackendTLSPolicy(test.tlsPolicy, configMapResolver, secretMapResolver, "test")
 
 			g.Expect(valid).To(Equal(test.isValid))
 			g.Expect(ignored).To(Equal(test.ignored))

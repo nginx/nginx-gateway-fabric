@@ -201,15 +201,27 @@ func TestSecretResolver(t *testing.T) {
 	expectedResolved := map[types.NamespacedName]*Secret{
 		client.ObjectKeyFromObject(validSecret1): {
 			Source: validSecret1,
+			CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(validSecret1), "Secret", &Certificate{
+				TLSCert:       cert,
+				TLSPrivateKey: key,
+			}),
 		},
 		client.ObjectKeyFromObject(invalidSecretType): {
 			Source: invalidSecretType,
 		},
 		client.ObjectKeyFromObject(invalidSecretCert): {
 			Source: invalidSecretCert,
+			CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(invalidSecretCert), "Secret", &Certificate{
+				TLSCert:       invalidCert,
+				TLSPrivateKey: key,
+			}),
 		},
 		client.ObjectKeyFromObject(invalidSecretKey): {
 			Source: invalidSecretKey,
+			CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(invalidSecretKey), "Secret", &Certificate{
+				TLSCert:       cert,
+				TLSPrivateKey: invalidKey,
+			}),
 		},
 		secretNotExistNsName: {
 			Source: nil,
