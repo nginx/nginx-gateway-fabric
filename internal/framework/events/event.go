@@ -23,3 +23,7 @@ type DeleteEvent struct {
 	// NamespacedName is the namespace & name of the deleted resource.
 	NamespacedName types.NamespacedName
 }
+
+// NewLeaderEvent represents an NGF Pod becoming leader. This is used to trigger the event handler to batch process
+// events and update nginx conf when no resource has been changed.
+type NewLeaderEvent struct{}

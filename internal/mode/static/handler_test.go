@@ -127,6 +127,8 @@ var _ = Describe("eventHandler", func() {
 			updateGatewayClassStatus: true,
 		})
 		Expect(handler.cfg.graphBuiltHealthChecker.ready).To(BeFalse())
+
+		handler.cfg.graphBuiltHealthChecker.leader = true
 	})
 
 	AfterEach(func() {
@@ -193,6 +195,17 @@ var _ = Describe("eventHandler", func() {
 				expectReconfig(dcfg, fakeCfgFiles)
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 			})
+
+			It("should process a NewLeaderEvent", func() {
+				e := &events.NewLeaderEvent{}
+
+				batch := []interface{}{e}
+
+				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
+			})
 		})
 
 		When("a batch has multiple events", func() {
@@ -202,7 +215,8 @@ var _ = Describe("eventHandler", func() {
 					Type:           &gatewayv1.HTTPRoute{},
 					NamespacedName: types.NamespacedName{Namespace: "test", Name: "route"},
 				}
-				batch := []interface{}{upsertEvent, deleteEvent}
+				newLeaderEvent := &events.NewLeaderEvent{}
+				batch := []interface{}{upsertEvent, deleteEvent, newLeaderEvent}
 
 				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
 
@@ -500,6 +514,25 @@ var _ = Describe("eventHandler", func() {
 		Expect(readyChannel).To(BeClosed())
 
 		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).To(Succeed())
+	})
+
+	It("should not update nginx conf if NGF is not leader", func() {
+		e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
+		batch := []interface{}{e}
+		readyChannel := handler.cfg.graphBuiltHealthChecker.getReadyCh()
+
+		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{})
+
+		handler.cfg.graphBuiltHealthChecker.leader = false
+
+		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).ToNot(Succeed())
+		handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+
+		Expect(handler.GetLatestConfiguration()).To(BeNil())
+
+		Expect(readyChannel).ShouldNot(BeClosed())
+
+		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).ToNot(Succeed())
 	})
 
 	It("should panic for an unknown event type", func() {

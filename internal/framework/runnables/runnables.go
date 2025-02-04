@@ -34,29 +34,32 @@ func (r *LeaderOrNonLeader) NeedLeaderElection() bool {
 	return false
 }
 
-// EnableAfterBecameLeader is a Runnable that will call the enable function when the current instance becomes
+// CallFunctionsAfterBecameLeader is a Runnable that will call the given functions when the current instance becomes
 // the leader.
-type EnableAfterBecameLeader struct {
+type CallFunctionsAfterBecameLeader struct {
 	enable func(context.Context)
+	leader func()
 }
 
 var (
-	_ manager.LeaderElectionRunnable = &EnableAfterBecameLeader{}
-	_ manager.Runnable               = &EnableAfterBecameLeader{}
+	_ manager.LeaderElectionRunnable = &CallFunctionsAfterBecameLeader{}
+	_ manager.Runnable               = &CallFunctionsAfterBecameLeader{}
 )
 
-// NewEnableAfterBecameLeader creates a new EnableAfterBecameLeader Runnable.
-func NewEnableAfterBecameLeader(enable func(context.Context)) *EnableAfterBecameLeader {
-	return &EnableAfterBecameLeader{
+// NewCallFunctionsAfterBecameLeader creates a new CallFunctionsAfterBecameLeader Runnable.
+func NewCallFunctionsAfterBecameLeader(enable func(context.Context), leader func()) *CallFunctionsAfterBecameLeader {
+	return &CallFunctionsAfterBecameLeader{
 		enable: enable,
+		leader: leader,
 	}
 }
 
-func (j *EnableAfterBecameLeader) Start(ctx context.Context) error {
+func (j *CallFunctionsAfterBecameLeader) Start(ctx context.Context) error {
 	j.enable(ctx)
+	j.leader()
 	return nil
 }
 
-func (j *EnableAfterBecameLeader) NeedLeaderElection() bool {
+func (j *CallFunctionsAfterBecameLeader) NeedLeaderElection() bool {
 	return true
 }

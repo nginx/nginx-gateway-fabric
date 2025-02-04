@@ -161,11 +161,30 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		h.cfg.metricsCollector.ObserveLastEventBatchProcessTime(duration)
 	}()
 
+	var newLeader bool
 	for _, event := range batch {
-		h.parseAndCaptureEvent(ctx, logger, event)
+		switch event.(type) {
+		case *events.NewLeaderEvent:
+			newLeader = true
+		default:
+			h.parseAndCaptureEvent(ctx, logger, event)
+		}
 	}
 
 	changeType, gr := h.cfg.processor.Process()
+
+	// if there is a newLeader event in the EventBatch, we want to generate and update nginx conf,
+	// so regardless of what came back from Process(), we want to update the nginx conf with the latest graph
+	if newLeader {
+		changeType = state.ClusterStateChange
+		gr = h.cfg.processor.GetLatestGraph()
+	}
+
+	// if this Pod is not the leader or does not have the leader lease yet,
+	// the nginx conf should not be updated.
+	if !h.cfg.graphBuiltHealthChecker.leader {
+		return
+	}
 
 	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
 	if !h.cfg.graphBuiltHealthChecker.ready {
