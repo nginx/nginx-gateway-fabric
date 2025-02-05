@@ -5,7 +5,7 @@ FROM scratch AS nginx-files
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
 
-FROM alpine:3.20
+FROM alpine:3.21
 
 ARG NGINX_PLUS_VERSION=R33
 ARG NJS_DIR
