@@ -66,7 +66,7 @@ For example, an application can be exposed using a routing rule like below:
     port: 80
 ```
 
-{{< note >}}See the [Cafe example](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.1/examples/cafe-example) for a basic example.{{< /note >}}
+{{< note >}}See the [Cafe example](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.0/examples/cafe-example) for a basic example.{{< /note >}}
 
 The upgrade methods in the next sections cover:
 
@@ -137,4 +137,4 @@ By updating the rule you can further increase the share of traffic the new versi
     weight: 1
 ```
 
-See the [Traffic splitting example](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.1/examples/traffic-splitting) from our repository.
+See the [Traffic splitting example](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.0/examples/traffic-splitting) from our repository.
