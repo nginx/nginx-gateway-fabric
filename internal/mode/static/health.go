@@ -2,10 +2,16 @@ package static
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"sync"
+	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 )
 
 // newGraphBuiltHealthChecker creates a new graphBuiltHealthChecker.
@@ -25,6 +31,37 @@ type graphBuiltHealthChecker struct {
 	lock    sync.RWMutex
 	ready   bool
 	leader  bool
+}
+
+// createHealthProbe creates a Server runnable to serve as our health and readiness checker.
+func createHealthProbe(cfg config.Config, healthChecker *graphBuiltHealthChecker) (manager.Server, error) {
+	// we chose to create our own health probe server instead of using the controller-runtime one because
+	// of an annoying log which would flood our logs on non-ready non-leader NGF Pods. This health probe is pretty
+	// similar to the controller-runtime's health probe.
+
+	mux := http.NewServeMux()
+
+	// copy of controller-runtime sane defaults for new http.Server
+	s := &http.Server{
+		Handler:           mux,
+		MaxHeaderBytes:    1 << 20,
+		IdleTimeout:       90 * time.Second, // matches http.DefaultTransport keep-alive timeout
+		ReadHeaderTimeout: 32 * time.Second,
+	}
+
+	mux.HandleFunc(readinessEndpointName, healthChecker.readyHandler)
+
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.HealthConfig.Port))
+	if err != nil {
+		return manager.Server{},
+			fmt.Errorf("error listening on %s: %w", fmt.Sprintf(":%d", cfg.HealthConfig.Port), err)
+	}
+
+	return manager.Server{
+		Name:     "health probe",
+		Server:   s,
+		Listener: ln,
+	}, nil
 }
 
 func (h *graphBuiltHealthChecker) readyHandler(resp http.ResponseWriter, req *http.Request) {
