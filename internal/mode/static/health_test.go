@@ -70,8 +70,11 @@ func TestCreateHealthProbe(t *testing.T) {
 
 	healthChecker := newGraphBuiltHealthChecker()
 
-	cfg := config.Config{HealthConfig: config.HealthConfig{Port: 8081}}
+	cfg := config.Config{HealthConfig: config.HealthConfig{Port: 100000}}
+	_, err := createHealthProbe(cfg, healthChecker)
+	g.Expect(err).To(MatchError("error listening on :100000: listen tcp: address 100000: invalid port"))
 
+	cfg = config.Config{HealthConfig: config.HealthConfig{Port: 8081}}
 	hp, err := createHealthProbe(cfg, healthChecker)
 	g.Expect(err).ToNot(HaveOccurred())
 
