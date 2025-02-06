@@ -18,11 +18,21 @@ func newGraphBuiltHealthChecker() *graphBuiltHealthChecker {
 // graphBuiltHealthChecker is used to check if the initial graph is built, if the NGF Pod is leader, and if the
 // NGF Pod is ready.
 type graphBuiltHealthChecker struct {
+	// readyCh is a channel that is initialized in newGraphBuiltHealthChecker and represents if the NGF Pod is ready.
 	readyCh chan struct{}
+	// eventCh is a channel that a NewLeaderEvent gets sent to when the NGF Pod becomes leader.
 	eventCh chan interface{}
 	lock    sync.RWMutex
 	ready   bool
 	leader  bool
+}
+
+func (h *graphBuiltHealthChecker) readyHandler(resp http.ResponseWriter, req *http.Request) {
+	if err := h.readyCheck(req); err != nil {
+		resp.WriteHeader(http.StatusServiceUnavailable)
+	} else {
+		resp.WriteHeader(http.StatusOK)
+	}
 }
 
 // readyCheck returns the ready-state of the Pod. It satisfies the controller-runtime Checker type.
@@ -31,12 +41,12 @@ func (h *graphBuiltHealthChecker) readyCheck(_ *http.Request) error {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
 
-	if !h.ready {
-		return errors.New("control plane is not yet ready")
-	}
-
 	if !h.leader {
 		return errors.New("this NGF Pod is not currently leader")
+	}
+
+	if !h.ready {
+		return errors.New("control plane is not yet ready")
 	}
 
 	return nil
