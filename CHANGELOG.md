@@ -19,7 +19,7 @@ UPGRADE:
 COMPATIBILITY:
 
 - Gateway API version: `1.2.1`
-- NGINX version: `1.27.3`
+- NGINX version: `1.27.4`
 - NGINX Plus version: `R33`
 - Kubernetes version: `1.25+`
 
