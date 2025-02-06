@@ -236,7 +236,7 @@
               "type": "string"
             },
             "tag": {
-              "default": "1.6.0",
+              "default": "1.6.1",
               "required": [],
               "title": "tag",
               "type": "string"
@@ -411,7 +411,7 @@
               "type": "string"
             },
             "tag": {
-              "default": "1.6.0",
+              "default": "1.6.1",
               "required": [],
               "title": "tag",
               "type": "string"
