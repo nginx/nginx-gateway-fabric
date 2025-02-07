@@ -247,12 +247,10 @@ func StartManager(cfg config.Config) error {
 		return fmt.Errorf("cannot register event loop: %w", err)
 	}
 
-	// the healthChecker needs the same eventCh as the event handler so it can send a NewLeaderEvent when
-	// the pod becomes leader, triggering HandleEventBatch to be called.
-	healthChecker.eventCh = eventCh
 	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader(
 		groupStatusUpdater.Enable,
 		healthChecker.setAsLeader,
+		eventHandler.eventHandlerEnable,
 	)); err != nil {
 		return fmt.Errorf("cannot register status updater or set pod as leader: %w", err)
 	}

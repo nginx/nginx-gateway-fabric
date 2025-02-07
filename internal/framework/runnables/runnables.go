@@ -37,8 +37,9 @@ func (r *LeaderOrNonLeader) NeedLeaderElection() bool {
 // CallFunctionsAfterBecameLeader is a Runnable that will call the given functions when the current instance becomes
 // the leader.
 type CallFunctionsAfterBecameLeader struct {
-	enable func(context.Context)
-	leader func()
+	enable             func(context.Context)
+	leader             func()
+	eventHandlerEnable func(context.Context)
 }
 
 var (
@@ -47,16 +48,22 @@ var (
 )
 
 // NewCallFunctionsAfterBecameLeader creates a new CallFunctionsAfterBecameLeader Runnable.
-func NewCallFunctionsAfterBecameLeader(enable func(context.Context), leader func()) *CallFunctionsAfterBecameLeader {
+func NewCallFunctionsAfterBecameLeader(
+	enable func(context.Context),
+	leader func(),
+	eventHandlerEnable func(context.Context),
+) *CallFunctionsAfterBecameLeader {
 	return &CallFunctionsAfterBecameLeader{
-		enable: enable,
-		leader: leader,
+		enable:             enable,
+		leader:             leader,
+		eventHandlerEnable: eventHandlerEnable,
 	}
 }
 
 func (j *CallFunctionsAfterBecameLeader) Start(ctx context.Context) error {
 	j.enable(ctx)
 	j.leader()
+	j.eventHandlerEnable(ctx)
 	return nil
 }
 

@@ -161,23 +161,15 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		h.cfg.metricsCollector.ObserveLastEventBatchProcessTime(duration)
 	}()
 
-	var newLeader bool
 	for _, event := range batch {
-		switch event.(type) {
-		case *events.NewLeaderEvent:
-			newLeader = true
-		default:
-			h.parseAndCaptureEvent(ctx, logger, event)
-		}
+		h.parseAndCaptureEvent(ctx, logger, event)
 	}
 
 	changeType, gr := h.cfg.processor.Process()
 
-	// if there is a newLeader event in the EventBatch, we want to generate and update nginx conf,
-	// so regardless of what came back from Process(), we want to update the nginx conf with the latest graph
-	if newLeader {
-		changeType = state.ClusterStateChange
-		gr = h.cfg.processor.GetLatestGraph()
+	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
+	if !h.cfg.graphBuiltHealthChecker.ready {
+		h.cfg.graphBuiltHealthChecker.setAsReady()
 	}
 
 	// if this Pod is not the leader or does not have the leader lease yet,
@@ -186,13 +178,19 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		return
 	}
 
-	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
-	if !h.cfg.graphBuiltHealthChecker.ready {
-		h.cfg.graphBuiltHealthChecker.setAsReady()
-	}
+	h.sendNginxConfig(ctx, logger, gr, changeType)
+}
 
-	// TODO(sberman): hardcode this deployment name until we support provisioning data planes
-	// If no deployments exist, we should just return without doing anything.
+func (h *eventHandlerImpl) eventHandlerEnable(ctx context.Context) {
+	h.sendNginxConfig(ctx, h.cfg.logger, h.cfg.processor.GetLatestGraph(), state.ClusterStateChange)
+}
+
+func (h *eventHandlerImpl) sendNginxConfig(
+	ctx context.Context,
+	logger logr.Logger,
+	gr *graph.Graph,
+	changeType state.ChangeType,
+) {
 	deploymentName := types.NamespacedName{
 		Name:      "tmp-nginx-deployment",
 		Namespace: h.cfg.gatewayPodConfig.Namespace,

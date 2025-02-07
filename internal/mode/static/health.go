@@ -10,7 +10,6 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 )
 
@@ -26,8 +25,6 @@ func newGraphBuiltHealthChecker() *graphBuiltHealthChecker {
 type graphBuiltHealthChecker struct {
 	// readyCh is a channel that is initialized in newGraphBuiltHealthChecker and represents if the NGF Pod is ready.
 	readyCh chan struct{}
-	// eventCh is a channel that a NewLeaderEvent gets sent to when the NGF Pod becomes leader.
-	eventCh chan interface{}
 	lock    sync.RWMutex
 	ready   bool
 	leader  bool
@@ -95,7 +92,6 @@ func (h *graphBuiltHealthChecker) setAsReady() {
 	defer h.lock.Unlock()
 
 	h.ready = true
-	close(h.readyCh)
 }
 
 // getReadyCh returns a read-only channel, which determines if the NGF Pod is ready.
@@ -109,5 +105,7 @@ func (h *graphBuiltHealthChecker) setAsLeader() {
 	defer h.lock.Unlock()
 
 	h.leader = true
-	h.eventCh <- &events.NewLeaderEvent{}
+
+	// not sure where to close this, this is needed for the telemetry job, though it needs to be ready and to be leader
+	close(h.readyCh)
 }

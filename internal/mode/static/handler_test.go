@@ -195,17 +195,6 @@ var _ = Describe("eventHandler", func() {
 				expectReconfig(dcfg, fakeCfgFiles)
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 			})
-
-			It("should process a NewLeaderEvent", func() {
-				e := &events.NewLeaderEvent{}
-
-				batch := []interface{}{e}
-
-				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
-
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
-				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
-			})
 		})
 
 		When("a batch has multiple events", func() {
@@ -215,8 +204,7 @@ var _ = Describe("eventHandler", func() {
 					Type:           &gatewayv1.HTTPRoute{},
 					NamespacedName: types.NamespacedName{Namespace: "test", Name: "route"},
 				}
-				newLeaderEvent := &events.NewLeaderEvent{}
-				batch := []interface{}{upsertEvent, deleteEvent, newLeaderEvent}
+				batch := []interface{}{upsertEvent, deleteEvent}
 
 				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
 
@@ -510,6 +498,8 @@ var _ = Describe("eventHandler", func() {
 
 		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
 		Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
+
+		handler.cfg.graphBuiltHealthChecker.setAsLeader()
 
 		Expect(readyChannel).To(BeClosed())
 

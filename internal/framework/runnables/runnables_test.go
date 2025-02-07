@@ -27,19 +27,21 @@ func TestCallFunctionsAfterBecameLeader(t *testing.T) {
 	t.Parallel()
 	enabled := false
 	leader := false
+	eventHandlerEnabled := false
 
 	callFunctionsAfterBecameLeader := NewCallFunctionsAfterBecameLeader(
 		func(_ context.Context) { enabled = true },
 		func() { leader = true },
+		func(_ context.Context) { eventHandlerEnabled = true },
 	)
 
 	g := NewWithT(t)
 	g.Expect(callFunctionsAfterBecameLeader.NeedLeaderElection()).To(BeTrue())
-	g.Expect(enabled).To(BeFalse())
 
 	err := callFunctionsAfterBecameLeader.Start(context.Background())
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(enabled).To(BeTrue())
 	g.Expect(leader).To(BeTrue())
+	g.Expect(eventHandlerEnabled).To(BeTrue())
 }

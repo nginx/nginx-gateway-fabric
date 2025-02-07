@@ -34,15 +34,14 @@ func TestSetAsLeader(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 	healthChecker := newGraphBuiltHealthChecker()
-	healthChecker.eventCh = make(chan interface{}, 1)
 
 	g.Expect(healthChecker.leader).To(BeFalse())
-	g.Expect(healthChecker.eventCh).ShouldNot(Receive())
+	g.Expect(healthChecker.readyCh).ShouldNot(BeClosed())
 
 	healthChecker.setAsLeader()
 
 	g.Expect(healthChecker.leader).To(BeTrue())
-	g.Expect(healthChecker.eventCh).Should(Receive())
+	g.Expect(healthChecker.readyCh).To(BeClosed())
 }
 
 func TestReadyHandler(t *testing.T) {
