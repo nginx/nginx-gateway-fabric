@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func TestCronJob(t *testing.T) {
@@ -26,7 +26,7 @@ func TestCronJob(t *testing.T) {
 
 	cfg := CronJobConfig{
 		Worker:  worker,
-		Logger:  zap.New(),
+		Logger:  logr.Discard(),
 		Period:  1 * time.Millisecond, // 1ms is much smaller than timeout so the CronJob should run a few times
 		ReadyCh: readyChannel,
 	}
@@ -58,7 +58,7 @@ func TestCronJob_ContextCanceled(t *testing.T) {
 
 	cfg := CronJobConfig{
 		Worker:  func(_ context.Context) {},
-		Logger:  zap.New(),
+		Logger:  logr.Discard(),
 		Period:  1 * time.Millisecond, // 1ms is much smaller than timeout so the CronJob should run a few times
 		ReadyCh: readyChannel,
 	}

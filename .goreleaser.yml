@@ -51,12 +51,6 @@ signs:
       - "${artifact}"
       - "--yes"
 
-announce:
-  slack:
-    enabled: true
-    channel: "#announcements"
-    message_template: "NGINX Gateway Fabric {{ .Tag }} is out! Check it out: {{ .ReleaseURL }}"
-
 milestones:
   - close: true
 

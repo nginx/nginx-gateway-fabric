@@ -3,6 +3,7 @@ package status
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -10,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
@@ -116,7 +116,7 @@ var _ = Describe("Updater", func() {
 		)
 
 		BeforeAll(func() {
-			updater = NewUpdater(k8sClient, zap.New())
+			updater = NewUpdater(k8sClient, logr.Discard())
 
 			for _, name := range gcNames {
 				gc := createGC(name)

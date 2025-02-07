@@ -174,7 +174,7 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		return
 	case state.EndpointsOnlyChange:
 		h.version++
-		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version)
+		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version, h.cfg.plus)
 		depCtx, getErr := h.getDeploymentContext(ctx)
 		if getErr != nil {
 			logger.Error(getErr, "error getting deployment context for usage reporting")
@@ -190,7 +190,7 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		}
 	case state.ClusterStateChange:
 		h.version++
-		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version)
+		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version, h.cfg.plus)
 		depCtx, getErr := h.getDeploymentContext(ctx)
 		if getErr != nil {
 			logger.Error(getErr, "error getting deployment context for usage reporting")

@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing/licensingfakes"
@@ -27,7 +27,7 @@ func TestInitialize_OSS(t *testing.T) {
 
 	ic := initializeConfig{
 		fileManager: fakeFileMgr,
-		logger:      zap.New(),
+		logger:      logr.Discard(),
 		copy: copyFiles{
 			destDirName:  "destDir",
 			srcFileNames: []string{"src1", "src2"},
@@ -55,7 +55,7 @@ func TestInitialize_OSS_Error(t *testing.T) {
 
 	ic := initializeConfig{
 		fileManager: fakeFileMgr,
-		logger:      zap.New(),
+		logger:      logr.Discard(),
 		copy: copyFiles{
 			destDirName:  "destDir",
 			srcFileNames: []string{"src1", "src2"},
@@ -111,7 +111,7 @@ func TestInitialize_Plus(t *testing.T) {
 
 			ic := initializeConfig{
 				fileManager:   fakeFileMgr,
-				logger:        zap.New(),
+				logger:        logr.Discard(),
 				collector:     fakeCollector,
 				fileGenerator: fakeGenerator,
 				copy: copyFiles{

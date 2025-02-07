@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -13,7 +14,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -268,7 +268,7 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	updater := statusFramework.NewUpdater(k8sClient, zap.New())
+	updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 	reqs := PrepareRouteRequests(
 		map[graph.L4RouteKey]*graph.L4Route{},
@@ -347,7 +347,7 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	updater := statusFramework.NewUpdater(k8sClient, zap.New())
+	updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 	reqs := PrepareRouteRequests(
 		map[graph.L4RouteKey]*graph.L4Route{},
@@ -424,7 +424,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	updater := statusFramework.NewUpdater(k8sClient, zap.New())
+	updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 	reqs := PrepareRouteRequests(
 		routes,
@@ -528,7 +528,7 @@ func TestBuildRouteStatusesNginxErr(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	updater := statusFramework.NewUpdater(k8sClient, zap.New())
+	updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 	reqs := PrepareRouteRequests(
 		map[graph.L4RouteKey]*graph.L4Route{},
@@ -662,7 +662,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 				expectedTotalReqs++
 			}
 
-			updater := statusFramework.NewUpdater(k8sClient, zap.New())
+			updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 			reqs := PrepareGatewayClassRequests(test.gc, test.ignoredClasses, transitionTime)
 
@@ -1158,7 +1158,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 				expectedTotalReqs++
 			}
 
-			updater := statusFramework.NewUpdater(k8sClient, zap.New())
+			updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 			reqs := PrepareGatewayRequests(
 				test.gateway,
@@ -1376,7 +1376,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := statusFramework.NewUpdater(k8sClient, zap.New())
+			updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 			reqs := PrepareBackendTLSPolicyRequests(test.backendTLSPolicies, transitionTime, gatewayCtlrName)
 
@@ -1470,7 +1470,7 @@ func TestBuildNginxGatewayStatus(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := statusFramework.NewUpdater(k8sClient, zap.New())
+			updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 			req := PrepareNginxGatewayStatus(test.nginxGateway, transitionTime, test.cpUpdateResult)
 
@@ -1764,7 +1764,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := statusFramework.NewUpdater(k8sClient, zap.New())
+			updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 			reqs := PrepareNGFPolicyRequests(test.policies, transitionTime, gatewayCtlrName)
 
@@ -1894,7 +1894,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			updater := statusFramework.NewUpdater(k8sClient, zap.New())
+			updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 			reqs := PrepareSnippetsFilterRequests(test.snippetsFilters, transitionTime, gatewayCtlrName)
 

@@ -50,6 +50,8 @@ type Configuration struct {
 	Telemetry Telemetry
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
+	// NginxPlus specifies NGINX Plus additional settings.
+	NginxPlus NginxPlus
 	// BaseHTTPConfig holds the configuration options at the http context.
 	BaseHTTPConfig BaseHTTPConfig
 	// Version represents the version of the generated configuration.
@@ -398,6 +400,12 @@ type Ratio struct {
 type Logging struct {
 	// ErrorLevel defines the error log level.
 	ErrorLevel string
+}
+
+// NginxPlus specifies NGINX Plus additional settings.
+type NginxPlus struct {
+	// AllowedAddresses specifies IPAddresses or CIDR blocks to the allow list for accessing the NGINX Plus API.
+	AllowedAddresses []string
 }
 
 // DeploymentContext contains metadata about NGF and the cluster.
