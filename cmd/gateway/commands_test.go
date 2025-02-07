@@ -669,43 +669,62 @@ func TestCreateGatewayPodConfig(t *testing.T) {
 
 	// Order matters here
 	// We start with all env vars set
-	g.Expect(os.Setenv("POD_IP", "10.0.0.0")).To(Succeed())
 	g.Expect(os.Setenv("POD_UID", "1234")).To(Succeed())
 	g.Expect(os.Setenv("POD_NAMESPACE", "default")).To(Succeed())
 	g.Expect(os.Setenv("POD_NAME", "my-pod")).To(Succeed())
+	g.Expect(os.Setenv("INSTANCE_NAME", "my-pod-xyz")).To(Succeed())
+	g.Expect(os.Setenv("IMAGE_NAME", "my-pod-image:tag")).To(Succeed())
+
+	version := "0.0.0"
 
 	expCfg := config.GatewayPodConfig{
-		PodIP:       "10.0.0.0",
-		ServiceName: "svc",
-		Namespace:   "default",
-		Name:        "my-pod",
-		UID:         "1234",
+		ServiceName:  "svc",
+		Namespace:    "default",
+		Name:         "my-pod",
+		UID:          "1234",
+		InstanceName: "my-pod-xyz",
+		Version:      "tag",
+		Image:        "my-pod-image:tag",
 	}
-	cfg, err := createGatewayPodConfig("svc")
+	cfg, err := createGatewayPodConfig(version, "svc")
 	g.Expect(err).To(Not(HaveOccurred()))
 	g.Expect(cfg).To(Equal(expCfg))
 
+	// unset image tag and use provided version
+	g.Expect(os.Setenv("IMAGE_NAME", "my-pod-image")).To(Succeed())
+	expCfg.Version = version
+	expCfg.Image = "my-pod-image"
+	cfg, err = createGatewayPodConfig(version, "svc")
+	g.Expect(err).To(Not(HaveOccurred()))
+	g.Expect(cfg).To(Equal(expCfg))
+
+	// unset image name
+	g.Expect(os.Unsetenv("IMAGE_NAME")).To(Succeed())
+	cfg, err = createGatewayPodConfig(version, "svc")
+	g.Expect(err).To(MatchError(errors.New("environment variable IMAGE_NAME not set")))
+	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
+
+	// unset instance name
+	g.Expect(os.Unsetenv("INSTANCE_NAME")).To(Succeed())
+	cfg, err = createGatewayPodConfig(version, "svc")
+	g.Expect(err).To(MatchError(errors.New("environment variable INSTANCE_NAME not set")))
+	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
+
 	// unset name
 	g.Expect(os.Unsetenv("POD_NAME")).To(Succeed())
-	cfg, err = createGatewayPodConfig("svc")
+	cfg, err = createGatewayPodConfig(version, "svc")
 	g.Expect(err).To(MatchError(errors.New("environment variable POD_NAME not set")))
 	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
 
 	// unset namespace
 	g.Expect(os.Unsetenv("POD_NAMESPACE")).To(Succeed())
-	cfg, err = createGatewayPodConfig("svc")
+	cfg, err = createGatewayPodConfig(version, "svc")
 	g.Expect(err).To(MatchError(errors.New("environment variable POD_NAMESPACE not set")))
 	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
 
 	// unset pod UID
 	g.Expect(os.Unsetenv("POD_UID")).To(Succeed())
-	cfg, err = createGatewayPodConfig("svc")
+	cfg, err = createGatewayPodConfig(version, "svc")
 	g.Expect(err).To(MatchError(errors.New("environment variable POD_UID not set")))
-	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
-
-	// unset IP
-	g.Expect(os.Unsetenv("POD_IP")).To(Succeed())
-	cfg, err = createGatewayPodConfig("svc")
-	g.Expect(err).To(MatchError(errors.New("environment variable POD_IP not set")))
 	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
 }

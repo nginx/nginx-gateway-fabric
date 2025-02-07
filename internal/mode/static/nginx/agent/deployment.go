@@ -104,6 +104,14 @@ func (d *Deployment) GetLatestUpstreamError() error {
 	return d.latestUpstreamError
 }
 
+// RemovePodStatus deletes a pod from the pod status map.
+func (d *Deployment) RemovePodStatus(podName string) {
+	d.Lock.Lock()
+	defer d.Lock.Unlock()
+
+	delete(d.podStatuses, podName)
+}
+
 /*
 The following functions for the Deployment object are UNLOCKED, meaning that they are unsafe.
 Callers of these functions MUST ensure the lock is set before calling.
@@ -255,9 +263,7 @@ func (d *DeploymentStore) StoreWithBroadcaster(
 	return deployment
 }
 
-// Remove cleans up any connections that are tracked for this deployment, and then removes
-// the deployment from the store.
+// Remove the deployment from the store.
 func (d *DeploymentStore) Remove(nsName types.NamespacedName) {
-	d.connTracker.UntrackConnectionsForParent(nsName)
 	d.deployments.Delete(nsName)
 }

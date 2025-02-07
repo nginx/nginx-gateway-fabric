@@ -7,14 +7,25 @@ metadata:
 rules:
 - apiGroups:
   - ""
+  - apps
+  resources:
+  - secrets
+  - configmaps
+  - serviceaccounts
+  - services
+  - deployments
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
+  - ""
   resources:
   - namespaces
-  - services
-  - secrets
   - pods
-{{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
-  - configmaps
-{{- end }}
   verbs:
   - get
   - list
@@ -135,4 +146,6 @@ rules:
   - {{ include "nginx-gateway.scc-name" . }}
   verbs:
   - use
+  - create
+  - watch
 {{- end }}

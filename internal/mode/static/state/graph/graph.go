@@ -16,6 +16,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
@@ -84,8 +85,10 @@ type Graph struct {
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// PlusSecrets holds the secrets related to NGINX Plus licensing.
 	PlusSecrets map[types.NamespacedName][]PlusSecretFile
-
+	// LatestReloadResult is the latest result of applying config to nginx for this Gateway.
 	LatestReloadResult NginxReloadResult
+	// DeploymentName is the name of the nginx Deployment for this Gateway.
+	DeploymentName types.NamespacedName
 }
 
 // NginxReloadResult describes the result of an NGINX reload.
@@ -208,7 +211,6 @@ func BuildGraph(
 	gcName string,
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	validators validation.Validators,
-	protectedPorts ProtectedPorts,
 ) *Graph {
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
@@ -240,7 +242,6 @@ func BuildGraph(
 		secretResolver,
 		gc,
 		refGrantResolver,
-		protectedPorts,
 		processedNginxProxies,
 	)
 
@@ -306,9 +307,18 @@ func BuildGraph(
 
 	setPlusSecretContent(state.Secrets, plusSecrets)
 
+	var deploymentName types.NamespacedName
+	if gw != nil {
+		deploymentName = types.NamespacedName{
+			Namespace: gw.Source.Namespace,
+			Name:      controller.CreateNginxResourceName(gw.Source.Name, gcName),
+		}
+	}
+
 	g := &Graph{
 		GatewayClass:               gc,
 		Gateway:                    gw,
+		DeploymentName:             deploymentName,
 		Routes:                     routes,
 		L4Routes:                   l4routes,
 		IgnoredGatewayClasses:      processedGwClasses.Ignored,

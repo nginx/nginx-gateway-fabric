@@ -69,8 +69,6 @@ type ChangeProcessorConfig struct {
 	EventRecorder record.EventRecorder
 	// MustExtractGVK is a function that extracts schema.GroupVersionKind from a client.Object.
 	MustExtractGVK kinds.MustExtractGVK
-	// ProtectedPorts are the ports that may not be configured by a listener with a descriptive name of the ports.
-	ProtectedPorts graph.ProtectedPorts
 	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
 	PlusSecrets map[types.NamespacedName][]graph.PlusSecretFile
 	// Logger is the logger for this Change Processor.
@@ -285,7 +283,6 @@ func (c *ChangeProcessorImpl) Process() (ChangeType, *graph.Graph) {
 		c.cfg.GatewayClassName,
 		c.cfg.PlusSecrets,
 		c.cfg.Validators,
-		c.cfg.ProtectedPorts,
 	)
 
 	return changeType, c.latestGraph

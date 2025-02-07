@@ -33,10 +33,6 @@ spec:
         - --leader-election-lock-name=nginx-gateway-leader-election
         - --product-telemetry-disable
         env:
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -49,6 +45,12 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
+        - name: INSTANCE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['app.kubernetes.io/instance']
+        - name: IMAGE_NAME
+          value: ghcr.io/nginx/nginx-gateway-fabric:edge
         image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: nginx-gateway

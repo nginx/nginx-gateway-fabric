@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent/grpc"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 type FakeConnectionsTracker struct {
@@ -20,6 +19,11 @@ type FakeConnectionsTracker struct {
 	getConnectionReturnsOnCall map[int]struct {
 		result1 grpc.Connection
 	}
+	RemoveConnectionStub        func(string)
+	removeConnectionMutex       sync.RWMutex
+	removeConnectionArgsForCall []struct {
+		arg1 string
+	}
 	SetInstanceIDStub        func(string, string)
 	setInstanceIDMutex       sync.RWMutex
 	setInstanceIDArgsForCall []struct {
@@ -31,11 +35,6 @@ type FakeConnectionsTracker struct {
 	trackArgsForCall []struct {
 		arg1 string
 		arg2 grpc.Connection
-	}
-	UntrackConnectionsForParentStub        func(types.NamespacedName)
-	untrackConnectionsForParentMutex       sync.RWMutex
-	untrackConnectionsForParentArgsForCall []struct {
-		arg1 types.NamespacedName
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
@@ -100,6 +99,38 @@ func (fake *FakeConnectionsTracker) GetConnectionReturnsOnCall(i int, result1 gr
 	fake.getConnectionReturnsOnCall[i] = struct {
 		result1 grpc.Connection
 	}{result1}
+}
+
+func (fake *FakeConnectionsTracker) RemoveConnection(arg1 string) {
+	fake.removeConnectionMutex.Lock()
+	fake.removeConnectionArgsForCall = append(fake.removeConnectionArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.RemoveConnectionStub
+	fake.recordInvocation("RemoveConnection", []interface{}{arg1})
+	fake.removeConnectionMutex.Unlock()
+	if stub != nil {
+		fake.RemoveConnectionStub(arg1)
+	}
+}
+
+func (fake *FakeConnectionsTracker) RemoveConnectionCallCount() int {
+	fake.removeConnectionMutex.RLock()
+	defer fake.removeConnectionMutex.RUnlock()
+	return len(fake.removeConnectionArgsForCall)
+}
+
+func (fake *FakeConnectionsTracker) RemoveConnectionCalls(stub func(string)) {
+	fake.removeConnectionMutex.Lock()
+	defer fake.removeConnectionMutex.Unlock()
+	fake.RemoveConnectionStub = stub
+}
+
+func (fake *FakeConnectionsTracker) RemoveConnectionArgsForCall(i int) string {
+	fake.removeConnectionMutex.RLock()
+	defer fake.removeConnectionMutex.RUnlock()
+	argsForCall := fake.removeConnectionArgsForCall[i]
+	return argsForCall.arg1
 }
 
 func (fake *FakeConnectionsTracker) SetInstanceID(arg1 string, arg2 string) {
@@ -168,49 +199,17 @@ func (fake *FakeConnectionsTracker) TrackArgsForCall(i int) (string, grpc.Connec
 	return argsForCall.arg1, argsForCall.arg2
 }
 
-func (fake *FakeConnectionsTracker) UntrackConnectionsForParent(arg1 types.NamespacedName) {
-	fake.untrackConnectionsForParentMutex.Lock()
-	fake.untrackConnectionsForParentArgsForCall = append(fake.untrackConnectionsForParentArgsForCall, struct {
-		arg1 types.NamespacedName
-	}{arg1})
-	stub := fake.UntrackConnectionsForParentStub
-	fake.recordInvocation("UntrackConnectionsForParent", []interface{}{arg1})
-	fake.untrackConnectionsForParentMutex.Unlock()
-	if stub != nil {
-		fake.UntrackConnectionsForParentStub(arg1)
-	}
-}
-
-func (fake *FakeConnectionsTracker) UntrackConnectionsForParentCallCount() int {
-	fake.untrackConnectionsForParentMutex.RLock()
-	defer fake.untrackConnectionsForParentMutex.RUnlock()
-	return len(fake.untrackConnectionsForParentArgsForCall)
-}
-
-func (fake *FakeConnectionsTracker) UntrackConnectionsForParentCalls(stub func(types.NamespacedName)) {
-	fake.untrackConnectionsForParentMutex.Lock()
-	defer fake.untrackConnectionsForParentMutex.Unlock()
-	fake.UntrackConnectionsForParentStub = stub
-}
-
-func (fake *FakeConnectionsTracker) UntrackConnectionsForParentArgsForCall(i int) types.NamespacedName {
-	fake.untrackConnectionsForParentMutex.RLock()
-	defer fake.untrackConnectionsForParentMutex.RUnlock()
-	argsForCall := fake.untrackConnectionsForParentArgsForCall[i]
-	return argsForCall.arg1
-}
-
 func (fake *FakeConnectionsTracker) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
 	fake.getConnectionMutex.RLock()
 	defer fake.getConnectionMutex.RUnlock()
+	fake.removeConnectionMutex.RLock()
+	defer fake.removeConnectionMutex.RUnlock()
 	fake.setInstanceIDMutex.RLock()
 	defer fake.setInstanceIDMutex.RUnlock()
 	fake.trackMutex.RLock()
 	defer fake.trackMutex.RUnlock()
-	fake.untrackConnectionsForParentMutex.RLock()
-	defer fake.untrackConnectionsForParentMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

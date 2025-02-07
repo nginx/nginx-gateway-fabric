@@ -29,6 +29,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent/agentfakes"
 	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent/grpc/grpcfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/configfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/provisioner/provisionerfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
@@ -38,10 +39,12 @@ import (
 
 var _ = Describe("eventHandler", func() {
 	var (
+		baseGraph         *graph.Graph
 		handler           *eventHandlerImpl
 		fakeProcessor     *statefakes.FakeChangeProcessor
 		fakeGenerator     *configfakes.FakeGenerator
 		fakeNginxUpdater  *agentfakes.FakeNginxUpdater
+		fakeProvisioner   *provisionerfakes.FakeProvisioner
 		fakeStatusUpdater *statusfakes.FakeGroupUpdater
 		fakeEventRecorder *record.FakeRecorder
 		fakeK8sClient     client.WithWatch
@@ -84,18 +87,29 @@ var _ = Describe("eventHandler", func() {
 
 		_, name, reqs = fakeStatusUpdater.UpdateGroupArgsForCall(1)
 		Expect(name).To(Equal(groupGateways))
-		Expect(reqs).To(BeEmpty())
+		Expect(reqs).To(HaveLen(1))
+
+		Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(1))
 	}
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.Background()) //nolint:fatcontext // ignore for test
 
+		baseGraph = &graph.Graph{
+			Gateway: &graph.Gateway{
+				Valid:  true,
+				Source: &gatewayv1.Gateway{},
+			},
+		}
+
 		fakeProcessor = &statefakes.FakeChangeProcessor{}
 		fakeProcessor.ProcessReturns(state.NoChange, &graph.Graph{})
-		fakeProcessor.GetLatestGraphReturns(&graph.Graph{})
+		fakeProcessor.GetLatestGraphReturns(baseGraph)
 		fakeGenerator = &configfakes.FakeGenerator{}
 		fakeNginxUpdater = &agentfakes.FakeNginxUpdater{}
 		fakeNginxUpdater.UpdateConfigReturns(true)
+		fakeProvisioner = &provisionerfakes.FakeProvisioner{}
+		fakeProvisioner.RegisterGatewayReturns(nil)
 		fakeStatusUpdater = &statusfakes.FakeGroupUpdater{}
 		fakeEventRecorder = record.NewFakeRecorder(1)
 		zapLogLevelSetter = newZapLogLevelSetter(zap.NewAtomicLevel())
@@ -112,6 +126,7 @@ var _ = Describe("eventHandler", func() {
 			generator:               fakeGenerator,
 			logLevelSetter:          zapLogLevelSetter,
 			nginxUpdater:            fakeNginxUpdater,
+			nginxProvisioner:        fakeProvisioner,
 			statusUpdater:           fakeStatusUpdater,
 			eventRecorder:           fakeEventRecorder,
 			deployCtxCollector:      &licensingfakes.FakeCollector{},
@@ -157,8 +172,7 @@ var _ = Describe("eventHandler", func() {
 		}
 
 		BeforeEach(func() {
-			fakeProcessor.ProcessReturns(state.ClusterStateChange /* changed */, &graph.Graph{})
-
+			fakeProcessor.ProcessReturns(state.ClusterStateChange, baseGraph)
 			fakeGenerator.GenerateReturns(fakeCfgFiles)
 		})
 
@@ -195,11 +209,24 @@ var _ = Describe("eventHandler", func() {
 				expectReconfig(dcfg, fakeCfgFiles)
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 			})
+
+			It("should not build anything if Gateway isn't set", func() {
+				fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{})
+
+				e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
+				batch := []interface{}{e}
+
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+				checkUpsertEventExpectations(e)
+				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
+				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
+			})
 		})
 
 		When("a batch has multiple events", func() {
 			It("should process events", func() {
-				upsertEvent := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
+				upsertEvent := &events.UpsertEvent{Resource: &gatewayv1.Gateway{}}
 				deleteEvent := &events.DeleteEvent{
 					Type:           &gatewayv1.HTTPRoute{},
 					NamespacedName: types.NamespacedName{Namespace: "test", Name: "route"},
@@ -357,77 +384,6 @@ var _ = Describe("eventHandler", func() {
 		})
 	})
 
-	When("receiving Service updates", func() {
-		const notNginxGatewayServiceName = "not-nginx-gateway"
-
-		BeforeEach(func() {
-			fakeProcessor.GetLatestGraphReturns(&graph.Graph{})
-
-			Expect(fakeK8sClient.Create(context.Background(), createService(notNginxGatewayServiceName))).To(Succeed())
-		})
-
-		It("should not call UpdateAddresses if the Service is not for the Gateway Pod", func() {
-			e := &events.UpsertEvent{Resource: &v1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "not-nginx-gateway",
-				},
-			}}
-			batch := []interface{}{e}
-
-			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
-
-			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(BeZero())
-
-			de := &events.DeleteEvent{Type: &v1.Service{}}
-			batch = []interface{}{de}
-			Expect(fakeK8sClient.Delete(context.Background(), createService(notNginxGatewayServiceName))).To(Succeed())
-
-			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
-
-			Expect(handler.GetLatestConfiguration()).To(BeNil())
-
-			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(BeZero())
-		})
-
-		It("should update the addresses when the Gateway Service is upserted", func() {
-			e := &events.UpsertEvent{Resource: &v1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "nginx-gateway",
-					Namespace: "nginx-gateway",
-				},
-			}}
-			batch := []interface{}{e}
-
-			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
-
-			Expect(handler.GetLatestConfiguration()).To(BeNil())
-			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(1))
-			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
-			Expect(name).To(Equal(groupGateways))
-			Expect(reqs).To(BeEmpty())
-		})
-
-		It("should update the addresses when the Gateway Service is deleted", func() {
-			e := &events.DeleteEvent{
-				Type: &v1.Service{},
-				NamespacedName: types.NamespacedName{
-					Name:      "nginx-gateway",
-					Namespace: "nginx-gateway",
-				},
-			}
-			batch := []interface{}{e}
-			Expect(fakeK8sClient.Delete(context.Background(), createService(nginxGatewayServiceName))).To(Succeed())
-
-			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
-
-			Expect(handler.GetLatestConfiguration()).To(BeNil())
-			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(1))
-			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
-			Expect(name).To(Equal(groupGateways))
-			Expect(reqs).To(BeEmpty())
-		})
-	})
-
 	When("receiving an EndpointsOnlyChange update", func() {
 		e := &events.UpsertEvent{Resource: &discoveryV1.EndpointSlice{
 			ObjectMeta: metav1.ObjectMeta{
@@ -438,7 +394,7 @@ var _ = Describe("eventHandler", func() {
 		batch := []interface{}{e}
 
 		BeforeEach(func() {
-			fakeProcessor.ProcessReturns(state.EndpointsOnlyChange, &graph.Graph{})
+			fakeProcessor.ProcessReturns(state.EndpointsOnlyChange, &graph.Graph{Gateway: &graph.Gateway{Valid: true}})
 		})
 
 		When("running NGINX Plus", func() {
@@ -472,6 +428,7 @@ var _ = Describe("eventHandler", func() {
 
 	It("should update status when receiving a queue event", func() {
 		obj := &status.QueueObject{
+			UpdateType: status.UpdateAll,
 			Deployment: types.NamespacedName{},
 			Error:      errors.New("status error"),
 		}
@@ -486,6 +443,20 @@ var _ = Describe("eventHandler", func() {
 		Expect(gr.LatestReloadResult.Error.Error()).To(Equal("status error"))
 	})
 
+	It("should update Gateway status when receiving a queue event", func() {
+		obj := &status.QueueObject{
+			UpdateType:     status.UpdateGateway,
+			Deployment:     types.NamespacedName{},
+			GatewayService: &v1.Service{},
+		}
+		queue.Enqueue(obj)
+
+		Eventually(
+			func() int {
+				return fakeStatusUpdater.UpdateGroupCallCount()
+			}).Should(Equal(1))
+	})
+
 	It("should update nginx conf only when leader", func() {
 		ctx := context.Background()
 		handler.cfg.graphBuiltHealthChecker.leader = false
@@ -494,7 +465,7 @@ var _ = Describe("eventHandler", func() {
 		batch := []interface{}{e}
 		readyChannel := handler.cfg.graphBuiltHealthChecker.getReadyCh()
 
-		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{})
+		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{Gateway: &graph.Gateway{Valid: true}})
 
 		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
@@ -535,23 +506,25 @@ var _ = Describe("eventHandler", func() {
 var _ = Describe("getGatewayAddresses", func() {
 	It("gets gateway addresses from a Service", func() {
 		fakeClient := fake.NewFakeClient()
-		podConfig := config.GatewayPodConfig{
-			PodIP:       "1.2.3.4",
-			ServiceName: "my-service",
-			Namespace:   "nginx-gateway",
-		}
 
 		// no Service exists yet, should get error and Pod Address
-		addrs, err := getGatewayAddresses(context.Background(), fakeClient, nil, podConfig)
+		gateway := &graph.Gateway{
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test-ns",
+				},
+			},
+		}
+		addrs, err := getGatewayAddresses(context.Background(), fakeClient, nil, gateway, "nginx")
 		Expect(err).To(HaveOccurred())
-		Expect(addrs).To(HaveLen(1))
-		Expect(addrs[0].Value).To(Equal("1.2.3.4"))
+		Expect(addrs).To(BeNil())
 
 		// Create LoadBalancer Service
 		svc := v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "my-service",
-				Namespace: "nginx-gateway",
+				Name:      "gateway-nginx",
+				Namespace: "test-ns",
 			},
 			Spec: v1.ServiceSpec{
 				Type: v1.ServiceTypeLoadBalancer,
@@ -572,11 +545,31 @@ var _ = Describe("getGatewayAddresses", func() {
 
 		Expect(fakeClient.Create(context.Background(), &svc)).To(Succeed())
 
-		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, podConfig)
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(addrs).To(HaveLen(2))
 		Expect(addrs[0].Value).To(Equal("34.35.36.37"))
 		Expect(addrs[1].Value).To(Equal("myhost"))
+
+		Expect(fakeClient.Delete(context.Background(), &svc)).To(Succeed())
+		// Create ClusterIP Service
+		svc = v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gateway-nginx",
+				Namespace: "test-ns",
+			},
+			Spec: v1.ServiceSpec{
+				Type:      v1.ServiceTypeClusterIP,
+				ClusterIP: "12.13.14.15",
+			},
+		}
+
+		Expect(fakeClient.Create(context.Background(), &svc)).To(Succeed())
+
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(addrs).To(HaveLen(1))
+		Expect(addrs[0].Value).To(Equal("12.13.14.15"))
 	})
 })
 
