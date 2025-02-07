@@ -90,19 +90,11 @@ ifeq ($(PLUS_ENABLED),true)
 endif
 
 .PHONY: setup-gcp-and-run-nfr-tests
-setup-gcp-and-run-nfr-tests: create-gke-router create-and-setup-vm nfr-test ## Create and setup a GKE router and GCP VM for tests and run the NFR tests
+setup-gcp-and-run-nfr-tests: create-gcp-resources nfr-test ## Create and setup a GKE router and GCP VM for tests and run the NFR tests
 
 .PHONY: create-gke-cluster
-create-gke-cluster: ## Create a GKE cluster
-	./scripts/create-gke-cluster.sh $(CI)
-
-.PHONY: create-and-setup-vm
-create-and-setup-vm: ## Create and setup a GCP VM for tests
-	./scripts/create-and-setup-gcp-vm.sh
-
-.PHONY: create-gke-router
-create-gke-router: ## Create a GKE router to allow egress traffic from private nodes (allows for external image pulls)
-	./scripts/create-gke-router.sh
+create-gcp-resources: ## Create a GKE cluster and a GCP VM for tests
+	tofu -chdir=tofu apply
 
 .PHONY: sync-files-to-vm
 sync-files-to-vm: ## Syncs your local NGF files with the NGF repo on the VM
@@ -124,7 +116,7 @@ stop-longevity-test: nfr-test ## Stop the longevity test and collects results
 .PHONY: .vm-nfr-test
 .vm-nfr-test: ## Runs the NFR tests on the GCP VM (called by `nfr-test`)
 	go run github.com/onsi/ginkgo/v2/ginkgo --randomize-all --randomize-suites --keep-going --fail-on-pending \
-		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) \
+		--trace -r -vv --buildvcs --force-newlines $(GITHUB_OUTPUT) \
 		--label-filter "nfr" $(GINKGO_FLAGS) --timeout 5h ./suite --  --gateway-api-version=$(GW_API_VERSION) \
 		--gateway-api-prev-version=$(GW_API_PREV_VERSION) --image-tag=$(TAG) --version-under-test=$(NGF_VERSION) \
 		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
@@ -151,23 +143,8 @@ test-with-plus: PLUS_ENABLED=true
 test-with-plus: check-for-plus-usage-endpoint test ## Runs the functional tests for NGF with NGINX Plus on your default k8s cluster
 
 .PHONY: cleanup-gcp
-cleanup-gcp: cleanup-router cleanup-vm delete-gke-cluster ## Cleanup all GCP resources
-
-.PHONY: cleanup-router
-cleanup-router: ## Delete the GKE router
-	./scripts/cleanup-router.sh
-
-.PHONY: cleanup-vm
-cleanup-vm: ## Delete the test GCP VM and delete the firewall rule
-	./scripts/cleanup-vm.sh
-
-.PHONY: delete-gke-cluster
-delete-gke-cluster: ## Delete the GKE cluster
-	./scripts/delete-gke-cluster.sh
-
-.PHONY: add-local-ip-to-cluster
-add-local-ip-to-cluster: ## Add local IP to the GKE cluster master-authorized-networks
-	./scripts/add-local-ip-auth-networks.sh
+cleanup-gcp: ## Cleanup all GCP resources
+	tofu -chdir=tofu destroy
 
 HELM_PARAMETERS += --set nameOverride=nginx-gateway --set nginxGateway.kind=skip --set service.create=false --skip-schema-validation
 

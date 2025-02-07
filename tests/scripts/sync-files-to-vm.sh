@@ -2,10 +2,11 @@
 
 set -eo pipefail
 
-source scripts/vars.env
-
-NGF_DIR=$(dirname "$PWD")/
+NGF_DIR=$(dirname "${PWD}")/
+GKE_CLUSTER_ZONE=$(tofu -chdir=tofu output -raw k8s_cluster_zone)
+GKE_PROJECT=$(tofu -chdir=tofu output -raw project_id)
+VM_NAME=$(tofu -chdir=tofu output -raw vm_name)
 
 gcloud compute config-ssh --ssh-config-file ngf-gcp.ssh >/dev/null
 
-rsync -ave 'ssh -F ngf-gcp.ssh' "${NGF_DIR}" username@"${RESOURCE_NAME}"."${GKE_CLUSTER_ZONE}"."${GKE_PROJECT}":~/nginx-gateway-fabric
+rsync -Putae 'ssh -F ngf-gcp.ssh' "${NGF_DIR}" username@"${VM_NAME}"."${GKE_CLUSTER_ZONE}"."${GKE_PROJECT}":~/nginx-gateway-fabric

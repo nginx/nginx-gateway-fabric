@@ -95,6 +95,12 @@ repos:
           - "--skip-auto-generation=required,additionalProperties"
           - --append-newline
 
+# - repo: https://github.com/tofuutils/pre-commit-opentofu
+#   rev: v2.1.0
+#   hooks:
+#     - id: tofu_fmt
+#     - id: tofu_docs
+
 ci:
   skip: [golangci-lint-full, prettier, markdownlint-cli2, yamllint]
   autofix_prs: false
