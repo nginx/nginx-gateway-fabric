@@ -45,6 +45,18 @@ func TestSetAsLeader(t *testing.T) {
 	g.Expect(healthChecker.readyCh).To(BeClosed())
 }
 
+func TestSetGraphBuilt(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+	healthChecker := newGraphBuiltHealthChecker()
+
+	g.Expect(healthChecker.graphBuilt).To(BeFalse())
+
+	healthChecker.setGraphBuilt()
+
+	g.Expect(healthChecker.graphBuilt).To(BeTrue())
+}
+
 func TestReadyHandler(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

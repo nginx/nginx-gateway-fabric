@@ -99,13 +99,15 @@ func (h *graphBuiltHealthChecker) getReadyCh() <-chan struct{} {
 	return h.readyCh
 }
 
-// setAsLeader marks the health check as leader and sends an empty event to the event channel.
+// setAsLeader marks the health check as leader.
 func (h *graphBuiltHealthChecker) setAsLeader() {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 
 	h.leader = true
 
-	// not sure where to close this, this is needed for the telemetry job, though it needs to be ready and to be leader
+	// setGraphBuilt should already have been called when processing the resources on startup because the leader
+	// election process takes longer than the initial call to HandleEventBatch. Thus, the NGF Pod should be marked as
+	// ready and have this channel be closed.
 	close(h.readyCh)
 }

@@ -182,6 +182,8 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 }
 
 func (h *eventHandlerImpl) eventHandlerEnable(ctx context.Context) {
+	// Latest graph is guaranteed to not be nil since the leader election process takes longer than
+	// the initial call to HandleEventBatch when NGF starts up.
 	h.sendNginxConfig(ctx, h.cfg.logger, h.cfg.processor.GetLatestGraph(), state.ClusterStateChange)
 }
 

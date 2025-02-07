@@ -25,13 +25,13 @@ func TestLeaderOrNonLeader(t *testing.T) {
 
 func TestCallFunctionsAfterBecameLeader(t *testing.T) {
 	t.Parallel()
-	enabled := false
-	leader := false
+	statusUpdaterEnabled := false
+	healthCheckEnableLeader := false
 	eventHandlerEnabled := false
 
 	callFunctionsAfterBecameLeader := NewCallFunctionsAfterBecameLeader(
-		func(_ context.Context) { enabled = true },
-		func() { leader = true },
+		func(_ context.Context) { statusUpdaterEnabled = true },
+		func() { healthCheckEnableLeader = true },
 		func(_ context.Context) { eventHandlerEnabled = true },
 	)
 
@@ -41,7 +41,7 @@ func TestCallFunctionsAfterBecameLeader(t *testing.T) {
 	err := callFunctionsAfterBecameLeader.Start(context.Background())
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(enabled).To(BeTrue())
-	g.Expect(leader).To(BeTrue())
+	g.Expect(statusUpdaterEnabled).To(BeTrue())
+	g.Expect(healthCheckEnableLeader).To(BeTrue())
 	g.Expect(eventHandlerEnabled).To(BeTrue())
 }
