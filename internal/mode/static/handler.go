@@ -167,9 +167,9 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 
 	changeType, gr := h.cfg.processor.Process()
 
-	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
-	if !h.cfg.graphBuiltHealthChecker.ready {
-		h.cfg.graphBuiltHealthChecker.setAsReady()
+	// Once we've processed resources on startup and built our first graph, mark the Pod as having built the graph.
+	if !h.cfg.graphBuiltHealthChecker.graphBuilt {
+		h.cfg.graphBuiltHealthChecker.setGraphBuilt()
 	}
 
 	// if this Pod is not the leader or does not have the leader lease yet,

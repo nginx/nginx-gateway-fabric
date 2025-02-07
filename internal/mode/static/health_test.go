@@ -19,14 +19,15 @@ func TestReadyCheck(t *testing.T) {
 
 	g.Expect(healthChecker.readyCheck(nil)).To(MatchError(errors.New("this NGF Pod is not currently leader")))
 
-	healthChecker.ready = true
+	healthChecker.graphBuilt = true
 	g.Expect(healthChecker.readyCheck(nil)).To(MatchError(errors.New("this NGF Pod is not currently leader")))
 
-	healthChecker.ready = false
+	healthChecker.graphBuilt = false
 	healthChecker.leader = true
-	g.Expect(healthChecker.readyCheck(nil)).To(MatchError(errors.New("control plane is not yet ready")))
+	g.Expect(healthChecker.readyCheck(nil)).
+		To(MatchError(errors.New("control plane initial graph has not been built")))
 
-	healthChecker.ready = true
+	healthChecker.graphBuilt = true
 	g.Expect(healthChecker.readyCheck(nil)).To(Succeed())
 }
 
@@ -55,7 +56,7 @@ func TestReadyHandler(t *testing.T) {
 	healthChecker.readyHandler(w, r)
 	g.Expect(w.Result().StatusCode).To(Equal(http.StatusServiceUnavailable))
 
-	healthChecker.ready = true
+	healthChecker.graphBuilt = true
 	healthChecker.leader = true
 
 	w = httptest.NewRecorder()

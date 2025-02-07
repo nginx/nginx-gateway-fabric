@@ -20,14 +20,14 @@ func newGraphBuiltHealthChecker() *graphBuiltHealthChecker {
 	}
 }
 
-// graphBuiltHealthChecker is used to check if the initial graph is built, if the NGF Pod is leader, and if the
-// NGF Pod is ready.
+// graphBuiltHealthChecker is used to check if the NGF Pod is ready. The NGF Pod is ready if the initial graph has
+// been built and if it is leader.
 type graphBuiltHealthChecker struct {
 	// readyCh is a channel that is initialized in newGraphBuiltHealthChecker and represents if the NGF Pod is ready.
-	readyCh chan struct{}
-	lock    sync.RWMutex
-	ready   bool
-	leader  bool
+	readyCh    chan struct{}
+	lock       sync.RWMutex
+	graphBuilt bool
+	leader     bool
 }
 
 // createHealthProbe creates a Server runnable to serve as our health and readiness checker.
@@ -79,19 +79,19 @@ func (h *graphBuiltHealthChecker) readyCheck(_ *http.Request) error {
 		return errors.New("this NGF Pod is not currently leader")
 	}
 
-	if !h.ready {
-		return errors.New("control plane is not yet ready")
+	if !h.graphBuilt {
+		return errors.New("control plane initial graph has not been built")
 	}
 
 	return nil
 }
 
-// setAsReady marks the health check as ready.
-func (h *graphBuiltHealthChecker) setAsReady() {
+// setGraphBuilt marks the health check as having the initial graph built.
+func (h *graphBuiltHealthChecker) setGraphBuilt() {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 
-	h.ready = true
+	h.graphBuilt = true
 }
 
 // getReadyCh returns a read-only channel, which determines if the NGF Pod is ready.

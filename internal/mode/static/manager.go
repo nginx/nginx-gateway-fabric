@@ -252,7 +252,7 @@ func StartManager(cfg config.Config) error {
 		healthChecker.setAsLeader,
 		eventHandler.eventHandlerEnable,
 	)); err != nil {
-		return fmt.Errorf("cannot register status updater or set pod as leader: %w", err)
+		return fmt.Errorf("cannot register functions that get called after Pod becomes leader: %w", err)
 	}
 
 	if cfg.ProductTelemetryConfig.Enabled {

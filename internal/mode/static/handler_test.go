@@ -126,7 +126,7 @@ var _ = Describe("eventHandler", func() {
 			metricsCollector:         collectors.NewControllerNoopCollector(),
 			updateGatewayClassStatus: true,
 		})
-		Expect(handler.cfg.graphBuiltHealthChecker.ready).To(BeFalse())
+		Expect(handler.cfg.graphBuiltHealthChecker.graphBuilt).To(BeFalse())
 
 		handler.cfg.graphBuiltHealthChecker.leader = true
 	})
@@ -163,7 +163,7 @@ var _ = Describe("eventHandler", func() {
 		})
 
 		AfterEach(func() {
-			Expect(handler.cfg.graphBuiltHealthChecker.ready).To(BeTrue())
+			Expect(handler.cfg.graphBuiltHealthChecker.graphBuilt).To(BeTrue())
 		})
 
 		When("a batch has one event", func() {
