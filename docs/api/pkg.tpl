@@ -2,7 +2,9 @@
 ---
 title: "API reference"
 weight: 100
-toc: false
+type: reference
+product: NGF
+docs: DOCS-000
 ---
 
 ## Overview
