@@ -141,7 +141,7 @@ generate-manifests: ## Generate manifests using Helm.
 	./scripts/generate-manifests.sh
 
 generate-api-docs: ## Generate API docs
-	go run github.com/ahmetb/gen-crd-api-reference-docs@$(GEN_CRD_API_REFERENCE_DOCS_VERSION) -config site/config/api/config.json -template-dir site/config/api -out-file site/content/reference/api.md -api-dir "github.com/nginx/nginx-gateway-fabric/apis"
+	go run github.com/ahmetb/gen-crd-api-reference-docs@$(GEN_CRD_API_REFERENCE_DOCS_VERSION) -config docs/api/config.json -template-dir docs/api -out-file docs/api/content.md -api-dir "github.com/nginx/nginx-gateway-fabric/apis"
 
 .PHONY: generate-helm-docs
 generate-helm-docs: ## Generate the Helm chart documentation
