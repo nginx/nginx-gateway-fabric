@@ -280,7 +280,7 @@ func StartManager(cfg config.Config) error {
 	}
 
 	cfg.Logger.Info("Starting manager")
-	cfg.Logger.Info("Nginx Gateway Fabric Pod will be marked as unready until it has the leader lease")
+	cfg.Logger.Info("NGINX Gateway Fabric Pod will be marked as unready until it has the leader lease")
 	go func() {
 		<-ctx.Done()
 		cfg.Logger.Info("Shutting down")

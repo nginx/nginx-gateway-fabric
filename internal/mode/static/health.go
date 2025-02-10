@@ -33,7 +33,7 @@ type graphBuiltHealthChecker struct {
 // createHealthProbe creates a Server runnable to serve as our health and readiness checker.
 func createHealthProbe(cfg config.Config, healthChecker *graphBuiltHealthChecker) (manager.Server, error) {
 	// we chose to create our own health probe server instead of using the controller-runtime one because
-	// of an annoying log which would flood our logs on non-ready non-leader NGF Pods. This health probe is pretty
+	// of repetitive log which would flood our logs on non-ready non-leader NGF Pods. This health probe is
 	// similar to the controller-runtime's health probe.
 
 	mux := http.NewServeMux()
@@ -76,7 +76,7 @@ func (h *graphBuiltHealthChecker) readyCheck(_ *http.Request) error {
 	defer h.lock.RUnlock()
 
 	if !h.leader {
-		return errors.New("this NGF Pod is not currently leader")
+		return errors.New("this Pod is not currently leader")
 	}
 
 	if !h.graphBuilt {
