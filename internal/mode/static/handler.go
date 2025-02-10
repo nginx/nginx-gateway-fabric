@@ -167,13 +167,33 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 
 	changeType, gr := h.cfg.processor.Process()
 
-	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
-	if !h.cfg.graphBuiltHealthChecker.ready {
-		h.cfg.graphBuiltHealthChecker.setAsReady()
+	// Once we've processed resources on startup and built our first graph, mark the Pod as having built the graph.
+	if !h.cfg.graphBuiltHealthChecker.graphBuilt {
+		h.cfg.graphBuiltHealthChecker.setGraphBuilt()
 	}
 
-	// TODO(sberman): hardcode this deployment name until we support provisioning data planes
-	// If no deployments exist, we should just return without doing anything.
+	// if this Pod is not the leader or does not have the leader lease yet,
+	// the nginx conf should not be updated.
+	if !h.cfg.graphBuiltHealthChecker.leader {
+		return
+	}
+
+	h.sendNginxConfig(ctx, logger, gr, changeType)
+}
+
+func (h *eventHandlerImpl) eventHandlerEnable(ctx context.Context) {
+	// Latest graph is guaranteed to not be nil since the leader election process takes longer than
+	// the initial call to HandleEventBatch when NGF starts up. And GatewayClass will typically always exist which
+	// triggers an event.
+	h.sendNginxConfig(ctx, h.cfg.logger, h.cfg.processor.GetLatestGraph(), state.ClusterStateChange)
+}
+
+func (h *eventHandlerImpl) sendNginxConfig(
+	ctx context.Context,
+	logger logr.Logger,
+	gr *graph.Graph,
+	changeType state.ChangeType,
+) {
 	deploymentName := types.NamespacedName{
 		Name:      "tmp-nginx-deployment",
 		Namespace: h.cfg.gatewayPodConfig.Namespace,
