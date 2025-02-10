@@ -126,7 +126,9 @@ var _ = Describe("eventHandler", func() {
 			metricsCollector:         collectors.NewControllerNoopCollector(),
 			updateGatewayClassStatus: true,
 		})
-		Expect(handler.cfg.graphBuiltHealthChecker.ready).To(BeFalse())
+		Expect(handler.cfg.graphBuiltHealthChecker.graphBuilt).To(BeFalse())
+
+		handler.cfg.graphBuiltHealthChecker.leader = true
 	})
 
 	AfterEach(func() {
@@ -161,7 +163,7 @@ var _ = Describe("eventHandler", func() {
 		})
 
 		AfterEach(func() {
-			Expect(handler.cfg.graphBuiltHealthChecker.ready).To(BeTrue())
+			Expect(handler.cfg.graphBuiltHealthChecker.graphBuilt).To(BeTrue())
 		})
 
 		When("a batch has one event", func() {
@@ -484,22 +486,36 @@ var _ = Describe("eventHandler", func() {
 		Expect(gr.LatestReloadResult.Error.Error()).To(Equal("status error"))
 	})
 
-	It("should set the health checker status properly", func() {
+	It("should update nginx conf only when leader", func() {
+		ctx := context.Background()
+		handler.cfg.graphBuiltHealthChecker.leader = false
+
 		e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
 		batch := []interface{}{e}
 		readyChannel := handler.cfg.graphBuiltHealthChecker.getReadyCh()
 
 		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{})
 
-		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).ToNot(Succeed())
 		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
+		// graph is built, but since the graphBuiltHealthChecker.leader is false, configuration isn't created and
+		// the readyCheck fails
+		Expect(handler.cfg.graphBuiltHealthChecker.graphBuilt).To(BeTrue())
+		Expect(handler.GetLatestConfiguration()).To(BeNil())
+		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).ToNot(Succeed())
+		Expect(readyChannel).ShouldNot(BeClosed())
+
+		// Once the pod becomes leader, these two functions will be called through the runnables we set in the manager
+		handler.cfg.graphBuiltHealthChecker.setAsLeader(ctx)
+		handler.eventHandlerEnable(ctx)
+
+		// nginx conf has been set
 		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
 		Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 
-		Expect(readyChannel).To(BeClosed())
-
+		// ready check is also set
 		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).To(Succeed())
+		Expect(handler.cfg.graphBuiltHealthChecker.getReadyCh()).To(BeClosed())
 	})
 
 	It("should panic for an unknown event type", func() {
