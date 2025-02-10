@@ -1,6 +1,7 @@
 package static
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -17,10 +18,10 @@ func TestReadyCheck(t *testing.T) {
 	g := NewWithT(t)
 	healthChecker := newGraphBuiltHealthChecker()
 
-	g.Expect(healthChecker.readyCheck(nil)).To(MatchError(errors.New("this NGF Pod is not currently leader")))
+	g.Expect(healthChecker.readyCheck(nil)).To(MatchError(errors.New("this Pod is not currently leader")))
 
 	healthChecker.graphBuilt = true
-	g.Expect(healthChecker.readyCheck(nil)).To(MatchError(errors.New("this NGF Pod is not currently leader")))
+	g.Expect(healthChecker.readyCheck(nil)).To(MatchError(errors.New("this Pod is not currently leader")))
 
 	healthChecker.graphBuilt = false
 	healthChecker.leader = true
@@ -39,7 +40,7 @@ func TestSetAsLeader(t *testing.T) {
 	g.Expect(healthChecker.leader).To(BeFalse())
 	g.Expect(healthChecker.readyCh).ShouldNot(BeClosed())
 
-	healthChecker.setAsLeader()
+	healthChecker.setAsLeader(context.Background())
 
 	g.Expect(healthChecker.leader).To(BeTrue())
 	g.Expect(healthChecker.readyCh).To(BeClosed())

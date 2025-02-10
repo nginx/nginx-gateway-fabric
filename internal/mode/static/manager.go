@@ -247,11 +247,11 @@ func StartManager(cfg config.Config) error {
 		return fmt.Errorf("cannot register event loop: %w", err)
 	}
 
-	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader(
+	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
 		groupStatusUpdater.Enable,
 		healthChecker.setAsLeader,
 		eventHandler.eventHandlerEnable,
-	)); err != nil {
+	})); err != nil {
 		return fmt.Errorf("cannot register functions that get called after Pod becomes leader: %w", err)
 	}
 

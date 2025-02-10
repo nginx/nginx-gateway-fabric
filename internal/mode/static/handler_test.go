@@ -487,6 +487,7 @@ var _ = Describe("eventHandler", func() {
 	})
 
 	It("should update nginx conf only when leader", func() {
+		ctx := context.Background()
 		handler.cfg.graphBuiltHealthChecker.leader = false
 
 		e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
@@ -505,8 +506,8 @@ var _ = Describe("eventHandler", func() {
 		Expect(readyChannel).ShouldNot(BeClosed())
 
 		// Once the pod becomes leader, these two functions will be called through the runnables we set in the manager
-		handler.cfg.graphBuiltHealthChecker.setAsLeader()
-		handler.eventHandlerEnable(context.Background())
+		handler.cfg.graphBuiltHealthChecker.setAsLeader(ctx)
+		handler.eventHandlerEnable(ctx)
 
 		// nginx conf has been set
 		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)

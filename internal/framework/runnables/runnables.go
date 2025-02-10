@@ -37,9 +37,7 @@ func (r *LeaderOrNonLeader) NeedLeaderElection() bool {
 // CallFunctionsAfterBecameLeader is a Runnable that will call the given functions when the current instance becomes
 // the leader.
 type CallFunctionsAfterBecameLeader struct {
-	statusUpdaterEnable     func(context.Context)
-	healthCheckEnableLeader func()
-	eventHandlerEnable      func(context.Context)
+	enableFunctions []func(context.Context)
 }
 
 var (
@@ -49,21 +47,17 @@ var (
 
 // NewCallFunctionsAfterBecameLeader creates a new CallFunctionsAfterBecameLeader Runnable.
 func NewCallFunctionsAfterBecameLeader(
-	statusUpdaterEnable func(context.Context),
-	healthCheckEnableLeader func(),
-	eventHandlerEnable func(context.Context),
+	enableFunctions []func(context.Context),
 ) *CallFunctionsAfterBecameLeader {
 	return &CallFunctionsAfterBecameLeader{
-		statusUpdaterEnable:     statusUpdaterEnable,
-		healthCheckEnableLeader: healthCheckEnableLeader,
-		eventHandlerEnable:      eventHandlerEnable,
+		enableFunctions: enableFunctions,
 	}
 }
 
 func (j *CallFunctionsAfterBecameLeader) Start(ctx context.Context) error {
-	j.statusUpdaterEnable(ctx)
-	j.healthCheckEnableLeader()
-	j.eventHandlerEnable(ctx)
+	for _, function := range j.enableFunctions {
+		function(ctx)
+	}
 	return nil
 }
 

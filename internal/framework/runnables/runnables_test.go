@@ -29,11 +29,11 @@ func TestCallFunctionsAfterBecameLeader(t *testing.T) {
 	healthCheckEnableLeader := false
 	eventHandlerEnabled := false
 
-	callFunctionsAfterBecameLeader := NewCallFunctionsAfterBecameLeader(
+	callFunctionsAfterBecameLeader := NewCallFunctionsAfterBecameLeader([]func(ctx context.Context){
 		func(_ context.Context) { statusUpdaterEnabled = true },
-		func() { healthCheckEnableLeader = true },
+		func(_ context.Context) { healthCheckEnableLeader = true },
 		func(_ context.Context) { eventHandlerEnabled = true },
-	)
+	})
 
 	g := NewWithT(t)
 	g.Expect(callFunctionsAfterBecameLeader.NeedLeaderElection()).To(BeTrue())

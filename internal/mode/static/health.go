@@ -1,6 +1,7 @@
 package static
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -100,7 +101,7 @@ func (h *graphBuiltHealthChecker) getReadyCh() <-chan struct{} {
 }
 
 // setAsLeader marks the health check as leader.
-func (h *graphBuiltHealthChecker) setAsLeader() {
+func (h *graphBuiltHealthChecker) setAsLeader(_ context.Context) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 
