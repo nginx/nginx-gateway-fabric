@@ -131,19 +131,19 @@ describe('testMatch', () => {
 		},
 		{
 			name: 'returns true if headers match and no other conditions are set',
-			match: { headers: ['header:value'] },
+			match: { headers: ['header:Exact:value'] },
 			request: createRequest({ headers: { header: 'value' } }),
 			expected: true,
 		},
 		{
 			name: 'returns true if query parameters match and no other conditions are set',
-			match: { params: ['key=value'] },
+			match: { params: ['key=Exact=value'] },
 			request: createRequest({ params: { key: 'value' } }),
 			expected: true,
 		},
 		{
 			name: 'returns true if multiple conditions match',
-			match: { method: 'GET', headers: ['header:value'], params: ['key=value'] },
+			match: { method: 'GET', headers: ['header:Exact:value'], params: ['key=Exact=value'] },
 			request: createRequest({
 				method: 'GET',
 				headers: { header: 'value' },
@@ -159,13 +159,13 @@ describe('testMatch', () => {
 		},
 		{
 			name: 'returns false if headers do not match',
-			match: { method: 'GET', headers: ['header:value'] },
+			match: { method: 'GET', headers: ['header:Exact:value'] },
 			request: createRequest({ method: 'GET' }), // no headers are set on request
 			expected: false,
 		},
 		{
 			name: 'returns false if query parameters do not match',
-			match: { method: 'GET', headers: ['header:value'], params: ['key=value'] },
+			match: { method: 'GET', headers: ['header:Exact:value'], params: ['key=Exact=value'] },
 			request: createRequest({ method: 'GET', headers: { header: 'value' } }), // no params set on request
 			expected: false,
 		},
@@ -198,8 +198,8 @@ describe('testMatch', () => {
 });
 
 describe('findWinningMatch', () => {
-	const headerMatch = { headers: ['header:value'] };
-	const queryParamMatch = { params: ['key=value'] };
+	const headerMatch = { headers: ['header:Exact:value'] };
+	const queryParamMatch = { params: ['key=Exact=value'] };
 	const methodMatch = { method: 'POST' };
 	const anyMatch = { any: true };
 	const malformedMatch = { headers: ['malformed'] };
@@ -241,12 +241,16 @@ describe('findWinningMatch', () => {
 });
 
 describe('headersMatch', () => {
-	const multipleHeaders = ['header1:VALUE1', 'header2:value2', 'header3:value3']; // case matters for header values
+	const multipleHeaders = [
+		'header1:Exact:VALUE1',
+		'header2:RegularExpression:Header-[a-z]{1}',
+		'header3:Exact:value3',
+	]; // case matters for header values
 
 	const tests = [
 		{
 			name: 'throws an error if a header has multiple colons',
-			headers: ['too:many:colons'],
+			headers: ['too:Exact:many:colons'],
 			expectThrow: true,
 		},
 		{
@@ -254,6 +258,14 @@ describe('headersMatch', () => {
 			headers: ['wrong=delimiter'],
 			requestHeaders: {},
 			expectThrow: true,
+		},
+		{
+			name: 'throws an error if a header has invalid match type',
+			headers: ['key:Incorrect:val'],
+			requestHeaders: {
+				key: 'val',
+			},
+			expectTypeError: true,
 		},
 		{
 			name: 'returns false if one of the header values does not match',
@@ -280,14 +292,14 @@ describe('headersMatch', () => {
 			headers: multipleHeaders,
 			requestHeaders: {
 				header1: 'VALUE1', // this value is not the correct case
-				header2: 'value2',
+				header2: 'Header-a',
 				header3: 'value3',
 			},
 			expected: true,
 		},
 		{
 			name: 'returns true if request has multiple values for a header name and one value matches ',
-			headers: ['multiValueHeader:val3'],
+			headers: ['multiValueHeader:Exact:val3'],
 			requestHeaders: {
 				multiValueHeader: 'val1,val2,val3,val4,val5',
 			},
@@ -301,6 +313,10 @@ describe('headersMatch', () => {
 				expect(() => hm.headersMatch(test.requestHeaders, test.headers)).to.throw(
 					'invalid header match',
 				);
+			} else if (test.expectTypeError) {
+				expect(() => hm.headersMatch(test.requestHeaders, test.headers)).to.throw(
+					'invalid header match type',
+				);
 			} else {
 				expect(hm.headersMatch(test.requestHeaders, test.headers)).to.equal(test.expected);
 			}
@@ -309,23 +325,32 @@ describe('headersMatch', () => {
 });
 
 describe('paramsMatch', () => {
-	const params = ['Arg1=value1', 'arg2=value2=SOME=other=value', 'arg3===value3&*1(*+']; // case matters for header values
+	const params = [
+		'Arg1=Exact=value1',
+		'arg2=Exact=value2=SOME=other=value',
+		'arg3=Exact===value3&*1(*+',
+	]; // case matters for header values
 
 	const tests = [
 		{
 			name: 'throws an error a param has no key',
-			params: ['=nokey'],
+			params: ['=Exact=nokey'],
 			expectThrow: true,
 		},
 		{
 			name: 'throws an error if a param has no value',
-			params: ['novalue='],
+			params: ['novalue=Exact='],
 			expectThrow: true,
 		},
 		{
 			name: 'throws an error a param has no equal sign delimiter',
 			params: ['keyval'],
 			expectThrow: true,
+		},
+		{
+			name: 'throws an error if a param has invalid match type',
+			params: ['key=Incorrect=val'],
+			expectTypeError: true,
 		},
 		{
 			name: 'returns false if one of the params is missing from request',
@@ -398,6 +423,22 @@ describe('paramsMatch', () => {
 			expected: true,
 		},
 		{
+			name: 'returns true if param matches the regular expression',
+			params: ['key=RegularExpression=Query-[a-z]{1}'],
+			requestParams: {
+				key: 'Query-a',
+			},
+			expected: true,
+		},
+		{
+			name: 'returns false if param does not match the regular expression',
+			params: ['key=RegularExpression=Query-[a-z]{1}'],
+			requestParams: {
+				key: 'value',
+			},
+			expected: false,
+		},
+		{
 			name: 'returns false if one param does not match because of multiple values',
 			params: params,
 			requestParams: {
@@ -415,6 +456,10 @@ describe('paramsMatch', () => {
 				expect(() => hm.paramsMatch(test.requestParams, test.params)).to.throw(
 					'invalid query parameter',
 				);
+			} else if (test.expectTypeError) {
+				expect(() => hm.paramsMatch(test.requestParams, test.params)).to.throw(
+					'invalid header match type',
+				);
 			} else {
 				expect(hm.paramsMatch(test.requestParams, test.params)).to.equal(test.expected);
 			}
@@ -425,17 +470,21 @@ describe('paramsMatch', () => {
 describe('redirectForMatchList', () => {
 	const testAnyMatch = { any: true, redirectPath: '/any' };
 	const testHeaderMatches = {
-		headers: ['header1:VALUE1', 'header2:value2', 'header3:value3'],
+		headers: ['header1:Exact:VALUE1', 'header2:Exact:value2', 'header3:Exact:value3'],
 		redirectPath: '/headers',
 	};
 	const testQueryParamMatches = {
-		params: ['Arg1=value1', 'arg2=value2=SOME=other=value', 'arg3===value3&*1(*+'],
+		params: [
+			'Arg1=Exact=value1',
+			'arg2=Exact=value2=SOME=other=value',
+			'arg3=Exact===value3&*1(*+',
+		],
 		redirectPath: '/params',
 	};
 	const testAllMatchTypes = {
 		method: 'GET',
-		headers: ['header1:value1', 'header2:value2'],
-		params: ['Arg1=value1', 'arg2=value2=SOME=other=value'],
+		headers: ['header1:Exact:value1', 'header2:Exact:value2'],
+		params: ['Arg1=Exact=value1', 'arg2=Exact=value2=SOME=other=value'],
 		redirectPath: '/a-match',
 	};
 

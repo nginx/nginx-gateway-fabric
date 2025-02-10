@@ -154,7 +154,8 @@ function headersMatch(requestHeaders, headers) {
 		const h = headers[i];
 		const kv = h.split(':');
 
-		if (kv.length !== 2) {
+		// header should be of the format "key:MatchType:value"
+		if (kv.length !== 3) {
 			throw Error(`invalid header match: ${h}`);
 		}
 		// Header names are compared in a case-insensitive manner, meaning header name "FOO" is equivalent to "foo".
@@ -168,8 +169,22 @@ function headersMatch(requestHeaders, headers) {
 
 		// split on comma because nginx uses commas to delimit multiple header values
 		const values = val.split(',');
-		if (!values.includes(kv[1])) {
-			return false;
+
+		let type = kv[1];
+		// verify the type of header match
+		if (!(type == 'Exact' || type == 'RegularExpression')) {
+			throw Error(`invalid header match type: ${type}`);
+		}
+
+		// match the value based on the type
+		if (type === 'Exact') {
+			if (!values.includes(kv[2])) {
+				return false;
+			}
+		} else if (type === 'RegularExpression') {
+			if (!values.some((v) => new RegExp(kv[2]).test(v))) {
+				return false;
+			}
 		}
 	}
 
@@ -179,20 +194,38 @@ function headersMatch(requestHeaders, headers) {
 function paramsMatch(requestParams, params) {
 	for (let i = 0; i < params.length; i++) {
 		let p = params[i];
-		// We store query parameter matches as strings with the format "key=value"; however, there may be more than one
+		// We store query parameter matches as strings with the format "key=MatchType=value"; however, there may be more than one
 		// instance of "=" in the string.
-		// To recover the key and value, we need to find the first occurrence of "=" in the string.
-		const idx = params[i].indexOf('=');
-		// Check for an improperly constructed query parameter match. There are three possible error cases:
-		// (1) if the index is -1, then there are no "=" in the string (e.g. "keyvalue")
-		// (2) if the index is 0, then there is no value in the string (e.g. "key=").
-		// (3) if the index is equal to length -1, then there is no key in the string (e.g. "=value").
-		if (idx === -1 || (idx === 0) | (idx === p.length - 1)) {
+		// To recover the key, type and and value, we need to find the first occurrence of "=" in the string.
+		const firstIdx = p.indexOf('=');
+
+		// Check for an improperly constructed query parameter match. There are two possible error cases:
+		// (1) if the index is -1, then there are no "=" in the string (e.g. "keyExactvalue")
+		// (2) if the index is 0, then there is no key in the string (e.g. "=Exact=value").
+		if (firstIdx === -1 || firstIdx === 0) {
 			throw Error(`invalid query parameter: ${p}`);
 		}
 
+		// find the next occurence of "=" in the string
+		const idx = p.indexOf('=', firstIdx + 1);
+
+		// Three possible error cases for improperly constructed query parameter match:
+		// (1) if the index is -1, then there are no second occurence of "=" in the string (e.g. "key=Exactvalue")
+		// (2) if the index is 0, then there is no value in the string and has only one "=" (e.g. "key=Exact").
+		// (3) if the index is equal to length -1, then there is no key and type in the string (e.g. "=value").
+		if (idx === -1 || idx === 0 || idx === p.length - 1) {
+			throw Error(`invalid query parameter: ${p}`);
+		}
+
+		// extract the type match from the string
+		const type = p.slice(firstIdx + 1, idx);
+
+		if (!(type == 'Exact' || type == 'RegularExpression')) {
+			throw Error(`invalid header match type: ${type}`);
+		}
+
 		// Divide string into key value using the index.
-		let kv = [p.slice(0, idx), p.slice(idx + 1)];
+		let kv = [p.slice(0, firstIdx), p.slice(idx + 1)];
 
 		// val can either be a string or an array of strings.
 		// Also, the NGINX request's args object lookup is case-sensitive.
@@ -207,8 +240,15 @@ function paramsMatch(requestParams, params) {
 			val = val[0];
 		}
 
-		if (val !== kv[1]) {
-			return false;
+		// match the value based on the type
+		if (type === 'Exact') {
+			if (val !== kv[1]) {
+				return false;
+			}
+		} else if (type === 'RegularExpression') {
+			if (!new RegExp(kv[1]).test(val)) {
+				return false;
+			}
 		}
 	}
 

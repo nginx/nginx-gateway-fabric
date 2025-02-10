@@ -710,14 +710,17 @@ func TestCreateServers(t *testing.T) {
 							{
 								Name:  "Version",
 								Value: "V1",
+								Type:  dataplane.MatchTypeExact,
 							},
 							{
 								Name:  "test",
 								Value: "foo",
+								Type:  dataplane.MatchTypeExact,
 							},
 							{
 								Name:  "my-header",
 								Value: "my-value",
+								Type:  dataplane.MatchTypeExact,
 							},
 						},
 						QueryParams: []dataplane.HTTPQueryParamMatch{
@@ -725,10 +728,12 @@ func TestCreateServers(t *testing.T) {
 								// query names and values should not be normalized to lowercase
 								Name:  "GrEat",
 								Value: "EXAMPLE",
+								Type:  dataplane.MatchTypeExact,
 							},
 							{
 								Name:  "test",
 								Value: "foo=bar",
+								Type:  dataplane.MatchTypeExact,
 							},
 						},
 					},
@@ -797,6 +802,7 @@ func TestCreateServers(t *testing.T) {
 							{
 								Name:  "redirect",
 								Value: "this",
+								Type:  dataplane.MatchTypeExact,
 							},
 						},
 					},
@@ -839,6 +845,7 @@ func TestCreateServers(t *testing.T) {
 							{
 								Name:  "rewrite",
 								Value: "this",
+								Type:  dataplane.MatchTypeExact,
 							},
 						},
 					},
@@ -878,6 +885,7 @@ func TestCreateServers(t *testing.T) {
 							{
 								Name:  "filter",
 								Value: "this",
+								Type:  dataplane.MatchTypeExact,
 							},
 						},
 					},
@@ -1071,23 +1079,23 @@ func TestCreateServers(t *testing.T) {
 		"1_1": {
 			{
 				Method:       "GET",
-				Headers:      []string{"Version:V1", "test:foo", "my-header:my-value"},
-				QueryParams:  []string{"GrEat=EXAMPLE", "test=foo=bar"},
+				Headers:      []string{"Version:Exact:V1", "test:Exact:foo", "my-header:Exact:my-value"},
+				QueryParams:  []string{"GrEat=Exact=EXAMPLE", "test=Exact=foo=bar"},
 				RedirectPath: "/_ngf-internal-rule1-route0",
 			},
 		},
 		"1_6": {
-			{RedirectPath: "/_ngf-internal-rule6-route0", Headers: []string{"redirect:this"}},
+			{RedirectPath: "/_ngf-internal-rule6-route0", Headers: []string{"redirect:Exact:this"}},
 		},
 		"1_8": {
 			{
-				Headers:      []string{"rewrite:this"},
+				Headers:      []string{"rewrite:Exact:this"},
 				RedirectPath: "/_ngf-internal-rule8-route0",
 			},
 		},
 		"1_10": {
 			{
-				Headers:      []string{"filter:this"},
+				Headers:      []string{"filter:Exact:this"},
 				RedirectPath: "/_ngf-internal-rule10-route0",
 			},
 		},
@@ -2702,14 +2710,17 @@ func TestCreateRouteMatch(t *testing.T) {
 		{
 			Name:  "header-1",
 			Value: "val-1",
+			Type:  dataplane.MatchTypeExact,
 		},
 		{
 			Name:  "header-2",
 			Value: "val-2",
+			Type:  dataplane.MatchTypeExact,
 		},
 		{
 			Name:  "header-3",
 			Value: "val-3",
+			Type:  dataplane.MatchTypeExact,
 		},
 	}
 
@@ -2725,19 +2736,22 @@ func TestCreateRouteMatch(t *testing.T) {
 		{
 			Name:  "arg1",
 			Value: "val1",
+			Type:  dataplane.MatchTypeExact,
 		},
 		{
 			Name:  "arg2",
 			Value: "val2=another-val",
+			Type:  dataplane.MatchTypeExact,
 		},
 		{
 			Name:  "arg3",
 			Value: "==val3",
+			Type:  dataplane.MatchTypeExact,
 		},
 	}
 
-	expectedHeaders := []string{"header-1:val-1", "header-2:val-2", "header-3:val-3"}
-	expectedArgs := []string{"arg1=val1", "arg2=val2=another-val", "arg3===val3"}
+	expectedHeaders := []string{"header-1:Exact:val-1", "header-2:Exact:val-2", "header-3:Exact:val-3"}
+	expectedArgs := []string{"arg1=Exact=val1", "arg2=Exact=val2=another-val", "arg3=Exact===val3"}
 
 	tests := []struct {
 		match    dataplane.Match
@@ -2856,41 +2870,74 @@ func TestCreateRouteMatch(t *testing.T) {
 
 func TestCreateQueryParamKeyValString(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	expected := "key=value"
-
-	result := createQueryParamKeyValString(
-		dataplane.HTTPQueryParamMatch{
-			Name:  "key",
-			Value: "value",
+	tests := []struct {
+		msg      string
+		input    dataplane.HTTPQueryParamMatch
+		expected string
+	}{
+		{
+			msg: "Exact match",
+			input: dataplane.HTTPQueryParamMatch{
+				Name:  "key",
+				Value: "value",
+				Type:  dataplane.MatchTypeExact,
+			},
+			expected: "key=Exact=value",
 		},
-	)
-
-	g.Expect(result).To(Equal(expected))
-
-	expected = "KeY=vaLUe=="
-
-	result = createQueryParamKeyValString(
-		dataplane.HTTPQueryParamMatch{
-			Name:  "KeY",
-			Value: "vaLUe==",
+		{
+			msg: "RegularExpression match",
+			input: dataplane.HTTPQueryParamMatch{
+				Name:  "KeY",
+				Value: "vaLUe-[a-z]==",
+				Type:  dataplane.MatchTypeRegularExpression,
+			},
+			expected: "KeY=RegularExpression=vaLUe-[a-z]==",
 		},
-	)
+		{
+			msg: "empty match type",
+			input: dataplane.HTTPQueryParamMatch{
+				Name:  "keY",
+				Value: "vaLUe==",
+				Type:  dataplane.MatchTypeExact,
+			},
+			expected: "keY=Exact=vaLUe==",
+		},
+	}
 
-	g.Expect(result).To(Equal(expected))
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			result := createQueryParamKeyValString(tc.input)
+			g.Expect(result).To(Equal(tc.expected))
+		})
+	}
 }
 
 func TestCreateHeaderKeyValString(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	expected := "kEy:vALUe"
+	expected := "kEy:Exact:vALUe"
 
 	result := createHeaderKeyValString(
 		dataplane.HTTPHeaderMatch{
 			Name:  "kEy",
 			Value: "vALUe",
+			Type:  dataplane.MatchTypeExact,
+		},
+	)
+
+	g.Expect(result).To(Equal(expected))
+
+	expected = "kEy:RegularExpression:vALUe-[0-9]"
+
+	result = createHeaderKeyValString(
+		dataplane.HTTPHeaderMatch{
+			Name:  "kEy",
+			Value: "vALUe-[0-9]",
+			Type:  dataplane.MatchTypeRegularExpression,
 		},
 	)
 

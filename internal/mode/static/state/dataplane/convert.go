@@ -24,6 +24,7 @@ func convertMatch(m v1.HTTPRouteMatch) Match {
 			match.Headers = append(match.Headers, HTTPHeaderMatch{
 				Name:  string(h.Name),
 				Value: h.Value,
+				Type:  convertMatchType(h.Type),
 			})
 		}
 	}
@@ -34,6 +35,7 @@ func convertMatch(m v1.HTTPRouteMatch) Match {
 			match.QueryParams = append(match.QueryParams, HTTPQueryParamMatch{
 				Name:  string(q.Name),
 				Value: q.Value,
+				Type:  convertMatchType(q.Type),
 			})
 		}
 	}
@@ -88,6 +90,17 @@ func convertPathType(pathType v1.PathMatchType) PathType {
 		return PathTypeExact
 	default:
 		panic(fmt.Sprintf("unsupported path type: %s", pathType))
+	}
+}
+
+func convertMatchType[T ~string](matchType *T) MatchType {
+	switch *matchType {
+	case T(v1.HeaderMatchExact), T(v1.QueryParamMatchExact):
+		return MatchTypeExact
+	case T(v1.HeaderMatchRegularExpression), T(v1.QueryParamMatchRegularExpression):
+		return MatchTypeRegularExpression
+	default:
+		panic(fmt.Sprintf("unsupported match type: %v", *matchType))
 	}
 }
 

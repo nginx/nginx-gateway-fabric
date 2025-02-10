@@ -350,13 +350,14 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 
 	grValidFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grValidHeaderMatch := createGRPCHeadersMatch("RegularExpression", "MyHeader", "headers-[a-z]+")
 	validSnippetsFilterRef := &v1.LocalObjectReference{
 		Group: ngfAPI.GroupName,
 		Kind:  kinds.SnippetsFilter,
 		Name:  "sf",
 	}
 
-	grValidFilterRule.Filters = []v1.GRPCRouteFilter{
+	grpcRouteFilters := []v1.GRPCRouteFilter{
 		{
 			Type: "RequestHeaderModifier",
 			RequestHeaderModifier: &v1.HTTPHeaderFilter{
@@ -377,11 +378,14 @@ func TestBuildGRPCRoute(t *testing.T) {
 		},
 	}
 
+	grValidFilterRule.Filters = grpcRouteFilters
+	grValidHeaderMatch.Filters = grpcRouteFilters
+
 	grValidFilter := createGRPCRoute(
 		"gr",
 		gatewayNsName.Name,
 		"example.com",
-		[]v1.GRPCRouteRule{grValidFilterRule},
+		[]v1.GRPCRouteRule{grValidFilterRule, grValidHeaderMatch},
 	)
 
 	// route with invalid snippets filter extension ref
@@ -453,6 +457,37 @@ func TestBuildGRPCRoute(t *testing.T) {
 		v := &validationfakes.FakeHTTPFieldsValidator{}
 		v.ValidateMethodInMatchReturns(true, nil)
 		return v
+	}
+
+	routeFilters := []Filter{
+		{
+			RouteType:  RouteTypeGRPC,
+			FilterType: FilterRequestHeaderModifier,
+			RequestHeaderModifier: &v1.HTTPHeaderFilter{
+				Remove: []string{"header"},
+			},
+		},
+		{
+			RouteType:  RouteTypeGRPC,
+			FilterType: FilterResponseHeaderModifier,
+			ResponseHeaderModifier: &v1.HTTPHeaderFilter{
+				Add: []v1.HTTPHeader{
+					{Name: "Accept-Encoding", Value: "gzip"},
+				},
+			},
+		},
+		{
+			RouteType:    RouteTypeGRPC,
+			FilterType:   FilterExtensionRef,
+			ExtensionRef: validSnippetsFilterRef,
+			ResolvedExtensionRef: &ExtensionRefFilter{
+				SnippetsFilter: &SnippetsFilter{
+					Valid:      true,
+					Referenced: true,
+				},
+				Valid: true,
+			},
+		},
 	}
 
 	tests := []struct {
@@ -558,43 +593,23 @@ func TestBuildGRPCRoute(t *testing.T) {
 							Matches:          ConvertGRPCMatches(grValidFilter.Spec.Rules[0].Matches),
 							RouteBackendRefs: []RouteBackendRef{},
 							Filters: RouteRuleFilters{
-								Filters: []Filter{
-									{
-										RouteType:  RouteTypeGRPC,
-										FilterType: FilterRequestHeaderModifier,
-										RequestHeaderModifier: &v1.HTTPHeaderFilter{
-											Remove: []string{"header"},
-										},
-									},
-									{
-										RouteType:  RouteTypeGRPC,
-										FilterType: FilterResponseHeaderModifier,
-										ResponseHeaderModifier: &v1.HTTPHeaderFilter{
-											Add: []v1.HTTPHeader{
-												{Name: "Accept-Encoding", Value: "gzip"},
-											},
-										},
-									},
-									{
-										RouteType:    RouteTypeGRPC,
-										FilterType:   FilterExtensionRef,
-										ExtensionRef: validSnippetsFilterRef,
-										ResolvedExtensionRef: &ExtensionRefFilter{
-											SnippetsFilter: &SnippetsFilter{
-												Valid:      true,
-												Referenced: true,
-											},
-											Valid: true,
-										},
-									},
-								},
-								Valid: true,
+								Valid:   true,
+								Filters: routeFilters,
 							},
+						},
+						{
+							ValidMatches: true,
+							Matches:      ConvertGRPCMatches(grValidFilter.Spec.Rules[1].Matches),
+							Filters: RouteRuleFilters{
+								Valid:   true,
+								Filters: routeFilters,
+							},
+							RouteBackendRefs: []RouteBackendRef{},
 						},
 					},
 				},
 			},
-			name: "valid rule with filter",
+			name: "valid path rule, headers with filters",
 		},
 		{
 			validator: createAllValidValidator(),
@@ -727,7 +742,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				},
 				Conditions: []conditions.Condition{
 					staticConds.NewRoutePartiallyInvalid(
-						`spec.rules[1].matches[0].headers[0].type: Unsupported value: "": supported values: "Exact"`,
+						`spec.rules[1].matches[0].headers[0].type: Unsupported value: "": supported values: "Exact", "RegularExpression"`,
 					),
 				},
 				Spec: L7RouteSpec{
@@ -774,7 +789,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Conditions: []conditions.Condition{
 					staticConds.NewRouteUnsupportedValue(
 						`All rules are invalid: spec.rules[0].matches[0].headers[0].type: ` +
-							`Unsupported value: "": supported values: "Exact"`,
+							`Unsupported value: "": supported values: "Exact", "RegularExpression"`,
 					),
 				},
 				Spec: L7RouteSpec{
@@ -973,7 +988,6 @@ func TestBuildGRPCRoute(t *testing.T) {
 					},
 				},
 			},
-
 			name: "invalid snippet filter extension ref",
 		},
 		{
@@ -1013,7 +1027,6 @@ func TestBuildGRPCRoute(t *testing.T) {
 					},
 				},
 			},
-
 			name: "unresolvable snippet filter extension ref",
 		},
 		{
@@ -1057,7 +1070,6 @@ func TestBuildGRPCRoute(t *testing.T) {
 					},
 				},
 			},
-
 			name: "one invalid and one unresolvable snippet filter extension ref",
 		},
 	}
@@ -1072,7 +1084,6 @@ func TestBuildGRPCRoute(t *testing.T) {
 			snippetsFilters := map[types.NamespacedName]*SnippetsFilter{
 				{Namespace: "test", Name: "sf"}: {Valid: true},
 			}
-
 			route := buildGRPCRoute(test.validator, test.gr, gatewayNsNames, test.http2disabled, snippetsFilters)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
@@ -1084,6 +1095,8 @@ func TestConvertGRPCMatches(t *testing.T) {
 	methodMatch := createGRPCMethodMatch("myService", "myMethod", "Exact").Matches
 
 	headersMatch := createGRPCHeadersMatch("Exact", "MyHeader", "SomeValue").Matches
+
+	headerMatchRegularExp := createGRPCHeadersMatch("RegularExpression", "HeaderRegex", "headers-[a-z]+").Matches
 
 	expectedHTTPMatches := []v1.HTTPRouteMatch{
 		{
@@ -1105,6 +1118,23 @@ func TestConvertGRPCMatches(t *testing.T) {
 				{
 					Value: "SomeValue",
 					Name:  v1.HTTPHeaderName("MyHeader"),
+					Type:  helpers.GetPointer(v1.HeaderMatchExact),
+				},
+			},
+		},
+	}
+
+	expectedHeaderMatchesRegularExp := []v1.HTTPRouteMatch{
+		{
+			Path: &v1.HTTPPathMatch{
+				Type:  helpers.GetPointer(v1.PathMatchPathPrefix),
+				Value: helpers.GetPointer("/"),
+			},
+			Headers: []v1.HTTPHeaderMatch{
+				{
+					Value: "headers-[a-z]+",
+					Name:  v1.HTTPHeaderName("HeaderRegex"),
+					Type:  helpers.GetPointer(v1.HeaderMatchRegularExpression),
 				},
 			},
 		},
@@ -1130,9 +1160,14 @@ func TestConvertGRPCMatches(t *testing.T) {
 			expected:      expectedHTTPMatches,
 		},
 		{
-			name:          "headers matches",
+			name:          "headers matches exact",
 			methodMatches: headersMatch,
 			expected:      expectedHeadersMatches,
+		},
+		{
+			name:          "headers matches regular expression",
+			methodMatches: headerMatchRegularExp,
+			expected:      expectedHeaderMatchesRegularExp,
 		},
 		{
 			name:          "empty matches",
@@ -1148,6 +1183,39 @@ func TestConvertGRPCMatches(t *testing.T) {
 
 			httpMatches := ConvertGRPCMatches(test.methodMatches)
 			g.Expect(helpers.Diff(test.expected, httpMatches)).To(BeEmpty())
+		})
+	}
+}
+
+func TestConvertGRPCHeaderMatchType(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input    *v1.GRPCHeaderMatchType
+		expected *v1.HeaderMatchType
+		name     string
+	}{
+		{
+			name:     "exact match type",
+			input:    helpers.GetPointer(v1.GRPCHeaderMatchExact),
+			expected: helpers.GetPointer(v1.HeaderMatchExact),
+		},
+		{
+			name:     "regular expression match type",
+			input:    helpers.GetPointer(v1.GRPCHeaderMatchRegularExpression),
+			expected: helpers.GetPointer(v1.HeaderMatchRegularExpression),
+		},
+		{
+			name:     "unsupported match type",
+			input:    helpers.GetPointer(v1.GRPCHeaderMatchType("unsupported")),
+			expected: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(convertGRPCHeaderMatchType(test.input)).To(Equal(test.expected))
 		})
 	}
 }

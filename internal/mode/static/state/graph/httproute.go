@@ -232,8 +232,12 @@ func validateQueryParamMatch(
 
 	if q.Type == nil {
 		allErrs = append(allErrs, field.Required(queryParamPath.Child("type"), "cannot be empty"))
-	} else if *q.Type != v1.QueryParamMatchExact {
-		valErr := field.NotSupported(queryParamPath.Child("type"), *q.Type, []string{string(v1.QueryParamMatchExact)})
+	} else if *q.Type != v1.QueryParamMatchExact && *q.Type != v1.QueryParamMatchRegularExpression {
+		valErr := field.NotSupported(
+			queryParamPath.Child("type"),
+			*q.Type,
+			[]string{string(v1.QueryParamMatchExact), string(v1.QueryParamMatchRegularExpression)},
+		)
 		allErrs = append(allErrs, valErr)
 	}
 

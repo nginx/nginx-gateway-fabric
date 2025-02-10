@@ -199,6 +199,7 @@ func ConvertGRPCMatches(grpcMatches []v1.GRPCRouteMatch) []v1.HTTPRouteMatch {
 			hmHeaders = append(hmHeaders, v1.HTTPHeaderMatch{
 				Name:  v1.HTTPHeaderName(head.Name),
 				Value: head.Value,
+				Type:  convertGRPCHeaderMatchType(head.Type),
 			})
 		}
 		hm.Headers = hmHeaders
@@ -219,6 +220,20 @@ func ConvertGRPCMatches(grpcMatches []v1.GRPCRouteMatch) []v1.HTTPRouteMatch {
 		hms = append(hms, hm)
 	}
 	return hms
+}
+
+func convertGRPCHeaderMatchType(matchType *v1.GRPCHeaderMatchType) *v1.HeaderMatchType {
+	if matchType == nil {
+		return nil
+	}
+	switch *matchType {
+	case v1.GRPCHeaderMatchExact:
+		return helpers.GetPointer(v1.HeaderMatchExact)
+	case v1.GRPCHeaderMatchRegularExpression:
+		return helpers.GetPointer(v1.HeaderMatchRegularExpression)
+	default:
+		return nil
+	}
 }
 
 func validateGRPCMatch(
@@ -289,11 +304,11 @@ func validateGRPCHeaderMatch(
 
 	if headerType == nil {
 		allErrs = append(allErrs, field.Required(headerPath.Child("type"), "cannot be empty"))
-	} else if *headerType != v1.GRPCHeaderMatchExact {
+	} else if *headerType != v1.GRPCHeaderMatchExact && *headerType != v1.GRPCHeaderMatchRegularExpression {
 		valErr := field.NotSupported(
 			headerPath.Child("type"),
 			*headerType,
-			[]string{string(v1.GRPCHeaderMatchExact)},
+			[]string{string(v1.GRPCHeaderMatchExact), string(v1.GRPCHeaderMatchRegularExpression)},
 		)
 		allErrs = append(allErrs, valErr)
 	}

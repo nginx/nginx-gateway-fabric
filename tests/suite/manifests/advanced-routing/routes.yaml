@@ -1,16 +1,54 @@
 apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
+kind: HTTPRoute
 metadata:
-  name: same-namespace
+  name: http-header-and-query-matching
 spec:
-  gatewayClassName: nginx
-  listeners:
-  - name: http
-    port: 80
-    protocol: HTTP
-    allowedRoutes:
-      namespaces:
-        from: Same
+  parentRefs:
+  - name: advanced-routing-gateway
+  hostnames:
+  - cafe.example.com
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /coffee
+    backendRefs:
+    - name: coffee-v1-svc
+      port: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /coffee
+      headers:
+      - name: version
+        value: v2
+    - path:
+        type: PathPrefix
+        value: /coffee
+      queryParams:
+      - name: TEST
+        value: v2
+    backendRefs:
+    - name: coffee-v2-svc
+      port: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /coffee
+      headers:
+      - name: headerRegex
+        type: RegularExpression
+        value: "header-[a-z]{1}"
+    - path:
+        type: PathPrefix
+        value: /coffee
+      queryParams:
+      - name: queryRegex
+        type: RegularExpression
+        value: "query-[a-z]{1}"
+    backendRefs:
+    - name: coffee-v3-svc
+      port: 80
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
@@ -18,7 +56,7 @@ metadata:
   name: grpc-header-matching
 spec:
   parentRefs:
-  - name: same-namespace
+  - name: advanced-routing-gateway
   rules:
   # Matches "version: one"
   - matches:

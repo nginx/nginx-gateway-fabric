@@ -220,7 +220,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 				_, err := rand.Read(payload)
 				Expect(err).ToNot(HaveOccurred())
 
-				resp, err := framework.Post(url, address, bytes.NewReader(payload), timeoutConfig.RequestTimeout)
+				resp, err := framework.Post(url, address, bytes.NewReader(payload), timeoutConfig.RequestTimeout, nil, nil)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).To(HaveHTTPStatus(expStatus))
 

@@ -217,6 +217,17 @@ const (
 	ReplacePrefixMatch PathModifierType = "ReplacePrefixMatch"
 )
 
+// MatchType is the type of match in a MatchRule for headers and query parameters.
+type MatchType string
+
+const (
+	// MatchTypeExact indicates that the match type is exact.
+	MatchTypeExact MatchType = "Exact"
+
+	// MatchTypeRegularExpression indicates that the match type is a regular expression.
+	MatchTypeRegularExpression MatchType = "RegularExpression"
+)
+
 // HTTPPathModifier defines configuration for path modifiers.
 type HTTPPathModifier struct {
 	// Replacement specifies the value with which to replace the full path or prefix match of a request during
@@ -232,6 +243,8 @@ type HTTPHeaderMatch struct {
 	Name string
 	// Value is the value of the header to match.
 	Value string
+	// Type specifies the type of match.
+	Type MatchType
 }
 
 // HTTPQueryParamMatch matches an HTTP query parameter.
@@ -240,6 +253,8 @@ type HTTPQueryParamMatch struct {
 	Name string
 	// Value is the value of the query parameter to match.
 	Value string
+	// Type specifies the type of match.
+	Type MatchType
 }
 
 // MatchRule represents a routing rule. It corresponds directly to a Match in the HTTPRoute resource.

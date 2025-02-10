@@ -45,6 +45,7 @@ func TestConvertMatch(t *testing.T) {
 					{
 						Name:  "Test-Header",
 						Value: "test-header-value",
+						Type:  helpers.GetPointer(v1.HeaderMatchExact),
 					},
 				},
 			},
@@ -53,6 +54,7 @@ func TestConvertMatch(t *testing.T) {
 					{
 						Name:  "Test-Header",
 						Value: "test-header-value",
+						Type:  MatchTypeExact,
 					},
 				},
 			},
@@ -65,6 +67,7 @@ func TestConvertMatch(t *testing.T) {
 					{
 						Name:  "Test-Param",
 						Value: "test-param-value",
+						Type:  helpers.GetPointer(v1.QueryParamMatchExact),
 					},
 				},
 			},
@@ -73,6 +76,7 @@ func TestConvertMatch(t *testing.T) {
 					{
 						Name:  "Test-Param",
 						Value: "test-param-value",
+						Type:  MatchTypeExact,
 					},
 				},
 			},
@@ -85,13 +89,53 @@ func TestConvertMatch(t *testing.T) {
 				Headers: []v1.HTTPHeaderMatch{
 					{
 						Name:  "Test-Header",
+						Value: "header-[0-9]+",
+						Type:  helpers.GetPointer(v1.HeaderMatchRegularExpression),
+					},
+				},
+				QueryParams: []v1.HTTPQueryParamMatch{
+					{
+						Name:  "Test-Param",
+						Value: "query-[0-9]+",
+						Type:  helpers.GetPointer(v1.QueryParamMatchRegularExpression),
+					},
+				},
+			},
+			expected: Match{
+				Method: helpers.GetPointer("GET"),
+				Headers: []HTTPHeaderMatch{
+					{
+						Name:  "Test-Header",
+						Value: "header-[0-9]+",
+						Type:  MatchTypeRegularExpression,
+					},
+				},
+				QueryParams: []HTTPQueryParamMatch{
+					{
+						Name:  "Test-Param",
+						Value: "query-[0-9]+",
+						Type:  MatchTypeRegularExpression,
+					},
+				},
+			},
+			name: "path, method, header, and query param with regex",
+		},
+		{
+			match: v1.HTTPRouteMatch{
+				Path:   &path,
+				Method: helpers.GetPointer(v1.HTTPMethodGet),
+				Headers: []v1.HTTPHeaderMatch{
+					{
+						Name:  "Test-Header",
 						Value: "test-header-value",
+						Type:  helpers.GetPointer(v1.HeaderMatchExact),
 					},
 				},
 				QueryParams: []v1.HTTPQueryParamMatch{
 					{
 						Name:  "Test-Param",
 						Value: "test-param-value",
+						Type:  helpers.GetPointer(v1.QueryParamMatchExact),
 					},
 				},
 			},
@@ -101,12 +145,14 @@ func TestConvertMatch(t *testing.T) {
 					{
 						Name:  "Test-Header",
 						Value: "test-header-value",
+						Type:  MatchTypeExact,
 					},
 				},
 				QueryParams: []HTTPQueryParamMatch{
 					{
 						Name:  "Test-Param",
 						Value: "test-param-value",
+						Type:  MatchTypeExact,
 					},
 				},
 			},
@@ -351,6 +397,55 @@ func TestConvertPathType(t *testing.T) {
 			} else {
 				result := convertPathType(tc.pathType)
 				g.Expect(result).To(Equal(tc.expected))
+			}
+		})
+	}
+}
+
+func TestConvertMatchType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		headerMatchType *v1.HeaderMatchType
+		queryMatchType  *v1.QueryParamMatchType
+		expectedType    MatchType
+		shouldPanic     bool
+	}{
+		{
+			name:            "exact match type for header and query param",
+			headerMatchType: helpers.GetPointer(v1.HeaderMatchExact),
+			queryMatchType:  helpers.GetPointer(v1.QueryParamMatchExact),
+			expectedType:    MatchTypeExact,
+			shouldPanic:     false,
+		},
+		{
+			name:            "regular expression match type for header and query param",
+			headerMatchType: helpers.GetPointer(v1.HeaderMatchRegularExpression),
+			queryMatchType:  helpers.GetPointer(v1.QueryParamMatchRegularExpression),
+			expectedType:    MatchTypeRegularExpression,
+			shouldPanic:     false,
+		},
+		{
+			name:            "unsupported match type for header and query param",
+			headerMatchType: helpers.GetPointer(v1.HeaderMatchType(v1.PathMatchPathPrefix)),
+			queryMatchType:  helpers.GetPointer(v1.QueryParamMatchType(v1.PathMatchPathPrefix)),
+			expectedType:    MatchTypeExact,
+			shouldPanic:     true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			if tc.shouldPanic {
+				g.Expect(func() { convertMatchType(tc.headerMatchType) }).To(Panic())
+				g.Expect(func() { convertMatchType(tc.queryMatchType) }).To(Panic())
+			} else {
+				g.Expect(convertMatchType(tc.headerMatchType)).To(Equal(tc.expectedType))
+				g.Expect(convertMatchType(tc.queryMatchType)).To(Equal(tc.expectedType))
 			}
 		})
 	}

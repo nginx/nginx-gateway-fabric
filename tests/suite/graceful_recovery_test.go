@@ -294,7 +294,7 @@ func checkForFailingTraffic(teaURL, coffeeURL string) error {
 }
 
 func expectRequestToSucceed(appURL, address string, responseBodyMessage string) error {
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout)
+	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
 
 	if status != http.StatusOK {
 		return errors.New("http status was not 200")
@@ -308,7 +308,7 @@ func expectRequestToSucceed(appURL, address string, responseBodyMessage string) 
 }
 
 func expectRequestToFail(appURL, address string) error {
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout)
+	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
 	if status != 0 {
 		return errors.New("expected http status to be 0")
 	}

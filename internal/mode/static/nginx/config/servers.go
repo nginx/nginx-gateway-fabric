@@ -716,19 +716,23 @@ func createRouteMatch(match dataplane.Match, redirectPath string) routeMatch {
 	return hm
 }
 
-// The name and values are delimited by "=". A name and value can always be recovered using strings.SplitN(arg,"=", 2).
+// The name, match type and values are delimited by "=".
+// A name, match type and value can always be recovered using strings.SplitN(arg,"=", 3).
 // Query Parameters are case-sensitive so case is preserved.
+// The match type is optional and defaults to "Exact".
 func createQueryParamKeyValString(p dataplane.HTTPQueryParamMatch) string {
-	return p.Name + "=" + p.Value
+	return p.Name + "=" + string(p.Type) + "=" + p.Value
 }
 
-// The name and values are delimited by ":". A name and value can always be recovered using strings.Split(arg, ":").
+// The name, match type and values are delimited by ":".
+// A name, match type and value can always be recovered using strings.Split(arg, ":").
 // Header names are case-insensitive and header values are case-sensitive.
+// The match type is optional and defaults to "Exact".
 // Ex. foo:bar == FOO:bar, but foo:bar != foo:BAR,
 // We preserve the case of the name here because NGINX allows us to look up the header names in a case-insensitive
 // manner.
 func createHeaderKeyValString(h dataplane.HTTPHeaderMatch) string {
-	return h.Name + HeaderMatchSeparator + h.Value
+	return h.Name + HeaderMatchSeparator + string(h.Type) + HeaderMatchSeparator + h.Value
 }
 
 func isPathOnlyMatch(match dataplane.Match) bool {

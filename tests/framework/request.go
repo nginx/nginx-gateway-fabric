@@ -16,8 +16,12 @@ import (
 // Get sends a GET request to the specified url.
 // It resolves to the specified address instead of using DNS.
 // The status and body of the response is returned, or an error.
-func Get(url, address string, timeout time.Duration) (int, string, error) {
-	resp, err := makeRequest(http.MethodGet, url, address, nil, timeout)
+func Get(
+	url, address string,
+	timeout time.Duration,
+	headers, queryParams map[string]string,
+) (int, string, error) {
+	resp, err := makeRequest(http.MethodGet, url, address, nil, timeout, headers, queryParams)
 	if err != nil {
 		return 0, "", err
 	}
@@ -35,11 +39,21 @@ func Get(url, address string, timeout time.Duration) (int, string, error) {
 
 // Post sends a POST request to the specified url with the body as the payload.
 // It resolves to the specified address instead of using DNS.
-func Post(url, address string, body io.Reader, timeout time.Duration) (*http.Response, error) {
-	return makeRequest(http.MethodPost, url, address, body, timeout)
+func Post(
+	url, address string,
+	body io.Reader,
+	timeout time.Duration,
+	headers, queryParams map[string]string,
+) (*http.Response, error) {
+	return makeRequest(http.MethodPost, url, address, body, timeout, headers, queryParams)
 }
 
-func makeRequest(method, url, address string, body io.Reader, timeout time.Duration) (*http.Response, error) {
+func makeRequest(
+	method, url, address string,
+	body io.Reader,
+	timeout time.Duration,
+	headers, queryParams map[string]string,
+) (*http.Response, error) {
 	dialer := &net.Dialer{}
 
 	transport, ok := http.DefaultTransport.(*http.Transport)
@@ -63,6 +77,18 @@ func makeRequest(method, url, address string, body io.Reader, timeout time.Durat
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, err
+	}
+
+	for key, value := range headers {
+		req.Header.Add(key, value)
+	}
+
+	if queryParams != nil {
+		q := req.URL.Query()
+		for key, value := range queryParams {
+			q.Add(key, value)
+		}
+		req.URL.RawQuery = q.Encode()
 	}
 
 	var resp *http.Response

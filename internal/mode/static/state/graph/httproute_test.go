@@ -1015,20 +1015,6 @@ func TestValidateMatch(t *testing.T) {
 			name:           "header match type is nil",
 		},
 		{
-			validator: createAllValidValidator(),
-			match: gatewayv1.HTTPRouteMatch{
-				Headers: []gatewayv1.HTTPHeaderMatch{
-					{
-						Type:  helpers.GetPointer(gatewayv1.HeaderMatchRegularExpression),
-						Name:  "header",
-						Value: "x",
-					},
-				},
-			},
-			expectErrCount: 1,
-			name:           "header match type is invalid",
-		},
-		{
 			validator: func() *validationfakes.FakeHTTPFieldsValidator {
 				validator := createAllValidValidator()
 				validator.ValidateHeaderNameInMatchReturns(errors.New("invalid header name"))
@@ -1045,6 +1031,20 @@ func TestValidateMatch(t *testing.T) {
 			},
 			expectErrCount: 1,
 			name:           "header name is invalid",
+		},
+		{
+			validator: createAllValidValidator(),
+			match: gatewayv1.HTTPRouteMatch{
+				Headers: []gatewayv1.HTTPHeaderMatch{
+					{
+						Type:  helpers.GetPointer(gatewayv1.HeaderMatchType("invalid")),
+						Name:  "header",
+						Value: "x",
+					},
+				},
+			},
+			expectErrCount: 1,
+			name:           "header match type is invalid",
 		},
 		{
 			validator: func() *validationfakes.FakeHTTPFieldsValidator {
@@ -1083,7 +1083,7 @@ func TestValidateMatch(t *testing.T) {
 			match: gatewayv1.HTTPRouteMatch{
 				QueryParams: []gatewayv1.HTTPQueryParamMatch{
 					{
-						Type:  helpers.GetPointer(gatewayv1.QueryParamMatchRegularExpression),
+						Type:  helpers.GetPointer(gatewayv1.QueryParamMatchType("invalid")),
 						Name:  "param",
 						Value: "y",
 					},
@@ -1149,14 +1149,14 @@ func TestValidateMatch(t *testing.T) {
 				},
 				Headers: []gatewayv1.HTTPHeaderMatch{
 					{
-						Type:  helpers.GetPointer(gatewayv1.HeaderMatchRegularExpression), // invalid
+						Type:  helpers.GetPointer(gatewayv1.HeaderMatchType("invalid")), // invalid
 						Name:  "header",
 						Value: "x",
 					},
 				},
 				QueryParams: []gatewayv1.HTTPQueryParamMatch{
 					{
-						Type:  helpers.GetPointer(gatewayv1.QueryParamMatchRegularExpression), // invalid
+						Type:  helpers.GetPointer(gatewayv1.QueryParamMatchType("invalid")), // invalid
 						Name:  "param",
 						Value: "y",
 					},
