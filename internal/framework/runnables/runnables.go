@@ -55,8 +55,8 @@ func NewCallFunctionsAfterBecameLeader(
 }
 
 func (j *CallFunctionsAfterBecameLeader) Start(ctx context.Context) error {
-	for _, function := range j.enableFunctions {
-		function(ctx)
+	for _, f := range j.enableFunctions {
+		f(ctx)
 	}
 	return nil
 }
