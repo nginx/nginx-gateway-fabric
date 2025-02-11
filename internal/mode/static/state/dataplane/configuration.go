@@ -72,7 +72,8 @@ func BuildConfiguration(
 		Version:               configVersion,
 		CertBundles: buildCertBundles(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
-			backendGroups),
+			backendGroups,
+		),
 		Telemetry:        buildTelemetry(g),
 		BaseHTTPConfig:   baseHTTPConfig,
 		Logging:          buildLogging(g),
@@ -241,7 +242,8 @@ func buildSSLKeyPairs(
 
 func buildRefCertificateBundles(
 	secrets map[types.NamespacedName]*graph.Secret,
-	configMaps map[types.NamespacedName]*graph.CaCertConfigMap) []graph.CertificateBundle {
+	configMaps map[types.NamespacedName]*graph.CaCertConfigMap,
+) []graph.CertificateBundle {
 	bundles := []graph.CertificateBundle{}
 
 	for _, secret := range secrets {

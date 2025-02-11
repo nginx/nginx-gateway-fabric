@@ -154,18 +154,19 @@ func validateBackendTLSCACertRef(btp *v1alpha3.BackendTLSPolicy, configMapResolv
 		Name:      string(selectedCertRef.Name),
 	}
 
-	if selectedCertRef.Kind == "ConfigMap" {
+	switch selectedCertRef.Kind {
+	case "ConfigMap":
 		if err := configMapResolver.resolve(nsName); err != nil {
 			path := field.NewPath("tls.cacertrefs[0]")
 			return field.Invalid(path, selectedCertRef, err.Error())
 		}
-	} else if selectedCertRef.Kind == "Secret" {
+	case "Secret":
 		if err := secretResolver.resolve(nsName); err != nil {
 			path := field.NewPath("tls.cacertrefs[0]")
 			return field.Invalid(path, selectedCertRef, err.Error())
 		}
-	} else {
-		return fmt.Errorf("`%s` invalid certificate reference supported", selectedCertRef.Kind)
+	default:
+		return fmt.Errorf("invalid certificate reference supported %q", selectedCertRef.Kind)
 	}
 	return nil
 }
