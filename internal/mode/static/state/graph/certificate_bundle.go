@@ -14,9 +14,10 @@ import (
 const CAKey = "ca.crt"
 
 type CertificateBundle struct {
+	Cert *Certificate
+
 	Name types.NamespacedName
 	Kind v1.Kind
-	Cert *Certificate
 }
 
 type Certificate struct {

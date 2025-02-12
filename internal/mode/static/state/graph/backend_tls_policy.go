@@ -128,7 +128,11 @@ func validateBackendTLSHostname(btp *v1alpha3.BackendTLSPolicy) error {
 	return nil
 }
 
-func validateBackendTLSCACertRef(btp *v1alpha3.BackendTLSPolicy, configMapResolver *configMapResolver, secretResolver *secretResolver) error {
+func validateBackendTLSCACertRef(
+	btp *v1alpha3.BackendTLSPolicy,
+	configMapResolver *configMapResolver,
+	secretResolver *secretResolver,
+) error {
 	if len(btp.Spec.Validation.CACertificateRefs) != 1 {
 		path := field.NewPath("tls.cacertrefs")
 		valErr := field.TooMany(path, len(btp.Spec.Validation.CACertificateRefs), 1)
