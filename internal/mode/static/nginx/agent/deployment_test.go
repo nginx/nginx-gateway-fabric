@@ -91,6 +91,9 @@ func TestSetPodErrorStatus(t *testing.T) {
 
 	g.Expect(deployment.GetConfigurationStatus()).To(MatchError(ContainSubstring("test error")))
 	g.Expect(deployment.GetConfigurationStatus()).To(MatchError(ContainSubstring("test error 2")))
+
+	deployment.RemovePodStatus("test-pod")
+	g.Expect(deployment.podStatuses).ToNot(HaveKey("test-pod"))
 }
 
 func TestSetLatestConfigError(t *testing.T) {

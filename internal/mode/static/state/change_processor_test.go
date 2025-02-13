@@ -966,6 +966,10 @@ var _ = Describe("ChangeProcessor", func() {
 						refTLSSvc:  {},
 						refGRPCSvc: {},
 					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "gateway-1-test-class",
+					},
 				}
 			})
 			When("no upsert has occurred", func() {
@@ -1574,6 +1578,7 @@ var _ = Describe("ChangeProcessor", func() {
 					)
 
 					// gateway 2 takes over;
+					expGraph.DeploymentName.Name = "gateway-2-test-class"
 					// route 1 has been replaced by route 2
 					listener80 := getListenerByName(expGraph.Gateway, httpListenerName)
 					listener443 := getListenerByName(expGraph.Gateway, httpsListenerName)
@@ -1627,6 +1632,7 @@ var _ = Describe("ChangeProcessor", func() {
 					)
 
 					// gateway 2 still in charge;
+					expGraph.DeploymentName.Name = "gateway-2-test-class"
 					// no HTTP routes remain
 					// GRPCRoute 2 still exists
 					// TLSRoute 2 still exists
@@ -1679,6 +1685,7 @@ var _ = Describe("ChangeProcessor", func() {
 					)
 
 					// gateway 2 still in charge;
+					expGraph.DeploymentName.Name = "gateway-2-test-class"
 					// no routes remain
 					listener80 := getListenerByName(expGraph.Gateway, httpListenerName)
 					listener443 := getListenerByName(expGraph.Gateway, httpsListenerName)
@@ -1724,6 +1731,7 @@ var _ = Describe("ChangeProcessor", func() {
 					)
 
 					// gateway 2 still in charge;
+					expGraph.DeploymentName.Name = "gateway-2-test-class"
 					// no HTTP or TLS routes remain
 					listener80 := getListenerByName(expGraph.Gateway, httpListenerName)
 					listener443 := getListenerByName(expGraph.Gateway, httpsListenerName)
@@ -1769,6 +1777,7 @@ var _ = Describe("ChangeProcessor", func() {
 						Source:     gw2,
 						Conditions: staticConds.NewGatewayInvalid("GatewayClass doesn't exist"),
 					}
+					expGraph.DeploymentName.Name = "gateway-2-test-class"
 					expGraph.Routes = map[graph.RouteKey]*graph.L7Route{}
 					expGraph.L4Routes = map[graph.L4RouteKey]*graph.L4Route{}
 					expGraph.ReferencedSecrets = nil

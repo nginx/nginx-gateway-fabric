@@ -8,13 +8,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+const DefaultNginxMetricsPort = int32(9113)
+
 type Config struct {
 	// AtomicLevel is an atomically changeable, dynamic logging level.
 	AtomicLevel zap.AtomicLevel
 	// UsageReportConfig specifies the NGINX Plus usage reporting configuration.
 	UsageReportConfig UsageReportConfig
-	// Version is the running NGF version.
-	Version string
 	// ImageSource is the source of the NGINX Gateway image.
 	ImageSource string
 	// Flags contains the NGF command-line flag names and values.
@@ -52,8 +52,6 @@ type Config struct {
 
 // GatewayPodConfig contains information about this Pod.
 type GatewayPodConfig struct {
-	// PodIP is the IP address of this Pod.
-	PodIP string
 	// ServiceName is the name of the Service that fronts this Pod.
 	ServiceName string
 	// Namespace is the namespace of this Pod.
@@ -62,6 +60,13 @@ type GatewayPodConfig struct {
 	Name string
 	// UID is the UID of the Pod.
 	UID string
+	// InstanceName is the name used in the instance label.
+	// Generally this will be the name of the Helm release.
+	InstanceName string
+	// Version is the running NGF version.
+	Version string
+	// Image is the image path of the Pod.
+	Image string
 }
 
 // MetricsConfig specifies the metrics config.
