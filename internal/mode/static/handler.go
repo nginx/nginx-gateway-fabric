@@ -16,6 +16,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	frameworkStatus "github.com/nginx/nginx-gateway-fabric/internal/framework/status"
@@ -23,6 +24,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent"
 	ngxConfig "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
@@ -39,6 +41,8 @@ type eventHandlerConfig struct {
 	ctx context.Context
 	// nginxUpdater updates nginx configuration using the NGINX agent.
 	nginxUpdater agent.NginxUpdater
+	// nginxProvisioner handles provisioning and deprovisioning nginx resources.
+	nginxProvisioner provisioner.Provisioner
 	// metricsCollector collects metrics for this controller.
 	metricsCollector handlerMetricsCollector
 	// statusUpdater updates statuses on Kubernetes resources.
@@ -73,6 +77,8 @@ type eventHandlerConfig struct {
 	controlConfigNSName types.NamespacedName
 	// gatewayCtlrName is the name of the NGF controller.
 	gatewayCtlrName string
+	// gatewayClassName is the name of the GatewayClass.
+	gatewayClassName string
 	// updateGatewayClassStatus enables updating the status of the GatewayClass resource.
 	updateGatewayClassStatus bool
 	// plus is whether or not we are running NGINX Plus.
@@ -129,18 +135,6 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 			upsert: handler.nginxGatewayCRDUpsert,
 			delete: handler.nginxGatewayCRDDelete,
 		},
-		// NGF-fronting Service
-		objectFilterKey(
-			&v1.Service{},
-			types.NamespacedName{
-				Name:      handler.cfg.gatewayPodConfig.ServiceName,
-				Namespace: handler.cfg.gatewayPodConfig.Namespace,
-			},
-		): {
-			upsert:               handler.nginxGatewayServiceUpsert,
-			delete:               handler.nginxGatewayServiceDelete,
-			captureChangeInGraph: true,
-		},
 	}
 
 	go handler.waitForStatusUpdates(cfg.ctx)
@@ -194,16 +188,37 @@ func (h *eventHandlerImpl) sendNginxConfig(
 	gr *graph.Graph,
 	changeType state.ChangeType,
 ) {
-	deploymentName := types.NamespacedName{
-		Name:      "tmp-nginx-deployment",
-		Namespace: h.cfg.gatewayPodConfig.Namespace,
+	if gr == nil {
+		logger.Info("Handling events didn't result into NGINX configuration changes")
+		return
 	}
 
-	// TODO(sberman): if nginx Deployment is scaled down, we should remove the pod from the ConnectionsTracker
-	// and Deployment.
-	// If fully deleted, then delete the deployment from the Store and close the stopCh.
+	if gr.Gateway == nil {
+		// still need to update GatewayClass status
+		obj := &status.QueueObject{
+			UpdateType: status.UpdateAll,
+		}
+		h.cfg.statusQueue.Enqueue(obj)
+		return
+	}
+
+	go func() {
+		if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gr.Gateway, gr.DeploymentName.Name); err != nil {
+			logger.Error(err, "error from provisioner")
+		}
+	}()
+
+	if !gr.Gateway.Valid {
+		obj := &status.QueueObject{
+			Deployment: gr.DeploymentName,
+			UpdateType: status.UpdateAll,
+		}
+		h.cfg.statusQueue.Enqueue(obj)
+		return
+	}
+
 	stopCh := make(chan struct{})
-	deployment := h.cfg.nginxDeployments.GetOrStore(ctx, deploymentName, stopCh)
+	deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gr.DeploymentName, stopCh)
 	if deployment == nil {
 		panic("expected deployment, got nil")
 	}
@@ -216,8 +231,9 @@ func (h *eventHandlerImpl) sendNginxConfig(
 
 	if configApplied || err != nil {
 		obj := &status.QueueObject{
+			UpdateType: status.UpdateAll,
 			Error:      err,
-			Deployment: deploymentName,
+			Deployment: gr.DeploymentName,
 		}
 		h.cfg.statusQueue.Enqueue(obj)
 	}
@@ -232,9 +248,6 @@ func (h *eventHandlerImpl) processStateAndBuildConfig(
 ) bool {
 	var configApplied bool
 	switch changeType {
-	case state.NoChange:
-		logger.Info("Handling events didn't result into NGINX configuration changes")
-		return false
 	case state.EndpointsOnlyChange:
 		h.version++
 		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version, h.cfg.plus)
@@ -279,28 +292,74 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 			return
 		}
 
+		// TODO(sberman): once we support multiple Gateways, we'll have to get
+		// the correct Graph for the Deployment contained in the update message
+		gr := h.cfg.processor.GetLatestGraph()
+		if gr == nil {
+			continue
+		}
+
 		var nginxReloadRes graph.NginxReloadResult
 		switch {
 		case item.Error != nil:
 			h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
 			nginxReloadRes.Error = item.Error
-		default:
+		case gr.Gateway != nil:
 			h.cfg.logger.Info("NGINX configuration was successfully updated")
 		}
-
-		// TODO(sberman): once we support multiple Gateways, we'll have to get
-		// the correct Graph for the Deployment contained in the update message
-		gr := h.cfg.processor.GetLatestGraph()
 		gr.LatestReloadResult = nginxReloadRes
 
-		h.updateStatuses(ctx, gr)
+		switch item.UpdateType {
+		case status.UpdateAll:
+			h.updateStatuses(ctx, gr)
+		case status.UpdateGateway:
+			gwAddresses, err := getGatewayAddresses(
+				ctx,
+				h.cfg.k8sClient,
+				item.GatewayService,
+				gr.Gateway,
+				h.cfg.gatewayClassName,
+			)
+			if err != nil {
+				msg := "error getting Gateway Service IP address"
+				h.cfg.logger.Error(err, msg)
+				h.cfg.eventRecorder.Eventf(
+					item.GatewayService,
+					v1.EventTypeWarning,
+					"GetServiceIPFailed",
+					msg+": %s",
+					err.Error(),
+				)
+				continue
+			}
+
+			transitionTime := metav1.Now()
+			gatewayStatuses := status.PrepareGatewayRequests(
+				gr.Gateway,
+				gr.IgnoredGateways,
+				transitionTime,
+				gwAddresses,
+				gr.LatestReloadResult,
+			)
+			h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
+		default:
+			panic(fmt.Sprintf("unknown event type %T", item.UpdateType))
+		}
 	}
 }
 
 func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph) {
-	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, h.cfg.gatewayPodConfig)
+	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gr.Gateway, h.cfg.gatewayClassName)
 	if err != nil {
-		h.cfg.logger.Error(err, "Setting GatewayStatusAddress to Pod IP Address")
+		msg := "error getting Gateway Service IP address"
+		h.cfg.logger.Error(err, msg)
+		h.cfg.eventRecorder.Eventf(
+			&v1.Service{},
+			v1.EventTypeWarning,
+			"GetServiceIPFailed",
+			msg+": %s",
+			err.Error(),
+		)
 	}
 
 	transitionTime := metav1.Now()
@@ -440,27 +499,27 @@ func getGatewayAddresses(
 	ctx context.Context,
 	k8sClient client.Client,
 	svc *v1.Service,
-	podConfig ngfConfig.GatewayPodConfig,
+	gateway *graph.Gateway,
+	gatewayClassName string,
 ) ([]gatewayv1.GatewayStatusAddress, error) {
-	podAddress := []gatewayv1.GatewayStatusAddress{
-		{
-			Type:  helpers.GetPointer(gatewayv1.IPAddressType),
-			Value: podConfig.PodIP,
-		},
+	if gateway == nil {
+		return nil, nil
 	}
 
 	var gwSvc v1.Service
 	if svc == nil {
-		key := types.NamespacedName{Name: podConfig.ServiceName, Namespace: podConfig.Namespace}
+		svcName := controller.CreateNginxResourceName(gateway.Source.GetName(), gatewayClassName)
+		key := types.NamespacedName{Name: svcName, Namespace: gateway.Source.GetNamespace()}
 		if err := k8sClient.Get(ctx, key, &gwSvc); err != nil {
-			return podAddress, fmt.Errorf("error finding Service for Gateway: %w", err)
+			return nil, fmt.Errorf("error finding Service for Gateway: %w", err)
 		}
 	} else {
 		gwSvc = *svc
 	}
 
 	var addresses, hostnames []string
-	if gwSvc.Spec.Type == v1.ServiceTypeLoadBalancer {
+	switch gwSvc.Spec.Type {
+	case v1.ServiceTypeLoadBalancer:
 		for _, ingress := range gwSvc.Status.LoadBalancer.Ingress {
 			if ingress.IP != "" {
 				addresses = append(addresses, ingress.IP)
@@ -468,6 +527,8 @@ func getGatewayAddresses(
 				hostnames = append(hostnames, ingress.Hostname)
 			}
 		}
+	default:
+		addresses = append(addresses, gwSvc.Spec.ClusterIP)
 	}
 
 	gwAddresses := make([]gatewayv1.GatewayStatusAddress, 0, len(addresses)+len(hostnames))
@@ -545,57 +606,4 @@ func (h *eventHandlerImpl) nginxGatewayCRDDelete(
 	_ types.NamespacedName,
 ) {
 	h.updateControlPlaneAndSetStatus(ctx, logger, nil)
-}
-
-func (h *eventHandlerImpl) nginxGatewayServiceUpsert(ctx context.Context, logger logr.Logger, obj client.Object) {
-	svc, ok := obj.(*v1.Service)
-	if !ok {
-		panic(fmt.Errorf("obj type mismatch: got %T, expected %T", svc, &v1.Service{}))
-	}
-
-	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, svc, h.cfg.gatewayPodConfig)
-	if err != nil {
-		logger.Error(err, "Setting GatewayStatusAddress to Pod IP Address")
-	}
-
-	gr := h.cfg.processor.GetLatestGraph()
-	if gr == nil {
-		return
-	}
-
-	transitionTime := metav1.Now()
-	gatewayStatuses := status.PrepareGatewayRequests(
-		gr.Gateway,
-		gr.IgnoredGateways,
-		transitionTime,
-		gwAddresses,
-		gr.LatestReloadResult,
-	)
-	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
-}
-
-func (h *eventHandlerImpl) nginxGatewayServiceDelete(
-	ctx context.Context,
-	logger logr.Logger,
-	_ types.NamespacedName,
-) {
-	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, h.cfg.gatewayPodConfig)
-	if err != nil {
-		logger.Error(err, "Setting GatewayStatusAddress to Pod IP Address")
-	}
-
-	gr := h.cfg.processor.GetLatestGraph()
-	if gr == nil {
-		return
-	}
-
-	transitionTime := metav1.Now()
-	gatewayStatuses := status.PrepareGatewayRequests(
-		gr.Gateway,
-		gr.IgnoredGateways,
-		transitionTime,
-		gwAddresses,
-		gr.LatestReloadResult,
-	)
-	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
 }

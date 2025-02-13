@@ -1,4 +1,8 @@
 nginxGateway:
   name: nginx-gateway
-nodeSelector:
-  kubernetes.io/os: linux
+  nodeSelector:
+    kubernetes.io/os: linux
+nginx:
+  pod:
+    nodeSelector:
+      kubernetes.io/os: linux

@@ -110,6 +110,19 @@ func telemetryEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
 	return true
 }
 
+// MetricsEnabledForNginxProxy returns whether metrics is enabled, and the associated port if specified.
+// By default, metrics are enabled.
+func MetricsEnabledForNginxProxy(np *EffectiveNginxProxy) (*int32, bool) {
+	if np != nil && np.Metrics != nil {
+		if np.Metrics.Disable != nil && *np.Metrics.Disable {
+			return nil, false
+		}
+		return np.Metrics.Port, true
+	}
+
+	return nil, true
+}
+
 func processNginxProxies(
 	nps map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy,
 	validator validation.GenericValidator,
