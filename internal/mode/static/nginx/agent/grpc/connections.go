@@ -16,7 +16,7 @@ type ConnectionsTracker interface {
 	Track(key string, conn Connection)
 	GetConnection(key string) Connection
 	SetInstanceID(key, id string)
-	UntrackConnectionsForParent(parent types.NamespacedName)
+	RemoveConnection(key string)
 }
 
 // Connection contains the data about a single nginx agent connection.
@@ -77,14 +77,10 @@ func (c *AgentConnectionsTracker) SetInstanceID(key, id string) {
 	}
 }
 
-// UntrackConnectionsForParent removes all Connections that reference the specified parent.
-func (c *AgentConnectionsTracker) UntrackConnectionsForParent(parent types.NamespacedName) {
+// RemoveConnection removes a connection from the tracking map.
+func (c *AgentConnectionsTracker) RemoveConnection(key string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	for key, conn := range c.connections {
-		if conn.Parent == parent {
-			delete(c.connections, key)
-		}
-	}
+	delete(c.connections, key)
 }

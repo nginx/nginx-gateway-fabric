@@ -128,6 +128,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
+	defer cs.connTracker.RemoveConnection(gi.IPAddress)
 
 	// wait for the agent to report itself and nginx
 	conn, deployment, err := cs.waitForConnection(ctx, gi)
@@ -135,6 +136,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		cs.logger.Error(err, "error waiting for connection")
 		return err
 	}
+	defer deployment.RemovePodStatus(conn.PodName)
 
 	cs.logger.Info(fmt.Sprintf("Successfully connected to nginx agent %s", conn.PodName))
 
@@ -367,6 +369,7 @@ func (cs *commandService) logAndSendErrorStatus(deployment *Deployment, conn *ag
 	queueObj := &status.QueueObject{
 		Deployment: conn.Parent,
 		Error:      deployment.GetConfigurationStatus(),
+		UpdateType: status.UpdateAll,
 	}
 	cs.statusQueue.Enqueue(queueObj)
 }
@@ -504,7 +507,6 @@ func getNginxInstanceID(instances []*pb.Instance) string {
 }
 
 // UpdateDataPlaneHealth includes full health information about the data plane as reported by the agent.
-// TODO(sberman): Is health monitoring the data planes something useful for us to do?
 func (cs *commandService) UpdateDataPlaneHealth(
 	_ context.Context,
 	_ *pb.UpdateDataPlaneHealthRequest,

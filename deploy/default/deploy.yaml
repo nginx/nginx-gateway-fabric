@@ -24,10 +24,24 @@ metadata:
 rules:
 - apiGroups:
   - ""
+  - apps
+  resources:
+  - secrets
+  - configmaps
+  - serviceaccounts
+  - services
+  - deployments
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
+  - ""
   resources:
   - namespaces
-  - services
-  - secrets
   - pods
   verbs:
   - get
@@ -141,60 +155,6 @@ subjects:
   namespace: nginx-gateway
 ---
 apiVersion: v1
-data:
-  nginx-agent.conf: |-
-    command:
-      server:
-        host: nginx-gateway.nginx-gateway.svc
-        port: 443
-    allowed_directories:
-    - /etc/nginx
-    - /usr/share/nginx
-    - /var/run/nginx
-    features:
-    - connection
-    - configuration
-    - certificates
-    - metrics
-    log:
-      level: debug
-    collector:
-      receivers:
-        host_metrics:
-          collection_interval: 1m0s
-          initial_delay: 1s
-          scrapers:
-            cpu: {}
-            memory: {}
-            disk: {}
-            network: {}
-            filesystem: {}
-      processors:
-        batch: {}
-      exporters:
-        prometheus_exporter:
-          server:
-            host: "0.0.0.0"
-            port: 9113
-kind: ConfigMap
-metadata:
-  name: nginx-agent-config
-  namespace: nginx-gateway
----
-apiVersion: v1
-data:
-  main.conf: |
-    error_log stderr info;
-kind: ConfigMap
-metadata:
-  labels:
-    app.kubernetes.io/instance: nginx-gateway
-    app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
-  name: nginx-includes-bootstrap
-  namespace: nginx-gateway
----
-apiVersion: v1
 kind: Service
 metadata:
   labels:
@@ -213,31 +173,6 @@ spec:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
   type: ClusterIP
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app.kubernetes.io/instance: nginx-gateway
-    app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
-  name: tmp-nginx-deployment
-  namespace: nginx-gateway
-spec:
-  externalTrafficPolicy: Local
-  ports:
-  - name: http
-    port: 80
-    protocol: TCP
-    targetPort: 80
-  - name: https
-    port: 443
-    protocol: TCP
-    targetPort: 443
-  selector:
-    app.kubernetes.io/instance: nginx-gateway
-    app.kubernetes.io/name: tmp-nginx-deployment
-  type: LoadBalancer
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -274,10 +209,6 @@ spec:
         - --health-port=8081
         - --leader-election-lock-name=nginx-gateway-leader-election
         env:
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -290,6 +221,12 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
+        - name: INSTANCE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['app.kubernetes.io/instance']
+        - name: IMAGE_NAME
+          value: ghcr.io/nginx/nginx-gateway-fabric:edge
         image: ghcr.io/nginx/nginx-gateway-fabric:edge
         imagePullPolicy: Always
         name: nginx-gateway
@@ -322,135 +259,6 @@ spec:
       serviceAccountName: nginx-gateway
       terminationGracePeriodSeconds: 30
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: tmp-nginx-deployment
-  namespace: nginx-gateway
-spec:
-  selector:
-    matchLabels:
-      app.kubernetes.io/instance: nginx-gateway
-      app.kubernetes.io/name: tmp-nginx-deployment
-  template:
-    metadata:
-      annotations:
-        prometheus.io/port: "9113"
-        prometheus.io/scrape: "true"
-      labels:
-        app.kubernetes.io/instance: nginx-gateway
-        app.kubernetes.io/name: tmp-nginx-deployment
-    spec:
-      containers:
-      - image: ghcr.io/nginx/nginx-gateway-fabric/nginx:edge
-        imagePullPolicy: Always
-        name: nginx
-        ports:
-        - containerPort: 80
-          name: http
-        - containerPort: 443
-          name: https
-        - containerPort: 9113
-          name: metrics
-        securityContext:
-          capabilities:
-            add:
-            - NET_BIND_SERVICE
-            drop:
-            - ALL
-          readOnlyRootFilesystem: true
-          runAsGroup: 1001
-          runAsUser: 101
-          seccompProfile:
-            type: RuntimeDefault
-        volumeMounts:
-        - mountPath: /etc/nginx-agent
-          name: nginx-agent
-        - mountPath: /var/log/nginx-agent
-          name: nginx-agent-log
-        - mountPath: /etc/nginx/conf.d
-          name: nginx-conf
-        - mountPath: /etc/nginx/stream-conf.d
-          name: nginx-stream-conf
-        - mountPath: /etc/nginx/main-includes
-          name: nginx-main-includes
-        - mountPath: /etc/nginx/secrets
-          name: nginx-secrets
-        - mountPath: /var/run/nginx
-          name: nginx-run
-        - mountPath: /var/cache/nginx
-          name: nginx-cache
-        - mountPath: /etc/nginx/includes
-          name: nginx-includes
-      initContainers:
-      - command:
-        - /usr/bin/gateway
-        - initialize
-        - --source
-        - /agent/nginx-agent.conf
-        - --destination
-        - /etc/nginx-agent
-        - --source
-        - /includes/main.conf
-        - --destination
-        - /etc/nginx/main-includes
-        env:
-        - name: POD_UID
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.uid
-        image: ghcr.io/nginx/nginx-gateway-fabric:edge
-        imagePullPolicy: Always
-        name: init
-        securityContext:
-          capabilities:
-            drop:
-            - ALL
-          readOnlyRootFilesystem: true
-          runAsGroup: 1001
-          runAsUser: 101
-          seccompProfile:
-            type: RuntimeDefault
-        volumeMounts:
-        - mountPath: /agent
-          name: nginx-agent-config
-        - mountPath: /etc/nginx-agent
-          name: nginx-agent
-        - mountPath: /includes
-          name: nginx-includes-bootstrap
-        - mountPath: /etc/nginx/main-includes
-          name: nginx-main-includes
-      securityContext:
-        fsGroup: 1001
-        runAsNonRoot: true
-      serviceAccountName: nginx-gateway
-      terminationGracePeriodSeconds: 30
-      volumes:
-      - emptyDir: {}
-        name: nginx-agent
-      - configMap:
-          name: nginx-agent-config
-        name: nginx-agent-config
-      - emptyDir: {}
-        name: nginx-agent-log
-      - emptyDir: {}
-        name: nginx-conf
-      - emptyDir: {}
-        name: nginx-stream-conf
-      - emptyDir: {}
-        name: nginx-main-includes
-      - emptyDir: {}
-        name: nginx-secrets
-      - emptyDir: {}
-        name: nginx-run
-      - emptyDir: {}
-        name: nginx-cache
-      - emptyDir: {}
-        name: nginx-includes
-      - configMap:
-          name: nginx-includes-bootstrap
-        name: nginx-includes-bootstrap
----
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
@@ -461,6 +269,11 @@ metadata:
   name: nginx
 spec:
   controllerName: gateway.nginx.org/nginx-gateway-controller
+  parametersRef:
+    group: gateway.nginx.org
+    kind: NginxProxy
+    name: nginx-gateway-proxy-config
+    namespace: nginx-gateway
 ---
 apiVersion: gateway.nginx.org/v1alpha1
 kind: NginxGateway
@@ -474,3 +287,25 @@ metadata:
 spec:
   logging:
     level: info
+---
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  labels:
+    app.kubernetes.io/instance: nginx-gateway
+    app.kubernetes.io/name: nginx-gateway
+    app.kubernetes.io/version: edge
+  name: nginx-gateway-proxy-config
+  namespace: nginx-gateway
+spec:
+  kubernetes:
+    deployment:
+      container:
+        image:
+          pullPolicy: Always
+          repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
+          tag: edge
+      replicas: 1
+    service:
+      externalTrafficPolicy: Local
+      type: LoadBalancer

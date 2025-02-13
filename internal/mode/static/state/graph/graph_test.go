@@ -36,11 +36,6 @@ func TestBuildGraph(t *testing.T) {
 		controllerName = "my.controller"
 	)
 
-	protectedPorts := ProtectedPorts{
-		9113: "MetricsPort",
-		8081: "HealthPort",
-	}
-
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "configmap",
@@ -1002,6 +997,10 @@ func TestBuildGraph(t *testing.T) {
 					},
 				},
 			},
+			DeploymentName: types.NamespacedName{
+				Namespace: "test",
+				Name:      "gateway-1-my-class",
+			},
 		}
 	}
 
@@ -1071,7 +1070,6 @@ func TestBuildGraph(t *testing.T) {
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
 					PolicyValidator:     fakePolicyValidator,
 				},
-				protectedPorts,
 			)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())

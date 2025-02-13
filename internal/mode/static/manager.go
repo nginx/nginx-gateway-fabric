@@ -58,6 +58,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/upstreamsettings"
 	ngxvalidation "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
@@ -122,12 +123,6 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
-	// protectedPorts is the map of ports that may not be configured by a listener, and the name of what it is used for
-	protectedPorts := map[int32]string{
-		int32(cfg.MetricsConfig.Port): "MetricsPort", //nolint:gosec // port will not overflow int32
-		int32(cfg.HealthConfig.Port):  "HealthPort",  //nolint:gosec // port will not overflow int32
-	}
-
 	mustExtractGVK := kinds.NewMustExtractGKV(scheme)
 
 	genericValidator := ngxvalidation.GenericValidator{}
@@ -149,7 +144,6 @@ func StartManager(cfg config.Config) error {
 		},
 		EventRecorder:  recorder,
 		MustExtractGVK: mustExtractGVK,
-		ProtectedPorts: protectedPorts,
 		PlusSecrets:    plusSecrets,
 	})
 
@@ -205,9 +199,31 @@ func StartManager(cfg config.Config) error {
 		return fmt.Errorf("cannot register grpc server: %w", err)
 	}
 
+	nginxProvisioner, provLoop, err := provisioner.NewNginxProvisioner(
+		ctx,
+		mgr,
+		provisioner.Config{
+			DeploymentStore:  nginxUpdater.NginxDeployments,
+			StatusQueue:      statusQueue,
+			Logger:           cfg.Logger.WithName("provisioner"),
+			EventRecorder:    recorder,
+			GatewayPodConfig: cfg.GatewayPodConfig,
+			GCName:           cfg.GatewayClassName,
+			Plus:             cfg.Plus,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("error building provisioner: %w", err)
+	}
+
+	if err := mgr.Add(&runnables.LeaderOrNonLeader{Runnable: provLoop}); err != nil {
+		return fmt.Errorf("cannot register provisioner event loop: %w", err)
+	}
+
 	eventHandler := newEventHandlerImpl(eventHandlerConfig{
 		ctx:              ctx,
 		nginxUpdater:     nginxUpdater,
+		nginxProvisioner: nginxProvisioner,
 		metricsCollector: handlerCollector,
 		statusUpdater:    groupStatusUpdater,
 		processor:        processor,
@@ -227,6 +243,7 @@ func StartManager(cfg config.Config) error {
 		gatewayPodConfig:         cfg.GatewayPodConfig,
 		controlConfigNSName:      controlConfigNSName,
 		gatewayCtlrName:          cfg.GatewayCtlrName,
+		gatewayClassName:         cfg.GatewayClassName,
 		updateGatewayClassStatus: cfg.UpdateGatewayClassStatus,
 		plus:                     cfg.Plus,
 		statusQueue:              statusQueue,
@@ -249,6 +266,7 @@ func StartManager(cfg config.Config) error {
 
 	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
 		groupStatusUpdater.Enable,
+		nginxProvisioner.Enable,
 		healthChecker.setAsLeader,
 		eventHandler.eventHandlerEnable,
 	})); err != nil {
@@ -260,7 +278,7 @@ func StartManager(cfg config.Config) error {
 			K8sClientReader:     mgr.GetAPIReader(),
 			GraphGetter:         processor,
 			ConfigurationGetter: eventHandler,
-			Version:             cfg.Version,
+			Version:             cfg.GatewayPodConfig.Version,
 			PodNSName: types.NamespacedName{
 				Namespace: cfg.GatewayPodConfig.Namespace,
 				Name:      cfg.GatewayPodConfig.Name,
@@ -416,19 +434,6 @@ func registerControllers(
 			options: []controller.Option{
 				controller.WithK8sPredicate(predicate.ServicePortsChangedPredicate{}),
 			},
-		},
-		{
-			objectType: &apiv1.Service{},
-			name:       "ngf-service", // unique controller names are needed and we have multiple Service ctlrs
-			options: func() []controller.Option {
-				svcNSName := types.NamespacedName{
-					Namespace: cfg.GatewayPodConfig.Namespace,
-					Name:      cfg.GatewayPodConfig.ServiceName,
-				}
-				return []controller.Option{
-					controller.WithK8sPredicate(predicate.GatewayServicePredicate{NSName: svcNSName}),
-				}
-			}(),
 		},
 		{
 			objectType: &apiv1.Secret{},

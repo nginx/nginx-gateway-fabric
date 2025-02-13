@@ -10,6 +10,7 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	ngfsort "github.com/nginx/nginx-gateway-fabric/internal/mode/static/sort"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
@@ -104,7 +105,6 @@ func buildGateway(
 	secretResolver *secretResolver,
 	gc *GatewayClass,
 	refGrantResolver *referenceGrantResolver,
-	protectedPorts ProtectedPorts,
 	nps map[types.NamespacedName]*NginxProxy,
 ) *Gateway {
 	if gw == nil {
@@ -134,6 +134,15 @@ func buildGateway(
 			EffectiveNginxProxy: effectiveNginxProxy,
 			Conditions:          conds,
 		}
+	}
+
+	protectedPorts := make(ProtectedPorts)
+	if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
+		metricsPort := config.DefaultNginxMetricsPort
+		if port != nil {
+			metricsPort = *port
+		}
+		protectedPorts[metricsPort] = "MetricsPort"
 	}
 
 	return &Gateway{
