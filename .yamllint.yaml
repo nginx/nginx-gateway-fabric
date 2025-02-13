@@ -14,7 +14,9 @@ rules:
     require-starting-space: true
     ignore-shebangs: true
     min-spaces-from-content: 1
-  comments-indentation: enable
+  comments-indentation:
+    ignore: |
+      charts/nginx-gateway-fabric/values.yaml
   document-end: disable
   document-start: disable
   empty-lines: enable

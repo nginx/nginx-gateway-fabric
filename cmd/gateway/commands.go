@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -206,7 +207,7 @@ func createStaticModeCommand() *cobra.Command {
 
 			flagKeys, flagValues := parseFlags(cmd.Flags())
 
-			podConfig, err := createGatewayPodConfig(serviceName.value)
+			podConfig, err := createGatewayPodConfig(version, serviceName.value)
 			if err != nil {
 				return fmt.Errorf("error creating gateway pod config: %w", err)
 			}
@@ -242,7 +243,6 @@ func createStaticModeCommand() *cobra.Command {
 					EndpointInsecure: telemetryEndpointInsecure,
 				},
 				Plus:                 plus,
-				Version:              version,
 				ExperimentalFeatures: gwExperimentalFeatures,
 				ImageSource:          imageSource,
 				Flags: config.Flags{
@@ -649,12 +649,7 @@ func getBuildInfo() (commitHash string, commitTime string, dirtyBuild string) {
 	return
 }
 
-func createGatewayPodConfig(svcName string) (config.GatewayPodConfig, error) {
-	podIP, err := getValueFromEnv("POD_IP")
-	if err != nil {
-		return config.GatewayPodConfig{}, err
-	}
-
+func createGatewayPodConfig(version, svcName string) (config.GatewayPodConfig, error) {
 	podUID, err := getValueFromEnv("POD_UID")
 	if err != nil {
 		return config.GatewayPodConfig{}, err
@@ -670,12 +665,30 @@ func createGatewayPodConfig(svcName string) (config.GatewayPodConfig, error) {
 		return config.GatewayPodConfig{}, err
 	}
 
+	instance, err := getValueFromEnv("INSTANCE_NAME")
+	if err != nil {
+		return config.GatewayPodConfig{}, err
+	}
+
+	image, err := getValueFromEnv("IMAGE_NAME")
+	if err != nil {
+		return config.GatewayPodConfig{}, err
+	}
+
+	// use image tag version if set, otherwise fall back to binary version
+	ngfVersion := version
+	if imageParts := strings.Split(image, ":"); len(imageParts) == 2 {
+		ngfVersion = imageParts[1]
+	}
+
 	c := config.GatewayPodConfig{
-		PodIP:       podIP,
-		ServiceName: svcName,
-		Namespace:   ns,
-		Name:        name,
-		UID:         podUID,
+		ServiceName:  svcName,
+		Namespace:    ns,
+		Name:         name,
+		UID:          podUID,
+		InstanceName: instance,
+		Version:      ngfVersion,
+		Image:        image,
 	}
 
 	return c, nil

@@ -373,6 +373,83 @@ func TestTelemetryEnabledForNginxProxy(t *testing.T) {
 	}
 }
 
+func TestMetricsEnabledForNginxProxy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		ep      *EffectiveNginxProxy
+		port    *int32
+		name    string
+		enabled bool
+	}{
+		{
+			name:    "NginxProxy is nil",
+			port:    nil,
+			enabled: true,
+		},
+		{
+			name: "metrics struct is nil",
+			ep: &EffectiveNginxProxy{
+				Metrics: nil,
+			},
+			port:    nil,
+			enabled: true,
+		},
+		{
+			name: "metrics disable is nil",
+			ep: &EffectiveNginxProxy{
+				Metrics: &ngfAPIv1alpha2.Metrics{
+					Disable: nil,
+				},
+			},
+			port:    nil,
+			enabled: true,
+		},
+		{
+			name: "metrics is disabled",
+			ep: &EffectiveNginxProxy{
+				Metrics: &ngfAPIv1alpha2.Metrics{
+					Disable: helpers.GetPointer(true),
+				},
+			},
+			port:    nil,
+			enabled: false,
+		},
+		{
+			name: "metrics is enabled with no port specified",
+			ep: &EffectiveNginxProxy{
+				Metrics: &ngfAPIv1alpha2.Metrics{
+					Disable: helpers.GetPointer(false),
+				},
+			},
+			port:    nil,
+			enabled: true,
+		},
+		{
+			name: "metrics is enabled with port specified",
+			ep: &EffectiveNginxProxy{
+				Metrics: &ngfAPIv1alpha2.Metrics{
+					Disable: helpers.GetPointer(false),
+					Port:    helpers.GetPointer[int32](8080),
+				},
+			},
+			port:    helpers.GetPointer[int32](8080),
+			enabled: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			port, enabled := MetricsEnabledForNginxProxy(test.ep)
+			g.Expect(port).To(Equal(test.port))
+			g.Expect(enabled).To(Equal(test.enabled))
+		})
+	}
+}
+
 func TestProcessNginxProxies(t *testing.T) {
 	t.Parallel()
 

@@ -399,11 +399,17 @@ func TestSubscribe(t *testing.T) {
 	ensureAPIRequestWasSent(g, mockServer, loopAction)
 	verifyResponse(g, mockServer, responseCh)
 
+	g.Eventually(func() map[string]error {
+		return deployment.podStatuses
+	}).Should(HaveKey("nginx-pod"))
+
 	cancel()
 
 	g.Eventually(func() error {
 		return <-errCh
 	}).Should(MatchError(ContainSubstring("context canceled")))
+
+	g.Expect(deployment.podStatuses).ToNot(HaveKey("nginx-pod"))
 }
 
 func TestSubscribe_Errors(t *testing.T) {

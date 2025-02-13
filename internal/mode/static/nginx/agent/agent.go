@@ -115,6 +115,8 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 	// TODO(sberman): optimize this by only sending updates that are necessary.
 	// Call GetUpstreams first (will need Subscribers to send responses back), and
 	// then determine which upstreams actually need to be updated.
+	// OR we can possibly just use the most recent NGINXPlusActions to see what the last state
+	// of upstreams were, and only update the diff.
 
 	var errs []error
 	var applied bool
