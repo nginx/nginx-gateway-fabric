@@ -10,7 +10,7 @@ metadata:
   {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  replicas: {{ .Values.nginxGateway.replicaCount }}
+  replicas: {{ .Values.nginxGateway.replicas }}
   selector:
     matchLabels:
     {{- include "nginx-gateway.selectorLabels" . | nindent 6 }}
@@ -21,24 +21,20 @@ spec:
       {{- with .Values.nginxGateway.labels }}
       {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or .Values.nginxGateway.podAnnotations .Values.metrics.enable }}
+      {{- if or .Values.nginxGateway.podAnnotations .Values.nginxGateway.metrics.enable }}
       annotations:
         {{- if .Values.nginxGateway.podAnnotations }}
         {{- toYaml .Values.nginxGateway.podAnnotations | nindent 8 }}
         {{- end }}
-        {{- if .Values.metrics.enable }}
+        {{- if .Values.nginxGateway.metrics.enable }}
         prometheus.io/scrape: "true"
-        prometheus.io/port: "{{ .Values.metrics.port }}"
-        {{- if .Values.metrics.secure }}
+        prometheus.io/port: "{{ .Values.nginxGateway.metrics.port }}"
+        {{- if .Values.nginxGateway.metrics.secure }}
         prometheus.io/scheme: "https"
         {{- end }}
         {{- end }}
       {{- end }}
     spec:
-      {{- if .Values.topologySpreadConstraints }}
-      topologySpreadConstraints:
-        {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
-      {{- end }}
       containers:
       - args:
         - static-mode
@@ -67,9 +63,9 @@ spec:
         - --usage-report-client-ssl-secret={{ .Values.nginx.usage.clientSSLSecretName }}
           {{- end }}
         {{- end }}
-        {{- if .Values.metrics.enable }}
-        - --metrics-port={{ .Values.metrics.port }}
-        {{- if .Values.metrics.secure  }}
+        {{- if .Values.nginxGateway.metrics.enable }}
+        - --metrics-port={{ .Values.nginxGateway.metrics.port }}
+        {{- if .Values.nginxGateway.metrics.secure  }}
         - --metrics-secure-serving
         {{- end }}
         {{- else }}
@@ -95,10 +91,6 @@ spec:
         - --snippets-filters
         {{- end }}
         env:
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -111,6 +103,12 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
+        - name: INSTANCE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['app.kubernetes.io/instance']
+        - name: IMAGE_NAME
+          value: {{ .Values.nginxGateway.image.repository }}:{{ default .Chart.AppVersion .Values.nginxGateway.image.tag }}
         image: {{ .Values.nginxGateway.image.repository }}:{{ default .Chart.AppVersion .Values.nginxGateway.image.tag }}
         imagePullPolicy: {{ .Values.nginxGateway.image.pullPolicy }}
         name: nginx-gateway
@@ -125,9 +123,9 @@ spec:
         ports:
         - name: agent-grpc
           containerPort: 8443
-        {{- if .Values.metrics.enable }}
+        {{- if .Values.nginxGateway.metrics.enable }}
         - name: metrics
-          containerPort: {{ .Values.metrics.port }}
+          containerPort: {{ .Values.nginxGateway.metrics.port }}
         {{- end }}
         {{- if .Values.nginxGateway.readinessProbe.enable }}
         - name: health
@@ -152,24 +150,28 @@ spec:
         {{- with .Values.nginxGateway.extraVolumeMounts -}}
         {{ toYaml . | nindent 8 }}
         {{- end }}
-      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
-      {{- if .Values.affinity }}
+      {{- if .Values.nginxGateway.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.nginxGateway.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.nginxGateway.terminationGracePeriodSeconds }}
+      {{- if .Values.nginxGateway.affinity }}
       affinity:
-      {{- toYaml .Values.affinity | nindent 8 }}
+      {{- toYaml .Values.nginxGateway.affinity | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "nginx-gateway.serviceAccountName" . }}
       securityContext:
         fsGroup: 1001
         runAsNonRoot: true
-      {{- if .Values.tolerations }}
+      {{- if .Values.nginxGateway.tolerations }}
       tolerations:
-      {{- toYaml .Values.tolerations | nindent 6 }}
+      {{- toYaml .Values.nginxGateway.tolerations | nindent 6 }}
       {{- end }}
-      {{- if .Values.nodeSelector }}
+      {{- if .Values.nginxGateway.nodeSelector }}
       nodeSelector:
-      {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- toYaml .Values.nginxGateway.nodeSelector | nindent 8 }}
       {{- end }}
-      {{- with .Values.extraVolumes -}}
+      {{- with .Values.nginxGateway.extraVolumes -}}
       {{ toYaml . | nindent 6 }}
       {{- end }}
 {{- end }}

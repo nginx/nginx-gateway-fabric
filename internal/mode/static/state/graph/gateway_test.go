@@ -153,9 +153,6 @@ func TestBuildGateway(t *testing.T) {
 	labelSet := map[string]string{
 		"key": "value",
 	}
-	protectedPorts := ProtectedPorts{
-		9113: "MetricsPort",
-	}
 	listenerAllowedRoutes := v1.Listener{
 		Name:     "listener-with-allowed-routes",
 		Hostname: helpers.GetPointer[v1.Hostname]("foo.example.com"),
@@ -1304,7 +1301,7 @@ func TestBuildGateway(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			resolver := newReferenceGrantResolver(test.refGrants)
-			result := buildGateway(test.gateway, secretResolver, test.gatewayClass, resolver, protectedPorts, nginxProxies)
+			result := buildGateway(test.gateway, secretResolver, test.gatewayClass, resolver, nginxProxies)
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}

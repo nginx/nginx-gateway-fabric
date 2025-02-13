@@ -230,7 +230,7 @@ func setImageArgs(cfg InstallationConfig) []string {
 	}
 
 	if cfg.ServiceType != "" {
-		args = append(args, formatValueSet("service.type", cfg.ServiceType)...)
+		args = append(args, formatValueSet("nginx.service.type", cfg.ServiceType)...)
 		if cfg.ServiceType == "LoadBalancer" && cfg.IsGKEInternalLB {
 			args = append(
 				args,

@@ -26,6 +26,7 @@ func TestEnqueue(t *testing.T) {
 	item := &QueueObject{
 		Error:      nil,
 		Deployment: types.NamespacedName{Namespace: "default", Name: "test-object"},
+		UpdateType: UpdateAll,
 	}
 	q.Enqueue(item)
 
@@ -41,6 +42,7 @@ func TestDequeue(t *testing.T) {
 	item := &QueueObject{
 		Error:      nil,
 		Deployment: types.NamespacedName{Namespace: "default", Name: "test-object"},
+		UpdateType: UpdateAll,
 	}
 	q.Enqueue(item)
 
@@ -73,10 +75,12 @@ func TestDequeueWithMultipleItems(t *testing.T) {
 	item1 := &QueueObject{
 		Error:      nil,
 		Deployment: types.NamespacedName{Namespace: "default", Name: "test-object-1"},
+		UpdateType: UpdateAll,
 	}
 	item2 := &QueueObject{
 		Error:      nil,
 		Deployment: types.NamespacedName{Namespace: "default", Name: "test-object-2"},
+		UpdateType: UpdateAll,
 	}
 	q.Enqueue(item1)
 	q.Enqueue(item2)
