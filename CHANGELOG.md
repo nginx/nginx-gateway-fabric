@@ -4,6 +4,31 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 1.6.1
+
+_February 6, 2025_
+
+HELM CHART:
+
+- The version of the Helm chart is now 1.6.1
+
+UPGRADE:
+
+- Update nginx to version 1.27.4. [3102](https://github.com/nginx/nginx-gateway-fabric/pull/3102)
+
+COMPATIBILITY:
+
+- Gateway API version: `1.2.1`
+- NGINX version: `1.27.4`
+- NGINX Plus version: `R33`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:1.6.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:1.6.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:1.6.1`
+
 ## Release 1.6.0
 
 _January 15, 2025_
