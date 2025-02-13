@@ -6,8 +6,8 @@ github.com/jstemmer/go-junit-report v1.0.0 h1:8X1gzZpR+nVQLAht+L/foqOeX2l9DTZoaI
 github.com/jstemmer/go-junit-report v1.0.0/go.mod h1:Brl9GWCQeLvo8nXZwPNNblvFj/XSXhF0NWZEnDohbsk=
 github.com/maxbrunsfeld/counterfeiter/v6 v6.10.0 h1:9WsegDYiSKtZXru+NcOB4z7iqb00n4atjmQlyy5TRXI=
 github.com/maxbrunsfeld/counterfeiter/v6 v6.10.0/go.mod h1:TeVdzh+5QB5IpWDJAU/uviXA6kOg9yXzLrrjeLKJXqY=
-github.com/nginxinc/nginx-go-crossplane v0.4.71 h1:WTpnkgUth1TcHXRNy3d/85pkzci2G/sNGfRMieLEE2U=
-github.com/nginxinc/nginx-go-crossplane v0.4.71/go.mod h1:BC3dfPTL7DJ+NbiN3qNos60BAjRZK71/fAGoid8I1jo=
+github.com/nginxinc/nginx-go-crossplane v0.4.72 h1:mjJtiwR37X83cM8PP5mG46vkKxbzcNIGfH4UyWvJs+Y=
+github.com/nginxinc/nginx-go-crossplane v0.4.72/go.mod h1:BC3dfPTL7DJ+NbiN3qNos60BAjRZK71/fAGoid8I1jo=
 github.com/onsi/gomega v1.34.2 h1:pNCwDkzrsv7MS9kpaQvVb1aVLahQXyJ/Tv5oAZMI3i8=
 github.com/onsi/gomega v1.34.2/go.mod h1:v1xfxRgk0KIsG+QOdm7p8UosrOzPYRo60fd3B/1Dukc=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
