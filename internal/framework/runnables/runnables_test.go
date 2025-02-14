@@ -23,25 +23,19 @@ func TestLeaderOrNonLeader(t *testing.T) {
 	g.Expect(leaderOrNonLeader.NeedLeaderElection()).To(BeFalse())
 }
 
-func TestCallFunctionsAfterBecameLeader(t *testing.T) {
+func TestEnableAfterBecameLeader(t *testing.T) {
 	t.Parallel()
-	statusUpdaterEnabled := false
-	healthCheckEnableLeader := false
-	eventHandlerEnabled := false
-
-	callFunctionsAfterBecameLeader := NewCallFunctionsAfterBecameLeader([]func(ctx context.Context){
-		func(_ context.Context) { statusUpdaterEnabled = true },
-		func(_ context.Context) { healthCheckEnableLeader = true },
-		func(_ context.Context) { eventHandlerEnabled = true },
+	enabled := false
+	enableAfterBecameLeader := NewEnableAfterBecameLeader(func(_ context.Context) {
+		enabled = true
 	})
 
 	g := NewWithT(t)
-	g.Expect(callFunctionsAfterBecameLeader.NeedLeaderElection()).To(BeTrue())
+	g.Expect(enableAfterBecameLeader.NeedLeaderElection()).To(BeTrue())
+	g.Expect(enabled).To(BeFalse())
 
-	err := callFunctionsAfterBecameLeader.Start(context.Background())
+	err := enableAfterBecameLeader.Start(context.Background())
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(statusUpdaterEnabled).To(BeTrue())
-	g.Expect(healthCheckEnableLeader).To(BeTrue())
-	g.Expect(eventHandlerEnabled).To(BeTrue())
+	g.Expect(enabled).To(BeTrue())
 }
