@@ -76,8 +76,6 @@ const (
 	plusClientCertField = "tls.crt"
 	plusClientKeyField  = "tls.key"
 	grpcServerPort      = 8443
-	// defined in our deployment.yaml.
-	readinessEndpointName = "/readyz"
 )
 
 var scheme = runtime.NewScheme()
@@ -264,15 +262,6 @@ func StartManager(cfg config.Config) error {
 		return fmt.Errorf("cannot register event loop: %w", err)
 	}
 
-	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
-		groupStatusUpdater.Enable,
-		nginxProvisioner.Enable,
-		healthChecker.setAsLeader,
-		eventHandler.eventHandlerEnable,
-	})); err != nil {
-		return fmt.Errorf("cannot register functions that get called after Pod becomes leader: %w", err)
-	}
-
 	if cfg.ProductTelemetryConfig.Enabled {
 		dataCollector := telemetry.NewDataCollectorImpl(telemetry.DataCollectorConfig{
 			K8sClientReader:     mgr.GetAPIReader(),
@@ -298,7 +287,6 @@ func StartManager(cfg config.Config) error {
 	}
 
 	cfg.Logger.Info("Starting manager")
-	cfg.Logger.Info("NGINX Gateway Fabric Pod will be marked as unready until it has the leader lease")
 	go func() {
 		<-ctx.Done()
 		cfg.Logger.Info("Shutting down")
@@ -351,6 +339,10 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 		},
 	}
 
+	if cfg.HealthConfig.Enabled {
+		options.HealthProbeBindAddress = fmt.Sprintf(":%d", cfg.HealthConfig.Port)
+	}
+
 	clusterCfg := ctlr.GetConfigOrDie()
 	clusterCfg.Timeout = clusterTimeout
 
@@ -360,13 +352,8 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 	}
 
 	if cfg.HealthConfig.Enabled {
-		healthProbeServer, err := createHealthProbe(cfg, healthChecker)
-		if err != nil {
-			return nil, fmt.Errorf("error creating health probe: %w", err)
-		}
-
-		if err := mgr.Add(&healthProbeServer); err != nil {
-			return nil, fmt.Errorf("error adding health probe: %w", err)
+		if err := mgr.AddReadyzCheck("readyz", healthChecker.readyCheck); err != nil {
+			return nil, fmt.Errorf("error adding ready check: %w", err)
 		}
 	}
 
