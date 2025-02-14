@@ -262,6 +262,10 @@ func StartManager(cfg config.Config) error {
 		return fmt.Errorf("cannot register event loop: %w", err)
 	}
 
+	if err = mgr.Add(runnables.NewEnableAfterBecameLeader(groupStatusUpdater.Enable)); err != nil {
+		return fmt.Errorf("cannot register status updater: %w", err)
+	}
+
 	if cfg.ProductTelemetryConfig.Enabled {
 		dataCollector := telemetry.NewDataCollectorImpl(telemetry.DataCollectorConfig{
 			K8sClientReader:     mgr.GetAPIReader(),
