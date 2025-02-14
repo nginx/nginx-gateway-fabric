@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file/filefakes"
@@ -60,7 +60,7 @@ var _ = Describe("EventHandler", func() {
 		}
 
 		BeforeAll(func() {
-			mgr = file.NewManagerImpl(zap.New(), file.NewStdLibOSFileManager())
+			mgr = file.NewManagerImpl(logr.Discard(), file.NewStdLibOSFileManager())
 			tmpDir = GinkgoT().TempDir()
 
 			regular1 = file.File{
@@ -119,7 +119,7 @@ var _ = Describe("EventHandler", func() {
 	When("file does not exist", func() {
 		It("should not error", func() {
 			fakeOSMgr := &filefakes.FakeOSFileManager{}
-			mgr := file.NewManagerImpl(zap.New(), fakeOSMgr)
+			mgr := file.NewManagerImpl(logr.Discard(), fakeOSMgr)
 
 			files := []file.File{
 				{
@@ -138,7 +138,7 @@ var _ = Describe("EventHandler", func() {
 
 	When("file type is not supported", func() {
 		It("should panic", func() {
-			mgr := file.NewManagerImpl(zap.New(), nil)
+			mgr := file.NewManagerImpl(logr.Discard(), nil)
 
 			files := []file.File{
 				{
@@ -175,7 +175,7 @@ var _ = Describe("EventHandler", func() {
 		DescribeTable(
 			"should return error on file IO error",
 			func(fakeOSMgr *filefakes.FakeOSFileManager) {
-				mgr := file.NewManagerImpl(zap.New(), fakeOSMgr)
+				mgr := file.NewManagerImpl(logr.Discard(), fakeOSMgr)
 
 				// special case for Remove
 				// to kick off removing, we need to successfully write files beforehand

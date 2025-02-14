@@ -32,14 +32,14 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: v3.4.2
+    rev: v3.5.0
     hooks:
       - id: prettier
         types:
           - javascript
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: v1.63.4
+    rev: v1.64.2
     hooks:
       - id: golangci-lint-full
         name: golangci-lint-root

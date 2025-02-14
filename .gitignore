@@ -61,3 +61,7 @@ internal/mode/static/nginx/modules/coverage
 # temporary files used for manifest generation
 config/base/deploy.yaml
 config/base/deploy.yaml.bak
+
+# Temporary API documentation file, which should be committed
+# to the main documentation repository instead
+docs/api/content.md

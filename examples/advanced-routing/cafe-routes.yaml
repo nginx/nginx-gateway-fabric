@@ -31,6 +31,24 @@ spec:
     backendRefs:
     - name: coffee-v2-svc
       port: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /coffee
+      headers:
+      - name: headerRegex
+        type: RegularExpression
+        value: "header-[a-z]{1}"
+    - path:
+        type: PathPrefix
+        value: /coffee
+      queryParams:
+      - name: queryRegex
+        type: RegularExpression
+        value: "query-[a-z]{1}"
+    backendRefs:
+    - name: coffee-v3-svc
+      port: 80
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

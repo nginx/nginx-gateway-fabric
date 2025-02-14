@@ -192,6 +192,20 @@ There are 3 options to configure gRPC routing. To access the application and tes
     2024/04/29 09:32:46 Received: version two
     ```
 
+    We'll send a request with the header `headerRegex: grpc-header-a`
+
+    ```shell
+    grpcurl -plaintext -proto grpc.proto -authority bar.com -d '{"name": "version two regex"}' -H 'headerRegex: grpc-header-a' ${GW_IP}:${GW_PORT} helloworld.Greeter/SayHello
+    ```
+
+    ```text
+    {
+        "message": "Hello version two regex"
+    }
+    ```
+
+   Verify logs of `${POD_V2}` to ensure response is from the correct service.
+
    Finally, we'll send a request with the headers `version: two` and `color: orange`
 
     ```shell

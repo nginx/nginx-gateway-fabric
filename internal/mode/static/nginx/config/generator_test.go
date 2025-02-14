@@ -5,9 +5,9 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
-	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	ngfConfig "github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
@@ -140,7 +140,7 @@ func TestGenerate(t *testing.T) {
 	generator := config.NewGeneratorImpl(
 		plus,
 		&ngfConfig.UsageReportConfig{Endpoint: "test-endpoint"},
-		ctlrZap.New(),
+		logr.Discard(),
 	)
 
 	files := generator.Generate(conf)

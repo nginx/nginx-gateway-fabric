@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/go-logr/logr"
 	ngxclient "github.com/nginxinc/nginx-plus-go-client/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -15,7 +16,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
@@ -154,7 +154,7 @@ var _ = Describe("eventHandler", func() {
 				e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
 				batch := []interface{}{e}
 
-				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
 
@@ -170,7 +170,7 @@ var _ = Describe("eventHandler", func() {
 				}
 				batch := []interface{}{e}
 
-				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
 
@@ -189,12 +189,12 @@ var _ = Describe("eventHandler", func() {
 				}
 				batch := []interface{}{upsertEvent, deleteEvent}
 
-				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 				checkUpsertEventExpectations(upsertEvent)
 				checkDeleteEventExpectations(deleteEvent)
 
-				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 2)
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
@@ -239,7 +239,7 @@ var _ = Describe("eventHandler", func() {
 				expectedReqsCount = 2
 			}
 
-			handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(2))
 
@@ -275,7 +275,7 @@ var _ = Describe("eventHandler", func() {
 
 		It("handles a valid config", func() {
 			batch := []interface{}{&events.UpsertEvent{Resource: cfg(ngfAPI.ControllerLogLevelError)}}
-			handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 			Expect(handler.GetLatestConfiguration()).To(BeNil())
 
@@ -290,7 +290,7 @@ var _ = Describe("eventHandler", func() {
 
 		It("handles an invalid config", func() {
 			batch := []interface{}{&events.UpsertEvent{Resource: cfg(ngfAPI.ControllerLogLevel("invalid"))}}
-			handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 			Expect(handler.GetLatestConfiguration()).To(BeNil())
 
@@ -318,7 +318,7 @@ var _ = Describe("eventHandler", func() {
 					},
 				},
 			}
-			handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 			Expect(handler.GetLatestConfiguration()).To(BeNil())
 
@@ -351,7 +351,7 @@ var _ = Describe("eventHandler", func() {
 			}}
 			batch := []interface{}{e}
 
-			handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(BeZero())
 
@@ -359,7 +359,7 @@ var _ = Describe("eventHandler", func() {
 			batch = []interface{}{de}
 			Expect(fakeK8sClient.Delete(context.Background(), createService(notNginxGatewayServiceName))).To(Succeed())
 
-			handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 			Expect(handler.GetLatestConfiguration()).To(BeNil())
 
@@ -375,7 +375,7 @@ var _ = Describe("eventHandler", func() {
 			}}
 			batch := []interface{}{e}
 
-			handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 			Expect(handler.GetLatestConfiguration()).To(BeNil())
 			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(1))
@@ -395,7 +395,7 @@ var _ = Describe("eventHandler", func() {
 			batch := []interface{}{e}
 			Expect(fakeK8sClient.Delete(context.Background(), createService(nginxGatewayServiceName))).To(Succeed())
 
-			handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 			Expect(handler.GetLatestConfiguration()).To(BeNil())
 			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(1))
@@ -439,7 +439,7 @@ var _ = Describe("eventHandler", func() {
 			It("should call the NGINX Plus API", func() {
 				handler.cfg.plus = true
 
-				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
 				dcfg.NginxPlus = dataplane.NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
@@ -453,7 +453,7 @@ var _ = Describe("eventHandler", func() {
 
 		When("not running NGINX Plus", func() {
 			It("should not call the NGINX Plus API", func() {
-				handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
@@ -543,7 +543,7 @@ var _ = Describe("eventHandler", func() {
 		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{})
 
 		Expect(handler.cfg.nginxConfiguredOnStartChecker.readyCheck(nil)).ToNot(Succeed())
-		handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
 		Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
@@ -559,7 +559,7 @@ var _ = Describe("eventHandler", func() {
 		readyChannel := handler.cfg.nginxConfiguredOnStartChecker.getReadyCh()
 
 		Expect(handler.cfg.nginxConfiguredOnStartChecker.readyCheck(nil)).ToNot(Succeed())
-		handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 		Expect(handler.GetLatestConfiguration()).To(BeNil())
 
@@ -576,14 +576,14 @@ var _ = Describe("eventHandler", func() {
 		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{})
 		fakeNginxRuntimeMgr.ReloadReturns(errors.New("reload error"))
 
-		handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 		Expect(handler.cfg.nginxConfiguredOnStartChecker.readyCheck(nil)).ToNot(Succeed())
 
 		// now send an update with no changes; should still return an error
 		fakeProcessor.ProcessReturns(state.NoChange, &graph.Graph{})
 
-		handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 		Expect(handler.cfg.nginxConfiguredOnStartChecker.readyCheck(nil)).ToNot(Succeed())
 
@@ -591,7 +591,7 @@ var _ = Describe("eventHandler", func() {
 		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{})
 		fakeNginxRuntimeMgr.ReloadReturns(nil)
 
-		handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 2)
 		Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
@@ -606,7 +606,7 @@ var _ = Describe("eventHandler", func() {
 
 		handle := func() {
 			batch := []interface{}{e}
-			handler.HandleEventBatch(context.Background(), ctlrZap.New(), batch)
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 		}
 
 		Expect(handle).Should(Panic())

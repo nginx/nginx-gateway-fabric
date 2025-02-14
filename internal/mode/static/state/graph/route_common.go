@@ -933,11 +933,11 @@ func validateHeaderMatch(
 
 	if headerType == nil {
 		allErrs = append(allErrs, field.Required(headerPath.Child("type"), "cannot be empty"))
-	} else if *headerType != v1.HeaderMatchExact {
+	} else if *headerType != v1.HeaderMatchExact && *headerType != v1.HeaderMatchRegularExpression {
 		valErr := field.NotSupported(
 			headerPath.Child("type"),
 			*headerType,
-			[]string{string(v1.HeaderMatchExact)},
+			[]string{string(v1.HeaderMatchExact), string(v1.HeaderMatchRegularExpression)},
 		)
 		allErrs = append(allErrs, valErr)
 	}

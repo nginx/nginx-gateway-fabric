@@ -46,7 +46,7 @@ Follow our [Installation Instructions](https://docs.nginx.com/nginx-gateway-fabr
 - We use [Go Modules](https://github.com/golang/go/wiki/Modules) for managing dependencies.
 - We use [Ginkgo](https://onsi.github.io/ginkgo/) and [Gomega](https://onsi.github.io/gomega/) for our BDD style unit
   tests.
-- The documentation website is found under `site/`.
+- The documentation is managed in [the NGINX documentation repository](https://github.com/nginx/documentation).
 
 ## Contributing
 
@@ -97,7 +97,7 @@ Before beginning development, familiarize yourself with the following documents:
   conventions to follow when writing Go code for the project.
 - [Architecture](https://docs.nginx.com/nginx-gateway-fabric/overview/gateway-architecture/): A high-level overview of the project's architecture.
 - [Design Principles](/docs/developer/design-principles.md): An overview of the project's design principles.
-- [NGINX Gateway Fabric Documentation](/site/README.md): An explanation of the documentation tooling and conventions.
+- [The NGINX documentation repository](https://github.com/nginx/documentation): The repository for NGINX documentation, which is used for the website.
 
 ## F5 Contributor License Agreement (CLA)
 

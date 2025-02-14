@@ -221,10 +221,10 @@ func processPolicies(
 					continue
 				}
 			case hrGroupKind, grpcGroupKind:
-				if route, exists := routes[routeKeyForKind(ref.Kind, refNsName)]; !exists {
-					continue
-				} else {
+				if route, exists := routes[routeKeyForKind(ref.Kind, refNsName)]; exists {
 					targetedRoutes[client.ObjectKeyFromObject(route.Source)] = route
+				} else {
+					continue
 				}
 			case serviceGroupKind:
 				if _, exists := services[refNsName]; !exists {

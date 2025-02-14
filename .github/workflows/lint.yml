@@ -37,10 +37,10 @@ jobs:
           go-version: stable
 
       - name: Lint Go
-        uses: golangci/golangci-lint-action@ec5d18412c0aeab7936cb16880d708ba2a64e1ae # v6.2.0
+        uses: golangci/golangci-lint-action@818ec4d51a1feacefc42ff1b3ec25d4962690f39 # v6.4.1
         with:
           working-directory: ${{ matrix.directory }}
-          version: v1.63.4 # renovate: datasource=github-tags depName=golangci/golangci-lint
+          version: v1.64.2 # renovate: datasource=github-tags depName=golangci/golangci-lint
 
   njs-lint:
     name: NJS Lint

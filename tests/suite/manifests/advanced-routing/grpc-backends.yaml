@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpc-infra-backend-v1
+spec:
+  selector:
+    app: grpc-infra-backend-v1
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 50051
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpc-infra-backend-v1
+  labels:
+    app: grpc-infra-backend-v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpc-infra-backend-v1
+  template:
+    metadata:
+      labels:
+        app: grpc-infra-backend-v1
+    spec:
+      containers:
+      - name: grpc-infra-backend-v1
+        image: ghcr.io/nginx/kic-test-grpc-server:0.2.5
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        resources:
+          requests:
+            cpu: 10m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpc-infra-backend-v2
+spec:
+  selector:
+    app: grpc-infra-backend-v2
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 50051
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpc-infra-backend-v2
+  labels:
+    app: grpc-infra-backend-v2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpc-infra-backend-v2
+  template:
+    metadata:
+      labels:
+        app: grpc-infra-backend-v2
+    spec:
+      containers:
+      - name: grpc-infra-backend-v2
+        image: ghcr.io/nginx/kic-test-grpc-server:edge
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        resources:
+          requests:
+            cpu: 10m

@@ -23,7 +23,7 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION = v1.63.4
+GOLANGCI_LINT_VERSION = v1.64.2
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.32.0
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
@@ -31,7 +31,7 @@ HELM_DOCS_VERSION = v1.14.2
 # renovate: datasource=github-tags depName=ahmetb/gen-crd-api-reference-docs
 GEN_CRD_API_REFERENCE_DOCS_VERSION = v0.3.0
 # renovate: datasource=go depName=sigs.k8s.io/controller-tools
-CONTROLLER_TOOLS_VERSION = v0.17.1
+CONTROLLER_TOOLS_VERSION = v0.17.2
 # renovate: datasource=docker depName=node
 NODE_VERSION = 22
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
@@ -141,7 +141,7 @@ generate-manifests: ## Generate manifests using Helm.
 	./scripts/generate-manifests.sh
 
 generate-api-docs: ## Generate API docs
-	go run github.com/ahmetb/gen-crd-api-reference-docs@$(GEN_CRD_API_REFERENCE_DOCS_VERSION) -config site/config/api/config.json -template-dir site/config/api -out-file site/content/reference/api.md -api-dir "github.com/nginx/nginx-gateway-fabric/apis"
+	go run github.com/ahmetb/gen-crd-api-reference-docs@$(GEN_CRD_API_REFERENCE_DOCS_VERSION) -config docs/api/config.json -template-dir docs/api -out-file docs/api/content.md -api-dir "github.com/nginx/nginx-gateway-fabric/apis"
 
 .PHONY: generate-helm-docs
 generate-helm-docs: ## Generate the Helm chart documentation
