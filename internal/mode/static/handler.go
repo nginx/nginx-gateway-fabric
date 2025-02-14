@@ -161,25 +161,12 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 
 	changeType, gr := h.cfg.processor.Process()
 
-	// Once we've processed resources on startup and built our first graph, mark the Pod as having built the graph.
-	if !h.cfg.graphBuiltHealthChecker.graphBuilt {
-		h.cfg.graphBuiltHealthChecker.setGraphBuilt()
-	}
-
-	// if this Pod is not the leader or does not have the leader lease yet,
-	// the nginx conf should not be updated.
-	if !h.cfg.graphBuiltHealthChecker.leader {
-		return
+	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
+	if !h.cfg.graphBuiltHealthChecker.ready {
+		h.cfg.graphBuiltHealthChecker.setAsReady()
 	}
 
 	h.sendNginxConfig(ctx, logger, gr, changeType)
-}
-
-func (h *eventHandlerImpl) eventHandlerEnable(ctx context.Context) {
-	// Latest graph is guaranteed to not be nil since the leader election process takes longer than
-	// the initial call to HandleEventBatch when NGF starts up. And GatewayClass will typically always exist which
-	// triggers an event.
-	h.sendNginxConfig(ctx, h.cfg.logger, h.cfg.processor.GetLatestGraph(), state.ClusterStateChange)
 }
 
 func (h *eventHandlerImpl) sendNginxConfig(
