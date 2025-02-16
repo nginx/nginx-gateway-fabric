@@ -293,18 +293,16 @@ func checkForFailingTraffic(teaURL, coffeeURL string) error {
 	return nil
 }
 
-func expectRequestToSucceed(appURL, address string, responseBodyMessage string) error {
+func expectRequestToSucceed(appURL, address, responseBodyMessage string) error {
 	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
-
-	if status != http.StatusOK {
-		return errors.New("http status was not 200")
+	if err != nil {
+		return err
 	}
 
-	if !strings.Contains(body, responseBodyMessage) {
-		return errors.New("expected response body to contain correct body message")
-	}
+	Expect(status).To(HaveHTTPStatus(http.StatusOK), "http status was not 200 but got %d", status)
+	Expect(body).To(HaveHTTPBody(ContainSubstring(responseBodyMessage)), "expected response body to contain correct body message but got: %s", responseBodyMessage)
 
-	return err
+	return nil
 }
 
 func expectRequestToFail(appURL, address string) error {
