@@ -262,6 +262,13 @@ func StartManager(cfg config.Config) error {
 		return fmt.Errorf("cannot register event loop: %w", err)
 	}
 
+	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
+		groupStatusUpdater.Enable,
+		nginxProvisioner.Enable,
+	})); err != nil {
+		return fmt.Errorf("cannot register functions that get called after Pod becomes leader: %w", err)
+	}
+
 	if cfg.ProductTelemetryConfig.Enabled {
 		dataCollector := telemetry.NewDataCollectorImpl(telemetry.DataCollectorConfig{
 			K8sClientReader:     mgr.GetAPIReader(),
