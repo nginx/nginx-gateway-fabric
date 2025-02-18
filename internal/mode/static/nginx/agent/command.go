@@ -34,11 +34,10 @@ const connectionWaitTimeout = 30 * time.Second
 // commandService handles the connection and subscription to the data plane agent.
 type commandService struct {
 	pb.CommandServiceServer
-	nginxDeployments *DeploymentStore
-	statusQueue      *status.Queue
-	connTracker      agentgrpc.ConnectionsTracker
-	k8sReader        client.Reader
-	// TODO(sberman): all logs are at Info level right now. Adjust appropriately.
+	nginxDeployments  *DeploymentStore
+	statusQueue       *status.Queue
+	connTracker       agentgrpc.ConnectionsTracker
+	k8sReader         client.Reader
 	logger            logr.Logger
 	connectionTimeout time.Duration
 }

@@ -153,6 +153,8 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 				"--leader-election-lock-name=my-lock",
 				"--leader-election-disable=false",
 				"--nginx-plus",
+				"--nginx-docker-secret=secret1",
+				"--nginx-docker-secret=secret2",
 				"--usage-report-secret=my-secret",
 				"--usage-report-endpoint=example.com",
 				"--usage-report-resolver=resolver.com",
@@ -313,6 +315,31 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "" for "--leader-election-disable" flag: strconv.ParseBool`,
+		},
+		{
+			name: "nginx-docker-secret is set to empty string",
+			args: []string{
+				"--nginx-docker-secret=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--nginx-docker-secret" flag: must be set`,
+		},
+		{
+			name: "nginx-docker-secret is invalid",
+			args: []string{
+				"--nginx-docker-secret=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-docker-secret" flag: invalid format: `,
+		},
+		{
+			name: "one nginx-docker-secret is invalid",
+			args: []string{
+				"--nginx-docker-secret=valid",
+				"--nginx-docker-secret=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-docker-secret" flag: invalid format: `,
 		},
 		{
 			name: "usage-report-secret is set to empty string",

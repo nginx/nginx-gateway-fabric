@@ -206,6 +206,15 @@ func (d *Deployment) GetConfigurationStatus() error {
 	return errors.Join(errs...)
 }
 
+//counterfeiter:generate . DeploymentStorer
+
+// DeploymentStorer is an interface to store Deployments.
+type DeploymentStorer interface {
+	Get(types.NamespacedName) *Deployment
+	GetOrStore(context.Context, types.NamespacedName, chan struct{}) *Deployment
+	Remove(types.NamespacedName)
+}
+
 // DeploymentStore holds a map of all Deployments.
 type DeploymentStore struct {
 	connTracker agentgrpc.ConnectionsTracker

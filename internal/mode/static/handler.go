@@ -169,6 +169,12 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 	h.sendNginxConfig(ctx, logger, gr, changeType)
 }
 
+// enable is called when the pod becomes leader to ensure the provisioner has
+// the latest configuration.
+func (h *eventHandlerImpl) enable(ctx context.Context) {
+	h.sendNginxConfig(ctx, h.cfg.logger, h.cfg.processor.GetLatestGraph(), state.ClusterStateChange)
+}
+
 func (h *eventHandlerImpl) sendNginxConfig(
 	ctx context.Context,
 	logger logr.Logger,
