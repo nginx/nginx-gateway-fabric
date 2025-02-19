@@ -449,8 +449,8 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			container.VolumeMounts = append(container.VolumeMounts, containerSpec.VolumeMounts...)
 
 			if containerSpec.Debug != nil && *containerSpec.Debug {
-				container.Command = append(container.Command, "/bin/sh")
-				container.Args = append(container.Args, "-c", "rm -rf /var/run/nginx/*sock && nginx-debug -g 'daemon off;'")
+				container.Command = append(container.Command, "/agent/entrypoint.sh")
+				container.Args = append(container.Args, "debug")
 			}
 			spec.Spec.Containers[0] = container
 		}

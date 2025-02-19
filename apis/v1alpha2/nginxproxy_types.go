@@ -438,7 +438,6 @@ type ContainerSpec struct {
 	// Debug enables debugging for NGINX by using the nginx-debug binary.
 	//
 	// +optional
-	// +kubebuilder:default=false
 	Debug *bool `json:"debug,omitempty"`
 
 	// Image is the NGINX image to use.

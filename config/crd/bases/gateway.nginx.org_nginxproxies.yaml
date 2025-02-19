@@ -80,7 +80,6 @@ spec:
                           container.
                         properties:
                           debug:
-                            default: false
                             description: Debug enables debugging for NGINX by using
                               the nginx-debug binary.
                             type: boolean
