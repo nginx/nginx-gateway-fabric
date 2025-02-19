@@ -680,6 +680,14 @@ func TestBuildConfiguration(t *testing.T) {
 				apiv1.TLSPrivateKeyKey: []byte("privateKey-1"),
 			},
 		},
+		CertBundle: graph.NewCertificateBundle(
+			secret1NsName,
+			"Secret",
+			&graph.Certificate{
+				TLSCert:       []byte("cert-1"),
+				TLSPrivateKey: []byte("privateKey-1"),
+			},
+		),
 	}
 
 	secret2NsName := types.NamespacedName{Namespace: "test", Name: "secret-2"}
@@ -694,6 +702,14 @@ func TestBuildConfiguration(t *testing.T) {
 				apiv1.TLSPrivateKeyKey: []byte("privateKey-2"),
 			},
 		},
+		CertBundle: graph.NewCertificateBundle(
+			secret2NsName,
+			"Secret",
+			&graph.Certificate{
+				TLSCert:       []byte("cert-2"),
+				TLSPrivateKey: []byte("privateKey-2"),
+			},
+		),
 	}
 
 	listener80 := v1.Listener{

@@ -43,7 +43,7 @@ func NewCertificateBundle(name types.NamespacedName, kind string, cert *Certific
 	}
 }
 
-// validateTLS ...
+// validateTLS checks to make sure a ssl certificate key pair is valid
 func validateTLS(tlsCert, tlsPrivateKey []byte) error {
 	_, err := tls.X509KeyPair(tlsCert, tlsPrivateKey)
 	if err != nil {
