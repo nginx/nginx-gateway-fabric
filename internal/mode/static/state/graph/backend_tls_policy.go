@@ -170,7 +170,7 @@ func validateBackendTLSCACertRef(
 			return field.Invalid(path, selectedCertRef, err.Error())
 		}
 	default:
-		return fmt.Errorf("invalid certificate reference supported %q", selectedCertRef.Kind)
+		return fmt.Errorf("invalid certificate reference kind %q", selectedCertRef.Kind)
 	}
 	return nil
 }

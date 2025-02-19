@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 
-	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -229,10 +228,10 @@ func buildSSLKeyPairs(
 			id := generateSSLKeyPairID(*l.ResolvedSecret)
 			secret := secrets[*l.ResolvedSecret]
 			// The Data map keys are guaranteed to exist by the graph package.
-			// the Source field is guaranteed to be non-nil by the graph package.
+			// the CertBundle field is guaranteed to be non-nil by the graph package.
 			keyPairs[id] = SSLKeyPair{
-				Cert: secret.Source.Data[apiv1.TLSCertKey],
-				Key:  secret.Source.Data[apiv1.TLSPrivateKeyKey],
+				Cert: secret.CertBundle.Cert.TLSCert,
+				Key:  secret.CertBundle.Cert.TLSPrivateKey,
 			}
 		}
 	}

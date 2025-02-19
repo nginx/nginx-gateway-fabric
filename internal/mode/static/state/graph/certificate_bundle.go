@@ -11,8 +11,12 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// CAKey is the key that is stored in a secret or configmap to grab its data from.
+// This follows the convention setup by kubernetes service account root ca
+// key for optional root certificate authority
 const CAKey = "ca.crt"
 
+// CertificateBundle is used to submit certificate data to nginx that is kubernetes aware
 type CertificateBundle struct {
 	Cert *Certificate
 
@@ -20,12 +24,17 @@ type CertificateBundle struct {
 	Kind v1.Kind
 }
 
+// Certificate houses the real certificate data that is sent to the configurator
 type Certificate struct {
-	TLSCert       []byte
+	// TLSCert is the SSL certificate used to send to CA
+	TLSCert []byte
+	// TLSPrivateKey is the cryptographic key for encrpyting traffic during secure TLS
 	TLSPrivateKey []byte
-	CACert        []byte
+	// CACert is the root certificate authority
+	CACert []byte
 }
 
+// NewCertificateBundle generates a kubernetes aware certificate that is used during the configurator for nginx
 func NewCertificateBundle(name types.NamespacedName, kind string, cert *Certificate) *CertificateBundle {
 	return &CertificateBundle{
 		Name: name,
@@ -34,6 +43,7 @@ func NewCertificateBundle(name types.NamespacedName, kind string, cert *Certific
 	}
 }
 
+// validateTLS ...
 func validateTLS(tlsCert, tlsPrivateKey []byte) error {
 	_, err := tls.X509KeyPair(tlsCert, tlsPrivateKey)
 	if err != nil {
