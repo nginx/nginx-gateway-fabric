@@ -308,6 +308,7 @@ spec:
   kubernetes:
     deployment:
       container:
+        debug: false
         image:
           pullPolicy: Always
           repository: private-registry.nginx.com/nginx-gateway-fabric/nginx-plus

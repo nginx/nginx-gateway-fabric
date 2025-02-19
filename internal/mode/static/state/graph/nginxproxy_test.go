@@ -55,6 +55,7 @@ func TestBuildEffectiveNginxProxy(t *testing.T) {
 		logLevel ngfAPIv1alpha2.NginxErrorLogLevel,
 		setIP bool,
 		disableHTTP bool,
+		nginxDebug bool,
 	) *ngfAPIv1alpha2.NginxProxy {
 		return &ngfAPIv1alpha2.NginxProxy{
 			Spec: ngfAPIv1alpha2.NginxProxySpec{
@@ -79,6 +80,13 @@ func TestBuildEffectiveNginxProxy(t *testing.T) {
 					ErrorLevel: &logLevel,
 				},
 				DisableHTTP2: &disableHTTP,
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							Debug: &nginxDebug,
+						},
+					},
+				},
 			},
 		}
 	}
@@ -100,6 +108,7 @@ func TestBuildEffectiveNginxProxy(t *testing.T) {
 			ngfAPIv1alpha2.NginxLogLevelAlert,
 			true,
 			false,
+			false,
 		)
 	}
 
@@ -119,6 +128,7 @@ func TestBuildEffectiveNginxProxy(t *testing.T) {
 			},
 			ngfAPIv1alpha2.NginxLogLevelError,
 			false,
+			true,
 			true,
 		)
 	}

@@ -447,6 +447,12 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			}
 			container.Lifecycle = containerSpec.Lifecycle
 			container.VolumeMounts = append(container.VolumeMounts, containerSpec.VolumeMounts...)
+
+			// ensure that this "effectiveNginxProxy" works
+			if containerSpec.Debug != nil && *containerSpec.Debug {
+				container.Command = append(container.Command, "/bin/sh")
+				container.Args = append(container.Args, "-c", "rm -rf /var/run/nginx/*sock && nginx-debug -g 'daemon off;'")
+			}
 			spec.Spec.Containers[0] = container
 		}
 	}

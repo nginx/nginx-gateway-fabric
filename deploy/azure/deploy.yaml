@@ -303,6 +303,7 @@ spec:
   kubernetes:
     deployment:
       container:
+        debug: false
         image:
           pullPolicy: Always
           repository: ghcr.io/nginx/nginx-gateway-fabric/nginx

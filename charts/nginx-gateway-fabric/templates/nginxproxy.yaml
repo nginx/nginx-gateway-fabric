@@ -23,6 +23,7 @@ spec:
         {{- end }}
         image:
           {{- toYaml .Values.nginx.image | nindent 10 }}
+        debug: {{ .Values.nginx.debug }}
     {{- end }}
     {{- if .Values.nginx.service }}
     service:
