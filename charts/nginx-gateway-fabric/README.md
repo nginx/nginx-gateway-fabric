@@ -258,10 +258,9 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 
 | Key | Description | Type | Default |
 |-----|-------------|------|---------|
-| `nginx` | The nginx section contains the configuration for all NGINX data plane deployments installed by the NGINX Gateway Fabric control plane. | object | `{"config":{},"container":{},"debug":false,"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric/nginx","tag":"edge"},"imagePullSecret":"","imagePullSecrets":[],"kind":"deployment","plus":false,"pod":{},"replicas":1,"service":{"externalTrafficPolicy":"Local","type":"LoadBalancer"},"usage":{"caSecretName":"","clientSSLSecretName":"","endpoint":"","resolver":"","secretName":"nplus-license","skipVerify":false}}` |
+| `nginx` | The nginx section contains the configuration for all NGINX data plane deployments installed by the NGINX Gateway Fabric control plane. | object | `{"config":{},"container":{},"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric/nginx","tag":"edge"},"imagePullSecret":"","imagePullSecrets":[],"kind":"deployment","plus":false,"pod":{},"replicas":1,"service":{"externalTrafficPolicy":"Local","type":"LoadBalancer"},"usage":{"caSecretName":"","clientSSLSecretName":"","endpoint":"","resolver":"","secretName":"nplus-license","skipVerify":false}}` |
 | `nginx.config` | The configuration for the data plane that is contained in the NginxProxy resource. | object | `{}` |
 | `nginx.container` | The container configuration for the NGINX container. | object | `{}` |
-| `nginx.debug` | Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource. | bool | `false` |
 | `nginx.image.repository` | The NGINX image to use. | string | `"ghcr.io/nginx/nginx-gateway-fabric/nginx"` |
 | `nginx.imagePullSecret` | The name of the secret containing docker registry credentials. Secret must exist in the same namespace as the helm release. The control plane will copy this secret into any namespace where NGINX is deployed. | string | `""` |
 | `nginx.imagePullSecrets` | A list of secret names containing docker registry credentials. Secrets must exist in the same namespace as the helm release. The control plane will copy these secrets into any namespace where NGINX is deployed. | list | `[]` |

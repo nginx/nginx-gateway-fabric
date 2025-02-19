@@ -229,13 +229,6 @@
           "title": "container",
           "type": "object"
         },
-        "debug": {
-          "default": false,
-          "description": "Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource.",
-          "required": [],
-          "title": "debug",
-          "type": "boolean"
-        },
         "image": {
           "properties": {
             "pullPolicy": {

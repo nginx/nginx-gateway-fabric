@@ -425,4 +425,4 @@ nginx:
     # loadBalancerSourceRanges: []
 
   # -- Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource.
-  debug: false
+  # debug: false
