@@ -182,7 +182,6 @@ func (h *eventHandlerImpl) sendNginxConfig(
 	changeType state.ChangeType,
 ) {
 	if gr == nil {
-		logger.Info("Handling events didn't result into NGINX configuration changes")
 		return
 	}
 
