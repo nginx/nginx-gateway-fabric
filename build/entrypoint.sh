@@ -16,7 +16,13 @@ rm -rf /var/run/nginx/*.sock
 
 # Launch nginx
 echo "starting nginx ..."
-/usr/sbin/nginx -g "daemon off;" &
+
+# if we want to use the nginx-debug binary, we will call this script with an argument "debug"
+if [ "${1:-false}" = "debug" ]; then
+    /usr/sbin/nginx-debug -g "daemon off;" &
+else
+    /usr/sbin/nginx -g "daemon off;" &
+fi
 
 nginx_pid=$!
 
@@ -31,7 +37,7 @@ done
 
 # start nginx-agent, pass args
 echo "starting nginx-agent ..."
-nginx-agent "$@" &
+nginx-agent &
 
 agent_pid=$!
 
