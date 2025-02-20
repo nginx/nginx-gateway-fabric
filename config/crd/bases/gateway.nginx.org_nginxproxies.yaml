@@ -79,6 +79,10 @@ spec:
                         description: Container defines container fields for the NGINX
                           container.
                         properties:
+                          debug:
+                            description: Debug enables debugging for NGINX by using
+                              the nginx-debug binary.
+                            type: boolean
                           image:
                             description: Image is the NGINX image to use.
                             properties:
