@@ -207,12 +207,12 @@ func TestSecretResolver(t *testing.T) {
 		{
 			name:           "invalid secret cert",
 			nsname:         client.ObjectKeyFromObject(invalidSecretCert),
-			expectedErrMsg: "TLS secret is invalid: x509: malformed certificate",
+			expectedErrMsg: "tls secret is invalid: x509: malformed certificate",
 		},
 		{
 			name:           "invalid secret key",
 			nsname:         client.ObjectKeyFromObject(invalidSecretKey),
-			expectedErrMsg: "TLS secret is invalid: tls: failed to parse private key",
+			expectedErrMsg: "tls secret is invalid: tls: failed to parse private key",
 		},
 		{
 			name:           "invalid secret ca cert",

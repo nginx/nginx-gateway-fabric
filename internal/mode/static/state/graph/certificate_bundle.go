@@ -11,12 +11,10 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// CAKey is the key that is stored in a secret or configmap to grab its data from.
-// This follows the convention setup by kubernetes service account root ca
-// key for optional root certificate authority
+// key for optional root certificate authority.
 const CAKey = "ca.crt"
 
-// CertificateBundle is used to submit certificate data to nginx that is kubernetes aware
+// CertificateBundle is used to submit certificate data to nginx that is kubernetes aware.
 type CertificateBundle struct {
 	Cert *Certificate
 
@@ -24,7 +22,7 @@ type CertificateBundle struct {
 	Kind v1.Kind
 }
 
-// Certificate houses the real certificate data that is sent to the configurator
+// Certificate houses the real certificate data that is sent to the configurator.
 type Certificate struct {
 	// TLSCert is the SSL certificate used to send to CA
 	TLSCert []byte
@@ -34,7 +32,7 @@ type Certificate struct {
 	CACert []byte
 }
 
-// NewCertificateBundle generates a kubernetes aware certificate that is used during the configurator for nginx
+// NewCertificateBundle generates a kubernetes aware certificate that is used during the configurator for nginx.
 func NewCertificateBundle(name types.NamespacedName, kind string, cert *Certificate) *CertificateBundle {
 	return &CertificateBundle{
 		Name: name,
@@ -43,11 +41,11 @@ func NewCertificateBundle(name types.NamespacedName, kind string, cert *Certific
 	}
 }
 
-// validateTLS checks to make sure a ssl certificate key pair is valid
+// validateTLS checks to make sure a ssl certificate key pair is valid.
 func validateTLS(tlsCert, tlsPrivateKey []byte) error {
 	_, err := tls.X509KeyPair(tlsCert, tlsPrivateKey)
 	if err != nil {
-		return fmt.Errorf("TLS secret is invalid: %w", err)
+		return fmt.Errorf("tls secret is invalid: %w", err)
 	}
 
 	return nil
