@@ -24,11 +24,11 @@ type CertificateBundle struct {
 
 // Certificate houses the real certificate data that is sent to the configurator.
 type Certificate struct {
-	// TLSCert is the SSL certificate used to send to CA
+	// TLSCert is the SSL certificate used to send to CA.
 	TLSCert []byte
-	// TLSPrivateKey is the cryptographic key for encrpyting traffic during secure TLS
+	// TLSPrivateKey is the cryptographic key for encrpyting traffic during secure TLS.
 	TLSPrivateKey []byte
-	// CACert is the root certificate authority
+	// CACert is the root certificate authority.
 	CACert []byte
 }
 
