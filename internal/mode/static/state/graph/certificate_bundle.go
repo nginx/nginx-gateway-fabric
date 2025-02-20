@@ -11,7 +11,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// key for optional root certificate authority.
+// CAKey certificate key for optional root certificate authority.
 const CAKey = "ca.crt"
 
 // CertificateBundle is used to submit certificate data to nginx that is kubernetes aware.
