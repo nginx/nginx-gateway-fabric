@@ -56,7 +56,8 @@ type Deployment struct {
 	fileOverviews    []*pb.File
 	files            []File
 
-	Lock sync.RWMutex
+	FileLock sync.RWMutex
+	errLock  sync.RWMutex
 }
 
 // newDeployment returns a new Deployment object.
@@ -72,56 +73,94 @@ func (d *Deployment) GetBroadcaster() broadcast.Broadcaster {
 	return d.broadcaster
 }
 
-// GetFileOverviews returns the current list of fileOverviews and configVersion for the deployment.
-func (d *Deployment) GetFileOverviews() ([]*pb.File, string) {
-	d.Lock.RLock()
-	defer d.Lock.RUnlock()
+// SetLatestConfigError sets the latest config apply error for the deployment.
+func (d *Deployment) SetLatestConfigError(err error) {
+	d.errLock.Lock()
+	defer d.errLock.Unlock()
 
-	return d.fileOverviews, d.configVersion
+	d.latestConfigError = err
 }
 
-// GetNGINXPlusActions returns the current NGINX Plus API Actions for the deployment.
-func (d *Deployment) GetNGINXPlusActions() []*pb.NGINXPlusAction {
-	d.Lock.RLock()
-	defer d.Lock.RUnlock()
+// SetLatestUpstreamError sets the latest upstream update error for the deployment.
+func (d *Deployment) SetLatestUpstreamError(err error) {
+	d.errLock.Lock()
+	defer d.errLock.Unlock()
 
-	return d.nginxPlusActions
+	d.latestUpstreamError = err
 }
 
 // GetLatestConfigError gets the latest config apply error for the deployment.
 func (d *Deployment) GetLatestConfigError() error {
-	d.Lock.RLock()
-	defer d.Lock.RUnlock()
+	d.errLock.RLock()
+	defer d.errLock.RUnlock()
 
 	return d.latestConfigError
 }
 
 // GetLatestUpstreamError gets the latest upstream update error for the deployment.
 func (d *Deployment) GetLatestUpstreamError() error {
-	d.Lock.RLock()
-	defer d.Lock.RUnlock()
+	d.errLock.RLock()
+	defer d.errLock.RUnlock()
 
 	return d.latestUpstreamError
 }
 
+// SetPodErrorStatus sets the error status of a Pod in this Deployment if applying the config failed.
+func (d *Deployment) SetPodErrorStatus(pod string, err error) {
+	d.errLock.Lock()
+	defer d.errLock.Unlock()
+
+	d.podStatuses[pod] = err
+}
+
 // RemovePodStatus deletes a pod from the pod status map.
 func (d *Deployment) RemovePodStatus(podName string) {
-	d.Lock.Lock()
-	defer d.Lock.Unlock()
+	d.errLock.Lock()
+	defer d.errLock.Unlock()
 
 	delete(d.podStatuses, podName)
 }
 
+// GetConfigurationStatus returns the current config status for this Deployment. It combines
+// the most recent errors (if they exist) for all Pods in the Deployment into a single error.
+func (d *Deployment) GetConfigurationStatus() error {
+	d.errLock.RLock()
+	defer d.errLock.RUnlock()
+
+	errs := make([]error, 0, len(d.podStatuses))
+	for _, err := range d.podStatuses {
+		errs = append(errs, err)
+	}
+
+	if len(errs) == 1 {
+		return errs[0]
+	}
+
+	return errors.Join(errs...)
+}
+
 /*
 The following functions for the Deployment object are UNLOCKED, meaning that they are unsafe.
-Callers of these functions MUST ensure the lock is set before calling.
+Callers of these functions MUST ensure the FileLock is set before calling.
 
 These functions are called as part of the ConfigApply or APIRequest processes. These entire processes
 are locked by the caller, hence why the functions themselves do not set the locks.
 */
 
+// GetFileOverviews returns the current list of fileOverviews and configVersion for the deployment.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) GetFileOverviews() ([]*pb.File, string) {
+	return d.fileOverviews, d.configVersion
+}
+
+// GetNGINXPlusActions returns the current NGINX Plus API Actions for the deployment.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) GetNGINXPlusActions() []*pb.NGINXPlusAction {
+	return d.nginxPlusActions
+}
+
 // GetFile gets the requested file for the deployment and returns its contents.
-// The deployment MUST already be locked before calling this function.
+// The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) GetFile(name, hash string) []byte {
 	for _, file := range d.files {
 		if name == file.Meta.GetName() && hash == file.Meta.GetHash() {
@@ -133,7 +172,7 @@ func (d *Deployment) GetFile(name, hash string) []byte {
 }
 
 // SetFiles updates the nginx files and fileOverviews for the deployment and returns the message to send.
-// The deployment MUST already be locked before calling this function.
+// The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) SetFiles(files []File) broadcast.NginxAgentMessage {
 	d.files = files
 
@@ -167,43 +206,9 @@ func (d *Deployment) SetFiles(files []File) broadcast.NginxAgentMessage {
 
 // SetNGINXPlusActions updates the deployment's latest NGINX Plus Actions to perform if using NGINX Plus.
 // Used by a Subscriber when it first connects.
-// The deployment MUST already be locked before calling this function.
+// The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) SetNGINXPlusActions(actions []*pb.NGINXPlusAction) {
 	d.nginxPlusActions = actions
-}
-
-// SetPodErrorStatus sets the error status of a Pod in this Deployment if applying the config failed.
-// The deployment MUST already be locked before calling this function.
-func (d *Deployment) SetPodErrorStatus(pod string, err error) {
-	d.podStatuses[pod] = err
-}
-
-// SetLatestConfigError sets the latest config apply error for the deployment.
-// The deployment MUST already be locked before calling this function.
-func (d *Deployment) SetLatestConfigError(err error) {
-	d.latestConfigError = err
-}
-
-// SetLatestUpstreamError sets the latest upstream update error for the deployment.
-// The deployment MUST already be locked before calling this function.
-func (d *Deployment) SetLatestUpstreamError(err error) {
-	d.latestUpstreamError = err
-}
-
-// GetConfigurationStatus returns the current config status for this Deployment. It combines
-// the most recent errors (if they exist) for all Pods in the Deployment into a single error.
-// The deployment MUST already be locked before calling this function.
-func (d *Deployment) GetConfigurationStatus() error {
-	errs := make([]error, 0, len(d.podStatuses))
-	for _, err := range d.podStatuses {
-		errs = append(errs, err)
-	}
-
-	if len(errs) == 1 {
-		return errs[0]
-	}
-
-	return errors.Join(errs...)
 }
 
 //counterfeiter:generate . DeploymentStorer

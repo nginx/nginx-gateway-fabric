@@ -251,13 +251,13 @@ func (h *eventHandlerImpl) processStateAndBuildConfig(
 
 		h.setLatestConfiguration(&cfg)
 
-		deployment.Lock.Lock()
+		deployment.FileLock.Lock()
 		if h.cfg.plus {
 			configApplied = h.cfg.nginxUpdater.UpdateUpstreamServers(deployment, cfg)
 		} else {
 			configApplied = h.updateNginxConf(deployment, cfg)
 		}
-		deployment.Lock.Unlock()
+		deployment.FileLock.Unlock()
 	case state.ClusterStateChange:
 		h.version++
 		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version, h.cfg.plus)
@@ -269,9 +269,9 @@ func (h *eventHandlerImpl) processStateAndBuildConfig(
 
 		h.setLatestConfiguration(&cfg)
 
-		deployment.Lock.Lock()
+		deployment.FileLock.Lock()
 		configApplied = h.updateNginxConf(deployment, cfg)
-		deployment.Lock.Unlock()
+		deployment.FileLock.Unlock()
 	}
 
 	return configApplied
