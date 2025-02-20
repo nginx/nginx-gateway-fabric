@@ -447,6 +447,11 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			}
 			container.Lifecycle = containerSpec.Lifecycle
 			container.VolumeMounts = append(container.VolumeMounts, containerSpec.VolumeMounts...)
+
+			if containerSpec.Debug != nil && *containerSpec.Debug {
+				container.Command = append(container.Command, "/agent/entrypoint.sh")
+				container.Args = append(container.Args, "debug")
+			}
 			spec.Spec.Containers[0] = container
 		}
 	}
