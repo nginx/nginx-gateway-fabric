@@ -56,7 +56,7 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 			switch obj := e.Resource.(type) {
 			case *gatewayv1.Gateway:
 				h.store.updateGateway(obj)
-			case *appsv1.Deployment, *corev1.ServiceAccount, *corev1.ConfigMap:
+			case *appsv1.Deployment, *corev1.ServiceAccount, *corev1.ConfigMap, *corev1.Secret:
 				objLabels := labels.Set(obj.GetLabels())
 				if h.labelSelector.Matches(objLabels) {
 					gatewayName := objLabels.Get(controller.GatewayLabel)
@@ -93,7 +93,7 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 					logger.Error(err, "error deprovisioning nginx resources")
 				}
 				h.store.deleteGateway(e.NamespacedName)
-			case *appsv1.Deployment, *corev1.Service, *corev1.ServiceAccount, *corev1.ConfigMap:
+			case *appsv1.Deployment, *corev1.Service, *corev1.ServiceAccount, *corev1.ConfigMap, *corev1.Secret:
 				if err := h.reprovisionResources(ctx, e); err != nil {
 					logger.Error(err, "error re-provisioning nginx resources")
 				}
@@ -129,9 +129,9 @@ func (h *eventHandler) updateOrDeleteResources(
 
 	h.store.registerResourceInGatewayConfig(gatewayNSName, obj)
 
-	resourceName := controller.CreateNginxResourceName(gatewayNSName.Name, h.gcName)
 	resources := h.store.getNginxResourcesForGateway(gatewayNSName)
 	if resources.Gateway != nil {
+		resourceName := controller.CreateNginxResourceName(gatewayNSName.Name, h.gcName)
 		if err := h.provisioner.provisionNginx(
 			ctx,
 			resourceName,

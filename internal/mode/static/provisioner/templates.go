@@ -3,31 +3,31 @@ package provisioner
 import gotemplate "text/template"
 
 var (
-	mainTemplate = gotemplate.Must(gotemplate.New("main").Parse(mainTemplateText))
-	// mgmtTemplate  = gotemplate.Must(gotemplate.New("mgmt").Parse(mgmtTemplateText)).
+	mainTemplate  = gotemplate.Must(gotemplate.New("main").Parse(mainTemplateText))
+	mgmtTemplate  = gotemplate.Must(gotemplate.New("mgmt").Parse(mgmtTemplateText))
 	agentTemplate = gotemplate.Must(gotemplate.New("agent").Parse(agentTemplateText))
 )
 
 const mainTemplateText = `
 error_log stderr {{ .ErrorLevel }};`
 
-// const mgmtTemplateText = `mgmt {
-//     {{- if .Values.nginx.usage.endpoint }}
-//     usage_report endpoint={{ .Values.nginx.usage.endpoint }};
-//     {{- end }}
-//     {{- if .Values.nginx.usage.skipVerify }}
-//     ssl_verify off;
-//     {{- end }}
-//     {{- if .Values.nginx.usage.caSecretName }}
-//     ssl_trusted_certificate /etc/nginx/certs-bootstrap/ca.crt;
-//     {{- end }}
-//     {{- if .Values.nginx.usage.clientSSLSecretName }}
-//     ssl_certificate        /etc/nginx/certs-bootstrap/tls.crt;
-//     ssl_certificate_key    /etc/nginx/certs-bootstrap/tls.key;
-//     {{- end }}
-//     enforce_initial_report off;
-//     deployment_context /etc/nginx/main-includes/deployment_ctx.json;
-// }`
+const mgmtTemplateText = `mgmt {
+    {{- if .UsageEndpoint }}
+    usage_report endpoint={{ .UsageEndpoint }};
+    {{- end }}
+    {{- if .SkipVerify }}
+    ssl_verify off;
+    {{- end }}
+    {{- if .UsageCASecret }}
+    ssl_trusted_certificate /etc/nginx/certs-bootstrap/ca.crt;
+    {{- end }}
+    {{- if .UsageClientSSLSecret }}
+    ssl_certificate        /etc/nginx/certs-bootstrap/tls.crt;
+    ssl_certificate_key    /etc/nginx/certs-bootstrap/tls.key;
+    {{- end }}
+    enforce_initial_report off;
+    deployment_context /etc/nginx/main-includes/deployment_ctx.json;
+}`
 
 const agentTemplateText = `command:
     server:

@@ -80,6 +80,17 @@ func newEventLoop(
 				),
 			},
 		},
+		{
+			objectType: &corev1.Secret{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.GenerationChangedPredicate{},
+						nginxResourceLabelPredicate,
+					),
+				),
+			},
+		},
 	}
 
 	eventCh := make(chan interface{})
@@ -112,6 +123,7 @@ func newEventLoop(
 			&corev1.ServiceList{},
 			&corev1.ServiceAccountList{},
 			&corev1.ConfigMapList{},
+			&corev1.SecretList{},
 		},
 	)
 

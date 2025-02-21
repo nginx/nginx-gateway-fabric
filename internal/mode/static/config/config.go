@@ -32,6 +32,8 @@ type Config struct {
 	ConfigName string
 	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
 	GatewayClassName string
+	// NginxDockerSecretNames are the names of any Docker registry Secrets for the NGINX container.
+	NginxDockerSecretNames []string
 	// LeaderElection contains the configuration for leader election.
 	LeaderElection LeaderElectionConfig
 	// ProductTelemetryConfig contains the configuration for collecting product telemetry.

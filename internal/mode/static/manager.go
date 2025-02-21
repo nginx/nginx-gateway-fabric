@@ -201,13 +201,15 @@ func StartManager(cfg config.Config) error {
 		ctx,
 		mgr,
 		provisioner.Config{
-			DeploymentStore:  nginxUpdater.NginxDeployments,
-			StatusQueue:      statusQueue,
-			Logger:           cfg.Logger.WithName("provisioner"),
-			EventRecorder:    recorder,
-			GatewayPodConfig: cfg.GatewayPodConfig,
-			GCName:           cfg.GatewayClassName,
-			Plus:             cfg.Plus,
+			DeploymentStore:        nginxUpdater.NginxDeployments,
+			StatusQueue:            statusQueue,
+			Logger:                 cfg.Logger.WithName("provisioner"),
+			EventRecorder:          recorder,
+			GatewayPodConfig:       &cfg.GatewayPodConfig,
+			GCName:                 cfg.GatewayClassName,
+			Plus:                   cfg.Plus,
+			NginxDockerSecretNames: cfg.NginxDockerSecretNames,
+			PlusUsageConfig:        &cfg.UsageReportConfig,
 		},
 	)
 	if err != nil {
@@ -265,6 +267,7 @@ func StartManager(cfg config.Config) error {
 	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
 		groupStatusUpdater.Enable,
 		nginxProvisioner.Enable,
+		eventHandler.enable,
 	})); err != nil {
 		return fmt.Errorf("cannot register functions that get called after Pod becomes leader: %w", err)
 	}
