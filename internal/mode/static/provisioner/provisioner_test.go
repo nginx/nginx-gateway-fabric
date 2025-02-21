@@ -208,6 +208,7 @@ func TestEnable(t *testing.T) {
 	}
 	provisioner, fakeClient, _ := defaultNginxProvisioner(dep)
 	provisioner.setResourceToDelete(types.NamespacedName{Name: "gw", Namespace: "default"})
+	provisioner.leader = false
 
 	provisioner.Enable(context.TODO())
 	g.Expect(provisioner.isLeader()).To(BeTrue())
