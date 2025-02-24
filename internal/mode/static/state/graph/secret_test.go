@@ -93,6 +93,19 @@ func TestSecretResolver(t *testing.T) {
 			Type: apiv1.SecretTypeTLS,
 		}
 
+		validSecret3 = &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "secret-3",
+			},
+			Data: map[string][]byte{
+				apiv1.TLSCertKey:       cert,
+				apiv1.TLSPrivateKeyKey: key,
+				CAKey:                  []byte(caBlock),
+			},
+			Type: apiv1.SecretTypeTLS,
+		}
+
 		invalidSecretType = &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "test",
@@ -129,6 +142,19 @@ func TestSecretResolver(t *testing.T) {
 			Type: apiv1.SecretTypeTLS,
 		}
 
+		invalidSecretCaCert = &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "invalid-ca-key",
+			},
+			Data: map[string][]byte{
+				apiv1.TLSCertKey:       cert,
+				apiv1.TLSPrivateKeyKey: key,
+				CAKey:                  invalidCert,
+			},
+			Type: apiv1.SecretTypeTLS,
+		}
+
 		secretNotExistNsName = types.NamespacedName{
 			Namespace: "test",
 			Name:      "not-exist",
@@ -137,11 +163,13 @@ func TestSecretResolver(t *testing.T) {
 
 	resolver := newSecretResolver(
 		map[types.NamespacedName]*apiv1.Secret{
-			client.ObjectKeyFromObject(validSecret1):      validSecret1,
-			client.ObjectKeyFromObject(validSecret2):      validSecret2, // we're not going to resolve it
-			client.ObjectKeyFromObject(invalidSecretType): invalidSecretType,
-			client.ObjectKeyFromObject(invalidSecretCert): invalidSecretCert,
-			client.ObjectKeyFromObject(invalidSecretKey):  invalidSecretKey,
+			client.ObjectKeyFromObject(validSecret1):        validSecret1,
+			client.ObjectKeyFromObject(validSecret2):        validSecret2, // we're not going to resolve it
+			client.ObjectKeyFromObject(validSecret3):        validSecret3,
+			client.ObjectKeyFromObject(invalidSecretType):   invalidSecretType,
+			client.ObjectKeyFromObject(invalidSecretCert):   invalidSecretCert,
+			client.ObjectKeyFromObject(invalidSecretKey):    invalidSecretKey,
+			client.ObjectKeyFromObject(invalidSecretCaCert): invalidSecretCaCert,
 		})
 
 	tests := []struct {
@@ -156,6 +184,10 @@ func TestSecretResolver(t *testing.T) {
 		{
 			name:   "valid secret, again",
 			nsname: client.ObjectKeyFromObject(validSecret1),
+		},
+		{
+			name:   "valid secret, with ca certificate",
+			nsname: client.ObjectKeyFromObject(validSecret3),
 		},
 		{
 			name:           "doesn't exist",
@@ -175,12 +207,17 @@ func TestSecretResolver(t *testing.T) {
 		{
 			name:           "invalid secret cert",
 			nsname:         client.ObjectKeyFromObject(invalidSecretCert),
-			expectedErrMsg: "TLS secret is invalid: x509: malformed certificate",
+			expectedErrMsg: "tls secret is invalid: x509: malformed certificate",
 		},
 		{
 			name:           "invalid secret key",
 			nsname:         client.ObjectKeyFromObject(invalidSecretKey),
-			expectedErrMsg: "TLS secret is invalid: tls: failed to parse private key",
+			expectedErrMsg: "tls secret is invalid: tls: failed to parse private key",
+		},
+		{
+			name:           "invalid secret ca cert",
+			nsname:         client.ObjectKeyFromObject(invalidSecretCaCert),
+			expectedErrMsg: "failed to validate certificate: x509: malformed certificate",
 		},
 	}
 
@@ -201,15 +238,43 @@ func TestSecretResolver(t *testing.T) {
 	expectedResolved := map[types.NamespacedName]*Secret{
 		client.ObjectKeyFromObject(validSecret1): {
 			Source: validSecret1,
+			CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(validSecret1), "Secret", &Certificate{
+				TLSCert:       cert,
+				TLSPrivateKey: key,
+			}),
+		},
+		client.ObjectKeyFromObject(validSecret3): {
+			Source: validSecret3,
+			CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(validSecret3), "Secret", &Certificate{
+				TLSCert:       cert,
+				TLSPrivateKey: key,
+				CACert:        []byte(caBlock),
+			}),
 		},
 		client.ObjectKeyFromObject(invalidSecretType): {
 			Source: invalidSecretType,
 		},
 		client.ObjectKeyFromObject(invalidSecretCert): {
 			Source: invalidSecretCert,
+			CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(invalidSecretCert), "Secret", &Certificate{
+				TLSCert:       invalidCert,
+				TLSPrivateKey: key,
+			}),
 		},
 		client.ObjectKeyFromObject(invalidSecretKey): {
 			Source: invalidSecretKey,
+			CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(invalidSecretKey), "Secret", &Certificate{
+				TLSCert:       cert,
+				TLSPrivateKey: invalidKey,
+			}),
+		},
+		client.ObjectKeyFromObject(invalidSecretCaCert): {
+			Source: invalidSecretCaCert,
+			CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(invalidSecretCaCert), "Secret", &Certificate{
+				TLSCert:       cert,
+				TLSPrivateKey: key,
+				CACert:        invalidCert,
+			}),
 		},
 		secretNotExistNsName: {
 			Source: nil,

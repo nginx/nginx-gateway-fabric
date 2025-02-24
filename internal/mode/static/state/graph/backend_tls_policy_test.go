@@ -75,7 +75,7 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, "test", test.gateway)
+			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, nil, "test", test.gateway)
 
 			g.Expect(processed).To(Equal(test.expected))
 		})
@@ -83,6 +83,7 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 }
 
 func TestValidateBackendTLSPolicy(t *testing.T) {
+	const testSecretName string = "test-secret"
 	targetRefNormalCase := []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
 		{
 			LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
@@ -96,6 +97,14 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		{
 			Kind:  "ConfigMap",
 			Name:  "configmap",
+			Group: "",
+		},
+	}
+
+	localObjectRefSecretNormalCase := []gatewayv1.LocalObjectReference{
+		{
+			Kind:  "Secret",
+			Name:  gatewayv1.ObjectName(testSecretName),
 			Group: "",
 		},
 	}
@@ -190,6 +199,23 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 					TargetRefs: targetRefNormalCase,
 					Validation: v1alpha3.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefNormalCase,
+						Hostname:          "foo.test.com",
+					},
+				},
+			},
+			isValid: true,
+		},
+		{
+			name: "normal case with ca cert ref secrets",
+			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tls-policy",
+					Namespace: "test",
+				},
+				Spec: v1alpha3.BackendTLSPolicySpec{
+					TargetRefs: targetRefNormalCase,
+					Validation: v1alpha3.BackendTLSPolicyValidation{
+						CACertificateRefs: localObjectRefSecretNormalCase,
 						Hostname:          "foo.test.com",
 					},
 				},
@@ -390,7 +416,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 				Namespace: "test",
 			},
 			Data: map[string]string{
-				"ca.crt": caBlock,
+				CAKey: caBlock,
 			},
 		},
 		{Namespace: "test", Name: "invalid"}: {
@@ -399,26 +425,53 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 				Namespace: "test",
 			},
 			Data: map[string]string{
-				"ca.crt": "invalid",
+				CAKey: "invalid",
+			},
+		},
+	}
+
+	secretMaps := map[types.NamespacedName]*v1.Secret{
+		{Namespace: "test", Name: testSecretName}: {
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      testSecretName,
+				Namespace: "test",
+			},
+			Type: v1.SecretTypeTLS,
+			Data: map[string][]byte{
+				v1.TLSCertKey:       cert,
+				v1.TLSPrivateKeyKey: key,
+				CAKey:               []byte(caBlock),
+			},
+		},
+		{Namespace: "test", Name: "invalid-secret"}: {
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "invalid-secret",
+				Namespace: "test",
+			},
+			Data: map[string][]byte{
+				v1.TLSCertKey:       invalidCert,
+				v1.TLSPrivateKeyKey: invalidKey,
+				CAKey:               []byte("invalid-cert"),
 			},
 		},
 	}
 
 	configMapResolver := newConfigMapResolver(configMaps)
+	secretMapResolver := newSecretResolver(secretMaps)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			valid, ignored, conds := validateBackendTLSPolicy(test.tlsPolicy, configMapResolver, "test")
+			valid, ignored, conds := validateBackendTLSPolicy(test.tlsPolicy, configMapResolver, secretMapResolver, "test")
 
-			g.Expect(valid).To(Equal(test.isValid))
-			g.Expect(ignored).To(Equal(test.ignored))
 			if !test.isValid && !test.ignored {
 				g.Expect(conds).To(HaveLen(1))
 			} else {
 				g.Expect(conds).To(BeEmpty())
 			}
+			g.Expect(valid).To(Equal(test.isValid))
+			g.Expect(ignored).To(Equal(test.ignored))
 		})
 	}
 }

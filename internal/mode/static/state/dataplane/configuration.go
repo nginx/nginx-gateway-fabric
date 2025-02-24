@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 
-	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -70,13 +69,16 @@ func BuildConfiguration(
 		BackendGroups:         backendGroups,
 		SSLKeyPairs:           buildSSLKeyPairs(g.ReferencedSecrets, g.Gateway.Listeners),
 		Version:               configVersion,
-		CertBundles:           buildCertBundles(g.ReferencedCaCertConfigMaps, backendGroups),
-		Telemetry:             buildTelemetry(g),
-		BaseHTTPConfig:        baseHTTPConfig,
-		Logging:               buildLogging(g),
-		NginxPlus:             nginxPlus,
-		MainSnippets:          buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
-		AuxiliarySecrets:      buildAuxiliarySecrets(g.PlusSecrets),
+		CertBundles: buildCertBundles(
+			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
+			backendGroups,
+		),
+		Telemetry:        buildTelemetry(g),
+		BaseHTTPConfig:   baseHTTPConfig,
+		Logging:          buildLogging(g),
+		NginxPlus:        nginxPlus,
+		MainSnippets:     buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
+		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
 	}
 
 	return config
@@ -226,10 +228,10 @@ func buildSSLKeyPairs(
 			id := generateSSLKeyPairID(*l.ResolvedSecret)
 			secret := secrets[*l.ResolvedSecret]
 			// The Data map keys are guaranteed to exist by the graph package.
-			// the Source field is guaranteed to be non-nil by the graph package.
+			// the CertBundle field is guaranteed to be non-nil by the graph package.
 			keyPairs[id] = SSLKeyPair{
-				Cert: secret.Source.Data[apiv1.TLSCertKey],
-				Key:  secret.Source.Data[apiv1.TLSPrivateKeyKey],
+				Cert: secret.CertBundle.Cert.TLSCert,
+				Key:  secret.CertBundle.Cert.TLSPrivateKey,
 			}
 		}
 	}
@@ -237,8 +239,29 @@ func buildSSLKeyPairs(
 	return keyPairs
 }
 
+func buildRefCertificateBundles(
+	secrets map[types.NamespacedName]*graph.Secret,
+	configMaps map[types.NamespacedName]*graph.CaCertConfigMap,
+) []graph.CertificateBundle {
+	bundles := []graph.CertificateBundle{}
+
+	for _, secret := range secrets {
+		if secret.CertBundle != nil {
+			bundles = append(bundles, *secret.CertBundle)
+		}
+	}
+
+	for _, configMap := range configMaps {
+		if configMap.CertBundle != nil {
+			bundles = append(bundles, *configMap.CertBundle)
+		}
+	}
+
+	return bundles
+}
+
 func buildCertBundles(
-	caCertConfigMaps map[types.NamespacedName]*graph.CaCertConfigMap,
+	refCertBundles []graph.CertificateBundle,
 	backendGroups []BackendGroup,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
@@ -260,18 +283,16 @@ func buildCertBundles(
 		}
 	}
 
-	for cmName, cm := range caCertConfigMaps {
-		id := generateCertBundleID(cmName)
+	for _, bundle := range refCertBundles {
+		id := generateCertBundleID(bundle.Name)
 		if _, exists := refByBG[id]; exists {
-			if cm.CACert != nil || len(cm.CACert) > 0 {
-				// the cert could be base64 encoded or plaintext
-				data := make([]byte, base64.StdEncoding.DecodedLen(len(cm.CACert)))
-				_, err := base64.StdEncoding.Decode(data, cm.CACert)
-				if err != nil {
-					data = cm.CACert
-				}
-				bundles[id] = data
+			// the cert could be base64 encoded or plaintext
+			data := make([]byte, base64.StdEncoding.DecodedLen(len(bundle.Cert.CACert)))
+			_, err := base64.StdEncoding.Decode(data, bundle.Cert.CACert)
+			if err != nil {
+				data = bundle.Cert.CACert
 			}
+			bundles[id] = data
 		}
 	}
 
@@ -779,11 +800,11 @@ func generateSSLKeyPairID(secret types.NamespacedName) SSLKeyPairID {
 	return SSLKeyPairID(fmt.Sprintf("ssl_keypair_%s_%s", secret.Namespace, secret.Name))
 }
 
-// generateCertBundleID generates an ID for the certificate bundle based on the ConfigMap namespaced name.
+// generateCertBundleID generates an ID for the certificate bundle based on the ConfigMap/Secret namespaced name.
 // It is guaranteed to be unique per unique namespaced name.
 // The ID is safe to use as a file name.
-func generateCertBundleID(configMap types.NamespacedName) CertBundleID {
-	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", configMap.Namespace, configMap.Name))
+func generateCertBundleID(caCertRef types.NamespacedName) CertBundleID {
+	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", caCertRef.Namespace, caCertRef.Name))
 }
 
 // buildTelemetry generates the Otel configuration.
