@@ -6,16 +6,16 @@ NGINX Plus: true
 
 NGINX Gateway Fabric:
 
-- Commit: e7d217a8f01fb3c8fc4507ef6f0e7feead667f20
-- Date: 2024-11-14T18:42:55Z
+- Commit: 9a7a618dab5ed0eee09063de60d80bf0fb76900a
+- Date: 2025-02-14T18:44:35Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.30.5-gke.1443001
+- k8s version: v1.31.5-gke.1023000
 - vCPUs per node: 16
-- RAM per node: 65853972Ki
+- RAM per node: 65851368Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -23,9 +23,9 @@ GKE Cluster:
 ## Test1: Running latte path based routing
 
 ```text
-Requests      [total, rate, throughput]         30000, 1000.01, 999.98
-Duration      [total, attack, wait]             30.001s, 30s, 852.811µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  484.762µs, 663.414µs, 647.232µs, 739.971µs, 776.515µs, 867.279µs, 19.761ms
+Requests      [total, rate, throughput]         30000, 1000.01, 999.99
+Duration      [total, attack, wait]             30s, 30s, 618.171µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  477.878µs, 647.929µs, 630.059µs, 730.862µs, 781.842µs, 926.293µs, 12.11ms
 Bytes In      [total, mean]                     4800000, 160.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
@@ -36,9 +36,9 @@ Error Set:
 ## Test2: Running coffee header based routing
 
 ```text
-Requests      [total, rate, throughput]         30000, 1000.04, 1000.02
-Duration      [total, attack, wait]             30s, 29.999s, 592.984µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  532.501µs, 697.491µs, 682.822µs, 782.979µs, 820.727µs, 919.977µs, 11.809ms
+Requests      [total, rate, throughput]         30000, 1000.03, 1000.01
+Duration      [total, attack, wait]             30s, 29.999s, 624.611µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  500.184µs, 680.143µs, 657.594µs, 767.853µs, 818.249µs, 1.001ms, 12.545ms
 Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
@@ -50,8 +50,8 @@ Error Set:
 
 ```text
 Requests      [total, rate, throughput]         30000, 1000.03, 1000.01
-Duration      [total, attack, wait]             30s, 29.999s, 757.242µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  522.486µs, 706.577µs, 693.391µs, 796.96µs, 837.354µs, 944.635µs, 9.484ms
+Duration      [total, attack, wait]             30s, 29.999s, 654.862µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  511.996µs, 683.306µs, 662.733µs, 775.319µs, 832.514µs, 996.46µs, 12.457ms
 Bytes In      [total, mean]                     5070000, 169.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
@@ -62,9 +62,9 @@ Error Set:
 ## Test4: Running tea GET method based routing
 
 ```text
-Requests      [total, rate, throughput]         30000, 1000.00, 999.98
-Duration      [total, attack, wait]             30.001s, 30s, 793.958µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  515.143µs, 694.579µs, 679.924µs, 783.488µs, 823.079µs, 935.749µs, 8.619ms
+Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
+Duration      [total, attack, wait]             30s, 29.999s, 681.845µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  487.83µs, 680.241µs, 652.959µs, 764.456µs, 815.077µs, 996.309µs, 21.867ms
 Bytes In      [total, mean]                     4740000, 158.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
@@ -75,9 +75,9 @@ Error Set:
 ## Test5: Running tea POST method based routing
 
 ```text
-Requests      [total, rate, throughput]         30000, 1000.02, 1000.00
-Duration      [total, attack, wait]             30s, 29.999s, 755.564µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  524.265µs, 684.282µs, 671.402µs, 770.187µs, 806.135µs, 906.279µs, 9.069ms
+Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
+Duration      [total, attack, wait]             30s, 29.999s, 653.708µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  501.209µs, 675.702µs, 655.411µs, 762.813µs, 812.689µs, 974.489µs, 12.214ms
 Bytes In      [total, mean]                     4740000, 158.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
