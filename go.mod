@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	github.com/go-kit/log v0.2.1
 	github.com/go-logr/logr v1.4.2
-	github.com/google/go-cmp v0.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/maxbrunsfeld/counterfeiter/v6 v6.11.2
 	github.com/nginx/telemetry-exporter v0.1.3
 	github.com/nginxinc/nginx-plus-go-client v1.3.0
