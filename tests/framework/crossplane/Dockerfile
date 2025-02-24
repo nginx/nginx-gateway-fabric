@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.14
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /
 ARG DIR=tests/framework/crossplane

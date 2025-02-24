@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.14
-FROM golang:1.23 AS builder
+FROM golang:1.24 AS builder
 
 WORKDIR /go/src/github.com/nginx/nginx-gateway-fabric
 
@@ -9,7 +9,7 @@ RUN go mod download
 COPY . /go/src/github.com/nginx/nginx-gateway-fabric
 RUN make build
 
-FROM golang:1.23 AS ca-certs-provider
+FROM golang:1.24 AS ca-certs-provider
 
 FROM alpine:3.21 AS capabilizer
 RUN apk add --no-cache libcap
