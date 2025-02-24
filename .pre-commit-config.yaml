@@ -27,19 +27,19 @@ repos:
         exclude: (^examples/|^docs/|.*_test.go$)
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.23.3
+    rev: v8.24.0
     hooks:
       - id: gitleaks
 
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: v3.5.0
+    rev: v3.5.1
     hooks:
       - id: prettier
         types:
           - javascript
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: v1.64.2
+    rev: v1.64.5
     hooks:
       - id: golangci-lint-full
         name: golangci-lint-root

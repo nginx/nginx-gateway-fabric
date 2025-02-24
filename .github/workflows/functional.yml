@@ -73,14 +73,14 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
         with:
-          version: v2.6.1 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.7.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           args: build --single-target --snapshot --clean
         env:
           TELEMETRY_ENDPOINT: otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317
           TELEMETRY_ENDPOINT_INSECURE: "true"
 
       - name: Build NGF Docker Image
-        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991 # v6.13.0
+        uses: docker/build-push-action@0adf9959216b96bec444f325f1e493d4aa344497 # v6.14.0
         with:
           file: build/Dockerfile
           tags: ${{ steps.ngf-meta.outputs.tags }}
@@ -91,7 +91,7 @@ jobs:
           target: goreleaser
 
       - name: Build NGINX Docker Image
-        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991 # v6.13.0
+        uses: docker/build-push-action@0adf9959216b96bec444f325f1e493d4aa344497 # v6.14.0
         with:
           file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || ''}}
           tags: ${{ steps.nginx-meta.outputs.tags }}
@@ -112,7 +112,7 @@ jobs:
 
       - name: Install cloud-provider-kind
         run: |
-          CLOUD_PROVIDER_KIND_VERSION=v0.5.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
+          CLOUD_PROVIDER_KIND_VERSION=v0.6.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
           go install sigs.k8s.io/cloud-provider-kind@${CLOUD_PROVIDER_KIND_VERSION}
 
       - name: Run cloud-provider-kind

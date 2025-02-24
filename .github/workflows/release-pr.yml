@@ -49,14 +49,6 @@ jobs:
       - name: Find and Replace
         uses: jacobtomlinson/gha-find-replace@f1069b438f125e5395d84d1c6fd3b559a7880cb5 # 3.0.5
         with:
-          find: ${{ steps.vars.outputs.current_version }}
-          replace: ${{ inputs.version }}
-          include: "site/content/**/*.md"
-          regex: false
-
-      - name: Find and Replace
-        uses: jacobtomlinson/gha-find-replace@f1069b438f125e5395d84d1c6fd3b559a7880cb5 # 3.0.5
-        with:
           find: "edge"
           replace: ${{ inputs.version }}
           include: "charts/nginx-gateway-fabric/*.yaml"
