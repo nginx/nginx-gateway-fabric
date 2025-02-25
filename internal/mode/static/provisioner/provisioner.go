@@ -41,13 +41,17 @@ type Provisioner interface {
 
 // Config is the configuration for the Provisioner.
 type Config struct {
-	DeploymentStore  *agent.DeploymentStore
-	StatusQueue      *status.Queue
-	Logger           logr.Logger
-	GatewayPodConfig config.GatewayPodConfig
-	EventRecorder    record.EventRecorder
-	GCName           string
-	Plus             bool
+	GCName string
+
+	DeploymentStore        agent.DeploymentStorer
+	StatusQueue            *status.Queue
+	GatewayPodConfig       *config.GatewayPodConfig
+	PlusUsageConfig        *config.UsageReportConfig
+	EventRecorder          record.EventRecorder
+	Logger                 logr.Logger
+	NginxDockerSecretNames []string
+
+	Plus bool
 }
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.
@@ -70,7 +74,13 @@ func NewNginxProvisioner(
 	mgr manager.Manager,
 	cfg Config,
 ) (*NginxProvisioner, *events.EventLoop, error) {
-	store := newStore()
+	var jwtSecretName, caSecretName, clientSSLSecretName string
+	if cfg.Plus && cfg.PlusUsageConfig != nil {
+		jwtSecretName = cfg.PlusUsageConfig.SecretName
+		caSecretName = cfg.PlusUsageConfig.CASecretName
+		clientSSLSecretName = cfg.PlusUsageConfig.ClientSSLSecretName
+	}
+	store := newStore(cfg.NginxDockerSecretNames, jwtSecretName, caSecretName, clientSSLSecretName)
 
 	selector := metav1.LabelSelector{
 		MatchLabels: map[string]string{
@@ -150,7 +160,10 @@ func (p *NginxProvisioner) provisionNginx(
 		return nil
 	}
 
-	objects := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	if err != nil {
+		return fmt.Errorf("error provisioning nginx resources :%w", err)
+	}
 
 	p.cfg.Logger.Info(
 		"Creating/Updating nginx resources",
@@ -194,10 +207,6 @@ func (p *NginxProvisioner) provisionNginx(
 		}
 		cancel()
 
-		if res != controllerutil.OperationResultCreated && res != controllerutil.OperationResultUpdated {
-			continue
-		}
-
 		switch o := obj.(type) {
 		case *appsv1.Deployment:
 			deploymentObj = o
@@ -209,6 +218,10 @@ func (p *NginxProvisioner) provisionNginx(
 				strings.Contains(obj.GetName(), nginxAgentConfigMapNameSuffix) {
 				agentConfigMapUpdated = true
 			}
+		}
+
+		if res != controllerutil.OperationResultCreated && res != controllerutil.OperationResultUpdated {
+			continue
 		}
 
 		result := cases.Title(language.English, cases.Compact).String(string(res))
@@ -259,7 +272,11 @@ func (p *NginxProvisioner) reprovisionNginx(
 	if !p.isLeader() {
 		return nil
 	}
-	objects := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+
+	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	if err != nil {
+		return fmt.Errorf("error provisioning nginx resources :%w", err)
+	}
 
 	p.cfg.Logger.Info(
 		"Re-creating nginx resources",
@@ -287,36 +304,34 @@ func (p *NginxProvisioner) reprovisionNginx(
 }
 
 func (p *NginxProvisioner) deprovisionNginx(ctx context.Context, gatewayNSName types.NamespacedName) error {
-	if !p.isLeader() {
-		return nil
-	}
-
-	p.cfg.Logger.Info(
-		"Removing nginx resources for Gateway",
-		"name", gatewayNSName.Name,
-		"namespace", gatewayNSName.Namespace,
-	)
-
 	deploymentNSName := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(gatewayNSName.Name, p.cfg.GCName),
 		Namespace: gatewayNSName.Namespace,
 	}
 
-	objects := p.buildNginxResourceObjectsForDeletion(deploymentNSName)
+	if p.isLeader() {
+		p.cfg.Logger.Info(
+			"Removing nginx resources for Gateway",
+			"name", gatewayNSName.Name,
+			"namespace", gatewayNSName.Namespace,
+		)
 
-	createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+		objects := p.buildNginxResourceObjectsForDeletion(deploymentNSName)
 
-	for _, obj := range objects {
-		if err := p.k8sClient.Delete(createCtx, obj); err != nil && !apierrors.IsNotFound(err) {
-			p.cfg.EventRecorder.Eventf(
-				obj,
-				corev1.EventTypeWarning,
-				"DeleteFailed",
-				"Failed to delete nginx resource: %s",
-				err.Error(),
-			)
-			return err
+		createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+
+		for _, obj := range objects {
+			if err := p.k8sClient.Delete(createCtx, obj); err != nil && !apierrors.IsNotFound(err) {
+				p.cfg.EventRecorder.Eventf(
+					obj,
+					corev1.EventTypeWarning,
+					"DeleteFailed",
+					"Failed to delete nginx resource: %s",
+					err.Error(),
+				)
+				return err
+			}
 		}
 	}
 
@@ -335,6 +350,10 @@ func (p *NginxProvisioner) RegisterGateway(
 	gateway *graph.Gateway,
 	resourceName string,
 ) error {
+	if !p.isLeader() {
+		return nil
+	}
+
 	gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
 	if updated := p.store.registerResourceInGatewayConfig(gatewayNSName, gateway); !updated {
 		return nil
