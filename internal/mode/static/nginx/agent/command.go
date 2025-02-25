@@ -34,11 +34,10 @@ const connectionWaitTimeout = 30 * time.Second
 // commandService handles the connection and subscription to the data plane agent.
 type commandService struct {
 	pb.CommandServiceServer
-	nginxDeployments *DeploymentStore
-	statusQueue      *status.Queue
-	connTracker      agentgrpc.ConnectionsTracker
-	k8sReader        client.Reader
-	// TODO(sberman): all logs are at Info level right now. Adjust appropriately.
+	nginxDeployments  *DeploymentStore
+	statusQueue       *status.Queue
+	connTracker       agentgrpc.ConnectionsTracker
+	k8sReader         client.Reader
 	logger            logr.Logger
 	connectionTimeout time.Duration
 }
@@ -144,13 +143,9 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	go msgr.Run(ctx)
 
 	// apply current config before starting event loop
-	deployment.Lock.RLock()
 	if err := cs.setInitialConfig(ctx, deployment, conn, msgr); err != nil {
-		deployment.Lock.RUnlock()
-
 		return err
 	}
-	deployment.Lock.RUnlock()
 
 	// subscribe to the deployment broadcaster to get file updates
 	broadcaster := deployment.GetBroadcaster()
@@ -255,13 +250,15 @@ func (cs *commandService) waitForConnection(
 }
 
 // setInitialConfig gets the initial configuration for this connection and applies it.
-// The caller MUST lock the deployment before calling this.
 func (cs *commandService) setInitialConfig(
 	ctx context.Context,
 	deployment *Deployment,
 	conn *agentgrpc.Connection,
 	msgr messenger.Messenger,
 ) error {
+	deployment.FileLock.Lock()
+	defer deployment.FileLock.Unlock()
+
 	fileOverviews, configVersion := deployment.GetFileOverviews()
 	if err := msgr.Send(ctx, buildRequest(fileOverviews, conn.InstanceID, configVersion)); err != nil {
 		cs.logAndSendErrorStatus(deployment, conn, err)
@@ -420,7 +417,7 @@ func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.Mana
 }
 
 func (cs *commandService) getPodOwner(podName string) (types.NamespacedName, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	var pods v1.PodList
@@ -451,12 +448,25 @@ func (cs *commandService) getPodOwner(podName string) (types.NamespacedName, err
 	}
 
 	var replicaSet appsv1.ReplicaSet
-	if err := cs.k8sReader.Get(
+	var replicaSetErr error
+	if err := wait.PollUntilContextCancel(
 		ctx,
-		types.NamespacedName{Namespace: pod.Namespace, Name: podOwnerRefs[0].Name},
-		&replicaSet,
+		500*time.Millisecond,
+		true, /* poll immediately */
+		func(ctx context.Context) (bool, error) {
+			if err := cs.k8sReader.Get(
+				ctx,
+				types.NamespacedName{Namespace: pod.Namespace, Name: podOwnerRefs[0].Name},
+				&replicaSet,
+			); err != nil {
+				replicaSetErr = err
+				return false, nil //nolint:nilerr // error is returned at the end
+			}
+
+			return true, nil
+		},
 	); err != nil {
-		return types.NamespacedName{}, fmt.Errorf("failed to get nginx Pod's ReplicaSet: %w", err)
+		return types.NamespacedName{}, fmt.Errorf("failed to get nginx Pod's ReplicaSet: %w", replicaSetErr)
 	}
 
 	replicaOwnerRefs := replicaSet.GetOwnerReferences()

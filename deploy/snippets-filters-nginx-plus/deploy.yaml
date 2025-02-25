@@ -207,6 +207,7 @@ spec:
         - --gatewayclass=nginx
         - --config=nginx-gateway-config
         - --service=nginx-gateway
+        - --nginx-docker-secret=nginx-plus-registry-secret
         - --nginx-plus
         - --usage-report-secret=nplus-license
         - --metrics-port=9113
