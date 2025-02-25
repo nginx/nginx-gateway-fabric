@@ -1,9 +1,12 @@
 package provisioner
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"strconv"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,11 +42,27 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	resourceName string,
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
-) []client.Object {
-	// TODO(sberman): handle nginx plus config
-
+) ([]client.Object, error) {
 	ngxIncludesConfigMapName := controller.CreateNginxResourceName(resourceName, nginxIncludesConfigMapNameSuffix)
 	ngxAgentConfigMapName := controller.CreateNginxResourceName(resourceName, nginxAgentConfigMapNameSuffix)
+
+	var jwtSecretName, caSecretName, clientSSLSecretName string
+	if p.cfg.Plus {
+		jwtSecretName = controller.CreateNginxResourceName(resourceName, p.cfg.PlusUsageConfig.SecretName)
+		if p.cfg.PlusUsageConfig.CASecretName != "" {
+			caSecretName = controller.CreateNginxResourceName(resourceName, p.cfg.PlusUsageConfig.CASecretName)
+		}
+		if p.cfg.PlusUsageConfig.ClientSSLSecretName != "" {
+			clientSSLSecretName = controller.CreateNginxResourceName(resourceName, p.cfg.PlusUsageConfig.ClientSSLSecretName)
+		}
+	}
+
+	// map key is the new name, value is the original name
+	dockerSecretNames := make(map[string]string)
+	for _, name := range p.cfg.NginxDockerSecretNames {
+		newName := controller.CreateNginxResourceName(resourceName, name)
+		dockerSecretNames[newName] = name
+	}
 
 	selectorLabels := make(map[string]string)
 	maps.Copy(selectorLabels, p.baseLabelSelector.MatchLabels)
@@ -72,11 +91,21 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		Annotations: annotations,
 	}
 
+	secrets, err := p.buildNginxSecrets(
+		objectMeta,
+		dockerSecretNames,
+		jwtSecretName,
+		caSecretName,
+		clientSSLSecretName,
+	)
+
 	configmaps := p.buildNginxConfigMaps(
 		objectMeta,
 		nProxyCfg,
 		ngxIncludesConfigMapName,
 		ngxAgentConfigMapName,
+		caSecretName != "",
+		clientSSLSecretName != "",
 	)
 
 	serviceAccount := &corev1.ServiceAccount{
@@ -96,6 +125,10 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ngxAgentConfigMapName,
 		ports,
 		selectorLabels,
+		dockerSecretNames,
+		jwtSecretName,
+		caSecretName,
+		clientSSLSecretName,
 	)
 
 	// order to install resources:
@@ -106,11 +139,114 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// service
 	// deployment/daemonset
 
-	objects := make([]client.Object, 0, len(configmaps)+3)
+	objects := make([]client.Object, 0, len(configmaps)+len(secrets)+3)
+	objects = append(objects, secrets...)
 	objects = append(objects, configmaps...)
 	objects = append(objects, serviceAccount, service, deployment)
 
-	return objects
+	return objects, err
+}
+
+func (p *NginxProvisioner) buildNginxSecrets(
+	objectMeta metav1.ObjectMeta,
+	dockerSecretNames map[string]string,
+	jwtSecretName string,
+	caSecretName string,
+	clientSSLSecretName string,
+) ([]client.Object, error) {
+	var secrets []client.Object
+	var errs []error
+
+	for newName, origName := range dockerSecretNames {
+		newSecret, err := p.getAndUpdateSecret(
+			origName,
+			metav1.ObjectMeta{
+				Name:        newName,
+				Namespace:   objectMeta.Namespace,
+				Labels:      objectMeta.Labels,
+				Annotations: objectMeta.Annotations,
+			},
+		)
+		if err != nil {
+			errs = append(errs, err)
+		} else {
+			secrets = append(secrets, newSecret)
+		}
+	}
+
+	if jwtSecretName != "" {
+		newSecret, err := p.getAndUpdateSecret(
+			p.cfg.PlusUsageConfig.SecretName,
+			metav1.ObjectMeta{
+				Name:        jwtSecretName,
+				Namespace:   objectMeta.Namespace,
+				Labels:      objectMeta.Labels,
+				Annotations: objectMeta.Annotations,
+			},
+		)
+		if err != nil {
+			errs = append(errs, err)
+		} else {
+			secrets = append(secrets, newSecret)
+		}
+	}
+
+	if caSecretName != "" {
+		newSecret, err := p.getAndUpdateSecret(
+			p.cfg.PlusUsageConfig.CASecretName,
+			metav1.ObjectMeta{
+				Name:        caSecretName,
+				Namespace:   objectMeta.Namespace,
+				Labels:      objectMeta.Labels,
+				Annotations: objectMeta.Annotations,
+			},
+		)
+		if err != nil {
+			errs = append(errs, err)
+		} else {
+			secrets = append(secrets, newSecret)
+		}
+	}
+
+	if clientSSLSecretName != "" {
+		newSecret, err := p.getAndUpdateSecret(
+			p.cfg.PlusUsageConfig.ClientSSLSecretName,
+			metav1.ObjectMeta{
+				Name:        clientSSLSecretName,
+				Namespace:   objectMeta.Namespace,
+				Labels:      objectMeta.Labels,
+				Annotations: objectMeta.Annotations,
+			},
+		)
+		if err != nil {
+			errs = append(errs, err)
+		} else {
+			secrets = append(secrets, newSecret)
+		}
+	}
+
+	return secrets, errors.Join(errs...)
+}
+
+func (p *NginxProvisioner) getAndUpdateSecret(
+	name string,
+	newObjectMeta metav1.ObjectMeta,
+) (*corev1.Secret, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	key := types.NamespacedName{Namespace: p.cfg.GatewayPodConfig.Namespace, Name: name}
+	secret := &corev1.Secret{}
+	if err := p.k8sClient.Get(ctx, key, secret); err != nil {
+		return nil, fmt.Errorf("error getting secret: %w", err)
+	}
+
+	newSecret := &corev1.Secret{
+		ObjectMeta: newObjectMeta,
+		Data:       secret.Data,
+	}
+
+	return newSecret, nil
 }
 
 func (p *NginxProvisioner) buildNginxConfigMaps(
@@ -118,6 +254,8 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ngxIncludesConfigMapName string,
 	ngxAgentConfigMapName string,
+	caSecret bool,
+	clientSSLSecret bool,
 ) []client.Object {
 	var logging *ngfAPIv1alpha2.NginxLogging
 	if nProxyCfg != nil && nProxyCfg.Logging != nil {
@@ -143,6 +281,17 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		Data: map[string]string{
 			"main.conf": string(helpers.MustExecuteTemplate(mainTemplate, mainFields)),
 		},
+	}
+
+	if p.cfg.Plus {
+		mgmtFields := map[string]interface{}{
+			"UsageEndpoint":        p.cfg.PlusUsageConfig.Endpoint,
+			"SkipVerify":           p.cfg.PlusUsageConfig.SkipVerify,
+			"UsageCASecret":        caSecret,
+			"UsageClientSSLSecret": clientSSLSecret,
+		}
+
+		bootstrapCM.Data["mgmt.conf"] = string(helpers.MustExecuteTemplate(mgmtTemplate, mgmtFields))
 	}
 
 	metricsPort := config.DefaultNginxMetricsPort
@@ -236,6 +385,10 @@ func (p *NginxProvisioner) buildNginxDeployment(
 	ngxAgentConfigMapName string,
 	ports map[int32]struct{},
 	selectorLabels map[string]string,
+	dockerSecretNames map[string]string,
+	jwtSecretName string,
+	caSecretName string,
+	clientSSLSecretName string,
 ) client.Object {
 	podTemplateSpec := p.buildNginxPodTemplateSpec(
 		objectMeta,
@@ -243,6 +396,10 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		ngxIncludesConfigMapName,
 		ngxAgentConfigMapName,
 		ports,
+		dockerSecretNames,
+		jwtSecretName,
+		caSecretName,
+		clientSSLSecretName,
 	)
 
 	var object client.Object
@@ -271,15 +428,18 @@ func (p *NginxProvisioner) buildNginxDeployment(
 	return object
 }
 
+//nolint:gocyclo // will refactor at some point
 func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ngxIncludesConfigMapName string,
 	ngxAgentConfigMapName string,
 	ports map[int32]struct{},
+	dockerSecretNames map[string]string,
+	jwtSecretName string,
+	caSecretName string,
+	clientSSLSecretName string,
 ) corev1.PodTemplateSpec {
-	// TODO(sberman): handle nginx plus; debug
-
 	containerPorts := make([]corev1.ContainerPort, 0, len(ports))
 	for port := range ports {
 		containerPort := corev1.ContainerPort{
@@ -388,6 +548,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 					},
 				},
 			},
+			ImagePullSecrets:   []corev1.LocalObjectReference{},
 			ServiceAccountName: objectMeta.Name,
 			Volumes: []corev1.Volume{
 				{Name: "nginx-agent", VolumeSource: emptyDirVolumeSource},
@@ -456,6 +617,76 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		}
 	}
 
+	for name := range dockerSecretNames {
+		ref := corev1.LocalObjectReference{Name: name}
+		spec.Spec.ImagePullSecrets = append(spec.Spec.ImagePullSecrets, ref)
+	}
+
+	if p.cfg.Plus {
+		initCmd := spec.Spec.InitContainers[0].Command
+		initCmd = append(initCmd,
+			"--source", "/includes/mgmt.conf", "--destination", "/etc/nginx/main-includes", "--nginx-plus")
+		spec.Spec.InitContainers[0].Command = initCmd
+
+		volumeMounts := spec.Spec.Containers[0].VolumeMounts
+
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "nginx-lib",
+			MountPath: "/var/lib/nginx/state",
+		})
+		spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
+			Name:         "nginx-lib",
+			VolumeSource: emptyDirVolumeSource,
+		})
+
+		if jwtSecretName != "" {
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      "nginx-plus-license",
+				MountPath: "/etc/nginx/license.jwt",
+				SubPath:   "license.jwt",
+			})
+			spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
+				Name:         "nginx-plus-license",
+				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: jwtSecretName}},
+			})
+		}
+		if caSecretName != "" || clientSSLSecretName != "" {
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      "nginx-plus-usage-certs",
+				MountPath: "/etc/nginx/certs-bootstrap/",
+			})
+
+			sources := []corev1.VolumeProjection{}
+
+			if caSecretName != "" {
+				sources = append(sources, corev1.VolumeProjection{
+					Secret: &corev1.SecretProjection{
+						LocalObjectReference: corev1.LocalObjectReference{Name: caSecretName},
+					},
+				})
+			}
+
+			if clientSSLSecretName != "" {
+				sources = append(sources, corev1.VolumeProjection{
+					Secret: &corev1.SecretProjection{
+						LocalObjectReference: corev1.LocalObjectReference{Name: clientSSLSecretName},
+					},
+				})
+			}
+
+			spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
+				Name: "nginx-plus-usage-certs",
+				VolumeSource: corev1.VolumeSource{
+					Projected: &corev1.ProjectedVolumeSource{
+						Sources: sources,
+					},
+				},
+			})
+		}
+
+		spec.Spec.Containers[0].VolumeMounts = volumeMounts
+	}
+
 	return spec
 }
 
@@ -489,7 +720,18 @@ func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (str
 	return fmt.Sprintf("%s:%s", image, tag), pullPolicy
 }
 
+// TODO(sberman): see about how this can be made more elegant. Maybe create some sort of Object factory
+// that can better store/build all the objects we need, to reduce the amount of duplicate object lists that we
+// have everywhere.
 func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName types.NamespacedName) []client.Object {
+	// order to delete:
+	// deployment/daemonset
+	// service
+	// serviceaccount
+	// configmaps
+	// secrets
+	// scc (if openshift)
+
 	objectMeta := metav1.ObjectMeta{
 		Name:      deploymentNSName.Name,
 		Namespace: deploymentNSName.Namespace,
@@ -517,13 +759,54 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 		},
 	}
 
-	// order to delete:
-	// deployment/daemonset
-	// service
-	// serviceaccount
-	// configmaps
-	// secrets
-	// scc (if openshift)
+	objects := []client.Object{deployment, service, serviceAccount, bootstrapCM, agentCM}
 
-	return []client.Object{deployment, service, serviceAccount, bootstrapCM, agentCM}
+	for _, name := range p.cfg.NginxDockerSecretNames {
+		newName := controller.CreateNginxResourceName(deploymentNSName.Name, name)
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      newName,
+				Namespace: deploymentNSName.Namespace,
+			},
+		}
+		objects = append(objects, secret)
+	}
+
+	var jwtSecretName, caSecretName, clientSSLSecretName string
+	if p.cfg.Plus {
+		if p.cfg.PlusUsageConfig.CASecretName != "" {
+			caSecretName = controller.CreateNginxResourceName(deploymentNSName.Name, p.cfg.PlusUsageConfig.CASecretName)
+			caSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      caSecretName,
+					Namespace: deploymentNSName.Namespace,
+				},
+			}
+			objects = append(objects, caSecret)
+		}
+		if p.cfg.PlusUsageConfig.ClientSSLSecretName != "" {
+			clientSSLSecretName = controller.CreateNginxResourceName(
+				deploymentNSName.Name,
+				p.cfg.PlusUsageConfig.ClientSSLSecretName,
+			)
+			clientSSLSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clientSSLSecretName,
+					Namespace: deploymentNSName.Namespace,
+				},
+			}
+			objects = append(objects, clientSSLSecret)
+		}
+
+		jwtSecretName = controller.CreateNginxResourceName(deploymentNSName.Name, p.cfg.PlusUsageConfig.SecretName)
+		jwtSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      jwtSecretName,
+				Namespace: deploymentNSName.Namespace,
+			},
+		}
+		objects = append(objects, jwtSecret)
+	}
+
+	return objects
 }

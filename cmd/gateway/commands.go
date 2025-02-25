@@ -69,6 +69,7 @@ func createStaticModeCommand() *cobra.Command {
 		leaderElectionLockNameFlag     = "leader-election-lock-name"
 		productTelemetryDisableFlag    = "product-telemetry-disable"
 		gwAPIExperimentalFlag          = "gateway-api-experimental-features"
+		nginxDockerSecretFlag          = "nginx-docker-secret" //nolint:gosec // not credentials
 		usageReportSecretFlag          = "usage-report-secret"
 		usageReportEndpointFlag        = "usage-report-endpoint"
 		usageReportResolverFlag        = "usage-report-resolver"
@@ -120,7 +121,10 @@ func createStaticModeCommand() *cobra.Command {
 
 		snippetsFilters bool
 
-		plus                  bool
+		plus               bool
+		nginxDockerSecrets = stringSliceValidatingValue{
+			validator: validateResourceName,
+		}
 		usageReportSkipVerify bool
 		usageReportSecretName = stringValidatingValue{
 			validator: validateResourceName,
@@ -249,7 +253,8 @@ func createStaticModeCommand() *cobra.Command {
 					Names:  flagKeys,
 					Values: flagValues,
 				},
-				SnippetsFilters: snippetsFilters,
+				SnippetsFilters:        snippetsFilters,
+				NginxDockerSecretNames: nginxDockerSecrets.values,
 			}
 
 			if err := static.StartManager(conf); err != nil {
@@ -376,6 +381,13 @@ func createStaticModeCommand() *cobra.Command {
 		false,
 		"Enable the experimental features of Gateway API which are supported by NGINX Gateway Fabric. "+
 			"Requires the Gateway APIs installed from the experimental channel.",
+	)
+
+	cmd.Flags().Var(
+		&nginxDockerSecrets,
+		nginxDockerSecretFlag,
+		"The name of the NGINX docker registry Secret(s). Must exist in the same namespace "+
+			"that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).",
 	)
 
 	cmd.Flags().Var(

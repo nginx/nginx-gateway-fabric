@@ -169,6 +169,12 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 	h.sendNginxConfig(ctx, logger, gr, changeType)
 }
 
+// enable is called when the pod becomes leader to ensure the provisioner has
+// the latest configuration.
+func (h *eventHandlerImpl) enable(ctx context.Context) {
+	h.sendNginxConfig(ctx, h.cfg.logger, h.cfg.processor.GetLatestGraph(), state.ClusterStateChange)
+}
+
 func (h *eventHandlerImpl) sendNginxConfig(
 	ctx context.Context,
 	logger logr.Logger,
@@ -176,7 +182,6 @@ func (h *eventHandlerImpl) sendNginxConfig(
 	changeType state.ChangeType,
 ) {
 	if gr == nil {
-		logger.Info("Handling events didn't result into NGINX configuration changes")
 		return
 	}
 
@@ -246,13 +251,13 @@ func (h *eventHandlerImpl) processStateAndBuildConfig(
 
 		h.setLatestConfiguration(&cfg)
 
-		deployment.Lock.Lock()
+		deployment.FileLock.Lock()
 		if h.cfg.plus {
 			configApplied = h.cfg.nginxUpdater.UpdateUpstreamServers(deployment, cfg)
 		} else {
 			configApplied = h.updateNginxConf(deployment, cfg)
 		}
-		deployment.Lock.Unlock()
+		deployment.FileLock.Unlock()
 	case state.ClusterStateChange:
 		h.version++
 		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version, h.cfg.plus)
@@ -264,9 +269,9 @@ func (h *eventHandlerImpl) processStateAndBuildConfig(
 
 		h.setLatestConfiguration(&cfg)
 
-		deployment.Lock.Lock()
+		deployment.FileLock.Lock()
 		configApplied = h.updateNginxConf(deployment, cfg)
-		deployment.Lock.Unlock()
+		deployment.FileLock.Unlock()
 	}
 
 	return configApplied
