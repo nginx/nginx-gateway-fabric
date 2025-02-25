@@ -2,7 +2,7 @@ package kubernetes
 
 import "sigs.k8s.io/controller-runtime/pkg/client"
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 
 //counterfeiter:generate . Reader
 

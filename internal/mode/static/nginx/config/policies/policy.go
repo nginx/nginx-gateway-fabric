@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 
 // Policy is an extension of client.Object. It adds methods that are common among all NGF Policies.
 //

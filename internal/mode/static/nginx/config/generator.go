@@ -17,7 +17,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 //counterfeiter:generate . Generator
 
 // Volumes here also need to be added to our crossplane ephemeral test container.

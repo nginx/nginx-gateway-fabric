@@ -14,7 +14,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
 )
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 //counterfeiter:generate . ServiceResolver
 
 // ServiceResolver resolves a Service's NamespacedName and ServicePort to a list of Endpoints.

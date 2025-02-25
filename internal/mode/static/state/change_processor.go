@@ -26,7 +26,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
 )
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 
 // ChangeType is the type of change that occurred based on a k8s object event.
 type ChangeType int

@@ -10,7 +10,7 @@ import (
 	"github.com/go-logr/logr"
 )
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 
 const (
 	// regularFileMode defines the default file mode for regular files.
