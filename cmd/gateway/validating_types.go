@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -28,6 +31,53 @@ func (v *stringValidatingValue) Set(param string) error {
 
 func (v *stringValidatingValue) Type() string {
 	return "string"
+}
+
+// stringSliceValidatingValue is a string slice flag value with custom validation logic.
+// it implements the pflag.Value interface.
+type stringSliceValidatingValue struct {
+	validator func(v string) error
+	values    []string
+	changed   bool
+}
+
+func (v *stringSliceValidatingValue) String() string {
+	b := &bytes.Buffer{}
+	w := csv.NewWriter(b)
+	err := w.Write(v.values)
+	if err != nil {
+		return ""
+	}
+
+	w.Flush()
+	str := strings.TrimSuffix(b.String(), "\n")
+	return "[" + str + "]"
+}
+
+func (v *stringSliceValidatingValue) Set(param string) error {
+	if err := v.validator(param); err != nil {
+		return err
+	}
+
+	stringReader := strings.NewReader(param)
+	csvReader := csv.NewReader(stringReader)
+	str, err := csvReader.Read()
+	if err != nil {
+		return err
+	}
+
+	if !v.changed {
+		v.values = str
+	} else {
+		v.values = append(v.values, str...)
+	}
+	v.changed = true
+
+	return nil
+}
+
+func (v *stringSliceValidatingValue) Type() string {
+	return "stringSlice"
 }
 
 type intValidatingValue struct {

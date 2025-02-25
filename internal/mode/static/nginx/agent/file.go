@@ -25,8 +25,7 @@ type fileService struct {
 	pb.FileServiceServer
 	nginxDeployments *DeploymentStore
 	connTracker      agentgrpc.ConnectionsTracker
-	// TODO(sberman): all logs are at Info level right now. Adjust appropriately.
-	logger logr.Logger
+	logger           logr.Logger
 }
 
 func newFileService(

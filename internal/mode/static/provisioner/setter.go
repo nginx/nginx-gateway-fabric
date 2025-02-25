@@ -18,6 +18,8 @@ func objectSpecSetter(object client.Object) controllerutil.MutateFn {
 		return func() error { return nil }
 	case *corev1.ConfigMap:
 		return configMapSpecSetter(obj, obj.Data)
+	case *corev1.Secret:
+		return secretSpecSetter(obj, obj.Data)
 	}
 
 	return nil
@@ -40,6 +42,13 @@ func serviceSpecSetter(service *corev1.Service, spec corev1.ServiceSpec) control
 func configMapSpecSetter(configMap *corev1.ConfigMap, data map[string]string) controllerutil.MutateFn {
 	return func() error {
 		configMap.Data = data
+		return nil
+	}
+}
+
+func secretSpecSetter(secret *corev1.Secret, data map[string][]byte) controllerutil.MutateFn {
+	return func() error {
+		secret.Data = data
 		return nil
 	}
 }
