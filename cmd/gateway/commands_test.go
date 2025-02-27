@@ -124,11 +124,7 @@ func TestCommonFlagsValidation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name+"_static_mode", func(t *testing.T) {
 			t.Parallel()
-			testFlag(t, createStaticModeCommand(), test)
-		})
-		t.Run(test.name+"_provisioner_mode", func(t *testing.T) {
-			t.Parallel()
-			testFlag(t, createProvisionerModeCommand(), test)
+			testFlag(t, createControllerCommand(), test)
 		})
 	}
 }
@@ -439,26 +435,10 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			cmd := createStaticModeCommand()
+			cmd := createControllerCommand()
 			testFlag(t, cmd, test)
 		})
 	}
-}
-
-func TestProvisionerModeCmdFlagValidation(t *testing.T) {
-	t.Parallel()
-	testCase := flagTestCase{
-		name: "valid flags",
-		args: []string{
-			"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway", // common and required flag
-			"--gatewayclass=nginx",                                // common and required flag
-		},
-		wantErr: false,
-	}
-
-	// common flags validation is tested separately
-
-	testFlag(t, createProvisionerModeCommand(), testCase)
 }
 
 func TestSleepCmdFlagValidation(t *testing.T) {

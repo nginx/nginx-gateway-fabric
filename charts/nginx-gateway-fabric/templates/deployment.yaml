@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
       - args:
-        - static-mode
+        - controller
         - --gateway-ctlr-name={{ .Values.nginxGateway.gatewayControllerName }}
         - --gatewayclass={{ .Values.nginxGateway.gatewayClassName }}
         - --config={{ include "nginx-gateway.config-name" . }}
