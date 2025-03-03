@@ -122,7 +122,7 @@ func TestCommonFlagsValidation(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name+"_static_mode", func(t *testing.T) {
+		t.Run(test.name+"_controller", func(t *testing.T) {
 			t.Parallel()
 			testFlag(t, createControllerCommand(), test)
 		})
