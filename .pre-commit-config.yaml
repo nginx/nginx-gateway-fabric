@@ -32,7 +32,7 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: v3.5.2
+    rev: v3.5.3
     hooks:
       - id: prettier
         types:
