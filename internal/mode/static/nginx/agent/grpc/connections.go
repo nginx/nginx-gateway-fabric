@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 
 //counterfeiter:generate . ConnectionsTracker
 
