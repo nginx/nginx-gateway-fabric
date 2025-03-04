@@ -30,7 +30,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/status"
 )
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 
 //counterfeiter:generate . Provisioner
 

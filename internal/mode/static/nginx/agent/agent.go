@@ -21,7 +21,7 @@ import (
 
 const retryUpstreamTimeout = 5 * time.Second
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 
 //counterfeiter:generate . NginxUpdater
 
