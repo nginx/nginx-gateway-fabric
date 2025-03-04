@@ -204,7 +204,7 @@ spec:
     spec:
       containers:
       - args:
-        - static-mode
+        - controller
         - --gateway-ctlr-name=gateway.nginx.org/nginx-gateway-controller
         - --gatewayclass=nginx
         - --config=nginx-gateway-config

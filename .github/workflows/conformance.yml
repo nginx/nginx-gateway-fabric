@@ -76,13 +76,6 @@ jobs:
             type=ref,event=pr
             type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
 
-      - name: Generate static deployment
-        run: |
-          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
-          ngf_tag=${{ steps.ngf-meta.outputs.version }}
-          make generate-static-deployment PLUS_ENABLED=${{ inputs.image == 'plus' && 'true' || 'false' }} PREFIX=${ngf_prefix} TAG=${ngf_tag}
-        working-directory: ./tests
-
       - name: Build binary
         uses: goreleaser/goreleaser-action@9c156ee8a17a598857849441385a2041ef570552 # v6.3.0
         with:
@@ -151,7 +144,6 @@ jobs:
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
           if [ ${{ github.event_name }} == "schedule" ]; then export GW_API_VERSION=main; fi
           make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
-          make deploy-updated-provisioner PREFIX=${ngf_prefix} TAG=${ngf_tag}
         working-directory: ./tests
 
       - name: Run conformance tests
