@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 )
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 
 //counterfeiter:generate . Broadcaster
 
