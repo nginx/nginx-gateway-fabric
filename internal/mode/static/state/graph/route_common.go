@@ -342,7 +342,8 @@ func bindRoutesToListeners(
 		routes = append(routes, r)
 	}
 
-	isolateL7RouteListeners(routes, gw.Listeners)
+	listenerMap := getListenerHostPortMap(gw.Listeners)
+	isolateL7RouteListeners(routes, listenerMap)
 
 	l4RouteSlice := make([]*L4Route, 0, len(l4Routes))
 	for _, r := range l4Routes {
@@ -361,53 +362,73 @@ func bindRoutesToListeners(
 		bindL4RouteToListeners(r, gw, namespaces, portHostnamesMap)
 	}
 
-	isolateL4RouteListeners(l4RouteSlice, gw.Listeners)
+	isolateL4RouteListeners(l4RouteSlice, listenerMap)
+}
+
+type hostPort struct {
+	hostname string
+	port     v1.PortNumber
+}
+
+func getListenerHostPortMap(listeners []*Listener) map[string]hostPort {
+	listenerHostPortMap := make(map[string]hostPort, len(listeners))
+	for _, l := range listeners {
+		listenerHostPortMap[l.Name] = hostPort{
+			hostname: getHostname(l.Source.Hostname),
+			port:     l.Source.Port,
+		}
+	}
+	return listenerHostPortMap
 }
 
 // isolateL7RouteListeners ensures listener isolation for all L7Routes.
-func isolateL7RouteListeners(routes []*L7Route, listeners []*Listener) {
-	listenerHostnameMap := make(map[string]string, len(listeners))
-	for _, l := range listeners {
-		listenerHostnameMap[l.Name] = getHostname(l.Source.Hostname)
-	}
-
+func isolateL7RouteListeners(routes []*L7Route, listenerHostPortMap map[string]hostPort) {
+	isL4Route := false
 	for _, route := range routes {
-		isolateHostnamesForParentRefs(route.ParentRefs, listenerHostnameMap)
+		isolateHostnamesForParentRefs(route.ParentRefs, listenerHostPortMap, isL4Route)
 	}
 }
 
 // isolateL4RouteListeners ensures listener isolation for all L4Routes.
-func isolateL4RouteListeners(routes []*L4Route, listeners []*Listener) {
-	listenerHostnameMap := make(map[string]string, len(listeners))
-	for _, l := range listeners {
-		listenerHostnameMap[l.Name] = getHostname(l.Source.Hostname)
-	}
-
+func isolateL4RouteListeners(routes []*L4Route, listenerHostPortMap map[string]hostPort) {
+	isL4Route := true
 	for _, route := range routes {
-		isolateHostnamesForParentRefs(route.ParentRefs, listenerHostnameMap)
+		isolateHostnamesForParentRefs(route.ParentRefs, listenerHostPortMap, isL4Route)
 	}
 }
 
 // isolateHostnamesForParentRefs iterates through the parentRefs of a route to identify the list of accepted hostnames
-// for each listener. If any accepted hostname belongs to another listener,
+// for each listener. If any accepted hostname belongs to another listener with the same port, then
 // it removes those hostnames to ensure listener isolation.
-func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap map[string]string) {
+func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap map[string]hostPort, isL4Route bool) {
 	for _, ref := range parentRef {
-		acceptedHostnames := ref.Attachment.AcceptedHostnames
+		// when sectionName is nil we allow all listeners to attach to the route
+		if ref.SectionName == nil {
+			continue
+		}
 
+		acceptedHostnames := ref.Attachment.AcceptedHostnames
 		hostnamesToRemoves := make(map[string]struct{})
 		for listenerName, hostnames := range acceptedHostnames {
 			if len(hostnames) == 0 {
 				continue
 			}
 			for _, h := range hostnames {
-				for lName, lHostname := range listenerHostnameMap {
+				for lName, lHostPort := range listenerHostnameMap {
 					// skip comparison if it is a catch all listener block
-					if lHostname == "" {
+					if lHostPort.hostname == "" {
 						continue
 					}
-					if h == lHostname && listenerName != lName {
-						hostnamesToRemoves[h] = struct{}{}
+
+					// for L7Routes, we compare the hostname, port and listener name combination
+					// to identify if hostname needs to be isolated.
+					if h == lHostPort.hostname && listenerName != lName {
+						// for L4Routes, we only compare the hostname and listener name combination
+						// because we do not allow l4Routes to attach to the same listener
+						// if they share the same port and hostname.
+						if isL4Route || lHostPort.port == ref.Attachment.ListenerPort {
+							hostnamesToRemoves[h] = struct{}{}
+						}
 					}
 				}
 			}

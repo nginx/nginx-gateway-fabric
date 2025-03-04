@@ -2247,6 +2247,7 @@ func TestIsolateL4Listeners(t *testing.T) {
 		acceptedHostnames map[string][]string,
 		hostnames []gatewayv1.Hostname,
 		sectionName *gatewayv1.SectionName,
+		listenerPort int32,
 	) *L4Route {
 		return &L4Route{
 			Source: source,
@@ -2264,21 +2265,10 @@ func TestIsolateL4Listeners(t *testing.T) {
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: acceptedHostnames,
 						Attached:          true,
+						ListenerPort:      gatewayv1.PortNumber(listenerPort),
 					},
 				},
 			},
-		}
-	}
-
-	createListener := func(name string, hostname string) *Listener {
-		return &Listener{
-			Name: name,
-			Source: gatewayv1.Listener{
-				Name:     gatewayv1.SectionName(name),
-				Hostname: (*gatewayv1.Hostname)(helpers.GetPointer(hostname)),
-			},
-			Valid:      true,
-			Attachable: true,
 		}
 	}
 
@@ -2308,47 +2298,52 @@ func TestIsolateL4Listeners(t *testing.T) {
 		"no-match": {},
 	}
 
-	routes := []*L4Route{
+	routesHostnameIntersection := []*L4Route{
 		createL4RoutewithAcceptedHostnames(
 			tr1, acceptedHostnamesEmptyHostname,
-			[]gatewayv1.Hostname{"bar.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("empty-hostname"),
+			80,
 		),
 		createL4RoutewithAcceptedHostnames(
 			tr2,
 			acceptedHostnamesWildcardExample,
-			[]gatewayv1.Hostname{"*.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
+			80,
 		),
 		createL4RoutewithAcceptedHostnames(
 			tr3,
 			acceptedHostnamesFooWildcardExample,
-			[]gatewayv1.Hostname{"*.foo.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("foo-wildcard-example-com"),
+			80,
 		),
 		createL4RoutewithAcceptedHostnames(
 			tr4,
 			acceptedHostnamesAbcCom,
-			[]gatewayv1.Hostname{"abc.foo.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("abc-com"),
+			80,
 		),
 		createL4RoutewithAcceptedHostnames(
 			tr5,
 			acceptedHostnamesNoMatch,
-			[]gatewayv1.Hostname{"cafe.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("no-match"),
+			80,
 		),
 	}
 
-	listeners := []*Listener{
-		createListener("empty-hostname", ""),
-		createListener("wildcard-example-com", "*.example.com"),
-		createListener("foo-wildcard-example-com", "*.foo.example.com"),
-		createListener("abc-com", "abc.foo.example.com"),
-		createListener("no-match", "no-match.cafe.com"),
+	listenerMapHostnameIntersection := map[string]hostPort{
+		"empty-hostname":           {hostname: "", port: 80},
+		"wildcard-example-com":     {hostname: "*.example.com", port: 80},
+		"foo-wildcard-example-com": {hostname: "*.foo.example.com", port: 80},
+		"abc-com":                  {hostname: "abc.foo.example.com", port: 80},
+		"no-match":                 {hostname: "no-match.cafe.com", port: 80},
 	}
 
-	expectedResult := map[string][]ParentRef{
+	expectedResultHostnameIntersection := map[string][]ParentRef{
 		"tr1": {
 			{
 				Idx:         0,
@@ -2358,7 +2353,8 @@ func TestIsolateL4Listeners(t *testing.T) {
 					AcceptedHostnames: map[string][]string{
 						"empty-hostname": {"bar.com"},
 					},
-					Attached: true,
+					Attached:     true,
+					ListenerPort: 80,
 				},
 			},
 		},
@@ -2371,7 +2367,8 @@ func TestIsolateL4Listeners(t *testing.T) {
 					AcceptedHostnames: map[string][]string{
 						"wildcard-example-com": {"*.example.com"},
 					},
-					Attached: true,
+					Attached:     true,
+					ListenerPort: 80,
 				},
 			},
 		},
@@ -2384,7 +2381,8 @@ func TestIsolateL4Listeners(t *testing.T) {
 					AcceptedHostnames: map[string][]string{
 						"foo-wildcard-example-com": {"*.foo.example.com"},
 					},
-					Attached: true,
+					Attached:     true,
+					ListenerPort: 80,
 				},
 			},
 		},
@@ -2397,7 +2395,8 @@ func TestIsolateL4Listeners(t *testing.T) {
 					AcceptedHostnames: map[string][]string{
 						"abc-com": {"abc.foo.example.com"},
 					},
-					Attached: true,
+					Attached:     true,
+					ListenerPort: 80,
 				},
 			},
 		},
@@ -2410,20 +2409,146 @@ func TestIsolateL4Listeners(t *testing.T) {
 					AcceptedHostnames: map[string][]string{
 						"no-match": {},
 					},
-					Attached: true,
+					Attached:     true,
+					ListenerPort: 80,
 				},
 			},
 		},
 	}
 
-	g := NewWithT(t)
-	isolateL4RouteListeners(routes, listeners)
+	routeHostnameNoSectionName := []gatewayv1.Hostname{"tea.example.com", "coffee.example.com", "flavor.example.com"}
+	tlsCoffeeRoute := createTLSRouteWithSectionNameAndPort(
+		"tls_coffee",
+		nil,
+		"test",
+		routeHostnameNoSectionName...,
+	)
 
-	result := map[string][]ParentRef{}
-	for _, route := range routes {
-		result[route.Source.GetName()] = route.ParentRefs
+	tlsTeaRoute := createTLSRouteWithSectionNameAndPort(
+		"tls_tea",
+		nil,
+		"test",
+		routeHostnameNoSectionName...,
+	)
+
+	tlsFlavorRoute := createTLSRouteWithSectionNameAndPort(
+		"tls_flavor",
+		nil,
+		"test",
+		routeHostnameNoSectionName...,
+	)
+
+	acceptedHostnamesNoSectionName := map[string][]string{
+		"tls_coffee": {"coffee.example.com"},
+		"tls_tea":    {"tea.example.com"},
+		"tls_flavor": {"flavor.example.com"},
 	}
-	g.Expect(helpers.Diff(result, expectedResult)).To(BeEmpty())
+
+	tests := []struct {
+		expectedResult map[string][]ParentRef
+		listenerMap    map[string]hostPort
+		name           string
+		routes         []*L4Route
+	}{
+		{
+			name:           "isolate listeners based on hostname intersection for different routes",
+			routes:         routesHostnameIntersection,
+			listenerMap:    listenerMapHostnameIntersection,
+			expectedResult: expectedResultHostnameIntersection,
+		},
+		{
+			name: "no listener isolation for routes with no section name, attaches to all listeners",
+			routes: []*L4Route{
+				createL4RoutewithAcceptedHostnames(
+					tlsCoffeeRoute,
+					acceptedHostnamesNoSectionName,
+					routeHostnameNoSectionName,
+					nil, // no section name
+					443,
+				),
+				createL4RoutewithAcceptedHostnames(
+					tlsTeaRoute,
+					acceptedHostnamesNoSectionName,
+					routeHostnameNoSectionName,
+					nil, // no section name
+					443,
+				),
+				createL4RoutewithAcceptedHostnames(
+					tlsFlavorRoute,
+					acceptedHostnamesNoSectionName,
+					routeHostnameNoSectionName,
+					nil, // no section name
+					443,
+				),
+			},
+			listenerMap: map[string]hostPort{
+				"tls_coffee": {hostname: "coffee.example.com", port: 443},
+				"tls_tea":    {hostname: "tea.example.com", port: 443},
+				"tls_flavor": {hostname: "flavor.example.com", port: 443},
+			},
+			expectedResult: map[string][]ParentRef{
+				"tls_coffee": {
+					{
+						Idx:     0,
+						Gateway: client.ObjectKeyFromObject(gw),
+						Attachment: &ParentRefAttachmentStatus{
+							AcceptedHostnames: map[string][]string{
+								"tls_coffee": {"coffee.example.com"},
+								"tls_tea":    {"tea.example.com"},
+								"tls_flavor": {"flavor.example.com"},
+							},
+							ListenerPort: 443,
+							Attached:     true,
+						},
+					},
+				},
+				"tls_tea": {
+					{
+						Idx:     0,
+						Gateway: client.ObjectKeyFromObject(gw),
+						Attachment: &ParentRefAttachmentStatus{
+							AcceptedHostnames: map[string][]string{
+								"tls_coffee": {"coffee.example.com"},
+								"tls_tea":    {"tea.example.com"},
+								"tls_flavor": {"flavor.example.com"},
+							},
+							ListenerPort: 443,
+							Attached:     true,
+						},
+					},
+				},
+				"tls_flavor": {
+					{
+						Idx:     0,
+						Gateway: client.ObjectKeyFromObject(gw),
+						Attachment: &ParentRefAttachmentStatus{
+							AcceptedHostnames: map[string][]string{
+								"tls_coffee": {"coffee.example.com"},
+								"tls_tea":    {"tea.example.com"},
+								"tls_flavor": {"flavor.example.com"},
+							},
+							ListenerPort: 443,
+							Attached:     true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			isolateL4RouteListeners(test.routes, test.listenerMap)
+
+			result := map[string][]ParentRef{}
+			for _, route := range test.routes {
+				result[route.Source.GetName()] = route.ParentRefs
+			}
+			g.Expect(helpers.Diff(result, test.expectedResult)).To(BeEmpty())
+		})
+	}
 }
 
 func TestIsolateL7Listeners(t *testing.T) {
@@ -2460,6 +2585,36 @@ func TestIsolateL7Listeners(t *testing.T) {
 		}
 	}
 
+	createL7RoutewithAcceptedHostnames := func(
+		source *gatewayv1.HTTPRoute,
+		acceptedHostnames map[string][]string,
+		hostnames []gatewayv1.Hostname,
+		sectionName *gatewayv1.SectionName,
+		listenerPort int32,
+	) *L7Route {
+		return &L7Route{
+			Source: source,
+			Spec: L7RouteSpec{
+				Hostnames: hostnames,
+			},
+			ParentRefs: []ParentRef{
+				{
+					Idx: 0,
+					Gateway: client.ObjectKey{
+						Namespace: gw.Namespace,
+						Name:      gw.Name,
+					},
+					SectionName: sectionName,
+					Attachment: &ParentRefAttachmentStatus{
+						AcceptedHostnames: acceptedHostnames,
+						Attached:          true,
+						ListenerPort:      gatewayv1.PortNumber(listenerPort),
+					},
+				},
+			},
+		}
+	}
+
 	routeHostnames := []gatewayv1.Hostname{"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com"}
 	hr1 := createHTTPRouteWithSectionNameAndPort(
 		"hr1",
@@ -2492,46 +2647,6 @@ func TestIsolateL7Listeners(t *testing.T) {
 		routeHostnames..., // no matching hostname
 	)
 
-	createL7RoutewithAcceptedHostnames := func(
-		source *gatewayv1.HTTPRoute,
-		acceptedHostnames map[string][]string,
-		hostnames []gatewayv1.Hostname,
-		sectionName *gatewayv1.SectionName,
-	) *L7Route {
-		return &L7Route{
-			Source: source,
-			Spec: L7RouteSpec{
-				Hostnames: hostnames,
-			},
-			ParentRefs: []ParentRef{
-				{
-					Idx: 0,
-					Gateway: client.ObjectKey{
-						Namespace: gw.Namespace,
-						Name:      gw.Name,
-					},
-					SectionName: sectionName,
-					Attachment: &ParentRefAttachmentStatus{
-						AcceptedHostnames: acceptedHostnames,
-						Attached:          true,
-					},
-				},
-			},
-		}
-	}
-
-	createListener := func(name string, hostname string) *Listener {
-		return &Listener{
-			Name: name,
-			Source: gatewayv1.Listener{
-				Name:     gatewayv1.SectionName(name),
-				Hostname: (*gatewayv1.Hostname)(helpers.GetPointer(hostname)),
-			},
-			Valid:      true,
-			Attachable: true,
-		}
-	}
-
 	acceptedHostnamesEmptyHostname := map[string][]string{
 		"empty-hostname": {
 			"bar.com", "*.example.com", "*.foo.example.com", "abc.foo.example.com",
@@ -2558,48 +2673,53 @@ func TestIsolateL7Listeners(t *testing.T) {
 		"no-match": {},
 	}
 
-	routes := []*L7Route{
+	routesHostnameIntersection := []*L7Route{
 		createL7RoutewithAcceptedHostnames(
 			hr1,
 			acceptedHostnamesEmptyHostname,
-			[]gatewayv1.Hostname{"bar.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("empty-hostname"),
+			80,
 		),
 		createL7RoutewithAcceptedHostnames(
 			hr2,
 			acceptedHostnamesWildcardExample,
-			[]gatewayv1.Hostname{"*.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
+			80,
 		),
 		createL7RoutewithAcceptedHostnames(
 			hr3,
 			acceptedHostnamesFooWildcardExample,
-			[]gatewayv1.Hostname{"*.foo.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("foo-wildcard-example-com"),
+			80,
 		),
 		createL7RoutewithAcceptedHostnames(
 			hr4,
 			acceptedHostnamesAbcCom,
-			[]gatewayv1.Hostname{"abc.foo.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("abc-com"),
+			80,
 		),
 		createL7RoutewithAcceptedHostnames(
 			hr5,
 			acceptedHostnamesNoMatch,
-			[]gatewayv1.Hostname{"cafe.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("no-match"),
+			80,
 		),
 	}
 
-	listeners := []*Listener{
-		createListener("empty-hostname", ""),
-		createListener("wildcard-example-com", "*.example.com"),
-		createListener("foo-wildcard-example-com", "*.foo.example.com"),
-		createListener("abc-com", "abc.foo.example.com"),
-		createListener("no-match", "no-match.cafe.com"),
+	listenerMapHostnameIntersection := map[string]hostPort{
+		"empty-hostname":           {hostname: "", port: 80},
+		"wildcard-example-com":     {hostname: "*.example.com", port: 80},
+		"foo-wildcard-example-com": {hostname: "*.foo.example.com", port: 80},
+		"abc-com":                  {hostname: "abc.foo.example.com", port: 80},
+		"no-match":                 {hostname: "no-match.cafe.com", port: 80},
 	}
 
-	expectedResult := map[string][]ParentRef{
+	expectedResultHostnameIntersection := map[string][]ParentRef{
 		"hr1": {
 			{
 				Idx:         0,
@@ -2609,7 +2729,8 @@ func TestIsolateL7Listeners(t *testing.T) {
 					AcceptedHostnames: map[string][]string{
 						"empty-hostname": {"bar.com"},
 					},
-					Attached: true,
+					Attached:     true,
+					ListenerPort: 80,
 				},
 			},
 		},
@@ -2622,7 +2743,8 @@ func TestIsolateL7Listeners(t *testing.T) {
 					AcceptedHostnames: map[string][]string{
 						"wildcard-example-com": {"*.example.com"},
 					},
-					Attached: true,
+					Attached:     true,
+					ListenerPort: 80,
 				},
 			},
 		},
@@ -2635,7 +2757,8 @@ func TestIsolateL7Listeners(t *testing.T) {
 					AcceptedHostnames: map[string][]string{
 						"foo-wildcard-example-com": {"*.foo.example.com"},
 					},
-					Attached: true,
+					Attached:     true,
+					ListenerPort: 80,
 				},
 			},
 		},
@@ -2648,7 +2771,8 @@ func TestIsolateL7Listeners(t *testing.T) {
 					AcceptedHostnames: map[string][]string{
 						"abc-com": {"abc.foo.example.com"},
 					},
-					Attached: true,
+					Attached:     true,
+					ListenerPort: 80,
 				},
 			},
 		},
@@ -2661,21 +2785,192 @@ func TestIsolateL7Listeners(t *testing.T) {
 					AcceptedHostnames: map[string][]string{
 						"no-match": {},
 					},
-					Attached: true,
+					Attached:     true,
+					ListenerPort: 80,
 				},
 			},
 		},
 	}
 
-	g := NewWithT(t)
-	isolateL7RouteListeners(routes, listeners)
+	routeHostnameCafeExample := []gatewayv1.Hostname{"cafe.example.com"}
+	httpListenerRoute := createHTTPRouteWithSectionNameAndPort(
+		"hr_cafe",
+		helpers.GetPointer[gatewayv1.SectionName]("http"),
+		"test",
+		routeHostnameCafeExample...,
+	)
 
-	result := map[string][]ParentRef{}
-	for _, route := range routes {
-		result[route.Source.GetName()] = route.ParentRefs
+	acceptedHostnamesHTTP := map[string][]string{
+		"http": {
+			"cafe.example.com",
+		},
 	}
 
-	g.Expect(helpers.Diff(result, expectedResult)).To(BeEmpty())
+	routeHostnameNoSectionName := []gatewayv1.Hostname{"tea.example.com", "coffee.example.com", "flavor.example.com"}
+	hrCoffeeRoute := createHTTPRouteWithSectionNameAndPort(
+		"hr_coffee",
+		nil,
+		"test",
+		routeHostnameNoSectionName...,
+	)
+
+	hrTeaRoute := createHTTPRouteWithSectionNameAndPort(
+		"hr_tea",
+		nil,
+		"test",
+		routeHostnameNoSectionName...,
+	)
+
+	hrFlavorRoute := createHTTPRouteWithSectionNameAndPort(
+		"hr_flavor",
+		nil,
+		"test",
+		routeHostnameNoSectionName...,
+	)
+
+	acceptedHostnamesNoSectionName := map[string][]string{
+		"hr_coffee": {"coffee.example.com"},
+		"hr_tea":    {"tea.example.com"},
+		"hr_flavor": {"flavor.example.com"},
+	}
+
+	tests := []struct {
+		expectedResult map[string][]ParentRef
+		listenersMap   map[string]hostPort
+		name           string
+		routes         []*L7Route
+	}{
+		{
+			name:           "isolate listeners based on hostname intersection for different routes",
+			routes:         routesHostnameIntersection,
+			listenersMap:   listenerMapHostnameIntersection,
+			expectedResult: expectedResultHostnameIntersection,
+		},
+		{
+			name: "no isolation for listeners with same hostname, different ports",
+			routes: []*L7Route{
+				createL7RoutewithAcceptedHostnames(
+					httpListenerRoute,
+					acceptedHostnamesHTTP,
+					[]gatewayv1.Hostname{"cafe.example.com"},
+					helpers.GetPointer[gatewayv1.SectionName]("http"),
+					80,
+				),
+			},
+			listenersMap: map[string]hostPort{
+				"http":           {hostname: "cafe.example.com", port: 80},
+				"http-different": {hostname: "cafe.example.com", port: 8080},
+			},
+			expectedResult: map[string][]ParentRef{
+				"hr_cafe": {
+					{
+						Idx:         0,
+						Gateway:     client.ObjectKeyFromObject(gw),
+						SectionName: httpListenerRoute.Spec.ParentRefs[0].SectionName,
+						Attachment: &ParentRefAttachmentStatus{
+							AcceptedHostnames: map[string][]string{
+								"http": {"cafe.example.com"},
+							},
+							ListenerPort: 80,
+							Attached:     true,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "no listener isolation for routes with no section name, attaches to all listeners",
+			routes: []*L7Route{
+				createL7RoutewithAcceptedHostnames(
+					hrCoffeeRoute,
+					acceptedHostnamesNoSectionName,
+					routeHostnameNoSectionName,
+					nil, // no section name
+					80,
+				),
+				createL7RoutewithAcceptedHostnames(
+					hrTeaRoute,
+					acceptedHostnamesNoSectionName,
+					routeHostnameNoSectionName,
+					nil, // no section name
+					80,
+				),
+				createL7RoutewithAcceptedHostnames(
+					hrFlavorRoute,
+					acceptedHostnamesNoSectionName,
+					routeHostnameNoSectionName,
+					nil, // no section name
+					80,
+				),
+			},
+			listenersMap: map[string]hostPort{
+				"hr_coffee": {hostname: "coffee.example.com", port: 80},
+				"hr_tea":    {hostname: "tea.example.com", port: 80},
+				"hr_flavor": {hostname: "flavor.example.com", port: 80},
+			},
+			expectedResult: map[string][]ParentRef{
+				"hr_coffee": {
+					{
+						Idx:     0,
+						Gateway: client.ObjectKeyFromObject(gw),
+						Attachment: &ParentRefAttachmentStatus{
+							AcceptedHostnames: map[string][]string{
+								"hr_coffee": {"coffee.example.com"},
+								"hr_tea":    {"tea.example.com"},
+								"hr_flavor": {"flavor.example.com"},
+							},
+							ListenerPort: 80,
+							Attached:     true,
+						},
+					},
+				},
+				"hr_tea": {
+					{
+						Idx:     0,
+						Gateway: client.ObjectKeyFromObject(gw),
+						Attachment: &ParentRefAttachmentStatus{
+							AcceptedHostnames: map[string][]string{
+								"hr_coffee": {"coffee.example.com"},
+								"hr_tea":    {"tea.example.com"},
+								"hr_flavor": {"flavor.example.com"},
+							},
+							ListenerPort: 80,
+							Attached:     true,
+						},
+					},
+				},
+				"hr_flavor": {
+					{
+						Idx:     0,
+						Gateway: client.ObjectKeyFromObject(gw),
+						Attachment: &ParentRefAttachmentStatus{
+							AcceptedHostnames: map[string][]string{
+								"hr_coffee": {"coffee.example.com"},
+								"hr_tea":    {"tea.example.com"},
+								"hr_flavor": {"flavor.example.com"},
+							},
+							ListenerPort: 80,
+							Attached:     true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			isolateL7RouteListeners(test.routes, test.listenersMap)
+
+			result := map[string][]ParentRef{}
+			for _, route := range test.routes {
+				result[route.Source.GetName()] = route.ParentRefs
+			}
+			g.Expect(helpers.Diff(result, test.expectedResult)).To(BeEmpty())
+		})
+	}
 }
 
 func TestRemoveHostnames(t *testing.T) {
