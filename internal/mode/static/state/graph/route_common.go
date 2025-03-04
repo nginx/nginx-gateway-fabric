@@ -420,10 +420,12 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 						continue
 					}
 
-					// for L4Routes, we only compare the hostname and listener name combination
-					// because we do not allow l4Routes to attach to the same listener
-					// if they share the same port and hostname.
+					// for L7Routes, we compare the hostname, port and listener name combination
+					// to identify if hostname needs to be isolated.
 					if h == lHostPort.hostname && listenerName != lName {
+						// for L4Routes, we only compare the hostname and listener name combination
+						// because we do not allow l4Routes to attach to the same listener
+						// if they share the same port and hostname.
 						if isL4Route || lHostPort.port == ref.Attachment.ListenerPort {
 							hostnamesToRemoves[h] = struct{}{}
 						}

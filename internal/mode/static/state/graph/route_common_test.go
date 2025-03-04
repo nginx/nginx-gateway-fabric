@@ -2301,35 +2301,35 @@ func TestIsolateL4Listeners(t *testing.T) {
 	routesHostnameIntersection := []*L4Route{
 		createL4RoutewithAcceptedHostnames(
 			tr1, acceptedHostnamesEmptyHostname,
-			[]gatewayv1.Hostname{"bar.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("empty-hostname"),
 			80,
 		),
 		createL4RoutewithAcceptedHostnames(
 			tr2,
 			acceptedHostnamesWildcardExample,
-			[]gatewayv1.Hostname{"*.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 			80,
 		),
 		createL4RoutewithAcceptedHostnames(
 			tr3,
 			acceptedHostnamesFooWildcardExample,
-			[]gatewayv1.Hostname{"*.foo.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("foo-wildcard-example-com"),
 			80,
 		),
 		createL4RoutewithAcceptedHostnames(
 			tr4,
 			acceptedHostnamesAbcCom,
-			[]gatewayv1.Hostname{"abc.foo.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("abc-com"),
 			80,
 		),
 		createL4RoutewithAcceptedHostnames(
 			tr5,
 			acceptedHostnamesNoMatch,
-			[]gatewayv1.Hostname{"cafe.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("no-match"),
 			80,
 		),
@@ -2462,21 +2462,21 @@ func TestIsolateL4Listeners(t *testing.T) {
 				createL4RoutewithAcceptedHostnames(
 					tlsCoffeeRoute,
 					acceptedHostnamesNoSectionName,
-					[]gatewayv1.Hostname{"coffee.example.com"},
+					routeHostnameNoSectionName,
 					nil, // no section name
 					443,
 				),
 				createL4RoutewithAcceptedHostnames(
 					tlsTeaRoute,
 					acceptedHostnamesNoSectionName,
-					[]gatewayv1.Hostname{"tea.example.com"},
+					routeHostnameNoSectionName,
 					nil, // no section name
 					443,
 				),
 				createL4RoutewithAcceptedHostnames(
 					tlsFlavorRoute,
 					acceptedHostnamesNoSectionName,
-					[]gatewayv1.Hostname{"flavor.example.com"},
+					routeHostnameNoSectionName,
 					nil, // no section name
 					443,
 				),
@@ -2677,35 +2677,35 @@ func TestIsolateL7Listeners(t *testing.T) {
 		createL7RoutewithAcceptedHostnames(
 			hr1,
 			acceptedHostnamesEmptyHostname,
-			[]gatewayv1.Hostname{""},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("empty-hostname"),
 			80,
 		),
 		createL7RoutewithAcceptedHostnames(
 			hr2,
 			acceptedHostnamesWildcardExample,
-			[]gatewayv1.Hostname{"*.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("wildcard-example-com"),
 			80,
 		),
 		createL7RoutewithAcceptedHostnames(
 			hr3,
 			acceptedHostnamesFooWildcardExample,
-			[]gatewayv1.Hostname{"*.foo.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("foo-wildcard-example-com"),
 			80,
 		),
 		createL7RoutewithAcceptedHostnames(
 			hr4,
 			acceptedHostnamesAbcCom,
-			[]gatewayv1.Hostname{"abc.foo.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("abc-com"),
 			80,
 		),
 		createL7RoutewithAcceptedHostnames(
 			hr5,
 			acceptedHostnamesNoMatch,
-			[]gatewayv1.Hostname{"cafe.example.com"},
+			routeHostnames,
 			helpers.GetPointer[gatewayv1.SectionName]("no-match"),
 			80,
 		),
@@ -2884,21 +2884,21 @@ func TestIsolateL7Listeners(t *testing.T) {
 				createL7RoutewithAcceptedHostnames(
 					hrCoffeeRoute,
 					acceptedHostnamesNoSectionName,
-					[]gatewayv1.Hostname{"coffee.example.com"},
+					routeHostnameNoSectionName,
 					nil, // no section name
 					80,
 				),
 				createL7RoutewithAcceptedHostnames(
 					hrTeaRoute,
 					acceptedHostnamesNoSectionName,
-					[]gatewayv1.Hostname{"tea.example.com"},
+					routeHostnameNoSectionName,
 					nil, // no section name
 					80,
 				),
 				createL7RoutewithAcceptedHostnames(
 					hrFlavorRoute,
 					acceptedHostnamesNoSectionName,
-					[]gatewayv1.Hostname{"flavor.example.com"},
+					routeHostnameNoSectionName,
 					nil, // no section name
 					80,
 				),
