@@ -7,7 +7,7 @@ import (
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 )
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+//go:generate go tool counterfeiter -generate
 
 //counterfeiter:generate . Messenger
 
