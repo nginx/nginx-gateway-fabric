@@ -18,6 +18,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/predicate"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 )
 
 func newEventLoop(
@@ -26,11 +27,30 @@ func newEventLoop(
 	handler *eventHandler,
 	logger logr.Logger,
 	selector metav1.LabelSelector,
+	ngfNamespace string,
+	dockerSecrets []string,
+	usageConfig *config.UsageReportConfig,
 ) (*events.EventLoop, error) {
 	nginxResourceLabelPredicate := predicate.NginxLabelPredicate(selector)
 
+	secretsToWatch := make([]string, 0, len(dockerSecrets)+3)
+	secretsToWatch = append(secretsToWatch, dockerSecrets...)
+
+	if usageConfig != nil {
+		if usageConfig.SecretName != "" {
+			secretsToWatch = append(secretsToWatch, usageConfig.SecretName)
+		}
+		if usageConfig.CASecretName != "" {
+			secretsToWatch = append(secretsToWatch, usageConfig.CASecretName)
+		}
+		if usageConfig.ClientSSLSecretName != "" {
+			secretsToWatch = append(secretsToWatch, usageConfig.ClientSSLSecretName)
+		}
+	}
+
 	controllerRegCfgs := []struct {
 		objectType ngftypes.ObjectType
+		name       string
 		options    []controller.Option
 	}{
 		{
@@ -85,15 +105,18 @@ func newEventLoop(
 			options: []controller.Option{
 				controller.WithK8sPredicate(
 					k8spredicate.And(
-						k8spredicate.GenerationChangedPredicate{},
-						nginxResourceLabelPredicate,
+						k8spredicate.ResourceVersionChangedPredicate{},
+						k8spredicate.Or(
+							nginxResourceLabelPredicate,
+							predicate.SecretNamePredicate{Namespace: ngfNamespace, SecretNames: secretsToWatch},
+						),
 					),
 				),
 			},
 		},
 	}
 
-	eventCh := make(chan interface{})
+	eventCh := make(chan any)
 	for _, regCfg := range controllerRegCfgs {
 		gvk, err := apiutil.GVKForObject(regCfg.objectType, mgr.GetScheme())
 		if err != nil {

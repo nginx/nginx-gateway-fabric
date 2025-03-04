@@ -144,7 +144,7 @@ func defaultNginxProvisioner(
 	deploymentStore := &agentfakes.FakeDeploymentStorer{}
 
 	return &NginxProvisioner{
-		store:     newStore([]string{"docker-secret"}, "jwt-secret", "ca-secret", "client-ssl-secret"),
+		store:     newStore([]string{dockerTestSecretName}, jwtTestSecretName, caTestSecretName, clientTestSecretName),
 		k8sClient: fakeClient,
 		cfg: Config{
 			DeploymentStore: deploymentStore,

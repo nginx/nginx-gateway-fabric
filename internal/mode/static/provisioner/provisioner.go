@@ -3,6 +3,7 @@ package provisioner
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -105,7 +106,16 @@ func NewNginxProvisioner(
 		return nil, nil, fmt.Errorf("error initializing eventHandler: %w", err)
 	}
 
-	eventLoop, err := newEventLoop(ctx, mgr, handler, cfg.Logger, selector)
+	eventLoop, err := newEventLoop(
+		ctx,
+		mgr,
+		handler,
+		cfg.Logger,
+		selector,
+		cfg.GatewayPodConfig.Namespace,
+		cfg.NginxDockerSecretNames,
+		cfg.PlusUsageConfig,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -162,7 +172,7 @@ func (p *NginxProvisioner) provisionNginx(
 
 	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
 	if err != nil {
-		return fmt.Errorf("error provisioning nginx resources :%w", err)
+		p.cfg.Logger.Error(err, "error provisioning some nginx resources")
 	}
 
 	p.cfg.Logger.Info(
@@ -275,7 +285,7 @@ func (p *NginxProvisioner) reprovisionNginx(
 
 	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
 	if err != nil {
-		return fmt.Errorf("error provisioning nginx resources :%w", err)
+		p.cfg.Logger.Error(err, "error provisioning some nginx resources")
 	}
 
 	p.cfg.Logger.Info(
@@ -339,6 +349,33 @@ func (p *NginxProvisioner) deprovisionNginx(ctx context.Context, gatewayNSName t
 	p.cfg.DeploymentStore.Remove(deploymentNSName)
 
 	return nil
+}
+
+// isUserSecret determines if the provided secret name is a special user secret,
+// for example an NGINX docker registry secret or NGINX Plus secret.
+func (p *NginxProvisioner) isUserSecret(name string) bool {
+	if slices.Contains(p.cfg.NginxDockerSecretNames, name) {
+		return true
+	}
+
+	if p.cfg.PlusUsageConfig != nil {
+		return name == p.cfg.PlusUsageConfig.SecretName ||
+			name == p.cfg.PlusUsageConfig.CASecretName ||
+			name == p.cfg.PlusUsageConfig.ClientSSLSecretName
+	}
+
+	return false
+}
+
+func (p *NginxProvisioner) deleteSecret(ctx context.Context, secretNSName types.NamespacedName) error {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretNSName.Name,
+			Namespace: secretNSName.Namespace,
+		},
+	}
+
+	return p.k8sClient.Delete(ctx, secret)
 }
 
 // RegisterGateway is called by the main event handler when a Gateway API resource event occurs

@@ -2,7 +2,9 @@ package provisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -49,6 +51,7 @@ func newEventHandler(
 	}, nil
 }
 
+//nolint:gocyclo // will refactor at some point
 func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger, batch events.EventBatch) {
 	for _, event := range batch {
 		switch e := event.(type) {
@@ -56,7 +59,7 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 			switch obj := e.Resource.(type) {
 			case *gatewayv1.Gateway:
 				h.store.updateGateway(obj)
-			case *appsv1.Deployment, *corev1.ServiceAccount, *corev1.ConfigMap, *corev1.Secret:
+			case *appsv1.Deployment, *corev1.ServiceAccount, *corev1.ConfigMap:
 				objLabels := labels.Set(obj.GetLabels())
 				if h.labelSelector.Matches(objLabels) {
 					gatewayName := objLabels.Get(controller.GatewayLabel)
@@ -83,6 +86,20 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 					}
 					h.provisioner.cfg.StatusQueue.Enqueue(statusUpdate)
 				}
+			case *corev1.Secret:
+				objLabels := labels.Set(obj.GetLabels())
+				if h.labelSelector.Matches(objLabels) {
+					gatewayName := objLabels.Get(controller.GatewayLabel)
+					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
+
+					if err := h.updateOrDeleteResources(ctx, obj, gatewayNSName); err != nil {
+						logger.Error(err, "error handling resource update")
+					}
+				} else if h.provisioner.isUserSecret(obj.GetName()) {
+					if err := h.provisionResourcesForAllGateways(ctx); err != nil {
+						logger.Error(err, "error updating resources")
+					}
+				}
 			default:
 				panic(fmt.Errorf("unknown resource type %T", e.Resource))
 			}
@@ -93,9 +110,19 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 					logger.Error(err, "error deprovisioning nginx resources")
 				}
 				h.store.deleteGateway(e.NamespacedName)
-			case *appsv1.Deployment, *corev1.Service, *corev1.ServiceAccount, *corev1.ConfigMap, *corev1.Secret:
+			case *appsv1.Deployment, *corev1.Service, *corev1.ServiceAccount, *corev1.ConfigMap:
 				if err := h.reprovisionResources(ctx, e); err != nil {
 					logger.Error(err, "error re-provisioning nginx resources")
+				}
+			case *corev1.Secret:
+				if h.provisioner.isUserSecret(e.NamespacedName.Name) {
+					if err := h.deprovisionSecretsForAllGateways(ctx, e.NamespacedName.Name); err != nil {
+						logger.Error(err, "error removing secrets")
+					}
+				} else {
+					if err := h.reprovisionResources(ctx, e); err != nil {
+						logger.Error(err, "error re-provisioning nginx resources")
+					}
 				}
 			default:
 				panic(fmt.Errorf("unknown resource type %T", e.Type))
@@ -128,7 +155,17 @@ func (h *eventHandler) updateOrDeleteResources(
 	}
 
 	h.store.registerResourceInGatewayConfig(gatewayNSName, obj)
+	if err := h.provisionResources(ctx, gatewayNSName); err != nil {
+		return fmt.Errorf("error updating nginx resource: %w", err)
+	}
 
+	return nil
+}
+
+func (h *eventHandler) provisionResources(
+	ctx context.Context,
+	gatewayNSName types.NamespacedName,
+) error {
 	resources := h.store.getNginxResourcesForGateway(gatewayNSName)
 	if resources.Gateway != nil {
 		resourceName := controller.CreateNginxResourceName(gatewayNSName.Name, h.gcName)
@@ -159,4 +196,69 @@ func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.D
 		}
 	}
 	return nil
+}
+
+// provisionResourcesForAllGateways is called when a resource is updated that needs to be applied
+// to all Gateway deployments. For example, NGINX Plus secrets.
+func (h *eventHandler) provisionResourcesForAllGateways(ctx context.Context) error {
+	var allErrs []error
+	gateways := h.store.getGateways()
+	for gateway := range gateways {
+		if err := h.provisionResources(ctx, gateway); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
+	return errors.Join(allErrs...)
+}
+
+// deprovisionSecretsForAllGateways cleans up any secrets that a user deleted that were duplicated
+// for all Gateways. For example, NGINX Plus secrets.
+func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, secret string) error {
+	var allErrs []error
+
+	gateways := h.store.getGateways()
+	for gateway := range gateways {
+		resources := h.store.getNginxResourcesForGateway(gateway)
+		if resources == nil {
+			continue
+		}
+
+		switch {
+		case strings.HasSuffix(resources.PlusJWTSecret.Name, secret):
+			if err := h.provisioner.deleteSecret(
+				ctx,
+				controller.ObjectMetaToNamespacedName(resources.PlusJWTSecret),
+			); err != nil {
+				allErrs = append(allErrs, err)
+			}
+		case strings.HasSuffix(resources.PlusCASecret.Name, secret):
+			if err := h.provisioner.deleteSecret(
+				ctx,
+				controller.ObjectMetaToNamespacedName(resources.PlusCASecret),
+			); err != nil {
+				allErrs = append(allErrs, err)
+			}
+		case strings.HasSuffix(resources.PlusClientSSLSecret.Name, secret):
+			if err := h.provisioner.deleteSecret(
+				ctx,
+				controller.ObjectMetaToNamespacedName(resources.PlusClientSSLSecret),
+			); err != nil {
+				allErrs = append(allErrs, err)
+			}
+		default:
+			for _, dockerSecret := range resources.DockerSecrets {
+				if strings.HasSuffix(dockerSecret.Name, secret) {
+					if err := h.provisioner.deleteSecret(
+						ctx,
+						controller.ObjectMetaToNamespacedName(dockerSecret),
+					); err != nil {
+						allErrs = append(allErrs, err)
+					}
+				}
+			}
+		}
+	}
+
+	return errors.Join(allErrs...)
 }
