@@ -21,7 +21,6 @@ import (
 	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
@@ -53,7 +52,7 @@ func createRootCommand() *cobra.Command {
 	return rootCmd
 }
 
-func createStaticModeCommand() *cobra.Command {
+func createControllerCommand() *cobra.Command {
 	// flag names
 	const (
 		gatewayFlag                    = "gateway"
@@ -145,8 +144,8 @@ func createStaticModeCommand() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "static-mode",
-		Short: "Configure NGINX in the scope of a single Gateway resource",
+		Use:   "controller",
+		Short: "Run the NGINX Gateway Fabric control plane",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			atom := zap.NewAtomicLevel()
 
@@ -155,7 +154,7 @@ func createStaticModeCommand() *cobra.Command {
 
 			commit, date, dirty := getBuildInfo()
 			logger.Info(
-				"Starting NGINX Gateway Fabric in static mode",
+				"Starting the NGINX Gateway Fabric control plane",
 				"version", version,
 				"commit", commit,
 				"date", date,
@@ -439,56 +438,6 @@ func createStaticModeCommand() *cobra.Command {
 		"Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the "+
 			"generated NGINX config for HTTPRoute and GRPCRoute resources.",
 	)
-
-	return cmd
-}
-
-func createProvisionerModeCommand() *cobra.Command {
-	var (
-		gatewayCtlrName = stringValidatingValue{
-			validator: validateGatewayControllerName,
-		}
-		gatewayClassName = stringValidatingValue{
-			validator: validateResourceName,
-		}
-	)
-
-	cmd := &cobra.Command{
-		Use:    "provisioner-mode",
-		Short:  "Provision a static-mode NGINX Gateway Fabric Deployment per Gateway resource",
-		Hidden: true,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			logger := ctlrZap.New()
-			commit, date, dirty := getBuildInfo()
-			logger.Info(
-				"Starting NGINX Gateway Fabric Provisioner",
-				"version", version,
-				"commit", commit,
-				"date", date,
-				"dirty", dirty,
-			)
-
-			return provisioner.StartManager(provisioner.Config{
-				Logger:           logger,
-				GatewayClassName: gatewayClassName.value,
-				GatewayCtlrName:  gatewayCtlrName.value,
-			})
-		},
-	}
-
-	cmd.Flags().Var(
-		&gatewayCtlrName,
-		gatewayCtlrNameFlag,
-		fmt.Sprintf(gatewayCtlrNameUsageFmt, domain),
-	)
-	utilruntime.Must(cmd.MarkFlagRequired(gatewayCtlrNameFlag))
-
-	cmd.Flags().Var(
-		&gatewayClassName,
-		gatewayClassFlag,
-		gatewayClassNameUsage,
-	)
-	utilruntime.Must(cmd.MarkFlagRequired(gatewayClassFlag))
 
 	return cmd
 }

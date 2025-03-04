@@ -150,18 +150,13 @@ func StartManager(cfg config.Config) error {
 	if cfg.MetricsConfig.Enabled {
 		constLabels := map[string]string{"class": cfg.GatewayClassName}
 
-		ngxruntimeCollector := collectors.NewManagerMetricsCollector(constLabels)
 		handlerCollector = collectors.NewControllerCollector(constLabels)
-
 		handlerCollector, ok := handlerCollector.(prometheus.Collector)
 		if !ok {
 			return fmt.Errorf("handlerCollector is not a prometheus.Collector: %w", frameworkStatus.ErrFailedAssert)
 		}
 
-		metrics.Registry.MustRegister(
-			ngxruntimeCollector,
-			handlerCollector,
-		)
+		metrics.Registry.MustRegister(handlerCollector)
 	}
 
 	statusUpdater := frameworkStatus.NewUpdater(
