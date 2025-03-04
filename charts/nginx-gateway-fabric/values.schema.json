@@ -456,6 +456,12 @@
           "required": [],
           "title": "kind"
         },
+        "labels": {
+          "description": "Labels to be added to the controller Deployment",
+          "required": [],
+          "title": "labels",
+          "type": "object"
+        },
         "leaderElection": {
           "description": "The configuration for leader election.",
           "properties": {
