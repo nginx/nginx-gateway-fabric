@@ -1,0 +1,6 @@
+2025/03/01 16:15:35 [error] 126#126: *15 no live upstreams while connecting to upstream, client: 10.138.0.122, server: 0.example.com, request: "GET / HTTP/1.1", upstream: "http://scale_backend-0_80/", host: "0.example.com"
+2025/03/01 16:15:37 [error] 262#262: *63 no live upstreams while connecting to upstream, client: 10.138.0.122, server: 4.example.com, request: "GET / HTTP/1.1", upstream: "http://scale_backend-4_80/", host: "4.example.com"
+2025/03/01 16:15:47 [error] 773#773: *248 no live upstreams while connecting to upstream, client: 10.138.0.122, server: 19.example.com, request: "GET / HTTP/1.1", upstream: "http://scale_backend-19_80/", host: "19.example.com"
+2025/03/01 16:15:50 [error] 943#943: *310 no live upstreams while connecting to upstream, client: 10.138.0.122, server: 24.example.com, request: "GET / HTTP/1.1", upstream: "http://scale_backend-24_80/", host: "24.example.com"
+2025/03/01 16:15:54 [error] 1079#1079: *364 no live upstreams while connecting to upstream, client: 10.138.0.122, server: 28.example.com, request: "GET / HTTP/1.1", upstream: "http://scale_backend-28_80/", host: "28.example.com"
+2025/03/01 16:16:04 [error] 1385#1385: *483 no live upstreams while connecting to upstream, client: 10.138.0.122, server: 37.example.com, request: "GET / HTTP/1.1", upstream: "http://scale_backend-37_80/", host: "37.example.com"
