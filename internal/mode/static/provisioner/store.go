@@ -88,6 +88,13 @@ func (s *store) getGateway(nsName types.NamespacedName) *gatewayv1.Gateway {
 	return s.gateways[nsName]
 }
 
+func (s *store) getGateways() map[types.NamespacedName]*gatewayv1.Gateway {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.gateways
+}
+
 // registerResourceInGatewayConfig adds or updates the provided resource in the tracking map.
 // If the object being updated is the Gateway, check if anything that we care about changed. This ensures that
 // we don't attempt to update nginx resources when the main event handler triggers this call with an unrelated event
