@@ -134,16 +134,16 @@ func TestSecretNamePredicate(t *testing.T) {
 			expUpdate: false,
 		},
 		{
-			name: "Generic event with non-matching secret",
+			name: "Generic event with matching secret",
 			genericEvent: &event.GenericEvent{
 				Object: &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "secret3",
+						Name:      "secret1",
 						Namespace: "test-namespace",
 					},
 				},
 			},
-			expUpdate: false,
+			expUpdate: true,
 		},
 		{
 			name: "Generic event with non-matching secret",
