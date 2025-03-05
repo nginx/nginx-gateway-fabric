@@ -64,6 +64,37 @@ func TestDeleteGateway(t *testing.T) {
 	g.Expect(store.getGateway(nsName)).To(BeNil())
 }
 
+func TestGetGateways(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	store := newStore(nil, "", "", "")
+	gateway1 := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-gateway-1",
+			Namespace: "default",
+		},
+	}
+	gateway2 := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-gateway-2",
+			Namespace: "default",
+		},
+	}
+	nsName1 := client.ObjectKeyFromObject(gateway1)
+	nsName2 := client.ObjectKeyFromObject(gateway2)
+
+	store.updateGateway(gateway1)
+	store.updateGateway(gateway2)
+
+	gateways := store.getGateways()
+
+	g.Expect(gateways).To(HaveKey(nsName1))
+	g.Expect(gateways).To(HaveKey(nsName2))
+	g.Expect(gateways[nsName1]).To(Equal(gateway1))
+	g.Expect(gateways[nsName2]).To(Equal(gateway2))
+}
+
 func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
