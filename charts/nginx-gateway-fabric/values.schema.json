@@ -456,6 +456,12 @@
           "required": [],
           "title": "kind"
         },
+        "labels": {
+          "description": "Set of labels to be added for NGINX Gateway Fabric deployment.",
+          "required": [],
+          "title": "labels",
+          "type": "object"
+        },
         "leaderElection": {
           "description": "The configuration for leader election.",
           "properties": {

@@ -21,6 +21,9 @@ nginxGateway:
   # -- Set of custom annotations for the NGINX Gateway Fabric pods.
   podAnnotations: {}
 
+  # -- Set of labels to be added for NGINX Gateway Fabric deployment.
+  labels: {}
+
   # -- Set of custom annotations for GatewayClass objects.
   gatewayClassAnnotations: {}
 
