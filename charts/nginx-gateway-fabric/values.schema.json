@@ -457,7 +457,7 @@
           "title": "kind"
         },
         "labels": {
-          "description": "Labels to be added to the controller Deployment",
+          "description": "Set of labels to be added for NGINX Gateway Fabric deployment.",
           "required": [],
           "title": "labels",
           "type": "object"
