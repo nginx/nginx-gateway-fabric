@@ -19,24 +19,24 @@ type AnnotationPredicate struct {
 }
 
 // Create filters CreateEvents based on the Annotation.
-func (cp AnnotationPredicate) Create(e event.CreateEvent) bool {
+func (ap AnnotationPredicate) Create(e event.CreateEvent) bool {
 	if e.Object == nil {
 		return false
 	}
 
-	_, ok := e.Object.GetAnnotations()[cp.Annotation]
+	_, ok := e.Object.GetAnnotations()[ap.Annotation]
 	return ok
 }
 
 // Update filters UpdateEvents based on the Annotation.
-func (cp AnnotationPredicate) Update(e event.UpdateEvent) bool {
+func (ap AnnotationPredicate) Update(e event.UpdateEvent) bool {
 	if e.ObjectOld == nil || e.ObjectNew == nil {
 		// this case should not happen
 		return false
 	}
 
-	oldAnnotationVal := e.ObjectOld.GetAnnotations()[cp.Annotation]
-	newAnnotationVal := e.ObjectNew.GetAnnotations()[cp.Annotation]
+	oldAnnotationVal := e.ObjectOld.GetAnnotations()[ap.Annotation]
+	newAnnotationVal := e.ObjectNew.GetAnnotations()[ap.Annotation]
 
 	return oldAnnotationVal != newAnnotationVal
 }
@@ -52,7 +52,7 @@ type RestartDeploymentAnnotationPredicate struct {
 }
 
 // Update filters UpdateEvents based on if the annotation is present or changed.
-func (cp RestartDeploymentAnnotationPredicate) Update(e event.UpdateEvent) bool {
+func (RestartDeploymentAnnotationPredicate) Update(e event.UpdateEvent) bool {
 	if e.ObjectOld == nil || e.ObjectNew == nil {
 		// this case should not happen
 		return false
