@@ -368,6 +368,10 @@ func (p *NginxProvisioner) isUserSecret(name string) bool {
 }
 
 func (p *NginxProvisioner) deleteSecret(ctx context.Context, secretNSName types.NamespacedName) error {
+	if !p.isLeader() {
+		return nil
+	}
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretNSName.Name,
@@ -375,7 +379,11 @@ func (p *NginxProvisioner) deleteSecret(ctx context.Context, secretNSName types.
 		},
 	}
 
-	return p.k8sClient.Delete(ctx, secret)
+	if err := p.k8sClient.Delete(ctx, secret); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	return nil
 }
 
 // RegisterGateway is called by the main event handler when a Gateway API resource event occurs
