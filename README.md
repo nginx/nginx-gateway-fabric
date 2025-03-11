@@ -108,13 +108,11 @@ For troubleshooting help, see the [Troubleshooting](https://docs.nginx.com/nginx
 
 We’d like to hear your feedback! If you experience issues with our Gateway Controller, please [open a bug][bug] in
 GitHub. If you have any suggestions or enhancement requests, please [open an idea][idea] on GitHub discussions. You can
-contact us directly on the [NGINX Community Slack][slack] in
-the `#nginx-gateway-fabric`
-channel.
+contact us directly on the [NGINX Community Forum][forum].
 
 [bug]: https://github.com/nginx/nginx-gateway-fabric/issues/new?assignees=&labels=&projects=&template=bug_report.md&title=
 [idea]: https://github.com/nginx/nginx-gateway-fabric/discussions/categories/ideas
-[slack]: https://nginxcommunity.slack.com/channels/nginx-gateway-fabric
+[forum]: https://community.nginx.org/
 
 ## Community Meetings
 
