@@ -701,22 +701,57 @@ func GetReadyNGFPodNames(
 			"app.kubernetes.io/instance": releaseName,
 		},
 	); err != nil {
-		return nil, fmt.Errorf("error getting list of Pods: %w", err)
+		return nil, fmt.Errorf("error getting list of NGF Pods: %w", err)
 	}
 
-	if len(podList.Items) > 0 {
-		var names []string
-		for _, pod := range podList.Items {
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type == core.PodReady && cond.Status == core.ConditionTrue {
-					names = append(names, pod.Name)
-				}
+	if len(podList.Items) == 0 {
+		return nil, errors.New("unable to find NGF Pod(s)")
+	}
+
+	var names []string
+	for _, pod := range podList.Items {
+		for _, cond := range pod.Status.Conditions {
+			if cond.Type == core.PodReady && cond.Status == core.ConditionTrue {
+				names = append(names, pod.Name)
 			}
 		}
-		return names, nil
+	}
+	return names, nil
+}
+
+// GetReadyNginxPodNames returns the name(s) of the NGINX Pod(s).
+func GetReadyNginxPodNames(
+	k8sClient client.Client,
+	namespace string,
+	timeout time.Duration,
+) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	var podList core.PodList
+	if err := k8sClient.List(
+		ctx,
+		&podList,
+		client.InNamespace(namespace),
+		client.HasLabels{"gateway.networking.k8s.io/gateway-name"},
+	); err != nil {
+		return nil, fmt.Errorf("error getting list of NGINX Pods: %w", err)
 	}
 
-	return nil, errors.New("unable to find NGF Pod(s)")
+	if len(podList.Items) == 0 {
+		return nil, errors.New("unable to find NGINX Pod(s)")
+	}
+
+	var names []string
+	for _, pod := range podList.Items {
+		for _, cond := range pod.Status.Conditions {
+			if cond.Type == core.PodReady && cond.Status == core.ConditionTrue {
+				names = append(names, pod.Name)
+			}
+		}
+	}
+
+	return names, nil
 }
 
 func countNumberOfReadyParents(parents []v1.RouteParentStatus) int {
@@ -760,7 +795,7 @@ func (rm *ResourceManager) WaitForAppsToBeReadyWithCtxWithPodCount(
 	return rm.waitForGatewaysToBeReady(ctx, namespace)
 }
 
-// WaitForPodsToBeReady waits for all Pods in the specified namespace to be ready or
+// WaitForPodsToBeReadyWithCount waits for all Pods in the specified namespace to be ready or
 // until the provided context is canceled.
 func (rm *ResourceManager) WaitForPodsToBeReadyWithCount(ctx context.Context, namespace string, count int) error {
 	return wait.PollUntilContextCancel(
@@ -817,17 +852,17 @@ func (rm *ResourceManager) WaitForGatewayObservedGeneration(
 }
 
 // GetNginxConfig uses crossplane to get the nginx configuration and convert it to JSON.
-func (rm *ResourceManager) GetNginxConfig(ngfPodName, namespace string) (*Payload, error) {
+func (rm *ResourceManager) GetNginxConfig(nginxPodName, namespace string) (*Payload, error) {
 	if err := injectCrossplaneContainer(
 		rm.ClientGoClient,
 		rm.TimeoutConfig.UpdateTimeout,
-		ngfPodName,
+		nginxPodName,
 		namespace,
 	); err != nil {
 		return nil, err
 	}
 
-	exec, err := createCrossplaneExecutor(rm.ClientGoClient, rm.K8sConfig, ngfPodName, namespace)
+	exec, err := createCrossplaneExecutor(rm.ClientGoClient, rm.K8sConfig, nginxPodName, namespace)
 	if err != nil {
 		return nil, err
 	}
