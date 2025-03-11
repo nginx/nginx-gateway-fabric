@@ -6,46 +6,29 @@ and includes links to all PRs that went into the release.
 
 ## Release 1.6.2
 
-n
-%%DATE%%
-
-FEATURES:
-
--
-
-BUG FIXES:
-
--
-
-DOCUMENTATION:
-
--
+_March 11, 2025_
 
 HELM CHART:
 
 - The version of the Helm chart is now 1.6.2
--
 
 UPGRADE:
 
--
-
-KNOWN ISSUES:
-
--
+- Update golang.org/x/oauth2. [3185](https://github.com/nginx/nginx-gateway-fabric/pull/3185)
 
 COMPATIBILITY:
 
-- Gateway API version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.2.1`
+- NGINX version: `1.27.4`
+- NGINX Plus version: `R33`
+- Kubernetes version: `1.25+`
 
 CONTAINER IMAGES:
 
 - Control plane: `ghcr.io/nginx/nginx-gateway-fabric:1.6.2`
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:1.6.2`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:1.6.2`
+
 ## Release 1.6.1
 
 _February 6, 2025_
