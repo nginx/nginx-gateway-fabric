@@ -9,7 +9,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 1.6.1
+    app.kubernetes.io/version: 1.6.2
   name: nginx-gateway
   namespace: nginx-gateway
 ---
@@ -19,7 +19,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 1.6.1
+    app.kubernetes.io/version: 1.6.2
   name: nginx-gateway
 rules:
 - apiGroups:
@@ -135,7 +135,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 1.6.1
+    app.kubernetes.io/version: 1.6.2
   name: nginx-gateway
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -155,7 +155,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 1.6.1
+    app.kubernetes.io/version: 1.6.2
   name: nginx-includes-bootstrap
   namespace: nginx-gateway
 ---
@@ -165,7 +165,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 1.6.1
+    app.kubernetes.io/version: 1.6.2
   name: nginx-gateway
   namespace: nginx-gateway
 spec:
@@ -190,7 +190,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 1.6.1
+    app.kubernetes.io/version: 1.6.2
   name: nginx-gateway
   namespace: nginx-gateway
 spec:
@@ -236,7 +236,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginx/nginx-gateway-fabric:1.6.1
+        image: ghcr.io/nginx/nginx-gateway-fabric:1.6.2
         imagePullPolicy: IfNotPresent
         name: nginx-gateway
         ports:
@@ -275,7 +275,7 @@ spec:
           name: nginx-run
         - mountPath: /etc/nginx/includes
           name: nginx-includes
-      - image: ghcr.io/nginx/nginx-gateway-fabric/nginx:1.6.1
+      - image: ghcr.io/nginx/nginx-gateway-fabric/nginx:1.6.2
         imagePullPolicy: IfNotPresent
         name: nginx
         ports:
@@ -322,7 +322,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
-        image: ghcr.io/nginx/nginx-gateway-fabric:1.6.1
+        image: ghcr.io/nginx/nginx-gateway-fabric:1.6.2
         imagePullPolicy: IfNotPresent
         name: init
         securityContext:
@@ -372,7 +372,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 1.6.1
+    app.kubernetes.io/version: 1.6.2
   name: nginx
 spec:
   controllerName: gateway.nginx.org/nginx-gateway-controller
@@ -383,7 +383,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 1.6.1
+    app.kubernetes.io/version: 1.6.2
   name: nginx-gateway-config
   namespace: nginx-gateway
 spec:
