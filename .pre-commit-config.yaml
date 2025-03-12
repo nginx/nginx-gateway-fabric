@@ -39,7 +39,7 @@ repos:
           - javascript
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: v1.64.6
+    rev: v1.64.7
     hooks:
       - id: golangci-lint-full
         name: golangci-lint-root
