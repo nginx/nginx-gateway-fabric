@@ -95,3 +95,4 @@ To create a new release, follow these steps:
 4. Test the release branch for release-readiness.
 5. If a problem is found, return to Step 2.
 6. Follow Steps 5-7 from the [Major or Minor Release](#major-or-minor-release) section.
+7. Prepare and merge a PR into the main branch of the [documentation repository](https://github.com/nginx/documentation) to update the NGF version in `layouts/shortcodes/version-ngf.html`.
