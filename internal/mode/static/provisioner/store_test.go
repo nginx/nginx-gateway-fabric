@@ -22,10 +22,11 @@ func TestNewStore(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{"docker-secret"}, "jwt-secret", "ca-secret", "client-ssl-secret")
+	store := newStore([]string{"docker-secret"}, "agent-tls-secret", "jwt-secret", "ca-secret", "client-ssl-secret")
 
 	g.Expect(store).NotTo(BeNil())
 	g.Expect(store.dockerSecretNames).To(HaveKey("docker-secret"))
+	g.Expect(store.agentTLSSecretName).To(Equal("agent-tls-secret"))
 	g.Expect(store.jwtSecretName).To(Equal("jwt-secret"))
 	g.Expect(store.caSecretName).To(Equal("ca-secret"))
 	g.Expect(store.clientSSLSecretName).To(Equal("client-ssl-secret"))
@@ -35,7 +36,7 @@ func TestUpdateGateway(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "")
+	store := newStore(nil, "", "", "", "")
 	gateway := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-gateway",
@@ -54,7 +55,7 @@ func TestDeleteGateway(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "")
+	store := newStore(nil, "", "", "", "")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 	store.gateways[nsName] = &gatewayv1.Gateway{}
 
@@ -68,7 +69,7 @@ func TestGetGateways(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "")
+	store := newStore(nil, "", "", "", "")
 	gateway1 := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-gateway-1",
@@ -99,7 +100,7 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{"docker-secret"}, "jwt-secret", "ca-secret", "client-ssl-secret")
+	store := newStore([]string{"docker-secret"}, "agent-tls-secret", "jwt-secret", "ca-secret", "client-ssl-secret")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 
 	registerAndGetResources := func(obj interface{}) *NginxResources {
@@ -194,6 +195,22 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// ConfigMap again, already exists
 	resources = registerAndGetResources(agentCM)
 	g.Expect(resources.AgentConfigMap).To(Equal(agentCMMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	// Secret
+	agentTLSSecretMeta := metav1.ObjectMeta{
+		Name:      controller.CreateNginxResourceName(defaultMeta.Name, store.agentTLSSecretName),
+		Namespace: defaultMeta.Namespace,
+	}
+	agentTLSSecret := &corev1.Secret{ObjectMeta: agentTLSSecretMeta}
+	resources = registerAndGetResources(agentTLSSecret)
+	g.Expect(resources.AgentTLSSecret).To(Equal(agentTLSSecretMeta))
+
+	// Secret again, already exists
+	resources = registerAndGetResources(agentTLSSecret)
+	g.Expect(resources.AgentTLSSecret).To(Equal(agentTLSSecretMeta))
 
 	// clear out resources before next test
 	store.deleteResourcesForGateway(nsName)
@@ -361,7 +378,7 @@ func TestDeleteResourcesForGateway(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "")
+	store := newStore(nil, "", "", "", "")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 	store.nginxResources[nsName] = &NginxResources{}
 
@@ -373,7 +390,7 @@ func TestDeleteResourcesForGateway(t *testing.T) {
 func TestGatewayExistsForResource(t *testing.T) {
 	t.Parallel()
 
-	store := newStore(nil, "", "", "")
+	store := newStore(nil, "", "", "", "")
 	gateway := &graph.Gateway{}
 	store.nginxResources[types.NamespacedName{Name: "test-gateway", Namespace: "default"}] = &NginxResources{
 		Gateway: gateway,
@@ -395,6 +412,10 @@ func TestGatewayExistsForResource(t *testing.T) {
 		},
 		AgentConfigMap: metav1.ObjectMeta{
 			Name:      "test-agent-configmap",
+			Namespace: "default",
+		},
+		AgentTLSSecret: metav1.ObjectMeta{
+			Name:      "test-agent-tls-secret",
 			Namespace: "default",
 		},
 		PlusJWTSecret: metav1.ObjectMeta{
@@ -467,6 +488,16 @@ func TestGatewayExistsForResource(t *testing.T) {
 			object: &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-agent-configmap",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
+			name: "Agent TLS Secret exists",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-agent-tls-secret",
 					Namespace: "default",
 				},
 			},

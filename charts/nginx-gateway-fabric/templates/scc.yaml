@@ -34,4 +34,6 @@ users:
 - {{ printf "system:serviceaccount:%s:%s" .Release.Namespace (include "nginx-gateway.serviceAccountName" .) }}
 requiredDropCapabilities:
 - ALL
+volumes:
+- secret
 {{- end }}

@@ -36,6 +36,7 @@ spec:
         - --gatewayclass={{ .Values.nginxGateway.gatewayClassName }}
         - --config={{ include "nginx-gateway.config-name" . }}
         - --service={{ include "nginx-gateway.fullname" . }}
+        - --agent-tls-secret={{ .Values.certGenerator.agentTLSSecretName }}
         {{- if .Values.nginx.imagePullSecret }}
         - --nginx-docker-secret={{ .Values.nginx.imagePullSecret }}
         {{- end }}
@@ -149,6 +150,9 @@ spec:
           readOnlyRootFilesystem: true
           runAsUser: 101
           runAsGroup: 1001
+        volumeMounts:
+        - name: nginx-agent-tls
+          mountPath: /var/run/secrets/ngf
         {{- with .Values.nginxGateway.extraVolumeMounts -}}
         {{ toYaml . | nindent 8 }}
         {{- end }}
@@ -173,6 +177,10 @@ spec:
       nodeSelector:
       {{- toYaml .Values.nginxGateway.nodeSelector | nindent 8 }}
       {{- end }}
+      volumes:
+      - name: nginx-agent-tls
+        secret:
+          secretName: {{ .Values.certGenerator.serverTLSSecretName }}
       {{- with .Values.nginxGateway.extraVolumes -}}
       {{ toYaml . | nindent 6 }}
       {{- end }}
