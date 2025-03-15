@@ -6,16 +6,16 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: e7d217a8f01fb3c8fc4507ef6f0e7feead667f20
-- Date: 2024-11-14T18:42:55Z
+- Commit: 9155a2b6a8d3179165797ef3e789e97283f7a695
+- Date: 2025-03-15T07:17:11Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.30.5-gke.1443001
+- k8s version: v1.31.6-gke.1020000
 - vCPUs per node: 16
-- RAM per node: 65853972Ki
+- RAM per node: 65851340Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -23,10 +23,10 @@ GKE Cluster:
 ## Test: Send http /coffee traffic
 
 ```text
-Requests      [total, rate, throughput]         6000, 100.02, 100.02
-Duration      [total, attack, wait]             59.991s, 59.99s, 587.326µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  439.889µs, 859.995µs, 849.253µs, 977.006µs, 1.024ms, 1.211ms, 15.355ms
-Bytes In      [total, mean]                     974028, 162.34
+Requests      [total, rate, throughput]         6000, 100.02, 100.01
+Duration      [total, attack, wait]             59.992s, 59.991s, 864.529µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  470.608µs, 866.796µs, 864.021µs, 991.562µs, 1.037ms, 1.156ms, 10.317ms
+Bytes In      [total, mean]                     967993, 161.33
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:6000  
@@ -39,9 +39,9 @@ Error Set:
 
 ```text
 Requests      [total, rate, throughput]         6000, 100.02, 100.01
-Duration      [total, attack, wait]             59.991s, 59.99s, 792.386µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  664.1µs, 910.376µs, 874.685µs, 1.007ms, 1.063ms, 1.271ms, 16.146ms
-Bytes In      [total, mean]                     936000, 156.00
+Duration      [total, attack, wait]             59.992s, 59.991s, 850.998µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  455.17µs, 901.793µs, 886.37µs, 1.017ms, 1.06ms, 1.177ms, 10.281ms
+Bytes In      [total, mean]                     931993, 155.33
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:6000  

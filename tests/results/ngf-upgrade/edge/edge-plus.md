@@ -6,16 +6,16 @@ NGINX Plus: true
 
 NGINX Gateway Fabric:
 
-- Commit: e7d217a8f01fb3c8fc4507ef6f0e7feead667f20
-- Date: 2024-11-14T18:42:55Z
+- Commit: 9155a2b6a8d3179165797ef3e789e97283f7a695
+- Date: 2025-03-15T07:17:11Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.30.5-gke.1443001
+- k8s version: v1.31.6-gke.1020000
 - vCPUs per node: 16
-- RAM per node: 65853972Ki
+- RAM per node: 65851340Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -24,9 +24,9 @@ GKE Cluster:
 
 ```text
 Requests      [total, rate, throughput]         6000, 100.02, 100.02
-Duration      [total, attack, wait]             59.991s, 59.99s, 772.721µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  596.14µs, 835.746µs, 798.892µs, 926.941µs, 975.553µs, 1.151ms, 14.047ms
-Bytes In      [total, mean]                     956060, 159.34
+Duration      [total, attack, wait]             59.99s, 59.989s, 855.743µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  635.422µs, 851.551µs, 832.349µs, 964.217µs, 1.017ms, 1.176ms, 9.726ms
+Bytes In      [total, mean]                     972000, 162.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:6000  
@@ -38,10 +38,10 @@ Error Set:
 ## Test: Send https /tea traffic
 
 ```text
-Requests      [total, rate, throughput]         6000, 100.02, 100.01
-Duration      [total, attack, wait]             59.991s, 59.99s, 955.654µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  630.575µs, 856.057µs, 818.559µs, 939.26µs, 986.329µs, 1.177ms, 14.025ms
-Bytes In      [total, mean]                     918000, 153.00
+Requests      [total, rate, throughput]         6000, 100.02, 100.02
+Duration      [total, attack, wait]             59.991s, 59.99s, 673.229µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  439.111µs, 903.895µs, 887.003µs, 1.057ms, 1.116ms, 1.284ms, 9.699ms
+Bytes In      [total, mean]                     936000, 156.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:6000  

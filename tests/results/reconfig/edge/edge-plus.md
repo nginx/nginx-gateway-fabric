@@ -6,16 +6,16 @@ NGINX Plus: true
 
 NGINX Gateway Fabric:
 
-- Commit: e7d217a8f01fb3c8fc4507ef6f0e7feead667f20
-- Date: 2024-11-14T18:42:55Z
+- Commit: 9155a2b6a8d3179165797ef3e789e97283f7a695
+- Date: 2025-03-15T07:17:11Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.30.5-gke.1443001
+- k8s version: v1.31.6-gke.1020000
 - vCPUs per node: 16
-- RAM per node: 65853972Ki
+- RAM per node: 65851340Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -24,57 +24,63 @@ GKE Cluster:
 
 ### Reloads and Time to Ready
 
-- TimeToReadyTotal: 3s
+- TimeToReadyTotal: 4s
 - TimeToReadyAvgSingle: < 1s
 - NGINX Reloads: 2
-- NGINX Reload Average Time: 114ms
+- NGINX Reload Average Time: 100ms
 - Reload distribution:
-	- 500ms: 2
-	- 1000ms: 2
-	- 5000ms: 2
-	- 10000ms: 2
-	- 30000ms: 2
-	- +Infms: 2
-
-### Event Batch Processing
-
-- Event Batch Total: 5
-- Event Batch Processing Average Time: 56ms
-- Event Batch Processing distribution:
-	- 500ms: 5
-	- 1000ms: 5
-	- 5000ms: 5
-	- 10000ms: 5
-	- 30000ms: 5
-	- +Infms: 5
-
-## Test 1: Resources exist before startup - NumResources 150
-
-### Reloads and Time to Ready
-
-- TimeToReadyTotal: 1s
-- TimeToReadyAvgSingle: < 1s
-- NGINX Reloads: 2
-- NGINX Reload Average Time: 113ms
-- Reload distribution:
-	- 500ms: 2
-	- 1000ms: 2
-	- 5000ms: 2
-	- 10000ms: 2
-	- 30000ms: 2
+	- 500.0ms: 2
+	- 1000.0ms: 2
+	- 5000.0ms: 2
+	- 10000.0ms: 2
+	- 30000.0ms: 2
 	- +Infms: 2
 
 ### Event Batch Processing
 
 - Event Batch Total: 6
-- Event Batch Processing Average Time: 46ms
+- Event Batch Processing Average Time: 52ms
 - Event Batch Processing distribution:
-	- 500ms: 6
-	- 1000ms: 6
-	- 5000ms: 6
-	- 10000ms: 6
-	- 30000ms: 6
+	- 500.0ms: 6
+	- 1000.0ms: 6
+	- 5000.0ms: 6
+	- 10000.0ms: 6
+	- 30000.0ms: 6
 	- +Infms: 6
+
+### NGINX Error Logs
+
+
+## Test 1: Resources exist before startup - NumResources 150
+
+### Reloads and Time to Ready
+
+- TimeToReadyTotal: 4s
+- TimeToReadyAvgSingle: < 1s
+- NGINX Reloads: 2
+- NGINX Reload Average Time: 100ms
+- Reload distribution:
+	- 500.0ms: 2
+	- 1000.0ms: 2
+	- 5000.0ms: 2
+	- 10000.0ms: 2
+	- 30000.0ms: 2
+	- +Infms: 2
+
+### Event Batch Processing
+
+- Event Batch Total: 6
+- Event Batch Processing Average Time: 53ms
+- Event Batch Processing distribution:
+	- 500.0ms: 6
+	- 1000.0ms: 6
+	- 5000.0ms: 6
+	- 10000.0ms: 6
+	- 30000.0ms: 6
+	- +Infms: 6
+
+### NGINX Error Logs
+
 
 ## Test 2: Start NGF, deploy Gateway, create many resources attached to GW - NumResources 30
 
@@ -82,55 +88,62 @@ GKE Cluster:
 
 - TimeToReadyTotal: 8s
 - TimeToReadyAvgSingle: < 1s
-- NGINX Reloads: 62
-- NGINX Reload Average Time: 125ms
+- NGINX Reloads: 47
+- NGINX Reload Average Time: 148ms
 - Reload distribution:
-	- 500ms: 62
-	- 1000ms: 62
-	- 5000ms: 62
-	- 10000ms: 62
-	- 30000ms: 62
-	- +Infms: 62
+	- 500.0ms: 47
+	- 1000.0ms: 47
+	- 5000.0ms: 47
+	- 10000.0ms: 47
+	- 30000.0ms: 47
+	- +Infms: 47
 
 ### Event Batch Processing
 
-- Event Batch Total: 337
-- Event Batch Processing Average Time: 23ms
+- Event Batch Total: 322
+- Event Batch Processing Average Time: 25ms
 - Event Batch Processing distribution:
-	- 500ms: 337
-	- 1000ms: 337
-	- 5000ms: 337
-	- 10000ms: 337
-	- 30000ms: 337
-	- +Infms: 337
+	- 500.0ms: 322
+	- 1000.0ms: 322
+	- 5000.0ms: 322
+	- 10000.0ms: 322
+	- 30000.0ms: 322
+	- +Infms: 322
+
+### NGINX Error Logs
+
 
 ## Test 2: Start NGF, deploy Gateway, create many resources attached to GW - NumResources 150
 
 ### Reloads and Time to Ready
 
-- TimeToReadyTotal: 43s
+- TimeToReadyTotal: 20s
 - TimeToReadyAvgSingle: < 1s
-- NGINX Reloads: 338
-- NGINX Reload Average Time: 126ms
+- NGINX Reloads: 117
+- NGINX Reload Average Time: 150ms
 - Reload distribution:
-	- 500ms: 338
-	- 1000ms: 338
-	- 5000ms: 338
-	- 10000ms: 338
-	- 30000ms: 338
-	- +Infms: 338
+	- 500.0ms: 117
+	- 1000.0ms: 117
+	- 5000.0ms: 117
+	- 10000.0ms: 117
+	- 30000.0ms: 117
+	- +Infms: 117
 
 ### Event Batch Processing
 
-- Event Batch Total: 1693
-- Event Batch Processing Average Time: 25ms
+- Event Batch Total: 1460
+- Event Batch Processing Average Time: 14ms
 - Event Batch Processing distribution:
-	- 500ms: 1693
-	- 1000ms: 1693
-	- 5000ms: 1693
-	- 10000ms: 1693
-	- 30000ms: 1693
-	- +Infms: 1693
+	- 500.0ms: 1460
+	- 1000.0ms: 1460
+	- 5000.0ms: 1460
+	- 10000.0ms: 1460
+	- 30000.0ms: 1460
+	- +Infms: 1460
+
+### NGINX Error Logs
+2025/03/15 17:00:26 [emerg] 48#48: invalid instance state file "/var/lib/nginx/state/nginx-mgmt-state"
+
 
 ## Test 3: Start NGF, create many resources attached to a Gateway, deploy the Gateway - NumResources 30
 
@@ -138,27 +151,30 @@ GKE Cluster:
 
 - TimeToReadyTotal: < 1s
 - TimeToReadyAvgSingle: < 1s
-- NGINX Reloads: 64
-- NGINX Reload Average Time: 125ms
+- NGINX Reloads: 46
+- NGINX Reload Average Time: 133ms
 - Reload distribution:
-	- 500ms: 64
-	- 1000ms: 64
-	- 5000ms: 64
-	- 10000ms: 64
-	- 30000ms: 64
-	- +Infms: 64
+	- 500.0ms: 46
+	- 1000.0ms: 46
+	- 5000.0ms: 46
+	- 10000.0ms: 46
+	- 30000.0ms: 46
+	- +Infms: 46
 
 ### Event Batch Processing
 
-- Event Batch Total: 306
-- Event Batch Processing Average Time: 26ms
+- Event Batch Total: 291
+- Event Batch Processing Average Time: 28ms
 - Event Batch Processing distribution:
-	- 500ms: 306
-	- 1000ms: 306
-	- 5000ms: 306
-	- 10000ms: 306
-	- 30000ms: 306
-	- +Infms: 306
+	- 500.0ms: 291
+	- 1000.0ms: 291
+	- 5000.0ms: 291
+	- 10000.0ms: 291
+	- 30000.0ms: 291
+	- +Infms: 291
+
+### NGINX Error Logs
+
 
 ## Test 3: Start NGF, create many resources attached to a Gateway, deploy the Gateway - NumResources 150
 
@@ -166,24 +182,27 @@ GKE Cluster:
 
 - TimeToReadyTotal: < 1s
 - TimeToReadyAvgSingle: < 1s
-- NGINX Reloads: 342
-- NGINX Reload Average Time: 125ms
+- NGINX Reloads: 258
+- NGINX Reload Average Time: 132ms
 - Reload distribution:
-	- 500ms: 342
-	- 1000ms: 342
-	- 5000ms: 342
-	- 10000ms: 342
-	- 30000ms: 342
-	- +Infms: 342
+	- 500.0ms: 258
+	- 1000.0ms: 258
+	- 5000.0ms: 258
+	- 10000.0ms: 258
+	- 30000.0ms: 258
+	- +Infms: 258
 
 ### Event Batch Processing
 
-- Event Batch Total: 1534
-- Event Batch Processing Average Time: 28ms
+- Event Batch Total: 1501
+- Event Batch Processing Average Time: 29ms
 - Event Batch Processing distribution:
-	- 500ms: 1534
-	- 1000ms: 1534
-	- 5000ms: 1534
-	- 10000ms: 1534
-	- 30000ms: 1534
-	- +Infms: 1534
+	- 500.0ms: 1501
+	- 1000.0ms: 1501
+	- 5000.0ms: 1501
+	- 10000.0ms: 1501
+	- 30000.0ms: 1501
+	- +Infms: 1501
+
+### NGINX Error Logs
+
