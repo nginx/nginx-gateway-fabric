@@ -27,12 +27,13 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 )
 
-var (
-	jwtTestSecretName    = "jwt-secret"
-	caTestSecretName     = "ca-secret"
-	clientTestSecretName = "client-secret"
-	dockerTestSecretName = "docker-secret"
-	ngfNamespace         = "nginx-gateway"
+const (
+	agentTLSTestSecretName = "agent-tls-secret"
+	jwtTestSecretName      = "jwt-secret"
+	caTestSecretName       = "ca-secret"
+	clientTestSecretName   = "client-secret"
+	dockerTestSecretName   = "docker-secret"
+	ngfNamespace           = "nginx-gateway"
 )
 
 func createScheme() *runtime.Scheme {
@@ -63,6 +64,12 @@ func expectResourcesToExist(g *WithT, k8sClient client.Client, nsName types.Name
 		Namespace: nsName.Namespace,
 	}
 	g.Expect(k8sClient.Get(context.TODO(), agentCM, &corev1.ConfigMap{})).To(Succeed())
+
+	agentTLSSecret := types.NamespacedName{
+		Name:      controller.CreateNginxResourceName(nsName.Name, agentTLSTestSecretName),
+		Namespace: nsName.Namespace,
+	}
+	g.Expect(k8sClient.Get(context.TODO(), agentTLSSecret, &corev1.Secret{})).To(Succeed())
 
 	if !plus {
 		return
@@ -112,6 +119,12 @@ func expectResourcesToNotExist(g *WithT, k8sClient client.Client, nsName types.N
 	}
 	g.Expect(k8sClient.Get(context.TODO(), agentCM, &corev1.ConfigMap{})).ToNot(Succeed())
 
+	agentTLSSecret := types.NamespacedName{
+		Name:      controller.CreateNginxResourceName(nsName.Name, agentTLSTestSecretName),
+		Namespace: nsName.Namespace,
+	}
+	g.Expect(k8sClient.Get(context.TODO(), agentTLSSecret, &corev1.Secret{})).ToNot(Succeed())
+
 	jwtSecret := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(nsName.Name, jwtTestSecretName),
 		Namespace: nsName.Namespace,
@@ -144,7 +157,13 @@ func defaultNginxProvisioner(
 	deploymentStore := &agentfakes.FakeDeploymentStorer{}
 
 	return &NginxProvisioner{
-		store:     newStore([]string{dockerTestSecretName}, jwtTestSecretName, caTestSecretName, clientTestSecretName),
+		store: newStore(
+			[]string{dockerTestSecretName},
+			agentTLSTestSecretName,
+			jwtTestSecretName,
+			caTestSecretName,
+			clientTestSecretName,
+		),
 		k8sClient: fakeClient,
 		cfg: Config{
 			DeploymentStore: deploymentStore,
@@ -162,6 +181,7 @@ func defaultNginxProvisioner(
 				ClientSSLSecretName: clientTestSecretName,
 			},
 			NginxDockerSecretNames: []string{dockerTestSecretName},
+			AgentTLSSecretName:     agentTLSTestSecretName,
 		},
 		leader: true,
 	}, fakeClient, deploymentStore
@@ -232,6 +252,12 @@ func TestRegisterGateway(t *testing.T) {
 
 	objects := []client.Object{
 		gateway.Source,
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      agentTLSTestSecretName,
+				Namespace: ngfNamespace,
+			},
+		},
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      jwtTestSecretName,
@@ -328,7 +354,14 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 	}
 
 	// provision everything first
-	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source)
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, agentTLSSecret)
 	provisioner.cfg.Plus = false
 	provisioner.cfg.NginxDockerSecretNames = nil
 

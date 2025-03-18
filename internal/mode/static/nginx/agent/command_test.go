@@ -208,6 +208,7 @@ func TestCreateConnection(t *testing.T) {
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
+				nil,
 			)
 
 			resp, err := cs.CreateConnection(test.ctx, test.request)
@@ -304,6 +305,7 @@ func TestSubscribe(t *testing.T) {
 		store,
 		&connTracker,
 		status.NewQueue(),
+		nil,
 	)
 
 	broadcaster := &broadcastfakes.FakeBroadcaster{}
@@ -412,6 +414,78 @@ func TestSubscribe(t *testing.T) {
 	g.Expect(deployment.podStatuses).ToNot(HaveKey("nginx-pod"))
 }
 
+func TestSubscribe_Reset(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+	conn := agentgrpc.Connection{
+		Parent:     types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
+		PodName:    "nginx-pod",
+		InstanceID: "nginx-id",
+	}
+	connTracker.GetConnectionReturns(conn)
+
+	store := NewDeploymentStore(&connTracker)
+	resetChan := make(chan struct{})
+	cs := newCommandService(
+		logr.Discard(),
+		fake.NewFakeClient(),
+		store,
+		&connTracker,
+		status.NewQueue(),
+		resetChan,
+	)
+
+	broadcaster := &broadcastfakes.FakeBroadcaster{}
+	responseCh := make(chan struct{})
+	listenCh := make(chan broadcast.NginxAgentMessage, 2)
+	subChannels := broadcast.SubscriberChannels{
+		ListenCh:   listenCh,
+		ResponseCh: responseCh,
+	}
+	broadcaster.SubscribeReturns(subChannels)
+
+	// set the initial files to be applied by the Subscription
+	deployment := store.StoreWithBroadcaster(conn.Parent, broadcaster)
+	files := []File{
+		{
+			Meta: &pb.FileMeta{
+				Name: "nginx.conf",
+				Hash: "12345",
+			},
+			Contents: []byte("file contents"),
+		},
+	}
+	deployment.SetFiles(files)
+
+	ctx, cancel := createGrpcContextWithCancel()
+	defer cancel()
+
+	mockServer := newMockSubscribeServer(ctx)
+
+	// start the Subscriber
+	errCh := make(chan error)
+	go func() {
+		errCh <- cs.Subscribe(mockServer)
+	}()
+
+	// ensure initial config is read to unblock read channel
+	mockServer.recvChan <- &pb.DataPlaneResponse{
+		CommandResponse: &pb.CommandResponse{
+			Status: pb.CommandResponse_COMMAND_STATUS_OK,
+		},
+	}
+
+	resetChan <- struct{}{}
+
+	g.Eventually(func() error {
+		err := <-errCh
+		g.Expect(err).To(HaveOccurred())
+		return err
+	}).Should(MatchError(ContainSubstring("TLS files updated")))
+}
+
 func TestSubscribe_Errors(t *testing.T) {
 	t.Parallel()
 
@@ -465,6 +539,7 @@ func TestSubscribe_Errors(t *testing.T) {
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
+				nil,
 			)
 
 			if test.setup != nil {
@@ -580,6 +655,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
+				nil,
 			)
 
 			conn := &agentgrpc.Connection{
@@ -765,6 +841,7 @@ func TestGetPodOwner(t *testing.T) {
 				NewDeploymentStore(nil),
 				nil,
 				status.NewQueue(),
+				nil,
 			)
 
 			owner, err := cs.getPodOwner(test.podName)
@@ -864,6 +941,7 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
+				nil,
 			)
 
 			resp, err := cs.UpdateDataPlaneStatus(test.ctx, test.request)
@@ -902,6 +980,7 @@ func TestUpdateDataPlaneHealth(t *testing.T) {
 		NewDeploymentStore(&connTracker),
 		&connTracker,
 		status.NewQueue(),
+		nil,
 	)
 
 	resp, err := cs.UpdateDataPlaneHealth(context.Background(), &pb.UpdateDataPlaneHealthRequest{})

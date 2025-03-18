@@ -13,6 +13,35 @@ metadata:
   name: nginx-gateway
   namespace: nginx-gateway
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/instance: nginx-gateway
+    app.kubernetes.io/name: nginx-gateway
+    app.kubernetes.io/version: edge
+  name: nginx-gateway-cert-generator
+  namespace: nginx-gateway
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/instance: nginx-gateway
+    app.kubernetes.io/name: nginx-gateway
+    app.kubernetes.io/version: edge
+  name: nginx-gateway-cert-generator
+  namespace: nginx-gateway
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - update
+  - get
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -75,6 +104,12 @@ rules:
   - list
   - watch
 - apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
   - gateway.networking.k8s.io
   resources:
   - gatewayclasses
@@ -136,6 +171,24 @@ rules:
   verbs:
   - list
   - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: nginx-gateway
+    app.kubernetes.io/name: nginx-gateway
+    app.kubernetes.io/version: edge
+  name: nginx-gateway-cert-generator
+  namespace: nginx-gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: nginx-gateway-cert-generator
+subjects:
+- kind: ServiceAccount
+  name: nginx-gateway-cert-generator
+  namespace: nginx-gateway
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -205,6 +258,7 @@ spec:
         - --gatewayclass=nginx
         - --config=nginx-gateway-config
         - --service=nginx-gateway
+        - --agent-tls-secret=agent-tls
         - --metrics-port=9113
         - --health-port=8081
         - --leader-election-lock-name=nginx-gateway-leader-election
@@ -253,11 +307,64 @@ spec:
           runAsUser: 101
           seccompProfile:
             type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /var/run/secrets/ngf
+          name: nginx-agent-tls
       securityContext:
         fsGroup: 1001
         runAsNonRoot: true
       serviceAccountName: nginx-gateway
       terminationGracePeriodSeconds: 30
+      volumes:
+      - name: nginx-agent-tls
+        secret:
+          secretName: server-tls
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/instance: nginx-gateway
+    app.kubernetes.io/name: nginx-gateway
+    app.kubernetes.io/version: edge
+  name: nginx-gateway-cert-generator
+  namespace: nginx-gateway
+spec:
+  template:
+    metadata:
+      annotations: null
+    spec:
+      containers:
+      - args:
+        - generate-certs
+        - --service=nginx-gateway
+        - --cluster-domain=cluster.local
+        - --server-tls-secret=server-tls
+        - --agent-tls-secret=agent-tls
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: ghcr.io/nginx/nginx-gateway-fabric:edge
+        imagePullPolicy: Always
+        name: cert-generator
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 1001
+          runAsUser: 101
+          seccompProfile:
+            type: RuntimeDefault
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 1001
+        runAsNonRoot: true
+      serviceAccountName: nginx-gateway-cert-generator
+  ttlSecondsAfterFinished: 0
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass

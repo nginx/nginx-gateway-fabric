@@ -33,6 +33,13 @@ const agentTemplateText = `command:
     server:
         host: {{ .ServiceName }}.{{ .Namespace }}.svc
         port: 443
+    auth:
+        tokenpath: /var/run/secrets/ngf/serviceaccount/token
+    tls:
+        cert: /var/run/secrets/ngf/tls.crt
+        key: /var/run/secrets/ngf/tls.key
+        ca: /var/run/secrets/ngf/ca.crt
+        server_name: {{ .ServiceName }}.{{ .Namespace }}.svc
 allowed_directories:
 - /etc/nginx
 - /usr/share/nginx

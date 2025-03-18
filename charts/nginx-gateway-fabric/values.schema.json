@@ -1,6 +1,48 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "properties": {
+    "certGenerator": {
+      "description": "The certGenerator section contains the configuration for the cert-generator Job.",
+      "properties": {
+        "agentTLSSecretName": {
+          "default": "agent-tls",
+          "description": "The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely\ncommunicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the\nNGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).",
+          "required": [],
+          "title": "agentTLSSecretName",
+          "type": "string"
+        },
+        "annotations": {
+          "description": "The annotations of the cert-generator Job.",
+          "required": [],
+          "title": "annotations",
+          "type": "object"
+        },
+        "overwrite": {
+          "default": false,
+          "description": "Overwrite existing TLS Secrets on startup.",
+          "required": [],
+          "title": "overwrite",
+          "type": "boolean"
+        },
+        "serverTLSSecretName": {
+          "default": "server-tls",
+          "description": "The name of the Secret containing TLS CA, certificate, and key for the NGINX Gateway Fabric control plane\nto securely communicate with the NGINX Agent. Must exist in the same namespace that the NGINX Gateway Fabric\ncontrol plane is running in (default namespace: nginx-gateway).",
+          "required": [],
+          "title": "serverTLSSecretName",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "certGenerator",
+      "type": "object"
+    },
+    "clusterDomain": {
+      "default": "cluster.local",
+      "description": "The DNS cluster domain of your Kubernetes cluster.",
+      "required": [],
+      "title": "clusterDomain",
+      "type": "string"
+    },
     "global": {
       "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
       "required": [],

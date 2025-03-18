@@ -51,7 +51,7 @@ func TestUpdateConfig(t *testing.T) {
 			fakeBroadcaster.SendReturns(test.configApplied)
 
 			plus := false
-			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, plus)
+			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, plus)
 			deployment := &Deployment{
 				broadcaster: fakeBroadcaster,
 				podStatuses: make(map[string]error),
@@ -142,7 +142,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
 			fakeBroadcaster.SendReturns(test.configApplied)
 
-			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, test.plus)
+			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, test.plus)
 			updater.retryTimeout = 0
 
 			deployment := &Deployment{

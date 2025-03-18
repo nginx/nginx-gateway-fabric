@@ -36,6 +36,7 @@ type commandService struct {
 	pb.CommandServiceServer
 	nginxDeployments  *DeploymentStore
 	statusQueue       *status.Queue
+	resetConnChan     <-chan struct{}
 	connTracker       agentgrpc.ConnectionsTracker
 	k8sReader         client.Reader
 	logger            logr.Logger
@@ -48,6 +49,7 @@ func newCommandService(
 	depStore *DeploymentStore,
 	connTracker agentgrpc.ConnectionsTracker,
 	statusQueue *status.Queue,
+	resetConnChan <-chan struct{},
 ) *commandService {
 	return &commandService{
 		connectionTimeout: connectionWaitTimeout,
@@ -56,6 +58,7 @@ func newCommandService(
 		connTracker:       connTracker,
 		nginxDeployments:  depStore,
 		statusQueue:       statusQueue,
+		resetConnChan:     resetConnChan,
 	}
 }
 
@@ -158,7 +161,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		// `updateNginxConfig`. The entire transaction (as described in above in the function comment)
 		// must be locked to prevent the deployment files from changing during the transaction.
 		// This means that the lock is held until we receive either an error or response from agent
-		// (via msgr.Errors() or msgr.Mesages()) and respond back, finally returning to the event handler
+		// (via msgr.Errors() or msgr.Messages()) and respond back, finally returning to the event handler
 		// which releases the lock.
 		select {
 		case <-ctx.Done():
@@ -167,6 +170,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			default:
 			}
 			return grpcStatus.Error(codes.Canceled, context.Cause(ctx).Error())
+		case <-cs.resetConnChan:
+			return grpcStatus.Error(codes.Unavailable, "TLS files updated")
 		case msg := <-channels.ListenCh:
 			var req *pb.ManagementPlaneRequest
 			switch msg.Type {

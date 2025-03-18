@@ -23,7 +23,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{dockerTestSecretName}, jwtTestSecretName, "", "")
+	store := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "")
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
 
@@ -196,7 +196,13 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{dockerTestSecretName}, jwtTestSecretName, caTestSecretName, clientTestSecretName)
+	store := newStore(
+		[]string{dockerTestSecretName},
+		agentTLSTestSecretName,
+		jwtTestSecretName,
+		caTestSecretName,
+		clientTestSecretName,
+	)
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
 
@@ -232,6 +238,14 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 	}
+
+	originalAgentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+	}
+	g.Expect(fakeClient.Create(ctx, originalAgentTLSSecret)).To(Succeed())
 
 	jwtSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -311,6 +325,7 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 		g.Expect(fakeClient.Get(ctx, key, &corev1.Secret{})).ToNot(Succeed())
 	}
 
+	verifySecret(agentTLSTestSecretName, originalAgentTLSSecret)
 	verifySecret(jwtTestSecretName, userJwtSecret)
 	verifySecret(caTestSecretName, userCASecret)
 	verifySecret(clientTestSecretName, userClientSSLSecret)

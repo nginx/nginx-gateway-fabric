@@ -22,6 +22,7 @@ func main() {
 
 	rootCmd.AddCommand(
 		createControllerCommand(),
+		createGenerateCertsCommand(),
 		createInitializeCommand(),
 		createSleepCommand(),
 	)

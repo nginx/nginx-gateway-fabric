@@ -29,11 +29,13 @@ func newEventLoop(
 	selector metav1.LabelSelector,
 	ngfNamespace string,
 	dockerSecrets []string,
+	agentTLSSecret string,
 	usageConfig *config.UsageReportConfig,
 ) (*events.EventLoop, error) {
 	nginxResourceLabelPredicate := predicate.NginxLabelPredicate(selector)
 
-	secretsToWatch := make([]string, 0, len(dockerSecrets)+3)
+	secretsToWatch := make([]string, 0, len(dockerSecrets)+4)
+	secretsToWatch = append(secretsToWatch, agentTLSSecret)
 	secretsToWatch = append(secretsToWatch, dockerSecrets...)
 
 	if usageConfig != nil {
