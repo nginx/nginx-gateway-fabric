@@ -260,6 +260,7 @@ func waitForHTTPRouteToHaveGatewayNotProgrammedCond(httpRouteNsName types.Namesp
 		500*time.Millisecond,
 		true, /* poll immediately */
 		func(ctx context.Context) (bool, error) {
+			fmt.Println("we are polling ")
 			var hr v1.HTTPRoute
 			var err error
 
@@ -311,6 +312,7 @@ func waitForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedNam
 		500*time.Millisecond,
 		true, /* poll immediately */
 		func(ctx context.Context) (bool, error) {
+			fmt.Println("we are polling ")
 			var sf ngfAPI.SnippetsFilter
 			var err error
 
