@@ -228,7 +228,11 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
 			nsname := types.NamespacedName{Name: "tea", Namespace: namespace}
-			Expect(waitForHTTPRouteToHaveGatewayNotProgrammedCond(nsname)).To(Succeed())
+			Eventually(waitForHTTPRouteToHaveGatewayNotProgrammedCond).
+				WithArguments(nsname).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
 
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		})
@@ -239,7 +243,11 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
 			nsname := types.NamespacedName{Name: "soda", Namespace: namespace}
-			Expect(waitForHTTPRouteToHaveGatewayNotProgrammedCond(nsname)).To(Succeed())
+			Eventually(waitForHTTPRouteToHaveGatewayNotProgrammedCond).
+				WithArguments(nsname).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
 
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		})
@@ -260,7 +268,6 @@ func waitForHTTPRouteToHaveGatewayNotProgrammedCond(httpRouteNsName types.Namesp
 		500*time.Millisecond,
 		true, /* poll immediately */
 		func(ctx context.Context) (bool, error) {
-			fmt.Println("we are polling ")
 			var hr v1.HTTPRoute
 			var err error
 
@@ -312,7 +319,6 @@ func waitForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedNam
 		500*time.Millisecond,
 		true, /* poll immediately */
 		func(ctx context.Context) (bool, error) {
-			fmt.Println("we are polling ")
 			var sf ngfAPI.SnippetsFilter
 			var err error
 
