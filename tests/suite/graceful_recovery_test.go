@@ -303,7 +303,7 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 			}).
 			WithTimeout(timeoutConfig.CreateTimeout * 2).
 			WithPolling(500 * time.Millisecond).
-			MustPassRepeatedly(5).
+			MustPassRepeatedly(20).
 			Should(BeTrue())
 
 		nginxPodName := nginxPodNames[0]
