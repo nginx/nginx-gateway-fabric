@@ -645,7 +645,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		spec.Spec.ImagePullSecrets = append(spec.Spec.ImagePullSecrets, ref)
 	}
 
-	// need to sort ports so everytime buildNginxPodTemplateSpec is called it will generate the exact same
+	// need to sort secret names so everytime buildNginxPodTemplateSpec is called it will generate the exact same
 	// array of secrets. This is needed to satisfy deterministic results of the method.
 	sort.Slice(spec.Spec.ImagePullSecrets, func(i, j int) bool {
 		return spec.Spec.ImagePullSecrets[i].Name < spec.Spec.ImagePullSecrets[j].Name

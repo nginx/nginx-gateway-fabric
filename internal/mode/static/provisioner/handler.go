@@ -104,11 +104,10 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 				panic(fmt.Errorf("unknown resource type %T", e.Resource))
 			}
 		case *events.DeleteEvent:
-			obj := e
 			switch e.Type.(type) {
 			case *gatewayv1.Gateway:
 				if !h.provisioner.isLeader() {
-					h.provisioner.setResourceToDelete(obj.NamespacedName)
+					h.provisioner.setResourceToDelete(e.NamespacedName)
 				}
 
 				if err := h.provisioner.deprovisionNginx(ctx, e.NamespacedName); err != nil {

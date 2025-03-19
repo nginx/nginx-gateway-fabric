@@ -708,14 +708,8 @@ func GetReadyNGFPodNames(
 		return nil, errors.New("unable to find NGF Pod(s)")
 	}
 
-	var names []string
-	for _, pod := range podList.Items {
-		for _, cond := range pod.Status.Conditions {
-			if cond.Type == core.PodReady && cond.Status == core.ConditionTrue {
-				names = append(names, pod.Name)
-			}
-		}
-	}
+	names := getReadyPodNames(podList)
+
 	return names, nil
 }
 
@@ -742,6 +736,12 @@ func GetReadyNginxPodNames(
 		return nil, errors.New("unable to find NGINX Pod(s)")
 	}
 
+	names := getReadyPodNames(podList)
+
+	return names, nil
+}
+
+func getReadyPodNames(podList core.PodList) []string {
 	var names []string
 	for _, pod := range podList.Items {
 		for _, cond := range pod.Status.Conditions {
@@ -751,7 +751,7 @@ func GetReadyNginxPodNames(
 		}
 	}
 
-	return names, nil
+	return names
 }
 
 func countNumberOfReadyParents(parents []v1.RouteParentStatus) int {
@@ -766,33 +766,6 @@ func countNumberOfReadyParents(parents []v1.RouteParentStatus) int {
 	}
 
 	return readyCount
-}
-
-func (rm *ResourceManager) WaitForAppsToBeReadyWithPodCount(namespace string, podCount int) error {
-	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.CreateTimeout)
-	defer cancel()
-
-	return rm.WaitForAppsToBeReadyWithCtxWithPodCount(ctx, namespace, podCount)
-}
-
-func (rm *ResourceManager) WaitForAppsToBeReadyWithCtxWithPodCount(
-	ctx context.Context,
-	namespace string,
-	podCount int,
-) error {
-	if err := rm.WaitForPodsToBeReadyWithCount(ctx, namespace, podCount); err != nil {
-		return err
-	}
-
-	if err := rm.waitForHTTPRoutesToBeReady(ctx, namespace); err != nil {
-		return err
-	}
-
-	if err := rm.waitForGRPCRoutesToBeReady(ctx, namespace); err != nil {
-		return err
-	}
-
-	return rm.waitForGatewaysToBeReady(ctx, namespace)
 }
 
 // WaitForPodsToBeReadyWithCount waits for all Pods in the specified namespace to be ready or

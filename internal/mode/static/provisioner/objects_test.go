@@ -447,31 +447,31 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 		Data: map[string][]byte{"data": []byte("docker")},
 	}
 
-	dockerSecretTeaName := dockerTestSecretName + "-Tea"
-	dockerSecretTea := &corev1.Secret{
+	dockerSecretRegistry1Name := dockerTestSecretName + "-registry1"
+	dockerSecretRegistry1 := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      dockerSecretTeaName,
+			Name:      dockerSecretRegistry1Name,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"data": []byte("docker-Tea")},
+		Data: map[string][]byte{"data": []byte("docker-registry1")},
 	}
 
-	dockerSecretChaiName := dockerTestSecretName + "-Chai"
-	dockerSecretChai := &corev1.Secret{
+	dockerSecretRegistry2Name := dockerTestSecretName + "-registry2"
+	dockerSecretRegistry2 := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      dockerSecretChaiName,
+			Name:      dockerSecretRegistry2Name,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"data": []byte("docker-Chai")},
+		Data: map[string][]byte{"data": []byte("docker-registry2")},
 	}
-	fakeClient := fake.NewFakeClient(dockerSecret, dockerSecretTea, dockerSecretChai)
+	fakeClient := fake.NewFakeClient(dockerSecret, dockerSecretRegistry1, dockerSecretRegistry2)
 
 	provisioner := &NginxProvisioner{
 		cfg: Config{
 			GatewayPodConfig: &config.GatewayPodConfig{
 				Namespace: ngfNamespace,
 			},
-			NginxDockerSecretNames: []string{dockerTestSecretName, dockerSecretTeaName, dockerSecretChaiName},
+			NginxDockerSecretNames: []string{dockerTestSecretName, dockerSecretRegistry1Name, dockerSecretRegistry2Name},
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
@@ -508,16 +508,16 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerTestSecretName)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 
-	chaiSecretObj := objects[1]
-	secret, ok = chaiSecretObj.(*corev1.Secret)
+	registry1SecretObj := objects[1]
+	secret, ok = registry1SecretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerSecretChaiName)))
+	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerSecretRegistry1Name)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 
-	teaSecretObj := objects[2]
-	secret, ok = teaSecretObj.(*corev1.Secret)
+	registry2SecretObj := objects[2]
+	secret, ok = registry2SecretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerSecretTeaName)))
+	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerSecretRegistry2Name)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 
 	depObj := objects[7]
@@ -530,10 +530,10 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 			Name: controller.CreateNginxResourceName(resourceName, dockerTestSecretName),
 		},
 		{
-			Name: controller.CreateNginxResourceName(resourceName, dockerSecretChaiName),
+			Name: controller.CreateNginxResourceName(resourceName, dockerSecretRegistry1Name),
 		},
 		{
-			Name: controller.CreateNginxResourceName(resourceName, dockerSecretTeaName),
+			Name: controller.CreateNginxResourceName(resourceName, dockerSecretRegistry2Name),
 		},
 	}))
 }
