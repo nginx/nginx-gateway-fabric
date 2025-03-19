@@ -323,7 +323,6 @@ var _ = BeforeSuite(func() {
 		"telemetry",          // - running telemetry test (NGF will be deployed as part of the test)
 		"scale",              // - running scale test (this test will deploy its own version)
 		"reconfiguration",    // - running reconfiguration test (test will deploy its own instances)
-		"graceful-recovery",  // - running graceful-recovery test (test will deploy its own instances)
 	}
 	for _, s := range skipSubstrings {
 		if strings.Contains(labelFilter, s) {

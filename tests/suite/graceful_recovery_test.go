@@ -28,22 +28,26 @@ const (
 	ngfContainerName   = "nginx-gateway"
 )
 
-// Since checkNGFContainerLogsForErrors may experience interference from previous tests (as explained in the function
-// documentation), this test is recommended to be run separate from other tests.
+// Since this test involves restarting of the test node, it is recommended to be run separate from other tests
+// such that any issues in this test do not interfere with other tests.
 var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), func() {
-	files := []string{
-		"graceful-recovery/cafe.yaml",
-		"graceful-recovery/cafe-secret.yaml",
-		"graceful-recovery/gateway.yaml",
-		"graceful-recovery/cafe-routes.yaml",
-	}
+	var (
+		files = []string{
+			"graceful-recovery/cafe.yaml",
+			"graceful-recovery/cafe-secret.yaml",
+			"graceful-recovery/gateway.yaml",
+			"graceful-recovery/cafe-routes.yaml",
+		}
 
-	var ns core.Namespace
+		ns core.Namespace
 
-	baseHTTPURL := "http://cafe.example.com"
-	baseHTTPSURL := "https://cafe.example.com"
-	teaURL := baseHTTPSURL + "/tea"
-	coffeeURL := baseHTTPURL + "/coffee"
+		baseHTTPURL  = "http://cafe.example.com"
+		baseHTTPSURL = "https://cafe.example.com"
+		teaURL       = baseHTTPSURL + "/tea"
+		coffeeURL    = baseHTTPURL + "/coffee"
+
+		activeNGFPodName, activeNginxPodName string
+	)
 
 	checkForWorkingTraffic := func(teaURL, coffeeURL string) error {
 		if err := expectRequestToSucceed(teaURL, address, "URI: /tea"); err != nil {
@@ -216,8 +220,9 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 
 		nginxPodName := nginxPodNames[0]
 		Expect(nginxPodName).ToNot(BeEmpty())
+		activeNginxPodName = nginxPodName
 
-		setUpPortForward(nginxPodNames[0], ns.Name)
+		setUpPortForward(activeNginxPodName, ns.Name)
 
 		Eventually(
 			func() error {
@@ -291,9 +296,16 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 			WithPolling(500 * time.Millisecond).
 			MustPassRepeatedly(20).
 			Should(BeTrue())
+		newNGFPodName := podNames[0]
 
-		ngfPodName := podNames[0]
-		Expect(ngfPodName).ToNot(BeEmpty())
+		// expected behavior is when node is drained, new pods will be created. when the node is
+		// abruptly restarted, new pods are not created.
+		if drain {
+			Expect(newNGFPodName).ToNot(Equal(activeNGFPodName))
+			activeNGFPodName = newNGFPodName
+		} else {
+			Expect(newNGFPodName).To(Equal(activeNGFPodName))
+		}
 
 		var nginxPodNames []string
 		Eventually(
@@ -305,21 +317,23 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 			WithPolling(500 * time.Millisecond).
 			MustPassRepeatedly(20).
 			Should(BeTrue())
+		newNginxPodName := nginxPodNames[0]
 
-		nginxPodName := nginxPodNames[0]
-		Expect(nginxPodName).ToNot(BeEmpty())
+		if drain {
+			Expect(newNginxPodName).ToNot(Equal(activeNginxPodName))
+			activeNginxPodName = newNginxPodName
+		} else {
+			Expect(newNginxPodName).To(Equal(activeNginxPodName))
+		}
 
-		setUpPortForward(nginxPodName, ns.Name)
+		setUpPortForward(activeNginxPodName, ns.Name)
 
+		// sets activeNginxPodName to new pod
 		checkNGFFunctionality(teaURL, coffeeURL, files, ns)
 
-		checkNGFContainerLogsForErrors(ngfPodName)
+		checkNGFContainerLogsForErrors(activeNGFPodName)
 
-		nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(nginxPodNames).To(HaveLen(1))
-
-		if errorLogs := getUnexpectedNginxErrorLogs(nginxPodNames[0], ns.Name); errorLogs != "" {
+		if errorLogs := getUnexpectedNginxErrorLogs(activeNginxPodName, ns.Name); errorLogs != "" {
 			Skip(fmt.Sprintf("NGINX has unexpected error logs: \n%s", errorLogs))
 		}
 	}
@@ -367,18 +381,12 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 		return nil
 	}
 
-	BeforeEach(func() {
-		// this test is unique in that it will check the entire log of both ngf and nginx containers
-		// for any errors, so in order to avoid errors generated in previous tests we will uninstall
-		// NGF installed at the suite level, then re-deploy our own. We will also uninstall and re-install
-		// NGF between each graceful-recovery test for the same reason.
-		teardown(releaseName)
-
-		setup(getDefaultSetupCfg())
-
+	BeforeAll(func() {
 		podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(podNames).To(HaveLen(1))
+
+		activeNGFPodName = podNames[0]
 
 		ns = core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -394,7 +402,9 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
-		setUpPortForward(nginxPodNames[0], ns.Name)
+		activeNginxPodName = nginxPodNames[0]
+
+		setUpPortForward(activeNginxPodName, ns.Name)
 
 		if portFwdPort != 0 {
 			coffeeURL = fmt.Sprintf("%s:%d/coffee", baseHTTPURL, portFwdPort)
@@ -412,58 +422,37 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 			Should(Succeed())
 	})
 
-	AfterEach(func() {
+	AfterAll(func() {
 		cleanUpPortForward()
 		Expect(resourceManager.DeleteFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
 	})
 
 	It("recovers when nginx container is restarted", func() {
+		restartNginxContainer(activeNginxPodName, ns.Name, nginxContainerName)
+
 		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
+		activeNginxPodName = nginxPodNames[0]
 
-		nginxPodName := nginxPodNames[0]
+		setUpPortForward(activeNginxPodName, ns.Name)
 
-		restartNginxContainer(nginxPodName, ns.Name, nginxContainerName)
-
-		nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(nginxPodNames).To(HaveLen(1))
-
-		setUpPortForward(nginxPodNames[0], ns.Name)
-
+		// sets activeNginxPodName to new pod
 		checkNGFFunctionality(teaURL, coffeeURL, files, &ns)
 
-		ngfPodNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(ngfPodNames).To(HaveLen(1))
+		checkNGFContainerLogsForErrors(activeNGFPodName)
 
-		nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(nginxPodNames).To(HaveLen(1))
-
-		checkNGFContainerLogsForErrors(ngfPodNames[0])
-
-		if errorLogs := getUnexpectedNginxErrorLogs(nginxPodNames[0], ns.Name); errorLogs != "" {
+		if errorLogs := getUnexpectedNginxErrorLogs(activeNginxPodName, ns.Name); errorLogs != "" {
 			Skip(fmt.Sprintf("NGINX has unexpected error logs: \n%s", errorLogs))
 		}
 	})
 
 	It("recovers when NGF Pod is restarted", func() {
-		startingNGFPodNames, err := framework.GetReadyNGFPodNames(
-			k8sClient,
-			ngfNamespace,
-			releaseName,
-			timeoutConfig.GetTimeout,
-		)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(startingNGFPodNames).To(HaveLen(1))
-
 		leaseName, err := getLeaderElectionLeaseHolderName()
 		Expect(err).ToNot(HaveOccurred())
 
-		ngfPod, err := resourceManager.GetPod(ngfNamespace, startingNGFPodNames[0])
+		ngfPod, err := resourceManager.GetPod(ngfNamespace, activeNGFPodName)
 		Expect(err).ToNot(HaveOccurred())
 
 		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
@@ -490,7 +479,8 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 		newNGFPodName := newNGFPodNames[0]
 		Expect(newNGFPodName).ToNot(BeEmpty())
 
-		Expect(newNGFPodName).ToNot(Equal(startingNGFPodNames[0]))
+		Expect(newNGFPodName).ToNot(Equal(activeNGFPodName))
+		activeNGFPodName = newNGFPodName
 
 		Eventually(
 			func() error {
@@ -500,15 +490,12 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 			WithPolling(500 * time.Millisecond).
 			Should(Succeed())
 
+		// sets activeNginxPodName to new pod
 		checkNGFFunctionality(teaURL, coffeeURL, files, &ns)
 
-		checkNGFContainerLogsForErrors(newNGFPodName)
+		checkNGFContainerLogsForErrors(activeNGFPodName)
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(nginxPodNames).To(HaveLen(1))
-
-		if errorLogs := getUnexpectedNginxErrorLogs(nginxPodNames[0], ns.Name); errorLogs != "" {
+		if errorLogs := getUnexpectedNginxErrorLogs(activeNginxPodName, ns.Name); errorLogs != "" {
 			Skip(fmt.Sprintf("NGINX has unexpected error logs: \n%s", errorLogs))
 		}
 	})
