@@ -145,10 +145,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		return Data{}, fmt.Errorf("failed to collect cluster information: %w", err)
 	}
 
-	graphResourceCount, err := collectGraphResourceCount(g, c.cfg.ConfigurationGetter)
-	if err != nil {
-		return Data{}, fmt.Errorf("failed to collect NGF resource counts: %w", err)
-	}
+	graphResourceCount := collectGraphResourceCount(g, c.cfg.ConfigurationGetter)
 
 	replicaSet, err := getPodReplicaSet(ctx, c.cfg.K8sClientReader, c.cfg.PodNSName)
 	if err != nil {
@@ -193,13 +190,9 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 func collectGraphResourceCount(
 	g *graph.Graph,
 	configurationGetter ConfigurationGetter,
-) (NGFResourceCounts, error) {
+) NGFResourceCounts {
 	ngfResourceCounts := NGFResourceCounts{}
 	cfg := configurationGetter.GetLatestConfiguration()
-
-	if cfg == nil {
-		return ngfResourceCounts, errors.New("latest configuration cannot be nil")
-	}
 
 	ngfResourceCounts.GatewayClassCount = int64(len(g.IgnoredGatewayClasses))
 	if g.GatewayClass != nil {
@@ -219,9 +212,11 @@ func collectGraphResourceCount(
 	ngfResourceCounts.SecretCount = int64(len(g.ReferencedSecrets))
 	ngfResourceCounts.ServiceCount = int64(len(g.ReferencedServices))
 
-	for _, upstream := range cfg.Upstreams {
-		if upstream.ErrorMsg == "" {
-			ngfResourceCounts.EndpointCount += int64(len(upstream.Endpoints))
+	if cfg != nil {
+		for _, upstream := range cfg.Upstreams {
+			if upstream.ErrorMsg == "" {
+				ngfResourceCounts.EndpointCount += int64(len(upstream.Endpoints))
+			}
 		}
 	}
 
@@ -249,7 +244,7 @@ func collectGraphResourceCount(
 	ngfResourceCounts.NginxProxyCount = int64(len(g.ReferencedNginxProxies))
 	ngfResourceCounts.SnippetsFilterCount = int64(len(g.SnippetsFilters))
 
-	return ngfResourceCounts, nil
+	return ngfResourceCounts
 }
 
 type RouteCounts struct {

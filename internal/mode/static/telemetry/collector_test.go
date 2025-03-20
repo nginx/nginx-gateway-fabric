@@ -728,14 +728,6 @@ var _ = Describe("Collector", Ordered, func() {
 					_, err := dataCollector.Collect(ctx)
 					Expect(err).To(MatchError(expectedError))
 				})
-
-				It("should error on nil latest configuration", func(ctx SpecContext) {
-					expectedError := errors.New("latest configuration cannot be nil")
-					fakeConfigurationGetter.GetLatestConfigurationReturns(nil)
-
-					_, err := dataCollector.Collect(ctx)
-					Expect(err).To(MatchError(expectedError))
-				})
 			})
 		})
 	})

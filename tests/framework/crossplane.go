@@ -203,7 +203,7 @@ func injectCrossplaneContainer(
 func createCrossplaneExecutor(
 	k8sClient kubernetes.Interface,
 	k8sConfig *rest.Config,
-	ngfPodName,
+	nginxPodName,
 	namespace string,
 ) (remotecommand.Executor, error) {
 	cmd := []string{"./crossplane", "/etc/nginx/nginx.conf"}
@@ -217,7 +217,7 @@ func createCrossplaneExecutor(
 	req := k8sClient.CoreV1().RESTClient().Post().
 		Resource("pods").
 		SubResource("exec").
-		Name(ngfPodName).
+		Name(nginxPodName).
 		Namespace(namespace).
 		VersionedParams(opts, scheme.ParameterCodec)
 

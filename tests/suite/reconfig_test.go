@@ -406,7 +406,12 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		}
 
 		checkNGFContainerLogsForErrors(ngfPodName)
-		nginxErrorLogs := getNginxErrorLogs(ngfPodName)
+
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, reconfigNamespace.Name, timeoutConfig.GetTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		nginxErrorLogs := getNginxErrorLogs(nginxPodNames[0], reconfigNamespace.Name)
 
 		reloadCount, err := framework.GetReloadCount(promInstance, ngfPodName)
 		Expect(err).ToNot(HaveOccurred())

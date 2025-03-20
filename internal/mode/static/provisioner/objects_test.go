@@ -59,6 +59,12 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 				{
 					Port: 80,
 				},
+				{
+					Port: 8888,
+				},
+				{
+					Port: 9999,
+				},
 			},
 		},
 	}
@@ -116,10 +122,24 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	validateMeta(svc)
 	g.Expect(svc.Spec.Type).To(Equal(defaultServiceType))
 	g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(defaultServicePolicy))
-	g.Expect(svc.Spec.Ports).To(ContainElement(corev1.ServicePort{
-		Port:       80,
-		Name:       "port-80",
-		TargetPort: intstr.FromInt(80),
+
+	// service ports is sorted in ascending order by port number when we make the nginx object
+	g.Expect(svc.Spec.Ports).To(Equal([]corev1.ServicePort{
+		{
+			Port:       80,
+			Name:       "port-80",
+			TargetPort: intstr.FromInt(80),
+		},
+		{
+			Port:       8888,
+			Name:       "port-8888",
+			TargetPort: intstr.FromInt(8888),
+		},
+		{
+			Port:       9999,
+			Name:       "port-9999",
+			TargetPort: intstr.FromInt(9999),
+		},
 	}))
 
 	depObj := objects[4]
@@ -132,13 +152,24 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	g.Expect(template.Spec.Containers).To(HaveLen(1))
 	container := template.Spec.Containers[0]
 
-	g.Expect(container.Ports).To(ContainElement(corev1.ContainerPort{
-		ContainerPort: config.DefaultNginxMetricsPort,
-		Name:          "metrics",
-	}))
-	g.Expect(container.Ports).To(ContainElement(corev1.ContainerPort{
-		ContainerPort: 80,
-		Name:          "port-80",
+	// container ports is sorted in ascending order by port number when we make the nginx object
+	g.Expect(container.Ports).To(Equal([]corev1.ContainerPort{
+		{
+			ContainerPort: 80,
+			Name:          "port-80",
+		},
+		{
+			ContainerPort: 8888,
+			Name:          "port-8888",
+		},
+		{
+			ContainerPort: config.DefaultNginxMetricsPort,
+			Name:          "metrics",
+		},
+		{
+			ContainerPort: 9999,
+			Name:          "port-9999",
+		},
 	}))
 
 	g.Expect(container.Image).To(Equal(fmt.Sprintf("%s:1.0.0", defaultNginxImagePath)))
@@ -415,14 +446,32 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 		},
 		Data: map[string][]byte{"data": []byte("docker")},
 	}
-	fakeClient := fake.NewFakeClient(dockerSecret)
+
+	dockerSecretRegistry1Name := dockerTestSecretName + "-registry1"
+	dockerSecretRegistry1 := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dockerSecretRegistry1Name,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"data": []byte("docker-registry1")},
+	}
+
+	dockerSecretRegistry2Name := dockerTestSecretName + "-registry2"
+	dockerSecretRegistry2 := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dockerSecretRegistry2Name,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"data": []byte("docker-registry2")},
+	}
+	fakeClient := fake.NewFakeClient(dockerSecret, dockerSecretRegistry1, dockerSecretRegistry2)
 
 	provisioner := &NginxProvisioner{
 		cfg: Config{
 			GatewayPodConfig: &config.GatewayPodConfig{
 				Namespace: ngfNamespace,
 			},
-			NginxDockerSecretNames: []string{dockerTestSecretName},
+			NginxDockerSecretNames: []string{dockerTestSecretName, dockerSecretRegistry1Name, dockerSecretRegistry2Name},
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
@@ -443,7 +492,7 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(6))
+	g.Expect(objects).To(HaveLen(8))
 
 	expLabels := map[string]string{
 		"app":                                    "nginx",
@@ -451,18 +500,41 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 		"app.kubernetes.io/name":                 "gw-nginx",
 	}
 
+	// the (docker-only) secret order in the object list is sorted by secret name
+
 	secretObj := objects[0]
 	secret, ok := secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerTestSecretName)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 
-	depObj := objects[5]
+	registry1SecretObj := objects[1]
+	secret, ok = registry1SecretObj.(*corev1.Secret)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerSecretRegistry1Name)))
+	g.Expect(secret.GetLabels()).To(Equal(expLabels))
+
+	registry2SecretObj := objects[2]
+	secret, ok = registry2SecretObj.(*corev1.Secret)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerSecretRegistry2Name)))
+	g.Expect(secret.GetLabels()).To(Equal(expLabels))
+
+	depObj := objects[7]
 	dep, ok := depObj.(*appsv1.Deployment)
 	g.Expect(ok).To(BeTrue())
 
-	g.Expect(dep.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{
-		Name: controller.CreateNginxResourceName(resourceName, dockerTestSecretName),
+	// imagePullSecrets is sorted by name when we make the nginx object
+	g.Expect(dep.Spec.Template.Spec.ImagePullSecrets).To(Equal([]corev1.LocalObjectReference{
+		{
+			Name: controller.CreateNginxResourceName(resourceName, dockerTestSecretName),
+		},
+		{
+			Name: controller.CreateNginxResourceName(resourceName, dockerSecretRegistry1Name),
+		},
+		{
+			Name: controller.CreateNginxResourceName(resourceName, dockerSecretRegistry2Name),
+		},
 	}))
 }
 

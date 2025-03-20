@@ -32,6 +32,8 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 		}
 
 		namespace = "clientsettings"
+
+		nginxPodName string
 	)
 
 	BeforeAll(func() {
@@ -44,9 +46,19 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		nginxPodName = nginxPodNames[0]
+
+		setUpPortForward(nginxPodName, namespace)
 	})
 
 	AfterAll(func() {
+		cleanUpPortForward()
+
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
@@ -96,13 +108,8 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			filePrefix := fmt.Sprintf("/etc/nginx/includes/ClientSettingsPolicy_%s", namespace)
 
 			BeforeAll(func() {
-				podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(podNames).To(HaveLen(1))
-
-				ngfPodName := podNames[0]
-
-				conf, err = resourceManager.GetNginxConfig(ngfPodName, ngfNamespace)
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace)
 				Expect(err).ToNot(HaveOccurred())
 			})
 

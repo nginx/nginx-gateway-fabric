@@ -316,7 +316,25 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	verifySecret(clientTestSecretName, userClientSSLSecret)
 	verifySecret(dockerTestSecretName, userDockerSecret)
 
-	// delete Gateway
+	// delete Gateway when provisioner is not leader
+	provisioner.leader = false
+
+	deleteEvent = &events.DeleteEvent{Type: gateway, NamespacedName: client.ObjectKeyFromObject(gateway)}
+	batch = events.EventBatch{deleteEvent}
+	handler.HandleEventBatch(ctx, logger, batch)
+
+	g.Expect(provisioner.resourcesToDeleteOnStartup).To(Equal([]types.NamespacedName{
+		{
+			Namespace: "default",
+			Name:      "gw",
+		},
+	}))
+	g.Expect(store.getGateway(client.ObjectKeyFromObject(gateway))).To(BeNil())
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deployment), &appsv1.Deployment{})).To(Succeed())
+
+	// delete Gateway when provisioner is leader
+	provisioner.leader = true
+
 	deleteEvent = &events.DeleteEvent{Type: gateway, NamespacedName: client.ObjectKeyFromObject(gateway)}
 	batch = events.EventBatch{deleteEvent}
 	handler.HandleEventBatch(ctx, logger, batch)
