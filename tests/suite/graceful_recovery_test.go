@@ -331,10 +331,12 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 		// sets activeNginxPodName to new pod
 		checkNGFFunctionality(teaURL, coffeeURL, files, ns)
 
-		checkNGFContainerLogsForErrors(activeNGFPodName)
+		if errorLogs := getNGFErrorLogs(activeNGFPodName); errorLogs != "" {
+			fmt.Printf("NGF has error logs: \n%s", errorLogs)
+		}
 
 		if errorLogs := getUnexpectedNginxErrorLogs(activeNginxPodName, ns.Name); errorLogs != "" {
-			Skip(fmt.Sprintf("NGINX has unexpected error logs: \n%s", errorLogs))
+			fmt.Printf("NGINX has unexpected error logs: \n%s", errorLogs)
 		}
 	}
 
@@ -441,10 +443,12 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 		// sets activeNginxPodName to new pod
 		checkNGFFunctionality(teaURL, coffeeURL, files, &ns)
 
-		checkNGFContainerLogsForErrors(activeNGFPodName)
+		if errorLogs := getNGFErrorLogs(activeNGFPodName); errorLogs != "" {
+			fmt.Printf("NGF has error logs: \n%s", errorLogs)
+		}
 
 		if errorLogs := getUnexpectedNginxErrorLogs(activeNginxPodName, ns.Name); errorLogs != "" {
-			Skip(fmt.Sprintf("NGINX has unexpected error logs: \n%s", errorLogs))
+			fmt.Printf("NGINX has unexpected error logs: \n%s", errorLogs)
 		}
 	})
 
@@ -493,10 +497,12 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 		// sets activeNginxPodName to new pod
 		checkNGFFunctionality(teaURL, coffeeURL, files, &ns)
 
-		checkNGFContainerLogsForErrors(activeNGFPodName)
+		if errorLogs := getNGFErrorLogs(activeNGFPodName); errorLogs != "" {
+			fmt.Printf("NGF has error logs: \n%s", errorLogs)
+		}
 
 		if errorLogs := getUnexpectedNginxErrorLogs(activeNginxPodName, ns.Name); errorLogs != "" {
-			Skip(fmt.Sprintf("NGINX has unexpected error logs: \n%s", errorLogs))
+			fmt.Printf("NGINX has unexpected error logs: \n%s", errorLogs)
 		}
 	})
 
@@ -505,6 +511,10 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 	})
 
 	It("recovers when node is restarted abruptly", func() {
+		if *plusEnabled {
+			Skip(fmt.Sprintf("Skipping test when using NGINX Plus due to known issue:" +
+				" https://github.com/nginx/nginx-gateway-fabric/issues/3248"))
+		}
 		runRestartNodeAbruptlyTest(teaURL, coffeeURL, files, &ns)
 	})
 })
@@ -592,6 +602,27 @@ func getUnexpectedNginxErrorLogs(nginxPodName, namespace string) string {
 	}
 
 	return unexpectedErrors
+}
+
+// getNGFErrorLogs gets NGF container error logs.
+func getNGFErrorLogs(ngfPodName string) string {
+	ngfLogs, err := resourceManager.GetPodLogs(
+		ngfNamespace,
+		ngfPodName,
+		&core.PodLogOptions{Container: ngfContainerName},
+	)
+	Expect(err).ToNot(HaveOccurred())
+
+	errorLogs := ""
+
+	for _, line := range strings.Split(ngfLogs, "\n") {
+		if strings.Contains(line, "\"level\":\"error\"") {
+			errorLogs += line + "\n"
+			break
+		}
+	}
+
+	return errorLogs
 }
 
 // checkNGFContainerLogsForErrors checks NGF container's logs for any possible errors.
