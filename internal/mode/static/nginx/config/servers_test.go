@@ -3147,6 +3147,54 @@ func TestGenerateProxySetHeaders(t *testing.T) {
 			baseHeaders: httpBaseHeaders,
 		},
 		{
+			msg: "header filter overwrite base header",
+			filters: &dataplane.HTTPFilters{
+				RequestHeaderModifiers: &dataplane.HTTPHeaderFilter{
+					Set: []dataplane.HTTPHeader{
+						{
+							Name:  "X-Forwarded-Proto",
+							Value: "new-proto",
+						},
+					},
+				},
+			},
+			expectedHeaders: []http.Header{
+				{
+					Name:  "X-Forwarded-Proto",
+					Value: "new-proto",
+				},
+				{
+					Name:  "Host",
+					Value: "$gw_api_compliant_host",
+				},
+				{
+					Name:  "X-Forwarded-For",
+					Value: "$proxy_add_x_forwarded_for",
+				},
+				{
+					Name:  "X-Real-IP",
+					Value: "$remote_addr",
+				},
+				{
+					Name:  "X-Forwarded-Host",
+					Value: "$host",
+				},
+				{
+					Name:  "X-Forwarded-Port",
+					Value: "$server_port",
+				},
+				{
+					Name:  "Upgrade",
+					Value: "$http_upgrade",
+				},
+				{
+					Name:  "Connection",
+					Value: "$connection_upgrade",
+				},
+			},
+			baseHeaders: httpBaseHeaders,
+		},
+		{
 			msg: "with url rewrite hostname",
 			filters: &dataplane.HTTPFilters{
 				RequestHeaderModifiers: &dataplane.HTTPHeaderFilter{

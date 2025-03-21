@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	gotemplate "text/template"
@@ -812,7 +813,15 @@ func generateProxySetHeaders(
 		})
 	}
 
-	return append(proxySetHeaders, baseHeaders...)
+	for _, header := range baseHeaders {
+		if !slices.ContainsFunc(proxySetHeaders, func(h http.Header) bool {
+			return header.Name == h.Name
+		}) {
+			proxySetHeaders = append(proxySetHeaders, header)
+		}
+	}
+
+	return proxySetHeaders
 }
 
 func generateResponseHeaders(filters *dataplane.HTTPFilters) http.ResponseHeaders {
