@@ -6,7 +6,7 @@ replace github.com/nginx/nginx-gateway-fabric => ../
 
 require (
 	github.com/nginx/nginx-gateway-fabric v0.0.0
-	github.com/onsi/ginkgo/v2 v2.23.0
+	github.com/onsi/ginkgo/v2 v2.23.3
 	github.com/onsi/gomega v1.36.2
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/common v0.60.1
