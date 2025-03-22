@@ -91,8 +91,8 @@ github.com/nginxinc/nginx-plus-go-client v1.3.0 h1:q/aeT4B5k0KLwWlefoBzfLfraBBvI
 github.com/nginxinc/nginx-plus-go-client v1.3.0/go.mod h1:n8OFLzrJulJ2fur28Cwa1Qp5DZNS2VicLV+Adt30LQ4=
 github.com/nginxinc/nginx-prometheus-exporter v1.3.0 h1:1JtdxsZH0Uwhu1nL/j/QyOXytP5V5j68AEo2X+DFWb0=
 github.com/nginxinc/nginx-prometheus-exporter v1.3.0/go.mod h1:hXoH+X6aIKSyQuO6QTIiPKH3eZyxqy/wW8GYiE3dflU=
-github.com/onsi/ginkgo/v2 v2.23.0 h1:FA1xjp8ieYDzlgS5ABTpdUDB7wtngggONc8a7ku2NqQ=
-github.com/onsi/ginkgo/v2 v2.23.0/go.mod h1:zXTP6xIp3U8aVuXN8ENK9IXRaTjFnpVB9mGmaSRvxnM=
+github.com/onsi/ginkgo/v2 v2.23.3 h1:edHxnszytJ4lD9D5Jjc4tiDkPBZ3siDeJJkUZJJVkp0=
+github.com/onsi/ginkgo/v2 v2.23.3/go.mod h1:zXTP6xIp3U8aVuXN8ENK9IXRaTjFnpVB9mGmaSRvxnM=
 github.com/onsi/gomega v1.36.2 h1:koNYke6TVk6ZmnyHrCXba/T/MoLBXFjeC1PtvYgw0A8=
 github.com/onsi/gomega v1.36.2/go.mod h1:DdwyADRjrc825LhMEkD76cHR5+pUnjhUN8GlHlRPHzY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
