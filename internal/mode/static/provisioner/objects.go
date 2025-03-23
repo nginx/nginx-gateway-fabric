@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"sort"
 	"strconv"
 	"time"
 
@@ -43,6 +44,10 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	gateway *gatewayv1.Gateway,
 	nProxyCfg *graph.EffectiveNginxProxy,
 ) ([]client.Object, error) {
+	// Need to ensure nginx resource objects are generated deterministically. Specifically when generating
+	// an object's field by ranging over a map, since ranging over a map is done in random order, we need to
+	// do some processing to ensure the generated results are the same each time.
+
 	ngxIncludesConfigMapName := controller.CreateNginxResourceName(resourceName, nginxIncludesConfigMapNameSuffix)
 	ngxAgentConfigMapName := controller.CreateNginxResourceName(resourceName, nginxAgentConfigMapNameSuffix)
 
@@ -173,6 +178,12 @@ func (p *NginxProvisioner) buildNginxSecrets(
 			secrets = append(secrets, newSecret)
 		}
 	}
+
+	// need to sort secrets so everytime buildNginxSecrets is called it will generate the exact same
+	// array of secrets. This is needed to satisfy deterministic results of the method.
+	sort.Slice(secrets, func(i, j int) bool {
+		return secrets[i].GetName() < secrets[j].GetName()
+	})
 
 	if jwtSecretName != "" {
 		newSecret, err := p.getAndUpdateSecret(
@@ -358,6 +369,12 @@ func buildNginxService(
 		servicePorts = append(servicePorts, servicePort)
 	}
 
+	// need to sort ports so everytime buildNginxService is called it will generate the exact same
+	// array of ports. This is needed to satisfy deterministic results of the method.
+	sort.Slice(servicePorts, func(i, j int) bool {
+		return servicePorts[i].Port < servicePorts[j].Port
+	})
+
 	svc := &corev1.Service{
 		ObjectMeta: objectMeta,
 		Spec: corev1.ServiceSpec{
@@ -466,6 +483,12 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		podAnnotations["prometheus.io/scrape"] = "true"
 		podAnnotations["prometheus.io/port"] = strconv.Itoa(int(metricsPort))
 	}
+
+	// need to sort ports so everytime buildNginxPodTemplateSpec is called it will generate the exact same
+	// array of ports. This is needed to satisfy deterministic results of the method.
+	sort.Slice(containerPorts, func(i, j int) bool {
+		return containerPorts[i].ContainerPort < containerPorts[j].ContainerPort
+	})
 
 	image, pullPolicy := p.buildImage(nProxyCfg)
 
@@ -621,6 +644,12 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		ref := corev1.LocalObjectReference{Name: name}
 		spec.Spec.ImagePullSecrets = append(spec.Spec.ImagePullSecrets, ref)
 	}
+
+	// need to sort secret names so everytime buildNginxPodTemplateSpec is called it will generate the exact same
+	// array of secrets. This is needed to satisfy deterministic results of the method.
+	sort.Slice(spec.Spec.ImagePullSecrets, func(i, j int) bool {
+		return spec.Spec.ImagePullSecrets[i].Name < spec.Spec.ImagePullSecrets[j].Name
+	})
 
 	if p.cfg.Plus {
 		initCmd := spec.Spec.InitContainers[0].Command
