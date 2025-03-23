@@ -106,6 +106,10 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 		case *events.DeleteEvent:
 			switch e.Type.(type) {
 			case *gatewayv1.Gateway:
+				if !h.provisioner.isLeader() {
+					h.provisioner.setResourceToDelete(e.NamespacedName)
+				}
+
 				if err := h.provisioner.deprovisionNginx(ctx, e.NamespacedName); err != nil {
 					logger.Error(err, "error deprovisioning nginx resources")
 				}

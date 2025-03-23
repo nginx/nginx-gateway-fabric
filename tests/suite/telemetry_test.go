@@ -12,6 +12,10 @@ import (
 )
 
 var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func() {
+	// To run the tracing test, you must build NGF with the following values:
+	// TELEMETRY_ENDPOINT=otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317
+	// TELEMETRY_ENDPOINT_INSECURE = true
+
 	BeforeEach(func() {
 		// Because NGF reports telemetry on start, we need to install the collector first.
 
@@ -22,10 +26,9 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 		// Install NGF
 		// Note: the BeforeSuite call doesn't install NGF for 'telemetry' label
 
-		setup(
-			getDefaultSetupCfg(),
-			"--set", "nginxGateway.productTelemetry.enable=true",
-		)
+		cfg := getDefaultSetupCfg()
+		cfg.telemetry = true
+		setup(cfg)
 	})
 
 	AfterEach(func() {
@@ -86,7 +89,7 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 				"GatewayAttachedClientSettingsPolicyCount: Int(0)",
 				"RouteAttachedClientSettingsPolicyCount: Int(0)",
 				"ObservabilityPolicyCount: Int(0)",
-				"NginxProxyCount: Int(0)",
+				"NginxProxyCount: Int(1)",
 				"SnippetsFilterCount: Int(0)",
 				"UpstreamSettingsPolicyCount: Int(0)",
 				"NGFReplicaCount: Int(1)",

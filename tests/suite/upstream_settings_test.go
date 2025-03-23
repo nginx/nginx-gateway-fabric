@@ -31,6 +31,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		namespace   = "uspolicy"
 		gatewayName = "gateway"
+
+		nginxPodName string
 	)
 
 	zoneSize := "512k"
@@ -48,9 +50,19 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		nginxPodName = nginxPodNames[0]
+
+		setUpPortForward(nginxPodName, namespace)
 	})
 
 	AfterAll(func() {
+		cleanUpPortForward()
+
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
@@ -117,13 +129,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(podNames).To(HaveLen(1))
-
-				ngfPodName := podNames[0]
-
-				conf, err = resourceManager.GetNginxConfig(ngfPodName, ngfNamespace)
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -302,13 +309,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(podNames).To(HaveLen(1))
-
-				ngfPodName := podNames[0]
-
-				conf, err = resourceManager.GetNginxConfig(ngfPodName, ngfNamespace)
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
