@@ -171,7 +171,7 @@ func (h *eventHandler) provisionResources(
 	gatewayNSName types.NamespacedName,
 ) error {
 	resources := h.store.getNginxResourcesForGateway(gatewayNSName)
-	if resources.Gateway != nil {
+	if resources != nil && resources.Gateway != nil {
 		resourceName := controller.CreateNginxResourceName(gatewayNSName.Name, h.gcName)
 		if err := h.provisioner.provisionNginx(
 			ctx,
@@ -229,6 +229,13 @@ func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, sec
 		}
 
 		switch {
+		case strings.HasSuffix(resources.AgentTLSSecret.Name, secret):
+			if err := h.provisioner.deleteSecret(
+				ctx,
+				controller.ObjectMetaToNamespacedName(resources.AgentTLSSecret),
+			); err != nil {
+				allErrs = append(allErrs, err)
+			}
 		case strings.HasSuffix(resources.PlusJWTSecret.Name, secret):
 			if err := h.provisioner.deleteSecret(
 				ctx,
