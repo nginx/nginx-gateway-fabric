@@ -1,5 +1,8 @@
 # yaml-language-server: $schema=values.schema.json
 
+# -- The DNS cluster domain of your Kubernetes cluster.
+clusterDomain: cluster.local
+
 # -- The nginxGateway section contains configuration for the NGINX Gateway Fabric control plane deployment.
 nginxGateway:
   # FIXME(lucacome): https://github.com/nginx/nginx-gateway-fabric/issues/2490
@@ -429,3 +432,21 @@ nginx:
 
   # -- Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource.
   debug: false
+
+# -- The certGenerator section contains the configuration for the cert-generator Job.
+certGenerator:
+  # -- The annotations of the cert-generator Job.
+  annotations: {}
+
+  # -- The name of the Secret containing TLS CA, certificate, and key for the NGINX Gateway Fabric control plane
+  # to securely communicate with the NGINX Agent. Must exist in the same namespace that the NGINX Gateway Fabric
+  # control plane is running in (default namespace: nginx-gateway).
+  serverTLSSecretName: server-tls
+
+  # -- The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely
+  # communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the
+  # NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).
+  agentTLSSecretName: agent-tls
+
+  # -- Overwrite existing TLS Secrets on startup.
+  overwrite: false

@@ -48,9 +48,6 @@ func NewConnectionsTracker() ConnectionsTracker {
 }
 
 // Track adds a connection to the tracking map.
-// TODO(sberman): we need to handle the case when the token expires (once we support the token).
-// This likely involves setting a callback to cancel a context when the token expires, which triggers
-// the connection to be removed from the tracking list.
 func (c *AgentConnectionsTracker) Track(key string, conn Connection) {
 	c.lock.Lock()
 	defer c.lock.Unlock()

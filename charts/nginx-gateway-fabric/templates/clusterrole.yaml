@@ -60,6 +60,12 @@ rules:
   - list
   - watch
 - apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
   - gateway.networking.k8s.io
   resources:
   - gatewayclasses
