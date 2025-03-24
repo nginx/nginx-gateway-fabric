@@ -42,7 +42,8 @@ type Provisioner interface {
 
 // Config is the configuration for the Provisioner.
 type Config struct {
-	GCName string
+	GCName             string
+	AgentTLSSecretName string
 
 	DeploymentStore        agent.DeploymentStorer
 	StatusQueue            *status.Queue
@@ -81,7 +82,13 @@ func NewNginxProvisioner(
 		caSecretName = cfg.PlusUsageConfig.CASecretName
 		clientSSLSecretName = cfg.PlusUsageConfig.ClientSSLSecretName
 	}
-	store := newStore(cfg.NginxDockerSecretNames, jwtSecretName, caSecretName, clientSSLSecretName)
+	store := newStore(
+		cfg.NginxDockerSecretNames,
+		cfg.AgentTLSSecretName,
+		jwtSecretName,
+		caSecretName,
+		clientSSLSecretName,
+	)
 
 	selector := metav1.LabelSelector{
 		MatchLabels: map[string]string{
@@ -114,6 +121,7 @@ func NewNginxProvisioner(
 		selector,
 		cfg.GatewayPodConfig.Namespace,
 		cfg.NginxDockerSecretNames,
+		cfg.AgentTLSSecretName,
 		cfg.PlusUsageConfig,
 	)
 	if err != nil {
@@ -354,6 +362,10 @@ func (p *NginxProvisioner) deprovisionNginx(ctx context.Context, gatewayNSName t
 // isUserSecret determines if the provided secret name is a special user secret,
 // for example an NGINX docker registry secret or NGINX Plus secret.
 func (p *NginxProvisioner) isUserSecret(name string) bool {
+	if name == p.cfg.AgentTLSSecretName {
+		return true
+	}
+
 	if slices.Contains(p.cfg.NginxDockerSecretNames, name) {
 		return true
 	}

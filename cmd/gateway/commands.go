@@ -17,6 +17,7 @@ import (
 	"k8s.io/klog/v2"
 	ctlr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8sConfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -37,6 +38,9 @@ const (
 	gatewayCtlrNameUsageFmt = `The name of the Gateway controller. ` +
 		`The controller name must be of the form: DOMAIN/PATH. The controller's domain is '%s'`
 	plusFlag = "nginx-plus"
+
+	serverTLSSecret = "server-tls"
+	agentTLSSecret  = "agent-tls"
 )
 
 func createRootCommand() *cobra.Command {
@@ -58,6 +62,7 @@ func createControllerCommand() *cobra.Command {
 		gatewayFlag                    = "gateway"
 		configFlag                     = "config"
 		serviceFlag                    = "service"
+		agentTLSSecretFlag             = "agent-tls-secret"
 		updateGCStatusFlag             = "update-gatewayclass-status"
 		metricsDisableFlag             = "metrics-disable"
 		metricsSecureFlag              = "metrics-secure-serving"
@@ -95,6 +100,10 @@ func createControllerCommand() *cobra.Command {
 		}
 		serviceName = stringValidatingValue{
 			validator: validateResourceName,
+		}
+		agentTLSSecretName = stringValidatingValue{
+			validator: validateResourceName,
+			value:     agentTLSSecret,
 		}
 		disableMetrics    bool
 		metricsSecure     bool
@@ -254,6 +263,7 @@ func createControllerCommand() *cobra.Command {
 				},
 				SnippetsFilters:        snippetsFilters,
 				NginxDockerSecretNames: nginxDockerSecrets.values,
+				AgentTLSSecretName:     agentTLSSecretName.value,
 			}
 
 			if err := static.StartManager(conf); err != nil {
@@ -301,6 +311,14 @@ func createControllerCommand() *cobra.Command {
 		serviceFlag,
 		`The name of the Service that fronts this NGINX Gateway Fabric Pod.`+
 			` Lives in the same Namespace as the controller.`,
+	)
+
+	cmd.Flags().Var(
+		&agentTLSSecretName,
+		agentTLSSecretFlag,
+		`The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely `+
+			`communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the `+
+			`NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
 	)
 
 	cmd.Flags().BoolVar(
@@ -442,32 +460,105 @@ func createControllerCommand() *cobra.Command {
 	return cmd
 }
 
-// FIXME(pleshakov): Remove this command once NGF min supported Kubernetes version supports sleep action in
-// preStop hook.
-// See https://github.com/kubernetes/enhancements/tree/4ec371d92dcd4f56a2ab18c8ba20bb85d8d20efe/keps/sig-node/3960-pod-lifecycle-sleep-action
-//
-//nolint:lll
-func createSleepCommand() *cobra.Command {
+func createGenerateCertsCommand() *cobra.Command {
 	// flag names
-	const durationFlag = "duration"
+	const (
+		serverTLSSecretFlag = "server-tls-secret" //nolint:gosec // not credentials
+		agentTLSSecretFlag  = "agent-tls-secret"
+		serviceFlag         = "service"
+		clusterDomainFlag   = "cluster-domain"
+		overwriteFlag       = "overwrite"
+	)
+
 	// flag values
-	var duration time.Duration
+	var (
+		serverTLSSecretName = stringValidatingValue{
+			validator: validateResourceName,
+			value:     serverTLSSecret,
+		}
+		agentTLSSecretName = stringValidatingValue{
+			validator: validateResourceName,
+			value:     agentTLSSecret,
+		}
+		serviceName = stringValidatingValue{
+			validator: validateResourceName,
+		}
+		clusterDomain = stringValidatingValue{
+			validator: validateQualifiedName,
+			value:     defaultDomain,
+		}
+		overwrite bool
+	)
 
 	cmd := &cobra.Command{
-		Use:   "sleep",
-		Short: "Sleep for specified duration and exit",
-		Run: func(_ *cobra.Command, _ []string) {
-			// It is expected that this command is run from lifecycle hook.
-			// Because logs from hooks are not visible in the container logs, we don't log here at all.
-			time.Sleep(duration)
+		Use:   "generate-certs",
+		Short: "Generate self-signed certificates for securing control plane to data plane communication",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			namespace, err := getValueFromEnv("POD_NAMESPACE")
+			if err != nil {
+				return fmt.Errorf("POD_NAMESPACE must be specified in the ENV")
+			}
+
+			certConfig, err := generateCertificates(serviceName.value, namespace, clusterDomain.value)
+			if err != nil {
+				return fmt.Errorf("error generating certificates: %w", err)
+			}
+
+			k8sClient, err := client.New(k8sConfig.GetConfigOrDie(), client.Options{})
+			if err != nil {
+				return fmt.Errorf("error creating k8s client: %w", err)
+			}
+
+			if err := createSecrets(
+				cmd.Context(),
+				k8sClient,
+				certConfig,
+				serverTLSSecretName.value,
+				agentTLSSecretName.value,
+				namespace,
+				overwrite,
+			); err != nil {
+				return fmt.Errorf("error creating secrets: %w", err)
+			}
+
+			return nil
 		},
 	}
 
-	cmd.Flags().DurationVar(
-		&duration,
-		durationFlag,
-		30*time.Second,
-		"Set the duration of sleep. Must be parsable by https://pkg.go.dev/time#ParseDuration",
+	cmd.Flags().Var(
+		&serverTLSSecretName,
+		serverTLSSecretFlag,
+		`The name of the Secret containing TLS CA, certificate, and key for the NGINX Gateway Fabric control plane `+
+			`to securely communicate with the NGINX Agent. Must exist in the same namespace that the `+
+			`NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
+	)
+
+	cmd.Flags().Var(
+		&agentTLSSecretName,
+		agentTLSSecretFlag,
+		`The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely `+
+			`communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the `+
+			`NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
+	)
+
+	cmd.Flags().Var(
+		&serviceName,
+		serviceFlag,
+		`The name of the Service that fronts the NGINX Gateway Fabric Pod.`+
+			` Lives in the same Namespace as the controller.`,
+	)
+
+	cmd.Flags().Var(
+		&clusterDomain,
+		clusterDomainFlag,
+		`The DNS domain of your Kubernetes cluster.`,
+	)
+
+	cmd.Flags().BoolVar(
+		&overwrite,
+		overwriteFlag,
+		false,
+		"Overwrite existing certificates.",
 	)
 
 	return cmd
@@ -560,6 +651,37 @@ func createInitializeCommand() *cobra.Command {
 	)
 
 	cmd.MarkFlagsRequiredTogether(srcFlag, destFlag)
+
+	return cmd
+}
+
+// FIXME(pleshakov): Remove this command once NGF min supported Kubernetes version supports sleep action in
+// preStop hook.
+// See https://github.com/kubernetes/enhancements/tree/4ec371d92dcd4f56a2ab18c8ba20bb85d8d20efe/keps/sig-node/3960-pod-lifecycle-sleep-action
+//
+//nolint:lll
+func createSleepCommand() *cobra.Command {
+	// flag names
+	const durationFlag = "duration"
+	// flag values
+	var duration time.Duration
+
+	cmd := &cobra.Command{
+		Use:   "sleep",
+		Short: "Sleep for specified duration and exit",
+		Run: func(_ *cobra.Command, _ []string) {
+			// It is expected that this command is run from lifecycle hook.
+			// Because logs from hooks are not visible in the container logs, we don't log here at all.
+			time.Sleep(duration)
+		},
+	}
+
+	cmd.Flags().DurationVar(
+		&duration,
+		durationFlag,
+		30*time.Second,
+		"Set the duration of sleep. Must be parsable by https://pkg.go.dev/time#ParseDuration",
+	)
 
 	return cmd
 }

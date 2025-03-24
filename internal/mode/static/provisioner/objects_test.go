@@ -26,19 +26,30 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+	fakeClient := fake.NewFakeClient(agentTLSSecret)
+
 	provisioner := &NginxProvisioner{
 		cfg: Config{
 			GatewayPodConfig: &config.GatewayPodConfig{
-				Namespace: "default",
+				Namespace: ngfNamespace,
 				Version:   "1.0.0",
 				Image:     "ngf-image",
 			},
+			AgentTLSSecretName: agentTLSTestSecretName,
 		},
 		baseLabelSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
 				"app": "nginx",
 			},
 		},
+		k8sClient: fakeClient,
 	}
 
 	gateway := &gatewayv1.Gateway{
@@ -83,7 +94,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(5))
+	g.Expect(objects).To(HaveLen(6))
 
 	validateLabelsAndAnnotations := func(obj client.Object) {
 		g.Expect(obj.GetLabels()).To(Equal(expLabels))
@@ -95,7 +106,16 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		validateLabelsAndAnnotations(obj)
 	}
 
-	cmObj := objects[0]
+	secretObj := objects[0]
+	secret, ok := secretObj.(*corev1.Secret)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, agentTLSTestSecretName)))
+	g.Expect(secret.GetLabels()).To(Equal(expLabels))
+	g.Expect(secret.GetAnnotations()).To(Equal(expAnnotations))
+	g.Expect(secret.Data).To(HaveKey("tls.crt"))
+	g.Expect(secret.Data["tls.crt"]).To(Equal([]byte("tls")))
+
+	cmObj := objects[1]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, nginxIncludesConfigMapNameSuffix)))
@@ -103,7 +123,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	g.Expect(cm.Data).To(HaveKey("main.conf"))
 	g.Expect(cm.Data["main.conf"]).To(ContainSubstring("info"))
 
-	cmObj = objects[1]
+	cmObj = objects[2]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, nginxAgentConfigMapNameSuffix)))
@@ -111,12 +131,12 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	g.Expect(cm.Data).To(HaveKey("nginx-agent.conf"))
 	g.Expect(cm.Data["nginx-agent.conf"]).To(ContainSubstring("command:"))
 
-	svcAcctObj := objects[2]
+	svcAcctObj := objects[3]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svcAcct)
 
-	svcObj := objects[3]
+	svcObj := objects[4]
 	svc, ok := svcObj.(*corev1.Service)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svc)
@@ -142,7 +162,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		},
 	}))
 
-	depObj := objects[4]
+	depObj := objects[5]
 	dep, ok := depObj.(*appsv1.Deployment)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(dep)
@@ -186,18 +206,29 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+	fakeClient := fake.NewFakeClient(agentTLSSecret)
+
 	provisioner := &NginxProvisioner{
 		cfg: Config{
 			GatewayPodConfig: &config.GatewayPodConfig{
-				Namespace: "default",
+				Namespace: ngfNamespace,
 				Version:   "1.0.0",
 			},
+			AgentTLSSecretName: agentTLSTestSecretName,
 		},
 		baseLabelSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
 				"app": "nginx",
 			},
 		},
+		k8sClient: fakeClient,
 	}
 
 	gateway := &gatewayv1.Gateway{
@@ -247,21 +278,21 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(5))
+	g.Expect(objects).To(HaveLen(6))
 
-	cmObj := objects[0]
+	cmObj := objects[1]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.Data).To(HaveKey("main.conf"))
 	g.Expect(cm.Data["main.conf"]).To(ContainSubstring("debug"))
 
-	cmObj = objects[1]
+	cmObj = objects[2]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.Data["nginx-agent.conf"]).To(ContainSubstring("level: debug"))
 	g.Expect(cm.Data["nginx-agent.conf"]).To(ContainSubstring("port: 8080"))
 
-	svcObj := objects[3]
+	svcObj := objects[4]
 	svc, ok := svcObj.(*corev1.Service)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
@@ -269,7 +300,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(svc.Spec.LoadBalancerIP).To(Equal("1.2.3.4"))
 	g.Expect(svc.Spec.LoadBalancerSourceRanges).To(Equal([]string{"5.6.7.8"}))
 
-	depObj := objects[4]
+	depObj := objects[5]
 	dep, ok := depObj.(*appsv1.Deployment)
 	g.Expect(ok).To(BeTrue())
 
@@ -293,6 +324,13 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
 	jwtSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jwtTestSecretName,
@@ -315,7 +353,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 		Data: map[string][]byte{"tls.crt": []byte("tls")},
 	}
 
-	fakeClient := fake.NewFakeClient(jwtSecret, caSecret, clientSSLSecret)
+	fakeClient := fake.NewFakeClient(agentTLSSecret, jwtSecret, caSecret, clientSSLSecret)
 
 	provisioner := &NginxProvisioner{
 		cfg: Config{
@@ -330,6 +368,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 				Endpoint:            "test.com",
 				SkipVerify:          true,
 			},
+			AgentTLSSecretName: agentTLSTestSecretName,
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
@@ -360,7 +399,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(8))
+	g.Expect(objects).To(HaveLen(9))
 
 	expLabels := map[string]string{
 		"label":                                  "value",
@@ -372,7 +411,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 		"annotation": "value",
 	}
 
-	secretObj := objects[0]
+	secretObj := objects[1]
 	secret, ok := secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, jwtTestSecretName)))
@@ -381,7 +420,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(secret.Data).To(HaveKey("license.jwt"))
 	g.Expect(secret.Data["license.jwt"]).To(Equal([]byte("jwt")))
 
-	secretObj = objects[1]
+	secretObj = objects[2]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, caTestSecretName)))
@@ -390,7 +429,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(secret.Data).To(HaveKey("ca.crt"))
 	g.Expect(secret.Data["ca.crt"]).To(Equal([]byte("ca")))
 
-	secretObj = objects[2]
+	secretObj = objects[3]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, clientTestSecretName)))
@@ -399,7 +438,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(secret.Data).To(HaveKey("tls.crt"))
 	g.Expect(secret.Data["tls.crt"]).To(Equal([]byte("tls")))
 
-	cmObj := objects[3]
+	cmObj := objects[4]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.Data).To(HaveKey("mgmt.conf"))
@@ -409,13 +448,13 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("ssl_certificate"))
 	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("ssl_certificate_key"))
 
-	cmObj = objects[4]
+	cmObj = objects[5]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.Data).To(HaveKey("nginx-agent.conf"))
 	g.Expect(cm.Data["nginx-agent.conf"]).To(ContainSubstring("api-action"))
 
-	depObj := objects[7]
+	depObj := objects[8]
 	dep, ok := depObj.(*appsv1.Deployment)
 	g.Expect(ok).To(BeTrue())
 
@@ -438,6 +477,14 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
 
 	dockerSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -464,7 +511,7 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 		},
 		Data: map[string][]byte{"data": []byte("docker-registry2")},
 	}
-	fakeClient := fake.NewFakeClient(dockerSecret, dockerSecretRegistry1, dockerSecretRegistry2)
+	fakeClient := fake.NewFakeClient(agentTLSSecret, dockerSecret, dockerSecretRegistry1, dockerSecretRegistry2)
 
 	provisioner := &NginxProvisioner{
 		cfg: Config{
@@ -472,6 +519,7 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 				Namespace: ngfNamespace,
 			},
 			NginxDockerSecretNames: []string{dockerTestSecretName, dockerSecretRegistry1Name, dockerSecretRegistry2Name},
+			AgentTLSSecretName:     agentTLSTestSecretName,
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
@@ -492,7 +540,7 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(8))
+	g.Expect(objects).To(HaveLen(9))
 
 	expLabels := map[string]string{
 		"app":                                    "nginx",
@@ -500,27 +548,33 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 		"app.kubernetes.io/name":                 "gw-nginx",
 	}
 
-	// the (docker-only) secret order in the object list is sorted by secret name
-
 	secretObj := objects[0]
 	secret, ok := secretObj.(*corev1.Secret)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, agentTLSTestSecretName)))
+	g.Expect(secret.GetLabels()).To(Equal(expLabels))
+
+	// the (docker-only) secret order in the object list is sorted by secret name
+
+	secretObj = objects[1]
+	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerTestSecretName)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 
-	registry1SecretObj := objects[1]
+	registry1SecretObj := objects[2]
 	secret, ok = registry1SecretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerSecretRegistry1Name)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 
-	registry2SecretObj := objects[2]
+	registry2SecretObj := objects[3]
 	secret, ok = registry2SecretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerSecretRegistry2Name)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 
-	depObj := objects[7]
+	depObj := objects[8]
 	dep, ok := depObj.(*appsv1.Deployment)
 	g.Expect(ok).To(BeTrue())
 
@@ -553,10 +607,14 @@ func TestGetAndUpdateSecret_NotFound(t *testing.T) {
 		k8sClient: fakeClient,
 	}
 
-	_, err := provisioner.getAndUpdateSecret("non-existent-secret", metav1.ObjectMeta{
-		Name:      "new-secret",
-		Namespace: "default",
-	})
+	_, err := provisioner.getAndUpdateSecret(
+		"non-existent-secret",
+		metav1.ObjectMeta{
+			Name:      "new-secret",
+			Namespace: "default",
+		},
+		corev1.SecretTypeOpaque,
+	)
 
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("error getting secret"))
@@ -575,7 +633,7 @@ func TestBuildNginxResourceObjectsForDeletion(t *testing.T) {
 
 	objects := provisioner.buildNginxResourceObjectsForDeletion(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(5))
+	g.Expect(objects).To(HaveLen(6))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -621,6 +679,7 @@ func TestBuildNginxResourceObjectsForDeletion_Plus(t *testing.T) {
 				ClientSSLSecretName: clientTestSecretName,
 			},
 			NginxDockerSecretNames: []string{dockerTestSecretName},
+			AgentTLSSecretName:     agentTLSTestSecretName,
 		},
 	}
 
@@ -631,7 +690,7 @@ func TestBuildNginxResourceObjectsForDeletion_Plus(t *testing.T) {
 
 	objects := provisioner.buildNginxResourceObjectsForDeletion(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(9))
+	g.Expect(objects).To(HaveLen(10))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -668,7 +727,7 @@ func TestBuildNginxResourceObjectsForDeletion_Plus(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
 		deploymentNSName.Name,
-		provisioner.cfg.NginxDockerSecretNames[0],
+		provisioner.cfg.AgentTLSSecretName,
 	))
 
 	secretObj = objects[6]
@@ -676,10 +735,18 @@ func TestBuildNginxResourceObjectsForDeletion_Plus(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
 		deploymentNSName.Name,
-		provisioner.cfg.PlusUsageConfig.CASecretName,
+		provisioner.cfg.NginxDockerSecretNames[0],
 	))
 
 	secretObj = objects[7]
+	secret, ok = secretObj.(*corev1.Secret)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(secret, controller.CreateNginxResourceName(
+		deploymentNSName.Name,
+		provisioner.cfg.PlusUsageConfig.CASecretName,
+	))
+
+	secretObj = objects[8]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(

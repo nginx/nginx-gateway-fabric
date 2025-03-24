@@ -129,7 +129,7 @@ func TestCommonFlagsValidation(t *testing.T) {
 	}
 }
 
-func TestStaticModeCmdFlagValidation(t *testing.T) {
+func TestControllerCmdFlagValidation(t *testing.T) {
 	t.Parallel()
 	tests := []flagTestCase{
 		{
@@ -140,6 +140,7 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 				"--gateway=nginx-gateway/nginx",
 				"--config=nginx-gateway-config",
 				"--service=nginx-gateway",
+				"--agent-tls-secret=agent-tls",
 				"--update-gatewayclass-status=true",
 				"--metrics-port=9114",
 				"--metrics-disable",
@@ -216,6 +217,22 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "!@#$" for "--service" flag: invalid format`,
+		},
+		{
+			name: "agent-tls-secret is set to empty string",
+			args: []string{
+				"--agent-tls-secret=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--agent-tls-secret" flag: must be set`,
+		},
+		{
+			name: "agent-tls-secret is set to invalid string",
+			args: []string{
+				"--agent-tls-secret=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--agent-tls-secret" flag: invalid format`,
 		},
 		{
 			name: "update-gatewayclass-status is set to empty string",
@@ -441,13 +458,18 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 	}
 }
 
-func TestSleepCmdFlagValidation(t *testing.T) {
+func TestGenerateCertsCmdFlagValidation(t *testing.T) {
 	t.Parallel()
+
 	tests := []flagTestCase{
 		{
 			name: "valid flags",
 			args: []string{
-				"--duration=1s",
+				"--server-tls-secret=server-secret",
+				"--agent-tls-secret=agent-secret",
+				"--service=my-service",
+				"--cluster-domain=cluster.local",
+				"--overwrite",
 			},
 			wantErr: false,
 		},
@@ -457,27 +479,75 @@ func TestSleepCmdFlagValidation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "duration is set to empty string",
+			name: "server-tls-secret is set to empty string",
 			args: []string{
-				"--duration=",
+				"--server-tls-secret=",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--duration" flag: time: invalid duration ""`,
+			expectedErrPrefix: `invalid argument "" for "--server-tls-secret" flag: must be set`,
 		},
 		{
-			name: "duration is invalid",
+			name: "server-tls-secret is invalid",
 			args: []string{
-				"--duration=invalid",
+				"--server-tls-secret=!@#$",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "invalid" for "--duration" flag: time: invalid duration "invalid"`,
+			expectedErrPrefix: `invalid argument "!@#$" for "--server-tls-secret" flag: invalid format`,
+		},
+		{
+			name: "agent-tls-secret is set to empty string",
+			args: []string{
+				"--agent-tls-secret=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--agent-tls-secret" flag: must be set`,
+		},
+		{
+			name: "agent-tls-secret is invalid",
+			args: []string{
+				"--agent-tls-secret=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--agent-tls-secret" flag: invalid format`,
+		},
+		{
+			name: "service is set to empty string",
+			args: []string{
+				"--service=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--service" flag: must be set`,
+		},
+		{
+			name: "service is invalid",
+			args: []string{
+				"--service=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--service" flag: invalid format`,
+		},
+		{
+			name: "cluster-domain is set to empty string",
+			args: []string{
+				"--cluster-domain=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--cluster-domain" flag: must be set`,
+		},
+		{
+			name: "cluster-domain is invalid",
+			args: []string{
+				"--cluster-domain=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--cluster-domain" flag: invalid format`,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			cmd := createSleepCommand()
+			cmd := createGenerateCertsCommand()
 			testFlag(t, cmd, test)
 		})
 	}
@@ -524,6 +594,48 @@ func TestInitializeCmdFlagValidation(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			cmd := createInitializeCommand()
+			testFlag(t, cmd, test)
+		})
+	}
+}
+
+func TestSleepCmdFlagValidation(t *testing.T) {
+	t.Parallel()
+	tests := []flagTestCase{
+		{
+			name: "valid flags",
+			args: []string{
+				"--duration=1s",
+			},
+			wantErr: false,
+		},
+		{
+			name:    "omitted flags",
+			args:    nil,
+			wantErr: false,
+		},
+		{
+			name: "duration is set to empty string",
+			args: []string{
+				"--duration=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--duration" flag: time: invalid duration ""`,
+		},
+		{
+			name: "duration is invalid",
+			args: []string{
+				"--duration=invalid",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "invalid" for "--duration" flag: time: invalid duration "invalid"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cmd := createSleepCommand()
 			testFlag(t, cmd, test)
 		})
 	}

@@ -96,7 +96,7 @@ func Register(
 	}
 
 	for field, indexerFunc := range cfg.fieldIndices {
-		if err := addIndex(
+		if err := AddIndex(
 			ctx,
 			mgr.GetFieldIndexer(),
 			objectType,
@@ -136,7 +136,7 @@ func Register(
 	return nil
 }
 
-func addIndex(
+func AddIndex(
 	ctx context.Context,
 	indexer client.FieldIndexer,
 	objectType ngftypes.ObjectType,
