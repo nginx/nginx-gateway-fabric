@@ -23,6 +23,7 @@ type NginxResources struct {
 	ServiceAccount      metav1.ObjectMeta
 	BootstrapConfigMap  metav1.ObjectMeta
 	AgentConfigMap      metav1.ObjectMeta
+	AgentTLSSecret      metav1.ObjectMeta
 	PlusJWTSecret       metav1.ObjectMeta
 	PlusClientSSLSecret metav1.ObjectMeta
 	PlusCASecret        metav1.ObjectMeta
@@ -37,7 +38,9 @@ type store struct {
 	// nginxResources is a map of Gateway NamespacedNames and their associated nginx resources.
 	nginxResources map[types.NamespacedName]*NginxResources
 
-	dockerSecretNames map[string]struct{}
+	dockerSecretNames  map[string]struct{}
+	agentTLSSecretName string
+
 	// NGINX Plus secrets
 	jwtSecretName       string
 	caSecretName        string
@@ -48,6 +51,7 @@ type store struct {
 
 func newStore(
 	dockerSecretNames []string,
+	agentTLSSecretName,
 	jwtSecretName,
 	caSecretName,
 	clientSSLSecretName string,
@@ -61,6 +65,7 @@ func newStore(
 		gateways:            make(map[types.NamespacedName]*gatewayv1.Gateway),
 		nginxResources:      make(map[types.NamespacedName]*NginxResources),
 		dockerSecretNames:   dockerSecretNamesMap,
+		agentTLSSecretName:  agentTLSSecretName,
 		jwtSecretName:       jwtSecretName,
 		caSecretName:        caSecretName,
 		clientSSLSecretName: clientSSLSecretName,
@@ -167,6 +172,7 @@ func (s *store) registerConfigMapInGatewayConfig(obj *corev1.ConfigMap, gatewayN
 	}
 }
 
+//nolint:gocyclo // will refactor at some point
 func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName types.NamespacedName) {
 	hasSuffix := func(str, suffix string) bool {
 		return suffix != "" && strings.HasSuffix(str, suffix)
@@ -174,6 +180,10 @@ func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName 
 
 	if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
 		switch {
+		case hasSuffix(obj.GetName(), s.agentTLSSecretName):
+			s.nginxResources[gatewayNSName] = &NginxResources{
+				AgentTLSSecret: obj.ObjectMeta,
+			}
 		case hasSuffix(obj.GetName(), s.jwtSecretName):
 			s.nginxResources[gatewayNSName] = &NginxResources{
 				PlusJWTSecret: obj.ObjectMeta,
@@ -198,6 +208,8 @@ func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName 
 		}
 	} else {
 		switch {
+		case hasSuffix(obj.GetName(), s.agentTLSSecretName):
+			cfg.AgentTLSSecret = obj.ObjectMeta
 		case hasSuffix(obj.GetName(), s.jwtSecretName):
 			cfg.PlusJWTSecret = obj.ObjectMeta
 		case hasSuffix(obj.GetName(), s.caSecretName):
@@ -284,6 +296,10 @@ func (s *store) gatewayExistsForResource(object client.Object, nsName types.Name
 }
 
 func secretResourceMatches(resources *NginxResources, nsName types.NamespacedName) bool {
+	if resourceMatches(resources.AgentTLSSecret, nsName) {
+		return true
+	}
+
 	for _, secret := range resources.DockerSecrets {
 		if resourceMatches(secret, nsName) {
 			return true
