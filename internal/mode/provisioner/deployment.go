@@ -19,9 +19,9 @@ func prepareDeployment(depYAML []byte, id string, gwNsName types.NamespacedName)
 		return nil, fmt.Errorf("failed to unmarshal deployment: %w", err)
 	}
 
-	dep.ObjectMeta.Name = id
+	dep.Name = id
 	dep.Spec.Selector.MatchLabels["app"] = id
-	dep.Spec.Template.ObjectMeta.Labels["app"] = id
+	dep.Spec.Template.Labels["app"] = id
 
 	finalArgs := []string{
 		"--gateway=" + gwNsName.String(),

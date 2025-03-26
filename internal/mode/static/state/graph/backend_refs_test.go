@@ -362,7 +362,7 @@ func TestVerifyIPFamily(t *testing.T) {
 				Valid: true,
 			},
 			svcIPFamily: []v1.IPFamily{v1.IPv6Protocol},
-			expErr:      errors.New("Service configured with IPv6 family but NginxProxy is configured with IPv4"),
+			expErr:      errors.New("service configured with IPv6 family but NginxProxy is configured with IPv4"),
 		},
 		{
 			name: "Invalid - IPv6 configured for NGINX, service has only IPv4",
@@ -375,7 +375,7 @@ func TestVerifyIPFamily(t *testing.T) {
 				Valid: true,
 			},
 			svcIPFamily: []v1.IPFamily{v1.IPv4Protocol},
-			expErr:      errors.New("Service configured with IPv4 family but NginxProxy is configured with IPv6"),
+			expErr:      errors.New("service configured with IPv4 family but NginxProxy is configured with IPv6"),
 		},
 		{
 			name:        "Valid - When NginxProxy is nil",
@@ -965,7 +965,7 @@ func TestCreateBackend(t *testing.T) {
 				Valid: true,
 			},
 			expectedCondition: helpers.GetPointer(
-				staticConds.NewRouteInvalidIPFamily(`Service configured with IPv4 family but NginxProxy is configured with IPv6`),
+				staticConds.NewRouteInvalidIPFamily(`service configured with IPv4 family but NginxProxy is configured with IPv6`),
 			),
 			name: "service IPFamily doesn't match NginxProxy IPFamily",
 		},
