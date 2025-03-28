@@ -46,27 +46,29 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 		},
 	}
 
-	gateway := &Gateway{
-		Source: &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gateway", Namespace: "test"}},
+	gateway := map[types.NamespacedName]*Gateway{
+		{Namespace: "test", Name: "gateway"}: {
+			Source: &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gateway", Namespace: "test"}},
+		},
 	}
 
 	tests := []struct {
 		expected           map[types.NamespacedName]*BackendTLSPolicy
-		gateway            *Gateway
+		gateways           map[types.NamespacedName]*Gateway
 		backendTLSPolicies map[types.NamespacedName]*v1alpha3.BackendTLSPolicy
 		name               string
 	}{
 		{
 			name:               "no policies",
 			expected:           nil,
-			gateway:            gateway,
+			gateways:           gateway,
 			backendTLSPolicies: nil,
 		},
 		{
 			name:               "nil gateway",
 			expected:           nil,
 			backendTLSPolicies: backendTLSPolicies,
-			gateway:            nil,
+			gateways:           nil,
 		},
 	}
 
@@ -75,7 +77,7 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, nil, "test", test.gateway)
+			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, nil, "test", test.gateways)
 
 			g.Expect(processed).To(Equal(test.expected))
 		})

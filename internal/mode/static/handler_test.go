@@ -96,9 +96,11 @@ var _ = Describe("eventHandler", func() {
 		ctx, cancel = context.WithCancel(context.Background()) //nolint:fatcontext // ignore for test
 
 		baseGraph = &graph.Graph{
-			Gateway: &graph.Gateway{
-				Valid:  true,
-				Source: &gatewayv1.Gateway{},
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				{}: {
+					Valid:  true,
+					Source: &gatewayv1.Gateway{},
+				},
 			},
 		}
 
@@ -185,7 +187,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1, &graph.Gateway{})
 
 				checkUpsertEventExpectations(e)
 				expectReconfig(dcfg, fakeCfgFiles)
@@ -201,7 +203,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1, &graph.Gateway{})
 
 				checkDeleteEventExpectations(e)
 				expectReconfig(dcfg, fakeCfgFiles)
@@ -238,7 +240,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 2)
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 2, &graph.Gateway{})
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 			})
 		})
@@ -268,6 +270,7 @@ var _ = Describe("eventHandler", func() {
 				IgnoredGatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
 					client.ObjectKeyFromObject(ignoredGC): ignoredGC,
 				},
+				Gateways: map[types.NamespacedName]*graph.Gateway{},
 			}
 
 			fakeProcessor.ProcessReturns(state.ClusterStateChange, gr)
@@ -392,7 +395,11 @@ var _ = Describe("eventHandler", func() {
 		batch := []interface{}{e}
 
 		BeforeEach(func() {
-			fakeProcessor.ProcessReturns(state.EndpointsOnlyChange, &graph.Graph{Gateway: &graph.Gateway{Valid: true}})
+			fakeProcessor.ProcessReturns(state.EndpointsOnlyChange, &graph.Graph{
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {Valid: true},
+				},
+			})
 		})
 
 		When("running NGINX Plus", func() {
@@ -401,7 +408,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1, &graph.Gateway{})
 				dcfg.NginxPlus = dataplane.NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 
@@ -414,7 +421,7 @@ var _ = Describe("eventHandler", func() {
 			It("should not call the NGINX Plus API", func() {
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1, &graph.Gateway{})
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 
 				Expect(fakeGenerator.GenerateCallCount()).To(Equal(1))
@@ -460,12 +467,16 @@ var _ = Describe("eventHandler", func() {
 		batch := []interface{}{e}
 		readyChannel := handler.cfg.graphBuiltHealthChecker.getReadyCh()
 
-		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{Gateway: &graph.Gateway{Valid: true}})
+		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				{}: {Valid: true},
+			},
+		})
 
 		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).ToNot(Succeed())
 		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1, &graph.Gateway{})
 		Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 
 		Expect(readyChannel).To(BeClosed())

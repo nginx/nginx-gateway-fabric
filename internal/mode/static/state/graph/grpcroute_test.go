@@ -83,6 +83,21 @@ func TestBuildGRPCRoutes(t *testing.T) {
 	t.Parallel()
 	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
 
+	gateways := map[types.NamespacedName]*Gateway{
+		gwNsName: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "gateway",
+				},
+			},
+			Valid: true,
+			EffectiveNginxProxy: &EffectiveNginxProxy{
+				DisableHTTP2: helpers.GetPointer(false),
+			},
+		},
+	}
+
 	snippetsFilterRef := v1.GRPCRouteFilter{
 		Type: v1.GRPCRouteFilterExtensionRef,
 		ExtensionRef: &v1.LocalObjectReference{
@@ -194,10 +209,6 @@ func TestBuildGRPCRoutes(t *testing.T) {
 
 	validator := &validationfakes.FakeHTTPFieldsValidator{}
 
-	npCfg := &EffectiveNginxProxy{
-		DisableHTTP2: helpers.GetPointer(false),
-	}
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -218,7 +229,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 				map[types.NamespacedName]*v1.HTTPRoute{},
 				grRoutes,
 				test.gwNsNames,
-				npCfg,
+				gateways,
 				snippetsFilters,
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())

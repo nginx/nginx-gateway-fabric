@@ -46,10 +46,15 @@ func addBackendRefsToRouteRules(
 	refGrantResolver *referenceGrantResolver,
 	services map[types.NamespacedName]*v1.Service,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
-	npCfg *EffectiveNginxProxy,
+	gws map[types.NamespacedName]*Gateway,
 ) {
-	for _, r := range routes {
-		addBackendRefsToRules(r, refGrantResolver, services, backendTLSPolicies, npCfg)
+	for _, gw := range gws {
+		if gw == nil {
+			continue
+		}
+		for _, r := range routes {
+			addBackendRefsToRules(r, refGrantResolver, services, backendTLSPolicies, gw.EffectiveNginxProxy)
+		}
 	}
 }
 

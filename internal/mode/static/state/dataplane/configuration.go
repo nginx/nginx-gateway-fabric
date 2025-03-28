@@ -31,26 +31,27 @@ const (
 func BuildConfiguration(
 	ctx context.Context,
 	g *graph.Graph,
+	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
 	configVersion int,
 	plus bool,
 ) Configuration {
-	if g.GatewayClass == nil || !g.GatewayClass.Valid || g.Gateway == nil {
-		config := GetDefaultConfiguration(g, configVersion)
+	if g.GatewayClass == nil || !g.GatewayClass.Valid || gateway == nil {
+		config := GetDefaultConfiguration(g, configVersion, gateway)
 		if plus {
-			config.NginxPlus = buildNginxPlus(g)
+			config.NginxPlus = buildNginxPlus(gateway)
 		}
 
 		return config
 	}
 
-	baseHTTPConfig := buildBaseHTTPConfig(g)
+	baseHTTPConfig := buildBaseHTTPConfig(g, gateway)
 
-	httpServers, sslServers := buildServers(g)
+	httpServers, sslServers := buildServers(gateway)
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 	upstreams := buildUpstreams(
 		ctx,
-		g.Gateway.Listeners,
+		gateway.Listeners,
 		serviceResolver,
 		g.ReferencedServices,
 		baseHTTPConfig.IPFamily,
@@ -58,25 +59,25 @@ func BuildConfiguration(
 
 	var nginxPlus NginxPlus
 	if plus {
-		nginxPlus = buildNginxPlus(g)
+		nginxPlus = buildNginxPlus(gateway)
 	}
 
 	config := Configuration{
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
-		TLSPassthroughServers: buildPassthroughServers(g),
+		TLSPassthroughServers: buildPassthroughServers(gateway),
 		Upstreams:             upstreams,
-		StreamUpstreams:       buildStreamUpstreams(ctx, g.Gateway.Listeners, serviceResolver, baseHTTPConfig.IPFamily),
+		StreamUpstreams:       buildStreamUpstreams(ctx, gateway.Listeners, serviceResolver, baseHTTPConfig.IPFamily),
 		BackendGroups:         backendGroups,
-		SSLKeyPairs:           buildSSLKeyPairs(g.ReferencedSecrets, g.Gateway.Listeners),
+		SSLKeyPairs:           buildSSLKeyPairs(g.ReferencedSecrets, gateway.Listeners),
 		Version:               configVersion,
 		CertBundles: buildCertBundles(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
 		),
-		Telemetry:        buildTelemetry(g),
+		Telemetry:        buildTelemetry(g, gateway),
 		BaseHTTPConfig:   baseHTTPConfig,
-		Logging:          buildLogging(g),
+		Logging:          buildLogging(gateway),
 		NginxPlus:        nginxPlus,
 		MainSnippets:     buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
@@ -86,13 +87,13 @@ func BuildConfiguration(
 }
 
 // buildPassthroughServers builds TLSPassthroughServers from TLSRoutes attaches to listeners.
-func buildPassthroughServers(g *graph.Graph) []Layer4VirtualServer {
+func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 	passthroughServersMap := make(map[graph.L4RouteKey][]Layer4VirtualServer)
 	listenerPassthroughServers := make([]Layer4VirtualServer, 0)
 
 	passthroughServerCount := 0
 
-	for _, l := range g.Gateway.Listeners {
+	for _, l := range gateway.Listeners {
 		if !l.Valid || l.Source.Protocol != v1.TLSProtocolType {
 			continue
 		}
@@ -375,13 +376,13 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy) *VerifyTLS {
 	return verify
 }
 
-func buildServers(g *graph.Graph) (http, ssl []VirtualServer) {
+func buildServers(gateway *graph.Gateway) (http, ssl []VirtualServer) {
 	rulesForProtocol := map[v1.ProtocolType]portPathRules{
 		v1.HTTPProtocolType:  make(portPathRules),
 		v1.HTTPSProtocolType: make(portPathRules),
 	}
 
-	for _, l := range g.Gateway.Listeners {
+	for _, l := range gateway.Listeners {
 		if l.Source.Protocol == v1.TLSProtocolType {
 			continue
 		}
@@ -401,7 +402,7 @@ func buildServers(g *graph.Graph) (http, ssl []VirtualServer) {
 
 	httpServers, sslServers := httpRules.buildServers(), sslRules.buildServers()
 
-	pols := buildPolicies(g.Gateway.Policies)
+	pols := buildPolicies(gateway.Policies)
 
 	for i := range httpServers {
 		httpServers[i].Policies = pols
@@ -831,13 +832,13 @@ func telemetryEnabled(gw *graph.Gateway) bool {
 }
 
 // buildTelemetry generates the Otel configuration.
-func buildTelemetry(g *graph.Graph) Telemetry {
-	if !telemetryEnabled(g.Gateway) {
+func buildTelemetry(g *graph.Graph, gateway *graph.Gateway) Telemetry {
+	if !telemetryEnabled(gateway) {
 		return Telemetry{}
 	}
 
-	serviceName := fmt.Sprintf("ngf:%s:%s", g.Gateway.Source.Namespace, g.Gateway.Source.Name)
-	telemetry := g.Gateway.EffectiveNginxProxy.Telemetry
+	serviceName := fmt.Sprintf("ngf:%s:%s", gateway.Source.Namespace, gateway.Source.Name)
+	telemetry := gateway.EffectiveNginxProxy.Telemetry
 	if telemetry.ServiceName != nil {
 		serviceName = serviceName + ":" + *telemetry.ServiceName
 	}
@@ -900,7 +901,7 @@ func CreateRatioVarName(ratio int32) string {
 }
 
 // buildBaseHTTPConfig generates the base http context config that should be applied to all servers.
-func buildBaseHTTPConfig(g *graph.Graph) BaseHTTPConfig {
+func buildBaseHTTPConfig(g *graph.Graph, gateway *graph.Gateway) BaseHTTPConfig {
 	baseConfig := BaseHTTPConfig{
 		// HTTP2 should be enabled by default
 		HTTP2:    true,
@@ -909,7 +910,7 @@ func buildBaseHTTPConfig(g *graph.Graph) BaseHTTPConfig {
 	}
 
 	// safe to access EffectiveNginxProxy since we only call this function when the Gateway is not nil.
-	np := g.Gateway.EffectiveNginxProxy
+	np := gateway.EffectiveNginxProxy
 	if np == nil {
 		return baseConfig
 	}
@@ -1016,14 +1017,14 @@ func convertAddresses(addresses []ngfAPIv1alpha2.RewriteClientIPAddress) []strin
 	return trustedAddresses
 }
 
-func buildLogging(g *graph.Graph) Logging {
+func buildLogging(gateway *graph.Gateway) Logging {
 	logSettings := Logging{ErrorLevel: defaultErrorLogLevel}
 
-	if g.Gateway == nil || g.Gateway.EffectiveNginxProxy == nil {
+	if gateway == nil || gateway.EffectiveNginxProxy == nil {
 		return logSettings
 	}
 
-	ngfProxy := g.Gateway.EffectiveNginxProxy
+	ngfProxy := gateway.EffectiveNginxProxy
 	if ngfProxy.Logging != nil {
 		if ngfProxy.Logging.ErrorLevel != nil {
 			logSettings.ErrorLevel = string(*ngfProxy.Logging.ErrorLevel)
@@ -1047,14 +1048,14 @@ func buildAuxiliarySecrets(
 	return auxSecrets
 }
 
-func buildNginxPlus(g *graph.Graph) NginxPlus {
+func buildNginxPlus(gateway *graph.Gateway) NginxPlus {
 	nginxPlusSettings := NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
 
-	if g.Gateway == nil || g.Gateway.EffectiveNginxProxy == nil {
+	if gateway == nil || gateway.EffectiveNginxProxy == nil {
 		return nginxPlusSettings
 	}
 
-	ngfProxy := g.Gateway.EffectiveNginxProxy
+	ngfProxy := gateway.EffectiveNginxProxy
 	if ngfProxy.NginxPlus != nil {
 		if ngfProxy.NginxPlus.AllowedAddresses != nil {
 			addresses := make([]string, 0, len(ngfProxy.NginxPlus.AllowedAddresses))
@@ -1069,10 +1070,10 @@ func buildNginxPlus(g *graph.Graph) NginxPlus {
 	return nginxPlusSettings
 }
 
-func GetDefaultConfiguration(g *graph.Graph, configVersion int) Configuration {
+func GetDefaultConfiguration(g *graph.Graph, configVersion int, gateway *graph.Gateway) Configuration {
 	return Configuration{
 		Version:          configVersion,
-		Logging:          buildLogging(g),
+		Logging:          buildLogging(gateway),
 		NginxPlus:        NginxPlus{},
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
 	}

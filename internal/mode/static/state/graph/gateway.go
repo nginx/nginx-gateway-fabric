@@ -1,64 +1,34 @@
 package graph
 
 import (
-	"sort"
-
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
-	ngfsort "github.com/nginx/nginx-gateway-fabric/internal/mode/static/sort"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
 
 // Gateway represents the winning Gateway resource.
 type Gateway struct {
-	// Source is the corresponding Gateway resource.
-	Source *v1.Gateway
-	// NginxProxy is the NginxProxy referenced by this Gateway.
-	NginxProxy *NginxProxy
-	/// EffectiveNginxProxy holds the result of merging the NginxProxySpec on this resource with the NginxProxySpec on
-	// the GatewayClass resource. This is the effective set of config that should be applied to the Gateway.
-	// If non-nil, then this config is valid.
+	Source              *v1.Gateway
+	NginxProxy          *NginxProxy
 	EffectiveNginxProxy *EffectiveNginxProxy
-	// Listeners include the listeners of the Gateway.
-	Listeners []*Listener
-	// Conditions holds the conditions for the Gateway.
-	Conditions []conditions.Condition
-	// Policies holds the policies attached to the Gateway.
-	Policies []*Policy
-	// Valid indicates whether the Gateway Spec is valid.
-	Valid bool
-}
-
-// processedGateways holds the resources that belong to NGF.
-type processedGateways struct {
-	Winner  *v1.Gateway
-	Ignored map[types.NamespacedName]*v1.Gateway
+	DeploymentName      types.NamespacedName
+	Listeners           []*Listener
+	Conditions          []conditions.Condition
+	Policies            []*Policy
+	Valid               bool
 }
 
 // GetAllNsNames returns all the NamespacedNames of the Gateway resources that belong to NGF.
-func (gws processedGateways) GetAllNsNames() []types.NamespacedName {
-	winnerCnt := 0
-	if gws.Winner != nil {
-		winnerCnt = 1
-	}
+func GetAllNsNames(gws map[types.NamespacedName]*v1.Gateway) []types.NamespacedName {
+	allNsNames := make([]types.NamespacedName, 0, len(gws))
 
-	length := winnerCnt + len(gws.Ignored)
-	if length == 0 {
-		return nil
-	}
-
-	allNsNames := make([]types.NamespacedName, 0, length)
-
-	if gws.Winner != nil {
-		allNsNames = append(allNsNames, client.ObjectKeyFromObject(gws.Winner))
-	}
-	for nsName := range gws.Ignored {
+	for nsName := range gws {
 		allNsNames = append(allNsNames, nsName)
 	}
 
@@ -69,89 +39,96 @@ func (gws processedGateways) GetAllNsNames() []types.NamespacedName {
 func processGateways(
 	gws map[types.NamespacedName]*v1.Gateway,
 	gcName string,
-) processedGateways {
-	referencedGws := make([]*v1.Gateway, 0, len(gws))
+) map[types.NamespacedName]*v1.Gateway {
+	referencedGws := make(map[types.NamespacedName]*v1.Gateway, len(gws))
 
-	for _, gw := range gws {
+	for gwNsName, gw := range gws {
 		if string(gw.Spec.GatewayClassName) != gcName {
 			continue
 		}
 
-		referencedGws = append(referencedGws, gw)
+		referencedGws[gwNsName] = gw
 	}
 
 	if len(referencedGws) == 0 {
-		return processedGateways{}
+		return nil
 	}
 
-	sort.Slice(referencedGws, func(i, j int) bool {
-		return ngfsort.LessClientObject(referencedGws[i], referencedGws[j])
-	})
-
-	ignoredGws := make(map[types.NamespacedName]*v1.Gateway)
-
-	for _, gw := range referencedGws[1:] {
-		ignoredGws[client.ObjectKeyFromObject(gw)] = gw
-	}
-
-	return processedGateways{
-		Winner:  referencedGws[0],
-		Ignored: ignoredGws,
-	}
+	return referencedGws
 }
 
 func buildGateway(
-	gw *v1.Gateway,
+	gws map[types.NamespacedName]*v1.Gateway,
 	secretResolver *secretResolver,
 	gc *GatewayClass,
 	refGrantResolver *referenceGrantResolver,
 	nps map[types.NamespacedName]*NginxProxy,
-) *Gateway {
-	if gw == nil {
+) map[types.NamespacedName]*Gateway {
+	if gws == nil {
 		return nil
 	}
 
-	var np *NginxProxy
-	if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
-		npName := types.NamespacedName{Namespace: gw.Namespace, Name: gw.Spec.Infrastructure.ParametersRef.Name}
-		np = nps[npName]
-	}
+	builtGateways := make(map[types.NamespacedName]*Gateway, len(gws))
 
-	var gcNp *NginxProxy
-	if gc != nil {
-		gcNp = gc.NginxProxy
-	}
+	for gwNsNames, gw := range gws {
+		var np *NginxProxy
+		var npNsName types.NamespacedName
+		if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
+			npNsName = types.NamespacedName{Namespace: gw.Namespace, Name: gw.Spec.Infrastructure.ParametersRef.Name}
+			np = nps[npNsName]
+		}
 
-	effectiveNginxProxy := buildEffectiveNginxProxy(gcNp, np)
+		var gcNp *NginxProxy
+		if gc != nil {
+			gcNp = gc.NginxProxy
+		}
 
-	conds, valid := validateGateway(gw, gc, np)
+		effectiveNginxProxy := buildEffectiveNginxProxy(gcNp, np)
 
-	if !valid {
-		return &Gateway{
-			Source:              gw,
-			Valid:               false,
-			NginxProxy:          np,
-			EffectiveNginxProxy: effectiveNginxProxy,
-			Conditions:          conds,
+		conds, valid := validateGateway(gw, gc, np)
+
+		protectedPorts := make(ProtectedPorts)
+		if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
+			metricsPort := config.DefaultNginxMetricsPort
+			if port != nil {
+				metricsPort = *port
+			}
+			protectedPorts[metricsPort] = "MetricsPort"
+		}
+
+		if !valid {
+			builtGateways[gwNsNames] = &Gateway{
+				Source:              gw,
+				Valid:               false,
+				NginxProxy:          np,
+				EffectiveNginxProxy: effectiveNginxProxy,
+				Conditions:          conds,
+			}
+		} else {
+			builtGateways[gwNsNames] = &Gateway{
+				Source:              gw,
+				Listeners:           buildListeners(gw, secretResolver, refGrantResolver, protectedPorts),
+				NginxProxy:          np,
+				EffectiveNginxProxy: effectiveNginxProxy,
+				Valid:               true,
+				Conditions:          conds,
+			}
 		}
 	}
 
-	protectedPorts := make(ProtectedPorts)
-	if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
-		metricsPort := config.DefaultNginxMetricsPort
-		if port != nil {
-			metricsPort = *port
-		}
-		protectedPorts[metricsPort] = "MetricsPort"
-	}
+	return builtGateways
+}
 
-	return &Gateway{
-		Source:              gw,
-		Listeners:           buildListeners(gw, secretResolver, refGrantResolver, protectedPorts),
-		NginxProxy:          np,
-		EffectiveNginxProxy: effectiveNginxProxy,
-		Valid:               true,
-		Conditions:          conds,
+func addDeploymentNameToGateway(gws map[types.NamespacedName]*Gateway) {
+	for _, gw := range gws {
+		if gw == nil {
+			continue
+		}
+
+		gw.DeploymentName = types.NamespacedName{
+			Namespace: gw.Source.Namespace,
+			Name:      controller.CreateNginxResourceName(gw.Source.Name, string(gw.Source.Spec.GatewayClassName)),
+		}
 	}
 }
 
