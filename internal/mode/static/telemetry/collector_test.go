@@ -527,7 +527,7 @@ var _ = Describe("Collector", Ordered, func() {
 			It("collects correct data for one node", func(ctx SpecContext) {
 				k8sClientReader.ListCalls(createListCallsFunc(nodeList))
 
-				expData.Data.ClusterNodeCount = 1
+				expData.ClusterNodeCount = 1
 
 				data, err := dataCollector.Collect(ctx)
 

@@ -151,10 +151,10 @@ func createBackendRef(
 	}
 
 	ns := sourceNamespace
-	if ref.BackendRef.Namespace != nil {
+	if ref.Namespace != nil {
 		ns = string(*ref.Namespace)
 	}
-	svcNsName := types.NamespacedName{Name: string(ref.BackendRef.Name), Namespace: ns}
+	svcNsName := types.NamespacedName{Name: string(ref.Name), Namespace: ns}
 	svcIPFamily, svcPort, err := getIPFamilyAndPortFromRef(ref.BackendRef, svcNsName, services, refPath)
 	if err != nil {
 		backendRef = BackendRef{
@@ -328,7 +328,7 @@ func verifyIPFamily(npCfg *NginxProxy, svcIPFamily []v1.IPFamily) error {
 			// capitalizing error message to match the rest of the error messages associated with a condition
 			//nolint: stylecheck
 			return errors.New(
-				"Service configured with IPv6 family but NginxProxy is configured with IPv4",
+				"service configured with IPv6 family but NginxProxy is configured with IPv4",
 			)
 		}
 	}
@@ -337,7 +337,7 @@ func verifyIPFamily(npCfg *NginxProxy, svcIPFamily []v1.IPFamily) error {
 			// capitalizing error message to match the rest of the error messages associated with a condition
 			//nolint: stylecheck
 			return errors.New(
-				"Service configured with IPv4 family but NginxProxy is configured with IPv6",
+				"service configured with IPv4 family but NginxProxy is configured with IPv6",
 			)
 		}
 	}
@@ -368,7 +368,7 @@ func validateBackendRef(
 ) (valid bool, cond conditions.Condition) {
 	// Because all errors cause same condition but different reasons, we return as soon as we find an error
 
-	if ref.Group != nil && !(*ref.Group == "core" || *ref.Group == "") {
+	if ref.Group != nil && (*ref.Group != "core" && *ref.Group != "") {
 		valErr := field.NotSupported(path.Child("group"), *ref.Group, []string{"core", ""})
 		return false, staticConds.NewRouteBackendRefInvalidKind(valErr.Error())
 	}

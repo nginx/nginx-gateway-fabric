@@ -482,7 +482,7 @@ func TestBuildTLSRoute(t *testing.T) {
 					},
 				},
 				Conditions: []conditions.Condition{staticConds.NewRouteInvalidIPFamily(
-					"Service configured with IPv4 family but NginxProxy is configured with IPv6",
+					"service configured with IPv4 family but NginxProxy is configured with IPv6",
 				)},
 				Attachable: true,
 				Valid:      true,
