@@ -185,49 +185,51 @@ func (h *eventHandlerImpl) sendNginxConfig(
 		return
 	}
 
-	if gr.Gateway == nil {
-		// still need to update GatewayClass status
-		obj := &status.QueueObject{
-			UpdateType: status.UpdateAll,
+	for _, gw := range gr.Gateways {
+		if gw == nil {
+			// still need to update GatewayClass status
+			obj := &status.QueueObject{
+				UpdateType: status.UpdateAll,
+			}
+			h.cfg.statusQueue.Enqueue(obj)
+			return
 		}
-		h.cfg.statusQueue.Enqueue(obj)
-		return
-	}
 
-	go func() {
-		if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gr.Gateway, gr.DeploymentName.Name); err != nil {
-			logger.Error(err, "error from provisioner")
+		go func() {
+			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
+				logger.Error(err, "error from provisioner")
+			}
+		}()
+
+		if !gw.Valid {
+			obj := &status.QueueObject{
+				Deployment: gw.DeploymentName,
+				UpdateType: status.UpdateAll,
+			}
+			h.cfg.statusQueue.Enqueue(obj)
+			return
 		}
-	}()
 
-	if !gr.Gateway.Valid {
-		obj := &status.QueueObject{
-			Deployment: gr.DeploymentName,
-			UpdateType: status.UpdateAll,
+		stopCh := make(chan struct{})
+		deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, stopCh)
+		if deployment == nil {
+			panic("expected deployment, got nil")
 		}
-		h.cfg.statusQueue.Enqueue(obj)
-		return
-	}
 
-	stopCh := make(chan struct{})
-	deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gr.DeploymentName, stopCh)
-	if deployment == nil {
-		panic("expected deployment, got nil")
-	}
+		configApplied := h.processStateAndBuildConfig(ctx, logger, gr, gw, changeType, deployment)
 
-	configApplied := h.processStateAndBuildConfig(ctx, logger, gr, changeType, deployment)
+		configErr := deployment.GetLatestConfigError()
+		upstreamErr := deployment.GetLatestUpstreamError()
+		err := errors.Join(configErr, upstreamErr)
 
-	configErr := deployment.GetLatestConfigError()
-	upstreamErr := deployment.GetLatestUpstreamError()
-	err := errors.Join(configErr, upstreamErr)
-
-	if configApplied || err != nil {
-		obj := &status.QueueObject{
-			UpdateType: status.UpdateAll,
-			Error:      err,
-			Deployment: gr.DeploymentName,
+		if configApplied || err != nil {
+			obj := &status.QueueObject{
+				UpdateType: status.UpdateAll,
+				Error:      err,
+				Deployment: gw.DeploymentName,
+			}
+			h.cfg.statusQueue.Enqueue(obj)
 		}
-		h.cfg.statusQueue.Enqueue(obj)
 	}
 }
 
@@ -235,6 +237,7 @@ func (h *eventHandlerImpl) processStateAndBuildConfig(
 	ctx context.Context,
 	logger logr.Logger,
 	gr *graph.Graph,
+	currentGateway *graph.Gateway,
 	changeType state.ChangeType,
 	deployment *agent.Deployment,
 ) bool {
@@ -242,7 +245,7 @@ func (h *eventHandlerImpl) processStateAndBuildConfig(
 	switch changeType {
 	case state.EndpointsOnlyChange:
 		h.version++
-		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version, h.cfg.plus)
+		cfg := dataplane.BuildConfiguration(ctx, gr, currentGateway, h.cfg.serviceResolver, h.version, h.cfg.plus)
 		depCtx, getErr := h.getDeploymentContext(ctx)
 		if getErr != nil {
 			logger.Error(getErr, "error getting deployment context for usage reporting")
@@ -260,7 +263,7 @@ func (h *eventHandlerImpl) processStateAndBuildConfig(
 		deployment.FileLock.Unlock()
 	case state.ClusterStateChange:
 		h.version++
-		cfg := dataplane.BuildConfiguration(ctx, gr, h.cfg.serviceResolver, h.version, h.cfg.plus)
+		cfg := dataplane.BuildConfiguration(ctx, gr, currentGateway, h.cfg.serviceResolver, h.version, h.cfg.plus)
 		depCtx, getErr := h.getDeploymentContext(ctx)
 		if getErr != nil {
 			logger.Error(getErr, "error getting deployment context for usage reporting")
@@ -292,56 +295,58 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 		}
 
 		var nginxReloadRes graph.NginxReloadResult
-		switch {
-		case item.Error != nil:
-			h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
-			nginxReloadRes.Error = item.Error
-		case gr.Gateway != nil:
-			h.cfg.logger.Info("NGINX configuration was successfully updated")
-		}
-		gr.LatestReloadResult = nginxReloadRes
-
-		switch item.UpdateType {
-		case status.UpdateAll:
-			h.updateStatuses(ctx, gr)
-		case status.UpdateGateway:
-			gwAddresses, err := getGatewayAddresses(
-				ctx,
-				h.cfg.k8sClient,
-				item.GatewayService,
-				gr.Gateway,
-				h.cfg.gatewayClassName,
-			)
-			if err != nil {
-				msg := "error getting Gateway Service IP address"
-				h.cfg.logger.Error(err, msg)
-				h.cfg.eventRecorder.Eventf(
-					item.GatewayService,
-					v1.EventTypeWarning,
-					"GetServiceIPFailed",
-					msg+": %s",
-					err.Error(),
-				)
-				continue
+		for _, gw := range gr.Gateways {
+			switch {
+			case item.Error != nil:
+				h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
+				nginxReloadRes.Error = item.Error
+			case gw != nil:
+				h.cfg.logger.Info("NGINX configuration was successfully updated")
 			}
+			gr.LatestReloadResult = nginxReloadRes
 
-			transitionTime := metav1.Now()
-			gatewayStatuses := status.PrepareGatewayRequests(
-				gr.Gateway,
-				gr.IgnoredGateways,
-				transitionTime,
-				gwAddresses,
-				gr.LatestReloadResult,
-			)
-			h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
-		default:
-			panic(fmt.Sprintf("unknown event type %T", item.UpdateType))
+			switch item.UpdateType {
+			case status.UpdateAll:
+				h.updateStatuses(ctx, gr, gw)
+			case status.UpdateGateway:
+				gwAddresses, err := getGatewayAddresses(
+					ctx,
+					h.cfg.k8sClient,
+					item.GatewayService,
+					gw,
+					h.cfg.gatewayClassName,
+				)
+				if err != nil {
+					msg := "error getting Gateway Service IP address"
+					h.cfg.logger.Error(err, msg)
+					h.cfg.eventRecorder.Eventf(
+						item.GatewayService,
+						v1.EventTypeWarning,
+						"GetServiceIPFailed",
+						msg+": %s",
+						err.Error(),
+					)
+					continue
+				}
+
+				transitionTime := metav1.Now()
+
+				gatewayStatuses := status.PrepareGatewayRequests(
+					gw,
+					transitionTime,
+					gwAddresses,
+					gr.LatestReloadResult,
+				)
+				h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
+			default:
+				panic(fmt.Sprintf("unknown event type %T", item.UpdateType))
+			}
 		}
 	}
 }
 
-func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph) {
-	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gr.Gateway, h.cfg.gatewayClassName)
+func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, gw *graph.Gateway) {
+	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 	if err != nil {
 		msg := "error getting Gateway Service IP address"
 		h.cfg.logger.Error(err, msg)
@@ -392,8 +397,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph) 
 	// We put Gateway status updates separately from the rest of the statuses because we want to be able
 	// to update them separately from the rest of the graph whenever the public IP of NGF changes.
 	gwReqs := status.PrepareGatewayRequests(
-		gr.Gateway,
-		gr.IgnoredGateways,
+		gw,
 		transitionTime,
 		gwAddresses,
 		gr.LatestReloadResult,

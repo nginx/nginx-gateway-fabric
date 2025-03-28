@@ -8,7 +8,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -16,7 +15,6 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
@@ -47,16 +45,12 @@ type ClusterState struct {
 type Graph struct {
 	// GatewayClass holds the GatewayClass resource.
 	GatewayClass *GatewayClass
-	// Gateway holds the winning Gateway resource.
-	Gateway *Gateway
+	// Gateway holds the all Gateway resource.
+	Gateways map[types.NamespacedName]*Gateway
 	// IgnoredGatewayClasses holds the ignored GatewayClass resources, which reference NGINX Gateway Fabric in the
 	// controllerName, but are not configured via the NGINX Gateway Fabric CLI argument. It doesn't hold the GatewayClass
 	// resources that do not belong to the NGINX Gateway Fabric.
 	IgnoredGatewayClasses map[types.NamespacedName]*gatewayv1.GatewayClass
-	// IgnoredGateways holds the ignored Gateway resources, which belong to the NGINX Gateway Fabric (based on the
-	// GatewayClassName field of the resource) but ignored. It doesn't hold the Gateway resources that do not belong to
-	// the NGINX Gateway Fabric.
-	IgnoredGateways map[types.NamespacedName]*gatewayv1.Gateway
 	// Routes hold Route resources.
 	Routes map[RouteKey]*L7Route
 	// L4Routes hold L4Route resources.
@@ -78,17 +72,12 @@ type Graph struct {
 	BackendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy
 	// NGFPolicies holds all NGF Policies.
 	NGFPolicies map[PolicyKey]*Policy
-	// GlobalSettings contains global settings from the current state of the graph that may be
-	// needed for policy validation or generation if certain policies rely on those global settings.
-	GlobalSettings *policies.GlobalSettings
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// PlusSecrets holds the secrets related to NGINX Plus licensing.
 	PlusSecrets map[types.NamespacedName][]PlusSecretFile
 	// LatestReloadResult is the latest result of applying config to nginx for this Gateway.
 	LatestReloadResult NginxReloadResult
-	// DeploymentName is the name of the nginx Deployment for this Gateway.
-	DeploymentName types.NamespacedName
 }
 
 // NginxReloadResult describes the result of an NGINX reload.
@@ -125,7 +114,7 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 		// `exists` does not cover the case highlighted above by `existed` and vice versa so both are needed.
 
 		_, existed := g.ReferencedNamespaces[nsname]
-		exists := isNamespaceReferenced(obj, g.Gateway)
+		exists := isNamespaceReferenced(obj, g.Gateways)
 		return existed || exists
 	// Service reference exists if at least one HTTPRoute references it.
 	case *v1.Service:
@@ -190,11 +179,11 @@ func (g *Graph) gatewayAPIResourceExist(ref v1alpha2.LocalPolicyTargetReference,
 
 	switch kind := ref.Kind; kind {
 	case kinds.Gateway:
-		if g.Gateway == nil {
+		if g.Gateways == nil {
 			return false
 		}
 
-		return gatewayExists(refNsName, g.Gateway.Source, g.IgnoredGateways)
+		return gatewayExists(refNsName, g.Gateways)
 	case kinds.HTTPRoute, kinds.GRPCRoute:
 		_, exists := g.Routes[routeKeyForKind(kind, refNsName)]
 		return exists
@@ -223,7 +212,7 @@ func BuildGraph(
 		state.NginxProxies,
 		validators.GenericValidator,
 		processedGwClasses.Winner,
-		processedGws.Winner,
+		processedGws,
 	)
 
 	gc := buildGatewayClass(
@@ -237,65 +226,59 @@ func BuildGraph(
 
 	refGrantResolver := newReferenceGrantResolver(state.ReferenceGrants)
 
-	gw := buildGateway(
-		processedGws.Winner,
+	gws := buildGateway(
+		processedGws,
 		secretResolver,
 		gc,
 		refGrantResolver,
 		processedNginxProxies,
 	)
 
+	addDeploymentNameToGateway(gws)
+
 	processedBackendTLSPolicies := processBackendTLSPolicies(
 		state.BackendTLSPolicies,
 		configMapResolver,
 		secretResolver,
 		controllerName,
-		gw,
+		gws,
 	)
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
-	var effectiveNginxProxy *EffectiveNginxProxy
-	if gw != nil {
-		effectiveNginxProxy = gw.EffectiveNginxProxy
-	}
 
+	nsNamesForProcessedGateways := GetAllNsNames(processedGws)
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
 		state.HTTPRoutes,
 		state.GRPCRoutes,
-		processedGws.GetAllNsNames(),
-		effectiveNginxProxy,
+		nsNamesForProcessedGateways,
+		gws,
 		processedSnippetsFilters,
 	)
 
 	l4routes := buildL4RoutesForGateways(
 		state.TLSRoutes,
-		processedGws.GetAllNsNames(),
+		nsNamesForProcessedGateways,
 		state.Services,
-		effectiveNginxProxy,
+		gws,
 		refGrantResolver,
 	)
 
-	bindRoutesToListeners(routes, l4routes, gw, state.Namespaces)
+	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces)
 	addBackendRefsToRouteRules(
 		routes,
 		refGrantResolver,
 		state.Services,
 		processedBackendTLSPolicies,
-		effectiveNginxProxy,
+		gws,
 	)
 
-	referencedNamespaces := buildReferencedNamespaces(state.Namespaces, gw)
+	referencedNamespaces := buildReferencedNamespaces(state.Namespaces, gws)
 
-	referencedServices := buildReferencedServices(routes, l4routes, gw)
+	referencedServices := buildReferencedServices(routes, l4routes, gws)
 
-	var globalSettings *policies.GlobalSettings
-	if gw != nil && gw.EffectiveNginxProxy != nil {
-		globalSettings = &policies.GlobalSettings{
-			NginxProxyValid:  true, // for effective nginx proxy to be set, the config must be valid
-			TelemetryEnabled: telemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
-		}
-	}
+	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices)
+
 	// policies must be processed last because they rely on the state of the other resources in the graph
 	processedPolicies := processPolicies(
 		state.NGFPolicies,
@@ -303,27 +286,17 @@ func BuildGraph(
 		processedGws,
 		routes,
 		referencedServices,
-		globalSettings,
+		gws,
 	)
 
 	setPlusSecretContent(state.Secrets, plusSecrets)
 
-	var deploymentName types.NamespacedName
-	if gw != nil {
-		deploymentName = types.NamespacedName{
-			Namespace: gw.Source.Namespace,
-			Name:      controller.CreateNginxResourceName(gw.Source.Name, gcName),
-		}
-	}
-
 	g := &Graph{
 		GatewayClass:               gc,
-		Gateway:                    gw,
-		DeploymentName:             deploymentName,
+		Gateways:                   gws,
 		Routes:                     routes,
 		L4Routes:                   l4routes,
 		IgnoredGatewayClasses:      processedGwClasses.Ignored,
-		IgnoredGateways:            processedGws.Ignored,
 		ReferencedSecrets:          secretResolver.getResolvedSecrets(),
 		ReferencedNamespaces:       referencedNamespaces,
 		ReferencedServices:         referencedServices,
@@ -331,7 +304,6 @@ func BuildGraph(
 		ReferencedNginxProxies:     processedNginxProxies,
 		BackendTLSPolicies:         processedBackendTLSPolicies,
 		NGFPolicies:                processedPolicies,
-		GlobalSettings:             globalSettings,
 		SnippetsFilters:            processedSnippetsFilters,
 		PlusSecrets:                plusSecrets,
 	}
@@ -341,21 +313,12 @@ func BuildGraph(
 	return g
 }
 
-func gatewayExists(
-	gwNsName types.NamespacedName,
-	winner *gatewayv1.Gateway,
-	ignored map[types.NamespacedName]*gatewayv1.Gateway,
-) bool {
-	if winner == nil {
+func gatewayExists[T any](gwNsName types.NamespacedName, gateways map[types.NamespacedName]*T) bool {
+	if gateways == nil {
 		return false
 	}
 
-	if client.ObjectKeyFromObject(winner) == gwNsName {
-		return true
-	}
-
-	_, exists := ignored[gwNsName]
-
+	_, exists := gateways[gwNsName]
 	return exists
 }
 
