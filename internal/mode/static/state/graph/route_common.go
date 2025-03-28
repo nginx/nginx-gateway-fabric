@@ -362,8 +362,8 @@ func bindRoutesToListeners(
 			routes = append(routes, r)
 		}
 
-		listenerMap := getListenerHostPortMap(gw.Listeners, gw)
-		isolateL7RouteListeners(routes, listenerMap)
+		// listenerMap := getListenerHostPortMap(gw.Listeners, gw)
+		// isolateL7RouteListeners(routes, listenerMap)
 
 		l4RouteSlice := make([]*L4Route, 0, len(l4Routes))
 		for _, r := range l4Routes {
@@ -382,7 +382,7 @@ func bindRoutesToListeners(
 			bindL4RouteToListeners(r, gw, namespaces, portHostnamesMap)
 		}
 
-		isolateL4RouteListeners(l4RouteSlice, listenerMap)
+		// isolateL4RouteListeners(l4RouteSlice, listenerMap)
 	}
 }
 
@@ -531,17 +531,18 @@ func bindL4RouteToListeners(
 	for i := range route.ParentRefs {
 		ref := &(route.ParentRefs)[i]
 
-		attachment, attachableListeners := validateParentRef(ref, gw)
-
-		if attachment.FailedCondition != (conditions.Condition{}) {
-			continue
-		}
-
 		gwNsName := types.NamespacedName{
 			Name:      gw.Source.Name,
 			Namespace: gw.Source.Namespace,
 		}
+
 		if ref.Gateway != gwNsName {
+			continue
+		}
+
+		attachment, attachableListeners := validateParentRef(ref, gw)
+
+		if attachment.FailedCondition != (conditions.Condition{}) {
 			continue
 		}
 
@@ -695,6 +696,7 @@ func bindL7RouteToListeners(
 			Name:      gw.Source.Name,
 			Namespace: gw.Source.Namespace,
 		}
+
 		if ref.Gateway != gwNsName {
 			continue
 		}

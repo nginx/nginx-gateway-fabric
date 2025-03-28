@@ -140,8 +140,7 @@ var _ = Describe("eventHandler", func() {
 				ServiceName: "nginx-gateway",
 				Namespace:   "nginx-gateway",
 			},
-			metricsCollector:         collectors.NewControllerNoopCollector(),
-			updateGatewayClassStatus: true,
+			metricsCollector: collectors.NewControllerNoopCollector(),
 		})
 		Expect(handler.cfg.graphBuiltHealthChecker.ready).To(BeFalse())
 	})
@@ -245,69 +244,6 @@ var _ = Describe("eventHandler", func() {
 			})
 		})
 	})
-
-	DescribeTable(
-		"updating statuses of GatewayClass conditionally based on handler configuration",
-		func(updateGatewayClassStatus bool) {
-			handler.cfg.updateGatewayClassStatus = updateGatewayClassStatus
-
-			gc := &gatewayv1.GatewayClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test",
-				},
-			}
-			ignoredGC := &gatewayv1.GatewayClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ignored",
-				},
-			}
-
-			gr := &graph.Graph{
-				GatewayClass: &graph.GatewayClass{
-					Source: gc,
-					Valid:  true,
-				},
-				IgnoredGatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
-					client.ObjectKeyFromObject(ignoredGC): ignoredGC,
-				},
-				Gateways: map[types.NamespacedName]*graph.Gateway{},
-			}
-
-			fakeProcessor.ProcessReturns(state.ClusterStateChange, gr)
-			fakeProcessor.GetLatestGraphReturns(gr)
-
-			e := &events.UpsertEvent{
-				Resource: &gatewayv1.HTTPRoute{}, // any supported is OK
-			}
-
-			batch := []interface{}{e}
-
-			var expectedReqsCount int
-			if updateGatewayClassStatus {
-				expectedReqsCount = 2
-			}
-
-			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
-
-			Eventually(
-				func() int {
-					return fakeStatusUpdater.UpdateGroupCallCount()
-				}).Should(Equal(2))
-
-			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
-			Expect(name).To(Equal(groupAllExceptGateways))
-			Expect(reqs).To(HaveLen(expectedReqsCount))
-			for _, req := range reqs {
-				Expect(req.NsName).To(BeElementOf(
-					client.ObjectKeyFromObject(gc),
-					client.ObjectKeyFromObject(ignoredGC),
-				))
-				Expect(req.ResourceType).To(Equal(&gatewayv1.GatewayClass{}))
-			}
-		},
-		Entry("should update statuses of GatewayClass", true),
-		Entry("should not update statuses of GatewayClass", false),
-	)
 
 	When("receiving control plane configuration updates", func() {
 		cfg := func(level ngfAPI.ControllerLogLevel) *ngfAPI.NginxGateway {
