@@ -531,17 +531,18 @@ func bindL4RouteToListeners(
 	for i := range route.ParentRefs {
 		ref := &(route.ParentRefs)[i]
 
-		attachment, attachableListeners := validateParentRef(ref, gw)
-
-		if attachment.FailedCondition != (conditions.Condition{}) {
-			continue
-		}
-
 		gwNsName := types.NamespacedName{
 			Name:      gw.Source.Name,
 			Namespace: gw.Source.Namespace,
 		}
+
 		if ref.Gateway != gwNsName {
+			continue
+		}
+
+		attachment, attachableListeners := validateParentRef(ref, gw)
+
+		if attachment.FailedCondition != (conditions.Condition{}) {
 			continue
 		}
 
@@ -695,6 +696,7 @@ func bindL7RouteToListeners(
 			Name:      gw.Source.Name,
 			Namespace: gw.Source.Namespace,
 		}
+
 		if ref.Gateway != gwNsName {
 			continue
 		}

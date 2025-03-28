@@ -1478,7 +1478,7 @@ var _ = Describe("ChangeProcessor", func() {
 				})
 			})
 			When("the second Gateway is upserted", func() {
-				It("returns populated graph using first gateway", func() {
+				It("returns populated graph with second gateway", func() {
 					processor.CaptureUpsertChange(gw2)
 
 					grpcRoute := expGraph.Routes[grpcRouteKey1]
