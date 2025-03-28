@@ -27,6 +27,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/provisioner/openshift"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/status"
 )
@@ -44,6 +45,7 @@ type Provisioner interface {
 type Config struct {
 	GCName             string
 	AgentTLSSecretName string
+	NGINXSCCName       string
 
 	DeploymentStore        agent.DeploymentStorer
 	StatusQueue            *status.Queue
@@ -66,9 +68,12 @@ type NginxProvisioner struct {
 	baseLabelSelector          metav1.LabelSelector
 	cfg                        Config
 	leader                     bool
+	isOpenshift                bool
 
 	lock sync.RWMutex
 }
+
+var apiChecker openshift.APIChecker = &openshift.APICheckerImpl{}
 
 // NewNginxProvisioner returns a new instance of a Provisioner that will deploy nginx resources.
 func NewNginxProvisioner(
@@ -82,6 +87,7 @@ func NewNginxProvisioner(
 		caSecretName = cfg.PlusUsageConfig.CASecretName
 		clientSSLSecretName = cfg.PlusUsageConfig.ClientSSLSecretName
 	}
+
 	store := newStore(
 		cfg.NginxDockerSecretNames,
 		cfg.AgentTLSSecretName,
@@ -100,12 +106,18 @@ func NewNginxProvisioner(
 		},
 	}
 
+	isOpenshift, err := apiChecker.IsOpenshift(mgr.GetConfig())
+	if err != nil {
+		return nil, nil, err
+	}
+
 	provisioner := &NginxProvisioner{
 		k8sClient:                  mgr.GetClient(),
 		store:                      store,
 		baseLabelSelector:          selector,
 		resourcesToDeleteOnStartup: []types.NamespacedName{},
 		cfg:                        cfg,
+		isOpenshift:                isOpenshift,
 	}
 
 	handler, err := newEventHandler(store, provisioner, selector, cfg.GCName)
@@ -123,6 +135,7 @@ func NewNginxProvisioner(
 		cfg.NginxDockerSecretNames,
 		cfg.AgentTLSSecretName,
 		cfg.PlusUsageConfig,
+		isOpenshift,
 	)
 	if err != nil {
 		return nil, nil, err
