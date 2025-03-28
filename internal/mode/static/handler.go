@@ -79,8 +79,6 @@ type eventHandlerConfig struct {
 	gatewayCtlrName string
 	// gatewayClassName is the name of the GatewayClass.
 	gatewayClassName string
-	// updateGatewayClassStatus enables updating the status of the GatewayClass resource.
-	updateGatewayClassStatus bool
 	// plus is whether or not we are running NGINX Plus.
 	plus bool
 }
@@ -182,6 +180,15 @@ func (h *eventHandlerImpl) sendNginxConfig(
 	changeType state.ChangeType,
 ) {
 	if gr == nil {
+		return
+	}
+
+	if len(gr.Gateways) == 0 {
+		// still need to update GatewayClass status
+		obj := &status.QueueObject{
+			UpdateType: status.UpdateAll,
+		}
+		h.cfg.statusQueue.Enqueue(obj)
 		return
 	}
 
@@ -361,10 +368,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 
 	transitionTime := metav1.Now()
 
-	var gcReqs []frameworkStatus.UpdateRequest
-	if h.cfg.updateGatewayClassStatus {
-		gcReqs = status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
-	}
+	gcReqs := status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
 	routeReqs := status.PrepareRouteRequests(
 		gr.L4Routes,
 		gr.Routes,

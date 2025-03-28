@@ -141,7 +141,6 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--config=nginx-gateway-config",
 				"--service=nginx-gateway",
 				"--agent-tls-secret=agent-tls",
-				"--update-gatewayclass-status=true",
 				"--metrics-port=9114",
 				"--metrics-disable",
 				"--metrics-secure-serving",
@@ -234,22 +233,6 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "!@#$" for "--agent-tls-secret" flag: invalid format`,
-		},
-		{
-			name: "update-gatewayclass-status is set to empty string",
-			args: []string{
-				"--update-gatewayclass-status=",
-			},
-			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--update-gatewayclass-status" flag: strconv.ParseBool`,
-		},
-		{
-			name: "update-gatewayclass-status is invalid",
-			args: []string{
-				"--update-gatewayclass-status=invalid", // not a boolean
-			},
-			wantErr:           true,
-			expectedErrPrefix: `invalid argument "invalid" for "--update-gatewayclass-status" flag: strconv.ParseBool`,
 		},
 		{
 			name: "metrics-port is invalid type",
