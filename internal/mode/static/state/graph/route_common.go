@@ -362,8 +362,8 @@ func bindRoutesToListeners(
 			routes = append(routes, r)
 		}
 
-		// listenerMap := getListenerHostPortMap(gw.Listeners, gw)
-		// isolateL7RouteListeners(routes, listenerMap)
+		listenerMap := getListenerHostPortMap(gw.Listeners, gw)
+		isolateL7RouteListeners(routes, listenerMap)
 
 		l4RouteSlice := make([]*L4Route, 0, len(l4Routes))
 		for _, r := range l4Routes {
@@ -382,22 +382,27 @@ func bindRoutesToListeners(
 			bindL4RouteToListeners(r, gw, namespaces, portHostnamesMap)
 		}
 
-		// isolateL4RouteListeners(l4RouteSlice, listenerMap)
+		isolateL4RouteListeners(l4RouteSlice, listenerMap)
 	}
 }
 
 type hostPort struct {
-	hostname string
-	port     v1.PortNumber
+	gwNsNames types.NamespacedName
+	hostname  string
+	port      v1.PortNumber
 }
 
 func getListenerHostPortMap(listeners []*Listener, gw *Gateway) map[string]hostPort {
 	listenerHostPortMap := make(map[string]hostPort, len(listeners))
+	gwNsNames := types.NamespacedName{
+		Name:      gw.Source.Name,
+		Namespace: gw.Source.Namespace,
+	}
 	for _, l := range listeners {
-		listenerKey := fmt.Sprintf("%s-%s-%s", gw.Source.Namespace, gw.Source.Name, l.Name)
-		listenerHostPortMap[listenerKey] = hostPort{
-			hostname: getHostname(l.Source.Hostname),
-			port:     l.Source.Port,
+		listenerHostPortMap[l.Name] = hostPort{
+			hostname:  getHostname(l.Source.Hostname),
+			port:      l.Source.Port,
+			gwNsNames: gwNsNames,
 		}
 	}
 
@@ -442,6 +447,10 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 			}
 			for _, h := range hostnames {
 				for lName, lHostPort := range listenerHostnameMap {
+					if lHostPort.gwNsNames != ref.Gateway {
+						continue
+					}
+
 					// skip comparison if it is a catch all listener block
 					if lHostPort.hostname == "" {
 						continue

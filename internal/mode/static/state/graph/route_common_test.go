@@ -2302,11 +2302,11 @@ func TestIsolateL4Listeners(t *testing.T) {
 	}
 
 	listenerMapHostnameIntersection := map[string]hostPort{
-		"empty-hostname":           {hostname: "", port: 80},
-		"wildcard-example-com":     {hostname: "*.example.com", port: 80},
-		"foo-wildcard-example-com": {hostname: "*.foo.example.com", port: 80},
-		"abc-com":                  {hostname: "abc.foo.example.com", port: 80},
-		"no-match":                 {hostname: "no-match.cafe.com", port: 80},
+		"empty-hostname":           {hostname: "", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"wildcard-example-com":     {hostname: "*.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"foo-wildcard-example-com": {hostname: "*.foo.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"abc-com":                  {hostname: "abc.foo.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"no-match":                 {hostname: "no-match.cafe.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
 	}
 
 	expectedResultHostnameIntersection := map[string][]ParentRef{
@@ -2678,11 +2678,11 @@ func TestIsolateL7Listeners(t *testing.T) {
 	}
 
 	listenerMapHostnameIntersection := map[string]hostPort{
-		"empty-hostname":           {hostname: "", port: 80},
-		"wildcard-example-com":     {hostname: "*.example.com", port: 80},
-		"foo-wildcard-example-com": {hostname: "*.foo.example.com", port: 80},
-		"abc-com":                  {hostname: "abc.foo.example.com", port: 80},
-		"no-match":                 {hostname: "no-match.cafe.com", port: 80},
+		"empty-hostname":           {hostname: "", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"wildcard-example-com":     {hostname: "*.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"foo-wildcard-example-com": {hostname: "*.foo.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"abc-com":                  {hostname: "abc.foo.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"no-match":                 {hostname: "no-match.cafe.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
 	}
 
 	expectedResultHostnameIntersection := map[string][]ParentRef{
