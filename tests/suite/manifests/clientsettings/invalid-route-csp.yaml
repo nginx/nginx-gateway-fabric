@@ -12,7 +12,7 @@ spec:
   - matches:
     - path:
         type: PathPrefix
-        value: /coffee
+        value: /invalid
       headers:
       - name: host_name
         value: v2
