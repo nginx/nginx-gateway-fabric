@@ -7,6 +7,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,6 +22,8 @@ type NginxResources struct {
 	Deployment          metav1.ObjectMeta
 	Service             metav1.ObjectMeta
 	ServiceAccount      metav1.ObjectMeta
+	Role                metav1.ObjectMeta
+	RoleBinding         metav1.ObjectMeta
 	BootstrapConfigMap  metav1.ObjectMeta
 	AgentConfigMap      metav1.ObjectMeta
 	AgentTLSSecret      metav1.ObjectMeta
@@ -143,6 +146,22 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 		} else {
 			cfg.ServiceAccount = obj.ObjectMeta
 		}
+	case *rbacv1.Role:
+		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
+			s.nginxResources[gatewayNSName] = &NginxResources{
+				Role: obj.ObjectMeta,
+			}
+		} else {
+			cfg.Role = obj.ObjectMeta
+		}
+	case *rbacv1.RoleBinding:
+		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
+			s.nginxResources[gatewayNSName] = &NginxResources{
+				RoleBinding: obj.ObjectMeta,
+			}
+		} else {
+			cfg.RoleBinding = obj.ObjectMeta
+		}
 	case *corev1.ConfigMap:
 		s.registerConfigMapInGatewayConfig(obj, gatewayNSName)
 	case *corev1.Secret:
@@ -260,6 +279,7 @@ func (s *store) deleteResourcesForGateway(nsName types.NamespacedName) {
 	delete(s.nginxResources, nsName)
 }
 
+//nolint:gocyclo // will refactor at some point
 func (s *store) gatewayExistsForResource(object client.Object, nsName types.NamespacedName) *graph.Gateway {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -276,6 +296,14 @@ func (s *store) gatewayExistsForResource(object client.Object, nsName types.Name
 			}
 		case *corev1.ServiceAccount:
 			if resourceMatches(resources.ServiceAccount, nsName) {
+				return resources.Gateway
+			}
+		case *rbacv1.Role:
+			if resourceMatches(resources.Role, nsName) {
+				return resources.Gateway
+			}
+		case *rbacv1.RoleBinding:
+			if resourceMatches(resources.RoleBinding, nsName) {
 				return resources.Gateway
 			}
 		case *corev1.ConfigMap:

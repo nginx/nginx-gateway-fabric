@@ -9,6 +9,7 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -59,7 +60,7 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 			switch obj := e.Resource.(type) {
 			case *gatewayv1.Gateway:
 				h.store.updateGateway(obj)
-			case *appsv1.Deployment, *corev1.ServiceAccount, *corev1.ConfigMap:
+			case *appsv1.Deployment, *corev1.ServiceAccount, *corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding:
 				objLabels := labels.Set(obj.GetLabels())
 				if h.labelSelector.Matches(objLabels) {
 					gatewayName := objLabels.Get(controller.GatewayLabel)
@@ -114,7 +115,8 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 					logger.Error(err, "error deprovisioning nginx resources")
 				}
 				h.store.deleteGateway(e.NamespacedName)
-			case *appsv1.Deployment, *corev1.Service, *corev1.ServiceAccount, *corev1.ConfigMap:
+			case *appsv1.Deployment, *corev1.Service, *corev1.ServiceAccount,
+				*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding:
 				if err := h.reprovisionResources(ctx, e); err != nil {
 					logger.Error(err, "error re-provisioning nginx resources")
 				}

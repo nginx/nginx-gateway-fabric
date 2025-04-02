@@ -3,6 +3,7 @@ package provisioner
 import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -20,6 +21,10 @@ func objectSpecSetter(object client.Object) controllerutil.MutateFn {
 		return configMapSpecSetter(obj, obj.Data)
 	case *corev1.Secret:
 		return secretSpecSetter(obj, obj.Data)
+	case *rbacv1.Role:
+		return roleSpecSetter(obj, obj.Rules)
+	case *rbacv1.RoleBinding:
+		return roleBindingSpecSetter(obj, obj.RoleRef, obj.Subjects)
 	}
 
 	return nil
@@ -49,6 +54,25 @@ func configMapSpecSetter(configMap *corev1.ConfigMap, data map[string]string) co
 func secretSpecSetter(secret *corev1.Secret, data map[string][]byte) controllerutil.MutateFn {
 	return func() error {
 		secret.Data = data
+		return nil
+	}
+}
+
+func roleSpecSetter(role *rbacv1.Role, rules []rbacv1.PolicyRule) controllerutil.MutateFn {
+	return func() error {
+		role.Rules = rules
+		return nil
+	}
+}
+
+func roleBindingSpecSetter(
+	roleBinding *rbacv1.RoleBinding,
+	roleRef rbacv1.RoleRef,
+	subjects []rbacv1.Subject,
+) controllerutil.MutateFn {
+	return func() error {
+		roleBinding.RoleRef = roleRef
+		roleBinding.Subjects = subjects
 		return nil
 	}
 }

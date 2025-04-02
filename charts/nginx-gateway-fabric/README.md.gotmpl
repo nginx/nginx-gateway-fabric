@@ -113,12 +113,6 @@ To use a NodePort Service instead:
 helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set nginx.service.type=NodePort
 ```
 
-To disable the creation of a Service:
-
-```shell
-helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set nginx.service.create=false
-```
-
 ## Upgrading the Chart
 
 > [!NOTE]

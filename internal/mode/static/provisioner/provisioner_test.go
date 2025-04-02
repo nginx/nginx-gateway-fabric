@@ -24,6 +24,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent/agentfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/provisioner/openshift/openshiftfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 )
 
@@ -202,6 +203,7 @@ func TestNewNginxProvisioner(t *testing.T) {
 		Logger: logr.Discard(),
 	}
 
+	apiChecker = &openshiftfakes.FakeAPIChecker{}
 	provisioner, eventLoop, err := NewNginxProvisioner(context.TODO(), mgr, cfg)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(provisioner).NotTo(BeNil())

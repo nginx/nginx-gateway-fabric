@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -163,6 +164,30 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// ServiceAccount again, already exists
 	resources = registerAndGetResources(svcAcct)
 	g.Expect(resources.ServiceAccount).To(Equal(defaultMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	// Role
+	role := &rbacv1.Role{ObjectMeta: defaultMeta}
+	resources = registerAndGetResources(role)
+	g.Expect(resources.Role).To(Equal(defaultMeta))
+
+	// Role again, already exists
+	resources = registerAndGetResources(role)
+	g.Expect(resources.Role).To(Equal(defaultMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	// RoleBinding
+	roleBinding := &rbacv1.RoleBinding{ObjectMeta: defaultMeta}
+	resources = registerAndGetResources(roleBinding)
+	g.Expect(resources.RoleBinding).To(Equal(defaultMeta))
+
+	// RoleBinding again, already exists
+	resources = registerAndGetResources(roleBinding)
+	g.Expect(resources.RoleBinding).To(Equal(defaultMeta))
 
 	// clear out resources before next test
 	store.deleteResourcesForGateway(nsName)
@@ -406,6 +431,14 @@ func TestGatewayExistsForResource(t *testing.T) {
 			Name:      "test-serviceaccount",
 			Namespace: "default",
 		},
+		Role: metav1.ObjectMeta{
+			Name:      "test-role",
+			Namespace: "default",
+		},
+		RoleBinding: metav1.ObjectMeta{
+			Name:      "test-rolebinding",
+			Namespace: "default",
+		},
 		BootstrapConfigMap: metav1.ObjectMeta{
 			Name:      "test-bootstrap-configmap",
 			Namespace: "default",
@@ -468,6 +501,26 @@ func TestGatewayExistsForResource(t *testing.T) {
 			object: &corev1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-serviceaccount",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
+			name: "Role exists",
+			object: &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-role",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
+			name: "RoleBinding exists",
+			object: &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-rolebinding",
 					Namespace: "default",
 				},
 			},

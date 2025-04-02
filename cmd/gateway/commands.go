@@ -81,6 +81,7 @@ func createControllerCommand() *cobra.Command {
 		usageReportClientSSLSecretFlag = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
 		usageReportCASecretFlag        = "usage-report-ca-secret"         //nolint:gosec // not credentials
 		snippetsFiltersFlag            = "snippets-filters"
+		nginxSCCFlag                   = "nginx-scc"
 	)
 
 	// flag values
@@ -104,6 +105,9 @@ func createControllerCommand() *cobra.Command {
 		agentTLSSecretName = stringValidatingValue{
 			validator: validateResourceName,
 			value:     agentTLSSecret,
+		}
+		nginxSCCName = stringValidatingValue{
+			validator: validateResourceName,
 		}
 		disableMetrics    bool
 		metricsSecure     bool
@@ -264,6 +268,7 @@ func createControllerCommand() *cobra.Command {
 				SnippetsFilters:        snippetsFilters,
 				NginxDockerSecretNames: nginxDockerSecrets.values,
 				AgentTLSSecretName:     agentTLSSecretName.value,
+				NGINXSCCName:           nginxSCCName.value,
 			}
 
 			if err := static.StartManager(conf); err != nil {
@@ -455,6 +460,13 @@ func createControllerCommand() *cobra.Command {
 		false,
 		"Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the "+
 			"generated NGINX config for HTTPRoute and GRPCRoute resources.",
+	)
+
+	cmd.Flags().Var(
+		&nginxSCCName,
+		nginxSCCFlag,
+		`The name of the SecurityContextConstraints to be used with the NGINX data plane Pods.`+
+			` Only applicable in OpenShift.`,
 	)
 
 	return cmd

@@ -14,6 +14,7 @@ import (
 	authv1 "k8s.io/api/authentication/v1"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -93,6 +94,7 @@ func init() {
 	utilruntime.Must(apiext.AddToScheme(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(authv1.AddToScheme(scheme))
+	utilruntime.Must(rbacv1.AddToScheme(scheme))
 }
 
 func StartManager(cfg config.Config) error {
@@ -216,6 +218,7 @@ func StartManager(cfg config.Config) error {
 			GatewayPodConfig:       &cfg.GatewayPodConfig,
 			GCName:                 cfg.GatewayClassName,
 			AgentTLSSecretName:     cfg.AgentTLSSecretName,
+			NGINXSCCName:           cfg.NGINXSCCName,
 			Plus:                   cfg.Plus,
 			NginxDockerSecretNames: cfg.NginxDockerSecretNames,
 			PlusUsageConfig:        &cfg.UsageReportConfig,
