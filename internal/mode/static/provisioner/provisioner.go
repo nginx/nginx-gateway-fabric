@@ -108,7 +108,7 @@ func NewNginxProvisioner(
 
 	isOpenshift, err := apiChecker.IsOpenshift(mgr.GetConfig())
 	if err != nil {
-		return nil, nil, err
+		cfg.Logger.Error(err, "could not determine if running in openshift, will not create Role/RoleBinding")
 	}
 
 	provisioner := &NginxProvisioner{
