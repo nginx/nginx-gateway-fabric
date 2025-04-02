@@ -63,6 +63,8 @@ func TestCommonFlagsValidation(t *testing.T) {
 			args: []string{
 				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
 				"--gatewayclass=nginx",
+				"--gateway=nginx-gateway/nginx",
+				"--config=nginx-gateway-config",
 			},
 			wantErr: false,
 		},
