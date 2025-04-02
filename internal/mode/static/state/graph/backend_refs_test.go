@@ -745,6 +745,264 @@ func TestAddBackendRefsToRulesTest(t *testing.T) {
 	}
 }
 
+func TestAddBackendRefsToRouteRulesTest(t *testing.T) {
+	t.Parallel()
+	sectionNameRefs := []ParentRef{
+		{
+			Idx:     0,
+			Gateway: types.NamespacedName{Namespace: "test", Name: "gateway"},
+			Attachment: &ParentRefAttachmentStatus{
+				Attached: true,
+			},
+		},
+		{
+			Idx:     0,
+			Gateway: types.NamespacedName{Namespace: "test", Name: "gateway-2"},
+			Attachment: &ParentRefAttachmentStatus{
+				Attached: true,
+			},
+		},
+	}
+	createRoute := func(
+		name string,
+		kind gatewayv1.Kind,
+		refsPerBackend int,
+		serviceNames ...string,
+	) *L7Route {
+		hr := &L7Route{
+			Source: &gatewayv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      name,
+				},
+			},
+			RouteType:  RouteTypeHTTP,
+			ParentRefs: sectionNameRefs,
+			Valid:      true,
+		}
+
+		createRouteBackendRef := func(svcName string, port gatewayv1.PortNumber, weight *int32) RouteBackendRef {
+			return RouteBackendRef{
+				BackendRef: gatewayv1.BackendRef{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Kind:      helpers.GetPointer(kind),
+						Name:      gatewayv1.ObjectName(svcName),
+						Namespace: helpers.GetPointer[gatewayv1.Namespace]("test"),
+						Port:      helpers.GetPointer(port),
+					},
+					Weight: weight,
+				},
+			}
+		}
+
+		hr.Spec.Rules = make([]RouteRule, len(serviceNames))
+
+		for idx, svcName := range serviceNames {
+			refs := []RouteBackendRef{
+				createRouteBackendRef(svcName, 80, nil),
+			}
+			if refsPerBackend == 2 {
+				refs = append(refs, createRouteBackendRef(svcName, 81, helpers.GetPointer[int32](5)))
+			}
+			if refsPerBackend != 1 && refsPerBackend != 2 {
+				panic("invalid refsPerBackend")
+			}
+
+			hr.Spec.Rules[idx] = RouteRule{
+				RouteBackendRefs: refs,
+				ValidMatches:     true,
+				Filters: RouteRuleFilters{
+					Filters: []Filter{},
+					Valid:   true,
+				},
+			}
+		}
+		return hr
+	}
+
+	getSvc := func(name string) *v1.Service {
+		return &v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      name,
+			},
+			Spec: v1.ServiceSpec{
+				Ports: []v1.ServicePort{
+					{
+						Port: 80,
+					},
+					{
+						Port: 81,
+					},
+				},
+			},
+		}
+	}
+
+	getPolicy := func(name, svcName, cmName string, gateway []types.NamespacedName) *BackendTLSPolicy {
+		return &BackendTLSPolicy{
+			Valid: true,
+			Source: &v1alpha3.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: "test",
+				},
+				Spec: v1alpha3.BackendTLSPolicySpec{
+					TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						{
+							LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+								Group: "",
+								Kind:  "Service",
+								Name:  gatewayv1.ObjectName(svcName),
+							},
+						},
+					},
+					Validation: v1alpha3.BackendTLSPolicyValidation{
+						Hostname: "foo.example.com",
+						CACertificateRefs: []gatewayv1.LocalObjectReference{
+							{
+								Group: "",
+								Kind:  "ConfigMap",
+								Name:  gatewayv1.ObjectName(cmName),
+							},
+						},
+					},
+				},
+			},
+			Gateways: gateway,
+		}
+	}
+
+	getBtp := func(name string, svcName string, cmName string) *BackendTLSPolicy {
+		return &BackendTLSPolicy{
+			Source: &v1alpha3.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"},
+				Spec: v1alpha3.BackendTLSPolicySpec{
+					TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						{
+							LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+								Group: "",
+								Kind:  "Service",
+								Name:  gatewayv1.ObjectName(svcName),
+							},
+						},
+					},
+					Validation: v1alpha3.BackendTLSPolicyValidation{
+						Hostname: "foo.example.com",
+						CACertificateRefs: []gatewayv1.LocalObjectReference{
+							{
+								Group: "",
+								Kind:  "ConfigMap",
+								Name:  gatewayv1.ObjectName(cmName),
+							},
+						},
+					},
+				},
+			},
+			Conditions: []conditions.Condition{
+				{
+					Type:    "Accepted",
+					Status:  "True",
+					Reason:  "Accepted",
+					Message: "Policy is accepted",
+				},
+			},
+			Valid:        true,
+			IsReferenced: true,
+		}
+	}
+
+	gatewayNsNames := []types.NamespacedName{
+		{Namespace: "test", Name: "gateway"},
+		{Namespace: "test", Name: "gateway-2"},
+	}
+	btp1 := getBtp("btp1", "svc1", "test")
+	conds := []conditions.Condition{
+		{
+			Type:    "Accepted",
+			Status:  "True",
+			Reason:  "Accepted",
+			Message: "Policy is accepted",
+		},
+		{
+			Type:    "Accepted",
+			Status:  "True",
+			Reason:  "Accepted",
+			Message: "Policy is accepted",
+		},
+	}
+	btp1.Conditions = append(btp1.Conditions, conds...)
+	btp1.Gateways = gatewayNsNames
+
+	policies1 := map[types.NamespacedName]*BackendTLSPolicy{
+		{Namespace: "test", Name: "btp1"}: getPolicy("btp1", "svc1", "test", gatewayNsNames),
+	}
+
+	svc1 := getSvc("svc1")
+	svc2 := getSvc("svc2")
+
+	gateways := map[types.NamespacedName]*Gateway{
+		{Namespace: "test", Name: "gateway"}: {
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test",
+				},
+			},
+			Valid:               true,
+			EffectiveNginxProxy: &EffectiveNginxProxy{},
+		},
+		{Namespace: "test", Name: "gateway-2"}: {
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway-2",
+					Namespace: "test",
+				},
+			},
+			Valid:               true,
+			EffectiveNginxProxy: &EffectiveNginxProxy{},
+		},
+		{Namespace: "test", Name: "gateway-3"}: {},
+		{Namespace: "test", Name: "gateway-4"}: nil,
+	}
+
+	services := map[types.NamespacedName]*v1.Service{
+		{Namespace: "test", Name: "svc1"}: svc1,
+		{Namespace: "test", Name: "svc2"}: svc2,
+	}
+
+	route := map[RouteKey]*L7Route{
+		{}: createRoute("hr1", "Service", 1, "svc1"),
+	}
+
+	expectedBackendRefs := []BackendRef{
+		{
+			SvcNsName:        types.NamespacedName{Namespace: "test", Name: "svc1"},
+			ServicePort:      svc1.Spec.Ports[0],
+			Valid:            true,
+			Weight:           1,
+			BackendTLSPolicy: btp1,
+		},
+	}
+
+	t.Run("routes with multiple gateways and backend TLS Policy", func(t *testing.T) {
+		t.Parallel()
+
+		g := NewWithT(t)
+		resolver := newReferenceGrantResolver(nil)
+		addBackendRefsToRouteRules(route, resolver, services, policies1, gateways)
+
+		var actual []BackendRef
+		route := route[RouteKey{}]
+		if route.Spec.Rules != nil {
+			actual = route.Spec.Rules[0].BackendRefs
+		}
+
+		g.Expect(helpers.Diff(expectedBackendRefs, actual)).To(BeEmpty())
+		g.Expect(route.Conditions).To(BeNil())
+	})
+}
+
 func TestCreateBackend(t *testing.T) {
 	t.Parallel()
 	createService := func(name string) *v1.Service {

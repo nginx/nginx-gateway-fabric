@@ -1226,217 +1226,263 @@ func TestBuildGatewayStatuses(t *testing.T) {
 	}
 }
 
-// func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
-// 	t.Parallel()
-// 	const gatewayCtlrName = "controller"
+func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
+	t.Parallel()
+	const gatewayCtlrName = "controller"
 
-// 	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
+	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
 
-// 	type policyCfg struct {
-// 		Name         string
-// 		Conditions   []conditions.Condition
-// 		Valid        bool
-// 		Ignored      bool
-// 		IsReferenced bool
-// 	}
+	type policyCfg struct {
+		Name         string
+		Conditions   []conditions.Condition
+		Gateways     []types.NamespacedName
+		Valid        bool
+		Ignored      bool
+		IsReferenced bool
+	}
 
-// 	getBackendTLSPolicy := func(policyCfg policyCfg) *graph.BackendTLSPolicy {
-// 		return &graph.BackendTLSPolicy{
-// 			Source: &v1alpha3.BackendTLSPolicy{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Namespace:  "test",
-// 					Name:       policyCfg.Name,
-// 					Generation: 1,
-// 				},
-// 			},
-// 			Valid:        policyCfg.Valid,
-// 			Ignored:      policyCfg.Ignored,
-// 			IsReferenced: policyCfg.IsReferenced,
-// 			Conditions:   policyCfg.Conditions,
-// 			Gateway:      types.NamespacedName{Name: "gateway", Namespace: "test"},
-// 		}
-// 	}
+	getBackendTLSPolicy := func(policyCfg policyCfg) *graph.BackendTLSPolicy {
+		return &graph.BackendTLSPolicy{
+			Source: &v1alpha3.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace:  "test",
+					Name:       policyCfg.Name,
+					Generation: 1,
+				},
+			},
+			Valid:        policyCfg.Valid,
+			Ignored:      policyCfg.Ignored,
+			IsReferenced: policyCfg.IsReferenced,
+			Conditions:   policyCfg.Conditions,
+			Gateways:     policyCfg.Gateways,
+		}
+	}
 
-// 	attachedConds := []conditions.Condition{staticConds.NewPolicyAccepted()}
-// 	invalidConds := []conditions.Condition{staticConds.NewPolicyInvalid("invalid backendTLSPolicy")}
+	attachedConds := []conditions.Condition{staticConds.NewPolicyAccepted()}
+	invalidConds := []conditions.Condition{staticConds.NewPolicyInvalid("invalid backendTLSPolicy")}
 
-// 	validPolicyCfg := policyCfg{
-// 		Name:         "valid-bt",
-// 		Valid:        true,
-// 		IsReferenced: true,
-// 		Conditions:   attachedConds,
-// 	}
+	validPolicyCfg := policyCfg{
+		Name:         "valid-bt",
+		Valid:        true,
+		IsReferenced: true,
+		Conditions:   attachedConds,
+		Gateways: []types.NamespacedName{
+			{Namespace: "test", Name: "gateway"},
+			{Namespace: "test", Name: "gateway-2"},
+		},
+	}
 
-// 	invalidPolicyCfg := policyCfg{
-// 		Name:         "invalid-bt",
-// 		IsReferenced: true,
-// 		Conditions:   invalidConds,
-// 	}
+	invalidPolicyCfg := policyCfg{
+		Name:         "invalid-bt",
+		IsReferenced: true,
+		Conditions:   invalidConds,
+		Gateways: []types.NamespacedName{
+			{Namespace: "test", Name: "gateway"},
+		},
+	}
 
-// 	ignoredPolicyCfg := policyCfg{
-// 		Name:         "ignored-bt",
-// 		Ignored:      true,
-// 		IsReferenced: true,
-// 	}
+	ignoredPolicyCfg := policyCfg{
+		Name:         "ignored-bt",
+		Ignored:      true,
+		IsReferenced: true,
+	}
 
-// 	notReferencedPolicyCfg := policyCfg{
-// 		Name:  "not-referenced",
-// 		Valid: true,
-// 	}
+	notReferencedPolicyCfg := policyCfg{
+		Name:  "not-referenced",
+		Valid: true,
+	}
 
-// 	tests := []struct {
-// 		backendTLSPolicies map[types.NamespacedName]*graph.BackendTLSPolicy
-// 		expected           map[types.NamespacedName]v1alpha2.PolicyStatus
-// 		name               string
-// 		expectedReqs       int
-// 	}{
-// 		{
-// 			name:         "nil backendTLSPolicies",
-// 			expectedReqs: 0,
-// 			expected:     map[types.NamespacedName]v1alpha2.PolicyStatus{},
-// 		},
-// 		{
-// 			name: "valid backendTLSPolicy",
-// 			backendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
-// 				{Namespace: "test", Name: "valid-bt"}: getBackendTLSPolicy(validPolicyCfg),
-// 			},
-// 			expectedReqs: 1,
-// 			expected: map[types.NamespacedName]v1alpha2.PolicyStatus{
-// 				{Name: "valid-bt", Namespace: "test"}: {
-// 					Ancestors: []v1alpha2.PolicyAncestorStatus{
-// 						{
-// 							AncestorRef: v1.ParentReference{
-// 								Namespace: helpers.GetPointer[v1.Namespace]("test"),
-// 								Name:      "gateway",
-// 								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
-// 								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
-// 							},
-// 							ControllerName: gatewayCtlrName,
-// 							Conditions: []metav1.Condition{
-// 								{
-// 									Type:               string(v1alpha2.PolicyConditionAccepted),
-// 									Status:             metav1.ConditionTrue,
-// 									ObservedGeneration: 1,
-// 									LastTransitionTime: transitionTime,
-// 									Reason:             string(v1alpha2.PolicyReasonAccepted),
-// 									Message:            "Policy is accepted",
-// 								},
-// 							},
-// 						},
-// 					},
-// 				},
-// 			},
-// 		},
-// 		{
-// 			name: "invalid backendTLSPolicy",
-// 			backendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
-// 				{Namespace: "test", Name: "invalid-bt"}: getBackendTLSPolicy(invalidPolicyCfg),
-// 			},
-// 			expectedReqs: 1,
-// 			expected: map[types.NamespacedName]v1alpha2.PolicyStatus{
-// 				{Name: "invalid-bt", Namespace: "test"}: {
-// 					Ancestors: []v1alpha2.PolicyAncestorStatus{
-// 						{
-// 							AncestorRef: v1.ParentReference{
-// 								Namespace: helpers.GetPointer[v1.Namespace]("test"),
-// 								Name:      "gateway",
-// 								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
-// 								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
-// 							},
-// 							ControllerName: gatewayCtlrName,
-// 							Conditions: []metav1.Condition{
-// 								{
-// 									Type:               string(v1alpha2.PolicyConditionAccepted),
-// 									Status:             metav1.ConditionFalse,
-// 									ObservedGeneration: 1,
-// 									LastTransitionTime: transitionTime,
-// 									Reason:             string(v1alpha2.PolicyReasonInvalid),
-// 									Message:            "invalid backendTLSPolicy",
-// 								},
-// 							},
-// 						},
-// 					},
-// 				},
-// 			},
-// 		},
-// 		{
-// 			name: "ignored or not referenced backendTLSPolicies",
-// 			backendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
-// 				{Namespace: "test", Name: "ignored-bt"}:     getBackendTLSPolicy(ignoredPolicyCfg),
-// 				{Namespace: "test", Name: "not-referenced"}: getBackendTLSPolicy(notReferencedPolicyCfg),
-// 			},
-// 			expectedReqs: 0,
-// 			expected: map[types.NamespacedName]v1alpha2.PolicyStatus{
-// 				{Name: "ignored-bt", Namespace: "test"}:     {},
-// 				{Name: "not-referenced", Namespace: "test"}: {},
-// 			},
-// 		},
-// 		{
-// 			name: "mix valid and ignored backendTLSPolicies",
-// 			backendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
-// 				{Namespace: "test", Name: "ignored-bt"}: getBackendTLSPolicy(ignoredPolicyCfg),
-// 				{Namespace: "test", Name: "valid-bt"}:   getBackendTLSPolicy(validPolicyCfg),
-// 			},
-// 			expectedReqs: 1,
-// 			expected: map[types.NamespacedName]v1alpha2.PolicyStatus{
-// 				{Name: "ignored-bt", Namespace: "test"}: {},
-// 				{Name: "valid-bt", Namespace: "test"}: {
-// 					Ancestors: []v1alpha2.PolicyAncestorStatus{
-// 						{
-// 							AncestorRef: v1.ParentReference{
-// 								Namespace: helpers.GetPointer[v1.Namespace]("test"),
-// 								Name:      "gateway",
-// 								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
-// 								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
-// 							},
-// 							ControllerName: gatewayCtlrName,
-// 							Conditions: []metav1.Condition{
-// 								{
-// 									Type:               string(v1alpha2.PolicyConditionAccepted),
-// 									Status:             metav1.ConditionTrue,
-// 									ObservedGeneration: 1,
-// 									LastTransitionTime: transitionTime,
-// 									Reason:             string(v1alpha2.PolicyReasonAccepted),
-// 									Message:            "Policy is accepted",
-// 								},
-// 							},
-// 						},
-// 					},
-// 				},
-// 			},
-// 		},
-// 	}
+	tests := []struct {
+		backendTLSPolicies map[types.NamespacedName]*graph.BackendTLSPolicy
+		expected           map[types.NamespacedName]v1alpha2.PolicyStatus
+		name               string
+		expectedReqs       int
+	}{
+		{
+			name:         "nil backendTLSPolicies",
+			expectedReqs: 0,
+			expected:     map[types.NamespacedName]v1alpha2.PolicyStatus{},
+		},
+		{
+			name: "valid backendTLSPolicy",
+			backendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
+				{Namespace: "test", Name: "valid-bt"}: getBackendTLSPolicy(validPolicyCfg),
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]v1alpha2.PolicyStatus{
+				{Name: "valid-bt", Namespace: "test"}: {
+					Ancestors: []v1alpha2.PolicyAncestorStatus{
+						{
+							AncestorRef: v1.ParentReference{
+								Namespace: helpers.GetPointer[v1.Namespace]("test"),
+								Name:      "gateway",
+								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1alpha2.PolicyConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1alpha2.PolicyReasonAccepted),
+									Message:            "Policy is accepted",
+								},
+							},
+						},
+						{
+							AncestorRef: v1.ParentReference{
+								Namespace: helpers.GetPointer[v1.Namespace]("test"),
+								Name:      "gateway-2",
+								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1alpha2.PolicyConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1alpha2.PolicyReasonAccepted),
+									Message:            "Policy is accepted",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "invalid backendTLSPolicy",
+			backendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
+				{Namespace: "test", Name: "invalid-bt"}: getBackendTLSPolicy(invalidPolicyCfg),
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]v1alpha2.PolicyStatus{
+				{Name: "invalid-bt", Namespace: "test"}: {
+					Ancestors: []v1alpha2.PolicyAncestorStatus{
+						{
+							AncestorRef: v1.ParentReference{
+								Namespace: helpers.GetPointer[v1.Namespace]("test"),
+								Name:      "gateway",
+								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1alpha2.PolicyConditionAccepted),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1alpha2.PolicyReasonInvalid),
+									Message:            "invalid backendTLSPolicy",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "ignored or not referenced backendTLSPolicies",
+			backendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
+				{Namespace: "test", Name: "ignored-bt"}:     getBackendTLSPolicy(ignoredPolicyCfg),
+				{Namespace: "test", Name: "not-referenced"}: getBackendTLSPolicy(notReferencedPolicyCfg),
+			},
+			expectedReqs: 0,
+			expected: map[types.NamespacedName]v1alpha2.PolicyStatus{
+				{Name: "ignored-bt", Namespace: "test"}:     {},
+				{Name: "not-referenced", Namespace: "test"}: {},
+			},
+		},
+		{
+			name: "mix valid and ignored backendTLSPolicies",
+			backendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
+				{Namespace: "test", Name: "ignored-bt"}: getBackendTLSPolicy(ignoredPolicyCfg),
+				{Namespace: "test", Name: "valid-bt"}:   getBackendTLSPolicy(validPolicyCfg),
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]v1alpha2.PolicyStatus{
+				{Name: "ignored-bt", Namespace: "test"}: {},
+				{Name: "valid-bt", Namespace: "test"}: {
+					Ancestors: []v1alpha2.PolicyAncestorStatus{
+						{
+							AncestorRef: v1.ParentReference{
+								Namespace: helpers.GetPointer[v1.Namespace]("test"),
+								Name:      "gateway",
+								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1alpha2.PolicyConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1alpha2.PolicyReasonAccepted),
+									Message:            "Policy is accepted",
+								},
+							},
+						},
+						{
+							AncestorRef: v1.ParentReference{
+								Namespace: helpers.GetPointer[v1.Namespace]("test"),
+								Name:      "gateway-2",
+								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1alpha2.PolicyConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1alpha2.PolicyReasonAccepted),
+									Message:            "Policy is accepted",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 
-// 	for _, test := range tests {
-// 		t.Run(test.name, func(t *testing.T) {
-// 			t.Parallel()
-// 			g := NewWithT(t)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-// 			k8sClient := createK8sClientFor(&v1alpha3.BackendTLSPolicy{})
+			k8sClient := createK8sClientFor(&v1alpha3.BackendTLSPolicy{})
 
-// 			for _, pol := range test.backendTLSPolicies {
-// 				err := k8sClient.Create(context.Background(), pol.Source)
-// 				g.Expect(err).ToNot(HaveOccurred())
-// 			}
+			for _, pol := range test.backendTLSPolicies {
+				err := k8sClient.Create(context.Background(), pol.Source)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
 
-// 			updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
+			updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
-// 			reqs := PrepareBackendTLSPolicyRequests(test.backendTLSPolicies, transitionTime, gatewayCtlrName)
+			reqs := PrepareBackendTLSPolicyRequests(test.backendTLSPolicies, transitionTime, gatewayCtlrName)
 
-// 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
+			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
-// 			updater.Update(context.Background(), reqs...)
+			updater.Update(context.Background(), reqs...)
 
-// 			for nsname, expected := range test.expected {
-// 				var pol v1alpha3.BackendTLSPolicy
+			for nsname, expected := range test.expected {
+				var pol v1alpha3.BackendTLSPolicy
 
-// 				err := k8sClient.Get(context.Background(), nsname, &pol)
-// 				g.Expect(err).ToNot(HaveOccurred())
-// 				g.Expect(helpers.Diff(expected, pol.Status)).To(BeEmpty())
-// 			}
-// 		})
-// 	}
-// }
+				err := k8sClient.Get(context.Background(), nsname, &pol)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(helpers.Diff(expected, pol.Status)).To(BeEmpty())
+			}
+		})
+	}
+}
 
 func TestBuildNginxGatewayStatus(t *testing.T) {
 	t.Parallel()

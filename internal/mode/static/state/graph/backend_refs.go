@@ -49,7 +49,7 @@ func addBackendRefsToRouteRules(
 	gws map[types.NamespacedName]*Gateway,
 ) {
 	for _, gw := range gws {
-		if gw == nil {
+		if gw == nil || gw == (&Gateway{}) {
 			continue
 		}
 		for _, r := range routes {
