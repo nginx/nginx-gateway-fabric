@@ -76,8 +76,6 @@ type Graph struct {
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// PlusSecrets holds the secrets related to NGINX Plus licensing.
 	PlusSecrets map[types.NamespacedName][]PlusSecretFile
-	// LatestReloadResult is holds latest result of applying config to nginx for all gateways.
-	LatestReloadResult map[types.NamespacedName]NginxReloadResult
 }
 
 // NginxReloadResult describes the result of an NGINX reload.
@@ -291,11 +289,6 @@ func BuildGraph(
 
 	setPlusSecretContent(state.Secrets, plusSecrets)
 
-	var latestReloadResult map[types.NamespacedName]NginxReloadResult
-	if gws != nil {
-		latestReloadResult = make(map[types.NamespacedName]NginxReloadResult, len(gws))
-	}
-
 	g := &Graph{
 		GatewayClass:               gc,
 		Gateways:                   gws,
@@ -311,7 +304,6 @@ func BuildGraph(
 		NGFPolicies:                processedPolicies,
 		SnippetsFilters:            processedSnippetsFilters,
 		PlusSecrets:                plusSecrets,
-		LatestReloadResult:         latestReloadResult,
 	}
 
 	g.attachPolicies(controllerName)

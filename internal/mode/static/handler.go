@@ -294,59 +294,60 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 			return
 		}
 
+		// TODO(sberman): once we support multiple Gateways, we'll have to get
+		// the correct Graph for the Deployment contained in the update message
 		gr := h.cfg.processor.GetLatestGraph()
 		if gr == nil {
 			continue
 		}
 
-		deploymentName := item.Deployment
-		gw := gr.Gateways[deploymentName]
-
 		var nginxReloadRes graph.NginxReloadResult
-		switch {
-		case item.Error != nil:
-			h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
-			nginxReloadRes.Error = item.Error
-		case gw != nil:
-			h.cfg.logger.Info("NGINX configuration was successfully updated")
-		}
-		gr.LatestReloadResult[deploymentName] = nginxReloadRes
-
-		switch item.UpdateType {
-		case status.UpdateAll:
-			h.updateStatuses(ctx, gr, gw)
-		case status.UpdateGateway:
-			gwAddresses, err := getGatewayAddresses(
-				ctx,
-				h.cfg.k8sClient,
-				item.GatewayService,
-				gw,
-				h.cfg.gatewayClassName,
-			)
-			if err != nil {
-				msg := "error getting Gateway Service IP address"
-				h.cfg.logger.Error(err, msg)
-				h.cfg.eventRecorder.Eventf(
-					item.GatewayService,
-					v1.EventTypeWarning,
-					"GetServiceIPFailed",
-					msg+": %s",
-					err.Error(),
-				)
-				continue
+		for _, gw := range gr.Gateways {
+			switch {
+			case item.Error != nil:
+				h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
+				nginxReloadRes.Error = item.Error
+			case gw != nil:
+				h.cfg.logger.Info("NGINX configuration was successfully updated")
 			}
+			gw.LatestReloadResult = nginxReloadRes
 
-			transitionTime := metav1.Now()
+			switch item.UpdateType {
+			case status.UpdateAll:
+				h.updateStatuses(ctx, gr, gw)
+			case status.UpdateGateway:
+				gwAddresses, err := getGatewayAddresses(
+					ctx,
+					h.cfg.k8sClient,
+					item.GatewayService,
+					gw,
+					h.cfg.gatewayClassName,
+				)
+				if err != nil {
+					msg := "error getting Gateway Service IP address"
+					h.cfg.logger.Error(err, msg)
+					h.cfg.eventRecorder.Eventf(
+						item.GatewayService,
+						v1.EventTypeWarning,
+						"GetServiceIPFailed",
+						msg+": %s",
+						err.Error(),
+					)
+					continue
+				}
 
-			gatewayStatuses := status.PrepareGatewayRequests(
-				gw,
-				transitionTime,
-				gwAddresses,
-				gr.LatestReloadResult[deploymentName],
-			)
-			h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
-		default:
-			panic(fmt.Sprintf("unknown event type %T", item.UpdateType))
+				transitionTime := metav1.Now()
+
+				gatewayStatuses := status.PrepareGatewayRequests(
+					gw,
+					transitionTime,
+					gwAddresses,
+					gw.LatestReloadResult,
+				)
+				h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
+			default:
+				panic(fmt.Sprintf("unknown event type %T", item.UpdateType))
+			}
 		}
 	}
 }
@@ -377,7 +378,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gr.L4Routes,
 		gr.Routes,
 		transitionTime,
-		gr.LatestReloadResult[gw.DeploymentName],
+		gw.LatestReloadResult,
 		h.cfg.gatewayCtlrName,
 	)
 
@@ -408,7 +409,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gw,
 		transitionTime,
 		gwAddresses,
-		gr.LatestReloadResult[gw.DeploymentName],
+		gw.LatestReloadResult,
 	)
 	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gwReqs...)
 }

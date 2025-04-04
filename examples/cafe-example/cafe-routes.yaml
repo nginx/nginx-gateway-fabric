@@ -6,8 +6,6 @@ spec:
   parentRefs:
   - name: gateway
     sectionName: http
-  - name: gateway3
-    sectionName: http
   hostnames:
   - "cafe.example.com"
   rules:
@@ -26,8 +24,6 @@ metadata:
 spec:
   parentRefs:
   - name: gateway
-    sectionName: http
-  - name: gateway3
     sectionName: http
   hostnames:
   - "cafe.example.com"

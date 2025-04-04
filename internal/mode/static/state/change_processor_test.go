@@ -1007,7 +1007,6 @@ var _ = Describe("ChangeProcessor", func() {
 							GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: "test", Name: "gateway-1"}: {}},
 						},
 					},
-					LatestReloadResult: map[types.NamespacedName]graph.NginxReloadResult{},
 				}
 
 				expGraph2 = &graph.Graph{
@@ -1134,7 +1133,6 @@ var _ = Describe("ChangeProcessor", func() {
 							GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: "test", Name: "gateway-1"}: {}},
 						},
 					},
-					LatestReloadResult: map[types.NamespacedName]graph.NginxReloadResult{},
 				}
 			})
 			When("no upsert has occurred", func() {
