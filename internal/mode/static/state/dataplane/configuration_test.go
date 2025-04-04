@@ -70,15 +70,27 @@ func getExpectedConfiguration() Configuration {
 	}
 }
 
+var gatewayNsName = types.NamespacedName{
+	Namespace: "test",
+	Name:      "gateway",
+}
+
 func getNormalGraph() *graph.Graph {
 	return &graph.Graph{
 		GatewayClass: &graph.GatewayClass{
 			Source: &v1.GatewayClass{},
 			Valid:  true,
 		},
-		Gateway: &graph.Gateway{
-			Source:    &v1.Gateway{},
-			Listeners: []*graph.Listener{},
+		Gateways: map[types.NamespacedName]*graph.Gateway{
+			gatewayNsName: {
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{},
+			},
 		},
 		Routes:                     map[graph.RouteKey]*graph.L7Route{},
 		ReferencedSecrets:          map[types.NamespacedName]*graph.Secret{},
@@ -899,7 +911,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
@@ -915,7 +928,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, []*graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, []*graph.Listener{
 					{
 						Name:   "listener-80-1",
 						Source: listener80,
@@ -954,7 +968,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, []*graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, []*graph.Listener{
 					{
 						Name:           "listener-443-1",
 						Source:         listener443, // nil hostname
@@ -1000,7 +1015,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:           "invalid-listener",
 					Source:         invalidListener,
 					Valid:          false,
@@ -1023,7 +1039,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
@@ -1084,7 +1101,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
@@ -1124,7 +1142,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, []*graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, []*graph.Listener{
 					{
 						Name:   "listener-443-1",
 						Source: listener443,
@@ -1234,7 +1253,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, []*graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, []*graph.Listener{
 					{
 						Name:   "listener-80-1",
 						Source: listener80,
@@ -1374,7 +1394,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, []*graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, []*graph.Listener{
 					{
 						Name:   "listener-80-1",
 						Source: listener80,
@@ -1583,7 +1604,7 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway = nil
+				delete(g.Gateways, gatewayNsName)
 				return g
 			}),
 			expConf: defaultConfig,
@@ -1591,7 +1612,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
@@ -1650,7 +1672,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, []*graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, []*graph.Listener{
 					{
 						Name:   "listener-80-1",
 						Source: listener80,
@@ -1794,7 +1817,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
@@ -1846,7 +1870,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, []*graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, []*graph.Listener{
 					{
 						Name:   "listener-443-with-hostname",
 						Source: listener443WithHostname,
@@ -1924,7 +1949,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-443",
 					Source: listener443,
 					Valid:  true,
@@ -1983,7 +2009,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-443",
 					Source: listener443,
 					Valid:  true,
@@ -2042,17 +2069,18 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+				gw := g.Gateways[gatewayNsName]
+				gw.Source.ObjectMeta = metav1.ObjectMeta{
 					Name:      "gw",
 					Namespace: "ns",
 				}
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.Gateway.EffectiveNginxProxy = nginxProxy
+				gw.EffectiveNginxProxy = nginxProxy
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
@@ -2074,7 +2102,8 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Listeners = append(g.Gateway.Listeners, []*graph.Listener{
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, []*graph.Listener{
 					{
 						Name:   "listener-80-1",
 						Source: listener80,
@@ -2093,7 +2122,7 @@ func TestBuildConfiguration(t *testing.T) {
 						ResolvedSecret: &secret1NsName,
 					},
 				}...)
-				g.Gateway.Policies = []*graph.Policy{gwPolicy1, gwPolicy2}
+				gw.Policies = []*graph.Policy{gwPolicy1, gwPolicy2}
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(hrWithPolicy):      l7RouteWithPolicy,
 					graph.CreateRouteKey(httpsHRWithPolicy): l7HTTPSRouteWithPolicy,
@@ -2169,17 +2198,18 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+				gw := g.Gateways[gatewayNsName]
+				gw.Source.ObjectMeta = metav1.ObjectMeta{
 					Name:      "gw",
 					Namespace: "ns",
 				}
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.Gateway.EffectiveNginxProxy = nginxProxyIPv4
+				gw.EffectiveNginxProxy = nginxProxyIPv4
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
@@ -2192,17 +2222,18 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+				gw := g.Gateways[gatewayNsName]
+				gw.Source.ObjectMeta = metav1.ObjectMeta{
 					Name:      "gw",
 					Namespace: "ns",
 				}
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.Gateway.EffectiveNginxProxy = nginxProxyIPv6
+				gw.EffectiveNginxProxy = nginxProxyIPv6
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
@@ -2215,17 +2246,18 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+				gw := g.Gateways[gatewayNsName]
+				gw.Source.ObjectMeta = metav1.ObjectMeta{
 					Name:      "gw",
 					Namespace: "ns",
 				}
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.Gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
+				gw.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
 					RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
 						SetIPRecursively: helpers.GetPointer(true),
 						TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
@@ -2257,17 +2289,18 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+				gw := g.Gateways[gatewayNsName]
+				gw.Source.ObjectMeta = metav1.ObjectMeta{
 					Name:      "gw",
 					Namespace: "ns",
 				}
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.Gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
+				gw.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
 					},
@@ -2320,17 +2353,18 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+				gw := g.Gateways[gatewayNsName]
+				gw.Source.ObjectMeta = metav1.ObjectMeta{
 					Name:      "gw",
 					Namespace: "ns",
 				}
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.Gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
+				gw.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
 					NginxPlus: &ngfAPIv1alpha2.NginxPlus{
 						AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
 							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
@@ -2357,6 +2391,7 @@ func TestBuildConfiguration(t *testing.T) {
 			result := BuildConfiguration(
 				context.TODO(),
 				test.graph,
+				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
 				1,
 				false,
@@ -2409,17 +2444,18 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 	}{
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
+				gw := g.Gateways[gatewayNsName]
+				gw.Source.ObjectMeta = metav1.ObjectMeta{
 					Name:      "gw",
 					Namespace: "ns",
 				}
-				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
 					Name:   "listener-80-1",
 					Source: listener80,
 					Valid:  true,
 					Routes: map[graph.RouteKey]*graph.L7Route{},
 				})
-				g.Gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
+				gw.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
 					NginxPlus: &ngfAPIv1alpha2.NginxPlus{
 						AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
 							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
@@ -2455,7 +2491,7 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
-				g.Gateway = nil
+				delete(g.Gateways, gatewayNsName)
 				return g
 			}),
 			expConf: defaultPlusConfig,
@@ -2471,6 +2507,7 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 			result := BuildConfiguration(
 				context.TODO(),
 				test.graph,
+				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
 				1,
 				true,
@@ -3420,8 +3457,10 @@ func TestBuildTelemetry(t *testing.T) {
 		},
 		{
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: nil,
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						EffectiveNginxProxy: nil,
+					},
 				},
 			},
 			expTelemetry: Telemetry{},
@@ -3429,8 +3468,8 @@ func TestBuildTelemetry(t *testing.T) {
 		},
 		{
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {EffectiveNginxProxy: &graph.EffectiveNginxProxy{}},
 				},
 			},
 			expTelemetry: Telemetry{},
@@ -3438,14 +3477,16 @@ func TestBuildTelemetry(t *testing.T) {
 		},
 		{
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Telemetry: &ngfAPIv1alpha2.Telemetry{
-							Exporter: &ngfAPIv1alpha2.TelemetryExporter{
-								Endpoint: helpers.GetPointer("my-otel.svc:4563"),
-							},
-							DisabledFeatures: []ngfAPIv1alpha2.DisableTelemetryFeature{
-								ngfAPIv1alpha2.DisableTracing,
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+							Telemetry: &ngfAPIv1alpha2.Telemetry{
+								Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+									Endpoint: helpers.GetPointer("my-otel.svc:4563"),
+								},
+								DisabledFeatures: []ngfAPIv1alpha2.DisableTelemetryFeature{
+									ngfAPIv1alpha2.DisableTracing,
+								},
 							},
 						},
 					},
@@ -3456,10 +3497,12 @@ func TestBuildTelemetry(t *testing.T) {
 		},
 		{
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Telemetry: &ngfAPIv1alpha2.Telemetry{
-							Exporter: nil,
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+							Telemetry: &ngfAPIv1alpha2.Telemetry{
+								Exporter: nil,
+							},
 						},
 					},
 				},
@@ -3469,11 +3512,13 @@ func TestBuildTelemetry(t *testing.T) {
 		},
 		{
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Telemetry: &ngfAPIv1alpha2.Telemetry{
-							Exporter: &ngfAPIv1alpha2.TelemetryExporter{
-								Endpoint: nil,
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+							Telemetry: &ngfAPIv1alpha2.Telemetry{
+								Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+									Endpoint: nil,
+								},
 							},
 						},
 					},
@@ -3484,14 +3529,16 @@ func TestBuildTelemetry(t *testing.T) {
 		},
 		{
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					Source: &v1.Gateway{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "gw",
-							Namespace: "ns",
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						Source: &v1.Gateway{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "gw",
+								Namespace: "ns",
+							},
 						},
+						EffectiveNginxProxy: telemetryConfigured,
 					},
-					EffectiveNginxProxy: telemetryConfigured,
 				},
 			},
 			expTelemetry: createTelemetry(),
@@ -3499,14 +3546,16 @@ func TestBuildTelemetry(t *testing.T) {
 		},
 		{
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					Source: &v1.Gateway{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "gw",
-							Namespace: "ns",
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						Source: &v1.Gateway{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "gw",
+								Namespace: "ns",
+							},
 						},
+						EffectiveNginxProxy: telemetryConfigured,
 					},
-					EffectiveNginxProxy: telemetryConfigured,
 				},
 				NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 					{NsName: types.NamespacedName{Name: "obsPolicy"}}: {
@@ -3534,14 +3583,16 @@ func TestBuildTelemetry(t *testing.T) {
 		},
 		{
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					Source: &v1.Gateway{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "gw",
-							Namespace: "ns",
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						Source: &v1.Gateway{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "gw",
+								Namespace: "ns",
+							},
 						},
+						EffectiveNginxProxy: telemetryConfigured,
 					},
-					EffectiveNginxProxy: telemetryConfigured,
 				},
 				NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 					{NsName: types.NamespacedName{Name: "obsPolicy"}}: {
@@ -3604,14 +3655,16 @@ func TestBuildTelemetry(t *testing.T) {
 		},
 		{
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					Source: &v1.Gateway{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "gw",
-							Namespace: "ns",
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						Source: &v1.Gateway{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "gw",
+								Namespace: "ns",
+							},
 						},
+						EffectiveNginxProxy: telemetryConfigured,
 					},
-					EffectiveNginxProxy: telemetryConfigured,
 				},
 				NGFPolicies: map[graph.PolicyKey]*graph.Policy{
 					{NsName: types.NamespacedName{Name: "obsPolicy"}}: {
@@ -3638,7 +3691,7 @@ func TestBuildTelemetry(t *testing.T) {
 		t.Run(tc.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			tel := buildTelemetry(tc.g)
+			tel := buildTelemetry(tc.g, tc.g.Gateways[types.NamespacedName{}])
 			sort.Slice(tel.Ratios, func(i, j int) bool {
 				return tel.Ratios[i].Value < tel.Ratios[j].Value
 			})
@@ -3782,97 +3835,95 @@ func TestCreatePassthroughServers(t *testing.T) {
 	secureAppKey := getL4RouteKey("secure-app")
 	secureApp2Key := getL4RouteKey("secure-app2")
 	secureApp3Key := getL4RouteKey("secure-app3")
-	testGraph := graph.Graph{
-		Gateway: &graph.Gateway{
-			Listeners: []*graph.Listener{
-				{
-					Name:  "testingListener",
-					Valid: true,
-					Source: v1.Listener{
-						Protocol: v1.TLSProtocolType,
-						Port:     443,
-						Hostname: helpers.GetPointer[v1.Hostname]("*.example.com"),
-					},
-					Routes: make(map[graph.RouteKey]*graph.L7Route),
-					L4Routes: map[graph.L4RouteKey]*graph.L4Route{
-						secureAppKey: {
-							Valid: true,
-							Spec: graph.L4RouteSpec{
-								Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-								BackendRef: graph.BackendRef{
-									Valid:     true,
-									SvcNsName: secureAppKey.NamespacedName,
-									ServicePort: apiv1.ServicePort{
-										Name:     "https",
-										Protocol: "TCP",
-										Port:     8443,
-										TargetPort: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: 8443,
-										},
+	testGraph := &graph.Gateway{
+		Listeners: []*graph.Listener{
+			{
+				Name:  "testingListener",
+				Valid: true,
+				Source: v1.Listener{
+					Protocol: v1.TLSProtocolType,
+					Port:     443,
+					Hostname: helpers.GetPointer[v1.Hostname]("*.example.com"),
+				},
+				Routes: make(map[graph.RouteKey]*graph.L7Route),
+				L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+					secureAppKey: {
+						Valid: true,
+						Spec: graph.L4RouteSpec{
+							Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
+							BackendRef: graph.BackendRef{
+								Valid:     true,
+								SvcNsName: secureAppKey.NamespacedName,
+								ServicePort: apiv1.ServicePort{
+									Name:     "https",
+									Protocol: "TCP",
+									Port:     8443,
+									TargetPort: intstr.IntOrString{
+										Type:   intstr.Int,
+										IntVal: 8443,
 									},
-								},
-							},
-							ParentRefs: []graph.ParentRef{
-								{
-									Attachment: &graph.ParentRefAttachmentStatus{
-										AcceptedHostnames: map[string][]string{
-											"testingListener": {"app.example.com", "cafe.example.com"},
-										},
-									},
-									SectionName: nil,
-									Port:        nil,
-									Gateway:     types.NamespacedName{},
-									Idx:         0,
 								},
 							},
 						},
-						secureApp2Key: {},
+						ParentRefs: []graph.ParentRef{
+							{
+								Attachment: &graph.ParentRefAttachmentStatus{
+									AcceptedHostnames: map[string][]string{
+										"testingListener": {"app.example.com", "cafe.example.com"},
+									},
+								},
+								SectionName: nil,
+								Port:        nil,
+								Gateway:     types.NamespacedName{},
+								Idx:         0,
+							},
+						},
 					},
+					secureApp2Key: {},
 				},
-				{
-					Name:  "testingListener2",
-					Valid: true,
-					Source: v1.Listener{
-						Protocol: v1.TLSProtocolType,
-						Port:     443,
-						Hostname: helpers.GetPointer[v1.Hostname]("cafe.example.com"),
-					},
-					Routes: make(map[graph.RouteKey]*graph.L7Route),
-					L4Routes: map[graph.L4RouteKey]*graph.L4Route{
-						secureApp3Key: {
-							Valid: true,
-							Spec: graph.L4RouteSpec{
-								Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-								BackendRef: graph.BackendRef{
-									Valid:     true,
-									SvcNsName: secureAppKey.NamespacedName,
-									ServicePort: apiv1.ServicePort{
-										Name:     "https",
-										Protocol: "TCP",
-										Port:     8443,
-										TargetPort: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: 8443,
-										},
+			},
+			{
+				Name:  "testingListener2",
+				Valid: true,
+				Source: v1.Listener{
+					Protocol: v1.TLSProtocolType,
+					Port:     443,
+					Hostname: helpers.GetPointer[v1.Hostname]("cafe.example.com"),
+				},
+				Routes: make(map[graph.RouteKey]*graph.L7Route),
+				L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+					secureApp3Key: {
+						Valid: true,
+						Spec: graph.L4RouteSpec{
+							Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
+							BackendRef: graph.BackendRef{
+								Valid:     true,
+								SvcNsName: secureAppKey.NamespacedName,
+								ServicePort: apiv1.ServicePort{
+									Name:     "https",
+									Protocol: "TCP",
+									Port:     8443,
+									TargetPort: intstr.IntOrString{
+										Type:   intstr.Int,
+										IntVal: 8443,
 									},
 								},
 							},
 						},
 					},
 				},
-				{
-					Name:  "httpListener",
-					Valid: true,
-					Source: v1.Listener{
-						Protocol: v1.HTTPProtocolType,
-					},
+			},
+			{
+				Name:  "httpListener",
+				Valid: true,
+				Source: v1.Listener{
+					Protocol: v1.HTTPProtocolType,
 				},
 			},
 		},
 	}
 
-	passthroughServers := buildPassthroughServers(&testGraph)
+	passthroughServers := buildPassthroughServers(testGraph)
 
 	expectedPassthroughServers := []Layer4VirtualServer{
 		{
@@ -3921,80 +3972,76 @@ func TestBuildStreamUpstreams(t *testing.T) {
 	secureApp3Key := getL4RouteKey("secure-app3")
 	secureApp4Key := getL4RouteKey("secure-app4")
 	secureApp5Key := getL4RouteKey("secure-app5")
-	testGraph := graph.Graph{
-		Gateway: &graph.Gateway{
-			Listeners: []*graph.Listener{
-				{
-					Name:  "testingListener",
+	listeners := []*graph.Listener{
+		{
+			Name:  "testingListener",
+			Valid: true,
+			Source: v1.Listener{
+				Protocol: v1.TLSProtocolType,
+				Port:     443,
+			},
+			Routes: make(map[graph.RouteKey]*graph.L7Route),
+			L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+				secureAppKey: {
 					Valid: true,
-					Source: v1.Listener{
-						Protocol: v1.TLSProtocolType,
-						Port:     443,
+					Spec: graph.L4RouteSpec{
+						Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
+						BackendRef: graph.BackendRef{
+							Valid:     true,
+							SvcNsName: secureAppKey.NamespacedName,
+							ServicePort: apiv1.ServicePort{
+								Name:     "https",
+								Protocol: "TCP",
+								Port:     8443,
+								TargetPort: intstr.IntOrString{
+									Type:   intstr.Int,
+									IntVal: 8443,
+								},
+							},
+						},
 					},
-					Routes: make(map[graph.RouteKey]*graph.L7Route),
-					L4Routes: map[graph.L4RouteKey]*graph.L4Route{
-						secureAppKey: {
-							Valid: true,
-							Spec: graph.L4RouteSpec{
-								Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-								BackendRef: graph.BackendRef{
-									Valid:     true,
-									SvcNsName: secureAppKey.NamespacedName,
-									ServicePort: apiv1.ServicePort{
-										Name:     "https",
-										Protocol: "TCP",
-										Port:     8443,
-										TargetPort: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: 8443,
-										},
-									},
+				},
+				secureApp2Key: {},
+				secureApp3Key: {
+					Valid: true,
+					Spec: graph.L4RouteSpec{
+						Hostnames:  []v1.Hostname{"test.example.com"},
+						BackendRef: graph.BackendRef{},
+					},
+				},
+				secureApp4Key: {
+					Valid: true,
+					Spec: graph.L4RouteSpec{
+						Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
+						BackendRef: graph.BackendRef{
+							Valid:     true,
+							SvcNsName: secureAppKey.NamespacedName,
+							ServicePort: apiv1.ServicePort{
+								Name:     "https",
+								Protocol: "TCP",
+								Port:     8443,
+								TargetPort: intstr.IntOrString{
+									Type:   intstr.Int,
+									IntVal: 8443,
 								},
 							},
 						},
-						secureApp2Key: {},
-						secureApp3Key: {
-							Valid: true,
-							Spec: graph.L4RouteSpec{
-								Hostnames:  []v1.Hostname{"test.example.com"},
-								BackendRef: graph.BackendRef{},
-							},
-						},
-						secureApp4Key: {
-							Valid: true,
-							Spec: graph.L4RouteSpec{
-								Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-								BackendRef: graph.BackendRef{
-									Valid:     true,
-									SvcNsName: secureAppKey.NamespacedName,
-									ServicePort: apiv1.ServicePort{
-										Name:     "https",
-										Protocol: "TCP",
-										Port:     8443,
-										TargetPort: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: 8443,
-										},
-									},
-								},
-							},
-						},
-						secureApp5Key: {
-							Valid: true,
-							Spec: graph.L4RouteSpec{
-								Hostnames: []v1.Hostname{"app2.example.com"},
-								BackendRef: graph.BackendRef{
-									Valid:     true,
-									SvcNsName: secureApp5Key.NamespacedName,
-									ServicePort: apiv1.ServicePort{
-										Name:     "https",
-										Protocol: "TCP",
-										Port:     8443,
-										TargetPort: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: 8443,
-										},
-									},
+					},
+				},
+				secureApp5Key: {
+					Valid: true,
+					Spec: graph.L4RouteSpec{
+						Hostnames: []v1.Hostname{"app2.example.com"},
+						BackendRef: graph.BackendRef{
+							Valid:     true,
+							SvcNsName: secureApp5Key.NamespacedName,
+							ServicePort: apiv1.ServicePort{
+								Name:     "https",
+								Protocol: "TCP",
+								Port:     8443,
+								TargetPort: intstr.IntOrString{
+									Type:   intstr.Int,
+									IntVal: 8443,
 								},
 							},
 						},
@@ -4021,7 +4068,7 @@ func TestBuildStreamUpstreams(t *testing.T) {
 		return fakeEndpoints, nil
 	}
 
-	streamUpstreams := buildStreamUpstreams(context.Background(), testGraph.Gateway.Listeners, &fakeResolver, Dual)
+	streamUpstreams := buildStreamUpstreams(context.Background(), listeners, &fakeResolver, Dual)
 
 	expectedStreamUpstreams := []Upstream{
 		{
@@ -4048,8 +4095,10 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 		{
 			msg: "no rewrite IP settings configured",
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+					},
 				},
 			},
 			expRewriteIPSettings: RewriteClientIPSettings{},
@@ -4057,17 +4106,19 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 		{
 			msg: "rewrite IP settings configured with proxyProtocol",
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
-							Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
-							TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
-								{
-									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
-									Value: "10.9.9.4/32",
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+							RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
+								Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
+								TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
+									{
+										Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+										Value: "10.9.9.4/32",
+									},
 								},
+								SetIPRecursively: helpers.GetPointer(true),
 							},
-							SetIPRecursively: helpers.GetPointer(true),
 						},
 					},
 				},
@@ -4081,17 +4132,19 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 		{
 			msg: "rewrite IP settings configured with xForwardedFor",
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
-							Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeXForwardedFor),
-							TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
-								{
-									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
-									Value: "76.89.90.11/24",
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+							RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
+								Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeXForwardedFor),
+								TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
+									{
+										Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+										Value: "76.89.90.11/24",
+									},
 								},
+								SetIPRecursively: helpers.GetPointer(true),
 							},
-							SetIPRecursively: helpers.GetPointer(true),
 						},
 					},
 				},
@@ -4105,29 +4158,31 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 		{
 			msg: "rewrite IP settings configured with recursive set to false and multiple trusted addresses",
 			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
-							Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeXForwardedFor),
-							TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
-								{
-									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
-									Value: "5.5.5.5/12",
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {
+						EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+							RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
+								Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeXForwardedFor),
+								TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
+									{
+										Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+										Value: "5.5.5.5/12",
+									},
+									{
+										Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+										Value: "1.1.1.1/26",
+									},
+									{
+										Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+										Value: "2.2.2.2/32",
+									},
+									{
+										Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+										Value: "3.3.3.3/24",
+									},
 								},
-								{
-									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
-									Value: "1.1.1.1/26",
-								},
-								{
-									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
-									Value: "2.2.2.2/32",
-								},
-								{
-									Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
-									Value: "3.3.3.3/24",
-								},
+								SetIPRecursively: helpers.GetPointer(false),
 							},
-							SetIPRecursively: helpers.GetPointer(false),
 						},
 					},
 				},
@@ -4144,7 +4199,7 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 		t.Run(tc.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			baseConfig := buildBaseHTTPConfig(tc.g)
+			baseConfig := buildBaseHTTPConfig(tc.g, tc.g.Gateways[types.NamespacedName{}])
 			g.Expect(baseConfig.RewriteClientIPSettings).To(Equal(tc.expRewriteIPSettings))
 		})
 	}
@@ -4156,44 +4211,36 @@ func TestBuildLogging(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		msg                string
-		g                  *graph.Graph
+		gw                 *graph.Gateway
 		expLoggingSettings Logging
 	}{
 		{
-			msg: "Gateway is nil",
-			g: &graph.Graph{
-				Gateway: nil,
-			},
+			msg:                "Gateway is nil",
+			gw:                 nil,
 			expLoggingSettings: defaultLogging,
 		},
 		{
 			msg: "Gateway has no effective NginxProxy",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: nil,
-				},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: nil,
 			},
 			expLoggingSettings: defaultLogging,
 		},
 		{
 			msg: "Effective NginxProxy does not specify log level",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
-					},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
 				},
 			},
 			expLoggingSettings: defaultLogging,
 		},
 		{
 			msg: "Effective NginxProxy log level set to debug",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Logging: &ngfAPIv1alpha2.NginxLogging{
-							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
-						},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
 					},
 				},
 			},
@@ -4201,12 +4248,10 @@ func TestBuildLogging(t *testing.T) {
 		},
 		{
 			msg: "Effective NginxProxy log level set to info",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Logging: &ngfAPIv1alpha2.NginxLogging{
-							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-						},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
 					},
 				},
 			},
@@ -4214,12 +4259,10 @@ func TestBuildLogging(t *testing.T) {
 		},
 		{
 			msg: "Effective NginxProxy log level set to notice",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Logging: &ngfAPIv1alpha2.NginxLogging{
-							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelNotice),
-						},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelNotice),
 					},
 				},
 			},
@@ -4227,12 +4270,10 @@ func TestBuildLogging(t *testing.T) {
 		},
 		{
 			msg: "Effective NginxProxy log level set to warn",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Logging: &ngfAPIv1alpha2.NginxLogging{
-							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelWarn),
-						},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelWarn),
 					},
 				},
 			},
@@ -4240,12 +4281,10 @@ func TestBuildLogging(t *testing.T) {
 		},
 		{
 			msg: "Effective NginxProxy log level set to error",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Logging: &ngfAPIv1alpha2.NginxLogging{
-							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
-						},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
 					},
 				},
 			},
@@ -4253,12 +4292,10 @@ func TestBuildLogging(t *testing.T) {
 		},
 		{
 			msg: "Effective NginxProxy log level set to crit",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Logging: &ngfAPIv1alpha2.NginxLogging{
-							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelCrit),
-						},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelCrit),
 					},
 				},
 			},
@@ -4266,12 +4303,10 @@ func TestBuildLogging(t *testing.T) {
 		},
 		{
 			msg: "Effective NginxProxy log level set to alert",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Logging: &ngfAPIv1alpha2.NginxLogging{
-							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelAlert),
-						},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelAlert),
 					},
 				},
 			},
@@ -4279,12 +4314,10 @@ func TestBuildLogging(t *testing.T) {
 		},
 		{
 			msg: "Effective NginxProxy log level set to emerg",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						Logging: &ngfAPIv1alpha2.NginxLogging{
-							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelEmerg),
-						},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelEmerg),
 					},
 				},
 			},
@@ -4297,7 +4330,7 @@ func TestBuildLogging(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			g.Expect(buildLogging(tc.g)).To(Equal(tc.expLoggingSettings))
+			g.Expect(buildLogging(tc.gw)).To(Equal(tc.expLoggingSettings))
 		})
 	}
 }
@@ -4518,32 +4551,28 @@ func TestBuildNginxPlus(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		msg          string
-		g            *graph.Graph
+		gw           *graph.Gateway
 		expNginxPlus NginxPlus
 	}{
 		{
 			msg:          "NginxProxy is nil",
-			g:            &graph.Graph{},
+			gw:           &graph.Gateway{},
 			expNginxPlus: defaultNginxPlus,
 		},
 		{
 			msg: "NginxPlus default values are used when NginxProxy doesn't specify NginxPlus settings",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
-				},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
 			},
 			expNginxPlus: defaultNginxPlus,
 		},
 		{
 			msg: "NginxProxy specifies one allowed address",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						NginxPlus: &ngfAPIv1alpha2.NginxPlus{
-							AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
-								{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
-							},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					NginxPlus: &ngfAPIv1alpha2.NginxPlus{
+						AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
+							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
 						},
 					},
 				},
@@ -4552,14 +4581,12 @@ func TestBuildNginxPlus(t *testing.T) {
 		},
 		{
 			msg: "NginxProxy specifies multiple allowed addresses",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						NginxPlus: &ngfAPIv1alpha2.NginxPlus{
-							AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
-								{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
-								{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
-							},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					NginxPlus: &ngfAPIv1alpha2.NginxPlus{
+						AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
+							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
+							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "25.0.0.3"},
 						},
 					},
 				},
@@ -4568,13 +4595,11 @@ func TestBuildNginxPlus(t *testing.T) {
 		},
 		{
 			msg: "NginxProxy specifies 127.0.0.1 as allowed address",
-			g: &graph.Graph{
-				Gateway: &graph.Gateway{
-					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						NginxPlus: &ngfAPIv1alpha2.NginxPlus{
-							AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
-								{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.1"},
-							},
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					NginxPlus: &ngfAPIv1alpha2.NginxPlus{
+						AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
+							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.1"},
 						},
 					},
 				},
@@ -4588,7 +4613,7 @@ func TestBuildNginxPlus(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			g.Expect(buildNginxPlus(tc.g)).To(Equal(tc.expNginxPlus))
+			g.Expect(buildNginxPlus(tc.gw)).To(Equal(tc.expNginxPlus))
 		})
 	}
 }

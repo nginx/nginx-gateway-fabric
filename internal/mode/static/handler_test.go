@@ -96,9 +96,11 @@ var _ = Describe("eventHandler", func() {
 		ctx, cancel = context.WithCancel(context.Background()) //nolint:fatcontext // ignore for test
 
 		baseGraph = &graph.Graph{
-			Gateway: &graph.Gateway{
-				Valid:  true,
-				Source: &gatewayv1.Gateway{},
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				{}: {
+					Valid:  true,
+					Source: &gatewayv1.Gateway{},
+				},
 			},
 		}
 
@@ -138,8 +140,7 @@ var _ = Describe("eventHandler", func() {
 				ServiceName: "nginx-gateway",
 				Namespace:   "nginx-gateway",
 			},
-			metricsCollector:         collectors.NewControllerNoopCollector(),
-			updateGatewayClassStatus: true,
+			metricsCollector: collectors.NewControllerNoopCollector(),
 		})
 		Expect(handler.cfg.graphBuiltHealthChecker.ready).To(BeFalse())
 	})
@@ -185,7 +186,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1, &graph.Gateway{})
 
 				checkUpsertEventExpectations(e)
 				expectReconfig(dcfg, fakeCfgFiles)
@@ -201,7 +202,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1, &graph.Gateway{})
 
 				checkDeleteEventExpectations(e)
 				expectReconfig(dcfg, fakeCfgFiles)
@@ -238,73 +239,11 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 2)
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 2, &graph.Gateway{})
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 			})
 		})
 	})
-
-	DescribeTable(
-		"updating statuses of GatewayClass conditionally based on handler configuration",
-		func(updateGatewayClassStatus bool) {
-			handler.cfg.updateGatewayClassStatus = updateGatewayClassStatus
-
-			gc := &gatewayv1.GatewayClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test",
-				},
-			}
-			ignoredGC := &gatewayv1.GatewayClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ignored",
-				},
-			}
-
-			gr := &graph.Graph{
-				GatewayClass: &graph.GatewayClass{
-					Source: gc,
-					Valid:  true,
-				},
-				IgnoredGatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
-					client.ObjectKeyFromObject(ignoredGC): ignoredGC,
-				},
-			}
-
-			fakeProcessor.ProcessReturns(state.ClusterStateChange, gr)
-			fakeProcessor.GetLatestGraphReturns(gr)
-
-			e := &events.UpsertEvent{
-				Resource: &gatewayv1.HTTPRoute{}, // any supported is OK
-			}
-
-			batch := []interface{}{e}
-
-			var expectedReqsCount int
-			if updateGatewayClassStatus {
-				expectedReqsCount = 2
-			}
-
-			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
-
-			Eventually(
-				func() int {
-					return fakeStatusUpdater.UpdateGroupCallCount()
-				}).Should(Equal(2))
-
-			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
-			Expect(name).To(Equal(groupAllExceptGateways))
-			Expect(reqs).To(HaveLen(expectedReqsCount))
-			for _, req := range reqs {
-				Expect(req.NsName).To(BeElementOf(
-					client.ObjectKeyFromObject(gc),
-					client.ObjectKeyFromObject(ignoredGC),
-				))
-				Expect(req.ResourceType).To(Equal(&gatewayv1.GatewayClass{}))
-			}
-		},
-		Entry("should update statuses of GatewayClass", true),
-		Entry("should not update statuses of GatewayClass", false),
-	)
 
 	When("receiving control plane configuration updates", func() {
 		cfg := func(level ngfAPI.ControllerLogLevel) *ngfAPI.NginxGateway {
@@ -392,7 +331,11 @@ var _ = Describe("eventHandler", func() {
 		batch := []interface{}{e}
 
 		BeforeEach(func() {
-			fakeProcessor.ProcessReturns(state.EndpointsOnlyChange, &graph.Graph{Gateway: &graph.Gateway{Valid: true}})
+			fakeProcessor.ProcessReturns(state.EndpointsOnlyChange, &graph.Graph{
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{}: {Valid: true},
+				},
+			})
 		})
 
 		When("running NGINX Plus", func() {
@@ -401,7 +344,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1, &graph.Gateway{})
 				dcfg.NginxPlus = dataplane.NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 
@@ -414,7 +357,7 @@ var _ = Describe("eventHandler", func() {
 			It("should not call the NGINX Plus API", func() {
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1, &graph.Gateway{})
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 
 				Expect(fakeGenerator.GenerateCallCount()).To(Equal(1))
@@ -438,7 +381,7 @@ var _ = Describe("eventHandler", func() {
 			}).Should(Equal(2))
 
 		gr := handler.cfg.processor.GetLatestGraph()
-		Expect(gr.LatestReloadResult.Error.Error()).To(Equal("status error"))
+		Expect(gr.LatestReloadResult[types.NamespacedName{}].Error.Error()).To(Equal("status error"))
 	})
 
 	It("should update Gateway status when receiving a queue event", func() {
@@ -460,12 +403,16 @@ var _ = Describe("eventHandler", func() {
 		batch := []interface{}{e}
 		readyChannel := handler.cfg.graphBuiltHealthChecker.getReadyCh()
 
-		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{Gateway: &graph.Gateway{Valid: true}})
+		fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				{}: {Valid: true},
+			},
+		})
 
 		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).ToNot(Succeed())
 		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1)
+		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, 1, &graph.Gateway{})
 		Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 
 		Expect(readyChannel).To(BeClosed())

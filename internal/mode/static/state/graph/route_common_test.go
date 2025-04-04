@@ -408,20 +408,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			},
 		},
 	}
-	ignoredGwNsName := types.NamespacedName{Namespace: "test", Name: "ignored-gateway"}
-	routeWithIgnoredGateway := &L7Route{
-		RouteType:  RouteTypeHTTP,
-		Source:     hr,
-		Valid:      true,
-		Attachable: true,
-		ParentRefs: []ParentRef{
-			{
-				Idx:         0,
-				Gateway:     ignoredGwNsName,
-				SectionName: hr.Spec.ParentRefs[0].SectionName,
-			},
-		},
-	}
 	invalidRoute := &L7Route{
 		RouteType: RouteTypeHTTP,
 		Valid:     false,
@@ -739,32 +725,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				nonMatchingHostnameListener,
 			},
 			name: "no matching listener hostname",
-		},
-		{
-			route: routeWithIgnoredGateway,
-			gateway: &Gateway{
-				Source: gw,
-				Valid:  true,
-				Listeners: []*Listener{
-					createListener("listener-80-1"),
-				},
-			},
-			expectedSectionNameRefs: []ParentRef{
-				{
-					Idx:         0,
-					Gateway:     ignoredGwNsName,
-					SectionName: hr.Spec.ParentRefs[0].SectionName,
-					Attachment: &ParentRefAttachmentStatus{
-						Attached:          false,
-						FailedCondition:   staticConds.NewRouteNotAcceptedGatewayIgnored(),
-						AcceptedHostnames: map[string][]string{},
-					},
-				},
-			},
-			expectedGatewayListeners: []*Listener{
-				createListener("listener-80-1"),
-			},
-			name: "gateway is ignored",
 		},
 		{
 			route: invalidRoute,
@@ -1620,21 +1580,6 @@ func TestBindL4RouteToListeners(t *testing.T) {
 		},
 		Attachable: true,
 	}
-	routeReferencesWrongNamespace := &L4Route{
-		Source: tr,
-		Spec: L4RouteSpec{
-			Hostnames: tr.Spec.Hostnames,
-		},
-		Valid: true,
-		ParentRefs: []ParentRef{
-			{
-				Idx:         0,
-				Gateway:     client.ObjectKeyFromObject(gwWrongNamespace),
-				SectionName: tr.Spec.ParentRefs[0].SectionName,
-			},
-		},
-		Attachable: true,
-	}
 
 	tests := []struct {
 		route                    *L4Route
@@ -1649,6 +1594,10 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
 				Listeners: []*Listener{
 					createListener("listener-443"),
 				},
@@ -1680,6 +1629,10 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
 				Listeners: []*Listener{
 					createListener("listener-443"),
 				},
@@ -1701,6 +1654,10 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
 				Listeners: []*Listener{
 					createListener("listener-444"),
 				},
@@ -1723,6 +1680,10 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
 				Listeners: []*Listener{
 					createListener("listener-443"),
 				},
@@ -1751,41 +1712,14 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			name: "port is not nil",
 		},
 		{
-			route: routeReferencesWrongNamespace,
-			gateway: &Gateway{
-				Source: gw,
-				Valid:  true,
-				Listeners: []*Listener{
-					createListener("listener-443"),
-				},
-			},
-			expectedSectionNameRefs: []ParentRef{
-				{
-					Attachment: &ParentRefAttachmentStatus{
-						AcceptedHostnames: map[string][]string{},
-						FailedCondition: conditions.Condition{
-							Type:    "Accepted",
-							Status:  "False",
-							Reason:  "GatewayIgnored",
-							Message: "The Gateway is ignored by the controller",
-						},
-						Attached: false,
-					},
-					SectionName: tr.Spec.ParentRefs[0].SectionName,
-					Gateway:     client.ObjectKeyFromObject(gwWrongNamespace),
-					Idx:         0,
-				},
-			},
-			expectedGatewayListeners: []*Listener{
-				createListener("listener-443"),
-			},
-			name: "ignored gateway",
-		},
-		{
 			route: createNormalRoute(gw),
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  false,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
 				Listeners: []*Listener{
 					createListener("listener-443"),
 				},
@@ -1817,6 +1751,10 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			gateway: &Gateway{
 				Source: gwWrongNamespace,
 				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "wrong",
+					Name:      "gateway",
+				},
 				Listeners: []*Listener{
 					createModifiedListener("listener-443", func(l *Listener) {
 						l.Source.AllowedRoutes = &gatewayv1.AllowedRoutes{
@@ -1859,6 +1797,10 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
 				Listeners: []*Listener{
 					createModifiedListener("listener-443", func(l *Listener) {
 						l.Valid = false
@@ -1908,7 +1850,11 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			route: createNormalRoute(gw),
 			gateway: &Gateway{
 				Source: gw,
-				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
+				Valid: true,
 				Listeners: []*Listener{
 					createModifiedListener("listener-443", func(l *Listener) {
 						l.Source.Hostname = (*gatewayv1.Hostname)(helpers.GetPointer("*.example.org"))
@@ -1940,6 +1886,10 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
 				Listeners: []*Listener{
 					createListener("listener-443"),
 				},
@@ -1972,6 +1922,10 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
 				Listeners: []*Listener{
 					createListener("listener-443"),
 				},
@@ -2001,7 +1955,11 @@ func TestBindL4RouteToListeners(t *testing.T) {
 		{
 			route: createNormalRoute(gw),
 			gateway: &Gateway{
-				Source:    gw,
+				Source: gw,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
 				Valid:     true,
 				Listeners: []*Listener{},
 			},
@@ -2022,7 +1980,11 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			}),
 			gateway: &Gateway{
 				Source: gw,
-				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
+				Valid: true,
 				Listeners: []*Listener{
 					createListener("listener-443"),
 				},
@@ -2054,6 +2016,10 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
 				Listeners: []*Listener{
 					createModifiedListener("listener-443", func(l *Listener) {
 						l.SupportedKinds = nil
@@ -2336,11 +2302,11 @@ func TestIsolateL4Listeners(t *testing.T) {
 	}
 
 	listenerMapHostnameIntersection := map[string]hostPort{
-		"empty-hostname":           {hostname: "", port: 80},
-		"wildcard-example-com":     {hostname: "*.example.com", port: 80},
-		"foo-wildcard-example-com": {hostname: "*.foo.example.com", port: 80},
-		"abc-com":                  {hostname: "abc.foo.example.com", port: 80},
-		"no-match":                 {hostname: "no-match.cafe.com", port: 80},
+		"empty-hostname":           {hostname: "", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"wildcard-example-com":     {hostname: "*.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"foo-wildcard-example-com": {hostname: "*.foo.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"abc-com":                  {hostname: "abc.foo.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"no-match":                 {hostname: "no-match.cafe.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
 	}
 
 	expectedResultHostnameIntersection := map[string][]ParentRef{
@@ -2712,11 +2678,11 @@ func TestIsolateL7Listeners(t *testing.T) {
 	}
 
 	listenerMapHostnameIntersection := map[string]hostPort{
-		"empty-hostname":           {hostname: "", port: 80},
-		"wildcard-example-com":     {hostname: "*.example.com", port: 80},
-		"foo-wildcard-example-com": {hostname: "*.foo.example.com", port: 80},
-		"abc-com":                  {hostname: "abc.foo.example.com", port: 80},
-		"no-match":                 {hostname: "no-match.cafe.com", port: 80},
+		"empty-hostname":           {hostname: "", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"wildcard-example-com":     {hostname: "*.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"foo-wildcard-example-com": {hostname: "*.foo.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"abc-com":                  {hostname: "abc.foo.example.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
+		"no-match":                 {hostname: "no-match.cafe.com", port: 80, gwNsNames: client.ObjectKeyFromObject(gw)},
 	}
 
 	expectedResultHostnameIntersection := map[string][]ParentRef{
