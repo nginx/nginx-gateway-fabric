@@ -381,7 +381,8 @@ var _ = Describe("eventHandler", func() {
 			}).Should(Equal(2))
 
 		gr := handler.cfg.processor.GetLatestGraph()
-		Expect(gr.LatestReloadResult[types.NamespacedName{}].Error.Error()).To(Equal("status error"))
+		gw := gr.Gateways[types.NamespacedName{}]
+		Expect(gw.LatestReloadResult.Error.Error()).To(Equal("status error"))
 	})
 
 	It("should update Gateway status when receiving a queue event", func() {

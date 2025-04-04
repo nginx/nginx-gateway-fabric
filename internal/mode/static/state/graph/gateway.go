@@ -14,6 +14,7 @@ import (
 
 // Gateway represents the winning Gateway resource.
 type Gateway struct {
+	LatestReloadResult  NginxReloadResult
 	Source              *v1.Gateway
 	NginxProxy          *NginxProxy
 	EffectiveNginxProxy *EffectiveNginxProxy

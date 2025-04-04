@@ -399,7 +399,8 @@ func getListenerHostPortMap(listeners []*Listener, gw *Gateway) map[string]hostP
 		Namespace: gw.Source.Namespace,
 	}
 	for _, l := range listeners {
-		listenerHostPortMap[l.Name] = hostPort{
+		key := fmt.Sprintf("%s,%s,%s", l.Name, gw.Source.Name, gw.Source.Namespace)
+		listenerHostPortMap[key] = hostPort{
 			hostname:  getHostname(l.Source.Hostname),
 			port:      l.Source.Port,
 			gwNsNames: gwNsNames,
@@ -447,6 +448,7 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 			}
 			for _, h := range hostnames {
 				for lName, lHostPort := range listenerHostnameMap {
+					// skip comparison if not part of the same gateway
 					if lHostPort.gwNsNames != ref.Gateway {
 						continue
 					}
@@ -456,8 +458,12 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 						continue
 					}
 
-					// for L7Routes, we compare the hostname, port and gatewayNamespace-gatewayName-listenerName combination
+					// for L7Routes, we compare the hostname, port and listenerName combination
 					// to identify if hostname needs to be isolated.
+					splitLName := strings.Split(lName, ",")
+					if len(splitLName) > 1 {
+						lName = splitLName[0]
+					}
 					if h == lHostPort.hostname && listenerName != lName {
 						// for L4Routes, we only compare the hostname and listener name combination
 						// because we do not allow l4Routes to attach to the same listener
