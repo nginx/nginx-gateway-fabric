@@ -40,7 +40,7 @@ spec:
           serviceAccountName: rollout-mgr
           containers:
           - name: coffee-rollout-mgr
-            image: curlimages/curl:8.12.1
+            image: curlimages/curl:8.13.0
             imagePullPolicy: IfNotPresent
             command:
             - /bin/sh
@@ -69,7 +69,7 @@ spec:
           serviceAccountName: rollout-mgr
           containers:
           - name: coffee-rollout-mgr
-            image: curlimages/curl:8.12.1
+            image: curlimages/curl:8.13.0
             imagePullPolicy: IfNotPresent
             command:
             - /bin/sh
