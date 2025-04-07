@@ -34,6 +34,8 @@ type Config struct {
 	GatewayClassName string
 	// AgentTLSSecretName is the name of the TLS Secret used by NGINX Agent to communicate with the control plane.
 	AgentTLSSecretName string
+	// NGINXSCCName is the name of the SecurityContextConstraints for the NGINX Pods. Only applicable in OpenShift.
+	NGINXSCCName string
 	// NginxDockerSecretNames are the names of any Docker registry Secrets for the NGINX container.
 	NginxDockerSecretNames []string
 	// LeaderElection contains the configuration for leader election.
