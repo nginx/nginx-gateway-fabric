@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -592,6 +593,65 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	}))
 }
 
+func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+	fakeClient := fake.NewFakeClient(agentTLSSecret)
+
+	provisioner := &NginxProvisioner{
+		isOpenshift: true,
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+		},
+		k8sClient: fakeClient,
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": "nginx",
+			},
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+	}
+
+	resourceName := "gw-nginx"
+	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	g.Expect(objects).To(HaveLen(8))
+
+	expLabels := map[string]string{
+		"app":                                    "nginx",
+		"gateway.networking.k8s.io/gateway-name": "gw",
+		"app.kubernetes.io/name":                 "gw-nginx",
+	}
+
+	roleObj := objects[4]
+	role, ok := roleObj.(*rbacv1.Role)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(role.GetLabels()).To(Equal(expLabels))
+
+	roleBindingObj := objects[5]
+	roleBinding, ok := roleBindingObj.(*rbacv1.RoleBinding)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(roleBinding.GetLabels()).To(Equal(expLabels))
+}
+
 func TestGetAndUpdateSecret_NotFound(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -753,4 +813,35 @@ func TestBuildNginxResourceObjectsForDeletion_Plus(t *testing.T) {
 		deploymentNSName.Name,
 		provisioner.cfg.PlusUsageConfig.ClientSSLSecretName,
 	))
+}
+
+func TestBuildNginxResourceObjectsForDeletion_OpenShift(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{isOpenshift: true}
+
+	deploymentNSName := types.NamespacedName{
+		Name:      "gw-nginx",
+		Namespace: "default",
+	}
+
+	objects := provisioner.buildNginxResourceObjectsForDeletion(deploymentNSName)
+
+	g.Expect(objects).To(HaveLen(8))
+
+	validateMeta := func(obj client.Object, name string) {
+		g.Expect(obj.GetName()).To(Equal(name))
+		g.Expect(obj.GetNamespace()).To(Equal(deploymentNSName.Namespace))
+	}
+
+	roleObj := objects[2]
+	role, ok := roleObj.(*rbacv1.Role)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(role, deploymentNSName.Name)
+
+	roleBindingObj := objects[3]
+	roleBinding, ok := roleBindingObj.(*rbacv1.RoleBinding)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(roleBinding, deploymentNSName.Name)
 }

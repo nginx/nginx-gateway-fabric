@@ -11,6 +11,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -119,6 +120,11 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ObjectMeta: objectMeta,
 	}
 
+	var openshiftObjs []client.Object
+	if p.isOpenshift {
+		openshiftObjs = p.buildOpenshiftObjects(objectMeta)
+	}
+
 	ports := make(map[int32]struct{})
 	for _, listener := range gateway.Spec.Listeners {
 		ports[int32(listener.Port)] = struct{}{}
@@ -140,17 +146,21 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	)
 
 	// order to install resources:
-	// scc (if openshift)
 	// secrets
 	// configmaps
 	// serviceaccount
+	// role/binding (if openshift)
 	// service
 	// deployment/daemonset
 
-	objects := make([]client.Object, 0, len(configmaps)+len(secrets)+3)
+	objects := make([]client.Object, 0, len(configmaps)+len(secrets)+len(openshiftObjs)+3)
 	objects = append(objects, secrets...)
 	objects = append(objects, configmaps...)
-	objects = append(objects, serviceAccount, service, deployment)
+	objects = append(objects, serviceAccount)
+	if p.isOpenshift {
+		objects = append(objects, openshiftObjs...)
+	}
+	objects = append(objects, service, deployment)
 
 	return objects, err
 }
@@ -364,6 +374,37 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 	}
 
 	return []client.Object{bootstrapCM, agentCM}
+}
+
+func (p *NginxProvisioner) buildOpenshiftObjects(objectMeta metav1.ObjectMeta) []client.Object {
+	role := &rbacv1.Role{
+		ObjectMeta: objectMeta,
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{"security.openshift.io"},
+				ResourceNames: []string{p.cfg.NGINXSCCName},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+			},
+		},
+	}
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: objectMeta,
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     objectMeta.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      rbacv1.ServiceAccountKind,
+				Name:      objectMeta.Name,
+				Namespace: objectMeta.Namespace,
+			},
+		},
+	}
+
+	return []client.Object{role, roleBinding}
 }
 
 func buildNginxService(
@@ -606,6 +647,10 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			},
 			ImagePullSecrets:   []corev1.LocalObjectReference{},
 			ServiceAccountName: objectMeta.Name,
+			SecurityContext: &corev1.PodSecurityContext{
+				FSGroup:      helpers.GetPointer[int64](1001),
+				RunAsNonRoot: helpers.GetPointer(true),
+			},
 			Volumes: []corev1.Volume{
 				{
 					Name: "token",
@@ -812,10 +857,10 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 	// order to delete:
 	// deployment/daemonset
 	// service
+	// role/binding (if openshift)
 	// serviceaccount
 	// configmaps
 	// secrets
-	// scc (if openshift)
 
 	objectMeta := metav1.ObjectMeta{
 		Name:      deploymentNSName.Name,
@@ -828,6 +873,19 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 	service := &corev1.Service{
 		ObjectMeta: objectMeta,
 	}
+
+	objects := []client.Object{deployment, service}
+
+	if p.isOpenshift {
+		role := &rbacv1.Role{
+			ObjectMeta: objectMeta,
+		}
+		roleBinding := &rbacv1.RoleBinding{
+			ObjectMeta: objectMeta,
+		}
+		objects = append(objects, role, roleBinding)
+	}
+
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: objectMeta,
 	}
@@ -844,7 +902,7 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 		},
 	}
 
-	objects := []client.Object{deployment, service, serviceAccount, bootstrapCM, agentCM}
+	objects = append(objects, serviceAccount, bootstrapCM, agentCM)
 
 	agentTLSSecretName := controller.CreateNginxResourceName(
 		deploymentNSName.Name,

@@ -158,6 +158,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--usage-report-ca-secret=ca-secret",
 				"--usage-report-client-ssl-secret=client-secret",
 				"--snippets-filters",
+				"--nginx-scc=nginx-sscc-name",
 			},
 			wantErr: false,
 		},
@@ -444,6 +445,22 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--snippets-filters=not-a-bool",
 			},
 			wantErr: true,
+		},
+		{
+			name: "nginx-scc is set to empty string",
+			args: []string{
+				"--nginx-scc=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--nginx-scc" flag: must be set`,
+		},
+		{
+			name: "nginx-scc is invalid",
+			args: []string{
+				"--nginx-scc=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-scc" flag: invalid format: `,
 		},
 	}
 
