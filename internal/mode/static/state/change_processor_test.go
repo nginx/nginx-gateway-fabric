@@ -1029,19 +1029,22 @@ var _ = Describe("ChangeProcessor", func() {
 							// no ref grant exists yet for the routes
 							expGraph.Routes[httpRouteKey1].Conditions = []conditions.Condition{
 								staticConds.NewRouteBackendRefRefNotPermitted(
-									"Backend ref to Service service-ns/service not permitted by any ReferenceGrant",
+									"spec.rules[0].backendRefs[0].namespace: Forbidden: " +
+										"Backend ref to Service service-ns/service not permitted by any ReferenceGrant",
 								),
 							}
 
 							expGraph.Routes[grpcRouteKey1].Conditions = []conditions.Condition{
 								staticConds.NewRouteBackendRefRefNotPermitted(
-									"Backend ref to Service grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
+									"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+										"grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
 								),
 							}
 
 							expGraph.L4Routes[trKey1].Conditions = []conditions.Condition{
 								staticConds.NewRouteBackendRefRefNotPermitted(
-									"Backend ref to Service tls-service-ns/tls-service not permitted by any ReferenceGrant",
+									"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+										"tls-service-ns/tls-service not permitted by any ReferenceGrant",
 								),
 							}
 
@@ -1118,7 +1121,8 @@ var _ = Describe("ChangeProcessor", func() {
 					expGraph.Routes[httpRouteKey1].Conditions = []conditions.Condition{
 						staticConds.NewRouteInvalidListener(),
 						staticConds.NewRouteBackendRefRefNotPermitted(
-							"Backend ref to Service service-ns/service not permitted by any ReferenceGrant",
+							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+								"service-ns/service not permitted by any ReferenceGrant",
 						),
 					}
 					expGraph.Routes[httpRouteKey1].ParentRefs[0].Attachment = expAttachment80
@@ -1128,7 +1132,8 @@ var _ = Describe("ChangeProcessor", func() {
 					expGraph.Routes[grpcRouteKey1].Conditions = []conditions.Condition{
 						staticConds.NewRouteInvalidListener(),
 						staticConds.NewRouteBackendRefRefNotPermitted(
-							"Backend ref to Service grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
+							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+								"grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
 						),
 					}
 					expGraph.Routes[grpcRouteKey1].ParentRefs[0].Attachment = expAttachment80
@@ -1137,7 +1142,8 @@ var _ = Describe("ChangeProcessor", func() {
 					// no ref grant exists yet for tr1
 					expGraph.L4Routes[trKey1].Conditions = []conditions.Condition{
 						staticConds.NewRouteBackendRefRefNotPermitted(
-							"Backend ref to Service tls-service-ns/tls-service not permitted by any ReferenceGrant",
+							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+								"tls-service-ns/tls-service not permitted by any ReferenceGrant",
 						),
 					}
 
@@ -1158,21 +1164,24 @@ var _ = Describe("ChangeProcessor", func() {
 					// no ref grant exists yet for hr1
 					expGraph.Routes[httpRouteKey1].Conditions = []conditions.Condition{
 						staticConds.NewRouteBackendRefRefNotPermitted(
-							"Backend ref to Service service-ns/service not permitted by any ReferenceGrant",
+							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+								"service-ns/service not permitted by any ReferenceGrant",
 						),
 					}
 
 					// no ref grant exists yet for gr1
 					expGraph.Routes[grpcRouteKey1].Conditions = []conditions.Condition{
 						staticConds.NewRouteBackendRefRefNotPermitted(
-							"Backend ref to Service grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
+							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+								"grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
 						),
 					}
 
 					// no ref grant exists yet for tr1
 					expGraph.L4Routes[trKey1].Conditions = []conditions.Condition{
 						staticConds.NewRouteBackendRefRefNotPermitted(
-							"Backend ref to Service tls-service-ns/tls-service not permitted by any ReferenceGrant",
+							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+								"tls-service-ns/tls-service not permitted by any ReferenceGrant",
 						),
 					}
 
@@ -1203,7 +1212,8 @@ var _ = Describe("ChangeProcessor", func() {
 					// no ref grant exists yet for gr1
 					expGraph.Routes[grpcRouteKey1].Conditions = []conditions.Condition{
 						staticConds.NewRouteBackendRefRefNotPermitted(
-							"Backend ref to Service grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
+							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+								"grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
 						),
 					}
 					delete(expGraph.ReferencedServices, refGRPCSvc)
@@ -1212,7 +1222,8 @@ var _ = Describe("ChangeProcessor", func() {
 					// no ref grant exists yet for tr1
 					expGraph.L4Routes[trKey1].Conditions = []conditions.Condition{
 						staticConds.NewRouteBackendRefRefNotPermitted(
-							"Backend ref to Service tls-service-ns/tls-service not permitted by any ReferenceGrant",
+							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+								"tls-service-ns/tls-service not permitted by any ReferenceGrant",
 						),
 					}
 					delete(expGraph.ReferencedServices, refTLSSvc)
@@ -1240,7 +1251,8 @@ var _ = Describe("ChangeProcessor", func() {
 					// no ref grant exists yet for tr1
 					expGraph.L4Routes[trKey1].Conditions = []conditions.Condition{
 						staticConds.NewRouteBackendRefRefNotPermitted(
-							"Backend ref to Service tls-service-ns/tls-service not permitted by any ReferenceGrant",
+							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+								"tls-service-ns/tls-service not permitted by any ReferenceGrant",
 						),
 					}
 					delete(expGraph.ReferencedServices, types.NamespacedName{Namespace: "tls-service-ns", Name: "tls-service"})

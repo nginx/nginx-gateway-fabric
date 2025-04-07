@@ -149,6 +149,8 @@ type HTTPFilters struct {
 	RequestRedirect *HTTPRequestRedirectFilter
 	// RequestURLRewrite holds the HTTPURLRewriteFilter.
 	RequestURLRewrite *HTTPURLRewriteFilter
+	// RequestMirrors holds the HTTPRequestMirrorFilters. There could be more than one specified.
+	RequestMirrors []*HTTPRequestMirrorFilter
 	// RequestHeaderModifiers holds the HTTPHeaderFilter.
 	RequestHeaderModifiers *HTTPHeaderFilter
 	// ResponseHeaderModifiers holds the HTTPHeaderFilter.
@@ -205,6 +207,16 @@ type HTTPURLRewriteFilter struct {
 	Hostname *string
 	// Path is the path of the rewrite.
 	Path *HTTPPathModifier
+}
+
+// HTTPRequestMirrorFilter mirrors HTTP requests.
+type HTTPRequestMirrorFilter struct {
+	// Name is the service name.
+	Name *string
+	// Namespace is the namespace of the service.
+	Namespace *string
+	// Target is the target of the mirror (path with hostname and service name).
+	Target *string
 }
 
 // PathModifierType is the type of the PathModifier in a redirect or rewrite rule.

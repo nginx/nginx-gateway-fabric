@@ -67,7 +67,8 @@ func buildTLSRoute(
 	return r
 }
 
-func validateBackendRefTLSRoute(gtr *v1alpha2.TLSRoute,
+func validateBackendRefTLSRoute(
+	gtr *v1alpha2.TLSRoute,
 	services map[types.NamespacedName]*apiv1.Service,
 	npCfg *NginxProxy,
 	refGrantResolver func(resource toResource) bool,

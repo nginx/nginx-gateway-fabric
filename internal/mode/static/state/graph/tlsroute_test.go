@@ -429,7 +429,8 @@ func TestBuildTLSRoute(t *testing.T) {
 					},
 				},
 				Conditions: []conditions.Condition{staticConds.NewRouteBackendRefRefNotPermitted(
-					"Backend ref to Service diff/hi not permitted by any ReferenceGrant",
+					"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
+						"diff/hi not permitted by any ReferenceGrant",
 				)},
 				Attachable: true,
 				Valid:      true,

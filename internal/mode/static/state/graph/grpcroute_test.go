@@ -15,6 +15,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/mirror"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation/validationfakes"
 )
 
@@ -338,7 +339,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 
 	grInvalidFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
-			Type: "RequestMirror",
+			Type: "InvalidFilter",
 		},
 	}
 
@@ -902,8 +903,8 @@ func TestBuildGRPCRoute(t *testing.T) {
 				Conditions: []conditions.Condition{
 					staticConds.NewRouteUnsupportedValue(
 						`All rules are invalid: spec.rules[0].filters[0].type: Unsupported value: ` +
-							`"RequestMirror": supported values: "ResponseHeaderModifier", ` +
-							`"RequestHeaderModifier", "ExtensionRef"`,
+							`"InvalidFilter": supported values: "ResponseHeaderModifier", ` +
+							`"RequestHeaderModifier", "RequestMirror", "ExtensionRef"`,
 					),
 				},
 				Spec: L7RouteSpec{
@@ -1088,6 +1089,150 @@ func TestBuildGRPCRoute(t *testing.T) {
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
 	}
+}
+
+func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
+	t.Parallel()
+	gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+	// Create a route with a request mirror filter and another random filter
+	mirrorFilter := v1.GRPCRouteFilter{
+		Type: v1.GRPCRouteFilterRequestMirror,
+		RequestMirror: &v1.HTTPRequestMirrorFilter{
+			BackendRef: v1.BackendObjectReference{
+				Name: "mirror-backend",
+			},
+		},
+	}
+
+	headerFilter := v1.GRPCRouteFilter{
+		Type: v1.GRPCRouteFilterRequestHeaderModifier,
+		RequestHeaderModifier: &v1.HTTPHeaderFilter{
+			Add: []v1.HTTPHeader{
+				{Name: "X-Custom-Header", Value: "some-value"},
+			},
+		},
+	}
+
+	gr := createGRPCRoute(
+		"gr",
+		gatewayNsName.Name,
+		"example.com",
+		[]v1.GRPCRouteRule{
+			{
+				Matches: []v1.GRPCRouteMatch{
+					{
+						Method: &v1.GRPCMethodMatch{
+							Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
+							Service: helpers.GetPointer("svc1"),
+							Method:  helpers.GetPointer("method"),
+						},
+					},
+				},
+				Filters: []v1.GRPCRouteFilter{mirrorFilter, headerFilter},
+			},
+		},
+	)
+
+	// Expected mirror route
+	expectedMirrorRoute := &L7Route{
+		RouteType: RouteTypeGRPC,
+		Source: &v1.GRPCRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      mirror.RouteName("gr", "mirror-backend", nil, 0),
+			},
+			Spec: v1.GRPCRouteSpec{
+				CommonRouteSpec: gr.Spec.CommonRouteSpec,
+				Hostnames:       gr.Spec.Hostnames,
+				Rules: []v1.GRPCRouteRule{
+					{
+						Matches: []v1.GRPCRouteMatch{
+							{
+								Method: &v1.GRPCMethodMatch{
+									Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
+									Service: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+								},
+							},
+						},
+						Filters: []v1.GRPCRouteFilter{headerFilter},
+						BackendRefs: []v1.GRPCBackendRef{
+							{
+								BackendRef: v1.BackendRef{
+									BackendObjectReference: v1.BackendObjectReference{
+										Name: "mirror-backend",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		ParentRefs: []ParentRef{
+			{
+				Idx:         0,
+				Gateway:     gatewayNsName,
+				SectionName: gr.Spec.ParentRefs[0].SectionName,
+			},
+		},
+		Valid:      true,
+		Attachable: true,
+		Spec: L7RouteSpec{
+			Hostnames: gr.Spec.Hostnames,
+			Rules: []RouteRule{
+				{
+					ValidMatches: true,
+					Filters: RouteRuleFilters{
+						Valid: true,
+						Filters: []Filter{
+							{
+								RouteType:             RouteTypeGRPC,
+								FilterType:            FilterRequestHeaderModifier,
+								RequestHeaderModifier: headerFilter.RequestHeaderModifier,
+							},
+						},
+					},
+					Matches: []v1.HTTPRouteMatch{
+						{
+							Path: &v1.HTTPPathMatch{
+								Type:  helpers.GetPointer(v1.PathMatchExact),
+								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+							},
+							Headers: []v1.HTTPHeaderMatch{},
+						},
+					},
+					RouteBackendRefs: []RouteBackendRef{
+						{
+							BackendRef: v1.BackendRef{
+								BackendObjectReference: v1.BackendObjectReference{
+									Name: "mirror-backend",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	gatewayNsNames := []types.NamespacedName{gatewayNsName}
+	snippetsFilters := map[types.NamespacedName]*SnippetsFilter{}
+
+	g := NewWithT(t)
+
+	routes := map[RouteKey]*L7Route{}
+	l7route := buildGRPCRoute(validator, gr, gatewayNsNames, false, snippetsFilters)
+	g.Expect(l7route).NotTo(BeNil())
+
+	buildGRPCMirrorRoutes(routes, l7route, gr, gatewayNsNames, snippetsFilters, false)
+
+	obj, ok := expectedMirrorRoute.Source.(*v1.GRPCRoute)
+	g.Expect(ok).To(BeTrue())
+	mirrorRouteKey := CreateRouteKey(obj)
+	g.Expect(routes).To(HaveKey(mirrorRouteKey))
+	g.Expect(helpers.Diff(expectedMirrorRoute, routes[mirrorRouteKey])).To(BeEmpty())
 }
 
 func TestConvertGRPCMatches(t *testing.T) {

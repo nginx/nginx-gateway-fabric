@@ -7,7 +7,9 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/mirror"
 )
 
 func convertMatch(m v1.HTTPRouteMatch) Match {
@@ -58,6 +60,25 @@ func convertHTTPURLRewriteFilter(filter *v1.HTTPURLRewriteFilter) *HTTPURLRewrit
 		Hostname: (*string)(filter.Hostname),
 		Path:     convertPathModifier(filter.Path),
 	}
+}
+
+func convertHTTPRequestMirrorFilter(filter *v1.HTTPRequestMirrorFilter, ruleIdx int) *HTTPRequestMirrorFilter {
+	if filter.BackendRef.Name == "" {
+		return &HTTPRequestMirrorFilter{}
+	}
+
+	result := &HTTPRequestMirrorFilter{
+		Name: helpers.GetPointer(string(filter.BackendRef.Name)),
+	}
+
+	namespace := (*string)(filter.BackendRef.Namespace)
+	if namespace != nil && len(*namespace) > 0 {
+		result.Namespace = namespace
+	}
+
+	result.Target = mirror.BackendPath(ruleIdx, namespace, *result.Name)
+
+	return result
 }
 
 func convertHTTPHeaderFilter(filter *v1.HTTPHeaderFilter) *HTTPHeaderFilter {

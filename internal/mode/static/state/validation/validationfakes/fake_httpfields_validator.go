@@ -8,6 +8,16 @@ import (
 )
 
 type FakeHTTPFieldsValidator struct {
+	SkipValidationStub        func() bool
+	skipValidationMutex       sync.RWMutex
+	skipValidationArgsForCall []struct {
+	}
+	skipValidationReturns struct {
+		result1 bool
+	}
+	skipValidationReturnsOnCall map[int]struct {
+		result1 bool
+	}
 	ValidateFilterHeaderNameStub        func(string) error
 	validateFilterHeaderNameMutex       sync.RWMutex
 	validateFilterHeaderNameArgsForCall []struct {
@@ -159,6 +169,59 @@ type FakeHTTPFieldsValidator struct {
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+func (fake *FakeHTTPFieldsValidator) SkipValidation() bool {
+	fake.skipValidationMutex.Lock()
+	ret, specificReturn := fake.skipValidationReturnsOnCall[len(fake.skipValidationArgsForCall)]
+	fake.skipValidationArgsForCall = append(fake.skipValidationArgsForCall, struct {
+	}{})
+	stub := fake.SkipValidationStub
+	fakeReturns := fake.skipValidationReturns
+	fake.recordInvocation("SkipValidation", []interface{}{})
+	fake.skipValidationMutex.Unlock()
+	if stub != nil {
+		return stub()
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeHTTPFieldsValidator) SkipValidationCallCount() int {
+	fake.skipValidationMutex.RLock()
+	defer fake.skipValidationMutex.RUnlock()
+	return len(fake.skipValidationArgsForCall)
+}
+
+func (fake *FakeHTTPFieldsValidator) SkipValidationCalls(stub func() bool) {
+	fake.skipValidationMutex.Lock()
+	defer fake.skipValidationMutex.Unlock()
+	fake.SkipValidationStub = stub
+}
+
+func (fake *FakeHTTPFieldsValidator) SkipValidationReturns(result1 bool) {
+	fake.skipValidationMutex.Lock()
+	defer fake.skipValidationMutex.Unlock()
+	fake.SkipValidationStub = nil
+	fake.skipValidationReturns = struct {
+		result1 bool
+	}{result1}
+}
+
+func (fake *FakeHTTPFieldsValidator) SkipValidationReturnsOnCall(i int, result1 bool) {
+	fake.skipValidationMutex.Lock()
+	defer fake.skipValidationMutex.Unlock()
+	fake.SkipValidationStub = nil
+	if fake.skipValidationReturnsOnCall == nil {
+		fake.skipValidationReturnsOnCall = make(map[int]struct {
+			result1 bool
+		})
+	}
+	fake.skipValidationReturnsOnCall[i] = struct {
+		result1 bool
+	}{result1}
 }
 
 func (fake *FakeHTTPFieldsValidator) ValidateFilterHeaderName(arg1 string) error {
@@ -966,6 +1029,8 @@ func (fake *FakeHTTPFieldsValidator) ValidateRedirectStatusCodeReturnsOnCall(i i
 func (fake *FakeHTTPFieldsValidator) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
+	fake.skipValidationMutex.RLock()
+	defer fake.skipValidationMutex.RUnlock()
 	fake.validateFilterHeaderNameMutex.RLock()
 	defer fake.validateFilterHeaderNameMutex.RUnlock()
 	fake.validateFilterHeaderValueMutex.RLock()
