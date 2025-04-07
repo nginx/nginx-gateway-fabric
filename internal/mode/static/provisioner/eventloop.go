@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -31,6 +32,7 @@ func newEventLoop(
 	dockerSecrets []string,
 	agentTLSSecret string,
 	usageConfig *config.UsageReportConfig,
+	isOpenshift bool,
 ) (*events.EventLoop, error) {
 	nginxResourceLabelPredicate := predicate.NginxLabelPredicate(selector)
 
@@ -50,11 +52,12 @@ func newEventLoop(
 		}
 	}
 
-	controllerRegCfgs := []struct {
+	type ctlrCfg struct {
 		objectType ngftypes.ObjectType
-		name       string
 		options    []controller.Option
-	}{
+	}
+
+	controllerRegCfgs := []ctlrCfg{
 		{
 			objectType: &gatewayv1.Gateway{},
 		},
@@ -118,6 +121,33 @@ func newEventLoop(
 		},
 	}
 
+	if isOpenshift {
+		controllerRegCfgs = append(controllerRegCfgs,
+			ctlrCfg{
+				objectType: &rbacv1.Role{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(
+						k8spredicate.And(
+							k8spredicate.GenerationChangedPredicate{},
+							nginxResourceLabelPredicate,
+						),
+					),
+				},
+			},
+			ctlrCfg{
+				objectType: &rbacv1.RoleBinding{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(
+						k8spredicate.And(
+							k8spredicate.GenerationChangedPredicate{},
+							nginxResourceLabelPredicate,
+						),
+					),
+				},
+			},
+		)
+	}
+
 	eventCh := make(chan any)
 	for _, regCfg := range controllerRegCfgs {
 		gvk, err := apiutil.GVKForObject(regCfg.objectType, mgr.GetScheme())
@@ -137,19 +167,28 @@ func newEventLoop(
 		}
 	}
 
+	objectList := []client.ObjectList{
+		// GatewayList MUST be first in this list to ensure that we see it before attempting
+		// to provision or deprovision any nginx resources.
+		&gatewayv1.GatewayList{},
+		&appsv1.DeploymentList{},
+		&corev1.ServiceList{},
+		&corev1.ServiceAccountList{},
+		&corev1.ConfigMapList{},
+		&corev1.SecretList{},
+	}
+
+	if isOpenshift {
+		objectList = append(objectList,
+			&rbacv1.RoleList{},
+			&rbacv1.RoleBindingList{},
+		)
+	}
+
 	firstBatchPreparer := events.NewFirstEventBatchPreparerImpl(
 		mgr.GetCache(),
 		[]client.Object{},
-		[]client.ObjectList{
-			// GatewayList MUST be first in this list to ensure that we see it before attempting
-			// to provision or deprovision any nginx resources.
-			&gatewayv1.GatewayList{},
-			&appsv1.DeploymentList{},
-			&corev1.ServiceList{},
-			&corev1.ServiceAccountList{},
-			&corev1.ConfigMapList{},
-			&corev1.SecretList{},
-		},
+		objectList,
 	)
 
 	eventLoop := events.NewEventLoop(

@@ -56,6 +56,50 @@ subjects:
   name: {{ include "nginx-gateway.fullname" . }}-cert-generator
   namespace: {{ .Release.Namespace }}
 ---
+{{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
+kind: SecurityContextConstraints
+apiVersion: security.openshift.io/v1
+metadata:
+  name: {{ include "nginx-gateway.scc-name" . }}-cert-generator
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook": pre-install
+allowPrivilegeEscalation: false
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+readOnlyRootFilesystem: true
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 101
+  uidRangeMax: 101
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1001
+    max: 1001
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 1001
+    max: 1001
+seLinuxContext:
+  type: MustRunAs
+seccompProfiles:
+- runtime/default
+users:
+- {{ printf "system:serviceaccount:%s:%s-cert-generator" .Release.Namespace (include "nginx-gateway.fullname" .) }}
+requiredDropCapabilities:
+- ALL
+volumes:
+- projected
+---
+{{- end }}
 apiVersion: batch/v1
 kind: Job
 metadata:

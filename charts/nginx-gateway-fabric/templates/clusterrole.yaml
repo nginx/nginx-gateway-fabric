@@ -150,8 +150,19 @@ rules:
   - securitycontextconstraints
   resourceNames:
   - {{ include "nginx-gateway.scc-name" . }}
+  - {{ include "nginx-gateway.scc-name" . }}-nginx
   verbs:
   - use
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  verbs:
   - create
+  - update
+  - delete
+  - list
+  - get
   - watch
 {{- end }}
