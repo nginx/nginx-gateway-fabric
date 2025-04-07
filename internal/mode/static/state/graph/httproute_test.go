@@ -131,6 +131,18 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		},
 	}
 
+	gateways := map[types.NamespacedName]*Gateway{
+		{}: {
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "gateway",
+				},
+			},
+			Valid: true,
+		},
+	}
+
 	tests := []struct {
 		expected  map[RouteKey]*L7Route
 		name      string
@@ -220,7 +232,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 				hrRoutes,
 				map[types.NamespacedName]*gatewayv1.GRPCRoute{},
 				test.gwNsNames,
-				nil,
+				gateways,
 				snippetsFilters,
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())

@@ -46,8 +46,6 @@ type Config struct {
 	MetricsConfig MetricsConfig
 	// HealthConfig specifies the health probe config.
 	HealthConfig HealthConfig
-	// UpdateGatewayClassStatus enables updating the status of the GatewayClass resource.
-	UpdateGatewayClassStatus bool
 	// Plus indicates whether NGINX Plus is being used.
 	Plus bool
 	// ExperimentalFeatures indicates if experimental features are enabled.

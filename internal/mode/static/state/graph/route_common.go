@@ -187,26 +187,35 @@ func buildL4RoutesForGateways(
 	tlsRoutes map[types.NamespacedName]*v1alpha.TLSRoute,
 	gatewayNsNames []types.NamespacedName,
 	services map[types.NamespacedName]*apiv1.Service,
-	npCfg *EffectiveNginxProxy,
+	gws map[types.NamespacedName]*Gateway,
 	resolver *referenceGrantResolver,
 ) map[L4RouteKey]*L4Route {
-	if len(gatewayNsNames) == 0 {
+	if len(gatewayNsNames) == 0 || len(gws) == 0 {
 		return nil
 	}
 
 	routes := make(map[L4RouteKey]*L4Route)
-	for _, route := range tlsRoutes {
-		r := buildTLSRoute(
-			route,
-			gatewayNsNames,
-			services,
-			npCfg,
-			resolver.refAllowedFrom(fromTLSRoute(route.Namespace)),
-		)
-		if r != nil {
-			routes[CreateRouteKeyL4(route)] = r
+
+	for _, gw := range gws {
+		if gw == nil {
+			continue
+		}
+
+		npCfg := gw.EffectiveNginxProxy
+		for _, route := range tlsRoutes {
+			r := buildTLSRoute(
+				route,
+				gatewayNsNames,
+				services,
+				npCfg,
+				resolver.refAllowedFrom(fromTLSRoute(route.Namespace)),
+			)
+			if r != nil {
+				routes[CreateRouteKeyL4(route)] = r
+			}
 		}
 	}
+
 	return routes
 }
 
@@ -215,29 +224,34 @@ func buildRoutesForGateways(
 	validator validation.HTTPFieldsValidator,
 	httpRoutes map[types.NamespacedName]*v1.HTTPRoute,
 	grpcRoutes map[types.NamespacedName]*v1.GRPCRoute,
-	gatewayNsNames []types.NamespacedName,
-	effectiveNginxProxy *EffectiveNginxProxy,
+	processedGwsNsNames []types.NamespacedName,
+	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 ) map[RouteKey]*L7Route {
-	if len(gatewayNsNames) == 0 {
+	if len(processedGwsNsNames) == 0 || len(gateways) == 0 {
 		return nil
 	}
 
 	routes := make(map[RouteKey]*L7Route)
-
-	http2disabled := isHTTP2Disabled(effectiveNginxProxy)
-
-	for _, route := range httpRoutes {
-		r := buildHTTPRoute(validator, route, gatewayNsNames, snippetsFilters)
-		if r != nil {
-			routes[CreateRouteKey(route)] = r
+	for _, gw := range gateways {
+		if gw == nil {
+			continue
 		}
-	}
 
-	for _, route := range grpcRoutes {
-		r := buildGRPCRoute(validator, route, gatewayNsNames, http2disabled, snippetsFilters)
-		if r != nil {
-			routes[CreateRouteKey(route)] = r
+		http2disabled := isHTTP2Disabled(gw.EffectiveNginxProxy)
+
+		for _, route := range httpRoutes {
+			r := buildHTTPRoute(validator, route, processedGwsNsNames, snippetsFilters)
+			if r != nil {
+				routes[CreateRouteKey(route)] = r
+			}
+		}
+
+		for _, route := range grpcRoutes {
+			r := buildGRPCRoute(validator, route, processedGwsNsNames, http2disabled, snippetsFilters)
+			if r != nil {
+				routes[CreateRouteKey(route)] = r
+			}
 		}
 	}
 
@@ -331,58 +345,68 @@ func findGatewayForParentRef(
 func bindRoutesToListeners(
 	l7Routes map[RouteKey]*L7Route,
 	l4Routes map[L4RouteKey]*L4Route,
-	gw *Gateway,
+	gws map[types.NamespacedName]*Gateway,
 	namespaces map[types.NamespacedName]*apiv1.Namespace,
 ) {
-	if gw == nil {
+	if len(gws) == 0 {
 		return
 	}
 
-	for _, r := range l7Routes {
-		bindL7RouteToListeners(r, gw, namespaces)
+	for _, gw := range gws {
+		for _, r := range l7Routes {
+			bindL7RouteToListeners(r, gw, namespaces)
+		}
+
+		routes := make([]*L7Route, 0, len(l7Routes))
+		for _, r := range l7Routes {
+			routes = append(routes, r)
+		}
+
+		listenerMap := getListenerHostPortMap(gw.Listeners, gw)
+		isolateL7RouteListeners(routes, listenerMap)
+
+		l4RouteSlice := make([]*L4Route, 0, len(l4Routes))
+		for _, r := range l4Routes {
+			l4RouteSlice = append(l4RouteSlice, r)
+		}
+
+		// Sort the slice by timestamp and name so that we process the routes in the priority order
+		sort.Slice(l4RouteSlice, func(i, j int) bool {
+			return ngfSort.LessClientObject(l4RouteSlice[i].Source, l4RouteSlice[j].Source)
+		})
+
+		// portHostnamesMap exists to detect duplicate hostnames on the same port
+		portHostnamesMap := make(map[string]struct{})
+
+		for _, r := range l4RouteSlice {
+			bindL4RouteToListeners(r, gw, namespaces, portHostnamesMap)
+		}
+
+		isolateL4RouteListeners(l4RouteSlice, listenerMap)
 	}
-
-	routes := make([]*L7Route, 0, len(l7Routes))
-	for _, r := range l7Routes {
-		routes = append(routes, r)
-	}
-
-	listenerMap := getListenerHostPortMap(gw.Listeners)
-	isolateL7RouteListeners(routes, listenerMap)
-
-	l4RouteSlice := make([]*L4Route, 0, len(l4Routes))
-	for _, r := range l4Routes {
-		l4RouteSlice = append(l4RouteSlice, r)
-	}
-
-	// Sort the slice by timestamp and name so that we process the routes in the priority order
-	sort.Slice(l4RouteSlice, func(i, j int) bool {
-		return ngfSort.LessClientObject(l4RouteSlice[i].Source, l4RouteSlice[j].Source)
-	})
-
-	// portHostnamesMap exists to detect duplicate hostnames on the same port
-	portHostnamesMap := make(map[string]struct{})
-
-	for _, r := range l4RouteSlice {
-		bindL4RouteToListeners(r, gw, namespaces, portHostnamesMap)
-	}
-
-	isolateL4RouteListeners(l4RouteSlice, listenerMap)
 }
 
 type hostPort struct {
-	hostname string
-	port     v1.PortNumber
+	gwNsNames types.NamespacedName
+	hostname  string
+	port      v1.PortNumber
 }
 
-func getListenerHostPortMap(listeners []*Listener) map[string]hostPort {
+func getListenerHostPortMap(listeners []*Listener, gw *Gateway) map[string]hostPort {
 	listenerHostPortMap := make(map[string]hostPort, len(listeners))
+	gwNsNames := types.NamespacedName{
+		Name:      gw.Source.Name,
+		Namespace: gw.Source.Namespace,
+	}
 	for _, l := range listeners {
-		listenerHostPortMap[l.Name] = hostPort{
-			hostname: getHostname(l.Source.Hostname),
-			port:     l.Source.Port,
+		key := fmt.Sprintf("%s,%s,%s", l.Name, gw.Source.Name, gw.Source.Namespace)
+		listenerHostPortMap[key] = hostPort{
+			hostname:  getHostname(l.Source.Hostname),
+			port:      l.Source.Port,
+			gwNsNames: gwNsNames,
 		}
 	}
+
 	return listenerHostPortMap
 }
 
@@ -412,6 +436,10 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 			continue
 		}
 
+		if ref.Attachment == nil {
+			continue
+		}
+
 		acceptedHostnames := ref.Attachment.AcceptedHostnames
 		hostnamesToRemoves := make(map[string]struct{})
 		for listenerName, hostnames := range acceptedHostnames {
@@ -420,13 +448,22 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 			}
 			for _, h := range hostnames {
 				for lName, lHostPort := range listenerHostnameMap {
+					// skip comparison if not part of the same gateway
+					if lHostPort.gwNsNames != ref.Gateway {
+						continue
+					}
+
 					// skip comparison if it is a catch all listener block
 					if lHostPort.hostname == "" {
 						continue
 					}
 
-					// for L7Routes, we compare the hostname, port and listener name combination
+					// for L7Routes, we compare the hostname, port and listenerName combination
 					// to identify if hostname needs to be isolated.
+					splitLName := strings.Split(lName, ",")
+					if len(splitLName) > 1 {
+						lName = splitLName[0]
+					}
 					if h == lHostPort.hostname && listenerName != lName {
 						// for L4Routes, we only compare the hostname and listener name combination
 						// because we do not allow l4Routes to attach to the same listener
@@ -487,16 +524,7 @@ func validateParentRef(
 		return attachment, attachableListeners
 	}
 
-	// Case 3: the parentRef references an ignored Gateway resource.
-
-	referencesWinningGw := ref.Gateway.Namespace == gw.Source.Namespace && ref.Gateway.Name == gw.Source.Name
-
-	if !referencesWinningGw {
-		attachment.FailedCondition = staticConds.NewRouteNotAcceptedGatewayIgnored()
-		return attachment, attachableListeners
-	}
-
-	// Case 4: Attachment is not possible because Gateway is invalid
+	// Case 3: Attachment is not possible because Gateway is invalid
 
 	if !gw.Valid {
 		attachment.FailedCondition = staticConds.NewRouteInvalidGateway()
@@ -518,13 +546,21 @@ func bindL4RouteToListeners(
 	for i := range route.ParentRefs {
 		ref := &(route.ParentRefs)[i]
 
+		gwNsName := types.NamespacedName{
+			Name:      gw.Source.Name,
+			Namespace: gw.Source.Namespace,
+		}
+
+		if ref.Gateway != gwNsName {
+			continue
+		}
+
 		attachment, attachableListeners := validateParentRef(ref, gw)
 
 		if attachment.FailedCondition != (conditions.Condition{}) {
 			continue
 		}
 
-		// Winning Gateway
 		// Try to attach Route to all matching listeners
 
 		cond, attached := tryToAttachL4RouteToListeners(
@@ -671,13 +707,21 @@ func bindL7RouteToListeners(
 	for i := range route.ParentRefs {
 		ref := &(route.ParentRefs)[i]
 
+		gwNsName := types.NamespacedName{
+			Name:      gw.Source.Name,
+			Namespace: gw.Source.Namespace,
+		}
+
+		if ref.Gateway != gwNsName {
+			continue
+		}
+
 		attachment, attachableListeners := validateParentRef(ref, gw)
 
 		if attachment.FailedCondition != (conditions.Condition{}) {
 			continue
 		}
 
-		// Winning Gateway
 		// Try to attach Route to all matching listeners
 
 		cond, attached := tryToAttachL7RouteToListeners(

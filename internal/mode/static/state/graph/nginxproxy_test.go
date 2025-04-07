@@ -481,16 +481,18 @@ func TestProcessNginxProxies(t *testing.T) {
 		}
 	}
 
-	gateway := &v1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "gw-ns",
-		},
-		Spec: v1.GatewaySpec{
-			Infrastructure: &v1.GatewayInfrastructure{
-				ParametersRef: &v1.LocalParametersReference{
-					Group: ngfAPIv1alpha2.GroupName,
-					Kind:  kinds.NginxProxy,
-					Name:  gatewayNpName.Name,
+	gateway := map[types.NamespacedName]*v1.Gateway{
+		gatewayNpName: {
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "gw-ns",
+			},
+			Spec: v1.GatewaySpec{
+				Infrastructure: &v1.GatewayInfrastructure{
+					ParametersRef: &v1.LocalParametersReference{
+						Group: ngfAPIv1alpha2.GroupName,
+						Kind:  kinds.NginxProxy,
+						Name:  gatewayNpName.Name,
+					},
 				},
 			},
 		},
@@ -551,7 +553,7 @@ func TestProcessNginxProxies(t *testing.T) {
 		validator validation.GenericValidator
 		nps       map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy
 		gc        *v1.GatewayClass
-		gw        *v1.Gateway
+		gws       map[types.NamespacedName]*v1.Gateway
 		expResult map[types.NamespacedName]*NginxProxy
 		name      string
 	}{
@@ -559,7 +561,7 @@ func TestProcessNginxProxies(t *testing.T) {
 			name:      "no nginx proxies",
 			nps:       nil,
 			gc:        gatewayClass,
-			gw:        gateway,
+			gws:       gateway,
 			validator: createValidValidator(),
 			expResult: nil,
 		},
@@ -570,7 +572,7 @@ func TestProcessNginxProxies(t *testing.T) {
 				gatewayNpName:      getTestNp(gatewayNpName),
 			},
 			gc:        gatewayClassRefMissingNs,
-			gw:        gateway,
+			gws:       gateway,
 			validator: createValidValidator(),
 			expResult: map[types.NamespacedName]*NginxProxy{
 				gatewayNpName: {
@@ -583,7 +585,7 @@ func TestProcessNginxProxies(t *testing.T) {
 			name:      "normal case; both nginx proxies are valid",
 			nps:       getNpMap(),
 			gc:        gatewayClass,
-			gw:        gateway,
+			gws:       gateway,
 			validator: createValidValidator(),
 			expResult: getExpResult(true),
 		},
@@ -591,7 +593,7 @@ func TestProcessNginxProxies(t *testing.T) {
 			name:      "normal case; both nginx proxies are invalid",
 			nps:       getNpMap(),
 			gc:        gatewayClass,
-			gw:        gateway,
+			gws:       gateway,
 			validator: createInvalidValidator(),
 			expResult: getExpResult(false),
 		},
@@ -606,7 +608,7 @@ func TestProcessNginxProxies(t *testing.T) {
 				test.nps,
 				test.validator,
 				test.gc,
-				test.gw,
+				test.gws,
 			)
 
 			g.Expect(helpers.Diff(test.expResult, result)).To(BeEmpty())

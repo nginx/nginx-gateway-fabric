@@ -63,7 +63,6 @@ func createControllerCommand() *cobra.Command {
 		configFlag                     = "config"
 		serviceFlag                    = "service"
 		agentTLSSecretFlag             = "agent-tls-secret"
-		updateGCStatusFlag             = "update-gatewayclass-status"
 		metricsDisableFlag             = "metrics-disable"
 		metricsSecureFlag              = "metrics-secure-serving"
 		metricsPortFlag                = "metrics-port"
@@ -94,9 +93,8 @@ func createControllerCommand() *cobra.Command {
 			validator: validateResourceName,
 		}
 
-		updateGCStatus bool
-		gateway        = namespacedNameValue{}
-		configName     = stringValidatingValue{
+		gateway    = namespacedNameValue{}
+		configName = stringValidatingValue{
 			validator: validateResourceName,
 		}
 		serviceName = stringValidatingValue{
@@ -229,14 +227,13 @@ func createControllerCommand() *cobra.Command {
 			}
 
 			conf := config.Config{
-				GatewayCtlrName:          gatewayCtlrName.value,
-				ConfigName:               configName.String(),
-				Logger:                   logger,
-				AtomicLevel:              atom,
-				GatewayClassName:         gatewayClassName.value,
-				GatewayNsName:            gwNsName,
-				UpdateGatewayClassStatus: updateGCStatus,
-				GatewayPodConfig:         podConfig,
+				GatewayCtlrName:  gatewayCtlrName.value,
+				ConfigName:       configName.String(),
+				Logger:           logger,
+				AtomicLevel:      atom,
+				GatewayClassName: gatewayClassName.value,
+				GatewayNsName:    gwNsName,
+				GatewayPodConfig: podConfig,
 				HealthConfig: config.HealthConfig{
 					Enabled: !disableHealth,
 					Port:    healthListenPort.value,
@@ -324,13 +321,6 @@ func createControllerCommand() *cobra.Command {
 		`The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely `+
 			`communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the `+
 			`NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
-	)
-
-	cmd.Flags().BoolVar(
-		&updateGCStatus,
-		updateGCStatusFlag,
-		true,
-		"Update the status of the GatewayClass resource.",
 	)
 
 	cmd.Flags().BoolVar(
