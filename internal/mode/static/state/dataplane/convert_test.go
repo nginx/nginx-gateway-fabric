@@ -316,6 +316,57 @@ func TestConvertHTTPURLRewriteFilter(t *testing.T) {
 	}
 }
 
+func TestConvertHTTPMirrorFilter(t *testing.T) {
+	tests := []struct {
+		filter   *v1.HTTPRequestMirrorFilter
+		expected *HTTPRequestMirrorFilter
+		name     string
+	}{
+		{
+			filter:   &v1.HTTPRequestMirrorFilter{},
+			expected: &HTTPRequestMirrorFilter{},
+			name:     "empty",
+		},
+		{
+			filter: &v1.HTTPRequestMirrorFilter{
+				BackendRef: v1.BackendObjectReference{
+					Name:      "backend",
+					Namespace: nil,
+				},
+			},
+			expected: &HTTPRequestMirrorFilter{
+				Name:      helpers.GetPointer("backend"),
+				Namespace: nil,
+				Target:    helpers.GetPointer("/_ngf-internal-mirror-backend-0"),
+			},
+			name: "missing namespace",
+		},
+		{
+			filter: &v1.HTTPRequestMirrorFilter{
+				BackendRef: v1.BackendObjectReference{
+					Name:      "backend",
+					Namespace: helpers.GetPointer[v1.Namespace]("namespace"),
+				},
+			},
+			expected: &HTTPRequestMirrorFilter{
+				Name:      helpers.GetPointer("backend"),
+				Namespace: helpers.GetPointer("namespace"),
+				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace-backend-0"),
+			},
+			name: "full",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			result := convertHTTPRequestMirrorFilter(test.filter, 0)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestConvertHTTPHeaderFilter(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

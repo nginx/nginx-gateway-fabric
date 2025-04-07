@@ -176,7 +176,7 @@ func TestValidateBackendRef(t *testing.T) {
 			refGrantResolver: alwaysFalseRefGrantResolver,
 			expectedValid:    false,
 			expectedCondition: staticConds.NewRouteBackendRefRefNotPermitted(
-				"Backend ref to Service invalid/service1 not permitted by any ReferenceGrant",
+				"test.namespace: Forbidden: Backend ref to Service invalid/service1 not permitted by any ReferenceGrant",
 			),
 		},
 		{
@@ -1024,14 +1024,15 @@ func TestCreateBackend(t *testing.T) {
 
 	refPath := field.NewPath("test")
 
+	alwaysTrueRefGrantResolver := func(_ toResource) bool { return true }
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			alwaysTrueRefGrantResolver := func(_ toResource) bool { return true }
-
 			rbr := RouteBackendRef{
+				nil,
 				test.ref.BackendRef,
 				[]any{},
 			}
@@ -1052,6 +1053,27 @@ func TestCreateBackend(t *testing.T) {
 			g.Expect(servicePortRef).To(Equal(test.expectedServicePortReference))
 		})
 	}
+
+	// test mirror backend case
+	g := NewWithT(t)
+	ref := RouteBackendRef{
+		helpers.GetPointer(0), // mirrorFilterIdx
+		getNormalRef(),
+		[]any{},
+	}
+
+	backend, conds := createBackendRef(
+		ref,
+		"test-ns",
+		alwaysTrueRefGrantResolver,
+		services,
+		refPath,
+		policies,
+		nil,
+	)
+
+	g.Expect(conds).To(BeNil())
+	g.Expect(backend.IsMirrorBackend).To(BeTrue())
 }
 
 func TestGetServicePort(t *testing.T) {

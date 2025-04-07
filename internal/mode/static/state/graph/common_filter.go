@@ -160,6 +160,7 @@ func processRouteRuleFilters(
 var supportedGRPCFilterTypes = []FilterType{
 	FilterResponseHeaderModifier,
 	FilterRequestHeaderModifier,
+	FilterRequestMirror,
 	FilterExtensionRef,
 }
 
@@ -169,6 +170,7 @@ var supportedHTTPFilterTypes = []FilterType{
 	FilterExtensionRef,
 	FilterRequestRedirect,
 	FilterURLRewrite,
+	FilterRequestMirror,
 }
 
 func validateFilterType(filter Filter, filterPath *field.Path) *field.Error {
@@ -200,6 +202,8 @@ func validateFilter(
 		return validateFilterRedirect(validator, filter.RequestRedirect, filterPath)
 	case FilterURLRewrite:
 		return validateFilterRewrite(validator, filter.URLRewrite, filterPath)
+	case FilterRequestMirror:
+		return validateFilterMirror(filter.RequestMirror, filterPath)
 	case FilterRequestHeaderModifier:
 		return validateFilterHeaderModifier(
 			validator,
@@ -217,6 +221,16 @@ func validateFilter(
 	default:
 		panic(fmt.Sprintf("unexpected filter type %v", filter.FilterType))
 	}
+}
+
+func validateFilterMirror(mirror *v1.HTTPRequestMirrorFilter, filterPath *field.Path) field.ErrorList {
+	mirrorPath := filterPath.Child("requestMirror")
+
+	if mirror == nil {
+		return field.ErrorList{field.Required(mirrorPath, "cannot be nil")}
+	}
+
+	return nil
 }
 
 func validateFilterHeaderModifier(

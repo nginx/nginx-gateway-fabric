@@ -668,6 +668,52 @@ func TestBuildConfiguration(t *testing.T) {
 
 	l7HTTPSRouteWithPolicy.Policies = []*graph.Policy{hrPolicy2, invalidPolicy}
 
+	hrWithMirror, expHRWithMirrorGroups, routeHRWithMirror := createTestResources(
+		"hr-with-mirror",
+		"foo.example.com",
+		"listener-80-1",
+		pathAndType{
+			path:     "/mirror",
+			pathType: prefix,
+		},
+	)
+
+	mirrorUpstreamName := "test_mirror-backend_80"
+	mirrorUpstream := Upstream{
+		Name: mirrorUpstreamName,
+		Endpoints: []resolver.Endpoint{
+			{
+				Address: "10.0.0.1",
+				Port:    8080,
+			},
+		},
+	}
+
+	fakeResolver.ResolveStub = func(
+		_ context.Context,
+		nsName types.NamespacedName,
+		_ apiv1.ServicePort,
+		_ []discoveryV1.AddressType,
+	) ([]resolver.Endpoint, error) {
+		if nsName.Name == "mirror-backend" {
+			return mirrorUpstream.Endpoints, nil
+		}
+		return fooEndpoints, nil
+	}
+
+	addFilters(routeHRWithMirror, []graph.Filter{
+		{
+			FilterType: graph.FilterRequestMirror,
+			RequestMirror: &v1.HTTPRequestMirrorFilter{
+				BackendRef: v1.BackendObjectReference{
+					Group: helpers.GetPointer(v1.Group("core")),
+					Kind:  helpers.GetPointer(v1.Kind("Service")),
+					Name:  v1.ObjectName("mirror-backend"),
+				},
+			},
+		},
+	})
+
 	secret1NsName := types.NamespacedName{Namespace: "test", Name: "secret-1"}
 	secret1 := &graph.Secret{
 		Source: &apiv1.Secret{
@@ -2059,6 +2105,56 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				g.Gateway.Listeners = append(g.Gateway.Listeners, &graph.Listener{
+					Name:   "listener-80-1",
+					Source: listener80,
+					Valid:  true,
+					Routes: map[graph.RouteKey]*graph.L7Route{
+						graph.CreateRouteKey(hrWithMirror): routeHRWithMirror,
+					},
+				})
+				g.Routes = map[graph.RouteKey]*graph.L7Route{
+					graph.CreateRouteKey(hrWithMirror): routeHRWithMirror,
+				}
+				return g
+			}),
+			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.HTTPServers = append(conf.HTTPServers, []VirtualServer{
+					{
+						Hostname: "foo.example.com",
+						PathRules: []PathRule{
+							{
+								Path:     "/mirror",
+								PathType: PathTypePrefix,
+								MatchRules: []MatchRule{
+									{
+										BackendGroup: expHRWithMirrorGroups[0],
+										Source:       &hrWithMirror.ObjectMeta,
+										Filters: HTTPFilters{
+											RequestMirrors: []*HTTPRequestMirrorFilter{
+												{
+													Name:   helpers.GetPointer("mirror-backend"),
+													Target: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Port: 80,
+					},
+				}...)
+				conf.SSLServers = []VirtualServer{}
+				conf.Upstreams = []Upstream{fooUpstream}
+				conf.BackendGroups = []BackendGroup{expHRWithMirrorGroups[0]}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
+				return conf
+			}),
+			msg: "one http listener with one route containing a request mirror filter",
+		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
 				g.Gateway.Source.ObjectMeta = metav1.ObjectMeta{
 					Name:      "gw",
 					Namespace: "ns",
@@ -2562,6 +2658,22 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 	}
 }
 
+func TestNewBackendGroup_Mirror(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	backendRef := graph.BackendRef{
+		SvcNsName:       types.NamespacedName{Name: "mirror-backend", Namespace: "test"},
+		ServicePort:     apiv1.ServicePort{Port: 80},
+		Valid:           true,
+		IsMirrorBackend: true,
+	}
+
+	group := newBackendGroup([]graph.BackendRef{backendRef}, types.NamespacedName{}, 0)
+
+	g.Expect(group.Backends).To(BeEmpty())
+}
+
 func TestGetPath(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -2628,6 +2740,26 @@ func TestCreateFilters(t *testing.T) {
 			Hostname: helpers.GetPointer[v1.PreciseHostname]("bar.example.com"),
 		},
 	}
+	mirror1 := graph.Filter{
+		FilterType: graph.FilterRequestMirror,
+		RequestMirror: &v1.HTTPRequestMirrorFilter{
+			BackendRef: v1.BackendObjectReference{
+				Group: helpers.GetPointer(v1.Group("core")),
+				Kind:  helpers.GetPointer(v1.Kind("Service")),
+				Name:  v1.ObjectName("mirror-backend"),
+			},
+		},
+	}
+	mirror2 := graph.Filter{
+		FilterType: graph.FilterRequestMirror,
+		RequestMirror: &v1.HTTPRequestMirrorFilter{
+			BackendRef: v1.BackendObjectReference{
+				Group: helpers.GetPointer(v1.Group("core")),
+				Kind:  helpers.GetPointer(v1.Kind("Service")),
+				Name:  v1.ObjectName("mirror-backend2"),
+			},
+		},
+	}
 	requestHeaderModifiers1 := graph.Filter{
 		FilterType: graph.FilterRequestHeaderModifier,
 		RequestHeaderModifier: &v1.HTTPHeaderFilter{
@@ -2681,6 +2813,16 @@ func TestCreateFilters(t *testing.T) {
 	expectedRewrite1 := HTTPURLRewriteFilter{
 		Hostname: helpers.GetPointer("foo.example.com"),
 	}
+
+	expectedMirror1 := HTTPRequestMirrorFilter{
+		Name:   helpers.GetPointer("mirror-backend"),
+		Target: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+	}
+	expectedMirror2 := HTTPRequestMirrorFilter{
+		Name:   helpers.GetPointer("mirror-backend2"),
+		Target: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend2-0"),
+	}
+
 	expectedHeaderModifier1 := HTTPHeaderFilter{
 		Set: []HTTPHeader{
 			{
@@ -2780,6 +2922,8 @@ func TestCreateFilters(t *testing.T) {
 				redirect2,
 				rewrite1,
 				rewrite2,
+				mirror1,
+				mirror2,
 				requestHeaderModifiers1,
 				requestHeaderModifiers2,
 				responseHeaderModifiers1,
@@ -2788,8 +2932,12 @@ func TestCreateFilters(t *testing.T) {
 				snippetsFilter2,
 			},
 			expected: HTTPFilters{
-				RequestRedirect:         &expectedRedirect1,
-				RequestURLRewrite:       &expectedRewrite1,
+				RequestRedirect:   &expectedRedirect1,
+				RequestURLRewrite: &expectedRewrite1,
+				RequestMirrors: []*HTTPRequestMirrorFilter{
+					&expectedMirror1,
+					&expectedMirror2,
+				},
 				RequestHeaderModifiers:  &expectedHeaderModifier1,
 				ResponseHeaderModifiers: &expectedresponseHeaderModifier,
 				SnippetsFilters: []SnippetsFilter{
@@ -2827,7 +2975,7 @@ func TestCreateFilters(t *testing.T) {
 					},
 				},
 			},
-			msg: "two of each filter, first value for each standard filter wins, all ext ref filters added",
+			msg: "two of each filter, first value for each standard filter wins, all mirror and ext ref filters added",
 		},
 	}
 
@@ -2835,7 +2983,7 @@ func TestCreateFilters(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := createHTTPFilters(test.filters)
+			result := createHTTPFilters(test.filters, 0)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})

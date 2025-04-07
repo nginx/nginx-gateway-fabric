@@ -345,6 +345,10 @@ func newBackendGroup(refs []graph.BackendRef, sourceNsName types.NamespacedName,
 	}
 
 	for _, ref := range refs {
+		if ref.IsMirrorBackend {
+			continue
+		}
+
 		backends = append(backends, Backend{
 			UpstreamName: ref.ServicePortReference(),
 			Weight:       ref.Weight,
@@ -506,14 +510,14 @@ func (hpr *hostPathRules) upsertRoute(
 		}
 	}
 
-	for i, rule := range route.Spec.Rules {
+	for idx, rule := range route.Spec.Rules {
 		if !rule.ValidMatches {
 			continue
 		}
 
 		var filters HTTPFilters
 		if rule.Filters.Valid {
-			filters = createHTTPFilters(rule.Filters.Filters)
+			filters = createHTTPFilters(rule.Filters.Filters, idx)
 		} else {
 			filters = HTTPFilters{
 				InvalidFilter: &InvalidHTTPFilter{},
@@ -544,7 +548,7 @@ func (hpr *hostPathRules) upsertRoute(
 
 				hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
 					Source:       objectSrc,
-					BackendGroup: newBackendGroup(rule.BackendRefs, routeNsName, i),
+					BackendGroup: newBackendGroup(rule.BackendRefs, routeNsName, idx),
 					Filters:      filters,
 					Match:        convertMatch(m),
 				})
@@ -741,7 +745,7 @@ func getPath(path *v1.HTTPPathMatch) string {
 	return *path.Value
 }
 
-func createHTTPFilters(filters []graph.Filter) HTTPFilters {
+func createHTTPFilters(filters []graph.Filter, ruleIdx int) HTTPFilters {
 	var result HTTPFilters
 
 	for _, f := range filters {
@@ -756,6 +760,11 @@ func createHTTPFilters(filters []graph.Filter) HTTPFilters {
 				// using the first filter
 				result.RequestURLRewrite = convertHTTPURLRewriteFilter(f.URLRewrite)
 			}
+		case graph.FilterRequestMirror:
+			result.RequestMirrors = append(
+				result.RequestMirrors,
+				convertHTTPRequestMirrorFilter(f.RequestMirror, ruleIdx),
+			)
 		case graph.FilterRequestHeaderModifier:
 			if result.RequestHeaderModifiers == nil {
 				// using the first filter

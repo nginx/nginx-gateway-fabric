@@ -15,4 +15,6 @@ type HTTPValidator struct {
 	HTTPPathValidator
 }
 
+func (HTTPValidator) SkipValidation() bool { return false }
+
 var _ validation.HTTPFieldsValidator = HTTPValidator{}

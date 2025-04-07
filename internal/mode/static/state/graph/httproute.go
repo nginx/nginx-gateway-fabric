@@ -9,9 +9,10 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
-
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/mirror"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
 )
 
@@ -70,6 +71,86 @@ func buildHTTPRoute(
 	return r
 }
 
+func buildHTTPMirrorRoutes(
+	routes map[RouteKey]*L7Route,
+	l7route *L7Route,
+	route *v1.HTTPRoute,
+	gatewayNsNames []types.NamespacedName,
+	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+) {
+	for idx, rule := range l7route.Spec.Rules {
+		if rule.Filters.Valid {
+			for _, filter := range rule.Filters.Filters {
+				if filter.RequestMirror == nil {
+					continue
+				}
+
+				objectMeta := route.ObjectMeta.DeepCopy()
+				backendRef := filter.RequestMirror.BackendRef
+				name := mirror.RouteName(route.GetName(), string(backendRef.Name), (*string)(backendRef.Namespace), idx)
+				objectMeta.SetName(name)
+
+				tmpMirrorRoute := &v1.HTTPRoute{
+					ObjectMeta: *objectMeta,
+					Spec: v1.HTTPRouteSpec{
+						CommonRouteSpec: route.Spec.CommonRouteSpec,
+						Hostnames:       route.Spec.Hostnames,
+						Rules:           buildHTTPMirrorRouteRule(idx, route.Spec.Rules[idx].Filters, filter),
+					},
+				}
+
+				mirrorRoute := buildHTTPRoute(
+					validation.SkipValidator{},
+					tmpMirrorRoute,
+					gatewayNsNames,
+					snippetsFilters,
+				)
+
+				if mirrorRoute != nil {
+					routes[CreateRouteKey(tmpMirrorRoute)] = mirrorRoute
+				}
+			}
+		}
+	}
+}
+
+func buildHTTPMirrorRouteRule(
+	ruleIdx int,
+	filters []v1.HTTPRouteFilter,
+	filter Filter,
+) []v1.HTTPRouteRule {
+	return []v1.HTTPRouteRule{
+		{
+			Matches: []v1.HTTPRouteMatch{
+				{
+					Path: &v1.HTTPPathMatch{
+						Type:  helpers.GetPointer(v1.PathMatchExact),
+						Value: mirror.PathWithBackendRef(ruleIdx, filter.RequestMirror.BackendRef),
+					},
+				},
+			},
+			Filters: removeHTTPMirrorFilters(filters),
+			BackendRefs: []v1.HTTPBackendRef{
+				{
+					BackendRef: v1.BackendRef{
+						BackendObjectReference: filter.RequestMirror.BackendRef,
+					},
+				},
+			},
+		},
+	}
+}
+
+func removeHTTPMirrorFilters(filters []v1.HTTPRouteFilter) []v1.HTTPRouteFilter {
+	var newFilters []v1.HTTPRouteFilter
+	for _, filter := range filters {
+		if filter.Type != v1.HTTPRouteFilterRequestMirror {
+			newFilters = append(newFilters, filter)
+		}
+	}
+	return newFilters
+}
+
 func processHTTPRouteRule(
 	specRule v1.HTTPRouteRule,
 	rulePath *field.Path,
@@ -117,6 +198,22 @@ func processHTTPRouteRule(
 		backendRefs = append(backendRefs, rbr)
 	}
 
+	if routeFilters.Valid {
+		for i, filter := range routeFilters.Filters {
+			if filter.RequestMirror == nil {
+				continue
+			}
+
+			rbr := RouteBackendRef{
+				BackendRef: v1.BackendRef{
+					BackendObjectReference: filter.RequestMirror.BackendRef,
+				},
+				MirrorBackendIdx: helpers.GetPointer[int](i),
+			}
+			backendRefs = append(backendRefs, rbr)
+		}
+	}
+
 	return RouteRule{
 		ValidMatches:     validMatches,
 		Matches:          specRule.Matches,
@@ -140,7 +237,12 @@ func processHTTPRouteRules(
 	for i, rule := range specRules {
 		rulePath := field.NewPath("spec").Child("rules").Index(i)
 
-		rr, errors := processHTTPRouteRule(rule, rulePath, validator, resolveExtRefFunc)
+		rr, errors := processHTTPRouteRule(
+			rule,
+			rulePath,
+			validator,
+			resolveExtRefFunc,
+		)
 
 		if rr.ValidMatches && rr.Filters.Valid {
 			atLeastOneValid = true
@@ -182,6 +284,11 @@ func validateMatch(
 	matchPath *field.Path,
 ) field.ErrorList {
 	var allErrs field.ErrorList
+
+	// for internally-created routes used for request mirroring, we don't need to validate
+	if validator.SkipValidation() {
+		return nil
+	}
 
 	pathPath := matchPath.Child("path")
 	allErrs = append(allErrs, validatePathMatch(validator, match.Path, pathPath)...)

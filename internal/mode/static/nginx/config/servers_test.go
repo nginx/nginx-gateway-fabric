@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/format"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
@@ -863,6 +864,66 @@ func TestCreateServers(t *testing.T) {
 			},
 		},
 		{
+			Path:     "/mirror",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{},
+					Filters: dataplane.HTTPFilters{
+						RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+							{
+								Name:      helpers.GetPointer("mirror-filter"),
+								Namespace: helpers.GetPointer("test-ns"),
+								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend"),
+							},
+						},
+					},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     http.InternalMirrorRoutePathPrefix + "-my-backend",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     "/grpc/mirror",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{},
+					Filters: dataplane.HTTPFilters{
+						RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+							{
+								Name:      helpers.GetPointer("grpc-mirror-filter"),
+								Namespace: helpers.GetPointer("test-ns"),
+								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-grpc-backend"),
+							},
+						},
+					},
+					BackendGroup: fooGroup,
+				},
+			},
+			GRPC: true,
+		},
+		{
+			Path:     http.InternalMirrorRoutePathPrefix + "-my-grpc-backend",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+			GRPC: true,
+		},
+		{
 			Path:     "/invalid-filter",
 			PathType: dataplane.PathTypePrefix,
 			MatchRules: []dataplane.MatchRule{
@@ -1093,25 +1154,25 @@ func TestCreateServers(t *testing.T) {
 				RedirectPath: "/_ngf-internal-rule8-route0",
 			},
 		},
-		"1_10": {
+		"1_14": {
 			{
 				Headers:      []string{"filter:Exact:this"},
-				RedirectPath: "/_ngf-internal-rule10-route0",
+				RedirectPath: "/_ngf-internal-rule14-route0",
 			},
 		},
-		"1_12": {
+		"1_16": {
 			{
 				Method:       "GET",
-				RedirectPath: "/_ngf-internal-rule12-route0",
+				RedirectPath: "/_ngf-internal-rule16-route0",
 				Headers:      nil,
 				QueryParams:  nil,
 				Any:          false,
 			},
 		},
-		"1_17": {
+		"1_21": {
 			{
 				Method:       "GET",
-				RedirectPath: "/_ngf-internal-rule17-route0",
+				RedirectPath: "/_ngf-internal-rule21-route0",
 			},
 		},
 	}
@@ -1343,6 +1404,47 @@ func TestCreateServers(t *testing.T) {
 				Includes:        internalIncludes,
 			},
 			{
+				Path:            "/mirror/",
+				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxySetHeaders: httpBaseHeaders,
+				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend"},
+				Type:            http.ExternalLocationType,
+				Includes:        externalIncludes,
+			},
+			{
+				Path:            "= /mirror",
+				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxySetHeaders: httpBaseHeaders,
+				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend"},
+				Type:            http.ExternalLocationType,
+				Includes:        externalIncludes,
+			},
+			{
+				Path:            "= /_ngf-internal-mirror-my-backend",
+				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxySetHeaders: httpBaseHeaders,
+				Type:            http.InternalLocationType,
+				Includes:        externalIncludes,
+			},
+			{
+				Path:            "= /grpc/mirror",
+				GRPC:            true,
+				ProxyPass:       "grpc://test_foo_80",
+				ProxySetHeaders: grpcBaseHeaders,
+				MirrorPaths:     []string{"/_ngf-internal-mirror-my-grpc-backend"},
+				Type:            http.ExternalLocationType,
+				Includes:        externalIncludes,
+			},
+			{
+				Path:            "= /_ngf-internal-mirror-my-grpc-backend",
+				GRPC:            true,
+				ProxyPass:       "grpc://test_foo_80",
+				Rewrites:        []string{"^ $request_uri break"},
+				ProxySetHeaders: grpcBaseHeaders,
+				Type:            http.InternalLocationType,
+				Includes:        externalIncludes,
+			},
+			{
 				Path: "/invalid-filter/",
 				Return: &http.Return{
 					Code: http.StatusInternalServerError,
@@ -1360,18 +1462,18 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:         "/invalid-filter-with-headers/",
-				HTTPMatchKey: ssl + "1_10",
+				HTTPMatchKey: ssl + "1_14",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
 			},
 			{
 				Path:         "= /invalid-filter-with-headers",
-				HTTPMatchKey: ssl + "1_10",
+				HTTPMatchKey: ssl + "1_14",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
 			},
 			{
-				Path: "/_ngf-internal-rule10-route0",
+				Path: "/_ngf-internal-rule14-route0",
 				Return: &http.Return{
 					Code: http.StatusInternalServerError,
 				},
@@ -1387,12 +1489,12 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:         "= /test",
-				HTTPMatchKey: ssl + "1_12",
+				HTTPMatchKey: ssl + "1_16",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
 			},
 			{
-				Path:            "/_ngf-internal-rule12-route0",
+				Path:            "/_ngf-internal-rule16-route0",
 				ProxyPass:       "http://test_foo_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
 				Type:            http.InternalLocationType,
@@ -1471,15 +1573,14 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:         "= /include-header-match",
-				HTTPMatchKey: ssl + "1_17",
+				HTTPMatchKey: ssl + "1_21",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
 			},
 			{
-				Path:            "/_ngf-internal-rule17-route0",
+				Path:            "/_ngf-internal-rule21-route0",
 				ProxyPass:       "http://test_foo_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
-				Rewrites:        []string{"^ $request_uri break"},
 				Type:            http.InternalLocationType,
 				Includes:        internalIncludes,
 			},
@@ -1572,6 +1673,7 @@ func TestCreateServers(t *testing.T) {
 
 	result, httpMatchPair := createServers(conf, fakeGenerator, keepAliveCheck)
 
+	format.MaxLength = 10000
 	g.Expect(httpMatchPair).To(Equal(allExpMatchPair))
 	g.Expect(helpers.Diff(expectedServers, result)).To(BeEmpty())
 }

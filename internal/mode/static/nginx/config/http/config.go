@@ -5,8 +5,9 @@ import (
 )
 
 const (
-	InternalRoutePathPrefix = "/_ngf-internal"
-	HTTPSScheme             = "https"
+	InternalRoutePathPrefix       = "/_ngf-internal"
+	InternalMirrorRoutePathPrefix = InternalRoutePathPrefix + "-mirror"
+	HTTPSScheme                   = "https"
 )
 
 // Server holds all configuration for an HTTP server.
@@ -41,6 +42,7 @@ type Location struct {
 	Return          *Return
 	ResponseHeaders ResponseHeaders
 	Rewrites        []string
+	MirrorPaths     []string
 	Includes        []shared.Include
 	GRPC            bool
 }

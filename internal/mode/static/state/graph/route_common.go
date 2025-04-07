@@ -139,6 +139,9 @@ type RouteRule struct {
 
 // RouteBackendRef is a wrapper for v1.BackendRef and any BackendRef filters from the HTTPRoute or GRPCRoute.
 type RouteBackendRef struct {
+	// If this backend is defined in a RequestMirror filter, this value will indicate the filter's index.
+	MirrorBackendIdx *int
+
 	v1.BackendRef
 	Filters []any
 }
@@ -229,16 +232,26 @@ func buildRoutesForGateways(
 
 	for _, route := range httpRoutes {
 		r := buildHTTPRoute(validator, route, gatewayNsNames, snippetsFilters)
-		if r != nil {
-			routes[CreateRouteKey(route)] = r
+		if r == nil {
+			continue
 		}
+
+		routes[CreateRouteKey(route)] = r
+
+		// if this route has a RequestMirror filter, build a duplicate route for the mirror
+		buildHTTPMirrorRoutes(routes, r, route, gatewayNsNames, snippetsFilters)
 	}
 
 	for _, route := range grpcRoutes {
 		r := buildGRPCRoute(validator, route, gatewayNsNames, http2disabled, snippetsFilters)
-		if r != nil {
-			routes[CreateRouteKey(route)] = r
+		if r == nil {
+			continue
 		}
+
+		routes[CreateRouteKey(route)] = r
+
+		// if this route has a RequestMirror filter, build a duplicate route for the mirror
+		buildGRPCMirrorRoutes(routes, r, route, gatewayNsNames, snippetsFilters, http2disabled)
 	}
 
 	return routes

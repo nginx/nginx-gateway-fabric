@@ -16,6 +16,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/mirror"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation/validationfakes"
 )
 
@@ -912,6 +913,129 @@ func TestBuildHTTPRoute(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
+	t.Parallel()
+	gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+	// Create a route with a request mirror filter and another random filter
+	mirrorFilter := gatewayv1.HTTPRouteFilter{
+		Type: gatewayv1.HTTPRouteFilterRequestMirror,
+		RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{
+			BackendRef: gatewayv1.BackendObjectReference{
+				Name: "mirror-backend",
+			},
+		},
+	}
+	urlRewriteFilter := gatewayv1.HTTPRouteFilter{
+		Type: gatewayv1.HTTPRouteFilterURLRewrite,
+		URLRewrite: &gatewayv1.HTTPURLRewriteFilter{
+			Hostname: helpers.GetPointer[gatewayv1.PreciseHostname]("hostname"),
+		},
+	}
+	hr := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/mirror")
+	addFilterToPath(hr, "/mirror", mirrorFilter)
+	addFilterToPath(hr, "/mirror", urlRewriteFilter)
+
+	// Expected mirror route
+	expectedMirrorRoute := &L7Route{
+		RouteType: RouteTypeHTTP,
+		Source: &gatewayv1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      mirror.RouteName("hr", "mirror-backend", nil, 0),
+			},
+			Spec: gatewayv1.HTTPRouteSpec{
+				CommonRouteSpec: hr.Spec.CommonRouteSpec,
+				Hostnames:       hr.Spec.Hostnames,
+				Rules: []gatewayv1.HTTPRouteRule{
+					{
+						Matches: []gatewayv1.HTTPRouteMatch{
+							{
+								Path: &gatewayv1.HTTPPathMatch{
+									Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
+									Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+								},
+							},
+						},
+						Filters: []gatewayv1.HTTPRouteFilter{urlRewriteFilter},
+						BackendRefs: []gatewayv1.HTTPBackendRef{
+							{
+								BackendRef: gatewayv1.BackendRef{
+									BackendObjectReference: gatewayv1.BackendObjectReference{
+										Name: "mirror-backend",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		ParentRefs: []ParentRef{
+			{
+				Idx:         0,
+				Gateway:     gatewayNsName,
+				SectionName: hr.Spec.ParentRefs[0].SectionName,
+			},
+		},
+		Valid:      true,
+		Attachable: true,
+		Spec: L7RouteSpec{
+			Hostnames: hr.Spec.Hostnames,
+			Rules: []RouteRule{
+				{
+					ValidMatches: true,
+					Filters: RouteRuleFilters{
+						Valid: true,
+						Filters: []Filter{
+							{
+								RouteType:  RouteTypeHTTP,
+								FilterType: FilterURLRewrite,
+								URLRewrite: urlRewriteFilter.URLRewrite,
+							},
+						},
+					},
+					Matches: []gatewayv1.HTTPRouteMatch{
+						{
+							Path: &gatewayv1.HTTPPathMatch{
+								Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
+								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+							},
+						},
+					},
+					RouteBackendRefs: []RouteBackendRef{
+						{
+							BackendRef: gatewayv1.BackendRef{
+								BackendObjectReference: gatewayv1.BackendObjectReference{
+									Name: "mirror-backend",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	gatewayNsNames := []types.NamespacedName{gatewayNsName}
+	snippetsFilters := map[types.NamespacedName]*SnippetsFilter{}
+
+	g := NewWithT(t)
+
+	routes := map[RouteKey]*L7Route{}
+	l7route := buildHTTPRoute(validator, hr, gatewayNsNames, snippetsFilters)
+	g.Expect(l7route).NotTo(BeNil())
+
+	buildHTTPMirrorRoutes(routes, l7route, hr, gatewayNsNames, snippetsFilters)
+
+	obj, ok := expectedMirrorRoute.Source.(*gatewayv1.HTTPRoute)
+	g.Expect(ok).To(BeTrue())
+	mirrorRouteKey := CreateRouteKey(obj)
+	g.Expect(routes).To(HaveKey(mirrorRouteKey))
+	g.Expect(helpers.Diff(expectedMirrorRoute, routes[mirrorRouteKey])).To(BeEmpty())
+}
+
 func TestValidateMatch(t *testing.T) {
 	t.Parallel()
 	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
@@ -919,6 +1043,9 @@ func TestValidateMatch(t *testing.T) {
 		v.ValidateMethodInMatchReturns(true, nil)
 		return v
 	}
+
+	skipValidator := validationfakes.FakeHTTPFieldsValidator{}
+	skipValidator.SkipValidationReturns(true)
 
 	tests := []struct {
 		match          gatewayv1.HTTPRouteMatch
@@ -1164,6 +1291,11 @@ func TestValidateMatch(t *testing.T) {
 			},
 			expectErrCount: 3,
 			name:           "multiple errors",
+		},
+		{
+			validator:      &skipValidator,
+			expectErrCount: 0,
+			name:           "skip validation",
 		},
 	}
 

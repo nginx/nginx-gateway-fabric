@@ -28,7 +28,7 @@ func validateExtensionRefFilter(ref *v1.LocalObjectReference, path *field.Path) 
 	extRefPath := path.Child("extensionRef")
 
 	if ref == nil {
-		return field.ErrorList{field.Required(extRefPath, "extensionRef cannot be nil")}
+		return field.ErrorList{field.Required(extRefPath, "cannot be nil")}
 	}
 
 	if ref.Name == "" {

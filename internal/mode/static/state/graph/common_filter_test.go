@@ -41,6 +41,24 @@ func TestValidateFilter(t *testing.T) {
 		},
 		{
 			filter: Filter{
+				RouteType:     RouteTypeHTTP,
+				FilterType:    FilterRequestMirror,
+				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{},
+			},
+			expectErrCount: 0,
+			name:           "valid HTTP mirror filter",
+		},
+		{
+			filter: Filter{
+				RouteType:     RouteTypeHTTP,
+				FilterType:    FilterRequestMirror,
+				RequestMirror: nil,
+			},
+			expectErrCount: 1,
+			name:           "invalid HTTP mirror filter",
+		},
+		{
+			filter: Filter{
 				RouteType:             RouteTypeHTTP,
 				FilterType:            FilterRequestHeaderModifier,
 				RequestHeaderModifier: &gatewayv1.HTTPHeaderFilter{},
@@ -73,10 +91,19 @@ func TestValidateFilter(t *testing.T) {
 		{
 			filter: Filter{
 				RouteType:  RouteTypeHTTP,
-				FilterType: FilterRequestMirror,
+				FilterType: "invalid-filter",
 			},
 			expectErrCount: 1,
 			name:           "unsupported HTTP filter type",
+		},
+		{
+			filter: Filter{
+				RouteType:     RouteTypeGRPC,
+				FilterType:    FilterRequestMirror,
+				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{},
+			},
+			expectErrCount: 0,
+			name:           "valid GRPC filter",
 		},
 		{
 			filter: Filter{
