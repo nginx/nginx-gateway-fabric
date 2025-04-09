@@ -144,10 +144,16 @@ func injectCrossplaneContainer(
 	k8sClient kubernetes.Interface,
 	timeout time.Duration,
 	ngfPodName,
-	namespace string,
+	namespace,
+	crossplaneImageRepo string,
 ) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	image := "nginx-crossplane:latest"
+	if crossplaneImageRepo != "" {
+		image = crossplaneImageRepo + "/" + image
+	}
 
 	pod := &core.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -160,8 +166,8 @@ func injectCrossplaneContainer(
 					TargetContainerName: "nginx",
 					EphemeralContainerCommon: core.EphemeralContainerCommon{
 						Name:            "crossplane",
-						Image:           "nginx-crossplane:latest",
-						ImagePullPolicy: "Never",
+						Image:           image,
+						ImagePullPolicy: "IfNotPresent",
 						Stdin:           true,
 						VolumeMounts: []core.VolumeMount{
 							{

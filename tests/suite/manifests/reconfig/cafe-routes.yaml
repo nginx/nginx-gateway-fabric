@@ -5,7 +5,7 @@ metadata:
 spec:
   parentRefs:
   - name: gateway
-    namespace: default
+    namespace: reconfig
     sectionName: http
   hostnames:
   - "cafe.example.com"
@@ -23,7 +23,7 @@ metadata:
 spec:
   parentRefs:
   - name: gateway
-    namespace: default
+    namespace: reconfig
     sectionName: https
   hostnames:
   - "cafe.example.com"
@@ -43,8 +43,8 @@ metadata:
 spec:
   parentRefs:
   - name: gateway
+    namespace: reconfig
     sectionName: https
-    namespace: default
   hostnames:
   - "cafe.example.com"
   rules:

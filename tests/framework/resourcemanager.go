@@ -825,12 +825,14 @@ func (rm *ResourceManager) WaitForGatewayObservedGeneration(
 }
 
 // GetNginxConfig uses crossplane to get the nginx configuration and convert it to JSON.
-func (rm *ResourceManager) GetNginxConfig(nginxPodName, namespace string) (*Payload, error) {
+// If the crossplane image is loaded locally on the node, crossplaneImageRepo can be empty.
+func (rm *ResourceManager) GetNginxConfig(nginxPodName, namespace, crossplaneImageRepo string) (*Payload, error) {
 	if err := injectCrossplaneContainer(
 		rm.ClientGoClient,
 		rm.TimeoutConfig.UpdateTimeout,
 		nginxPodName,
 		namespace,
+		crossplaneImageRepo,
 	); err != nil {
 		return nil, err
 	}
