@@ -88,6 +88,7 @@ var _ = Describe("Dataplane performance", Ordered, Label("nfr", "performance"), 
 	})
 
 	AfterAll(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())

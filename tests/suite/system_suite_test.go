@@ -348,7 +348,7 @@ var _ = AfterSuite(func() {
 	AddReportEntry("Events", events, ReportEntryVisibilityNever)
 
 	logs = framework.GetLogs(resourceManager, ngfNamespace, releaseName)
-	AddReportEntry("Logs", logs, ReportEntryVisibilityNever)
+	AddReportEntry("NGF Logs", logs, ReportEntryVisibilityNever)
 
 	labelFilter := GinkgoLabelFilter()
 	if !strings.Contains(labelFilter, "longevity-setup") {
