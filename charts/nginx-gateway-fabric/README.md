@@ -300,6 +300,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.snippetsFilters.enable` | Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the generated NGINX config for HTTPRoute and GRPCRoute resources. | bool | `false` |
 | `nodeSelector` | The nodeSelector of the NGINX Gateway Fabric pod. | object | `{}` |
 | `service.annotations` | The annotations of the NGINX Gateway Fabric service. | object | `{}` |
+| `service.labels` | The additional labels of the NGINX Gateway Fabric service. | object | `{}` |
 | `service.create` | Creates a service to expose the NGINX Gateway Fabric pods. | bool | `true` |
 | `service.externalTrafficPolicy` | The externalTrafficPolicy of the service. The value Local preserves the client source IP. | string | `"Local"` |
 | `service.loadBalancerIP` | The static IP address for the load balancer. Requires service.type set to LoadBalancer. | string | `""` |

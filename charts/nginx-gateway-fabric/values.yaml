@@ -330,6 +330,9 @@ service:
   # -- The annotations of the NGINX Gateway Fabric service.
   annotations: {}
 
+  # -- The additional labels of the NGINX Gateway Fabric service.
+  labels: {}
+
   # -- The static IP address for the load balancer. Requires service.type set to LoadBalancer.
   loadBalancerIP: ""
 

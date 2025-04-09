@@ -604,6 +604,12 @@
           "title": "annotations",
           "type": "object"
         },
+        "labels": {
+          "description": "The additional labels of the NGINX Gateway Fabric service.",
+          "required": [],
+          "title": "labels",
+          "type": "object"
+        },
         "create": {
           "default": true,
           "description": "Creates a service to expose the NGINX Gateway Fabric pods.",
