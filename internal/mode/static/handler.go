@@ -194,15 +194,6 @@ func (h *eventHandlerImpl) sendNginxConfig(
 	}
 
 	for _, gw := range gr.Gateways {
-		if gw == nil {
-			// still need to update GatewayClass status
-			obj := &status.QueueObject{
-				UpdateType: status.UpdateAll,
-			}
-			h.cfg.statusQueue.Enqueue(obj)
-			return
-		}
-
 		go func() {
 			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
 				logger.Error(err, "error from provisioner")

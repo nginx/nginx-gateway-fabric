@@ -212,6 +212,8 @@ var _ = Describe("eventHandler", func() {
 				checkUpsertEventExpectations(e)
 				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
 				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
+				// status update for GatewayClass should still occur
+				Expect(fakeStatusUpdater.UpdateGroupCallCount()).Should(Equal(1))
 			})
 		})
 
