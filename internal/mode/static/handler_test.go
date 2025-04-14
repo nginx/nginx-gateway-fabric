@@ -213,7 +213,10 @@ var _ = Describe("eventHandler", func() {
 				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
 				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
 				// status update for GatewayClass should still occur
-				Expect(fakeStatusUpdater.UpdateGroupCallCount()).Should(Equal(1))
+				Eventually(
+					func() int {
+						return fakeStatusUpdater.UpdateGroupCallCount()
+					}).Should(Equal(1))
 			})
 		})
 
@@ -260,7 +263,11 @@ var _ = Describe("eventHandler", func() {
 
 			Expect(handler.GetLatestConfiguration()).To(BeNil())
 
-			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(1))
+			Eventually(
+				func() int {
+					return fakeStatusUpdater.UpdateGroupCallCount()
+				}).Should(Equal(1))
+
 			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
 			Expect(reqs).To(HaveLen(1))
@@ -275,7 +282,11 @@ var _ = Describe("eventHandler", func() {
 
 			Expect(handler.GetLatestConfiguration()).To(BeNil())
 
-			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(1))
+			Eventually(
+				func() int {
+					return fakeStatusUpdater.UpdateGroupCallCount()
+				}).Should(Equal(1))
+
 			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
 			Expect(reqs).To(HaveLen(1))
@@ -303,7 +314,11 @@ var _ = Describe("eventHandler", func() {
 
 			Expect(handler.GetLatestConfiguration()).To(BeNil())
 
-			Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(1))
+			Eventually(
+				func() int {
+					return fakeStatusUpdater.UpdateGroupCallCount()
+				}).Should(Equal(1))
+
 			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
 			Expect(reqs).To(BeEmpty())
