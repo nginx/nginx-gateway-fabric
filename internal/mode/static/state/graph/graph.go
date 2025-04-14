@@ -66,7 +66,7 @@ type Graph struct {
 	ReferencedServices map[types.NamespacedName]*ReferencedService
 	// ReferencedCaCertConfigMaps includes ConfigMaps that have been referenced by any BackendTLSPolicies.
 	ReferencedCaCertConfigMaps map[types.NamespacedName]*CaCertConfigMap
-	// ReferencedNginxProxies includes NginxProxies that have been referenced by a GatewayClass or the winning Gateway.
+	// ReferencedNginxProxies includes NginxProxies that have been referenced by a GatewayClass or a Gateway.
 	ReferencedNginxProxies map[types.NamespacedName]*NginxProxy
 	// BackendTLSPolicies holds BackendTLSPolicy resources.
 	BackendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy
@@ -125,7 +125,7 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 		// Service Namespace should be the same Namespace as the EndpointSlice
 		_, exists := g.ReferencedServices[types.NamespacedName{Namespace: nsname.Namespace, Name: svcName}]
 		return exists
-	// NginxProxy reference exists if the GatewayClass or winning Gateway references it.
+	// NginxProxy reference exists if the GatewayClass or Gateway references it.
 	case *ngfAPIv1alpha2.NginxProxy:
 		_, exists := g.ReferencedNginxProxies[nsname]
 		return exists
@@ -177,7 +177,7 @@ func (g *Graph) gatewayAPIResourceExist(ref v1alpha2.LocalPolicyTargetReference,
 
 	switch kind := ref.Kind; kind {
 	case kinds.Gateway:
-		if g.Gateways == nil {
+		if len(g.Gateways) == 0 {
 			return false
 		}
 
@@ -224,15 +224,13 @@ func BuildGraph(
 
 	refGrantResolver := newReferenceGrantResolver(state.ReferenceGrants)
 
-	gws := buildGateway(
+	gws := buildGateways(
 		processedGws,
 		secretResolver,
 		gc,
 		refGrantResolver,
 		processedNginxProxies,
 	)
-
-	addDeploymentNameToGateway(gws)
 
 	processedBackendTLSPolicies := processBackendTLSPolicies(
 		state.BackendTLSPolicies,
@@ -244,32 +242,28 @@ func BuildGraph(
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 
-	nsNamesForProcessedGateways := GetAllNsNames(processedGws)
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
 		state.HTTPRoutes,
 		state.GRPCRoutes,
-		nsNamesForProcessedGateways,
 		gws,
 		processedSnippetsFilters,
 	)
 
 	l4routes := buildL4RoutesForGateways(
 		state.TLSRoutes,
-		nsNamesForProcessedGateways,
 		state.Services,
 		gws,
 		refGrantResolver,
 	)
 
-	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces)
 	addBackendRefsToRouteRules(
 		routes,
 		refGrantResolver,
 		state.Services,
 		processedBackendTLSPolicies,
-		gws,
 	)
+	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces)
 
 	referencedNamespaces := buildReferencedNamespaces(state.Namespaces, gws)
 
@@ -281,7 +275,6 @@ func BuildGraph(
 	processedPolicies := processPolicies(
 		state.NGFPolicies,
 		validators.PolicyValidator,
-		processedGws,
 		routes,
 		referencedServices,
 		gws,
@@ -306,13 +299,13 @@ func BuildGraph(
 		PlusSecrets:                plusSecrets,
 	}
 
-	g.attachPolicies(controllerName)
+	g.attachPolicies(validators.PolicyValidator, controllerName)
 
 	return g
 }
 
-func gatewayExists[T any](gwNsName types.NamespacedName, gateways map[types.NamespacedName]*T) bool {
-	if gateways == nil {
+func gatewayExists(gwNsName types.NamespacedName, gateways map[types.NamespacedName]*Gateway) bool {
+	if len(gateways) == 0 {
 		return false
 	}
 

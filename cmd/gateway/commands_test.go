@@ -9,7 +9,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 )
@@ -63,8 +62,6 @@ func TestCommonFlagsValidation(t *testing.T) {
 			args: []string{
 				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
 				"--gatewayclass=nginx",
-				"--gateway=nginx-gateway/nginx",
-				"--config=nginx-gateway-config",
 			},
 			wantErr: false,
 		},
@@ -139,7 +136,6 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			args: []string{
 				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway", // common and required flag
 				"--gatewayclass=nginx",                                // common and required flag
-				"--gateway=nginx-gateway/nginx",
 				"--config=nginx-gateway-config",
 				"--service=nginx-gateway",
 				"--agent-tls-secret=agent-tls",
@@ -170,23 +166,6 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--gatewayclass=nginx",                                // common and required flag,
 			},
 			wantErr: false,
-		},
-		{
-			name: "gateway is set to empty string",
-			args: []string{
-				"--gateway=",
-			},
-			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--gateway" flag: must be set`,
-		},
-		{
-			name: "gateway is invalid",
-			args: []string{
-				"--gateway=nginx-gateway", // no namespace
-			},
-			wantErr: true,
-			expectedErrPrefix: `invalid argument "nginx-gateway" for "--gateway" flag: invalid format; ` +
-				"must be NAMESPACE/NAME",
 		},
 		{
 			name: "config is set to empty string",
@@ -712,30 +691,6 @@ func TestParseFlags(t *testing.T) {
 	err = flagSet.Set("customStringFlagUserDefined", "changed-test-flag-value")
 	g.Expect(err).To(Not(HaveOccurred()))
 
-	customStringFlagNoDefaultValueUnset := namespacedNameValue{
-		value: types.NamespacedName{},
-	}
-	flagSet.Var(
-		&customStringFlagNoDefaultValueUnset,
-		"customStringFlagNoDefaultValueUnset",
-		"no default value custom string test flag",
-	)
-
-	customStringFlagNoDefaultValueUserDefined := namespacedNameValue{
-		value: types.NamespacedName{},
-	}
-	flagSet.Var(
-		&customStringFlagNoDefaultValueUserDefined,
-		"customStringFlagNoDefaultValueUserDefined",
-		"no default value but with user defined namespacedName test flag",
-	)
-	userDefinedNamespacedName := types.NamespacedName{
-		Namespace: "changed-namespace",
-		Name:      "changed-name",
-	}
-	err = flagSet.Set("customStringFlagNoDefaultValueUserDefined", userDefinedNamespacedName.String())
-	g.Expect(err).To(Not(HaveOccurred()))
-
 	expectedKeys := []string{
 		"boolFlagTrue",
 		"boolFlagFalse",
@@ -745,16 +700,10 @@ func TestParseFlags(t *testing.T) {
 
 		"customStringFlagDefault",
 		"customStringFlagUserDefined",
-
-		"customStringFlagNoDefaultValueUnset",
-		"customStringFlagNoDefaultValueUserDefined",
 	}
 	expectedValues := []string{
 		"true",
 		"false",
-
-		"default",
-		"user-defined",
 
 		"default",
 		"user-defined",

@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
 
@@ -18,7 +19,7 @@ type BackendTLSPolicy struct {
 	Source *v1alpha3.BackendTLSPolicy
 	// CaCertRef is the name of the ConfigMap that contains the CA certificate.
 	CaCertRef types.NamespacedName
-	// Gateway is the name of the Gateway that is being checked for this BackendTLSPolicy.
+	// Gateways are the names of the Gateways that are being checked for this BackendTLSPolicy.
 	Gateways []types.NamespacedName
 	// Conditions include Conditions for the BackendTLSPolicy.
 	Conditions []conditions.Condition
@@ -37,7 +38,7 @@ func processBackendTLSPolicies(
 	ctlrName string,
 	gateways map[types.NamespacedName]*Gateway,
 ) map[types.NamespacedName]*BackendTLSPolicy {
-	if len(backendTLSPolicies) == 0 || gateways == nil {
+	if len(backendTLSPolicies) == 0 || len(gateways) == 0 {
 		return nil
 	}
 
@@ -188,43 +189,26 @@ func addGatewaysForBackendTLSPolicies(
 	services map[types.NamespacedName]*ReferencedService,
 ) {
 	for _, backendTLSPolicy := range backendTLSPolicies {
+		gateways := make(map[types.NamespacedName]struct{})
+
 		for _, refs := range backendTLSPolicy.Source.Spec.TargetRefs {
+			if refs.Kind != kinds.Service {
+				continue
+			}
+
 			for svcNsName, referencedServices := range services {
-				if refs.Kind != "Service" {
-					continue
-				}
 				if svcNsName.Name != string(refs.Name) {
 					continue
 				}
-				backendTLSPolicy.Gateways = append(
-					backendTLSPolicy.Gateways,
-					getUniqueGatewayNsNames(referencedServices.GatewayNsNames)...,
-				)
+
+				for gateway := range referencedServices.GatewayNsNames {
+					gateways[gateway] = struct{}{}
+				}
 			}
 		}
-	}
 
-	deduplicateGateways(backendTLSPolicies)
-}
-
-func getUniqueGatewayNsNames(gatewayMap map[types.NamespacedName]struct{}) []types.NamespacedName {
-	gatewayNsNames := make([]types.NamespacedName, 0, len(gatewayMap))
-	for nsname := range gatewayMap {
-		gatewayNsNames = append(gatewayNsNames, nsname)
-	}
-	return gatewayNsNames
-}
-
-func deduplicateGateways(backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy) {
-	for _, backendTLSPolicy := range backendTLSPolicies {
-		gatewayNsNames := make(map[types.NamespacedName]struct{})
-		if len(backendTLSPolicy.Gateways) == 0 {
-			continue
+		for gateway := range gateways {
+			backendTLSPolicy.Gateways = append(backendTLSPolicy.Gateways, gateway)
 		}
-		for _, gatewayNsName := range backendTLSPolicy.Gateways {
-			gatewayNsNames[gatewayNsName] = struct{}{}
-		}
-
-		backendTLSPolicy.Gateways = getUniqueGatewayNsNames(gatewayNsNames)
 	}
 }

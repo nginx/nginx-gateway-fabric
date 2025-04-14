@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -53,40 +52,6 @@ func validateResourceName(value string) error {
 	}
 
 	return nil
-}
-
-func validateNamespaceName(value string) error {
-	// used by Kubernetes to validate resource namespace names
-	messages := validation.IsDNS1123Label(value)
-	if len(messages) > 0 {
-		msg := strings.Join(messages, "; ")
-		return fmt.Errorf("invalid format: %s", msg)
-	}
-
-	return nil
-}
-
-func parseNamespacedResourceName(value string) (types.NamespacedName, error) {
-	if value == "" {
-		return types.NamespacedName{}, errors.New("must be set")
-	}
-
-	parts := strings.Split(value, "/")
-	if len(parts) != 2 {
-		return types.NamespacedName{}, errors.New("invalid format; must be NAMESPACE/NAME")
-	}
-
-	if err := validateNamespaceName(parts[0]); err != nil {
-		return types.NamespacedName{}, fmt.Errorf("invalid namespace name: %w", err)
-	}
-	if err := validateResourceName(parts[1]); err != nil {
-		return types.NamespacedName{}, fmt.Errorf("invalid resource name: %w", err)
-	}
-
-	return types.NamespacedName{
-		Namespace: parts[0],
-		Name:      parts[1],
-	}, nil
 }
 
 func validateQualifiedName(name string) error {

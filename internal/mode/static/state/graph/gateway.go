@@ -12,28 +12,28 @@ import (
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
 
-// Gateway represents the winning Gateway resource.
+// Gateway represents the a Gateway resource.
 type Gateway struct {
-	LatestReloadResult  NginxReloadResult
-	Source              *v1.Gateway
-	NginxProxy          *NginxProxy
+	// LatestReloadResult is the result of the last nginx reload attempt.
+	LatestReloadResult NginxReloadResult
+	// Source is the corresponding Gateway resource.
+	Source *v1.Gateway
+	// NginxProxy is the NginxProxy referenced by this Gateway.
+	NginxProxy *NginxProxy
+	// EffectiveNginxProxy holds the result of merging the NginxProxySpec on this resource with the NginxProxySpec on
+	// the GatewayClass resource. This is the effective set of config that should be applied to the Gateway.
+	// If non-nil, then this config is valid.
 	EffectiveNginxProxy *EffectiveNginxProxy
-	DeploymentName      types.NamespacedName
-	Listeners           []*Listener
-	Conditions          []conditions.Condition
-	Policies            []*Policy
-	Valid               bool
-}
-
-// GetAllNsNames returns all the NamespacedNames of the Gateway resources that belong to NGF.
-func GetAllNsNames(gws map[types.NamespacedName]*v1.Gateway) []types.NamespacedName {
-	allNsNames := make([]types.NamespacedName, 0, len(gws))
-
-	for nsName := range gws {
-		allNsNames = append(allNsNames, nsName)
-	}
-
-	return allNsNames
+	// DeploymentName is the name of the nginx Deployment associated with this Gateway.
+	DeploymentName types.NamespacedName
+	// Listeners include the listeners of the Gateway.
+	Listeners []*Listener
+	// Conditions holds the conditions for the Gateway.
+	Conditions []conditions.Condition
+	// Policies holds the policies attached to the Gateway.
+	Policies []*Policy
+	// Valid indicates whether the Gateway Spec is valid.
+	Valid bool
 }
 
 // processGateways determines which Gateway resource belong to NGF (determined by the Gateway GatewayClassName field).
@@ -41,7 +41,7 @@ func processGateways(
 	gws map[types.NamespacedName]*v1.Gateway,
 	gcName string,
 ) map[types.NamespacedName]*v1.Gateway {
-	referencedGws := make(map[types.NamespacedName]*v1.Gateway, len(gws))
+	referencedGws := make(map[types.NamespacedName]*v1.Gateway)
 
 	for gwNsName, gw := range gws {
 		if string(gw.Spec.GatewayClassName) != gcName {
@@ -58,20 +58,20 @@ func processGateways(
 	return referencedGws
 }
 
-func buildGateway(
+func buildGateways(
 	gws map[types.NamespacedName]*v1.Gateway,
 	secretResolver *secretResolver,
 	gc *GatewayClass,
 	refGrantResolver *referenceGrantResolver,
 	nps map[types.NamespacedName]*NginxProxy,
 ) map[types.NamespacedName]*Gateway {
-	if gws == nil {
+	if len(gws) == 0 {
 		return nil
 	}
 
 	builtGateways := make(map[types.NamespacedName]*Gateway, len(gws))
 
-	for gwNsNames, gw := range gws {
+	for gwNsName, gw := range gws {
 		var np *NginxProxy
 		var npNsName types.NamespacedName
 		if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
@@ -97,40 +97,34 @@ func buildGateway(
 			protectedPorts[metricsPort] = "MetricsPort"
 		}
 
+		deploymentName := types.NamespacedName{
+			Namespace: gw.GetNamespace(),
+			Name:      controller.CreateNginxResourceName(gw.GetName(), string(gw.Spec.GatewayClassName)),
+		}
+
 		if !valid {
-			builtGateways[gwNsNames] = &Gateway{
+			builtGateways[gwNsName] = &Gateway{
 				Source:              gw,
 				Valid:               false,
 				NginxProxy:          np,
 				EffectiveNginxProxy: effectiveNginxProxy,
 				Conditions:          conds,
+				DeploymentName:      deploymentName,
 			}
 		} else {
-			builtGateways[gwNsNames] = &Gateway{
+			builtGateways[gwNsName] = &Gateway{
 				Source:              gw,
 				Listeners:           buildListeners(gw, secretResolver, refGrantResolver, protectedPorts),
 				NginxProxy:          np,
 				EffectiveNginxProxy: effectiveNginxProxy,
 				Valid:               true,
 				Conditions:          conds,
+				DeploymentName:      deploymentName,
 			}
 		}
 	}
 
 	return builtGateways
-}
-
-func addDeploymentNameToGateway(gws map[types.NamespacedName]*Gateway) {
-	for _, gw := range gws {
-		if gw == nil {
-			continue
-		}
-
-		gw.DeploymentName = types.NamespacedName{
-			Namespace: gw.Source.Namespace,
-			Name:      controller.CreateNginxResourceName(gw.Source.Name, string(gw.Source.Spec.GatewayClassName)),
-		}
-	}
 }
 
 func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersReference) []conditions.Condition {

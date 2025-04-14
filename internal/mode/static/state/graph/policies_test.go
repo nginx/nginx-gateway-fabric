@@ -11,6 +11,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
@@ -110,7 +111,7 @@ func TestAttachPolicies(t *testing.T) {
 
 	expectSvcPolicyAttachment := func(g *WithT, graph *Graph) {
 		for _, r := range graph.ReferencedServices {
-			g.Expect(r.Policies).To(HaveLen(2))
+			g.Expect(r.Policies).To(HaveLen(1))
 		}
 	}
 
@@ -148,7 +149,7 @@ func TestAttachPolicies(t *testing.T) {
 		)
 	}
 
-	getGateway := func() map[types.NamespacedName]*Gateway {
+	getGateways := func() map[types.NamespacedName]*Gateway {
 		return map[types.NamespacedName]*Gateway{
 			{Namespace: testNs, Name: "gateway"}: {
 				Source: &v1.Gateway{
@@ -199,7 +200,7 @@ func TestAttachPolicies(t *testing.T) {
 		},
 		{
 			name:        "nil Routes; gateway and service policies attach",
-			gateway:     getGateway(),
+			gateway:     getGateways(),
 			svcs:        getServices(),
 			ngfPolicies: getPolicies(),
 			expects: []func(g *WithT, graph *Graph){
@@ -212,7 +213,7 @@ func TestAttachPolicies(t *testing.T) {
 			name:        "nil ReferencedServices; gateway and route policies attach",
 			routes:      getRoutes(),
 			ngfPolicies: getPolicies(),
-			gateway:     getGateway(),
+			gateway:     getGateways(),
 			expects: []func(g *WithT, graph *Graph){
 				expectGatewayPolicyAttachment,
 				expectRoutePolicyAttachment,
@@ -224,7 +225,7 @@ func TestAttachPolicies(t *testing.T) {
 			routes:      getRoutes(),
 			svcs:        getServices(),
 			ngfPolicies: getPolicies(),
-			gateway:     getGateway(),
+			gateway:     getGateways(),
 			expects:     expectAllAttachmentList,
 		},
 	}
@@ -241,7 +242,7 @@ func TestAttachPolicies(t *testing.T) {
 				NGFPolicies:        test.ngfPolicies,
 			}
 
-			graph.attachPolicies("nginx-gateway")
+			graph.attachPolicies(nil, "nginx-gateway")
 			for _, expect := range test.expects {
 				expect(g, graph)
 			}
@@ -296,34 +297,49 @@ func TestAttachPolicyToRoute(t *testing.T) {
 		}
 	}
 
+	validatorError := &policiesfakes.FakeValidator{
+		ValidateGlobalSettingsStub: func(_ policies.Policy, gs *policies.GlobalSettings) []conditions.Condition {
+			if !gs.TelemetryEnabled {
+				return []conditions.Condition{
+					staticConds.NewPolicyNotAcceptedNginxProxyNotSet(staticConds.PolicyMessageTelemetryNotEnabled),
+				}
+			}
+			return nil
+		},
+	}
+
 	tests := []struct {
 		route        *L7Route
 		policy       *Policy
+		validator    policies.Validator
 		name         string
 		expAncestors []PolicyAncestor
 		expAttached  bool
 	}{
 		{
-			name:   "policy attaches to http route",
-			route:  createHTTPRoute(true /*valid*/, true /*attachable*/, true /*parentRefs*/),
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}},
+			name:      "policy attaches to http route",
+			route:     createHTTPRoute(true /*valid*/, true /*attachable*/, true /*parentRefs*/),
+			validator: &policiesfakes.FakeValidator{},
+			policy:    &Policy{Source: &policiesfakes.FakePolicy{}},
 			expAncestors: []PolicyAncestor{
 				{Ancestor: createExpAncestor(kinds.HTTPRoute)},
 			},
 			expAttached: true,
 		},
 		{
-			name:   "policy attaches to grpc route",
-			route:  createGRPCRoute(true /*valid*/, true /*attachable*/, true /*parentRefs*/),
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}},
+			name:      "policy attaches to grpc route",
+			route:     createGRPCRoute(true /*valid*/, true /*attachable*/, true /*parentRefs*/),
+			validator: &policiesfakes.FakeValidator{},
+			policy:    &Policy{Source: &policiesfakes.FakePolicy{}},
 			expAncestors: []PolicyAncestor{
 				{Ancestor: createExpAncestor(kinds.GRPCRoute)},
 			},
 			expAttached: true,
 		},
 		{
-			name:  "attachment with existing ancestor",
-			route: createHTTPRoute(true /*valid*/, true /*attachable*/, true /*parentRefs*/),
+			name:      "attachment with existing ancestor",
+			route:     createHTTPRoute(true /*valid*/, true /*attachable*/, true /*parentRefs*/),
+			validator: &policiesfakes.FakeValidator{},
 			policy: &Policy{
 				Source: &policiesfakes.FakePolicy{},
 				Ancestors: []PolicyAncestor{
@@ -337,9 +353,10 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAttached: true,
 		},
 		{
-			name:   "no attachment; unattachable route",
-			route:  createHTTPRoute(true /*valid*/, false /*attachable*/, true /*parentRefs*/),
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}},
+			name:      "no attachment; unattachable route",
+			route:     createHTTPRoute(true /*valid*/, false /*attachable*/, true /*parentRefs*/),
+			validator: &policiesfakes.FakeValidator{},
+			policy:    &Policy{Source: &policiesfakes.FakePolicy{}},
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
@@ -349,9 +366,10 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAttached: false,
 		},
 		{
-			name:   "no attachment; missing parentRefs",
-			route:  createHTTPRoute(true /*valid*/, true /*attachable*/, false /*parentRefs*/),
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}},
+			name:      "no attachment; missing parentRefs",
+			route:     createHTTPRoute(true /*valid*/, true /*attachable*/, false /*parentRefs*/),
+			validator: &policiesfakes.FakeValidator{},
+			policy:    &Policy{Source: &policiesfakes.FakePolicy{}},
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
@@ -361,9 +379,10 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAttached: false,
 		},
 		{
-			name:   "no attachment; invalid route",
-			route:  createHTTPRoute(false /*valid*/, true /*attachable*/, true /*parentRefs*/),
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}},
+			name:      "no attachment; invalid route",
+			route:     createHTTPRoute(false /*valid*/, true /*attachable*/, true /*parentRefs*/),
+			validator: &policiesfakes.FakeValidator{},
+			policy:    &Policy{Source: &policiesfakes.FakePolicy{}},
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
@@ -375,9 +394,103 @@ func TestAttachPolicyToRoute(t *testing.T) {
 		{
 			name:         "no attachment; max ancestors",
 			route:        createHTTPRoute(true /*valid*/, true /*attachable*/, true /*parentRefs*/),
+			validator:    &policiesfakes.FakeValidator{},
 			policy:       &Policy{Source: createTestPolicyWithAncestors(16)},
 			expAncestors: nil,
 			expAttached:  false,
+		},
+		{
+			name: "invalid for some ParentRefs",
+			route: &L7Route{
+				Source: &v1.HTTPRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      routeNsName.Name,
+						Namespace: routeNsName.Namespace,
+					},
+				},
+				Valid:      true,
+				Attachable: true,
+				RouteType:  RouteTypeHTTP,
+				ParentRefs: []ParentRef{
+					{
+						Gateway: &ParentRefGateway{
+							NamespacedName: types.NamespacedName{Name: "gateway1", Namespace: "test"},
+							EffectiveNginxProxy: &EffectiveNginxProxy{
+								Telemetry: &ngfAPIv1alpha2.Telemetry{
+									Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+										Endpoint: helpers.GetPointer("test-endpoint"),
+									},
+								},
+							},
+						},
+						Attachment: &ParentRefAttachmentStatus{
+							Attached: true,
+						},
+					},
+					{
+						Gateway: &ParentRefGateway{
+							NamespacedName:      types.NamespacedName{Name: "gateway2", Namespace: "test"},
+							EffectiveNginxProxy: &EffectiveNginxProxy{},
+						},
+						Attachment: &ParentRefAttachmentStatus{
+							Attached: true,
+						},
+					},
+				},
+			},
+			validator: validatorError,
+			policy: &Policy{
+				Source:             &policiesfakes.FakePolicy{},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
+			},
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: createExpAncestor(kinds.HTTPRoute),
+					Conditions: []conditions.Condition{
+						staticConds.NewPolicyNotAcceptedNginxProxyNotSet(staticConds.PolicyMessageTelemetryNotEnabled),
+					},
+				},
+			},
+			expAttached: true,
+		},
+		{
+			name: "invalid for all ParentRefs",
+			route: &L7Route{
+				Source: &v1.HTTPRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      routeNsName.Name,
+						Namespace: routeNsName.Namespace,
+					},
+				},
+				Valid:      true,
+				Attachable: true,
+				RouteType:  RouteTypeHTTP,
+				ParentRefs: []ParentRef{
+					{
+						Gateway: &ParentRefGateway{
+							NamespacedName:      types.NamespacedName{Name: "gateway1", Namespace: "test"},
+							EffectiveNginxProxy: &EffectiveNginxProxy{},
+						},
+						Attachment: &ParentRefAttachmentStatus{
+							Attached: true,
+						},
+					},
+				},
+			},
+			validator: validatorError,
+			policy: &Policy{
+				Source:             &policiesfakes.FakePolicy{},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
+			},
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: createExpAncestor(kinds.HTTPRoute),
+					Conditions: []conditions.Condition{
+						staticConds.NewPolicyNotAcceptedNginxProxyNotSet(staticConds.PolicyMessageTelemetryNotEnabled),
+					},
+				},
+			},
+			expAttached: false,
 		},
 	}
 
@@ -386,7 +499,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			attachPolicyToRoute(test.policy, test.route, "nginx-gateway")
+			attachPolicyToRoute(test.policy, test.route, test.validator, "nginx-gateway")
 
 			if test.expAttached {
 				g.Expect(test.route.Policies).To(HaveLen(1))
@@ -437,6 +550,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 						Kind:   "Gateway",
 					},
 				},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
 			},
 			gws: newGatewayMap(true, []types.NamespacedName{gatewayNsName}),
 			expAncestors: []PolicyAncestor{
@@ -454,6 +568,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 						Kind:   "Gateway",
 					},
 				},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
 				Ancestors: []PolicyAncestor{
 					{Ancestor: getGatewayParentRef(gatewayNsName)},
 				},
@@ -466,7 +581,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			expAttached: true,
 		},
 		{
-			name: "not attached; gateway is invalid",
+			name: "not attached; gateway is not found",
 			policy: &Policy{
 				Source: &policiesfakes.FakePolicy{},
 				TargetRefs: []PolicyTargetRef{
@@ -475,12 +590,13 @@ func TestAttachPolicyToGateway(t *testing.T) {
 						Kind:   "Gateway",
 					},
 				},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
 			},
 			gws: newGatewayMap(true, []types.NamespacedName{gatewayNsName}),
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   getGatewayParentRef(gateway2NsName),
-					Conditions: []conditions.Condition{staticConds.NewPolicyTargetNotFound("TargetRef is ignored")},
+					Conditions: []conditions.Condition{staticConds.NewPolicyTargetNotFound("TargetRef is not found")},
 				},
 			},
 			expAttached: false,
@@ -495,32 +611,13 @@ func TestAttachPolicyToGateway(t *testing.T) {
 						Kind:   "Gateway",
 					},
 				},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
 			},
 			gws: newGatewayMap(false, []types.NamespacedName{gatewayNsName}),
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   getGatewayParentRef(gatewayNsName),
 					Conditions: []conditions.Condition{staticConds.NewPolicyTargetNotFound("TargetRef is invalid")},
-				},
-			},
-			expAttached: false,
-		},
-		{
-			name: "not attached; non-NGF gateway",
-			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
-				TargetRefs: []PolicyTargetRef{
-					{
-						Nsname: gateway2NsName,
-						Kind:   "Gateway",
-					},
-				},
-			},
-			gws: newGatewayMap(true, []types.NamespacedName{gatewayNsName}),
-			expAncestors: []PolicyAncestor{
-				{
-					Ancestor:   getGatewayParentRef(gateway2NsName),
-					Conditions: []conditions.Condition{staticConds.NewPolicyTargetNotFound("TargetRef is ignored")},
 				},
 			},
 			expAttached: false,
@@ -535,6 +632,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 						Kind:   "Gateway",
 					},
 				},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
 			},
 			gws:          newGatewayMap(true, []types.NamespacedName{gatewayNsName}),
 			expAncestors: nil,
@@ -594,7 +692,7 @@ func TestAttachPolicyToService(t *testing.T) {
 	}{
 		{
 			name:   "attachment",
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}},
+			policy: &Policy{Source: &policiesfakes.FakePolicy{}, InvalidForGateways: map[types.NamespacedName]struct{}{}},
 			svc: &ReferencedService{
 				GatewayNsNames: map[types.NamespacedName]struct{}{
 					gwNsname: {},
@@ -617,6 +715,7 @@ func TestAttachPolicyToService(t *testing.T) {
 						Ancestor: getGatewayParentRef(gwNsname),
 					},
 				},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
 			},
 			svc: &ReferencedService{
 				GatewayNsNames: map[types.NamespacedName]struct{}{
@@ -640,6 +739,7 @@ func TestAttachPolicyToService(t *testing.T) {
 						Ancestor: getGatewayParentRef(gw2Nsname),
 					},
 				},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
 			},
 			svc: &ReferencedService{
 				GatewayNsNames: map[types.NamespacedName]struct{}{
@@ -660,7 +760,7 @@ func TestAttachPolicyToService(t *testing.T) {
 		},
 		{
 			name:   "no attachment; gateway is invalid",
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}},
+			policy: &Policy{Source: &policiesfakes.FakePolicy{}, InvalidForGateways: map[types.NamespacedName]struct{}{}},
 			svc: &ReferencedService{
 				GatewayNsNames: map[types.NamespacedName]struct{}{
 					gwNsname: {},
@@ -677,7 +777,7 @@ func TestAttachPolicyToService(t *testing.T) {
 		},
 		{
 			name:   "no attachment; max ancestor",
-			policy: &Policy{Source: createTestPolicyWithAncestors(16)},
+			policy: &Policy{Source: createTestPolicyWithAncestors(16), InvalidForGateways: map[types.NamespacedName]struct{}{}},
 			svc: &ReferencedService{
 				GatewayNsNames: map[types.NamespacedName]struct{}{
 					gwNsname: {},
@@ -776,8 +876,9 @@ func TestProcessPolicies(t *testing.T) {
 							Group:  v1.GroupName,
 						},
 					},
-					Ancestors: []PolicyAncestor{},
-					Valid:     true,
+					Ancestors:          []PolicyAncestor{},
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					Valid:              true,
 				},
 				pol2Key: {
 					Source: pol2,
@@ -788,8 +889,9 @@ func TestProcessPolicies(t *testing.T) {
 							Group:  v1.GroupName,
 						},
 					},
-					Ancestors: []PolicyAncestor{},
-					Valid:     true,
+					Ancestors:          []PolicyAncestor{},
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					Valid:              true,
 				},
 				pol3Key: {
 					Source: pol3,
@@ -800,8 +902,9 @@ func TestProcessPolicies(t *testing.T) {
 							Group:  v1.GroupName,
 						},
 					},
-					Ancestors: []PolicyAncestor{},
-					Valid:     true,
+					Ancestors:          []PolicyAncestor{},
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					Valid:              true,
 				},
 				pol4Key: {
 					Source: pol4,
@@ -812,8 +915,9 @@ func TestProcessPolicies(t *testing.T) {
 							Group:  v1.GroupName,
 						},
 					},
-					Ancestors: []PolicyAncestor{},
-					Valid:     true,
+					Ancestors:          []PolicyAncestor{},
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					Valid:              true,
 				},
 				pol10Key: {
 					Source: pol10,
@@ -824,18 +928,16 @@ func TestProcessPolicies(t *testing.T) {
 							Group:  "core",
 						},
 					},
-					Ancestors: []PolicyAncestor{},
-					Valid:     true,
+					Ancestors:          []PolicyAncestor{},
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					Valid:              true,
 				},
 			},
 		},
 		{
 			name: "invalid and valid policies",
 			validator: &policiesfakes.FakeValidator{
-				ValidateStub: func(
-					policy policies.Policy,
-					_ *policies.GlobalSettings,
-				) []conditions.Condition {
+				ValidateStub: func(policy policies.Policy) []conditions.Condition {
 					if policy.GetName() == "pol1" {
 						return []conditions.Condition{staticConds.NewPolicyInvalid("invalid error")}
 					}
@@ -860,8 +962,9 @@ func TestProcessPolicies(t *testing.T) {
 					Conditions: []conditions.Condition{
 						staticConds.NewPolicyInvalid("invalid error"),
 					},
-					Ancestors: []PolicyAncestor{},
-					Valid:     false,
+					Ancestors:          []PolicyAncestor{},
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					Valid:              false,
 				},
 				pol2Key: {
 					Source: pol2,
@@ -872,8 +975,9 @@ func TestProcessPolicies(t *testing.T) {
 							Group:  v1.GroupName,
 						},
 					},
-					Ancestors: []PolicyAncestor{},
-					Valid:     true,
+					Ancestors:          []PolicyAncestor{},
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					Valid:              true,
 				},
 			},
 		},
@@ -898,8 +1002,9 @@ func TestProcessPolicies(t *testing.T) {
 							Group:  v1.GroupName,
 						},
 					},
-					Ancestors: []PolicyAncestor{},
-					Valid:     true,
+					Ancestors:          []PolicyAncestor{},
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					Valid:              true,
 				},
 				pol1ConflictKey: {
 					Source: pol1Conflict,
@@ -913,25 +1018,10 @@ func TestProcessPolicies(t *testing.T) {
 					Conditions: []conditions.Condition{
 						staticConds.NewPolicyConflicted("Conflicts with another MyPolicy"),
 					},
-					Ancestors: []PolicyAncestor{},
-					Valid:     false,
+					Ancestors:          []PolicyAncestor{},
+					InvalidForGateways: map[types.NamespacedName]struct{}{},
+					Valid:              false,
 				},
-			},
-		},
-	}
-
-	processedGateways := map[types.NamespacedName]*v1.Gateway{
-		{Namespace: testNs, Name: "gw"}: {
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "gw",
-				Namespace: testNs,
-			},
-		},
-
-		{Namespace: testNs, Name: "gw2"}: {
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "gw2",
-				Namespace: testNs,
 			},
 		},
 	}
@@ -985,7 +1075,7 @@ func TestProcessPolicies(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed := processPolicies(test.policies, test.validator, processedGateways, routes, services, gateways)
+			processed := processPolicies(test.policies, test.validator, routes, services, gateways)
 			g.Expect(processed).To(BeEquivalentTo(test.expProcessedPolicies))
 		})
 	}
@@ -1111,15 +1201,6 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 		},
 	}
 
-	processedGateways := map[types.NamespacedName]*v1.Gateway{
-		{Namespace: testNs, Name: "gw"}: {
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "gw",
-				Namespace: testNs,
-			},
-		},
-	}
-
 	gateways := map[types.NamespacedName]*Gateway{
 		{Namespace: testNs, Name: "gw"}: {
 			Source: &v1.Gateway{
@@ -1137,7 +1218,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed := processPolicies(test.policies, test.validator, processedGateways, test.routes, nil, gateways)
+			processed := processPolicies(test.policies, test.validator, test.routes, nil, gateways)
 			g.Expect(processed).To(HaveLen(1))
 
 			for _, pol := range processed {

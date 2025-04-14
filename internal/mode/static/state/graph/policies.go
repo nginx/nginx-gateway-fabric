@@ -21,6 +21,9 @@ import (
 type Policy struct {
 	// Source is the corresponding Policy resource.
 	Source policies.Policy
+	// InvalidForGateways is a map of Gateways for which this Policy is invalid for. Certain NginxProxy
+	// configurations may result in a policy not being valid for some Gateways, but not others.
+	InvalidForGateways map[types.NamespacedName]struct{}
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.
@@ -67,7 +70,7 @@ const (
 )
 
 // attachPolicies attaches the graph's processed policies to the resources they target. It modifies the graph in place.
-func (g *Graph) attachPolicies(ctlrName string) {
+func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName string) {
 	if len(g.Gateways) == 0 {
 		return
 	}
@@ -83,7 +86,7 @@ func (g *Graph) attachPolicies(ctlrName string) {
 					continue
 				}
 
-				attachPolicyToRoute(policy, route, ctlrName)
+				attachPolicyToRoute(policy, route, validator, ctlrName)
 			case kinds.Service:
 				svc, exists := g.ReferencedServices[ref.Nsname]
 				if !exists {
@@ -102,12 +105,13 @@ func attachPolicyToService(
 	gws map[types.NamespacedName]*Gateway,
 	ctlrName string,
 ) {
-	for gwNsNames, gw := range gws {
-		if ngfPolicyAncestorsFull(policy, ctlrName) {
-			return
-		}
+	if ngfPolicyAncestorsFull(policy, ctlrName) {
+		return
+	}
 
-		if _, belongsToGw := svc.GatewayNsNames[gwNsNames]; !belongsToGw {
+	var validForAGateway bool
+	for gwNsName, gw := range gws {
+		if _, belongsToGw := svc.GatewayNsNames[gwNsName]; !belongsToGw {
 			continue
 		}
 
@@ -116,24 +120,33 @@ func attachPolicyToService(
 		}
 
 		if !gw.Valid {
+			policy.InvalidForGateways[gwNsName] = struct{}{}
 			ancestor.Conditions = []conditions.Condition{staticConds.NewPolicyTargetNotFound("Parent Gateway is invalid")}
 			if ancestorsContainsAncestorRef(policy.Ancestors, ancestor.Ancestor) {
-				return
+				continue
 			}
 
 			policy.Ancestors = append(policy.Ancestors, ancestor)
-			return
+			continue
 		}
 
 		if !ancestorsContainsAncestorRef(policy.Ancestors, ancestor.Ancestor) {
 			policy.Ancestors = append(policy.Ancestors, ancestor)
 		}
+		validForAGateway = true
+	}
 
+	if validForAGateway {
 		svc.Policies = append(svc.Policies, policy)
 	}
 }
 
-func attachPolicyToRoute(policy *Policy, route *L7Route, ctlrName string) {
+func attachPolicyToRoute(policy *Policy, route *L7Route, validator validation.PolicyValidator, ctlrName string) {
+	if ngfPolicyAncestorsFull(policy, ctlrName) {
+		// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
+		return
+	}
+
 	kind := v1.Kind(kinds.HTTPRoute)
 	if route.RouteType == RouteTypeGRPC {
 		kind = kinds.GRPCRoute
@@ -145,18 +158,32 @@ func attachPolicyToRoute(policy *Policy, route *L7Route, ctlrName string) {
 		Ancestor: createParentReference(v1.GroupName, kind, routeNsName),
 	}
 
-	if ngfPolicyAncestorsFull(policy, ctlrName) {
-		// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
-		return
-	}
-
 	if !route.Valid || !route.Attachable || len(route.ParentRefs) == 0 {
 		ancestor.Conditions = []conditions.Condition{staticConds.NewPolicyTargetNotFound("TargetRef is invalid")}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}
 
+	// as of now, ObservabilityPolicy is the only policy that needs this check, and it only attaches to Routes
+	for _, parentRef := range route.ParentRefs {
+		if parentRef.Gateway != nil && parentRef.Gateway.EffectiveNginxProxy != nil {
+			gw := parentRef.Gateway
+			globalSettings := &policies.GlobalSettings{
+				TelemetryEnabled: telemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+			}
+
+			if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
+				policy.InvalidForGateways[gw.NamespacedName] = struct{}{}
+				ancestor.Conditions = append(ancestor.Conditions, conds...)
+			}
+		}
+	}
+
 	policy.Ancestors = append(policy.Ancestors, ancestor)
+	if len(policy.InvalidForGateways) == len(route.ParentRefs) {
+		return
+	}
+
 	route.Policies = append(route.Policies, policy)
 }
 
@@ -166,9 +193,8 @@ func attachPolicyToGateway(
 	gateways map[types.NamespacedName]*Gateway,
 	ctlrName string,
 ) {
-	gw, exists := gateways[ref.Nsname]
-
-	if !exists && gw != nil && gw.Source == nil {
+	if ngfPolicyAncestorsFull(policy, ctlrName) {
+		// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
 		return
 	}
 
@@ -176,18 +202,17 @@ func attachPolicyToGateway(
 		Ancestor: createParentReference(v1.GroupName, kinds.Gateway, ref.Nsname),
 	}
 
-	if ngfPolicyAncestorsFull(policy, ctlrName) {
-		// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
-		return
-	}
+	gw, exists := gateways[ref.Nsname]
 
-	if !exists {
-		ancestor.Conditions = []conditions.Condition{staticConds.NewPolicyTargetNotFound("TargetRef is ignored")}
+	if !exists || (gw != nil && gw.Source == nil) {
+		policy.InvalidForGateways[ref.Nsname] = struct{}{}
+		ancestor.Conditions = []conditions.Condition{staticConds.NewPolicyTargetNotFound("TargetRef is not found")}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}
 
 	if !gw.Valid {
+		policy.InvalidForGateways[ref.Nsname] = struct{}{}
 		ancestor.Conditions = []conditions.Condition{staticConds.NewPolicyTargetNotFound("TargetRef is invalid")}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
@@ -200,82 +225,72 @@ func attachPolicyToGateway(
 func processPolicies(
 	pols map[PolicyKey]policies.Policy,
 	validator validation.PolicyValidator,
-	processedGateways map[types.NamespacedName]*v1.Gateway,
 	routes map[RouteKey]*L7Route,
 	services map[types.NamespacedName]*ReferencedService,
 	gws map[types.NamespacedName]*Gateway,
 ) map[PolicyKey]*Policy {
-	if len(pols) == 0 || len(processedGateways) == 0 {
+	if len(pols) == 0 || len(gws) == 0 {
 		return nil
 	}
 
 	processedPolicies := make(map[PolicyKey]*Policy)
 
-	for _, gw := range gws {
-		for key, policy := range pols {
-			var conds []conditions.Condition
+	for key, policy := range pols {
+		var conds []conditions.Condition
 
-			var globalSettings *policies.GlobalSettings
-			if gw != nil && gw.EffectiveNginxProxy != nil {
-				globalSettings = &policies.GlobalSettings{
-					NginxProxyValid:  true, // for effective nginx proxy to be set, the config must be valid
-					TelemetryEnabled: telemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
-				}
-			}
+		targetRefs := make([]PolicyTargetRef, 0, len(policy.GetTargetRefs()))
+		targetedRoutes := make(map[types.NamespacedName]*L7Route)
 
-			targetRefs := make([]PolicyTargetRef, 0, len(policy.GetTargetRefs()))
-			targetedRoutes := make(map[types.NamespacedName]*L7Route)
+		for _, ref := range policy.GetTargetRefs() {
+			refNsName := types.NamespacedName{Name: string(ref.Name), Namespace: policy.GetNamespace()}
 
-			for _, ref := range policy.GetTargetRefs() {
-				refNsName := types.NamespacedName{Name: string(ref.Name), Namespace: policy.GetNamespace()}
-
-				switch refGroupKind(ref.Group, ref.Kind) {
-				case gatewayGroupKind:
-					if !gatewayExists(refNsName, processedGateways) {
-						continue
-					}
-				case hrGroupKind, grpcGroupKind:
-					if route, exists := routes[routeKeyForKind(ref.Kind, refNsName)]; exists {
-						targetedRoutes[client.ObjectKeyFromObject(route.Source)] = route
-					} else {
-						continue
-					}
-				case serviceGroupKind:
-					if _, exists := services[refNsName]; !exists {
-						continue
-					}
-				default:
+			switch refGroupKind(ref.Group, ref.Kind) {
+			case gatewayGroupKind:
+				if !gatewayExists(refNsName, gws) {
 					continue
 				}
-
-				targetRefs = append(targetRefs,
-					PolicyTargetRef{
-						Kind:   ref.Kind,
-						Group:  ref.Group,
-						Nsname: refNsName,
-					})
-			}
-
-			if len(targetRefs) == 0 {
+			case hrGroupKind, grpcGroupKind:
+				if route, exists := routes[routeKeyForKind(ref.Kind, refNsName)]; exists {
+					targetedRoutes[client.ObjectKeyFromObject(route.Source)] = route
+				} else {
+					continue
+				}
+			case serviceGroupKind:
+				if _, exists := services[refNsName]; !exists {
+					continue
+				}
+			default:
 				continue
 			}
 
-			overlapConds := checkTargetRoutesForOverlap(targetedRoutes, routes)
-			conds = append(conds, overlapConds...)
-
-			conds = append(conds, validator.Validate(policy, globalSettings)...)
-
-			processedPolicies[key] = &Policy{
-				Source:     policy,
-				Valid:      len(conds) == 0,
-				Conditions: conds,
-				TargetRefs: targetRefs,
-				Ancestors:  make([]PolicyAncestor, 0, len(targetRefs)),
-			}
+			targetRefs = append(targetRefs,
+				PolicyTargetRef{
+					Kind:   ref.Kind,
+					Group:  ref.Group,
+					Nsname: refNsName,
+				})
 		}
 
-		markConflictedPolicies(processedPolicies, validator)
+		if len(targetRefs) == 0 {
+			continue
+		}
+
+		overlapConds := checkTargetRoutesForOverlap(targetedRoutes, routes)
+		conds = append(conds, overlapConds...)
+
+		conds = append(conds, validator.Validate(policy)...)
+
+		processedPolicies[key] = &Policy{
+			Source:             policy,
+			Valid:              len(conds) == 0,
+			Conditions:         conds,
+			TargetRefs:         targetRefs,
+			Ancestors:          make([]PolicyAncestor, 0, len(targetRefs)),
+			InvalidForGateways: make(map[types.NamespacedName]struct{}),
+		}
 	}
+
+	markConflictedPolicies(processedPolicies, validator)
 
 	return processedPolicies
 }

@@ -121,7 +121,7 @@ func prepareRouteStatus(
 		allConds = append(allConds, defaultConds...)
 		allConds = append(allConds, conds...)
 		if failedAttachmentCondCount == 1 {
-			allConds = append(allConds, ref.Attachment.FailedCondition)
+			allConds = append(allConds, ref.Attachment.FailedConditions...)
 		}
 
 		if nginxReloadRes.Error != nil {
@@ -136,8 +136,8 @@ func prepareRouteStatus(
 
 		ps := v1.RouteParentStatus{
 			ParentRef: v1.ParentReference{
-				Namespace:   helpers.GetPointer(v1.Namespace(ref.Gateway.Namespace)),
-				Name:        v1.ObjectName(ref.Gateway.Name),
+				Namespace:   helpers.GetPointer(v1.Namespace(ref.Gateway.NamespacedName.Namespace)),
+				Name:        v1.ObjectName(ref.Gateway.NamespacedName.Name),
 				SectionName: ref.SectionName,
 			},
 			ControllerName: v1.GatewayController(gatewayCtlrName),
@@ -372,11 +372,11 @@ func PrepareBackendTLSPolicyRequests(
 		apiConds := conditions.ConvertConditions(conds, pol.Source.Generation, transitionTime)
 
 		policyAncestors := make([]v1alpha2.PolicyAncestorStatus, 0, len(pol.Gateways))
-		for _, gwNsNames := range pol.Gateways {
+		for _, gwNsName := range pol.Gateways {
 			policyAncestorStatus := v1alpha2.PolicyAncestorStatus{
 				AncestorRef: v1.ParentReference{
-					Namespace: helpers.GetPointer(v1.Namespace(gwNsNames.Namespace)),
-					Name:      v1.ObjectName(gwNsNames.Name),
+					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
+					Name:      v1.ObjectName(gwNsName.Name),
 					Group:     helpers.GetPointer[v1.Group](v1.GroupName),
 					Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
 				},

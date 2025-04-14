@@ -185,6 +185,7 @@ func createListener(
 
 func convertListener(
 	listener gatewayv1.Listener,
+	gatewayNSName types.NamespacedName,
 	secret *v1.Secret,
 	supportedKinds []gatewayv1.RouteGroupKind,
 	l7Route map[RouteKey]*L7Route,
@@ -192,6 +193,7 @@ func convertListener(
 ) *Listener {
 	l := &Listener{
 		Name:           string(listener.Name),
+		GatewayName:    gatewayNSName,
 		Source:         listener,
 		L4Routes:       l4Route,
 		Routes:         l7Route,
@@ -599,6 +601,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 						[]*Listener{
 							convertListener(
 								gateway1.Spec.Listeners[0],
+								client.ObjectKeyFromObject(gateway1),
 								secretDiffNs,
 								supportedHTTPGRPC,
 								map[RouteKey]*L7Route{},
@@ -614,6 +617,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 						[]*Listener{
 							convertListener(
 								gateway2.Spec.Listeners[0],
+								client.ObjectKeyFromObject(gateway2),
 								secretDiffNs,
 								supportedHTTPGRPC,
 								map[RouteKey]*L7Route{},
@@ -670,6 +674,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 						[]*Listener{
 							convertListener(
 								gatewayMultipleListeners1.Spec.Listeners[0],
+								client.ObjectKeyFromObject(gatewayMultipleListeners1),
 								nil,
 								supportedHTTPGRPC,
 								map[RouteKey]*L7Route{},
@@ -677,6 +682,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 							),
 							convertListener(
 								gatewayMultipleListeners1.Spec.Listeners[1],
+								client.ObjectKeyFromObject(gatewayMultipleListeners1),
 								secretSameNs,
 								supportedHTTPGRPC,
 								map[RouteKey]*L7Route{},
@@ -684,6 +690,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 							),
 							convertListener(
 								gatewayMultipleListeners1.Spec.Listeners[2],
+								client.ObjectKeyFromObject(gatewayMultipleListeners1),
 								nil,
 								supportedTLS,
 								map[RouteKey]*L7Route{},
@@ -699,6 +706,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 						[]*Listener{
 							convertListener(
 								gatewayMultipleListeners2.Spec.Listeners[0],
+								client.ObjectKeyFromObject(gatewayMultipleListeners2),
 								nil,
 								supportedHTTPGRPC,
 								map[RouteKey]*L7Route{},
@@ -706,6 +714,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 							),
 							convertListener(
 								gatewayMultipleListeners2.Spec.Listeners[1],
+								client.ObjectKeyFromObject(gatewayMultipleListeners2),
 								secretSameNs,
 								supportedHTTPGRPC,
 								map[RouteKey]*L7Route{},
@@ -713,6 +722,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 							),
 							convertListener(
 								gatewayMultipleListeners2.Spec.Listeners[2],
+								client.ObjectKeyFromObject(gatewayMultipleListeners2),
 								nil,
 								supportedTLS,
 								map[RouteKey]*L7Route{},
@@ -728,6 +738,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 						[]*Listener{
 							convertListener(
 								gatewayMultipleListeners3.Spec.Listeners[0],
+								client.ObjectKeyFromObject(gatewayMultipleListeners3),
 								nil,
 								supportedHTTPGRPC,
 								map[RouteKey]*L7Route{},
@@ -735,6 +746,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 							),
 							convertListener(
 								gatewayMultipleListeners3.Spec.Listeners[1],
+								client.ObjectKeyFromObject(gatewayMultipleListeners3),
 								secretSameNs,
 								supportedHTTPGRPC,
 								map[RouteKey]*L7Route{},
@@ -742,6 +754,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 							),
 							convertListener(
 								gatewayMultipleListeners3.Spec.Listeners[2],
+								client.ObjectKeyFromObject(gatewayMultipleListeners3),
 								nil,
 								supportedTLS,
 								map[RouteKey]*L7Route{},
@@ -796,6 +809,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 						[]*Listener{
 							convertListener(
 								gatewayTLSSamePortHostname.Spec.Listeners[0],
+								client.ObjectKeyFromObject(gatewayTLSSamePortHostname),
 								nil,
 								supportedTLS,
 								map[RouteKey]*L7Route{},
@@ -811,6 +825,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 						[]*Listener{
 							convertListener(
 								gatewayHTTPSSamePortHostname.Spec.Listeners[0],
+								client.ObjectKeyFromObject(gatewayHTTPSSamePortHostname),
 								secretSameNs,
 								supportedHTTPGRPC,
 								map[RouteKey]*L7Route{},

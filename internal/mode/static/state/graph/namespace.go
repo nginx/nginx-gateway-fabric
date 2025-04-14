@@ -29,7 +29,7 @@ func buildReferencedNamespaces(
 // isNamespaceReferenced returns true if a given Namespace resource has a label
 // that matches any of the Gateway Listener's label selector.
 func isNamespaceReferenced(ns *v1.Namespace, gws map[types.NamespacedName]*Gateway) bool {
-	if gws == nil || ns == nil {
+	if ns == nil || len(gws) == 0 {
 		return false
 	}
 

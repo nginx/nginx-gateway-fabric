@@ -53,9 +53,6 @@ func TestBuildGraph(t *testing.T) {
 		staticConds.NewPolicyAccepted(),
 		staticConds.NewPolicyAccepted(),
 		staticConds.NewPolicyAccepted(),
-		staticConds.NewPolicyAccepted(),
-		staticConds.NewPolicyAccepted(),
-		staticConds.NewPolicyAccepted(),
 	}
 
 	btp := BackendTLSPolicy{
@@ -168,11 +165,12 @@ func TestBuildGraph(t *testing.T) {
 	createValidRuleWithBackendRefs := func(matches []gatewayv1.HTTPRouteMatch) RouteRule {
 		refs := []BackendRef{
 			{
-				SvcNsName:        types.NamespacedName{Namespace: "service", Name: "foo"},
-				ServicePort:      v1.ServicePort{Port: 80},
-				Valid:            true,
-				Weight:           1,
-				BackendTLSPolicy: &btp,
+				SvcNsName:          types.NamespacedName{Namespace: "service", Name: "foo"},
+				ServicePort:        v1.ServicePort{Port: 80},
+				Valid:              true,
+				Weight:             1,
+				BackendTLSPolicy:   &btp,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 		}
 		rbrs := []RouteBackendRef{
@@ -373,73 +371,75 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
-	createGateway := func(name, nginxProxyName string) *gatewayv1.Gateway {
-		return &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: testNs,
-				Name:      name,
-			},
-			Spec: gatewayv1.GatewaySpec{
-				GatewayClassName: gcName,
-				Infrastructure: &gatewayv1.GatewayInfrastructure{
-					ParametersRef: &gatewayv1.LocalParametersReference{
-						Group: ngfAPIv1alpha2.GroupName,
-						Kind:  kinds.NginxProxy,
-						Name:  nginxProxyName,
-					},
+	createGateway := func(name, nginxProxyName string) *Gateway {
+		return &Gateway{
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: testNs,
+					Name:      name,
 				},
-				Listeners: []gatewayv1.Listener{
-					{
-						Name:     "listener-80-1",
-						Hostname: nil,
-						Port:     80,
-						Protocol: gatewayv1.HTTPProtocolType,
-						AllowedRoutes: &gatewayv1.AllowedRoutes{
-							Namespaces: &gatewayv1.RouteNamespaces{
-								From: helpers.GetPointer(gatewayv1.NamespacesFromSelector),
-								Selector: &metav1.LabelSelector{
-									MatchLabels: map[string]string{
-										"app": "allowed",
+				Spec: gatewayv1.GatewaySpec{
+					GatewayClassName: gcName,
+					Infrastructure: &gatewayv1.GatewayInfrastructure{
+						ParametersRef: &gatewayv1.LocalParametersReference{
+							Group: ngfAPIv1alpha2.GroupName,
+							Kind:  kinds.NginxProxy,
+							Name:  nginxProxyName,
+						},
+					},
+					Listeners: []gatewayv1.Listener{
+						{
+							Name:     "listener-80-1",
+							Hostname: nil,
+							Port:     80,
+							Protocol: gatewayv1.HTTPProtocolType,
+							AllowedRoutes: &gatewayv1.AllowedRoutes{
+								Namespaces: &gatewayv1.RouteNamespaces{
+									From: helpers.GetPointer(gatewayv1.NamespacesFromSelector),
+									Selector: &metav1.LabelSelector{
+										MatchLabels: map[string]string{
+											"app": "allowed",
+										},
 									},
 								},
 							},
 						},
-					},
 
-					{
-						Name:     "listener-443-1",
-						Hostname: (*gatewayv1.Hostname)(helpers.GetPointer("*.example.com")),
-						Port:     443,
-						TLS: &gatewayv1.GatewayTLSConfig{
-							Mode: helpers.GetPointer(gatewayv1.TLSModeTerminate),
-							CertificateRefs: []gatewayv1.SecretObjectReference{
-								{
-									Kind:      helpers.GetPointer[gatewayv1.Kind]("Secret"),
-									Name:      gatewayv1.ObjectName(secret.Name),
-									Namespace: helpers.GetPointer(gatewayv1.Namespace(secret.Namespace)),
+						{
+							Name:     "listener-443-1",
+							Hostname: (*gatewayv1.Hostname)(helpers.GetPointer("*.example.com")),
+							Port:     443,
+							TLS: &gatewayv1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(gatewayv1.TLSModeTerminate),
+								CertificateRefs: []gatewayv1.SecretObjectReference{
+									{
+										Kind:      helpers.GetPointer[gatewayv1.Kind]("Secret"),
+										Name:      gatewayv1.ObjectName(secret.Name),
+										Namespace: helpers.GetPointer(gatewayv1.Namespace(secret.Namespace)),
+									},
+								},
+							},
+							Protocol: gatewayv1.HTTPSProtocolType,
+						},
+						{
+							Name:     "listener-443-2",
+							Hostname: (*gatewayv1.Hostname)(helpers.GetPointer("*.example.org")),
+							Port:     443,
+							Protocol: gatewayv1.TLSProtocolType,
+							TLS:      &gatewayv1.GatewayTLSConfig{Mode: helpers.GetPointer(gatewayv1.TLSModePassthrough)},
+							AllowedRoutes: &gatewayv1.AllowedRoutes{
+								Kinds: []gatewayv1.RouteGroupKind{
+									{Kind: kinds.TLSRoute, Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
 								},
 							},
 						},
-						Protocol: gatewayv1.HTTPSProtocolType,
-					},
-					{
-						Name:     "listener-443-2",
-						Hostname: (*gatewayv1.Hostname)(helpers.GetPointer("*.example.org")),
-						Port:     443,
-						Protocol: gatewayv1.TLSProtocolType,
-						TLS:      &gatewayv1.GatewayTLSConfig{Mode: helpers.GetPointer(gatewayv1.TLSModePassthrough)},
-						AllowedRoutes: &gatewayv1.AllowedRoutes{
-							Kinds: []gatewayv1.RouteGroupKind{
-								{Kind: kinds.TLSRoute, Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
-							},
+						{
+							Name:     "listener-8443",
+							Hostname: (*gatewayv1.Hostname)(helpers.GetPointer("*.example.org")),
+							Port:     8443,
+							Protocol: gatewayv1.TLSProtocolType,
+							TLS:      &gatewayv1.GatewayTLSConfig{Mode: helpers.GetPointer(gatewayv1.TLSModePassthrough)},
 						},
-					},
-					{
-						Name:     "listener-8443",
-						Hostname: (*gatewayv1.Hostname)(helpers.GetPointer("*.example.org")),
-						Port:     8443,
-						Protocol: gatewayv1.TLSProtocolType,
-						TLS:      &gatewayv1.GatewayTLSConfig{Mode: helpers.GetPointer(gatewayv1.TLSModePassthrough)},
 					},
 				},
 			},
@@ -584,6 +584,25 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
+	// np1Effective is the combined NginxProxy of npGlobal and np1
+	np1Effective := &EffectiveNginxProxy{
+		Telemetry: &ngfAPIv1alpha2.Telemetry{
+			Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+				Endpoint:   helpers.GetPointer("1.2.3.4:123"),
+				Interval:   helpers.GetPointer(ngfAPIv1alpha1.Duration("5s")),
+				BatchSize:  helpers.GetPointer(int32(512)),
+				BatchCount: helpers.GetPointer(int32(4)),
+			},
+			ServiceName: helpers.GetPointer("my-svc"),
+			SpanAttributes: []ngfAPIv1alpha1.SpanAttribute{
+				{Key: "key", Value: "value"},
+			},
+		},
+		Logging: &ngfAPIv1alpha2.NginxLogging{
+			ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
+		},
+	}
+
 	// NGF Policies
 	//
 	// We have to use real policies here instead of a mocks because the Diff function we use in the test fails when
@@ -620,7 +639,8 @@ func TestBuildGraph(t *testing.T) {
 				Nsname: types.NamespacedName{Namespace: testNs, Name: "hr-1"},
 			},
 		},
-		Valid: true,
+		InvalidForGateways: map[types.NamespacedName]struct{}{},
+		Valid:              true,
 	}
 
 	gwPolicyKey := PolicyKey{GVK: polGVK, NsName: types.NamespacedName{Namespace: testNs, Name: "gwPolicy"}}
@@ -653,7 +673,8 @@ func TestBuildGraph(t *testing.T) {
 				Nsname: types.NamespacedName{Namespace: testNs, Name: "gateway-1"},
 			},
 		},
-		Valid: true,
+		InvalidForGateways: map[types.NamespacedName]struct{}{},
+		Valid:              true,
 	}
 
 	createStateWithGatewayClass := func(gc *gatewayv1.GatewayClass) ClusterState {
@@ -662,8 +683,8 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(gc): gc,
 			},
 			Gateways: map[types.NamespacedName]*gatewayv1.Gateway{
-				client.ObjectKeyFromObject(gw1): gw1,
-				client.ObjectKeyFromObject(gw2): gw2,
+				client.ObjectKeyFromObject(gw1.Source): gw1.Source,
+				client.ObjectKeyFromObject(gw2.Source): gw2.Source,
 			},
 			HTTPRoutes: map[types.NamespacedName]*gatewayv1.HTTPRoute{
 				client.ObjectKeyFromObject(hr1): hr1,
@@ -722,13 +743,21 @@ func TestBuildGraph(t *testing.T) {
 		Source:     hr1,
 		ParentRefs: []ParentRef{
 			{
-				Idx:         0,
-				Gateway:     client.ObjectKeyFromObject(gw1),
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
 				SectionName: hr1.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
-					Attached:          true,
-					AcceptedHostnames: map[string][]string{"listener-80-1": {"foo.example.com"}},
-					ListenerPort:      80,
+					Attached: true,
+					AcceptedHostnames: map[string][]string{
+						CreateGatewayListenerKey(
+							client.ObjectKeyFromObject(gw1.Source),
+							"listener-80-1",
+						): {"foo.example.com"},
+					},
+					ListenerPort: 80,
 				},
 			},
 		},
@@ -745,13 +774,22 @@ func TestBuildGraph(t *testing.T) {
 		Source:     tr,
 		ParentRefs: []ParentRef{
 			{
-				Idx:     0,
-				Gateway: client.ObjectKeyFromObject(gw1),
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
 				Attachment: &ParentRefAttachmentStatus{
 					Attached: true,
 					AcceptedHostnames: map[string][]string{
-						"listener-443-2": {"fizz.example.org"},
-						"listener-8443":  {"fizz.example.org"},
+						CreateGatewayListenerKey(
+							client.ObjectKeyFromObject(gw1.Source),
+							"listener-443-2",
+						): {"fizz.example.org"},
+						CreateGatewayListenerKey(
+							client.ObjectKeyFromObject(gw1.Source),
+							"listener-8443",
+						): {"fizz.example.org"},
 					},
 				},
 			},
@@ -766,7 +804,8 @@ func TestBuildGraph(t *testing.T) {
 				ServicePort: v1.ServicePort{
 					Port: 80,
 				},
-				Valid: true,
+				Valid:              true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 		},
 	}
@@ -777,12 +816,15 @@ func TestBuildGraph(t *testing.T) {
 		Source:     tr2,
 		ParentRefs: []ParentRef{
 			{
-				Idx:     0,
-				Gateway: client.ObjectKeyFromObject(gw1),
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
 				Attachment: &ParentRefAttachmentStatus{
 					Attached:          false,
 					AcceptedHostnames: map[string][]string{},
-					FailedCondition:   staticConds.NewRouteHostnameConflict(),
+					FailedConditions:  []conditions.Condition{staticConds.NewRouteHostnameConflict()},
 				},
 			},
 		},
@@ -796,7 +838,8 @@ func TestBuildGraph(t *testing.T) {
 				ServicePort: v1.ServicePort{
 					Port: 80,
 				},
-				Valid: true,
+				Valid:              true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 		},
 	}
@@ -808,13 +851,21 @@ func TestBuildGraph(t *testing.T) {
 		Source:     gr,
 		ParentRefs: []ParentRef{
 			{
-				Idx:         0,
-				Gateway:     client.ObjectKeyFromObject(gw1),
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
 				SectionName: gr.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
-					Attached:          true,
-					AcceptedHostnames: map[string][]string{"listener-80-1": {"bar.example.com"}},
-					ListenerPort:      80,
+					Attached: true,
+					AcceptedHostnames: map[string][]string{
+						CreateGatewayListenerKey(
+							client.ObjectKeyFromObject(gw1.Source),
+							"listener-80-1",
+						): {"bar.example.com"},
+					},
+					ListenerPort: 80,
 				},
 			},
 		},
@@ -833,13 +884,21 @@ func TestBuildGraph(t *testing.T) {
 		Source:     hr3,
 		ParentRefs: []ParentRef{
 			{
-				Idx:         0,
-				Gateway:     client.ObjectKeyFromObject(gw1),
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
 				SectionName: hr3.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
-					Attached:          true,
-					AcceptedHostnames: map[string][]string{"listener-443-1": {"foo.example.com"}},
-					ListenerPort:      443,
+					Attached: true,
+					AcceptedHostnames: map[string][]string{
+						CreateGatewayListenerKey(
+							client.ObjectKeyFromObject(gw1.Source),
+							"listener-443-1",
+						): {"foo.example.com"},
+					},
+					ListenerPort: 443,
 				},
 			},
 		},
@@ -867,13 +926,14 @@ func TestBuildGraph(t *testing.T) {
 			},
 			Gateways: map[types.NamespacedName]*Gateway{
 				{Namespace: testNs, Name: "gateway-1"}: {
-					Source: gw1,
+					Source: gw1.Source,
 					Listeners: []*Listener{
 						{
-							Name:       "listener-80-1",
-							Source:     gw1.Spec.Listeners[0],
-							Valid:      true,
-							Attachable: true,
+							Name:        "listener-80-1",
+							GatewayName: types.NamespacedName{Namespace: testNs, Name: "gateway-1"},
+							Source:      gw1.Source.Spec.Listeners[0],
+							Valid:       true,
+							Attachable:  true,
 							Routes: map[RouteKey]*L7Route{
 								CreateRouteKey(hr1): routeHR1,
 								CreateRouteKey(gr):  routeGR,
@@ -884,7 +944,8 @@ func TestBuildGraph(t *testing.T) {
 						},
 						{
 							Name:           "listener-443-1",
-							Source:         gw1.Spec.Listeners[1],
+							GatewayName:    types.NamespacedName{Namespace: testNs, Name: "gateway-1"},
+							Source:         gw1.Source.Spec.Listeners[1],
 							Valid:          true,
 							Attachable:     true,
 							Routes:         map[RouteKey]*L7Route{CreateRouteKey(hr3): routeHR3},
@@ -893,23 +954,25 @@ func TestBuildGraph(t *testing.T) {
 							SupportedKinds: supportedKindsForListeners,
 						},
 						{
-							Name:       "listener-443-2",
-							Source:     gw1.Spec.Listeners[2],
-							Valid:      true,
-							Attachable: true,
-							L4Routes:   map[L4RouteKey]*L4Route{CreateRouteKeyL4(tr): routeTR},
-							Routes:     map[RouteKey]*L7Route{},
+							Name:        "listener-443-2",
+							GatewayName: types.NamespacedName{Namespace: testNs, Name: "gateway-1"},
+							Source:      gw1.Source.Spec.Listeners[2],
+							Valid:       true,
+							Attachable:  true,
+							L4Routes:    map[L4RouteKey]*L4Route{CreateRouteKeyL4(tr): routeTR},
+							Routes:      map[RouteKey]*L7Route{},
 							SupportedKinds: []gatewayv1.RouteGroupKind{
 								{Kind: kinds.TLSRoute, Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
 							},
 						},
 						{
-							Name:       "listener-8443",
-							Source:     gw1.Spec.Listeners[3],
-							Valid:      true,
-							Attachable: true,
-							L4Routes:   map[L4RouteKey]*L4Route{CreateRouteKeyL4(tr): routeTR},
-							Routes:     map[RouteKey]*L7Route{},
+							Name:        "listener-8443",
+							GatewayName: types.NamespacedName{Namespace: testNs, Name: "gateway-1"},
+							Source:      gw1.Source.Spec.Listeners[3],
+							Valid:       true,
+							Attachable:  true,
+							L4Routes:    map[L4RouteKey]*L4Route{CreateRouteKeyL4(tr): routeTR},
+							Routes:      map[RouteKey]*L7Route{},
 							SupportedKinds: []gatewayv1.RouteGroupKind{
 								{Kind: kinds.TLSRoute, Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
 							},
@@ -945,11 +1008,12 @@ func TestBuildGraph(t *testing.T) {
 					},
 				},
 				{Namespace: testNs, Name: "gateway-2"}: {
-					Source: gw2,
+					Source: gw2.Source,
 					Listeners: []*Listener{
 						{
 							Name:                      "listener-80-1",
-							Source:                    gw2.Spec.Listeners[0],
+							GatewayName:               types.NamespacedName{Namespace: testNs, Name: "gateway-2"},
+							Source:                    gw2.Source.Spec.Listeners[0],
 							Valid:                     true,
 							Attachable:                true,
 							Routes:                    map[RouteKey]*L7Route{},
@@ -959,7 +1023,8 @@ func TestBuildGraph(t *testing.T) {
 						},
 						{
 							Name:           "listener-443-1",
-							Source:         gw2.Spec.Listeners[1],
+							GatewayName:    types.NamespacedName{Namespace: testNs, Name: "gateway-2"},
+							Source:         gw2.Source.Spec.Listeners[1],
 							Valid:          true,
 							Attachable:     true,
 							Routes:         map[RouteKey]*L7Route{},
@@ -968,23 +1033,25 @@ func TestBuildGraph(t *testing.T) {
 							SupportedKinds: supportedKindsForListeners,
 						},
 						{
-							Name:       "listener-443-2",
-							Source:     gw2.Spec.Listeners[2],
-							Valid:      true,
-							Attachable: true,
-							L4Routes:   map[L4RouteKey]*L4Route{},
-							Routes:     map[RouteKey]*L7Route{},
+							Name:        "listener-443-2",
+							GatewayName: types.NamespacedName{Namespace: testNs, Name: "gateway-2"},
+							Source:      gw2.Source.Spec.Listeners[2],
+							Valid:       true,
+							Attachable:  true,
+							L4Routes:    map[L4RouteKey]*L4Route{},
+							Routes:      map[RouteKey]*L7Route{},
 							SupportedKinds: []gatewayv1.RouteGroupKind{
 								{Kind: kinds.TLSRoute, Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
 							},
 						},
 						{
-							Name:       "listener-8443",
-							Source:     gw2.Spec.Listeners[3],
-							Valid:      true,
-							Attachable: true,
-							L4Routes:   map[L4RouteKey]*L4Route{},
-							Routes:     map[RouteKey]*L7Route{},
+							Name:        "listener-8443",
+							GatewayName: types.NamespacedName{Namespace: testNs, Name: "gateway-2"},
+							Source:      gw2.Source.Spec.Listeners[3],
+							Valid:       true,
+							Attachable:  true,
+							L4Routes:    map[L4RouteKey]*L4Route{},
+							Routes:      map[RouteKey]*L7Route{},
 							SupportedKinds: []gatewayv1.RouteGroupKind{
 								{Kind: kinds.TLSRoute, Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
 							},

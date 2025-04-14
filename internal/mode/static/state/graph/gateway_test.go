@@ -15,58 +15,11 @@ import (
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
-
-func TestProcessedGatewaysGetAllNsNames(t *testing.T) {
-	t.Parallel()
-	gateway1 := &v1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "test",
-			Name:      "gateway-1",
-		},
-	}
-	gateway2 := &v1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "test",
-			Name:      "gateway-2",
-		},
-	}
-
-	tests := []struct {
-		gws      map[types.NamespacedName]*v1.Gateway
-		name     string
-		expected []types.NamespacedName
-	}{
-		{
-			gws:      nil,
-			expected: []types.NamespacedName{},
-			name:     "no gateways",
-		},
-		{
-			gws: map[types.NamespacedName]*v1.Gateway{
-				client.ObjectKeyFromObject(gateway1): gateway1,
-				client.ObjectKeyFromObject(gateway2): gateway2,
-			},
-			expected: []types.NamespacedName{
-				client.ObjectKeyFromObject(gateway1),
-				client.ObjectKeyFromObject(gateway2),
-			},
-			name: "all gateways",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-			result := GetAllNsNames(test.gws)
-			g.Expect(result).To(ConsistOf(test.expected))
-		})
-	}
-}
 
 func TestProcessGateways(t *testing.T) {
 	t.Parallel()
@@ -453,6 +406,7 @@ func TestBuildGateway(t *testing.T) {
 					Listeners: []*Listener{
 						{
 							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo80Listener1,
 							Valid:          true,
 							Attachable:     true,
@@ -462,6 +416,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "foo-8080",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo8080Listener,
 							Valid:          true,
 							Attachable:     true,
@@ -469,6 +424,10 @@ func TestBuildGateway(t *testing.T) {
 							L4Routes:       map[L4RouteKey]*L4Route{},
 							SupportedKinds: supportedKindsForListeners,
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true,
 				},
@@ -486,6 +445,7 @@ func TestBuildGateway(t *testing.T) {
 					Listeners: []*Listener{
 						{
 							Name:           "foo-443-https-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo443HTTPSListener1,
 							Valid:          true,
 							Attachable:     true,
@@ -496,6 +456,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "foo-8443-https",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo8443HTTPSListener,
 							Valid:          true,
 							Attachable:     true,
@@ -504,6 +465,10 @@ func TestBuildGateway(t *testing.T) {
 							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
 							SupportedKinds: supportedKindsForListeners,
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway-https", gcName),
 					},
 					Valid: true,
 				},
@@ -519,6 +484,7 @@ func TestBuildGateway(t *testing.T) {
 					Listeners: []*Listener{
 						{
 							Name:                      "listener-with-allowed-routes",
+							GatewayName:               client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:                    listenerAllowedRoutes,
 							Valid:                     true,
 							Attachable:                true,
@@ -529,6 +495,10 @@ func TestBuildGateway(t *testing.T) {
 								{Kind: kinds.HTTPRoute, Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 							},
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true,
 				},
@@ -568,6 +538,7 @@ func TestBuildGateway(t *testing.T) {
 					Listeners: []*Listener{
 						{
 							Name:           "listener-cross-ns-secret",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         crossNamespaceSecretListener,
 							Valid:          true,
 							Attachable:     true,
@@ -576,6 +547,10 @@ func TestBuildGateway(t *testing.T) {
 							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretDiffNamespace)),
 							SupportedKinds: supportedKindsForListeners,
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true,
 				},
@@ -595,6 +570,7 @@ func TestBuildGateway(t *testing.T) {
 					Listeners: []*Listener{
 						{
 							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo80Listener1,
 							Valid:          true,
 							Attachable:     true,
@@ -602,6 +578,10 @@ func TestBuildGateway(t *testing.T) {
 							L4Routes:       map[L4RouteKey]*L4Route{},
 							SupportedKinds: supportedKindsForListeners,
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway-valid-np", gcName),
 					},
 					Valid: true,
 					NginxProxy: &NginxProxy{
@@ -631,6 +611,7 @@ func TestBuildGateway(t *testing.T) {
 					Listeners: []*Listener{
 						{
 							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo80Listener1,
 							Valid:          true,
 							Attachable:     true,
@@ -638,6 +619,10 @@ func TestBuildGateway(t *testing.T) {
 							L4Routes:       map[L4RouteKey]*L4Route{},
 							SupportedKinds: supportedKindsForListeners,
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway-valid-np", gcName),
 					},
 					Valid: true,
 					NginxProxy: &NginxProxy{
@@ -656,14 +641,15 @@ func TestBuildGateway(t *testing.T) {
 			name: "valid http listener with valid NginxProxy; GatewayClass has valid NginxProxy too",
 		},
 		{
-			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{foo80Listener1}}),
+			gateway:      createGateway(gatewayCfg{name: "gateway1", listeners: []v1.Listener{foo80Listener1}}),
 			gatewayClass: validGCWithNp,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
 							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo80Listener1,
 							Valid:          true,
 							Attachable:     true,
@@ -671,6 +657,10 @@ func TestBuildGateway(t *testing.T) {
 							L4Routes:       map[L4RouteKey]*L4Route{},
 							SupportedKinds: supportedKindsForListeners,
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true,
 					EffectiveNginxProxy: &EffectiveNginxProxy{
@@ -681,17 +671,18 @@ func TestBuildGateway(t *testing.T) {
 			name: "valid http listener; GatewayClass has valid NginxProxy",
 		},
 		{
-			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{crossNamespaceSecretListener}}),
+			gateway:      createGateway(gatewayCfg{name: "gateway1", listeners: []v1.Listener{crossNamespaceSecretListener}}),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
-							Name:       "listener-cross-ns-secret",
-							Source:     crossNamespaceSecretListener,
-							Valid:      false,
-							Attachable: true,
+							Name:        "listener-cross-ns-secret",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      crossNamespaceSecretListener,
+							Valid:       false,
+							Attachable:  true,
 							Conditions: staticConds.NewListenerRefNotPermitted(
 								`Certificate ref to secret diff-ns/secret not permitted by any ReferenceGrant`,
 							),
@@ -700,23 +691,28 @@ func TestBuildGateway(t *testing.T) {
 							SupportedKinds: supportedKindsForListeners,
 						},
 					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
 					Valid: true,
 				},
 			},
 			name: "invalid attachable https listener with cross-namespace secret; no reference grant",
 		},
 		{
-			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{listenerInvalidSelector}}),
+			gateway:      createGateway(gatewayCfg{name: "gateway1", listeners: []v1.Listener{listenerInvalidSelector}}),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
-							Name:       "listener-with-invalid-selector",
-							Source:     listenerInvalidSelector,
-							Valid:      false,
-							Attachable: true,
+							Name:        "listener-with-invalid-selector",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      listenerInvalidSelector,
+							Valid:       false,
+							Attachable:  true,
 							Conditions: staticConds.NewListenerUnsupportedValue(
 								`invalid label selector: "invalid" is not a valid label selector operator`,
 							),
@@ -727,29 +723,38 @@ func TestBuildGateway(t *testing.T) {
 							},
 						},
 					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
 					Valid: true,
 				},
 			},
 			name: "attachable http listener with invalid label selector",
 		},
 		{
-			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{invalidProtocolListener}}),
+			gateway:      createGateway(gatewayCfg{name: "gateway1", listeners: []v1.Listener{invalidProtocolListener}}),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
-							Name:       "invalid-protocol",
-							Source:     invalidProtocolListener,
-							Valid:      false,
-							Attachable: false,
+							Name:        "invalid-protocol",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      invalidProtocolListener,
+							Valid:       false,
+							Attachable:  false,
 							Conditions: staticConds.NewListenerUnsupportedProtocol(
 								`protocol: Unsupported value: "TCP": supported values: "HTTP", "HTTPS", "TLS"`,
 							),
 							Routes:   map[RouteKey]*L7Route{},
 							L4Routes: map[L4RouteKey]*L4Route{},
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true,
 				},
@@ -759,6 +764,7 @@ func TestBuildGateway(t *testing.T) {
 		{
 			gateway: createGateway(
 				gatewayCfg{
+					name: "gateway1",
 					listeners: []v1.Listener{
 						invalidPortListener,
 						invalidHTTPSPortListener,
@@ -768,14 +774,15 @@ func TestBuildGateway(t *testing.T) {
 			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
-							Name:       "invalid-port",
-							Source:     invalidPortListener,
-							Valid:      false,
-							Attachable: true,
+							Name:        "invalid-port",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      invalidPortListener,
+							Valid:       false,
+							Attachable:  true,
 							Conditions: staticConds.NewListenerUnsupportedValue(
 								`port: Invalid value: 0: port must be between 1-65535`,
 							),
@@ -784,10 +791,11 @@ func TestBuildGateway(t *testing.T) {
 							SupportedKinds: supportedKindsForListeners,
 						},
 						{
-							Name:       "invalid-https-port",
-							Source:     invalidHTTPSPortListener,
-							Valid:      false,
-							Attachable: true,
+							Name:        "invalid-https-port",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      invalidHTTPSPortListener,
+							Valid:       false,
+							Attachable:  true,
 							Conditions: staticConds.NewListenerUnsupportedValue(
 								`port: Invalid value: 65536: port must be between 1-65535`,
 							),
@@ -796,10 +804,11 @@ func TestBuildGateway(t *testing.T) {
 							SupportedKinds: supportedKindsForListeners,
 						},
 						{
-							Name:       "invalid-protected-port",
-							Source:     invalidProtectedPortListener,
-							Valid:      false,
-							Attachable: true,
+							Name:        "invalid-protected-port",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      invalidProtectedPortListener,
+							Valid:       false,
+							Attachable:  true,
 							Conditions: staticConds.NewListenerUnsupportedValue(
 								`port: Invalid value: 9113: port is already in use as MetricsPort`,
 							),
@@ -808,6 +817,10 @@ func TestBuildGateway(t *testing.T) {
 							L4Routes:       map[L4RouteKey]*L4Route{},
 						},
 					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
 					Valid: true,
 				},
 			},
@@ -815,15 +828,16 @@ func TestBuildGateway(t *testing.T) {
 		},
 		{
 			gateway: createGateway(
-				gatewayCfg{listeners: []v1.Listener{invalidHostnameListener, invalidHTTPSHostnameListener}},
+				gatewayCfg{name: "gateway1", listeners: []v1.Listener{invalidHostnameListener, invalidHTTPSHostnameListener}},
 			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
 							Name:           "invalid-hostname",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         invalidHostnameListener,
 							Valid:          false,
 							Conditions:     staticConds.NewListenerUnsupportedValue(invalidHostnameMsg),
@@ -833,6 +847,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "invalid-https-hostname",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         invalidHTTPSHostnameListener,
 							Valid:          false,
 							Conditions:     staticConds.NewListenerUnsupportedValue(invalidHostnameMsg),
@@ -841,30 +856,39 @@ func TestBuildGateway(t *testing.T) {
 							SupportedKinds: supportedKindsForListeners,
 						},
 					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
 					Valid: true,
 				},
 			},
 			name: "invalid hostnames",
 		},
 		{
-			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{invalidTLSConfigListener}}),
+			gateway:      createGateway(gatewayCfg{name: "gateway1", listeners: []v1.Listener{invalidTLSConfigListener}}),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
-							Name:       "invalid-tls-config",
-							Source:     invalidTLSConfigListener,
-							Valid:      false,
-							Attachable: true,
-							Routes:     map[RouteKey]*L7Route{},
-							L4Routes:   map[L4RouteKey]*L4Route{},
+							Name:        "invalid-tls-config",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      invalidTLSConfigListener,
+							Valid:       false,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
 							Conditions: staticConds.NewListenerInvalidCertificateRef(
 								`tls.certificateRefs[0]: Invalid value: test/does-not-exist: secret does not exist`,
 							),
 							SupportedKinds: supportedKindsForListeners,
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true,
 				},
@@ -874,6 +898,7 @@ func TestBuildGateway(t *testing.T) {
 		{
 			gateway: createGateway(
 				gatewayCfg{
+					name: "gateway1",
 					listeners: []v1.Listener{
 						foo80Listener1,
 						foo8080Listener,
@@ -888,11 +913,12 @@ func TestBuildGateway(t *testing.T) {
 			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
 							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo80Listener1,
 							Valid:          true,
 							Attachable:     true,
@@ -902,6 +928,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "foo-8080",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo8080Listener,
 							Valid:          true,
 							Attachable:     true,
@@ -911,6 +938,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "foo-8081",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo8081Listener,
 							Valid:          true,
 							Attachable:     true,
@@ -920,6 +948,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "foo-443-https-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo443HTTPSListener1,
 							Valid:          true,
 							Attachable:     true,
@@ -930,6 +959,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "foo-8443-https",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo8443HTTPSListener,
 							Valid:          true,
 							Attachable:     true,
@@ -940,6 +970,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "bar-80",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         bar80Listener,
 							Valid:          true,
 							Attachable:     true,
@@ -949,6 +980,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "bar-443-https",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         bar443HTTPSListener,
 							Valid:          true,
 							Attachable:     true,
@@ -959,6 +991,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "bar-8443-https",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         bar8443HTTPSListener,
 							Valid:          true,
 							Attachable:     true,
@@ -968,6 +1001,10 @@ func TestBuildGateway(t *testing.T) {
 							SupportedKinds: supportedKindsForListeners,
 						},
 					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
 					Valid: true,
 				},
 			},
@@ -976,6 +1013,7 @@ func TestBuildGateway(t *testing.T) {
 		{
 			gateway: createGateway(
 				gatewayCfg{
+					name: "gateway1",
 					listeners: []v1.Listener{
 						foo80Listener1,
 						bar80Listener,
@@ -988,11 +1026,12 @@ func TestBuildGateway(t *testing.T) {
 			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
 							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo80Listener1,
 							Valid:          false,
 							Attachable:     true,
@@ -1003,6 +1042,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "bar-80",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         bar80Listener,
 							Valid:          false,
 							Attachable:     true,
@@ -1013,6 +1053,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "foo-443-http",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo443HTTPListener,
 							Valid:          false,
 							Attachable:     true,
@@ -1023,6 +1064,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "foo-80-https",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo80HTTPSListener,
 							Valid:          false,
 							Attachable:     true,
@@ -1034,6 +1076,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "foo-443-https-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo443HTTPSListener1,
 							Valid:          false,
 							Attachable:     true,
@@ -1045,6 +1088,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						{
 							Name:           "bar-443-https",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         bar443HTTPSListener,
 							Valid:          false,
 							Attachable:     true,
@@ -1055,6 +1099,10 @@ func TestBuildGateway(t *testing.T) {
 							SupportedKinds: supportedKindsForListeners,
 						},
 					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
 					Valid: true,
 				},
 			},
@@ -1063,15 +1111,20 @@ func TestBuildGateway(t *testing.T) {
 		{
 			gateway: createGateway(
 				gatewayCfg{
+					name:      "gateway1",
 					listeners: []v1.Listener{foo80Listener1, foo443HTTPSListener1},
 					addresses: []v1.GatewayAddress{{}},
 				},
 			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
-					Valid:  false,
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: false,
 					Conditions: staticConds.NewGatewayUnsupportedValue("spec." +
 						"addresses: Forbidden: addresses are not supported",
 					),
@@ -1086,12 +1139,16 @@ func TestBuildGateway(t *testing.T) {
 		},
 		{
 			gateway: createGateway(
-				gatewayCfg{listeners: []v1.Listener{foo80Listener1, invalidProtocolListener}},
+				gatewayCfg{name: "gateway1", listeners: []v1.Listener{foo80Listener1, invalidProtocolListener}},
 			),
 			gatewayClass: invalidGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
-					Source:     getLastCreatedGateway(),
+				{Namespace: "test", Name: "gateway1"}: {
+					Source: getLastCreatedGateway(),
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
 					Valid:      false,
 					Conditions: staticConds.NewGatewayInvalid("GatewayClass is invalid"),
 				},
@@ -1100,12 +1157,16 @@ func TestBuildGateway(t *testing.T) {
 		},
 		{
 			gateway: createGateway(
-				gatewayCfg{listeners: []v1.Listener{foo80Listener1, invalidProtocolListener}},
+				gatewayCfg{name: "gateway1", listeners: []v1.Listener{foo80Listener1, invalidProtocolListener}},
 			),
 			gatewayClass: nil,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
-					Source:     getLastCreatedGateway(),
+				{Namespace: "test", Name: "gateway1"}: {
+					Source: getLastCreatedGateway(),
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
 					Valid:      false,
 					Conditions: staticConds.NewGatewayInvalid("GatewayClass doesn't exist"),
 				},
@@ -1114,28 +1175,34 @@ func TestBuildGateway(t *testing.T) {
 		},
 		{
 			gateway: createGateway(
-				gatewayCfg{listeners: []v1.Listener{foo443TLSListener, foo443HTTPListener}},
+				gatewayCfg{name: "gateway1", listeners: []v1.Listener{foo443TLSListener, foo443HTTPListener}},
 			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
-					Valid:  true,
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: true,
 					Listeners: []*Listener{
 						{
-							Name:       "foo-443-tls",
-							Source:     foo443TLSListener,
-							Valid:      false,
-							Attachable: true,
-							Routes:     map[RouteKey]*L7Route{},
-							L4Routes:   map[L4RouteKey]*L4Route{},
-							Conditions: staticConds.NewListenerProtocolConflict(conflict443PortMsg),
+							Name:        "foo-443-tls",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      foo443TLSListener,
+							Valid:       false,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
+							Conditions:  staticConds.NewListenerProtocolConflict(conflict443PortMsg),
 							SupportedKinds: []v1.RouteGroupKind{
 								{Kind: kinds.TLSRoute, Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 							},
 						},
 						{
 							Name:           "foo-443-http",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo443HTTPListener,
 							Valid:          false,
 							Attachable:     true,
@@ -1151,28 +1218,34 @@ func TestBuildGateway(t *testing.T) {
 		},
 		{
 			gateway: createGateway(
-				gatewayCfg{listeners: []v1.Listener{foo443TLSListener, splat443HTTPSListener}},
+				gatewayCfg{name: "gateway1", listeners: []v1.Listener{foo443TLSListener, splat443HTTPSListener}},
 			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
-					Valid:  true,
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: true,
 					Listeners: []*Listener{
 						{
-							Name:       "foo-443-tls",
-							Source:     foo443TLSListener,
-							Valid:      false,
-							Attachable: true,
-							Routes:     map[RouteKey]*L7Route{},
-							L4Routes:   map[L4RouteKey]*L4Route{},
-							Conditions: staticConds.NewListenerHostnameConflict(conflict443HostnameMsg),
+							Name:        "foo-443-tls",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      foo443TLSListener,
+							Valid:       false,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
+							Conditions:  staticConds.NewListenerHostnameConflict(conflict443HostnameMsg),
 							SupportedKinds: []v1.RouteGroupKind{
 								{Kind: kinds.TLSRoute, Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 							},
 						},
 						{
 							Name:           "splat-443-https",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         splat443HTTPSListener,
 							Valid:          false,
 							Attachable:     true,
@@ -1189,27 +1262,33 @@ func TestBuildGateway(t *testing.T) {
 		},
 		{
 			gateway: createGateway(
-				gatewayCfg{listeners: []v1.Listener{foo443TLSListener, bar443HTTPSListener}},
+				gatewayCfg{name: "gateway1", listeners: []v1.Listener{foo443TLSListener, bar443HTTPSListener}},
 			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
-					Valid:  true,
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: true,
 					Listeners: []*Listener{
 						{
-							Name:       "foo-443-tls",
-							Source:     foo443TLSListener,
-							Valid:      true,
-							Attachable: true,
-							Routes:     map[RouteKey]*L7Route{},
-							L4Routes:   map[L4RouteKey]*L4Route{},
+							Name:        "foo-443-tls",
+							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:      foo443TLSListener,
+							Valid:       true,
+							Attachable:  true,
+							Routes:      map[RouteKey]*L7Route{},
+							L4Routes:    map[L4RouteKey]*L4Route{},
 							SupportedKinds: []v1.RouteGroupKind{
 								{Kind: kinds.TLSRoute, Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 							},
 						},
 						{
 							Name:           "bar-443-https",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         bar443HTTPSListener,
 							Valid:          true,
 							Attachable:     true,
@@ -1224,14 +1303,21 @@ func TestBuildGateway(t *testing.T) {
 			name: "https listener and tls listener with non overlapping hostnames",
 		},
 		{
-			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{foo80Listener1}, ref: invalidKindRef}),
+			gateway: createGateway(
+				gatewayCfg{
+					name:      "gateway1",
+					listeners: []v1.Listener{foo80Listener1},
+					ref:       invalidKindRef,
+				},
+			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
 							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo80Listener1,
 							Valid:          true,
 							Attachable:     true,
@@ -1239,6 +1325,10 @@ func TestBuildGateway(t *testing.T) {
 							L4Routes:       map[L4RouteKey]*L4Route{},
 							SupportedKinds: supportedKindsForListeners,
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true, // invalid parametersRef does not invalidate Gateway.
 					Conditions: []conditions.Condition{
@@ -1256,14 +1346,21 @@ func TestBuildGateway(t *testing.T) {
 			name: "invalid parameters ref kind",
 		},
 		{
-			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{foo80Listener1}, ref: npDoesNotExistRef}),
+			gateway: createGateway(
+				gatewayCfg{
+					name:      "gateway1",
+					listeners: []v1.Listener{foo80Listener1},
+					ref:       npDoesNotExistRef,
+				},
+			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
 							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo80Listener1,
 							Valid:          true,
 							Attachable:     true,
@@ -1271,6 +1368,10 @@ func TestBuildGateway(t *testing.T) {
 							L4Routes:       map[L4RouteKey]*L4Route{},
 							SupportedKinds: supportedKindsForListeners,
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true, // invalid parametersRef does not invalidate Gateway.
 					Conditions: []conditions.Condition{
@@ -1284,14 +1385,21 @@ func TestBuildGateway(t *testing.T) {
 			name: "referenced NginxProxy doesn't exist",
 		},
 		{
-			gateway:      createGateway(gatewayCfg{listeners: []v1.Listener{foo80Listener1}, ref: invalidGwNpRef}),
+			gateway: createGateway(
+				gatewayCfg{
+					name:      "gateway1",
+					listeners: []v1.Listener{foo80Listener1},
+					ref:       invalidGwNpRef,
+				},
+			),
 			gatewayClass: validGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
 					Listeners: []*Listener{
 						{
 							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:         foo80Listener1,
 							Valid:          true,
 							Attachable:     true,
@@ -1299,6 +1407,10 @@ func TestBuildGateway(t *testing.T) {
 							L4Routes:       map[L4RouteKey]*L4Route{},
 							SupportedKinds: supportedKindsForListeners,
 						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true, // invalid NginxProxy does not invalidate Gateway.
 					NginxProxy: &NginxProxy{
@@ -1318,13 +1430,20 @@ func TestBuildGateway(t *testing.T) {
 		},
 		{
 			gateway: createGateway(
-				gatewayCfg{listeners: []v1.Listener{foo80Listener1, invalidProtocolListener}, ref: invalidGwNpRef},
+				gatewayCfg{
+					name:      "gateway1",
+					listeners: []v1.Listener{foo80Listener1, invalidProtocolListener}, ref: invalidGwNpRef,
+				},
 			),
 			gatewayClass: invalidGC,
 			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test"}: {
+				{Namespace: "test", Name: "gateway1"}: {
 					Source: getLastCreatedGateway(),
-					Valid:  false,
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway1", gcName),
+					},
+					Valid: false,
 					NginxProxy: &NginxProxy{
 						Source: invalidGwNp,
 						ErrMsgs: field.ErrorList{
@@ -1363,7 +1482,7 @@ func TestBuildGateway(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			resolver := newReferenceGrantResolver(test.refGrants)
-			result := buildGateway(test.gateway, secretResolver, test.gatewayClass, resolver, nginxProxies)
+			result := buildGateways(test.gateway, secretResolver, test.gatewayClass, resolver, nginxProxies)
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}

@@ -85,7 +85,7 @@ var (
 	parentRefsValid = []graph.ParentRef{
 		{
 			Idx:         0,
-			Gateway:     gwNsName,
+			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[0].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached: true,
@@ -93,11 +93,11 @@ var (
 		},
 		{
 			Idx:         1,
-			Gateway:     gwNsName,
+			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[1].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
-				Attached:        false,
-				FailedCondition: invalidAttachmentCondition,
+				Attached:         false,
+				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
 		},
 	}
@@ -105,7 +105,7 @@ var (
 	parentRefsInvalid = []graph.ParentRef{
 		{
 			Idx:         0,
-			Gateway:     gwNsName,
+			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			Attachment:  nil,
 			SectionName: commonRouteSpecInvalid.ParentRefs[0].SectionName,
 		},
@@ -475,7 +475,7 @@ func TestBuildRouteStatusesNginxErr(t *testing.T) {
 			ParentRefs: []graph.ParentRef{
 				{
 					Idx:     0,
-					Gateway: gwNsName,
+					Gateway: &graph.ParentRefGateway{NamespacedName: gwNsName},
 					Attachment: &graph.ParentRefAttachmentStatus{
 						Attached: true,
 					},

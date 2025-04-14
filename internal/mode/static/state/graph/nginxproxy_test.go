@@ -563,7 +563,7 @@ func TestProcessNginxProxies(t *testing.T) {
 			gc:        gatewayClass,
 			gws:       gateway,
 			validator: createValidValidator(),
-			expResult: nil,
+			expResult: map[types.NamespacedName]*NginxProxy{gatewayNpName: nil},
 		},
 		{
 			name: "gateway class param ref is missing namespace",

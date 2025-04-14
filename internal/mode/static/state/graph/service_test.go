@@ -12,31 +12,31 @@ import (
 func TestBuildReferencedServices(t *testing.T) {
 	t.Parallel()
 
-	gwNsname := types.NamespacedName{Namespace: "test", Name: "gwNsname"}
-	gw2NsNames := types.NamespacedName{Namespace: "test", Name: "gw2Nsname"}
-	gw3NsNames := types.NamespacedName{Namespace: "test", Name: "gw3Nsname"}
+	gwNsName := types.NamespacedName{Namespace: "test", Name: "gwNsname"}
+	gw2NsName := types.NamespacedName{Namespace: "test", Name: "gw2Nsname"}
+	gw3NsName := types.NamespacedName{Namespace: "test", Name: "gw3Nsname"}
 	gw := map[types.NamespacedName]*Gateway{
-		gwNsname: {
+		gwNsName: {
 			Source: &v1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: gwNsname.Namespace,
-					Name:      gwNsname.Name,
+					Namespace: gwNsName.Namespace,
+					Name:      gwNsName.Name,
 				},
 			},
 		},
-		gw2NsNames: {
+		gw2NsName: {
 			Source: &v1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: gw2NsNames.Namespace,
-					Name:      gw2NsNames.Name,
+					Namespace: gw2NsName.Namespace,
+					Name:      gw2NsName.Name,
 				},
 			},
 		},
-		gw3NsNames: {
+		gw3NsName: {
 			Source: &v1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: gw3NsNames.Namespace,
-					Name:      gw3NsNames.Name,
+					Namespace: gw3NsName.Namespace,
+					Name:      gw3NsName.Name,
 				},
 			},
 		},
@@ -44,10 +44,10 @@ func TestBuildReferencedServices(t *testing.T) {
 
 	parentRefs := []ParentRef{
 		{
-			Gateway: gwNsname,
+			Gateway: &ParentRefGateway{NamespacedName: gwNsName},
 		},
 		{
-			Gateway: gw2NsNames,
+			Gateway: &ParentRefGateway{NamespacedName: gw2NsName},
 		},
 	}
 

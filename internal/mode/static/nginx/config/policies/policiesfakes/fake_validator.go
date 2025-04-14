@@ -21,16 +21,27 @@ type FakeValidator struct {
 	conflictsReturnsOnCall map[int]struct {
 		result1 bool
 	}
-	ValidateStub        func(policies.Policy, *policies.GlobalSettings) []conditions.Condition
+	ValidateStub        func(policies.Policy) []conditions.Condition
 	validateMutex       sync.RWMutex
 	validateArgsForCall []struct {
 		arg1 policies.Policy
-		arg2 *policies.GlobalSettings
 	}
 	validateReturns struct {
 		result1 []conditions.Condition
 	}
 	validateReturnsOnCall map[int]struct {
+		result1 []conditions.Condition
+	}
+	ValidateGlobalSettingsStub        func(policies.Policy, *policies.GlobalSettings) []conditions.Condition
+	validateGlobalSettingsMutex       sync.RWMutex
+	validateGlobalSettingsArgsForCall []struct {
+		arg1 policies.Policy
+		arg2 *policies.GlobalSettings
+	}
+	validateGlobalSettingsReturns struct {
+		result1 []conditions.Condition
+	}
+	validateGlobalSettingsReturnsOnCall map[int]struct {
 		result1 []conditions.Condition
 	}
 	invocations      map[string][][]interface{}
@@ -99,19 +110,18 @@ func (fake *FakeValidator) ConflictsReturnsOnCall(i int, result1 bool) {
 	}{result1}
 }
 
-func (fake *FakeValidator) Validate(arg1 policies.Policy, arg2 *policies.GlobalSettings) []conditions.Condition {
+func (fake *FakeValidator) Validate(arg1 policies.Policy) []conditions.Condition {
 	fake.validateMutex.Lock()
 	ret, specificReturn := fake.validateReturnsOnCall[len(fake.validateArgsForCall)]
 	fake.validateArgsForCall = append(fake.validateArgsForCall, struct {
 		arg1 policies.Policy
-		arg2 *policies.GlobalSettings
-	}{arg1, arg2})
+	}{arg1})
 	stub := fake.ValidateStub
 	fakeReturns := fake.validateReturns
-	fake.recordInvocation("Validate", []interface{}{arg1, arg2})
+	fake.recordInvocation("Validate", []interface{}{arg1})
 	fake.validateMutex.Unlock()
 	if stub != nil {
-		return stub(arg1, arg2)
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1
@@ -125,17 +135,17 @@ func (fake *FakeValidator) ValidateCallCount() int {
 	return len(fake.validateArgsForCall)
 }
 
-func (fake *FakeValidator) ValidateCalls(stub func(policies.Policy, *policies.GlobalSettings) []conditions.Condition) {
+func (fake *FakeValidator) ValidateCalls(stub func(policies.Policy) []conditions.Condition) {
 	fake.validateMutex.Lock()
 	defer fake.validateMutex.Unlock()
 	fake.ValidateStub = stub
 }
 
-func (fake *FakeValidator) ValidateArgsForCall(i int) (policies.Policy, *policies.GlobalSettings) {
+func (fake *FakeValidator) ValidateArgsForCall(i int) policies.Policy {
 	fake.validateMutex.RLock()
 	defer fake.validateMutex.RUnlock()
 	argsForCall := fake.validateArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.arg1
 }
 
 func (fake *FakeValidator) ValidateReturns(result1 []conditions.Condition) {
@@ -161,6 +171,68 @@ func (fake *FakeValidator) ValidateReturnsOnCall(i int, result1 []conditions.Con
 	}{result1}
 }
 
+func (fake *FakeValidator) ValidateGlobalSettings(arg1 policies.Policy, arg2 *policies.GlobalSettings) []conditions.Condition {
+	fake.validateGlobalSettingsMutex.Lock()
+	ret, specificReturn := fake.validateGlobalSettingsReturnsOnCall[len(fake.validateGlobalSettingsArgsForCall)]
+	fake.validateGlobalSettingsArgsForCall = append(fake.validateGlobalSettingsArgsForCall, struct {
+		arg1 policies.Policy
+		arg2 *policies.GlobalSettings
+	}{arg1, arg2})
+	stub := fake.ValidateGlobalSettingsStub
+	fakeReturns := fake.validateGlobalSettingsReturns
+	fake.recordInvocation("ValidateGlobalSettings", []interface{}{arg1, arg2})
+	fake.validateGlobalSettingsMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeValidator) ValidateGlobalSettingsCallCount() int {
+	fake.validateGlobalSettingsMutex.RLock()
+	defer fake.validateGlobalSettingsMutex.RUnlock()
+	return len(fake.validateGlobalSettingsArgsForCall)
+}
+
+func (fake *FakeValidator) ValidateGlobalSettingsCalls(stub func(policies.Policy, *policies.GlobalSettings) []conditions.Condition) {
+	fake.validateGlobalSettingsMutex.Lock()
+	defer fake.validateGlobalSettingsMutex.Unlock()
+	fake.ValidateGlobalSettingsStub = stub
+}
+
+func (fake *FakeValidator) ValidateGlobalSettingsArgsForCall(i int) (policies.Policy, *policies.GlobalSettings) {
+	fake.validateGlobalSettingsMutex.RLock()
+	defer fake.validateGlobalSettingsMutex.RUnlock()
+	argsForCall := fake.validateGlobalSettingsArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *FakeValidator) ValidateGlobalSettingsReturns(result1 []conditions.Condition) {
+	fake.validateGlobalSettingsMutex.Lock()
+	defer fake.validateGlobalSettingsMutex.Unlock()
+	fake.ValidateGlobalSettingsStub = nil
+	fake.validateGlobalSettingsReturns = struct {
+		result1 []conditions.Condition
+	}{result1}
+}
+
+func (fake *FakeValidator) ValidateGlobalSettingsReturnsOnCall(i int, result1 []conditions.Condition) {
+	fake.validateGlobalSettingsMutex.Lock()
+	defer fake.validateGlobalSettingsMutex.Unlock()
+	fake.ValidateGlobalSettingsStub = nil
+	if fake.validateGlobalSettingsReturnsOnCall == nil {
+		fake.validateGlobalSettingsReturnsOnCall = make(map[int]struct {
+			result1 []conditions.Condition
+		})
+	}
+	fake.validateGlobalSettingsReturnsOnCall[i] = struct {
+		result1 []conditions.Condition
+	}{result1}
+}
+
 func (fake *FakeValidator) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
@@ -168,6 +240,8 @@ func (fake *FakeValidator) Invocations() map[string][][]interface{} {
 	defer fake.conflictsMutex.RUnlock()
 	fake.validateMutex.RLock()
 	defer fake.validateMutex.RUnlock()
+	fake.validateGlobalSettingsMutex.RLock()
+	defer fake.validateGlobalSettingsMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

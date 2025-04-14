@@ -152,9 +152,10 @@ func processNginxProxies(
 				Name:      gw.Spec.Infrastructure.ParametersRef.Name,
 				Namespace: gw.Namespace,
 			}
-
 			if np, ok := nps[refNp]; ok {
 				referencedNginxProxies[refNp] = buildNginxProxy(np, validator)
+			} else {
+				referencedNginxProxies[refNp] = nil
 			}
 		}
 	}

@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 	ctlr "sigs.k8s.io/controller-runtime"
@@ -59,7 +58,6 @@ func createRootCommand() *cobra.Command {
 func createControllerCommand() *cobra.Command {
 	// flag names
 	const (
-		gatewayFlag                    = "gateway"
 		configFlag                     = "config"
 		serviceFlag                    = "service"
 		agentTLSSecretFlag             = "agent-tls-secret"
@@ -93,7 +91,6 @@ func createControllerCommand() *cobra.Command {
 			validator: validateResourceName,
 		}
 
-		gateway    = namespacedNameValue{}
 		configName = stringValidatingValue{
 			validator: validateResourceName,
 		}
@@ -198,11 +195,6 @@ func createControllerCommand() *cobra.Command {
 				return fmt.Errorf("error parsing telemetry endpoint insecure: %w", err)
 			}
 
-			var gwNsName *types.NamespacedName
-			if cmd.Flags().Changed(gatewayFlag) {
-				gwNsName = &gateway.value
-			}
-
 			var usageReportConfig config.UsageReportConfig
 			if plus && usageReportSecretName.value == "" {
 				return errors.New("usage-report-secret is required when using NGINX Plus")
@@ -232,7 +224,6 @@ func createControllerCommand() *cobra.Command {
 				Logger:           logger,
 				AtomicLevel:      atom,
 				GatewayClassName: gatewayClassName.value,
-				GatewayNsName:    gwNsName,
 				GatewayPodConfig: podConfig,
 				HealthConfig: config.HealthConfig{
 					Enabled: !disableHealth,
@@ -289,16 +280,6 @@ func createControllerCommand() *cobra.Command {
 		gatewayClassNameUsage,
 	)
 	utilruntime.Must(cmd.MarkFlagRequired(gatewayClassFlag))
-
-	cmd.Flags().Var(
-		&gateway,
-		gatewayFlag,
-		"The namespaced name of the Gateway resource to use. "+
-			"Must be of the form: NAMESPACE/NAME. "+
-			"If not specified, the control plane will process all Gateways for the configured GatewayClass. "+
-			"However, among them, it will choose the oldest resource by creation timestamp. If the timestamps are "+
-			"equal, it will choose the resource that appears first in alphabetical order by {namespace}/{name}.",
-	)
 
 	cmd.Flags().VarP(
 		&configName,

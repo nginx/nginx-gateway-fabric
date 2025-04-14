@@ -19,6 +19,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/status/statusfakes"
@@ -56,17 +57,6 @@ var _ = Describe("eventHandler", func() {
 		cancel            context.CancelFunc
 	)
 
-	const nginxGatewayServiceName = "nginx-gateway"
-
-	createService := func(name string) *v1.Service {
-		return &v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: "nginx-gateway",
-			},
-		}
-	}
-
 	expectReconfig := func(expectedConf dataplane.Configuration, expectedFiles []agent.File) {
 		Expect(fakeProcessor.ProcessCallCount()).Should(Equal(1))
 
@@ -97,9 +87,13 @@ var _ = Describe("eventHandler", func() {
 
 		baseGraph = &graph.Graph{
 			Gateways: map[types.NamespacedName]*graph.Gateway{
-				{}: {
+				{Namespace: "test", Name: "gateway"}: {
 					Valid:  true,
 					Source: &gatewayv1.Gateway{},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+					},
 				},
 			},
 		}
@@ -117,9 +111,6 @@ var _ = Describe("eventHandler", func() {
 		zapLogLevelSetter = newZapLogLevelSetter(zap.NewAtomicLevel())
 		fakeK8sClient = fake.NewFakeClient()
 		queue = status.NewQueue()
-
-		// Needed because handler checks the service from the API on every HandleEventBatch
-		Expect(fakeK8sClient.Create(context.Background(), createService(nginxGatewayServiceName))).To(Succeed())
 
 		handler = newEventHandlerImpl(eventHandlerConfig{
 			ctx:                     ctx,
@@ -140,6 +131,7 @@ var _ = Describe("eventHandler", func() {
 				ServiceName: "nginx-gateway",
 				Namespace:   "nginx-gateway",
 			},
+			gatewayClassName: "nginx",
 			metricsCollector: collectors.NewControllerNoopCollector(),
 		})
 		Expect(handler.cfg.graphBuiltHealthChecker.ready).To(BeFalse())
@@ -370,8 +362,11 @@ var _ = Describe("eventHandler", func() {
 	It("should update status when receiving a queue event", func() {
 		obj := &status.QueueObject{
 			UpdateType: status.UpdateAll,
-			Deployment: types.NamespacedName{},
-			Error:      errors.New("status error"),
+			Deployment: types.NamespacedName{
+				Namespace: "test",
+				Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+			},
+			Error: errors.New("status error"),
 		}
 		queue.Enqueue(obj)
 
@@ -381,14 +376,17 @@ var _ = Describe("eventHandler", func() {
 			}).Should(Equal(2))
 
 		gr := handler.cfg.processor.GetLatestGraph()
-		gw := gr.Gateways[types.NamespacedName{}]
+		gw := gr.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}]
 		Expect(gw.LatestReloadResult.Error.Error()).To(Equal("status error"))
 	})
 
 	It("should update Gateway status when receiving a queue event", func() {
 		obj := &status.QueueObject{
-			UpdateType:     status.UpdateGateway,
-			Deployment:     types.NamespacedName{},
+			UpdateType: status.UpdateGateway,
+			Deployment: types.NamespacedName{
+				Namespace: "test",
+				Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+			},
 			GatewayService: &v1.Service{},
 		}
 		queue.Enqueue(obj)

@@ -9,8 +9,10 @@ import (
 // It does not contain the v1.Service object, because Services are resolved when building
 // the dataplane.Configuration.
 type ReferencedService struct {
+	// GatewayNsNames are all the Gateways that this Service indirectly attaches to through a Route.
 	GatewayNsNames map[types.NamespacedName]struct{}
-	Policies       []*Policy
+	// Policies is a list of NGF Policies that target this Service.
+	Policies []*Policy
 }
 
 func buildReferencedServices(
@@ -19,14 +21,14 @@ func buildReferencedServices(
 	gws map[types.NamespacedName]*Gateway,
 ) map[types.NamespacedName]*ReferencedService {
 	referencedServices := make(map[types.NamespacedName]*ReferencedService)
-	for gwNsNames, gw := range gws {
+	for gwNsName, gw := range gws {
 		if gw == nil {
 			continue
 		}
 
 		belongsToGw := func(refs []ParentRef) bool {
 			for _, ref := range refs {
-				if ref.Gateway == client.ObjectKeyFromObject(gw.Source) {
+				if ref.Gateway.NamespacedName == client.ObjectKeyFromObject(gw.Source) {
 					return true
 				}
 			}
@@ -43,7 +45,7 @@ func buildReferencedServices(
 
 			// Processes both valid and invalid BackendRefs as invalid ones still have referenced services
 			// we may want to track.
-			addServicesAndGatewayForL7Routes(route.Spec.Rules, gwNsNames, referencedServices)
+			addServicesAndGatewayForL7Routes(route.Spec.Rules, gwNsName, referencedServices)
 		}
 
 		for _, route := range l4Routes {
@@ -51,11 +53,7 @@ func buildReferencedServices(
 				continue
 			}
 
-			addServicesAndGatewayForL4Routes(route, gwNsNames, referencedServices)
-		}
-
-		if len(referencedServices) == 0 {
-			continue
+			addServicesAndGatewayForL4Routes(route, gwNsName, referencedServices)
 		}
 	}
 
@@ -68,7 +66,7 @@ func buildReferencedServices(
 
 func addServicesAndGatewayForL4Routes(
 	route *L4Route,
-	gwNsNames types.NamespacedName,
+	gwNsName types.NamespacedName,
 	referencedServices map[types.NamespacedName]*ReferencedService,
 ) {
 	nsname := route.Spec.BackendRef.SvcNsName
@@ -79,13 +77,13 @@ func addServicesAndGatewayForL4Routes(
 				GatewayNsNames: make(map[types.NamespacedName]struct{}),
 			}
 		}
-		referencedServices[nsname].GatewayNsNames[gwNsNames] = struct{}{}
+		referencedServices[nsname].GatewayNsNames[gwNsName] = struct{}{}
 	}
 }
 
 func addServicesAndGatewayForL7Routes(
 	routeRules []RouteRule,
-	gwNsNames types.NamespacedName,
+	gwNsName types.NamespacedName,
 	referencedServices map[types.NamespacedName]*ReferencedService,
 ) {
 	for _, rule := range routeRules {
@@ -98,7 +96,7 @@ func addServicesAndGatewayForL7Routes(
 					}
 				}
 
-				referencedServices[ref.SvcNsName].GatewayNsNames[gwNsNames] = struct{}{}
+				referencedServices[ref.SvcNsName].GatewayNsNames[gwNsName] = struct{}{}
 			}
 		}
 	}

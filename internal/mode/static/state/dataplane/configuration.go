@@ -51,7 +51,7 @@ func BuildConfiguration(
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 	upstreams := buildUpstreams(
 		ctx,
-		gateway.Listeners,
+		gateway,
 		serviceResolver,
 		g.ReferencedServices,
 		baseHTTPConfig.IPFamily,
@@ -67,7 +67,7 @@ func BuildConfiguration(
 		SSLServers:            sslServers,
 		TLSPassthroughServers: buildPassthroughServers(gateway),
 		Upstreams:             upstreams,
-		StreamUpstreams:       buildStreamUpstreams(ctx, gateway.Listeners, serviceResolver, baseHTTPConfig.IPFamily),
+		StreamUpstreams:       buildStreamUpstreams(ctx, gateway, serviceResolver, baseHTTPConfig.IPFamily),
 		BackendGroups:         backendGroups,
 		SSLKeyPairs:           buildSSLKeyPairs(g.ReferencedSecrets, gateway.Listeners),
 		Version:               configVersion,
@@ -106,7 +106,8 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 			var hostnames []string
 
 			for _, p := range r.ParentRefs {
-				if val, exist := p.Attachment.AcceptedHostnames[l.Name]; exist {
+				key := graph.CreateGatewayListenerKey(l.GatewayName, l.Name)
+				if val, exist := p.Attachment.AcceptedHostnames[key]; exist {
 					hostnames = val
 					break
 				}
@@ -158,7 +159,7 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 // buildStreamUpstreams builds all stream upstreams.
 func buildStreamUpstreams(
 	ctx context.Context,
-	listeners []*graph.Listener,
+	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
 	ipFamily IPFamilyType,
 ) []Upstream {
@@ -166,7 +167,7 @@ func buildStreamUpstreams(
 	// We use a map to deduplicate them.
 	uniqueUpstreams := make(map[string]Upstream)
 
-	for _, l := range listeners {
+	for _, l := range gateway.Listeners {
 		if !l.Valid || l.Source.Protocol != v1.TLSProtocolType {
 			continue
 		}
@@ -179,6 +180,11 @@ func buildStreamUpstreams(
 			br := route.Spec.BackendRef
 
 			if !br.Valid {
+				continue
+			}
+
+			gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
+			if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
 				continue
 			}
 
@@ -339,7 +345,12 @@ func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 	return groups
 }
 
-func newBackendGroup(refs []graph.BackendRef, sourceNsName types.NamespacedName, ruleIdx int) BackendGroup {
+func newBackendGroup(
+	refs []graph.BackendRef,
+	gatewayName types.NamespacedName,
+	sourceNsName types.NamespacedName,
+	ruleIdx int,
+) BackendGroup {
 	var backends []Backend
 
 	if len(refs) > 0 {
@@ -347,10 +358,15 @@ func newBackendGroup(refs []graph.BackendRef, sourceNsName types.NamespacedName,
 	}
 
 	for _, ref := range refs {
+		valid := ref.Valid
+		if _, ok := ref.InvalidForGateways[gatewayName]; ok {
+			valid = false
+		}
+
 		backends = append(backends, Backend{
 			UpstreamName: ref.ServicePortReference(),
 			Weight:       ref.Weight,
-			Valid:        ref.Valid,
+			Valid:        valid,
 			VerifyTLS:    convertBackendTLS(ref.BackendTLSPolicy),
 		})
 	}
@@ -393,7 +409,7 @@ func buildServers(gateway *graph.Gateway) (http, ssl []VirtualServer) {
 				rulesForProtocol[l.Source.Protocol][l.Source.Port] = rules
 			}
 
-			rules.upsertListener(l)
+			rules.upsertListener(l, gateway)
 		}
 	}
 
@@ -402,7 +418,7 @@ func buildServers(gateway *graph.Gateway) (http, ssl []VirtualServer) {
 
 	httpServers, sslServers := httpRules.buildServers(), sslRules.buildServers()
 
-	pols := buildPolicies(gateway.Policies)
+	pols := buildPolicies(gateway, gateway.Policies)
 
 	for i := range httpServers {
 		httpServers[i].Policies = pols
@@ -454,7 +470,7 @@ func newHostPathRules() *hostPathRules {
 	}
 }
 
-func (hpr *hostPathRules) upsertListener(l *graph.Listener) {
+func (hpr *hostPathRules) upsertListener(l *graph.Listener, gateway *graph.Gateway) {
 	hpr.listenersExist = true
 	hpr.port = int32(l.Source.Port)
 
@@ -467,13 +483,14 @@ func (hpr *hostPathRules) upsertListener(l *graph.Listener) {
 			continue
 		}
 
-		hpr.upsertRoute(r, l)
+		hpr.upsertRoute(r, l, gateway)
 	}
 }
 
 func (hpr *hostPathRules) upsertRoute(
 	route *graph.L7Route,
 	listener *graph.Listener,
+	gateway *graph.Gateway,
 ) {
 	var hostnames []string
 	GRPC := route.RouteType == graph.RouteTypeGRPC
@@ -487,7 +504,9 @@ func (hpr *hostPathRules) upsertRoute(
 	}
 
 	for _, p := range route.ParentRefs {
-		if val, exist := p.Attachment.AcceptedHostnames[string(listener.Source.Name)]; exist {
+		key := graph.CreateGatewayListenerKey(listener.GatewayName, listener.Name)
+
+		if val, exist := p.Attachment.AcceptedHostnames[key]; exist {
 			hostnames = val
 			break
 		}
@@ -522,7 +541,7 @@ func (hpr *hostPathRules) upsertRoute(
 			}
 		}
 
-		pols := buildPolicies(route.Policies)
+		pols := buildPolicies(gateway, route.Policies)
 
 		for _, h := range hostnames {
 			for _, m := range rule.Matches {
@@ -546,7 +565,7 @@ func (hpr *hostPathRules) upsertRoute(
 
 				hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
 					Source:       objectSrc,
-					BackendGroup: newBackendGroup(rule.BackendRefs, routeNsName, i),
+					BackendGroup: newBackendGroup(rule.BackendRefs, listener.GatewayName, routeNsName, i),
 					Filters:      filters,
 					Match:        convertMatch(m),
 				})
@@ -643,7 +662,7 @@ func (hpr *hostPathRules) maxServerCount() int {
 
 func buildUpstreams(
 	ctx context.Context,
-	listeners []*graph.Listener,
+	gateway *graph.Gateway,
 	svcResolver resolver.ServiceResolver,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	ipFamily IPFamilyType,
@@ -655,7 +674,7 @@ func buildUpstreams(
 	// We need to build endpoints based on the IPFamily of NGINX.
 	allowedAddressType := getAllowedAddressType(ipFamily)
 
-	for _, l := range listeners {
+	for _, l := range gateway.Listeners {
 		if !l.Valid {
 			continue
 		}
@@ -670,33 +689,18 @@ func buildUpstreams(
 					// don't generate upstreams for rules that have invalid matches or filters
 					continue
 				}
+
 				for _, br := range rule.BackendRefs {
-					if br.Valid {
-						upstreamName := br.ServicePortReference()
-						_, exist := uniqueUpstreams[upstreamName]
-
-						if exist {
-							continue
-						}
-
-						var errMsg string
-
-						eps, err := svcResolver.Resolve(ctx, br.SvcNsName, br.ServicePort, allowedAddressType)
-						if err != nil {
-							errMsg = err.Error()
-						}
-
-						var upstreamPolicies []policies.Policy
-						if graphSvc, exists := referencedServices[br.SvcNsName]; exists {
-							upstreamPolicies = buildPolicies(graphSvc.Policies)
-						}
-
-						uniqueUpstreams[upstreamName] = Upstream{
-							Name:      upstreamName,
-							Endpoints: eps,
-							ErrorMsg:  errMsg,
-							Policies:  upstreamPolicies,
-						}
+					if upstream := buildUpstream(
+						ctx,
+						br,
+						gateway,
+						svcResolver,
+						referencedServices,
+						uniqueUpstreams,
+						allowedAddressType,
+					); upstream != nil {
+						uniqueUpstreams[upstream.Name] = *upstream
 					}
 				}
 			}
@@ -713,6 +717,51 @@ func buildUpstreams(
 		upstreams = append(upstreams, up)
 	}
 	return upstreams
+}
+
+func buildUpstream(
+	ctx context.Context,
+	br graph.BackendRef,
+	gateway *graph.Gateway,
+	svcResolver resolver.ServiceResolver,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	uniqueUpstreams map[string]Upstream,
+	allowedAddressType []discoveryV1.AddressType,
+) *Upstream {
+	if !br.Valid {
+		return nil
+	}
+
+	gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
+	if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+		return nil
+	}
+
+	upstreamName := br.ServicePortReference()
+	_, exist := uniqueUpstreams[upstreamName]
+
+	if exist {
+		return nil
+	}
+
+	var errMsg string
+
+	eps, err := svcResolver.Resolve(ctx, br.SvcNsName, br.ServicePort, allowedAddressType)
+	if err != nil {
+		errMsg = err.Error()
+	}
+
+	var upstreamPolicies []policies.Policy
+	if graphSvc, exists := referencedServices[br.SvcNsName]; exists {
+		upstreamPolicies = buildPolicies(gateway, graphSvc.Policies)
+	}
+
+	return &Upstream{
+		Name:      upstreamName,
+		Endpoints: eps,
+		ErrorMsg:  errMsg,
+		Policies:  upstreamPolicies,
+	}
 }
 
 func getAllowedAddressType(ipFamily IPFamilyType) []discoveryV1.AddressType {
@@ -991,8 +1040,8 @@ func buildSnippetsForContext(
 	return snippetsForContext
 }
 
-func buildPolicies(graphPolicies []*graph.Policy) []policies.Policy {
-	if len(graphPolicies) == 0 {
+func buildPolicies(gateway *graph.Gateway, graphPolicies []*graph.Policy) []policies.Policy {
+	if len(graphPolicies) == 0 || gateway == nil {
 		return nil
 	}
 
@@ -1000,6 +1049,9 @@ func buildPolicies(graphPolicies []*graph.Policy) []policies.Policy {
 
 	for _, policy := range graphPolicies {
 		if !policy.Valid {
+			continue
+		}
+		if _, exists := policy.InvalidForGateways[client.ObjectKeyFromObject(gateway.Source)]; exists {
 			continue
 		}
 
