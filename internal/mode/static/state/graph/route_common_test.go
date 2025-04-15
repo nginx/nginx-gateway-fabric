@@ -465,6 +465,19 @@ func TestBindRouteToListeners(t *testing.T) {
 		l.Source.Hostname = helpers.GetPointer[gatewayv1.Hostname]("bar.example.com")
 	})
 
+	routeWithInvalidBackendRefs := createNormalHTTPRoute(gw)
+	routeWithInvalidBackendRefs.Spec.Rules = []RouteRule{
+		{
+			BackendRefs: []BackendRef{
+				{
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+						client.ObjectKeyFromObject(gw): {Message: "invalid backend"},
+					},
+				},
+			},
+		},
+	}
+
 	createGRPCRouteWithSectionNameAndPort := func(
 		sectionName *gatewayv1.SectionName,
 		port *gatewayv1.PortNumber,
@@ -1290,6 +1303,43 @@ func TestBindRouteToListeners(t *testing.T) {
 			},
 			name: "http route allowed when listener kind is HTTPRoute",
 		},
+		{
+			route: routeWithInvalidBackendRefs,
+			gateway: &Gateway{
+				Source: gw,
+				Valid:  true,
+				Listeners: []*Listener{
+					createListener("listener-80-1"),
+				},
+			},
+			expectedSectionNameRefs: []ParentRef{
+				{
+					Idx:         0,
+					Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
+					SectionName: hr.Spec.ParentRefs[0].SectionName,
+					Attachment: &ParentRefAttachmentStatus{
+						Attached: true,
+						FailedConditions: []conditions.Condition{
+							{Message: "invalid backend"},
+						},
+						AcceptedHostnames: map[string][]string{
+							CreateGatewayListenerKey(
+								client.ObjectKeyFromObject(gw),
+								"listener-80-1",
+							): {"foo.example.com"},
+						},
+					},
+				},
+			},
+			expectedGatewayListeners: []*Listener{
+				createModifiedListener("listener-80-1", func(l *Listener) {
+					l.Routes = map[RouteKey]*L7Route{
+						CreateRouteKey(hr): routeWithInvalidBackendRefs,
+					}
+				}),
+			},
+			name: "route still allowed if backendRef failure conditions exist",
+		},
 	}
 
 	namespaces := map[types.NamespacedName]*v1.Namespace{
@@ -1704,6 +1754,13 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			},
 		},
 		Attachable: true,
+	}
+
+	routeWithInvalidBackendRefs := createNormalRoute(gw)
+	routeWithInvalidBackendRefs.Spec.BackendRef = BackendRef{
+		InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+			client.ObjectKeyFromObject(gw): {Message: "invalid backend"},
+		},
 	}
 
 	tests := []struct {
@@ -2177,6 +2234,47 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				}),
 			},
 			name: "route kind not allowed",
+		},
+		{
+			route: routeWithInvalidBackendRefs,
+			gateway: &Gateway{
+				Source: gw,
+				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
+				Listeners: []*Listener{
+					createListener("listener-443"),
+				},
+			},
+			expectedSectionNameRefs: []ParentRef{
+				{
+					Idx:         0,
+					Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
+					SectionName: tr.Spec.ParentRefs[0].SectionName,
+					Attachment: &ParentRefAttachmentStatus{
+						Attached: true,
+						FailedConditions: []conditions.Condition{
+							{Message: "invalid backend"},
+						},
+						AcceptedHostnames: map[string][]string{
+							CreateGatewayListenerKey(
+								client.ObjectKeyFromObject(gw),
+								"listener-443",
+							): {"foo.example.com"},
+						},
+					},
+				},
+			},
+			expectedGatewayListeners: []*Listener{
+				createModifiedListener("listener-443", func(l *Listener) {
+					l.L4Routes = map[L4RouteKey]*L4Route{
+						CreateRouteKeyL4(tr): routeWithInvalidBackendRefs,
+					}
+				}),
+			},
+			name: "route still allowed if backendRef failure conditions exist",
 		},
 	}
 

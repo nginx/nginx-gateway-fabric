@@ -42,8 +42,9 @@ type ParentRefAttachmentStatus struct {
 	// AcceptedHostnames is an intersection between the hostnames supported by an attached Listener
 	// and the hostnames from this Route. Key is <gatewayNamespacedName/listenerName>, value is list of hostnames.
 	AcceptedHostnames map[string][]string
-	// FailedConditions are the conditions that describes why the ParentRef is not attached to the Gateway. They are
-	// set when Attached is false.
+	// FailedConditions are the conditions that describe why the ParentRef is not attached to the Gateway, or other
+	// failures that may lead to partial attachments. For example, a backendRef could be invalid, but the route can
+	// still attach. The backendRef condition would be displayed here.
 	FailedConditions []conditions.Condition
 	// ListenerPort is the port on the Listener that the Route is attached to.
 	ListenerPort v1.PortNumber
@@ -549,12 +550,12 @@ func bindL4RouteToListeners(
 
 		attachment, attachableListeners := validateParentRef(ref, gw)
 
-		if cond, ok := route.Spec.BackendRef.InvalidForGateways[gwNsName]; ok {
-			attachment.FailedConditions = append(attachment.FailedConditions, cond)
-		}
-
 		if len(attachment.FailedConditions) > 0 {
 			continue
+		}
+
+		if cond, ok := route.Spec.BackendRef.InvalidForGateways[gwNsName]; ok {
+			attachment.FailedConditions = append(attachment.FailedConditions, cond)
 		}
 
 		// Try to attach Route to all matching listeners
@@ -721,16 +722,16 @@ func bindL7RouteToListeners(
 			)
 		}
 
+		if len(attachment.FailedConditions) > 0 {
+			continue
+		}
+
 		for _, rule := range route.Spec.Rules {
 			for _, backendRef := range rule.BackendRefs {
 				if cond, ok := backendRef.InvalidForGateways[gwNsName]; ok {
 					attachment.FailedConditions = append(attachment.FailedConditions, cond)
 				}
 			}
-		}
-
-		if len(attachment.FailedConditions) > 0 {
-			continue
 		}
 
 		// Try to attach Route to all matching listeners

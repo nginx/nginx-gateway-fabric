@@ -111,8 +111,8 @@ func prepareRouteStatus(
 
 	for _, ref := range parentRefs {
 		failedAttachmentCondCount := 0
-		if ref.Attachment != nil && !ref.Attachment.Attached {
-			failedAttachmentCondCount = 1
+		if ref.Attachment != nil {
+			failedAttachmentCondCount = len(ref.Attachment.FailedConditions)
 		}
 		allConds := make([]conditions.Condition, 0, len(conds)+len(defaultConds)+failedAttachmentCondCount)
 
@@ -120,7 +120,7 @@ func prepareRouteStatus(
 		// ensured by DeduplicateConditions.
 		allConds = append(allConds, defaultConds...)
 		allConds = append(allConds, conds...)
-		if failedAttachmentCondCount == 1 {
+		if failedAttachmentCondCount > 0 {
 			allConds = append(allConds, ref.Attachment.FailedConditions...)
 		}
 

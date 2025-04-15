@@ -71,6 +71,9 @@ var (
 			{
 				SectionName: helpers.GetPointer[v1.SectionName]("listener-80-2"),
 			},
+			{
+				SectionName: helpers.GetPointer[v1.SectionName]("listener-80-3"),
+			},
 		},
 	}
 
@@ -97,6 +100,15 @@ var (
 			SectionName: commonRouteSpecValid.ParentRefs[1].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         false,
+				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+			},
+		},
+		{
+			Idx:         2,
+			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
+			SectionName: commonRouteSpecValid.ParentRefs[2].SectionName,
+			Attachment: &graph.ParentRefAttachmentStatus{
+				Attached:         true,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
 		},
@@ -144,6 +156,38 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:        v1.ObjectName(gwNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-2"),
+				},
+				ControllerName: gatewayCtlrName,
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(v1.RouteConditionAccepted),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonAccepted),
+						Message:            "The route is accepted",
+					},
+					{
+						Type:               string(v1.RouteConditionResolvedRefs),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonResolvedRefs),
+						Message:            "All references are resolved",
+					},
+					{
+						Type:               invalidAttachmentCondition.Type,
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+					},
+				},
+			},
+			{
+				ParentRef: v1.ParentReference{
+					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
+					Name:        v1.ObjectName(gwNsName.Name),
+					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-3"),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
