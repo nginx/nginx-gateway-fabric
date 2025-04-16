@@ -105,15 +105,15 @@ sync-files-to-vm: ## Syncs your local NGF files with the NGF repo on the VM
 	./scripts/sync-files-to-vm.sh
 
 
+# This is to access $(GKE_PROJECT)
 include scripts/vars.env
 export
 
 .PHONY: nfr-test
-nfr-test: check-for-plus-usage-endpoint ## Run the NFR tests on a GCP VM
 nfr-test: GOARCH=amd64
-nfr-test: build-crossplane-image
-	docker tag nginx-crossplane:latest $(PREFIX)/nginx-crossplane:latest
-	docker push $(PREFIX)/nginx-crossplane:latest
+nfr-test: check-for-plus-usage-endpoint build-crossplane-image  ## Run the NFR tests on a GCP VM
+	docker tag nginx-crossplane:latest gcr.io/$(GKE_PROJECT)/nginx-crossplane:latest
+	docker push gcr.io/$(GKE_PROJECT)/nginx-crossplane:latest
 	CI=$(CI) ./scripts/run-tests-gcp-vm.sh
 
 .PHONY: start-longevity-test

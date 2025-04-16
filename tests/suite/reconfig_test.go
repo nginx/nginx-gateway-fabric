@@ -427,7 +427,6 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 				results.TimeToReadyTotal = timeToReadyTotal
 				results.TestDescription = testDescription
 				results.TimeToReadyDescription = timeToReadyDescription
-				fmt.Println(timeToReadyTotal)
 
 				err = writeReconfigResults(outFile, results)
 				Expect(err).ToNot(HaveOccurred())
