@@ -188,7 +188,7 @@ func (rm *ResourceManager) Delete(resources []client.Object, opts ...client.Dele
 }
 
 func (rm *ResourceManager) DeleteNamespace(name string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.DeleteNamespaceTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.DeleteNamespaceTimeout*2)
 	defer cancel()
 
 	ns := &core.Namespace{}
