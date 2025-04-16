@@ -361,9 +361,11 @@ func (rm *ResourceManager) WaitForPodsToBeReady(ctx context.Context, namespace s
 			if err := rm.K8sClient.List(ctx, &podList, client.InNamespace(namespace)); err != nil {
 				return false, err
 			}
+			fmt.Println("POD LIST ", podList.Items)
 
 			var podsReady int
 			for _, pod := range podList.Items {
+				fmt.Println("POD STATUS ", pod.Name, pod.Status)
 				for _, cond := range pod.Status.Conditions {
 					if cond.Type == core.PodReady && cond.Status == core.ConditionTrue {
 						podsReady++
