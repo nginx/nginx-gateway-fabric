@@ -210,7 +210,7 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 		var err error
 		Eventually(
 			func() bool {
-				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
+				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
 				return len(nginxPodNames) == 1 && err == nil
 			}).
 			WithTimeout(timeoutConfig.CreateTimeout).
@@ -310,7 +310,7 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 		var nginxPodNames []string
 		Eventually(
 			func() bool {
-				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
+				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
 				return len(nginxPodNames) == 1 && err == nil
 			}).
 			WithTimeout(timeoutConfig.CreateTimeout * 2).
@@ -400,7 +400,7 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
@@ -433,7 +433,7 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 	It("recovers when nginx container is restarted", func() {
 		restartNginxContainer(activeNginxPodName, ns.Name, nginxContainerName)
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 		activeNginxPodName = nginxPodNames[0]
