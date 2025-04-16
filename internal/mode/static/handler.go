@@ -317,6 +317,10 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 		case status.UpdateAll:
 			h.updateStatuses(ctx, gr, gw)
 		case status.UpdateGateway:
+			if gw == nil {
+				continue
+			}
+
 			gwAddresses, err := getGatewayAddresses(
 				ctx,
 				h.cfg.k8sClient,
