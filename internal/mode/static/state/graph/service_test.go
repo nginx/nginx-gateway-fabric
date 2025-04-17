@@ -319,7 +319,9 @@ func TestBuildReferencedServices(t *testing.T) {
 		},
 		{
 			name: "nil gateway",
-			gws:  nil,
+			gws: map[types.NamespacedName]*Gateway{
+				gwNsName: nil,
+			},
 			l7Routes: map[RouteKey]*L7Route{
 				{NamespacedName: types.NamespacedName{Name: "no-service-nsname"}}: validRouteNoServiceNsName,
 			},

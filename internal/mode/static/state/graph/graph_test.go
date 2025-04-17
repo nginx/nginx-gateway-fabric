@@ -1747,3 +1747,12 @@ func TestIsNGFPolicyRelevantPanics(t *testing.T) {
 
 	g.Expect(isRelevant).To(Panic())
 }
+
+func TestGatewayExists(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+	gwNsName := types.NamespacedName{Namespace: "test", Name: "gw"}
+
+	result := gatewayExists(gwNsName, nil)
+	g.Expect(result).To(BeFalse())
+}

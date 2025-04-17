@@ -184,7 +184,6 @@ var _ = Describe("eventHandler", func() {
 				expectReconfig(dcfg, fakeCfgFiles)
 				Expect(helpers.Diff(handler.GetLatestConfiguration(), &dcfg)).To(BeEmpty())
 			})
-
 			It("should process Delete", func() {
 				e := &events.DeleteEvent{
 					Type:           &gatewayv1.HTTPRoute{},
@@ -213,6 +212,46 @@ var _ = Describe("eventHandler", func() {
 				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
 				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
 				// status update for GatewayClass should still occur
+				Eventually(
+					func() int {
+						return fakeStatusUpdater.UpdateGroupCallCount()
+					}).Should(Equal(1))
+			})
+			It("should not build anything if graph is nil", func() {
+				fakeProcessor.ProcessReturns(state.ClusterStateChange, nil)
+
+				e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
+				batch := []interface{}{e}
+
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+				checkUpsertEventExpectations(e)
+				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
+				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
+				// status update for GatewayClass should not occur
+				Eventually(
+					func() int {
+						return fakeStatusUpdater.UpdateGroupCallCount()
+					}).Should(Equal(0))
+			})
+			It("should update gateway class even if gateway is invalid", func() {
+				fakeProcessor.ProcessReturns(state.ClusterStateChange, &graph.Graph{
+					Gateways: map[types.NamespacedName]*graph.Gateway{
+						{Namespace: "test", Name: "gateway"}: {
+							Valid: false,
+						},
+					},
+				})
+
+				e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
+				batch := []interface{}{e}
+
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+				checkUpsertEventExpectations(e)
+				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
+				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
+				// status update should still occur for GatewayClasses
 				Eventually(
 					func() int {
 						return fakeStatusUpdater.UpdateGroupCallCount()

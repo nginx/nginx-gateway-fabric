@@ -331,6 +331,10 @@ func TestBuildGateway(t *testing.T) {
 		},
 		Spec: ngfAPIv1alpha2.NginxProxySpec{
 			Logging: &ngfAPIv1alpha2.NginxLogging{ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError)},
+			Metrics: &ngfAPIv1alpha2.Metrics{
+				Disable: helpers.GetPointer(false),
+				Port:    helpers.GetPointer(int32(90)),
+			},
 		},
 	}
 	validGwNpRef := &v1.LocalParametersReference{
@@ -592,6 +596,10 @@ func TestBuildGateway(t *testing.T) {
 						Logging: &ngfAPIv1alpha2.NginxLogging{
 							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
 						},
+						Metrics: &ngfAPIv1alpha2.Metrics{
+							Disable: helpers.GetPointer(false),
+							Port:    helpers.GetPointer(int32(90)),
+						},
 					},
 					Conditions: []conditions.Condition{staticConds.NewGatewayResolvedRefs()},
 				},
@@ -634,6 +642,10 @@ func TestBuildGateway(t *testing.T) {
 							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
 						},
 						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
+						Metrics: &ngfAPIv1alpha2.Metrics{
+							Disable: helpers.GetPointer(false),
+							Port:    helpers.GetPointer(int32(90)),
+						},
 					},
 					Conditions: []conditions.Condition{staticConds.NewGatewayResolvedRefs()},
 				},

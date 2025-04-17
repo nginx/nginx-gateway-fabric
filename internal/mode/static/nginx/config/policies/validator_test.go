@@ -27,6 +27,13 @@ var _ = Describe("Policy CompositeValidator", func() {
 		},
 	}
 
+	bananaGVK := schema.GroupVersionKind{Group: "fruit", Version: "1", Kind: "banana"}
+	bananaPolicy := &policiesfakes.FakePolicy{
+		GetNameStub: func() string {
+			return "banana"
+		},
+	}
+
 	mustExtractGVK := func(object client.Object) schema.GroupVersionKind {
 		switch object.GetName() {
 		case "apple":
@@ -63,6 +70,10 @@ var _ = Describe("Policy CompositeValidator", func() {
 				ConflictsStub: func(_ policies.Policy, _ policies.Policy) bool { return false },
 			},
 			GVK: orangeGVK,
+		},
+		policies.ManagerConfig{
+			Validator: &policiesfakes.FakeValidator{},
+			GVK:       bananaGVK,
 		},
 	)
 
@@ -103,6 +114,13 @@ var _ = Describe("Policy CompositeValidator", func() {
 			It("panics on call to conflicts", func() {
 				conflict := func() {
 					_ = mgr.Conflicts(&policiesfakes.FakePolicy{}, &policiesfakes.FakePolicy{})
+				}
+
+				Expect(conflict).To(Panic())
+			})
+			It("panics on call to conflicts when no validator is registered for policy", func() {
+				conflict := func() {
+					_ = mgr.Conflicts(bananaPolicy, bananaPolicy)
 				}
 
 				Expect(conflict).To(Panic())

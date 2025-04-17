@@ -787,6 +787,44 @@ func TestAttachPolicyToService(t *testing.T) {
 			expAttached:  false,
 			expAncestors: nil,
 		},
+		{
+			name:   "no attachment; does not belong to gateway",
+			policy: &Policy{Source: &policiesfakes.FakePolicy{}, InvalidForGateways: map[types.NamespacedName]struct{}{}},
+			svc: &ReferencedService{
+				GatewayNsNames: map[types.NamespacedName]struct{}{
+					gw2Nsname: {},
+				},
+			},
+			gws:          getGateway(true /*valid*/),
+			expAttached:  false,
+			expAncestors: nil,
+		},
+		{
+			name: "no attachment; gateway is invalid",
+			policy: &Policy{
+				Source: &policiesfakes.FakePolicy{},
+				InvalidForGateways: map[types.NamespacedName]struct{}{
+					gwNsname: {},
+				},
+				Ancestors: []PolicyAncestor{
+					{
+						Ancestor: getGatewayParentRef(gwNsname),
+					},
+				},
+			},
+			svc: &ReferencedService{
+				GatewayNsNames: map[types.NamespacedName]struct{}{
+					gwNsname: {},
+				},
+			},
+			gws:         getGateway(false),
+			expAttached: false,
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: getGatewayParentRef(gwNsname),
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {

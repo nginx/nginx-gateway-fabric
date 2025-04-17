@@ -95,6 +95,15 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 	}
 
+	targetRefInvalidKind := []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+		{
+			LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+				Kind: "Invalid",
+				Name: "service1",
+			},
+		},
+	}
+
 	localObjectRefNormalCase := []gatewayv1.LocalObjectReference{
 		{
 			Kind:  "ConfigMap",
@@ -301,7 +310,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 					Namespace: "test",
 				},
 				Spec: v1alpha3.BackendTLSPolicySpec{
-					TargetRefs: targetRefNormalCase,
+					TargetRefs: targetRefInvalidKind,
 					Validation: v1alpha3.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefInvalidKind,
 						Hostname:          "foo.test.com",
