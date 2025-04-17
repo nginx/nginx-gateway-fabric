@@ -46,6 +46,8 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 )
 
 // ResourceManager handles creating/updating/deleting Kubernetes resources.
@@ -188,7 +190,7 @@ func (rm *ResourceManager) Delete(resources []client.Object, opts ...client.Dele
 }
 
 func (rm *ResourceManager) DeleteNamespace(name string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.DeleteNamespaceTimeout*2)
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.DeleteNamespaceTimeout)
 	defer cancel()
 
 	ns := &core.Namespace{}
@@ -645,6 +647,44 @@ func (rm *ResourceManager) GetNGFDeployment(namespace, releaseName string) (*app
 
 	deployment := deployments.Items[0]
 	return &deployment, nil
+}
+
+func (rm *ResourceManager) getGatewayClassNginxProxy(
+	namespace,
+	releaseName string,
+) (*ngfAPIv1alpha2.NginxProxy, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.GetTimeout)
+	defer cancel()
+
+	var proxy ngfAPIv1alpha2.NginxProxy
+	proxyName := releaseName + "-proxy-config"
+
+	if err := rm.K8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: proxyName}, &proxy); err != nil {
+		return nil, fmt.Errorf("error getting GatewayClass NginxProxy: %w", err)
+	}
+
+	return &proxy, nil
+}
+
+// ScaleNginxDeployment scales the Nginx Deployment to the specified number of replicas.
+func (rm *ResourceManager) ScaleNginxDeployment(namespace, releaseName string, replicas int32) error {
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.UpdateTimeout)
+	defer cancel()
+
+	// If there is another NginxProxy which "overrides" the gateway class level one, then this won't work and
+	// may need refactoring.
+	proxy, err := rm.getGatewayClassNginxProxy(namespace, releaseName)
+	if err != nil {
+		return fmt.Errorf("error getting NginxProxy: %w", err)
+	}
+
+	proxy.Spec.Kubernetes.Deployment.Replicas = &replicas
+
+	if err = rm.K8sClient.Update(ctx, proxy); err != nil {
+		return fmt.Errorf("error updating NginxProxy: %w", err)
+	}
+
+	return nil
 }
 
 // GetEvents returns all Events in the specified namespace.

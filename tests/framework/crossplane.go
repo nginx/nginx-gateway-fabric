@@ -38,6 +38,8 @@ type ExpectedNginxField struct {
 	ValueSubstringAllowed bool
 }
 
+const crossplaneImageName = "nginx-crossplane:latest"
+
 // ValidateNginxFieldExists accepts the nginx config and the configuration for the expected field,
 // and returns whether or not that field exists where it should.
 func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField) error {
@@ -150,7 +152,7 @@ func injectCrossplaneContainer(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	image := "nginx-crossplane:latest"
+	image := crossplaneImageName
 	if crossplaneImageRepo != "" {
 		image = crossplaneImageRepo + "/" + image
 	}

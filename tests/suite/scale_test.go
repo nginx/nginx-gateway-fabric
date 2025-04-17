@@ -711,13 +711,13 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 	}
 
 	var (
-		outFile           *os.File
-		resultsDir        string
-		ngfDeploymentName string
-		ns                core.Namespace
-		metricsCh         chan *metricsResults
+		outFile    *os.File
+		resultsDir string
+		ns         core.Namespace
+		metricsCh  chan *metricsResults
 
-		files = []string{
+		numCoffeeAndTeaPods = 20
+		files               = []string{
 			"scale/zero-downtime/cafe.yaml",
 			"scale/zero-downtime/cafe-secret.yaml",
 			"scale/zero-downtime/gateway-1.yaml",
@@ -858,12 +858,12 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 		numReplicas int
 	}{
 		{
-			name:        "One NGF Pod runs per node",
+			name:        "One NGINX Pod runs per node",
 			valuesFile:  "manifests/scale/zero-downtime/values-affinity.yaml",
 			numReplicas: 12, // equals number of nodes
 		},
 		{
-			name:        "Multiple NGF Pods run per node",
+			name:        "Multiple NGINX Pods run per node",
 			valuesFile:  "manifests/scale/zero-downtime/values.yaml",
 			numReplicas: 24, // twice the number of nodes
 		},
@@ -876,18 +876,15 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				cfg.nfr = true
 				setup(cfg, "--values", test.valuesFile)
 
-				deploy, err := resourceManager.GetNGFDeployment(ngfNamespace, releaseName)
-				Expect(err).ToNot(HaveOccurred())
-				ngfDeploymentName = deploy.GetName()
-
 				Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
 
 				var nginxPodNames []string
+				var err error
 				Eventually(
 					func() bool {
-						nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
+						nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetTimeout)
 						return len(nginxPodNames) == 1 && err == nil
 					}).
 					WithTimeout(timeoutConfig.CreateTimeout).
@@ -931,8 +928,8 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 
 				// scale NGF up one at a time
 				for i := 2; i <= test.numReplicas; i++ {
-					Eventually(resourceManager.ScaleDeployment).
-						WithArguments(ngfNamespace, ngfDeploymentName, int32(i)).
+					Eventually(resourceManager.ScaleNginxDeployment).
+						WithArguments(ngfNamespace, releaseName, int32(i)).
 						WithTimeout(timeoutConfig.UpdateTimeout).
 						WithPolling(500 * time.Millisecond).
 						Should(Succeed())
@@ -942,7 +939,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 
 					ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.UpdateTimeout)
 
-					Expect(resourceManager.WaitForPodsToBeReadyWithCount(ctx, ngfNamespace, i)).To(Succeed())
+					Expect(resourceManager.WaitForPodsToBeReadyWithCount(ctx, ns.Name, i+numCoffeeAndTeaPods)).To(Succeed())
 					Expect(resourceManager.WaitForGatewayObservedGeneration(ctx, ns.Name, "gateway", i)).To(Succeed())
 
 					cancel()
@@ -984,8 +981,8 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				// scale NGF down one at a time
 				currentGen := test.numReplicas
 				for i := test.numReplicas - 1; i >= 1; i-- {
-					Eventually(resourceManager.ScaleDeployment).
-						WithArguments(ngfNamespace, ngfDeploymentName, int32(i)).
+					Eventually(resourceManager.ScaleNginxDeployment).
+						WithArguments(ngfNamespace, releaseName, int32(i)).
 						WithTimeout(timeoutConfig.UpdateTimeout).
 						WithPolling(500 * time.Millisecond).
 						Should(Succeed())
@@ -994,7 +991,12 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 					Expect(resourceManager.ApplyFromFiles([]string{gatewayFile}, ns.Name)).To(Succeed())
 					currentGen++
 
+					ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.UpdateTimeout)
+
 					time.Sleep(terminationTime)
+					Expect(resourceManager.WaitForGatewayObservedGeneration(ctx, ns.Name, "gateway", currentGen)).To(Succeed())
+
+					cancel()
 				}
 
 				wg.Wait()
@@ -1049,7 +1051,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				// allow traffic flow to start
 				time.Sleep(2 * time.Second)
 
-				Expect(resourceManager.ScaleDeployment(ngfNamespace, ngfDeploymentName, int32(test.numReplicas))).To(Succeed())
+				Expect(resourceManager.ScaleNginxDeployment(ngfNamespace, releaseName, int32(test.numReplicas))).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles([]string{"scale/zero-downtime/gateway-2.yaml"}, ns.Name)).To(Succeed())
 				checkGatewayListeners(3)
 
@@ -1081,7 +1083,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				// allow traffic flow to start
 				time.Sleep(2 * time.Second)
 
-				Expect(resourceManager.ScaleDeployment(ngfNamespace, ngfDeploymentName, int32(1))).To(Succeed())
+				Expect(resourceManager.ScaleNginxDeployment(ngfNamespace, releaseName, int32(1))).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles([]string{"scale/zero-downtime/gateway-1.yaml"}, ns.Name)).To(Succeed())
 				checkGatewayListeners(2)
 
