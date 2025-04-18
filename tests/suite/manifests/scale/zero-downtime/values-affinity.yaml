@@ -3,24 +3,26 @@ nginxGateway:
     preStop:
       exec:
         command:
-        - /usr/bin/gateway
-        - sleep
-        - --duration=40s
+          - /usr/bin/gateway
+          - sleep
+          - --duration=40s
+  terminationGracePeriodSeconds: 50
+
 
 nginx:
-  lifecycle:
-    preStop:
-      exec:
-        command:
-        - /bin/sleep
-        - "40"
-
-terminationGracePeriodSeconds: 50
-
-affinity:
-  podAntiAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-    - topologyKey: kubernetes.io/hostname
-      labelSelector:
-        matchLabels:
-          app.kubernetes.io/name: nginx-gateway
+  pod:
+    terminationGracePeriodSeconds: 50
+  container:
+    lifecycle:
+      preStop:
+        exec:
+          command:
+            - /bin/sleep
+            - "40"
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: gateway-nginx

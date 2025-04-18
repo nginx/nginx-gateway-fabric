@@ -372,19 +372,19 @@ nginx:
     # -- The termination grace period of the NGINX data plane pod.
     # terminationGracePeriodSeconds: 30
 
-    # -- Tolerations for the NGINX Gateway Fabric control plane pod.
+    # -- Tolerations for the NGINX data plane pod.
     # tolerations: []
 
-    # -- The nodeSelector of the NGINX Gateway Fabric control plane pod.
+    # -- The nodeSelector of the NGINX data plane pod.
     # nodeSelector: {}
 
-    # -- The affinity of the NGINX Gateway Fabric control plane pod.
+    # -- The affinity of the NGINX data plane pod.
     # affinity: {}
 
-    # -- The topology spread constraints for the NGINX Gateway Fabric control plane pod.
+    # -- The topology spread constraints for the NGINX data plane pod.
     # topologySpreadConstraints: []
 
-    # -- extraVolumes for the NGINX Gateway Fabric control plane pod. Use in conjunction with
+    # -- extraVolumes for the NGINX data plane pod. Use in conjunction with
     # nginx.container.extraVolumeMounts mount additional volumes to the container.
     # extraVolumes: []
 
