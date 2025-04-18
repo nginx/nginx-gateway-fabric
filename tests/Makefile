@@ -44,7 +44,7 @@ build-test-runner-image: ## Build conformance test runner image
 
 .PHONY: build-crossplane-image
 build-crossplane-image: ## Build the crossplane image
-	docker build --platform linux/$(GOARCH) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) -t nginx-crossplane:latest -f framework/crossplane/Dockerfile ..
+	docker build --platform $(GOOS)/$(GOARCH) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) -t nginx-crossplane:latest -f framework/crossplane/Dockerfile ..
 
 .PHONY: run-conformance-tests
 run-conformance-tests: ## Run conformance tests
@@ -104,16 +104,10 @@ create-gke-router: ## Create a GKE router to allow egress traffic from private n
 sync-files-to-vm: ## Syncs your local NGF files with the NGF repo on the VM
 	./scripts/sync-files-to-vm.sh
 
-
-# This is to access $(GKE_PROJECT)
-include scripts/vars.env
-export
-
 .PHONY: nfr-test
 nfr-test: GOARCH=amd64
 nfr-test: check-for-plus-usage-endpoint build-crossplane-image  ## Run the NFR tests on a GCP VM
-	docker tag nginx-crossplane:latest gcr.io/$(GKE_PROJECT)/nginx-crossplane:latest
-	docker push gcr.io/$(GKE_PROJECT)/nginx-crossplane:latest
+	./scripts/push-crossplane-image.sh
 	CI=$(CI) ./scripts/run-tests-gcp-vm.sh
 
 .PHONY: start-longevity-test

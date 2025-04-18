@@ -671,7 +671,7 @@ func (rm *ResourceManager) ScaleNginxDeployment(namespace, releaseName string, r
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.UpdateTimeout)
 	defer cancel()
 
-	// If there is another NginxProxy which "overrides" the gateway class level one, then this won't work and
+	// If there is another NginxProxy which "overrides" the gateway class  one, then this won't work and
 	// may need refactoring.
 	proxy, err := rm.getGatewayClassNginxProxy(namespace, releaseName)
 	if err != nil {
