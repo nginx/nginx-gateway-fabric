@@ -101,6 +101,10 @@ server {
         rewrite {{ $r }};
         {{- end }}
 
+        {{- range $m := $l.MirrorPaths }}
+        mirror {{ $m }};
+        {{- end }}
+
         {{- if $l.Return }}
         return {{ $l.Return.Code }} "{{ $l.Return.Body }}";
         {{- end }}

@@ -1,13 +1,18 @@
 package graph
 
 import (
+	"fmt"
+	"strings"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/http"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/mirror"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
 )
 
@@ -69,6 +74,88 @@ func buildGRPCRoute(
 	return r
 }
 
+func buildGRPCMirrorRoutes(
+	routes map[RouteKey]*L7Route,
+	l7route *L7Route,
+	route *v1.GRPCRoute,
+	gatewayNsNames []types.NamespacedName,
+	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	http2disabled bool,
+) {
+	for idx, rule := range l7route.Spec.Rules {
+		if rule.Filters.Valid {
+			for _, filter := range rule.Filters.Filters {
+				if filter.RequestMirror == nil {
+					continue
+				}
+
+				objectMeta := route.ObjectMeta.DeepCopy()
+				backendRef := filter.RequestMirror.BackendRef
+				name := mirror.RouteName(route.GetName(), string(backendRef.Name), (*string)(backendRef.Namespace), idx)
+				objectMeta.SetName(name)
+
+				tmpMirrorRoute := &v1.GRPCRoute{
+					ObjectMeta: *objectMeta,
+					Spec: v1.GRPCRouteSpec{
+						CommonRouteSpec: route.Spec.CommonRouteSpec,
+						Hostnames:       route.Spec.Hostnames,
+						Rules:           buildGRPCMirrorRouteRule(idx, route.Spec.Rules[idx].Filters, filter),
+					},
+				}
+
+				mirrorRoute := buildGRPCRoute(
+					validation.SkipValidator{},
+					tmpMirrorRoute,
+					gatewayNsNames,
+					http2disabled,
+					snippetsFilters,
+				)
+
+				if mirrorRoute != nil {
+					routes[CreateRouteKey(tmpMirrorRoute)] = mirrorRoute
+				}
+			}
+		}
+	}
+}
+
+func buildGRPCMirrorRouteRule(
+	ruleIdx int,
+	filters []v1.GRPCRouteFilter,
+	filter Filter,
+) []v1.GRPCRouteRule {
+	return []v1.GRPCRouteRule{
+		{
+			Matches: []v1.GRPCRouteMatch{
+				{
+					Method: &v1.GRPCMethodMatch{
+						Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
+						Service: mirror.PathWithBackendRef(ruleIdx, filter.RequestMirror.BackendRef),
+					},
+				},
+			},
+			Filters: removeGRPCMirrorFilters(filters),
+			BackendRefs: []v1.GRPCBackendRef{
+				{
+					BackendRef: v1.BackendRef{
+						BackendObjectReference: filter.RequestMirror.BackendRef,
+					},
+				},
+			},
+		},
+	}
+}
+
+func removeGRPCMirrorFilters(filters []v1.GRPCRouteFilter) []v1.GRPCRouteFilter {
+	var newFilters []v1.GRPCRouteFilter
+	for _, filter := range filters {
+		if filter.Type != v1.GRPCRouteFilterRequestMirror {
+			newFilters = append(newFilters, filter)
+		}
+	}
+	return newFilters
+}
+
 func processGRPCRouteRule(
 	specRule v1.GRPCRouteRule,
 	rulePath *field.Path,
@@ -116,6 +203,22 @@ func processGRPCRouteRule(
 		backendRefs = append(backendRefs, rbr)
 	}
 
+	if routeFilters.Valid {
+		for i, filter := range routeFilters.Filters {
+			if filter.RequestMirror == nil {
+				continue
+			}
+
+			rbr := RouteBackendRef{
+				BackendRef: v1.BackendRef{
+					BackendObjectReference: filter.RequestMirror.BackendRef,
+				},
+				MirrorBackendIdx: helpers.GetPointer(i),
+			}
+			backendRefs = append(backendRefs, rbr)
+		}
+	}
+
 	return RouteRule{
 		ValidMatches:     validMatches,
 		Matches:          ConvertGRPCMatches(specRule.Matches),
@@ -139,7 +242,12 @@ func processGRPCRouteRules(
 	for i, rule := range specRules {
 		rulePath := field.NewPath("spec").Child("rules").Index(i)
 
-		rr, errors := processGRPCRouteRule(rule, rulePath, validator, resolveExtRefFunc)
+		rr, errors := processGRPCRouteRule(
+			rule,
+			rulePath,
+			validator,
+			resolveExtRefFunc,
+		)
 
 		if rr.ValidMatches && rr.Filters.Valid {
 			atLeastOneValid = true
@@ -204,12 +312,19 @@ func ConvertGRPCMatches(grpcMatches []v1.GRPCRouteMatch) []v1.HTTPRouteMatch {
 		}
 		hm.Headers = hmHeaders
 
-		if gm.Method != nil && gm.Method.Service != nil && gm.Method.Method != nil {
-			// if method match is provided, service and method are required
-			// as the only method type supported is exact.
-			// Validation has already been done at this point, and the condition will
-			// have been added there if required.
-			pathValue = "/" + *gm.Method.Service + "/" + *gm.Method.Method
+		if gm.Method != nil && gm.Method.Service != nil {
+			// service path used in mirror routes are special case; method is not specified
+			if strings.HasPrefix(*gm.Method.Service, http.InternalMirrorRoutePathPrefix) {
+				pathValue = *gm.Method.Service
+			}
+
+			if gm.Method.Method != nil {
+				// if method match is provided, service and method are required
+				// as the only method type supported is exact.
+				// Validation has already been done at this point, and the condition will
+				// have been added there if required.
+				pathValue = "/" + *gm.Method.Service + "/" + *gm.Method.Method
+			}
 			pathType = v1.PathMatchType("Exact")
 		}
 		hm.Path = &v1.HTTPPathMatch{
@@ -243,6 +358,11 @@ func validateGRPCMatch(
 ) field.ErrorList {
 	var allErrs field.ErrorList
 
+	// for internally-created routes used for request mirroring, we don't need to validate
+	if validator.SkipValidation() {
+		return nil
+	}
+
 	methodPath := matchPath.Child("method")
 	allErrs = append(allErrs, validateGRPCMethodMatch(validator, match.Method, methodPath)...)
 
@@ -275,6 +395,14 @@ func validateGRPCMethodMatch(
 		if method.Service == nil || *method.Service == "" {
 			allErrs = append(allErrs, field.Required(methodServicePath, "service is required"))
 		} else {
+			if strings.HasPrefix(*method.Service, http.InternalRoutePathPrefix) {
+				msg := fmt.Sprintf(
+					"service cannot start with %s. This prefix is reserved for internal use",
+					http.InternalRoutePathPrefix,
+				)
+				return field.ErrorList{field.Invalid(methodPath.Child("service"), *method.Service, msg)}
+			}
+
 			pathValue := "/" + *method.Service
 			if err := validator.ValidatePathInMatch(pathValue); err != nil {
 				valErr := field.Invalid(methodServicePath, *method.Service, err.Error())

@@ -26,7 +26,7 @@ func TestValidateExtensionRefFilter(t *testing.T) {
 			ref:         nil,
 			expErrCount: 1,
 			errSubString: []string{
-				`test.extensionRef: Required value: extensionRef cannot be nil`,
+				`test.extensionRef: Required value: cannot be nil`,
 			},
 		},
 		{

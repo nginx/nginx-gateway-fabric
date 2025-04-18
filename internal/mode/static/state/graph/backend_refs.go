@@ -32,6 +32,8 @@ type BackendRef struct {
 	// Valid indicates whether the backendRef is valid.
 	// No configuration should be generated for an invalid BackendRef.
 	Valid bool
+	// IsMirrorBackend indicates whether the BackendGroup is for a mirrored backend.
+	IsMirrorBackend bool
 }
 
 // ServicePortReference returns a string representation for the service and port that is referenced by the BackendRef.
@@ -83,7 +85,11 @@ func addBackendRefsToRules(
 		backendRefs := make([]BackendRef, 0, len(rule.RouteBackendRefs))
 
 		for refIdx, ref := range rule.RouteBackendRefs {
-			refPath := field.NewPath("spec").Child("rules").Index(idx).Child("backendRefs").Index(refIdx)
+			basePath := field.NewPath("spec").Child("rules").Index(idx)
+			refPath := basePath.Child("backendRefs").Index(refIdx)
+			if ref.MirrorBackendIdx != nil {
+				refPath = basePath.Child("filters").Index(*ref.MirrorBackendIdx).Child("backendRef")
+			}
 			routeNs := route.Source.GetNamespace()
 
 			ref, cond := createBackendRef(
@@ -143,8 +149,9 @@ func createBackendRef(
 	valid, cond := validateRouteBackendRef(ref, sourceNamespace, refGrantResolver, refPath)
 	if !valid {
 		backendRef = BackendRef{
-			Weight: weight,
-			Valid:  false,
+			Weight:          weight,
+			Valid:           false,
+			IsMirrorBackend: ref.MirrorBackendIdx != nil,
 		}
 
 		return backendRef, &cond
@@ -158,10 +165,11 @@ func createBackendRef(
 	svcIPFamily, svcPort, err := getIPFamilyAndPortFromRef(ref.BackendRef, svcNsName, services, refPath)
 	if err != nil {
 		backendRef = BackendRef{
-			Weight:      weight,
-			Valid:       false,
-			SvcNsName:   svcNsName,
-			ServicePort: v1.ServicePort{},
+			Weight:          weight,
+			Valid:           false,
+			SvcNsName:       svcNsName,
+			ServicePort:     v1.ServicePort{},
+			IsMirrorBackend: ref.MirrorBackendIdx != nil,
 		}
 
 		cond := staticConds.NewRouteBackendRefRefBackendNotFound(err.Error())
@@ -170,10 +178,11 @@ func createBackendRef(
 
 	if err := verifyIPFamily(npCfg, svcIPFamily); err != nil {
 		backendRef = BackendRef{
-			SvcNsName:   svcNsName,
-			ServicePort: svcPort,
-			Weight:      weight,
-			Valid:       false,
+			SvcNsName:       svcNsName,
+			ServicePort:     svcPort,
+			Weight:          weight,
+			Valid:           false,
+			IsMirrorBackend: ref.MirrorBackendIdx != nil,
 		}
 
 		cond := staticConds.NewRouteInvalidIPFamily(err.Error())
@@ -188,10 +197,11 @@ func createBackendRef(
 	)
 	if err != nil {
 		backendRef = BackendRef{
-			SvcNsName:   svcNsName,
-			ServicePort: svcPort,
-			Weight:      weight,
-			Valid:       false,
+			SvcNsName:       svcNsName,
+			ServicePort:     svcPort,
+			Weight:          weight,
+			Valid:           false,
+			IsMirrorBackend: ref.MirrorBackendIdx != nil,
 		}
 
 		cond := staticConds.NewRouteBackendRefUnsupportedValue(err.Error())
@@ -204,6 +214,7 @@ func createBackendRef(
 		ServicePort:      svcPort,
 		Valid:            true,
 		Weight:           weight,
+		IsMirrorBackend:  ref.MirrorBackendIdx != nil,
 	}
 
 	return backendRef, nil
@@ -385,8 +396,9 @@ func validateBackendRef(
 
 		if !refGrantResolver(toService(refNsName)) {
 			msg := fmt.Sprintf("Backend ref to Service %s not permitted by any ReferenceGrant", refNsName)
+			valErr := field.Forbidden(path.Child("namespace"), msg)
 
-			return false, staticConds.NewRouteBackendRefRefNotPermitted(msg)
+			return false, staticConds.NewRouteBackendRefRefNotPermitted(valErr.Error())
 		}
 	}
 

@@ -22,6 +22,7 @@ type Validators struct {
 //
 //counterfeiter:generate . HTTPFieldsValidator
 type HTTPFieldsValidator interface {
+	SkipValidation() bool
 	ValidatePathInMatch(path string) error
 	ValidateHeaderNameInMatch(name string) error
 	ValidateHeaderValueInMatch(value string) error
@@ -58,3 +59,22 @@ type PolicyValidator interface {
 	// Conflicts returns true if the two Policies conflict.
 	Conflicts(a, b policies.Policy) bool
 }
+
+// SkipValidator is used to skip validation on internally-created routes for request mirroring.
+type SkipValidator struct{}
+
+func (SkipValidator) SkipValidation() bool { return true }
+
+func (SkipValidator) ValidatePathInMatch(string) error                { return nil }
+func (SkipValidator) ValidateHeaderNameInMatch(string) error          { return nil }
+func (SkipValidator) ValidateHeaderValueInMatch(string) error         { return nil }
+func (SkipValidator) ValidateQueryParamNameInMatch(string) error      { return nil }
+func (SkipValidator) ValidateQueryParamValueInMatch(string) error     { return nil }
+func (SkipValidator) ValidateMethodInMatch(string) (bool, []string)   { return true, nil }
+func (SkipValidator) ValidateRedirectScheme(string) (bool, []string)  { return true, nil }
+func (SkipValidator) ValidateRedirectPort(int32) error                { return nil }
+func (SkipValidator) ValidateRedirectStatusCode(int) (bool, []string) { return true, nil }
+func (SkipValidator) ValidateHostname(string) error                   { return nil }
+func (SkipValidator) ValidateFilterHeaderName(string) error           { return nil }
+func (SkipValidator) ValidateFilterHeaderValue(string) error          { return nil }
+func (SkipValidator) ValidatePath(string) error                       { return nil }

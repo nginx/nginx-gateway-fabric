@@ -237,7 +237,7 @@ func createLocations(
 	matchPairs := make(httpMatchPairs)
 
 	var rootPathExists bool
-	var grpc bool
+	var grpcServer bool
 
 	for pathRuleIdx, rule := range server.PathRules {
 		matches := make([]routeMatch, 0, len(rule.MatchRules))
@@ -247,7 +247,7 @@ func createLocations(
 		}
 
 		if rule.GRPC {
-			grpc = true
+			grpcServer = true
 		}
 
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
@@ -277,7 +277,7 @@ func createLocations(
 		internalLocations := make([]http.Location, 0, len(rule.MatchRules))
 
 		for matchRuleIdx, r := range rule.MatchRules {
-			intLocation, match := initializeInternalLocation(pathRuleIdx, matchRuleIdx, r.Match, grpc)
+			intLocation, match := initializeInternalLocation(pathRuleIdx, matchRuleIdx, r.Match, rule.GRPC)
 			intLocation.Includes = createIncludesFromPolicyGenerateResult(
 				generator.GenerateForInternalLocation(rule.Policies),
 			)
@@ -313,7 +313,7 @@ func createLocations(
 		locs = append(locs, createDefaultRootLocation())
 	}
 
-	return locs, matchPairs, grpc
+	return locs, matchPairs, grpcServer
 }
 
 func needsInternalLocations(rule dataplane.PathRule) bool {
@@ -433,6 +433,13 @@ func updateLocation(
 		return location
 	}
 
+	if strings.HasPrefix(path, http.InternalMirrorRoutePathPrefix) {
+		location.Type = http.InternalLocationType
+		if grpc {
+			location.Rewrites = []string{"^ $request_uri break"}
+		}
+	}
+
 	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
 
 	if filters.RequestRedirect != nil {
@@ -445,6 +452,20 @@ func updateLocation(
 	}
 
 	rewrites := createRewritesValForRewriteFilter(filters.RequestURLRewrite, path)
+	if rewrites != nil {
+		if location.Type == http.InternalLocationType && rewrites.InternalRewrite != "" {
+			location.Rewrites = append(location.Rewrites, rewrites.InternalRewrite)
+		}
+		if rewrites.MainRewrite != "" {
+			location.Rewrites = append(location.Rewrites, rewrites.MainRewrite)
+		}
+	}
+
+	for _, filter := range filters.RequestMirrors {
+		if filter.Target != nil {
+			location.MirrorPaths = append(location.MirrorPaths, *filter.Target)
+		}
+	}
 
 	extraHeaders := make([]http.Header, 0, 3)
 	if grpc {
@@ -456,15 +477,6 @@ func updateLocation(
 
 	proxySetHeaders := generateProxySetHeaders(&matchRule.Filters, createBaseProxySetHeaders(extraHeaders...))
 	responseHeaders := generateResponseHeaders(&matchRule.Filters)
-
-	if rewrites != nil {
-		if location.Type == http.InternalLocationType && rewrites.InternalRewrite != "" {
-			location.Rewrites = append(location.Rewrites, rewrites.InternalRewrite)
-		}
-		if rewrites.MainRewrite != "" {
-			location.Rewrites = append(location.Rewrites, rewrites.MainRewrite)
-		}
-	}
 
 	location.ProxySetHeaders = proxySetHeaders
 	location.ProxySSLVerify = createProxyTLSFromBackends(matchRule.BackendGroup.Backends)
