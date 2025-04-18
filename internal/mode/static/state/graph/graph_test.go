@@ -1751,8 +1751,34 @@ func TestIsNGFPolicyRelevantPanics(t *testing.T) {
 func TestGatewayExists(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
-	gwNsName := types.NamespacedName{Namespace: "test", Name: "gw"}
 
-	result := gatewayExists(gwNsName, nil)
-	g.Expect(result).To(BeFalse())
+	tests := []struct {
+		gateways       map[types.NamespacedName]*Gateway
+		gwNsName       types.NamespacedName
+		name           string
+		expectedResult bool
+	}{
+		{
+			name:     "gateway exists",
+			gwNsName: types.NamespacedName{Namespace: "test", Name: "gw"},
+			gateways: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gw"}:  {},
+				{Namespace: "test", Name: "gw2"}: {},
+			},
+			expectedResult: true,
+		},
+		{
+			name:           "gateway does not exist",
+			gwNsName:       types.NamespacedName{Namespace: "test", Name: "gw"},
+			gateways:       nil,
+			expectedResult: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g.Expect(gatewayExists(test.gwNsName, test.gateways)).To(Equal(test.expectedResult))
+		})
+	}
 }

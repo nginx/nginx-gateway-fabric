@@ -3677,3 +3677,12 @@ func TestRemoveHostnames(t *testing.T) {
 		})
 	}
 }
+
+func TestBindRoutesToListeners(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	g.Expect(func() {
+		bindRoutesToListeners(nil, nil, nil, nil)
+	}).ToNot(Panic())
+}

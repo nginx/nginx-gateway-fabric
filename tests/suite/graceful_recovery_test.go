@@ -349,7 +349,7 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 	}
 
 	getLeaderElectionLeaseHolderName := func() (string, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
 		defer cancel()
 
 		var lease coordination.Lease
@@ -384,7 +384,7 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 	}
 
 	BeforeAll(func() {
-		podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
+		podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetStatusTimeout)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(podNames).To(HaveLen(1))
 
