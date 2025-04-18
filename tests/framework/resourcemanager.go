@@ -660,7 +660,7 @@ func (rm *ResourceManager) getGatewayClassNginxProxy(
 	proxyName := releaseName + "-proxy-config"
 
 	if err := rm.K8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: proxyName}, &proxy); err != nil {
-		return nil, fmt.Errorf("error getting GatewayClass NginxProxy: %w", err)
+		return nil, err
 	}
 
 	return &proxy, nil
