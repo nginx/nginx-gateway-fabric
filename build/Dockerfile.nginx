@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.14
+# syntax=docker/dockerfile:1.15
 FROM nginx:1.27.4-alpine-otel
 
 ARG NJS_DIR
