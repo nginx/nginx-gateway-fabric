@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"go.uber.org/zap"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 const DefaultNginxMetricsPort = int32(9113)
@@ -19,9 +18,6 @@ type Config struct {
 	ImageSource string
 	// Flags contains the NGF command-line flag names and values.
 	Flags Flags
-	// GatewayNsName is the namespaced name of a Gateway resource that the Gateway will use.
-	// The Gateway will ignore all other Gateway resources.
-	GatewayNsName *types.NamespacedName
 	// GatewayPodConfig contains information about this Pod.
 	GatewayPodConfig GatewayPodConfig
 	// Logger is the Zap Logger used by all components.
@@ -46,8 +42,6 @@ type Config struct {
 	MetricsConfig MetricsConfig
 	// HealthConfig specifies the health probe config.
 	HealthConfig HealthConfig
-	// UpdateGatewayClassStatus enables updating the status of the GatewayClass resource.
-	UpdateGatewayClassStatus bool
 	// Plus indicates whether NGINX Plus is being used.
 	Plus bool
 	// ExperimentalFeatures indicates if experimental features are enabled.

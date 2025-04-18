@@ -24,8 +24,6 @@ type Policy interface {
 // GlobalSettings contains global settings from the current state of the graph that may be
 // needed for policy validation or generation if certain policies rely on those global settings.
 type GlobalSettings struct {
-	// NginxProxyValid is whether the NginxProxy resource is valid.
-	NginxProxyValid bool
 	// TelemetryEnabled is whether telemetry is enabled in the NginxProxy resource.
 	TelemetryEnabled bool
 }

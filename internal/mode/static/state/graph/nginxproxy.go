@@ -127,7 +127,7 @@ func processNginxProxies(
 	nps map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy,
 	validator validation.GenericValidator,
 	gc *v1.GatewayClass,
-	winningGateway *v1.Gateway,
+	gws map[types.NamespacedName]*v1.Gateway,
 ) map[types.NamespacedName]*NginxProxy {
 	referencedNginxProxies := make(map[types.NamespacedName]*NginxProxy)
 
@@ -146,14 +146,17 @@ func processNginxProxies(
 		}
 	}
 
-	if gwReferencesAnyNginxProxy(winningGateway) {
-		refNp := types.NamespacedName{
-			Name:      winningGateway.Spec.Infrastructure.ParametersRef.Name,
-			Namespace: winningGateway.Namespace,
-		}
-
-		if np, ok := nps[refNp]; ok {
-			referencedNginxProxies[refNp] = buildNginxProxy(np, validator)
+	for _, gw := range gws {
+		if gwReferencesAnyNginxProxy(gw) {
+			refNp := types.NamespacedName{
+				Name:      gw.Spec.Infrastructure.ParametersRef.Name,
+				Namespace: gw.Namespace,
+			}
+			if np, ok := nps[refNp]; ok {
+				referencedNginxProxies[refNp] = buildNginxProxy(np, validator)
+			} else {
+				referencedNginxProxies[refNp] = nil
+			}
 		}
 	}
 

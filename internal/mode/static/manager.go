@@ -245,21 +245,20 @@ func StartManager(cfg config.Config) error {
 			&cfg.UsageReportConfig,
 			cfg.Logger.WithName("generator"),
 		),
-		k8sClient:                mgr.GetClient(),
-		k8sReader:                mgr.GetAPIReader(),
-		logger:                   cfg.Logger.WithName("eventHandler"),
-		logLevelSetter:           logLevelSetter,
-		eventRecorder:            recorder,
-		deployCtxCollector:       deployCtxCollector,
-		graphBuiltHealthChecker:  healthChecker,
-		gatewayPodConfig:         cfg.GatewayPodConfig,
-		controlConfigNSName:      controlConfigNSName,
-		gatewayCtlrName:          cfg.GatewayCtlrName,
-		gatewayClassName:         cfg.GatewayClassName,
-		updateGatewayClassStatus: cfg.UpdateGatewayClassStatus,
-		plus:                     cfg.Plus,
-		statusQueue:              statusQueue,
-		nginxDeployments:         nginxUpdater.NginxDeployments,
+		k8sClient:               mgr.GetClient(),
+		k8sReader:               mgr.GetAPIReader(),
+		logger:                  cfg.Logger.WithName("eventHandler"),
+		logLevelSetter:          logLevelSetter,
+		eventRecorder:           recorder,
+		deployCtxCollector:      deployCtxCollector,
+		graphBuiltHealthChecker: healthChecker,
+		gatewayPodConfig:        cfg.GatewayPodConfig,
+		controlConfigNSName:     controlConfigNSName,
+		gatewayCtlrName:         cfg.GatewayCtlrName,
+		gatewayClassName:        cfg.GatewayClassName,
+		plus:                    cfg.Plus,
+		statusQueue:             statusQueue,
+		nginxDeployments:        nginxUpdater.NginxDeployments,
 	})
 
 	objects, objectLists := prepareFirstEventBatchPreparerArgs(cfg)
@@ -434,12 +433,6 @@ func registerControllers(
 			options: func() []controller.Option {
 				options := []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-				}
-				if cfg.GatewayNsName != nil {
-					options = append(
-						options,
-						controller.WithNamespacedNameFilter(filter.CreateSingleResourceFilter(*cfg.GatewayNsName)),
-					)
 				}
 				return options
 			}(),
@@ -778,16 +771,7 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 		)
 	}
 
-	gwNsName := cfg.GatewayNsName
-
-	if gwNsName == nil {
-		objectLists = append(objectLists, &gatewayv1.GatewayList{})
-	} else {
-		objects = append(
-			objects,
-			&gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: gwNsName.Name, Namespace: gwNsName.Namespace}},
-		)
-	}
+	objectLists = append(objectLists, &gatewayv1.GatewayList{})
 
 	return objects, objectLists
 }

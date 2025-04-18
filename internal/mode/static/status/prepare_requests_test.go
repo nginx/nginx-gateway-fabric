@@ -71,6 +71,9 @@ var (
 			{
 				SectionName: helpers.GetPointer[v1.SectionName]("listener-80-2"),
 			},
+			{
+				SectionName: helpers.GetPointer[v1.SectionName]("listener-80-3"),
+			},
 		},
 	}
 
@@ -85,7 +88,7 @@ var (
 	parentRefsValid = []graph.ParentRef{
 		{
 			Idx:         0,
-			Gateway:     gwNsName,
+			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[0].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached: true,
@@ -93,11 +96,20 @@ var (
 		},
 		{
 			Idx:         1,
-			Gateway:     gwNsName,
+			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			SectionName: commonRouteSpecValid.ParentRefs[1].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
-				Attached:        false,
-				FailedCondition: invalidAttachmentCondition,
+				Attached:         false,
+				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+			},
+		},
+		{
+			Idx:         2,
+			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
+			SectionName: commonRouteSpecValid.ParentRefs[2].SectionName,
+			Attachment: &graph.ParentRefAttachmentStatus{
+				Attached:         true,
+				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
 			},
 		},
 	}
@@ -105,7 +117,7 @@ var (
 	parentRefsInvalid = []graph.ParentRef{
 		{
 			Idx:         0,
-			Gateway:     gwNsName,
+			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
 			Attachment:  nil,
 			SectionName: commonRouteSpecInvalid.ParentRefs[0].SectionName,
 		},
@@ -144,6 +156,38 @@ var (
 					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:        v1.ObjectName(gwNsName.Name),
 					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-2"),
+				},
+				ControllerName: gatewayCtlrName,
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(v1.RouteConditionAccepted),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonAccepted),
+						Message:            "The route is accepted",
+					},
+					{
+						Type:               string(v1.RouteConditionResolvedRefs),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonResolvedRefs),
+						Message:            "All references are resolved",
+					},
+					{
+						Type:               invalidAttachmentCondition.Type,
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+					},
+				},
+			},
+			{
+				ParentRef: v1.ParentReference{
+					Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
+					Name:        v1.ObjectName(gwNsName.Name),
+					SectionName: helpers.GetPointer[v1.SectionName]("listener-80-3"),
 				},
 				ControllerName: gatewayCtlrName,
 				Conditions: []metav1.Condition{
@@ -475,7 +519,7 @@ func TestBuildRouteStatusesNginxErr(t *testing.T) {
 			ParentRefs: []graph.ParentRef{
 				{
 					Idx:     0,
-					Gateway: gwNsName,
+					Gateway: &graph.ParentRefGateway{NamespacedName: gwNsName},
 					Attachment: &graph.ParentRefAttachmentStatus{
 						Attached: true,
 					},
@@ -741,76 +785,14 @@ func TestBuildGatewayStatuses(t *testing.T) {
 	routeKey := graph.RouteKey{NamespacedName: types.NamespacedName{Namespace: "test", Name: "hr-1"}}
 
 	tests := []struct {
-		nginxReloadRes  graph.NginxReloadResult
-		gateway         *graph.Gateway
-		ignoredGateways map[types.NamespacedName]*v1.Gateway
-		expected        map[types.NamespacedName]v1.GatewayStatus
-		name            string
+		nginxReloadRes graph.NginxReloadResult
+		gateway        *graph.Gateway
+		expected       map[types.NamespacedName]v1.GatewayStatus
+		name           string
 	}{
 		{
 			name:     "nil gateway and no ignored gateways",
 			expected: map[types.NamespacedName]v1.GatewayStatus{},
-		},
-		{
-			name: "nil gateway and ignored gateways",
-			ignoredGateways: map[types.NamespacedName]*v1.Gateway{
-				{Namespace: "test", Name: "ignored-1"}: {
-					ObjectMeta: metav1.ObjectMeta{
-						Name:       "ignored-1",
-						Namespace:  "test",
-						Generation: 1,
-					},
-				},
-				{Namespace: "test", Name: "ignored-2"}: {
-					ObjectMeta: metav1.ObjectMeta{
-						Name:       "ignored-2",
-						Namespace:  "test",
-						Generation: 2,
-					},
-				},
-			},
-			expected: map[types.NamespacedName]v1.GatewayStatus{
-				{Namespace: "test", Name: "ignored-1"}: {
-					Conditions: []metav1.Condition{
-						{
-							Type:               string(v1.GatewayConditionAccepted),
-							Status:             metav1.ConditionFalse,
-							ObservedGeneration: 1,
-							LastTransitionTime: transitionTime,
-							Reason:             string(staticConds.GatewayReasonGatewayConflict),
-							Message:            staticConds.GatewayMessageGatewayConflict,
-						},
-						{
-							Type:               string(v1.GatewayConditionProgrammed),
-							Status:             metav1.ConditionFalse,
-							ObservedGeneration: 1,
-							LastTransitionTime: transitionTime,
-							Reason:             string(staticConds.GatewayReasonGatewayConflict),
-							Message:            staticConds.GatewayMessageGatewayConflict,
-						},
-					},
-				},
-				{Namespace: "test", Name: "ignored-2"}: {
-					Conditions: []metav1.Condition{
-						{
-							Type:               string(v1.GatewayConditionAccepted),
-							Status:             metav1.ConditionFalse,
-							ObservedGeneration: 2,
-							LastTransitionTime: transitionTime,
-							Reason:             string(staticConds.GatewayReasonGatewayConflict),
-							Message:            staticConds.GatewayMessageGatewayConflict,
-						},
-						{
-							Type:               string(v1.GatewayConditionProgrammed),
-							Status:             metav1.ConditionFalse,
-							ObservedGeneration: 2,
-							LastTransitionTime: transitionTime,
-							Reason:             string(staticConds.GatewayReasonGatewayConflict),
-							Message:            staticConds.GatewayMessageGatewayConflict,
-						},
-					},
-				},
-			},
 		},
 		{
 			name: "valid gateway; all valid listeners",
@@ -1264,17 +1246,10 @@ func TestBuildGatewayStatuses(t *testing.T) {
 				expectedTotalReqs++
 			}
 
-			for _, gw := range test.ignoredGateways {
-				err := k8sClient.Create(context.Background(), gw)
-				g.Expect(err).ToNot(HaveOccurred())
-				expectedTotalReqs++
-			}
-
 			updater := statusFramework.NewUpdater(k8sClient, logr.Discard())
 
 			reqs := PrepareGatewayRequests(
 				test.gateway,
-				test.ignoredGateways,
 				transitionTime,
 				addr,
 				test.nginxReloadRes,
@@ -1304,6 +1279,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 	type policyCfg struct {
 		Name         string
 		Conditions   []conditions.Condition
+		Gateways     []types.NamespacedName
 		Valid        bool
 		Ignored      bool
 		IsReferenced bool
@@ -1322,7 +1298,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 			Ignored:      policyCfg.Ignored,
 			IsReferenced: policyCfg.IsReferenced,
 			Conditions:   policyCfg.Conditions,
-			Gateway:      types.NamespacedName{Name: "gateway", Namespace: "test"},
+			Gateways:     policyCfg.Gateways,
 		}
 	}
 
@@ -1334,12 +1310,19 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 		Valid:        true,
 		IsReferenced: true,
 		Conditions:   attachedConds,
+		Gateways: []types.NamespacedName{
+			{Namespace: "test", Name: "gateway"},
+			{Namespace: "test", Name: "gateway-2"},
+		},
 	}
 
 	invalidPolicyCfg := policyCfg{
 		Name:         "invalid-bt",
 		IsReferenced: true,
 		Conditions:   invalidConds,
+		Gateways: []types.NamespacedName{
+			{Namespace: "test", Name: "gateway"},
+		},
 	}
 
 	ignoredPolicyCfg := policyCfg{
@@ -1377,6 +1360,25 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 							AncestorRef: v1.ParentReference{
 								Namespace: helpers.GetPointer[v1.Namespace]("test"),
 								Name:      "gateway",
+								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1alpha2.PolicyConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1alpha2.PolicyReasonAccepted),
+									Message:            "Policy is accepted",
+								},
+							},
+						},
+						{
+							AncestorRef: v1.ParentReference{
+								Namespace: helpers.GetPointer[v1.Namespace]("test"),
+								Name:      "gateway-2",
 								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
 								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
 							},
@@ -1455,6 +1457,25 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 							AncestorRef: v1.ParentReference{
 								Namespace: helpers.GetPointer[v1.Namespace]("test"),
 								Name:      "gateway",
+								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+							},
+							ControllerName: gatewayCtlrName,
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(v1alpha2.PolicyConditionAccepted),
+									Status:             metav1.ConditionTrue,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(v1alpha2.PolicyReasonAccepted),
+									Message:            "Policy is accepted",
+								},
+							},
+						},
+						{
+							AncestorRef: v1.ParentReference{
+								Namespace: helpers.GetPointer[v1.Namespace]("test"),
+								Name:      "gateway-2",
 								Group:     helpers.GetPointer[v1.Group](v1.GroupName),
 								Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
 							},

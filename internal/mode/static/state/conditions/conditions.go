@@ -107,10 +107,6 @@ const (
 	// has an overlapping hostname:port/path combination with another Route.
 	PolicyReasonTargetConflict v1alpha2.PolicyConditionReason = "TargetConflict"
 
-	// GatewayIgnoredReason is used with v1.RouteConditionAccepted when the route references a Gateway that is ignored
-	// by NGF.
-	GatewayIgnoredReason v1.RouteConditionReason = "GatewayIgnored"
-
 	// GatewayResolvedRefs condition indicates whether the controller was able to resolve the
 	// parametersRef on the Gateway.
 	GatewayResolvedRefs v1.GatewayConditionType = "ResolvedRefs"
@@ -126,17 +122,6 @@ const (
 	// parametersRef resource is invalid.
 	GatewayReasonParamsRefInvalid v1.GatewayConditionReason = "ParametersRefInvalid"
 )
-
-// NewRouteNotAcceptedGatewayIgnored returns a Condition that indicates that the Route is not accepted by the Gateway
-// because the Gateway is ignored by NGF.
-func NewRouteNotAcceptedGatewayIgnored() conditions.Condition {
-	return conditions.Condition{
-		Type:    string(v1.RouteConditionAccepted),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(GatewayIgnoredReason),
-		Message: "The Gateway is ignored by the controller",
-	}
-}
 
 // NewDefaultRouteConditions returns the default conditions that must be present in the status of a Route.
 func NewDefaultRouteConditions() []conditions.Condition {

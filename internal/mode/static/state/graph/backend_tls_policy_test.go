@@ -46,27 +46,29 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 		},
 	}
 
-	gateway := &Gateway{
-		Source: &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gateway", Namespace: "test"}},
+	gateway := map[types.NamespacedName]*Gateway{
+		{Namespace: "test", Name: "gateway"}: {
+			Source: &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gateway", Namespace: "test"}},
+		},
 	}
 
 	tests := []struct {
 		expected           map[types.NamespacedName]*BackendTLSPolicy
-		gateway            *Gateway
+		gateways           map[types.NamespacedName]*Gateway
 		backendTLSPolicies map[types.NamespacedName]*v1alpha3.BackendTLSPolicy
 		name               string
 	}{
 		{
 			name:               "no policies",
 			expected:           nil,
-			gateway:            gateway,
+			gateways:           gateway,
 			backendTLSPolicies: nil,
 		},
 		{
 			name:               "nil gateway",
 			expected:           nil,
 			backendTLSPolicies: backendTLSPolicies,
-			gateway:            nil,
+			gateways:           nil,
 		},
 	}
 
@@ -75,7 +77,7 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, nil, "test", test.gateway)
+			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, nil, "test", test.gateways)
 
 			g.Expect(processed).To(Equal(test.expected))
 		})
@@ -88,6 +90,15 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		{
 			LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
 				Kind: "Service",
+				Name: "service1",
+			},
+		},
+	}
+
+	targetRefInvalidKind := []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+		{
+			LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+				Kind: "Invalid",
 				Name: "service1",
 			},
 		},
@@ -119,7 +130,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 
 	localObjectRefInvalidKind := []gatewayv1.LocalObjectReference{
 		{
-			Kind:  "Secret",
+			Kind:  "Invalid",
 			Name:  "secret",
 			Group: "",
 		},
@@ -299,7 +310,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 					Namespace: "test",
 				},
 				Spec: v1alpha3.BackendTLSPolicySpec{
-					TargetRefs: targetRefNormalCase,
+					TargetRefs: targetRefInvalidKind,
 					Validation: v1alpha3.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefInvalidKind,
 						Hostname:          "foo.test.com",
@@ -472,6 +483,185 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 			}
 			g.Expect(valid).To(Equal(test.isValid))
 			g.Expect(ignored).To(Equal(test.ignored))
+		})
+	}
+}
+
+func TestAddGatewaysForBackendTLSPolicies(t *testing.T) {
+	t.Parallel()
+
+	btp1 := &BackendTLSPolicy{
+		Source: &v1alpha3.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "btp1",
+				Namespace: "test",
+			},
+			Spec: v1alpha3.BackendTLSPolicySpec{
+				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "service1",
+						},
+					},
+					{
+						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "service2",
+						},
+					},
+				},
+			},
+		},
+	}
+	btp1Expected := btp1
+
+	btp1Expected.Gateways = []types.NamespacedName{
+		{Namespace: "test", Name: "gateway1"},
+		{Namespace: "test", Name: "gateway2"},
+		{Namespace: "test", Name: "gateway3"},
+	}
+
+	btp2 := &BackendTLSPolicy{
+		Source: &v1alpha3.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "btp2",
+				Namespace: "test",
+			},
+			Spec: v1alpha3.BackendTLSPolicySpec{
+				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "service3",
+						},
+					},
+					{
+						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "service4",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	btp2Expected := btp2
+	btp2Expected.Gateways = []types.NamespacedName{
+		{Namespace: "test", Name: "gateway4"},
+	}
+
+	btp3 := &BackendTLSPolicy{
+		Source: &v1alpha3.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "btp3",
+				Namespace: "test",
+			},
+			Spec: v1alpha3.BackendTLSPolicySpec{
+				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "service-does-not-exist",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	btp4 := &BackendTLSPolicy{
+		Source: &v1alpha3.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "btp4",
+				Namespace: "test",
+			},
+			Spec: v1alpha3.BackendTLSPolicySpec{
+				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+							Kind: "Gateway",
+							Name: "gateway",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy
+		services           map[types.NamespacedName]*ReferencedService
+		expected           map[types.NamespacedName]*BackendTLSPolicy
+		name               string
+	}{
+		{
+			name: "add multiple gateways to backend tls policies",
+			backendTLSPolicies: map[types.NamespacedName]*BackendTLSPolicy{
+				{Namespace: "test", Name: "btp1"}: btp1,
+				{Namespace: "test", Name: "btp2"}: btp2,
+			},
+			services: map[types.NamespacedName]*ReferencedService{
+				{Namespace: "test", Name: "service1"}: {
+					GatewayNsNames: map[types.NamespacedName]struct{}{
+						{Namespace: "test", Name: "gateway1"}: {},
+					},
+				},
+				{Namespace: "test", Name: "service2"}: {
+					GatewayNsNames: map[types.NamespacedName]struct{}{
+						{Namespace: "test", Name: "gateway2"}: {},
+						{Namespace: "test", Name: "gateway3"}: {},
+					},
+				},
+				{Namespace: "test", Name: "service3"}: {
+					GatewayNsNames: map[types.NamespacedName]struct{}{
+						{Namespace: "test", Name: "gateway4"}: {},
+					},
+				},
+				{Namespace: "test", Name: "service4"}: {
+					GatewayNsNames: map[types.NamespacedName]struct{}{
+						{Namespace: "test", Name: "gateway4"}: {},
+					},
+				},
+			},
+			expected: map[types.NamespacedName]*BackendTLSPolicy{
+				{Namespace: "test", Name: "btp1"}: btp1Expected,
+				{Namespace: "test", Name: "btp2"}: btp2Expected,
+			},
+		},
+		{
+			name: "backend tls policy with a service target ref that does not reference a gateway",
+			backendTLSPolicies: map[types.NamespacedName]*BackendTLSPolicy{
+				{Namespace: "test", Name: "btp3"}: btp3,
+			},
+			services: map[types.NamespacedName]*ReferencedService{
+				{Namespace: "test", Name: "service1"}: {
+					GatewayNsNames: map[types.NamespacedName]struct{}{},
+				},
+			},
+			expected: map[types.NamespacedName]*BackendTLSPolicy{
+				{Namespace: "test", Name: "btp3"}: btp3,
+			},
+		},
+		{
+			name: "backend tls policy that does not reference a service",
+			backendTLSPolicies: map[types.NamespacedName]*BackendTLSPolicy{
+				{Namespace: "test", Name: "btp4"}: btp4,
+			},
+			services: map[types.NamespacedName]*ReferencedService{},
+			expected: map[types.NamespacedName]*BackendTLSPolicy{
+				{Namespace: "test", Name: "btp4"}: btp4,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		g := NewWithT(t)
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			addGatewaysForBackendTLSPolicies(test.backendTLSPolicies, test.services)
+			g.Expect(helpers.Diff(test.backendTLSPolicies, test.expected)).To(BeEmpty())
 		})
 	}
 }

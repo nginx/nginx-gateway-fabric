@@ -98,7 +98,7 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 			k8sClient,
 			ngfNamespace,
 			releaseName,
-			timeoutConfig.GetTimeout,
+			timeoutConfig.GetStatusTimeout,
 		)
 		if err != nil {
 			return "", err

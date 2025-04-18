@@ -111,8 +111,8 @@ func prepareRouteStatus(
 
 	for _, ref := range parentRefs {
 		failedAttachmentCondCount := 0
-		if ref.Attachment != nil && !ref.Attachment.Attached {
-			failedAttachmentCondCount = 1
+		if ref.Attachment != nil {
+			failedAttachmentCondCount = len(ref.Attachment.FailedConditions)
 		}
 		allConds := make([]conditions.Condition, 0, len(conds)+len(defaultConds)+failedAttachmentCondCount)
 
@@ -120,8 +120,8 @@ func prepareRouteStatus(
 		// ensured by DeduplicateConditions.
 		allConds = append(allConds, defaultConds...)
 		allConds = append(allConds, conds...)
-		if failedAttachmentCondCount == 1 {
-			allConds = append(allConds, ref.Attachment.FailedCondition)
+		if failedAttachmentCondCount > 0 {
+			allConds = append(allConds, ref.Attachment.FailedConditions...)
 		}
 
 		if nginxReloadRes.Error != nil {
@@ -136,8 +136,8 @@ func prepareRouteStatus(
 
 		ps := v1.RouteParentStatus{
 			ParentRef: v1.ParentReference{
-				Namespace:   helpers.GetPointer(v1.Namespace(ref.Gateway.Namespace)),
-				Name:        v1.ObjectName(ref.Gateway.Name),
+				Namespace:   helpers.GetPointer(v1.Namespace(ref.Gateway.NamespacedName.Namespace)),
+				Name:        v1.ObjectName(ref.Gateway.NamespacedName.Name),
 				SectionName: ref.SectionName,
 			},
 			ControllerName: v1.GatewayController(gatewayCtlrName),
@@ -205,26 +205,14 @@ func PrepareGatewayClassRequests(
 // PrepareGatewayRequests prepares status UpdateRequests for the given Gateways.
 func PrepareGatewayRequests(
 	gateway *graph.Gateway,
-	ignoredGateways map[types.NamespacedName]*v1.Gateway,
 	transitionTime metav1.Time,
 	gwAddresses []v1.GatewayStatusAddress,
 	nginxReloadRes graph.NginxReloadResult,
 ) []frameworkStatus.UpdateRequest {
-	reqs := make([]frameworkStatus.UpdateRequest, 0, 1+len(ignoredGateways))
+	reqs := make([]frameworkStatus.UpdateRequest, 0, 1)
 
 	if gateway != nil {
 		reqs = append(reqs, prepareGatewayRequest(gateway, transitionTime, gwAddresses, nginxReloadRes))
-	}
-
-	for nsname, gw := range ignoredGateways {
-		apiConds := conditions.ConvertConditions(staticConds.NewGatewayConflict(), gw.Generation, transitionTime)
-		reqs = append(reqs, frameworkStatus.UpdateRequest{
-			NsName:       nsname,
-			ResourceType: &v1.Gateway{},
-			Setter: newGatewayStatusSetter(v1.GatewayStatus{
-				Conditions: apiConds,
-			}),
-		})
 	}
 
 	return reqs
@@ -383,19 +371,24 @@ func PrepareBackendTLSPolicyRequests(
 		conds := conditions.DeduplicateConditions(pol.Conditions)
 		apiConds := conditions.ConvertConditions(conds, pol.Source.Generation, transitionTime)
 
-		status := v1alpha2.PolicyStatus{
-			Ancestors: []v1alpha2.PolicyAncestorStatus{
-				{
-					AncestorRef: v1.ParentReference{
-						Namespace: (*v1.Namespace)(&pol.Gateway.Namespace),
-						Name:      v1alpha2.ObjectName(pol.Gateway.Name),
-						Group:     helpers.GetPointer[v1.Group](v1.GroupName),
-						Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
-					},
-					ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
-					Conditions:     apiConds,
+		policyAncestors := make([]v1alpha2.PolicyAncestorStatus, 0, len(pol.Gateways))
+		for _, gwNsName := range pol.Gateways {
+			policyAncestorStatus := v1alpha2.PolicyAncestorStatus{
+				AncestorRef: v1.ParentReference{
+					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
+					Name:      v1.ObjectName(gwNsName.Name),
+					Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+					Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
 				},
-			},
+				ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
+				Conditions:     apiConds,
+			}
+
+			policyAncestors = append(policyAncestors, policyAncestorStatus)
+		}
+
+		status := v1alpha2.PolicyStatus{
+			Ancestors: policyAncestors,
 		}
 
 		reqs = append(reqs, frameworkStatus.UpdateRequest{
