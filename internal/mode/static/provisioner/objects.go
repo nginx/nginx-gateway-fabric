@@ -423,9 +423,12 @@ func buildNginxService(
 		serviceType = corev1.ServiceType(*serviceCfg.ServiceType)
 	}
 
-	servicePolicy := defaultServicePolicy
-	if serviceCfg.ExternalTrafficPolicy != nil {
-		servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
+	var servicePolicy corev1.ServiceExternalTrafficPolicyType
+	if serviceType != corev1.ServiceTypeClusterIP {
+		servicePolicy = defaultServicePolicy
+		if serviceCfg.ExternalTrafficPolicy != nil {
+			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
+		}
 	}
 
 	servicePorts := make([]corev1.ServicePort, 0, len(ports))
