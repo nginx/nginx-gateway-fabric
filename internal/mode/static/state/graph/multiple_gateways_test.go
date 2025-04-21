@@ -67,24 +67,29 @@ var (
 	}
 )
 
-func createGateway(name, nginxProxyName string, listeners []gatewayv1.Listener) *gatewayv1.Gateway {
-	return &gatewayv1.Gateway{
+func createGateway(name, namespace, nginxProxyName string, listeners []gatewayv1.Listener) *gatewayv1.Gateway {
+	gateway := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: testNs,
+			Namespace: namespace,
 			Name:      name,
 		},
 		Spec: gatewayv1.GatewaySpec{
 			GatewayClassName: gcName,
-			Infrastructure: &gatewayv1.GatewayInfrastructure{
-				ParametersRef: &gatewayv1.LocalParametersReference{
-					Group: ngfAPIv1alpha2.GroupName,
-					Kind:  kinds.NginxProxy,
-					Name:  nginxProxyName,
-				},
-			},
-			Listeners: listeners,
+			Listeners:        listeners,
 		},
 	}
+
+	if nginxProxyName != "" {
+		gateway.Spec.Infrastructure = &gatewayv1.GatewayInfrastructure{
+			ParametersRef: &gatewayv1.LocalParametersReference{
+				Group: ngfAPIv1alpha2.GroupName,
+				Kind:  kinds.NginxProxy,
+				Name:  nginxProxyName,
+			},
+		}
+	}
+
+	return gateway
 }
 
 func createGatewayClass(name, controllerName, npName, npNamespace string) *gatewayv1.GatewayClass {
@@ -145,7 +150,7 @@ func convertedGateway(
 	nginxProxy *NginxProxy,
 	effectiveNp *EffectiveNginxProxy,
 	listeners []*Listener,
-	conds ...conditions.Condition,
+	conds []conditions.Condition,
 ) *Gateway {
 	return &Gateway{
 		Source:              gw,
@@ -222,7 +227,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 		},
 	})
 
-	nginxProxyGateway3 := createNginxProxy("nginx-proxy-gateway-3", testNs, ngfAPIv1alpha2.NginxProxySpec{
+	nginxProxyGateway3 := createNginxProxy("nginx-proxy-gateway-3", "test2", ngfAPIv1alpha2.NginxProxySpec{
 		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
 				Replicas: helpers.GetPointer(int32(3)),
@@ -232,12 +237,12 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 	})
 
 	gatewayClass := createGatewayClass(gcName, controllerName, "nginx-proxy", testNs)
-	gateway1 := createGateway("gateway-1", "nginx-proxy", []gatewayv1.Listener{})
-	gateway2 := createGateway("gateway-2", "nginx-proxy", []gatewayv1.Listener{})
-	gateway3 := createGateway("gateway-3", "nginx-proxy", []gatewayv1.Listener{})
+	gateway1 := createGateway("gateway-1", testNs, "", []gatewayv1.Listener{})
+	gateway2 := createGateway("gateway-2", testNs, "", []gatewayv1.Listener{})
+	gateway3 := createGateway("gateway-3", "test2", "", []gatewayv1.Listener{})
 
-	gateway1withNP := createGateway("gateway-1", "nginx-proxy-gateway-1", []gatewayv1.Listener{})
-	gateway3withNP := createGateway("gateway-3", "nginx-proxy-gateway-3", []gatewayv1.Listener{})
+	gateway1withNP := createGateway("gateway-1", testNs, "nginx-proxy-gateway-1", []gatewayv1.Listener{})
+	gateway3withNP := createGateway("gateway-3", "test2", "nginx-proxy-gateway-3", []gatewayv1.Listener{})
 
 	gcConditions := []conditions.Condition{staticConds.NewGatewayClassResolvedRefs()}
 
@@ -269,24 +274,24 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 				Gateways: map[types.NamespacedName]*Gateway{
 					client.ObjectKeyFromObject(gateway1): convertedGateway(
 						gateway1,
-						&NginxProxy{Source: nginxProxyGlobal, Valid: true},
+						nil,
 						&EffectiveNginxProxy{DisableHTTP2: helpers.GetPointer(true)},
 						[]*Listener{},
-						gcConditions...,
+						nil,
 					),
 					client.ObjectKeyFromObject(gateway2): convertedGateway(
 						gateway2,
-						&NginxProxy{Source: nginxProxyGlobal, Valid: true},
+						nil,
 						&EffectiveNginxProxy{DisableHTTP2: helpers.GetPointer(true)},
 						[]*Listener{},
-						gcConditions...,
+						nil,
 					),
 					client.ObjectKeyFromObject(gateway3): convertedGateway(
 						gateway3,
-						&NginxProxy{Source: nginxProxyGlobal, Valid: true},
+						nil,
 						&EffectiveNginxProxy{DisableHTTP2: helpers.GetPointer(true)},
 						[]*Listener{},
-						gcConditions...,
+						nil,
 					),
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{
@@ -307,9 +312,9 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					client.ObjectKeyFromObject(gatewayClass): gatewayClass,
 				},
 				Gateways: map[types.NamespacedName]*gatewayv1.Gateway{
-					client.ObjectKeyFromObject(gateway1): gateway1withNP,
-					client.ObjectKeyFromObject(gateway2): gateway2,
-					client.ObjectKeyFromObject(gateway3): gateway3withNP,
+					client.ObjectKeyFromObject(gateway1withNP): gateway1withNP,
+					client.ObjectKeyFromObject(gateway2):       gateway2,
+					client.ObjectKeyFromObject(gateway3withNP): gateway3withNP,
 				},
 				NginxProxies: map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy{
 					client.ObjectKeyFromObject(nginxProxyGlobal):   nginxProxyGlobal,
@@ -334,14 +339,14 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 							DisableHTTP2: helpers.GetPointer(true),
 						},
 						[]*Listener{},
-						gcConditions...,
+						gcConditions,
 					),
 					client.ObjectKeyFromObject(gateway2): convertedGateway(
 						gateway2,
-						&NginxProxy{Source: nginxProxyGlobal, Valid: true},
+						nil,
 						&EffectiveNginxProxy{DisableHTTP2: helpers.GetPointer(true)},
 						[]*Listener{},
-						gcConditions...,
+						nil,
 					),
 					client.ObjectKeyFromObject(gateway3withNP): convertedGateway(
 						gateway3withNP,
@@ -355,7 +360,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 							DisableHTTP2: helpers.GetPointer(false),
 						},
 						[]*Listener{},
-						gcConditions...,
+						gcConditions,
 					),
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{
@@ -457,7 +462,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 		},
 	}
 
-	gateway1 := createGateway("gateway-1", "nginx-proxy", []gatewayv1.Listener{
+	gateway1 := createGateway("gateway-1", testNs, "nginx-proxy", []gatewayv1.Listener{
 		createListener(
 			"listener-tls-mode-terminate",
 			"*.example.com",
@@ -467,7 +472,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 			allowedRoutesHTTPGRPC,
 		),
 	})
-	gateway2 := createGateway("gateway-2", "nginx-proxy", []gatewayv1.Listener{
+	gateway2 := createGateway("gateway-2", testNs, "nginx-proxy", []gatewayv1.Listener{
 		createListener(
 			"listener-tls-mode-terminate",
 			"*.example.com",
@@ -532,12 +537,14 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 			allowedRoutesTLS,
 		),
 	}
-	gatewayMultipleListeners1 := createGateway("gateway-multiple-listeners-1", "nginx-proxy", listeners)
-	gatewayMultipleListeners2 := createGateway("gateway-multiple-listeners-2", "nginx-proxy", listeners)
-	gatewayMultipleListeners3 := createGateway("gateway-multiple-listeners-3", "nginx-proxy", listeners)
+	gatewayMultipleListeners1 := createGateway("gateway-multiple-listeners-1", testNs, "nginx-proxy", listeners)
+	gatewayMultipleListeners2 := createGateway("gateway-multiple-listeners-2", testNs, "nginx-proxy", listeners)
+	gatewayMultipleListeners3 := createGateway("gateway-multiple-listeners-3", testNs, "nginx-proxy", listeners)
 
 	// valid TLS and https listener same port and hostname
-	gatewayTLSSamePortHostname := createGateway("gateway-tls-foo",
+	gatewayTLSSamePortHostname := createGateway(
+		"gateway-tls-foo",
+		testNs,
 		"nginx-proxy",
 		[]gatewayv1.Listener{
 			createListener(
@@ -551,7 +558,9 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 		},
 	)
 
-	gatewayHTTPSSamePortHostname := createGateway("gateway-http-foo",
+	gatewayHTTPSSamePortHostname := createGateway(
+		"gateway-http-foo",
+		testNs,
 		"nginx-proxy",
 		[]gatewayv1.Listener{
 			createListener(
@@ -608,7 +617,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						staticConds.NewGatewayClassResolvedRefs(),
+						[]conditions.Condition{staticConds.NewGatewayClassResolvedRefs()},
 					),
 					client.ObjectKeyFromObject(gateway2): convertedGateway(
 						gateway2,
@@ -624,7 +633,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						staticConds.NewGatewayClassResolvedRefs(),
+						[]conditions.Condition{staticConds.NewGatewayClassResolvedRefs()},
 					),
 				},
 				Routes:      map[RouteKey]*L7Route{},
@@ -697,7 +706,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						staticConds.NewGatewayClassResolvedRefs(),
+						[]conditions.Condition{staticConds.NewGatewayClassResolvedRefs()},
 					),
 					client.ObjectKeyFromObject(gatewayMultipleListeners2): convertedGateway(
 						gatewayMultipleListeners2,
@@ -729,7 +738,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						staticConds.NewGatewayClassResolvedRefs(),
+						[]conditions.Condition{staticConds.NewGatewayClassResolvedRefs()},
 					),
 					client.ObjectKeyFromObject(gatewayMultipleListeners3): convertedGateway(
 						gatewayMultipleListeners3,
@@ -761,7 +770,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						staticConds.NewGatewayClassResolvedRefs(),
+						[]conditions.Condition{staticConds.NewGatewayClassResolvedRefs()},
 					),
 				},
 				Routes:      map[RouteKey]*L7Route{},
@@ -816,7 +825,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						staticConds.NewGatewayClassResolvedRefs(),
+						[]conditions.Condition{staticConds.NewGatewayClassResolvedRefs()},
 					),
 					client.ObjectKeyFromObject(gatewayHTTPSSamePortHostname): convertedGateway(
 						gatewayHTTPSSamePortHostname,
@@ -832,7 +841,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 								map[L4RouteKey]*L4Route{},
 							),
 						},
-						staticConds.NewGatewayClassResolvedRefs(),
+						[]conditions.Condition{staticConds.NewGatewayClassResolvedRefs()},
 					),
 				},
 				Routes:      map[RouteKey]*L7Route{},

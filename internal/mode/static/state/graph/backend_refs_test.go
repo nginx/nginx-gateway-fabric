@@ -1009,7 +1009,6 @@ func TestCreateBackend(t *testing.T) {
 	policies := map[types.NamespacedName]*BackendTLSPolicy{
 		client.ObjectKeyFromObject(btp.Source):  &btp,
 		client.ObjectKeyFromObject(btp2.Source): &btp2,
-		// client.ObjectKeyFromObject(btpDupe.Source): &btpDupe,
 	}
 
 	refPath := field.NewPath("test")

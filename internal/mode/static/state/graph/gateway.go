@@ -12,7 +12,7 @@ import (
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
 
-// Gateway represents the a Gateway resource.
+// Gateway represents a Gateway resource.
 type Gateway struct {
 	// LatestReloadResult is the result of the last nginx reload attempt.
 	LatestReloadResult NginxReloadResult
@@ -36,7 +36,7 @@ type Gateway struct {
 	Valid bool
 }
 
-// processGateways determines which Gateway resource belong to NGF (determined by the Gateway GatewayClassName field).
+// processGateways determines which Gateway resources belong to NGF (determined by the Gateway GatewayClassName field).
 func processGateways(
 	gws map[types.NamespacedName]*v1.Gateway,
 	gcName string,

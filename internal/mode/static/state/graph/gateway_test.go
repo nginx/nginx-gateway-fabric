@@ -221,7 +221,7 @@ func TestBuildGateway(t *testing.T) {
 	foo8081Listener := createHTTPListener("foo-8081", "foo.example.com", 8081)
 	foo443HTTPListener := createHTTPListener("foo-443-http", "foo.example.com", 443)
 
-	// // foo https listeners
+	// foo https listeners
 	foo80HTTPSListener := createHTTPSListener("foo-80-https", "foo.example.com", 80, gatewayTLSConfigSameNs)
 	foo443HTTPSListener1 := createHTTPSListener("foo-443-https-1", "foo.example.com", 443, gatewayTLSConfigSameNs)
 	foo8443HTTPSListener := createHTTPSListener("foo-8443-https", "foo.example.com", 8443, gatewayTLSConfigSameNs)

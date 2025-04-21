@@ -45,7 +45,7 @@ type ClusterState struct {
 type Graph struct {
 	// GatewayClass holds the GatewayClass resource.
 	GatewayClass *GatewayClass
-	// Gateway holds the all Gateway resource.
+	// Gateways holds the all Gateway resource.
 	Gateways map[types.NamespacedName]*Gateway
 	// IgnoredGatewayClasses holds the ignored GatewayClass resources, which reference NGINX Gateway Fabric in the
 	// controllerName, but are not configured via the NGINX Gateway Fabric CLI argument. It doesn't hold the GatewayClass
