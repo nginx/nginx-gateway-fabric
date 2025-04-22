@@ -4,9 +4,8 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -44,20 +43,22 @@ func TestBuildReferencedNamespaces(t *testing.T) {
 	}
 
 	tests := []struct {
-		gw            *Gateway
+		gws           map[types.NamespacedName]*Gateway
 		expectedRefNS map[types.NamespacedName]*v1.Namespace
 		name          string
 	}{
 		{
-			gw: &Gateway{
-				Listeners: []*Listener{
-					{
-						Name:                      "listener-2",
-						Valid:                     true,
-						AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"apples": "oranges"}),
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{
+						{
+							Name:                      "listener-2",
+							Valid:                     true,
+							AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"apples": "oranges"}),
+						},
 					},
+					Valid: true,
 				},
-				Valid: true,
 			},
 			expectedRefNS: map[types.NamespacedName]*v1.Namespace{
 				{Name: "ns2"}: ns2,
@@ -65,20 +66,22 @@ func TestBuildReferencedNamespaces(t *testing.T) {
 			name: "gateway matches labels with one namespace",
 		},
 		{
-			gw: &Gateway{
-				Listeners: []*Listener{
-					{
-						Name:                      "listener-1",
-						Valid:                     true,
-						AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"apples": "oranges"}),
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{
+						{
+							Name:                      "listener-1",
+							Valid:                     true,
+							AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"apples": "oranges"}),
+						},
+						{
+							Name:                      "listener-2",
+							Valid:                     true,
+							AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"peaches": "bananas"}),
+						},
 					},
-					{
-						Name:                      "listener-2",
-						Valid:                     true,
-						AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"peaches": "bananas"}),
-					},
+					Valid: true,
 				},
-				Valid: true,
 			},
 			expectedRefNS: map[types.NamespacedName]*v1.Namespace{
 				{Name: "ns2"}: ns2,
@@ -87,60 +90,67 @@ func TestBuildReferencedNamespaces(t *testing.T) {
 			name: "gateway matches labels with two namespaces",
 		},
 		{
-			gw: &Gateway{
-				Listeners: []*Listener{},
-				Valid:     true,
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{},
+					Valid:     true,
+				},
 			},
 			expectedRefNS: nil,
 			name:          "gateway has no Listeners",
 		},
 		{
-			gw: &Gateway{
-				Listeners: []*Listener{
-					{
-						Name:  "listener-1",
-						Valid: true,
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{
+						{
+							Name:  "listener-1",
+							Valid: true,
+						},
+						{
+							Name:  "listener-2",
+							Valid: true,
+						},
 					},
-					{
-						Name:  "listener-2",
-						Valid: true,
-					},
+					Valid: true,
 				},
-				Valid: true,
 			},
 			expectedRefNS: nil,
 			name:          "gateway has multiple listeners with no AllowedRouteLabelSelector set",
 		},
 		{
-			gw: &Gateway{
-				Listeners: []*Listener{
-					{
-						Name:                      "listener-1",
-						Valid:                     true,
-						AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"not": "matching"}),
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{
+						{
+							Name:                      "listener-1",
+							Valid:                     true,
+							AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"not": "matching"}),
+						},
 					},
+					Valid: true,
 				},
-				Valid: true,
 			},
-
 			expectedRefNS: nil,
 			name:          "gateway doesn't match labels with any namespace",
 		},
 		{
-			gw: &Gateway{
-				Listeners: []*Listener{
-					{
-						Name:                      "listener-1",
-						Valid:                     true,
-						AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"apples": "oranges"}),
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{
+						{
+							Name:                      "listener-1",
+							Valid:                     true,
+							AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"apples": "oranges"}),
+						},
+						{
+							Name:                      "listener-2",
+							Valid:                     true,
+							AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"not": "matching"}),
+						},
 					},
-					{
-						Name:                      "listener-2",
-						Valid:                     true,
-						AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"not": "matching"}),
-					},
+					Valid: true,
 				},
-				Valid: true,
 			},
 			expectedRefNS: map[types.NamespacedName]*v1.Namespace{
 				{Name: "ns2"}: ns2,
@@ -148,19 +158,21 @@ func TestBuildReferencedNamespaces(t *testing.T) {
 			name: "gateway has two listeners and only matches labels with one namespace",
 		},
 		{
-			gw: &Gateway{
-				Listeners: []*Listener{
-					{
-						Name:                      "listener-1",
-						Valid:                     true,
-						AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"apples": "oranges"}),
+			gws: map[types.NamespacedName]*Gateway{
+				{}: {
+					Listeners: []*Listener{
+						{
+							Name:                      "listener-1",
+							Valid:                     true,
+							AllowedRouteLabelSelector: labels.SelectorFromSet(map[string]string{"apples": "oranges"}),
+						},
+						{
+							Name:  "listener-2",
+							Valid: true,
+						},
 					},
-					{
-						Name:  "listener-2",
-						Valid: true,
-					},
+					Valid: true,
 				},
-				Valid: true,
 			},
 			expectedRefNS: map[types.NamespacedName]*v1.Namespace{
 				{Name: "ns2"}: ns2,
@@ -173,7 +185,7 @@ func TestBuildReferencedNamespaces(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			g.Expect(buildReferencedNamespaces(clusterNamespaces, test.gw)).To(Equal(test.expectedRefNS))
+			g.Expect(buildReferencedNamespaces(clusterNamespaces, test.gws)).To(Equal(test.expectedRefNS))
 		})
 	}
 }
@@ -182,13 +194,13 @@ func TestIsNamespaceReferenced(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		ns   *v1.Namespace
-		gw   *Gateway
+		gws  map[types.NamespacedName]*Gateway
 		name string
 		exp  bool
 	}{
 		{
 			ns:   nil,
-			gw:   nil,
+			gws:  nil,
 			exp:  false,
 			name: "namespace and gateway are nil",
 		},
@@ -198,15 +210,17 @@ func TestIsNamespaceReferenced(t *testing.T) {
 					Name: "ns1",
 				},
 			},
-			gw:   nil,
+			gws:  nil,
 			exp:  false,
 			name: "namespace is valid but gateway is nil",
 		},
 		{
 			ns: nil,
-			gw: &Gateway{
-				Listeners: []*Listener{},
-				Valid:     true,
+			gws: map[types.NamespacedName]*Gateway{
+				{Name: "ns1"}: {
+					Listeners: []*Listener{},
+					Valid:     true,
+				},
 			},
 			exp:  false,
 			name: "gateway is valid but namespace is nil",
@@ -218,7 +232,7 @@ func TestIsNamespaceReferenced(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			g.Expect(isNamespaceReferenced(test.ns, test.gw)).To(Equal(test.exp))
+			g.Expect(isNamespaceReferenced(test.ns, test.gws)).To(Equal(test.exp))
 		})
 	}
 }

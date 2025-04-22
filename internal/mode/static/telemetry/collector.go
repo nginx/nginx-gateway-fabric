@@ -199,10 +199,7 @@ func collectGraphResourceCount(
 		ngfResourceCounts.GatewayClassCount++
 	}
 
-	ngfResourceCounts.GatewayCount = int64(len(g.IgnoredGateways))
-	if g.Gateway != nil {
-		ngfResourceCounts.GatewayCount++
-	}
+	ngfResourceCounts.GatewayCount = int64(len(g.Gateways))
 
 	routeCounts := computeRouteCount(g.Routes, g.L4Routes)
 	ngfResourceCounts.HTTPRouteCount = routeCounts.HTTPRouteCount

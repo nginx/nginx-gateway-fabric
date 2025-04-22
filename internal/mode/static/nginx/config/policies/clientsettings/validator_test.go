@@ -143,7 +143,7 @@ func TestValidator_Validate(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			conds := v.Validate(test.policy, nil)
+			conds := v.Validate(test.policy)
 			g.Expect(conds).To(Equal(test.expConditions))
 		})
 	}
@@ -154,12 +154,21 @@ func TestValidator_ValidatePanics(t *testing.T) {
 	v := clientsettings.NewValidator(nil)
 
 	validate := func() {
-		_ = v.Validate(&policiesfakes.FakePolicy{}, nil)
+		_ = v.Validate(&policiesfakes.FakePolicy{})
 	}
 
 	g := NewWithT(t)
 
 	g.Expect(validate).To(Panic())
+}
+
+func TestValidator_ValidateGlobalSettings(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	v := clientsettings.NewValidator(validation.GenericValidator{})
+
+	g.Expect(v.ValidateGlobalSettings(nil, nil)).To(BeNil())
 }
 
 func TestValidator_Conflicts(t *testing.T) {

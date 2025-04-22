@@ -47,7 +47,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetTimeout)
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
@@ -255,13 +255,12 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 	When("a ClientSettingsPolicy targets an invalid resources", func() {
 		Specify("their accepted condition is set to TargetNotFound", func() {
 			files := []string{
-				"clientsettings/ignored-gateway.yaml",
-				"clientsettings/invalid-csp.yaml",
+				"clientsettings/invalid-route-csp.yaml",
 			}
 
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
-			nsname := types.NamespacedName{Name: "invalid-csp", Namespace: namespace}
+			nsname := types.NamespacedName{Name: "invalid-route-csp", Namespace: namespace}
 			Expect(waitForCSPolicyToHaveTargetNotFoundAcceptedCond(nsname)).To(Succeed())
 
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())

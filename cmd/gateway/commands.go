@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 	ctlr "sigs.k8s.io/controller-runtime"
@@ -59,11 +58,9 @@ func createRootCommand() *cobra.Command {
 func createControllerCommand() *cobra.Command {
 	// flag names
 	const (
-		gatewayFlag                    = "gateway"
 		configFlag                     = "config"
 		serviceFlag                    = "service"
 		agentTLSSecretFlag             = "agent-tls-secret"
-		updateGCStatusFlag             = "update-gatewayclass-status"
 		metricsDisableFlag             = "metrics-disable"
 		metricsSecureFlag              = "metrics-secure-serving"
 		metricsPortFlag                = "metrics-port"
@@ -94,9 +91,7 @@ func createControllerCommand() *cobra.Command {
 			validator: validateResourceName,
 		}
 
-		updateGCStatus bool
-		gateway        = namespacedNameValue{}
-		configName     = stringValidatingValue{
+		configName = stringValidatingValue{
 			validator: validateResourceName,
 		}
 		serviceName = stringValidatingValue{
@@ -200,11 +195,6 @@ func createControllerCommand() *cobra.Command {
 				return fmt.Errorf("error parsing telemetry endpoint insecure: %w", err)
 			}
 
-			var gwNsName *types.NamespacedName
-			if cmd.Flags().Changed(gatewayFlag) {
-				gwNsName = &gateway.value
-			}
-
 			var usageReportConfig config.UsageReportConfig
 			if plus && usageReportSecretName.value == "" {
 				return errors.New("usage-report-secret is required when using NGINX Plus")
@@ -229,14 +219,12 @@ func createControllerCommand() *cobra.Command {
 			}
 
 			conf := config.Config{
-				GatewayCtlrName:          gatewayCtlrName.value,
-				ConfigName:               configName.String(),
-				Logger:                   logger,
-				AtomicLevel:              atom,
-				GatewayClassName:         gatewayClassName.value,
-				GatewayNsName:            gwNsName,
-				UpdateGatewayClassStatus: updateGCStatus,
-				GatewayPodConfig:         podConfig,
+				GatewayCtlrName:  gatewayCtlrName.value,
+				ConfigName:       configName.String(),
+				Logger:           logger,
+				AtomicLevel:      atom,
+				GatewayClassName: gatewayClassName.value,
+				GatewayPodConfig: podConfig,
 				HealthConfig: config.HealthConfig{
 					Enabled: !disableHealth,
 					Port:    healthListenPort.value,
@@ -293,16 +281,6 @@ func createControllerCommand() *cobra.Command {
 	)
 	utilruntime.Must(cmd.MarkFlagRequired(gatewayClassFlag))
 
-	cmd.Flags().Var(
-		&gateway,
-		gatewayFlag,
-		"The namespaced name of the Gateway resource to use. "+
-			"Must be of the form: NAMESPACE/NAME. "+
-			"If not specified, the control plane will process all Gateways for the configured GatewayClass. "+
-			"However, among them, it will choose the oldest resource by creation timestamp. If the timestamps are "+
-			"equal, it will choose the resource that appears first in alphabetical order by {namespace}/{name}.",
-	)
-
 	cmd.Flags().VarP(
 		&configName,
 		configFlag,
@@ -324,13 +302,6 @@ func createControllerCommand() *cobra.Command {
 		`The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely `+
 			`communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the `+
 			`NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
-	)
-
-	cmd.Flags().BoolVar(
-		&updateGCStatus,
-		updateGCStatusFlag,
-		true,
-		"Update the status of the GatewayClass resource.",
 	)
 
 	cmd.Flags().BoolVar(
