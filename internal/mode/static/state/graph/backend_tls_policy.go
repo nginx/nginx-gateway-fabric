@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
 
@@ -18,8 +19,8 @@ type BackendTLSPolicy struct {
 	Source *v1alpha3.BackendTLSPolicy
 	// CaCertRef is the name of the ConfigMap that contains the CA certificate.
 	CaCertRef types.NamespacedName
-	// Gateway is the name of the Gateway that is being checked for this BackendTLSPolicy.
-	Gateway types.NamespacedName
+	// Gateways are the names of the Gateways that are being checked for this BackendTLSPolicy.
+	Gateways []types.NamespacedName
 	// Conditions include Conditions for the BackendTLSPolicy.
 	Conditions []conditions.Condition
 	// Valid shows whether the BackendTLSPolicy is valid.
@@ -35,9 +36,9 @@ func processBackendTLSPolicies(
 	configMapResolver *configMapResolver,
 	secretResolver *secretResolver,
 	ctlrName string,
-	gateway *Gateway,
+	gateways map[types.NamespacedName]*Gateway,
 ) map[types.NamespacedName]*BackendTLSPolicy {
-	if len(backendTLSPolicies) == 0 || gateway == nil {
+	if len(backendTLSPolicies) == 0 || len(gateways) == 0 {
 		return nil
 	}
 
@@ -57,12 +58,8 @@ func processBackendTLSPolicies(
 			Source:     backendTLSPolicy,
 			Valid:      valid,
 			Conditions: conds,
-			Gateway: types.NamespacedName{
-				Namespace: gateway.Source.Namespace,
-				Name:      gateway.Source.Name,
-			},
-			CaCertRef: caCertRef,
-			Ignored:   ignored,
+			CaCertRef:  caCertRef,
+			Ignored:    ignored,
 		}
 	}
 	return processedBackendTLSPolicies
@@ -134,7 +131,7 @@ func validateBackendTLSCACertRef(
 	secretResolver *secretResolver,
 ) error {
 	if len(btp.Spec.Validation.CACertificateRefs) != 1 {
-		path := field.NewPath("tls.cacertrefs")
+		path := field.NewPath("validation.caCertificateRefs")
 		valErr := field.TooMany(path, len(btp.Spec.Validation.CACertificateRefs), 1)
 		return valErr
 	}
@@ -143,13 +140,13 @@ func validateBackendTLSCACertRef(
 	allowedCaCertKinds := []v1.Kind{"ConfigMap", "Secret"}
 
 	if !slices.Contains(allowedCaCertKinds, selectedCertRef.Kind) {
-		path := field.NewPath("tls.cacertrefs[0].kind")
+		path := field.NewPath("validation.caCertificateRefs[0].kind")
 		valErr := field.NotSupported(path, btp.Spec.Validation.CACertificateRefs[0].Kind, allowedCaCertKinds)
 		return valErr
 	}
 	if selectedCertRef.Group != "" &&
 		selectedCertRef.Group != "core" {
-		path := field.NewPath("tls.cacertrefs[0].group")
+		path := field.NewPath("validation.caCertificateRefs[0].group")
 		valErr := field.NotSupported(path, selectedCertRef.Group, []string{"", "core"})
 		return valErr
 	}
@@ -161,12 +158,12 @@ func validateBackendTLSCACertRef(
 	switch selectedCertRef.Kind {
 	case "ConfigMap":
 		if err := configMapResolver.resolve(nsName); err != nil {
-			path := field.NewPath("tls.cacertrefs[0]")
+			path := field.NewPath("validation.caCertificateRefs[0]")
 			return field.Invalid(path, selectedCertRef, err.Error())
 		}
 	case "Secret":
 		if err := secretResolver.resolve(nsName); err != nil {
-			path := field.NewPath("tls.cacertrefs[0]")
+			path := field.NewPath("validation.caCertificateRefs[0]")
 			return field.Invalid(path, selectedCertRef, err.Error())
 		}
 	default:
@@ -185,4 +182,33 @@ func validateBackendTLSWellKnownCACerts(btp *v1alpha3.BackendTLSPolicy) error {
 		)
 	}
 	return nil
+}
+
+func addGatewaysForBackendTLSPolicies(
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
+	services map[types.NamespacedName]*ReferencedService,
+) {
+	for _, backendTLSPolicy := range backendTLSPolicies {
+		gateways := make(map[types.NamespacedName]struct{})
+
+		for _, refs := range backendTLSPolicy.Source.Spec.TargetRefs {
+			if refs.Kind != kinds.Service {
+				continue
+			}
+
+			for svcNsName, referencedServices := range services {
+				if svcNsName.Name != string(refs.Name) {
+					continue
+				}
+
+				for gateway := range referencedServices.GatewayNsNames {
+					gateways[gateway] = struct{}{}
+				}
+			}
+		}
+
+		for gateway := range gateways {
+			backendTLSPolicy.Gateways = append(backendTLSPolicy.Gateways, gateway)
+		}
+	}
 }

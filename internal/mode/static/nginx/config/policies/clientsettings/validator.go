@@ -25,7 +25,7 @@ func NewValidator(genericValidator validation.GenericValidator) *Validator {
 }
 
 // Validate validates the spec of a ClientSettingsPolicy.
-func (v *Validator) Validate(policy policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
+func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 	csp := helpers.MustCastObject[*ngfAPI.ClientSettingsPolicy](policy)
 
 	targetRefPath := field.NewPath("spec").Child("targetRef")
@@ -40,6 +40,14 @@ func (v *Validator) Validate(policy policies.Policy, _ *policies.GlobalSettings)
 		return []conditions.Condition{staticConds.NewPolicyInvalid(err.Error())}
 	}
 
+	return nil
+}
+
+// ValidateGlobalSettings validates a ClientSettingsPolicy with respect to the NginxProxy global settings.
+func (v *Validator) ValidateGlobalSettings(
+	_ policies.Policy,
+	_ *policies.GlobalSettings,
+) []conditions.Condition {
 	return nil
 }
 

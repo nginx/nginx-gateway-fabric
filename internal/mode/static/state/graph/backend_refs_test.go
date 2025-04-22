@@ -377,13 +377,13 @@ func TestVerifyIPFamily(t *testing.T) {
 	}
 }
 
-func TestAddBackendRefsToRulesTest(t *testing.T) {
+func TestAddBackendRefsToRules(t *testing.T) {
 	t.Parallel()
 
 	sectionNameRefs := []ParentRef{
 		{
 			Idx:     0,
-			Gateway: types.NamespacedName{Namespace: "test", Name: "gateway"},
+			Gateway: &ParentRefGateway{NamespacedName: types.NamespacedName{Namespace: "test", Name: "gateway"}},
 			Attachment: &ParentRefAttachmentStatus{
 				Attached: true,
 			},
@@ -589,10 +589,11 @@ func TestAddBackendRefsToRulesTest(t *testing.T) {
 			route: createRoute("hr1", "Service", 1, "svc1"),
 			expectedBackendRefs: []BackendRef{
 				{
-					SvcNsName:   svc1NsName,
-					ServicePort: svc1.Spec.Ports[0],
-					Valid:       true,
-					Weight:      1,
+					SvcNsName:          svc1NsName,
+					ServicePort:        svc1.Spec.Ports[0],
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
 			expectedConditions: nil,
@@ -603,16 +604,18 @@ func TestAddBackendRefsToRulesTest(t *testing.T) {
 			route: createRoute("hr2", "Service", 2, "svc1"),
 			expectedBackendRefs: []BackendRef{
 				{
-					SvcNsName:   svc1NsName,
-					ServicePort: svc1.Spec.Ports[0],
-					Valid:       true,
-					Weight:      1,
+					SvcNsName:          svc1NsName,
+					ServicePort:        svc1.Spec.Ports[0],
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 				{
-					SvcNsName:   svc1NsName,
-					ServicePort: svc1.Spec.Ports[1],
-					Valid:       true,
-					Weight:      5,
+					SvcNsName:          svc1NsName,
+					ServicePort:        svc1.Spec.Ports[1],
+					Valid:              true,
+					Weight:             5,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
 			expectedConditions: nil,
@@ -623,18 +626,20 @@ func TestAddBackendRefsToRulesTest(t *testing.T) {
 			route: createRoute("hr2", "Service", 2, "svc1"),
 			expectedBackendRefs: []BackendRef{
 				{
-					SvcNsName:        svc1NsName,
-					ServicePort:      svc1.Spec.Ports[0],
-					Valid:            true,
-					Weight:           1,
-					BackendTLSPolicy: btp3,
+					SvcNsName:          svc1NsName,
+					ServicePort:        svc1.Spec.Ports[0],
+					Valid:              true,
+					Weight:             1,
+					BackendTLSPolicy:   btp3,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 				{
-					SvcNsName:        svc1NsName,
-					ServicePort:      svc1.Spec.Ports[1],
-					Valid:            true,
-					Weight:           5,
-					BackendTLSPolicy: btp3,
+					SvcNsName:          svc1NsName,
+					ServicePort:        svc1.Spec.Ports[1],
+					Valid:              true,
+					Weight:             5,
+					BackendTLSPolicy:   btp3,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
 			expectedConditions: nil,
@@ -675,7 +680,8 @@ func TestAddBackendRefsToRulesTest(t *testing.T) {
 			route: createRoute("hr3", "NotService", 1, "svc1"),
 			expectedBackendRefs: []BackendRef{
 				{
-					Weight: 1,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
 			expectedConditions: []conditions.Condition{
@@ -693,18 +699,20 @@ func TestAddBackendRefsToRulesTest(t *testing.T) {
 			}),
 			expectedBackendRefs: []BackendRef{
 				{
-					SvcNsName:        svc1NsName,
-					ServicePort:      svc1.Spec.Ports[0],
-					Valid:            false,
-					Weight:           1,
-					BackendTLSPolicy: btp1,
+					SvcNsName:          svc1NsName,
+					ServicePort:        svc1.Spec.Ports[0],
+					Valid:              false,
+					Weight:             1,
+					BackendTLSPolicy:   btp1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 				{
-					SvcNsName:        svc2NsName,
-					ServicePort:      svc2.Spec.Ports[1],
-					Valid:            false,
-					Weight:           5,
-					BackendTLSPolicy: btp2,
+					SvcNsName:          svc2NsName,
+					ServicePort:        svc2.Spec.Ports[1],
+					Valid:              false,
+					Weight:             5,
+					BackendTLSPolicy:   btp2,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
 			expectedConditions: []conditions.Condition{
@@ -732,7 +740,7 @@ func TestAddBackendRefsToRulesTest(t *testing.T) {
 
 			g := NewWithT(t)
 			resolver := newReferenceGrantResolver(nil)
-			addBackendRefsToRules(test.route, resolver, services, test.policies, nil)
+			addBackendRefsToRules(test.route, resolver, services, test.policies)
 
 			var actual []BackendRef
 			if test.route.Spec.Rules != nil {
@@ -824,11 +832,11 @@ func TestCreateBackend(t *testing.T) {
 	}
 
 	tests := []struct {
-		expectedCondition            *conditions.Condition
 		nginxProxySpec               *EffectiveNginxProxy
 		name                         string
 		expectedServicePortReference string
 		ref                          gatewayv1.HTTPBackendRef
+		expectedConditions           []conditions.Condition
 		expectedBackend              BackendRef
 	}{
 		{
@@ -836,13 +844,14 @@ func TestCreateBackend(t *testing.T) {
 				BackendRef: getNormalRef(),
 			},
 			expectedBackend: BackendRef{
-				SvcNsName:   svc1NamespacedName,
-				ServicePort: svc1.Spec.Ports[0],
-				Weight:      5,
-				Valid:       true,
+				SvcNsName:          svc1NamespacedName,
+				ServicePort:        svc1.Spec.Ports[0],
+				Weight:             5,
+				Valid:              true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedServicePortReference: "test_service1_80",
-			expectedCondition:            nil,
+			expectedConditions:           nil,
 			name:                         "normal case",
 		},
 		{
@@ -853,13 +862,14 @@ func TestCreateBackend(t *testing.T) {
 				}),
 			},
 			expectedBackend: BackendRef{
-				SvcNsName:   svc1NamespacedName,
-				ServicePort: svc1.Spec.Ports[0],
-				Weight:      1,
-				Valid:       true,
+				SvcNsName:          svc1NamespacedName,
+				ServicePort:        svc1.Spec.Ports[0],
+				Weight:             1,
+				Valid:              true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedServicePortReference: "test_service1_80",
-			expectedCondition:            nil,
+			expectedConditions:           nil,
 			name:                         "normal with nil weight",
 		},
 		{
@@ -870,17 +880,18 @@ func TestCreateBackend(t *testing.T) {
 				}),
 			},
 			expectedBackend: BackendRef{
-				SvcNsName:   types.NamespacedName{},
-				ServicePort: v1.ServicePort{},
-				Weight:      0,
-				Valid:       false,
+				SvcNsName:          types.NamespacedName{},
+				ServicePort:        v1.ServicePort{},
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				Weight:             0,
+				Valid:              false,
 			},
 			expectedServicePortReference: "",
-			expectedCondition: helpers.GetPointer(
+			expectedConditions: []conditions.Condition{
 				staticConds.NewRouteBackendRefUnsupportedValue(
 					"test.weight: Invalid value: -1: must be in the range [0, 1000000]",
 				),
-			),
+			},
 			name: "invalid weight",
 		},
 		{
@@ -891,17 +902,18 @@ func TestCreateBackend(t *testing.T) {
 				}),
 			},
 			expectedBackend: BackendRef{
-				SvcNsName:   types.NamespacedName{},
-				ServicePort: v1.ServicePort{},
-				Weight:      5,
-				Valid:       false,
+				SvcNsName:          types.NamespacedName{},
+				ServicePort:        v1.ServicePort{},
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				Weight:             5,
+				Valid:              false,
 			},
 			expectedServicePortReference: "",
-			expectedCondition: helpers.GetPointer(
+			expectedConditions: []conditions.Condition{
 				staticConds.NewRouteBackendRefInvalidKind(
 					`test.kind: Unsupported value: "NotService": supported values: "Service"`,
 				),
-			),
+			},
 			name: "invalid kind",
 		},
 		{
@@ -918,31 +930,33 @@ func TestCreateBackend(t *testing.T) {
 					Namespace: "test",
 					Name:      "not-exist",
 				},
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedServicePortReference: "",
-			expectedCondition: helpers.GetPointer(
+			expectedConditions: []conditions.Condition{
 				staticConds.NewRouteBackendRefRefBackendNotFound(`test.name: Not found: "not-exist"`),
-			),
+			},
 			name: "service doesn't exist",
 		},
 		{
 			ref: gatewayv1.HTTPBackendRef{
-				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
-					backend.Name = "service2"
-					return backend
-				}),
+				BackendRef: getNormalRef(),
 			},
 			expectedBackend: BackendRef{
-				SvcNsName:   svc2NamespacedName,
+				SvcNsName:   svc1NamespacedName,
 				ServicePort: svc1.Spec.Ports[0],
 				Weight:      5,
-				Valid:       false,
+				Valid:       true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+					{Namespace: "test", Name: "gateway"}: staticConds.NewRouteInvalidIPFamily(
+						`Service configured with IPv4 family but NginxProxy is configured with IPv6`,
+					),
+				},
 			},
-			nginxProxySpec: &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6)},
-			expectedCondition: helpers.GetPointer(
-				staticConds.NewRouteInvalidIPFamily(`Service configured with IPv4 family but NginxProxy is configured with IPv6`),
-			),
-			name: "service IPFamily doesn't match NginxProxy IPFamily",
+			expectedServicePortReference: "test_service1_80",
+			nginxProxySpec:               &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6)},
+			expectedConditions:           nil,
+			name:                         "service IPFamily doesn't match NginxProxy IPFamily",
 		},
 		{
 			ref: gatewayv1.HTTPBackendRef{
@@ -952,14 +966,15 @@ func TestCreateBackend(t *testing.T) {
 				}),
 			},
 			expectedBackend: BackendRef{
-				SvcNsName:        svc2NamespacedName,
-				ServicePort:      svc1.Spec.Ports[0],
-				Weight:           5,
-				Valid:            true,
-				BackendTLSPolicy: &btp,
+				SvcNsName:          svc2NamespacedName,
+				ServicePort:        svc1.Spec.Ports[0],
+				Weight:             5,
+				Valid:              true,
+				BackendTLSPolicy:   &btp,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedServicePortReference: "test_service2_80",
-			expectedCondition:            nil,
+			expectedConditions:           nil,
 			name:                         "normal case with policy",
 		},
 		{
@@ -970,17 +985,18 @@ func TestCreateBackend(t *testing.T) {
 				}),
 			},
 			expectedBackend: BackendRef{
-				SvcNsName:   svc3NamespacedName,
-				ServicePort: svc1.Spec.Ports[0],
-				Weight:      5,
-				Valid:       false,
+				SvcNsName:          svc3NamespacedName,
+				ServicePort:        svc1.Spec.Ports[0],
+				Weight:             5,
+				Valid:              false,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedServicePortReference: "",
-			expectedCondition: helpers.GetPointer(
+			expectedConditions: []conditions.Condition{
 				staticConds.NewRouteBackendRefUnsupportedValue(
 					"the backend TLS policy is invalid: unsupported value",
 				),
-			),
+			},
 			name: "invalid policy",
 		},
 	}
@@ -995,8 +1011,6 @@ func TestCreateBackend(t *testing.T) {
 		client.ObjectKeyFromObject(btp2.Source): &btp2,
 	}
 
-	sourceNamespace := "test"
-
 	refPath := field.NewPath("test")
 
 	for _, test := range tests {
@@ -1010,18 +1024,36 @@ func TestCreateBackend(t *testing.T) {
 				test.ref.BackendRef,
 				[]any{},
 			}
-			backend, cond := createBackendRef(
+			route := &L7Route{
+				Source: &gatewayv1.HTTPRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+					},
+				},
+				ParentRefs: []ParentRef{
+					{
+						Gateway: &ParentRefGateway{
+							NamespacedName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "gateway",
+							},
+							EffectiveNginxProxy: test.nginxProxySpec,
+						},
+					},
+				},
+			}
+
+			backend, conds := createBackendRef(
 				rbr,
-				sourceNamespace,
+				route,
 				alwaysTrueRefGrantResolver,
 				services,
 				refPath,
 				policies,
-				test.nginxProxySpec,
 			)
 
 			g.Expect(helpers.Diff(test.expectedBackend, backend)).To(BeEmpty())
-			g.Expect(cond).To(Equal(test.expectedCondition))
+			g.Expect(conds).To(Equal(test.expectedConditions))
 
 			servicePortRef := backend.ServicePortReference()
 			g.Expect(servicePortRef).To(Equal(test.expectedServicePortReference))

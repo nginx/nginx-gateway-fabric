@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"k8s.io/apimachinery/pkg/types"
 )
 
 // stringValidatingValue is a string flag value with custom validation logic.
@@ -105,32 +103,4 @@ func (v *intValidatingValue) Set(param string) error {
 
 func (v *intValidatingValue) Type() string {
 	return "int"
-}
-
-// namespacedNameValue is a string flag value that represents a namespaced name.
-// it implements the pflag.Value interface.
-type namespacedNameValue struct {
-	value types.NamespacedName
-}
-
-func (v *namespacedNameValue) String() string {
-	if (v.value == types.NamespacedName{}) {
-		// if we don't do that, the default value in the help message will be printed as "/"
-		return ""
-	}
-	return v.value.String()
-}
-
-func (v *namespacedNameValue) Set(param string) error {
-	nsname, err := parseNamespacedResourceName(param)
-	if err != nil {
-		return err
-	}
-
-	v.value = nsname
-	return nil
-}
-
-func (v *namespacedNameValue) Type() string {
-	return "string"
 }

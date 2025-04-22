@@ -692,25 +692,34 @@ func GetReadyNGFPodNames(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	var podList core.PodList
-	if err := k8sClient.List(
+	var ngfPodNames []string
+
+	err := wait.PollUntilContextCancel(
 		ctx,
-		&podList,
-		client.InNamespace(namespace),
-		client.MatchingLabels{
-			"app.kubernetes.io/instance": releaseName,
+		500*time.Millisecond,
+		true, // poll immediately
+		func(ctx context.Context) (bool, error) {
+			var podList core.PodList
+			if err := k8sClient.List(
+				ctx,
+				&podList,
+				client.InNamespace(namespace),
+				client.MatchingLabels{
+					"app.kubernetes.io/instance": releaseName,
+				},
+			); err != nil {
+				return false, fmt.Errorf("error getting list of NGF Pods: %w", err)
+			}
+
+			ngfPodNames = getReadyPodNames(podList)
+			return len(ngfPodNames) > 0, nil
 		},
-	); err != nil {
-		return nil, fmt.Errorf("error getting list of NGF Pods: %w", err)
+	)
+	if err != nil {
+		return nil, fmt.Errorf("timed out waiting for NGF Pods to be ready: %w", err)
 	}
 
-	if len(podList.Items) == 0 {
-		return nil, errors.New("unable to find NGF Pod(s)")
-	}
-
-	names := getReadyPodNames(podList)
-
-	return names, nil
+	return ngfPodNames, nil
 }
 
 // GetReadyNginxPodNames returns the name(s) of the NGINX Pod(s).
@@ -722,23 +731,32 @@ func GetReadyNginxPodNames(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	var podList core.PodList
-	if err := k8sClient.List(
+	var nginxPodNames []string
+
+	err := wait.PollUntilContextCancel(
 		ctx,
-		&podList,
-		client.InNamespace(namespace),
-		client.HasLabels{"gateway.networking.k8s.io/gateway-name"},
-	); err != nil {
-		return nil, fmt.Errorf("error getting list of NGINX Pods: %w", err)
+		500*time.Millisecond,
+		true, // poll immediately
+		func(ctx context.Context) (bool, error) {
+			var podList core.PodList
+			if err := k8sClient.List(
+				ctx,
+				&podList,
+				client.InNamespace(namespace),
+				client.HasLabels{"gateway.networking.k8s.io/gateway-name"},
+			); err != nil {
+				return false, fmt.Errorf("error getting list of NGINX Pods: %w", err)
+			}
+
+			nginxPodNames = getReadyPodNames(podList)
+			return len(nginxPodNames) > 0, nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("timed out waiting for NGINX Pods to be ready: %w", err)
 	}
 
-	if len(podList.Items) == 0 {
-		return nil, errors.New("unable to find NGINX Pod(s)")
-	}
-
-	names := getReadyPodNames(podList)
-
-	return names, nil
+	return nginxPodNames, nil
 }
 
 func getReadyPodNames(podList core.PodList) []string {
