@@ -27,6 +27,13 @@ var _ = Describe("Policy CompositeValidator", func() {
 		},
 	}
 
+	bananaGVK := schema.GroupVersionKind{Group: "fruit", Version: "1", Kind: "banana"}
+	bananaPolicy := &policiesfakes.FakePolicy{
+		GetNameStub: func() string {
+			return "banana"
+		},
+	}
+
 	mustExtractGVK := func(object client.Object) schema.GroupVersionKind {
 		switch object.GetName() {
 		case "apple":
@@ -42,8 +49,11 @@ var _ = Describe("Policy CompositeValidator", func() {
 		mustExtractGVK,
 		policies.ManagerConfig{
 			Validator: &policiesfakes.FakeValidator{
-				ValidateStub: func(_ policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
+				ValidateStub: func(_ policies.Policy) []conditions.Condition {
 					return []conditions.Condition{staticConds.NewPolicyInvalid("apple error")}
+				},
+				ValidateGlobalSettingsStub: func(_ policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
+					return []conditions.Condition{staticConds.NewPolicyInvalid("apple global settings error")}
 				},
 				ConflictsStub: func(_ policies.Policy, _ policies.Policy) bool { return true },
 			},
@@ -51,25 +61,42 @@ var _ = Describe("Policy CompositeValidator", func() {
 		},
 		policies.ManagerConfig{
 			Validator: &policiesfakes.FakeValidator{
-				ValidateStub: func(_ policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
+				ValidateStub: func(_ policies.Policy) []conditions.Condition {
 					return []conditions.Condition{staticConds.NewPolicyInvalid("orange error")}
+				},
+				ValidateGlobalSettingsStub: func(_ policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
+					return []conditions.Condition{staticConds.NewPolicyInvalid("orange global settings error")}
 				},
 				ConflictsStub: func(_ policies.Policy, _ policies.Policy) bool { return false },
 			},
 			GVK: orangeGVK,
+		},
+		policies.ManagerConfig{
+			Validator: &policiesfakes.FakeValidator{},
+			GVK:       bananaGVK,
 		},
 	)
 
 	Context("Validation", func() {
 		When("Policy is registered with manager", func() {
 			It("Validates the policy", func() {
-				conds := mgr.Validate(applePolicy, nil)
+				globalSettings := &policies.GlobalSettings{}
+
+				conds := mgr.Validate(applePolicy)
 				Expect(conds).To(HaveLen(1))
 				Expect(conds[0].Message).To(Equal("apple error"))
 
-				conds = mgr.Validate(orangePolicy, nil)
+				conds = mgr.ValidateGlobalSettings(applePolicy, globalSettings)
+				Expect(conds).To(HaveLen(1))
+				Expect(conds[0].Message).To(Equal("apple global settings error"))
+
+				conds = mgr.Validate(orangePolicy)
 				Expect(conds).To(HaveLen(1))
 				Expect(conds[0].Message).To(Equal("orange error"))
+
+				conds = mgr.ValidateGlobalSettings(orangePolicy, globalSettings)
+				Expect(conds).To(HaveLen(1))
+				Expect(conds[0].Message).To(Equal("orange global settings error"))
 			})
 			It("Returns whether the policies conflict", func() {
 				Expect(mgr.Conflicts(applePolicy, applePolicy)).To(BeTrue())
@@ -79,7 +106,7 @@ var _ = Describe("Policy CompositeValidator", func() {
 		When("Policy is not registered with manager", func() {
 			It("Panics on call to validate", func() {
 				validate := func() {
-					_ = mgr.Validate(&policiesfakes.FakePolicy{}, nil)
+					_ = mgr.Validate(&policiesfakes.FakePolicy{})
 				}
 
 				Expect(validate).To(Panic())
@@ -87,6 +114,13 @@ var _ = Describe("Policy CompositeValidator", func() {
 			It("panics on call to conflicts", func() {
 				conflict := func() {
 					_ = mgr.Conflicts(&policiesfakes.FakePolicy{}, &policiesfakes.FakePolicy{})
+				}
+
+				Expect(conflict).To(Panic())
+			})
+			It("panics on call to conflicts when no validator is registered for policy", func() {
+				conflict := func() {
+					_ = mgr.Conflicts(bananaPolicy, bananaPolicy)
 				}
 
 				Expect(conflict).To(Panic())

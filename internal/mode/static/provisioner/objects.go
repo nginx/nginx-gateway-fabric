@@ -423,9 +423,12 @@ func buildNginxService(
 		serviceType = corev1.ServiceType(*serviceCfg.ServiceType)
 	}
 
-	servicePolicy := defaultServicePolicy
-	if serviceCfg.ExternalTrafficPolicy != nil {
-		servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
+	var servicePolicy corev1.ServiceExternalTrafficPolicyType
+	if serviceType != corev1.ServiceTypeClusterIP {
+		servicePolicy = defaultServicePolicy
+		if serviceCfg.ExternalTrafficPolicy != nil {
+			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
+		}
 	}
 
 	servicePorts := make([]corev1.ServicePort, 0, len(ports))
@@ -593,6 +596,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 						{MountPath: "/var/run/secrets/ngf", Name: "nginx-agent-tls"},
 						{MountPath: "/var/run/secrets/ngf/serviceaccount", Name: "token"},
 						{MountPath: "/var/log/nginx-agent", Name: "nginx-agent-log"},
+						{MountPath: "/var/lib/nginx-agent", Name: "nginx-agent-lib"},
 						{MountPath: "/etc/nginx/conf.d", Name: "nginx-conf"},
 						{MountPath: "/etc/nginx/stream-conf.d", Name: "nginx-stream-conf"},
 						{MountPath: "/etc/nginx/main-includes", Name: "nginx-main-includes"},
@@ -687,6 +691,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 					},
 				},
 				{Name: "nginx-agent-log", VolumeSource: emptyDirVolumeSource},
+				{Name: "nginx-agent-lib", VolumeSource: emptyDirVolumeSource},
 				{Name: "nginx-conf", VolumeSource: emptyDirVolumeSource},
 				{Name: "nginx-stream-conf", VolumeSource: emptyDirVolumeSource},
 				{Name: "nginx-main-includes", VolumeSource: emptyDirVolumeSource},
