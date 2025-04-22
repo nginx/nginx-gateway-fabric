@@ -272,14 +272,14 @@ var _ = Describe("Collector", Ordered, func() {
 
 				graph := &graph.Graph{
 					GatewayClass: &graph.GatewayClass{},
-					Gateway:      &graph.Gateway{},
+					Gateways: map[types.NamespacedName]*graph.Gateway{
+						{Name: "gateway1"}: {},
+						{Name: "gateway2"}: {},
+						{Name: "gateway3"}: {},
+					},
 					IgnoredGatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
 						{Name: "ignoredGC1"}: {},
 						{Name: "ignoredGC2"}: {},
-					},
-					IgnoredGateways: map[types.NamespacedName]*gatewayv1.Gateway{
-						{Name: "ignoredGw1"}: {},
-						{Name: "ignoredGw2"}: {},
 					},
 					Routes: map[graph.RouteKey]*graph.L7Route{
 						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "hr-1"}}: {RouteType: graph.RouteTypeHTTP},
@@ -578,7 +578,9 @@ var _ = Describe("Collector", Ordered, func() {
 
 			graph1 = &graph.Graph{
 				GatewayClass: &graph.GatewayClass{},
-				Gateway:      &graph.Gateway{},
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{Name: "gateway1"}: {},
+				},
 				Routes: map[graph.RouteKey]*graph.L7Route{
 					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "hr-1"}}: {RouteType: graph.RouteTypeHTTP},
 				},

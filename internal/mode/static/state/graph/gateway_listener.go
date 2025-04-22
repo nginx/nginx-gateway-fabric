@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
@@ -21,6 +22,8 @@ import (
 // For now, we only support HTTP and HTTPS listeners.
 type Listener struct {
 	Name string
+	// GatewayName is the name of the Gateway resource this Listener belongs to.
+	GatewayName types.NamespacedName
 	// Source holds the source of the Listener from the Gateway resource.
 	Source v1.Listener
 	// Routes holds the GRPC/HTTPRoutes attached to the Listener.
@@ -57,7 +60,7 @@ func buildListeners(
 
 	for _, gl := range gw.Spec.Listeners {
 		configurator := listenerFactory.getConfiguratorForListener(gl)
-		listeners = append(listeners, configurator.configure(gl))
+		listeners = append(listeners, configurator.configure(gl, client.ObjectKeyFromObject(gw)))
 	}
 
 	return listeners
@@ -167,7 +170,7 @@ type listenerConfigurator struct {
 	externalReferenceResolvers []listenerExternalReferenceResolver
 }
 
-func (c *listenerConfigurator) configure(listener v1.Listener) *Listener {
+func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.NamespacedName) *Listener {
 	var conds []conditions.Condition
 
 	attachable := true
@@ -197,6 +200,7 @@ func (c *listenerConfigurator) configure(listener v1.Listener) *Listener {
 
 	l := &Listener{
 		Name:                      string(listener.Name),
+		GatewayName:               gwNSName,
 		Source:                    listener,
 		Conditions:                conds,
 		AllowedRouteLabelSelector: allowedRouteSelector,

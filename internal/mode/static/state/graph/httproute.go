@@ -25,7 +25,7 @@ var (
 func buildHTTPRoute(
 	validator validation.HTTPFieldsValidator,
 	ghr *v1.HTTPRoute,
-	gatewayNsNames []types.NamespacedName,
+	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 ) *L7Route {
 	r := &L7Route{
@@ -33,7 +33,7 @@ func buildHTTPRoute(
 		RouteType: RouteTypeHTTP,
 	}
 
-	sectionNameRefs, err := buildSectionNameRefs(ghr.Spec.ParentRefs, ghr.Namespace, gatewayNsNames)
+	sectionNameRefs, err := buildSectionNameRefs(ghr.Spec.ParentRefs, ghr.Namespace, gws)
 	if err != nil {
 		r.Valid = false
 
@@ -75,7 +75,7 @@ func buildHTTPMirrorRoutes(
 	routes map[RouteKey]*L7Route,
 	l7route *L7Route,
 	route *v1.HTTPRoute,
-	gatewayNsNames []types.NamespacedName,
+	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 ) {
 	for idx, rule := range l7route.Spec.Rules {
@@ -106,7 +106,7 @@ func buildHTTPMirrorRoutes(
 				mirrorRoute := buildHTTPRoute(
 					validation.SkipValidator{},
 					tmpMirrorRoute,
-					gatewayNsNames,
+					gateways,
 					snippetsFilters,
 				)
 
