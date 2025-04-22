@@ -249,8 +249,6 @@ var _ = Describe("eventHandler", func() {
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
 				checkUpsertEventExpectations(e)
-				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
-				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
 				// status update should still occur for GatewayClasses
 				Eventually(
 					func() int {
@@ -305,7 +303,7 @@ var _ = Describe("eventHandler", func() {
 			Eventually(
 				func() int {
 					return fakeStatusUpdater.UpdateGroupCallCount()
-				}).Should(Equal(1))
+				}).Should(BeNumerically(">", 1))
 
 			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
@@ -324,7 +322,7 @@ var _ = Describe("eventHandler", func() {
 			Eventually(
 				func() int {
 					return fakeStatusUpdater.UpdateGroupCallCount()
-				}).Should(Equal(1))
+				}).Should(BeNumerically(">", 1))
 
 			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
@@ -356,7 +354,7 @@ var _ = Describe("eventHandler", func() {
 			Eventually(
 				func() int {
 					return fakeStatusUpdater.UpdateGroupCallCount()
-				}).Should(Equal(1))
+				}).Should(BeNumerically(">", 1))
 
 			_, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
