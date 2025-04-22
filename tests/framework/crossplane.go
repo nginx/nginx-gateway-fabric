@@ -38,6 +38,8 @@ type ExpectedNginxField struct {
 	ValueSubstringAllowed bool
 }
 
+const crossplaneImageName = "nginx-crossplane:latest"
+
 // ValidateNginxFieldExists accepts the nginx config and the configuration for the expected field,
 // and returns whether or not that field exists where it should.
 func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField) error {
@@ -144,10 +146,16 @@ func injectCrossplaneContainer(
 	k8sClient kubernetes.Interface,
 	timeout time.Duration,
 	ngfPodName,
-	namespace string,
+	namespace,
+	crossplaneImageRepo string,
 ) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	image := crossplaneImageName
+	if crossplaneImageRepo != "" {
+		image = crossplaneImageRepo + "/" + image
+	}
 
 	pod := &core.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -160,8 +168,8 @@ func injectCrossplaneContainer(
 					TargetContainerName: "nginx",
 					EphemeralContainerCommon: core.EphemeralContainerCommon{
 						Name:            "crossplane",
-						Image:           "nginx-crossplane:latest",
-						ImagePullPolicy: "Never",
+						Image:           image,
+						ImagePullPolicy: "IfNotPresent",
 						Stdin:           true,
 						VolumeMounts: []core.VolumeMount{
 							{

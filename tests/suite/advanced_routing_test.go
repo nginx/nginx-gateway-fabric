@@ -48,6 +48,7 @@ var _ = Describe("AdvancedRouting", Ordered, Label("functional", "routing"), fun
 	})
 
 	AfterAll(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())

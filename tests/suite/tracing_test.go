@@ -110,6 +110,7 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 	})
 
 	AfterEach(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		output, err := framework.UninstallCollector(resourceManager)
 		Expect(err).ToNot(HaveOccurred(), string(output))
 

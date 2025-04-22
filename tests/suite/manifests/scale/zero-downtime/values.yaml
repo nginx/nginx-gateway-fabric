@@ -6,13 +6,15 @@ nginxGateway:
         - /usr/bin/gateway
         - sleep
         - --duration=40s
+  terminationGracePeriodSeconds: 50
 
 nginx:
-  lifecycle:
-    preStop:
-      exec:
-        command:
-        - /bin/sleep
-        - "40"
-
-terminationGracePeriodSeconds: 50
+  pod:
+    terminationGracePeriodSeconds: 50
+  container:
+    lifecycle:
+      preStop:
+        exec:
+          command:
+          - /bin/sleep
+          - "40"

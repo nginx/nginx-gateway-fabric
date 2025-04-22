@@ -46,6 +46,7 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 	})
 
 	AfterEach(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
