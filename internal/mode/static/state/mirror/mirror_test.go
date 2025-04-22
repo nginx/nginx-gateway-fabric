@@ -11,42 +11,10 @@ import (
 
 func TestRouteName(t *testing.T) {
 	t.Parallel()
+	g := NewWithT(t)
 
-	tests := []struct {
-		namespace *string
-		name      string
-		routeName string
-		service   string
-		expected  string
-		idx       int
-	}{
-		{
-			name:      "with namespace",
-			routeName: "route1",
-			service:   "service1",
-			namespace: helpers.GetPointer("namespace1"),
-			idx:       1,
-			expected:  "_ngf-internal-mirror-route1-service1-namespace1-1",
-		},
-		{
-			name:      "without namespace",
-			routeName: "route2",
-			service:   "service2",
-			namespace: nil,
-			idx:       2,
-			expected:  "_ngf-internal-mirror-route2-service2-2",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			result := RouteName(tt.routeName, tt.service, tt.namespace, tt.idx)
-			g.Expect(result).To(Equal(tt.expected))
-		})
-	}
+	result := RouteName("route1", "service1", "namespace1", 1)
+	g.Expect(result).To(Equal("_ngf-internal-mirror-route1-namespace1/service1-1"))
 }
 
 func TestPathWithBackendRef(t *testing.T) {
@@ -65,7 +33,7 @@ func TestPathWithBackendRef(t *testing.T) {
 				Name:      "service1",
 				Namespace: helpers.GetPointer[v1.Namespace]("namespace1"),
 			},
-			expected: helpers.GetPointer("/_ngf-internal-mirror-namespace1-service1-1"),
+			expected: helpers.GetPointer("/_ngf-internal-mirror-namespace1/service1-1"),
 		},
 		{
 			name: "without namespace",
@@ -103,7 +71,7 @@ func TestBackendPath(t *testing.T) {
 			idx:       1,
 			namespace: helpers.GetPointer("namespace1"),
 			service:   "service1",
-			expected:  helpers.GetPointer("/_ngf-internal-mirror-namespace1-service1-1"),
+			expected:  helpers.GetPointer("/_ngf-internal-mirror-namespace1/service1-1"),
 		},
 		{
 			name:      "Without namespace",

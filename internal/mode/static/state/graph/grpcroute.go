@@ -91,7 +91,11 @@ func buildGRPCMirrorRoutes(
 
 				objectMeta := route.ObjectMeta.DeepCopy()
 				backendRef := filter.RequestMirror.BackendRef
-				name := mirror.RouteName(route.GetName(), string(backendRef.Name), (*string)(backendRef.Namespace), idx)
+				namespace := route.GetNamespace()
+				if backendRef.Namespace != nil {
+					namespace = string(*backendRef.Namespace)
+				}
+				name := mirror.RouteName(route.GetName(), string(backendRef.Name), namespace, idx)
 				objectMeta.SetName(name)
 
 				tmpMirrorRoute := &v1.GRPCRoute{

@@ -351,7 +351,7 @@ func TestConvertHTTPMirrorFilter(t *testing.T) {
 			expected: &HTTPRequestMirrorFilter{
 				Name:      helpers.GetPointer("backend"),
 				Namespace: helpers.GetPointer("namespace"),
-				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace-backend-0"),
+				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace/backend-0"),
 			},
 			name: "full",
 		},

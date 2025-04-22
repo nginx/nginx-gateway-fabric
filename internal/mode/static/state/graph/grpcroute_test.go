@@ -1140,7 +1140,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 		Source: &v1.GRPCRoute{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "test",
-				Name:      mirror.RouteName("gr", "mirror-backend", nil, 0),
+				Name:      mirror.RouteName("gr", "mirror-backend", "test", 0),
 			},
 			Spec: v1.GRPCRouteSpec{
 				CommonRouteSpec: gr.Spec.CommonRouteSpec,

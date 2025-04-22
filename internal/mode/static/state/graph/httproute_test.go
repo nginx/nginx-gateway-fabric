@@ -942,7 +942,7 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 		Source: &gatewayv1.HTTPRoute{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "test",
-				Name:      mirror.RouteName("hr", "mirror-backend", nil, 0),
+				Name:      mirror.RouteName("hr", "mirror-backend", "test", 0),
 			},
 			Spec: gatewayv1.HTTPRouteSpec{
 				CommonRouteSpec: hr.Spec.CommonRouteSpec,

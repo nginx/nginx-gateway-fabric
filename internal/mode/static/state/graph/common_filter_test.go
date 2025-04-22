@@ -103,7 +103,7 @@ func TestValidateFilter(t *testing.T) {
 				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{},
 			},
 			expectErrCount: 0,
-			name:           "valid GRPC filter",
+			name:           "valid GRPC mirror filter",
 		},
 		{
 			filter: Filter{
