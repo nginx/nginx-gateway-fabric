@@ -67,6 +67,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 		})
 
 		AfterAll(func() {
+			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 			Expect(resourceManager.DeleteFromFiles(snippetsFilter, namespace)).To(Succeed())
 		})
 
@@ -119,7 +120,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 			BeforeAll(func() {
 				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace)
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 				Expect(err).ToNot(HaveOccurred())
 			})
 

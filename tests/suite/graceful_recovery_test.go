@@ -425,6 +425,7 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 	})
 
 	AfterAll(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, ns.Name)
 		cleanUpPortForward()
 		Expect(resourceManager.DeleteFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
