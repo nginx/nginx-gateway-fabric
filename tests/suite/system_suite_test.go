@@ -70,20 +70,21 @@ var (
 
 var (
 	//go:embed manifests/*
-	manifests         embed.FS
-	k8sClient         client.Client // TODO: are the k8sClient and the resourceManager.k8sClient the same?
-	resourceManager   framework.ResourceManager
-	portForwardStopCh chan struct{}
-	portFwdPort       int
-	portFwdHTTPSPort  int
-	timeoutConfig     framework.TimeoutConfig
-	localChartPath    string
-	address           string
-	version           string
-	chartVersion      string
-	clusterInfo       framework.ClusterInfo
-	skipNFRTests      bool
-	logs              string
+	manifests           embed.FS
+	k8sClient           client.Client
+	resourceManager     framework.ResourceManager
+	portForwardStopCh   chan struct{}
+	portFwdPort         int
+	portFwdHTTPSPort    int
+	timeoutConfig       framework.TimeoutConfig
+	localChartPath      string
+	address             string
+	version             string
+	chartVersion        string
+	clusterInfo         framework.ClusterInfo
+	skipNFRTests        bool
+	logs                string
+	nginxCrossplanePath string
 )
 
 var formatNginxPlusEdgeImagePath = "us-docker.pkg.dev/%s/nginx-gateway-fabric/nginx-plus"
@@ -170,6 +171,8 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 	default:
 		version = "edge"
 	}
+
+	nginxCrossplanePath = "us-docker.pkg.dev/" + *gkeProject + "/nginx-gateway-fabric"
 
 	if !cfg.deploy {
 		return

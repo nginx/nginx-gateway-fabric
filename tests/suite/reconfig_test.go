@@ -190,7 +190,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		defer cancel()
 
 		index := 1
-		conf, _ := resourceManager.GetNginxConfig(nginxPodName, reconfigNamespace.Name, *ngfImageRepository)
+		conf, _ := resourceManager.GetNginxConfig(nginxPodName, reconfigNamespace.Name, nginxCrossplanePath)
 		for index <= resourceCount {
 			namespace := "namespace" + strconv.Itoa(resourceCount)
 			expUpstream := framework.ExpectedNginxField{
@@ -206,7 +206,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 					return fmt.Errorf("error validating nginx conf was generated in "+namespace+": %w", err.Error())
 				default:
 					// each call to GetNginxConfig takes about 70ms
-					conf, _ = resourceManager.GetNginxConfig(nginxPodName, reconfigNamespace.Name, *ngfImageRepository)
+					conf, _ = resourceManager.GetNginxConfig(nginxPodName, reconfigNamespace.Name, nginxCrossplanePath)
 					continue
 				}
 			}
@@ -402,7 +402,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 				// this checks if NGF has established a connection with agent and sent over the first nginx conf
 				Eventually(
 					func() bool {
-						conf, _ := resourceManager.GetNginxConfig(nginxPodName, reconfigNamespace.Name, *ngfImageRepository)
+						conf, _ := resourceManager.GetNginxConfig(nginxPodName, reconfigNamespace.Name, nginxCrossplanePath)
 						// a default upstream NGF creates
 						defaultUpstream := framework.ExpectedNginxField{
 							Directive: "upstream",
