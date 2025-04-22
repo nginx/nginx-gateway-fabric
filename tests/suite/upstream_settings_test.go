@@ -61,6 +61,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 	})
 
 	AfterAll(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
@@ -130,7 +131,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 			BeforeAll(func() {
 				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace)
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -310,7 +311,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 			BeforeAll(func() {
 				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace)
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 				Expect(err).ToNot(HaveOccurred())
 			})
 

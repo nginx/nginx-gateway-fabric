@@ -46,6 +46,8 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 )
 
 // ResourceManager handles creating/updating/deleting Kubernetes resources.
@@ -647,6 +649,44 @@ func (rm *ResourceManager) GetNGFDeployment(namespace, releaseName string) (*app
 	return &deployment, nil
 }
 
+func (rm *ResourceManager) getGatewayClassNginxProxy(
+	namespace,
+	releaseName string,
+) (*ngfAPIv1alpha2.NginxProxy, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.GetTimeout)
+	defer cancel()
+
+	var proxy ngfAPIv1alpha2.NginxProxy
+	proxyName := releaseName + "-proxy-config"
+
+	if err := rm.K8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: proxyName}, &proxy); err != nil {
+		return nil, err
+	}
+
+	return &proxy, nil
+}
+
+// ScaleNginxDeployment scales the Nginx Deployment to the specified number of replicas.
+func (rm *ResourceManager) ScaleNginxDeployment(namespace, releaseName string, replicas int32) error {
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.UpdateTimeout)
+	defer cancel()
+
+	// If there is another NginxProxy which "overrides" the gateway class  one, then this won't work and
+	// may need refactoring.
+	proxy, err := rm.getGatewayClassNginxProxy(namespace, releaseName)
+	if err != nil {
+		return fmt.Errorf("error getting NginxProxy: %w", err)
+	}
+
+	proxy.Spec.Kubernetes.Deployment.Replicas = &replicas
+
+	if err = rm.K8sClient.Update(ctx, proxy); err != nil {
+		return fmt.Errorf("error updating NginxProxy: %w", err)
+	}
+
+	return nil
+}
+
 // GetEvents returns all Events in the specified namespace.
 func (rm *ResourceManager) GetEvents(namespace string) (*core.EventList, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.GetTimeout)
@@ -843,12 +883,14 @@ func (rm *ResourceManager) WaitForGatewayObservedGeneration(
 }
 
 // GetNginxConfig uses crossplane to get the nginx configuration and convert it to JSON.
-func (rm *ResourceManager) GetNginxConfig(nginxPodName, namespace string) (*Payload, error) {
+// If the crossplane image is loaded locally on the node, crossplaneImageRepo can be empty.
+func (rm *ResourceManager) GetNginxConfig(nginxPodName, namespace, crossplaneImageRepo string) (*Payload, error) {
 	if err := injectCrossplaneContainer(
 		rm.ClientGoClient,
 		rm.TimeoutConfig.UpdateTimeout,
 		nginxPodName,
 		namespace,
+		crossplaneImageRepo,
 	); err != nil {
 		return nil, err
 	}
