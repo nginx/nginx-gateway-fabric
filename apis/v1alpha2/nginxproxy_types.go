@@ -517,6 +517,12 @@ type ServiceSpec struct {
 	// +optional
 	LoadBalancerIP *string `json:"loadBalancerIP,omitempty"`
 
+	// LoadBalancerClass is the class of the load balancer implementation this Service belongs to.
+	// Requires service type to be LoadBalancer.
+	//
+	// +optional
+	LoadBalancerClass *string `json:"loadBalancerClass,omitempty"`
+
 	// Annotations contain any Service-specific annotations.
 	//
 	// +optional

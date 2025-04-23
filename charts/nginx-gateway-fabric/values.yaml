@@ -427,6 +427,10 @@ nginx:
     # -- The static IP address for the load balancer. Requires nginx.service.type set to LoadBalancer.
     # loadBalancerIP: ""
 
+    # -- LoadBalancerClass is the class of the load balancer implementation this Service belongs to.
+    # Requires nginx.service.type set to LoadBalancer.
+    # loadBalancerClass: ""
+
     # -- The IP ranges (CIDR) that are allowed to access the load balancer. Requires nginx.service.type set to LoadBalancer.
     # loadBalancerSourceRanges: []
 
