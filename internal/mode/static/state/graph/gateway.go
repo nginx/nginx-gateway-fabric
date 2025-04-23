@@ -188,7 +188,7 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]con
 
 	// we evaluate validity before validating parametersRef because an invalid parametersRef/NginxProxy does not
 	// invalidate the entire Gateway.
-	valid := !(len(conds) > 0)
+	valid := len(conds) == 0
 
 	if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
 		paramConds := validateGatewayParametersRef(npCfg, *gw.Spec.Infrastructure.ParametersRef)
