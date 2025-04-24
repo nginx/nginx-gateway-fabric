@@ -21,24 +21,16 @@ func TestUpdateConfig(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		configApplied bool
-		expErr        bool
+		name   string
+		expErr bool
 	}{
 		{
-			name:          "success",
-			configApplied: true,
-			expErr:        false,
+			name:   "success",
+			expErr: false,
 		},
 		{
-			name:          "error returned from agent",
-			configApplied: true,
-			expErr:        true,
-		},
-		{
-			name:          "configuration not applied",
-			configApplied: false,
-			expErr:        false,
+			name:   "error returned from agent",
+			expErr: true,
 		},
 	}
 
@@ -48,7 +40,7 @@ func TestUpdateConfig(t *testing.T) {
 			g := NewWithT(t)
 
 			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-			fakeBroadcaster.SendReturns(test.configApplied)
+			fakeBroadcaster.SendReturns(true)
 
 			plus := false
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, plus)
@@ -70,9 +62,9 @@ func TestUpdateConfig(t *testing.T) {
 				deployment.SetPodErrorStatus("pod1", testErr)
 			}
 
-			applied := updater.UpdateConfig(deployment, []File{file})
+			updater.UpdateConfig(deployment, []File{file})
 
-			g.Expect(applied).To(Equal(test.configApplied))
+			g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
 			g.Expect(deployment.GetFile(file.Meta.Name, file.Meta.Hash)).To(Equal(file.Contents))
 
 			if test.expErr {
@@ -114,10 +106,9 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	deployment.SetFiles([]File{file})
 
 	// Call UpdateConfig with the same files
-	applied := updater.UpdateConfig(deployment, []File{file})
+	updater.UpdateConfig(deployment, []File{file})
 
 	// Verify that no new configuration was sent
-	g.Expect(applied).To(BeFalse())
 	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
 }
 
@@ -128,42 +119,30 @@ func TestUpdateUpstreamServers(t *testing.T) {
 		name           string
 		buildUpstreams bool
 		plus           bool
-		configApplied  bool
 		expErr         bool
 	}{
 		{
 			name:           "success",
 			plus:           true,
 			buildUpstreams: true,
-			configApplied:  true,
 			expErr:         false,
 		},
 		{
 			name:           "no upstreams to apply",
 			plus:           true,
 			buildUpstreams: false,
-			configApplied:  false,
 			expErr:         false,
 		},
 		{
-			name:          "not running nginx plus",
-			plus:          false,
-			configApplied: false,
-			expErr:        false,
+			name:   "not running nginx plus",
+			plus:   false,
+			expErr: false,
 		},
 		{
 			name:           "error returned from agent",
 			plus:           true,
 			buildUpstreams: true,
-			configApplied:  true,
 			expErr:         true,
-		},
-		{
-			name:           "configuration not applied",
-			plus:           true,
-			buildUpstreams: true,
-			configApplied:  false,
-			expErr:         false,
 		},
 	}
 
@@ -173,7 +152,6 @@ func TestUpdateUpstreamServers(t *testing.T) {
 			g := NewWithT(t)
 
 			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-			fakeBroadcaster.SendReturns(test.configApplied)
 
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, test.plus)
 			updater.retryTimeout = 0
@@ -215,8 +193,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 				}
 			}
 
-			applied := updater.UpdateUpstreamServers(deployment, conf)
-			g.Expect(applied).To(Equal(test.configApplied))
+			updater.UpdateUpstreamServers(deployment, conf)
 
 			expActions := make([]*pb.NGINXPlusAction, 0)
 			if test.buildUpstreams {
@@ -254,8 +231,10 @@ func TestUpdateUpstreamServers(t *testing.T) {
 
 			if !test.plus {
 				g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
+				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
 			} else if test.buildUpstreams {
 				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
+				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(2))
 			}
 
 			if test.expErr {
@@ -347,10 +326,9 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	deployment.SetNGINXPlusActions(initialActions)
 
 	// Call UpdateUpstreamServers with the same configuration
-	applied := updater.UpdateUpstreamServers(deployment, conf)
+	updater.UpdateUpstreamServers(deployment, conf)
 
 	// Verify that no new actions were sent
-	g.Expect(applied).To(BeFalse())
 	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
 }
 

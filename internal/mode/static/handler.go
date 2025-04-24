@@ -218,21 +218,19 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		h.setLatestConfiguration(gw, &cfg)
 
 		deployment.FileLock.Lock()
-		configApplied := h.updateNginxConf(deployment, cfg)
+		h.updateNginxConf(deployment, cfg)
 		deployment.FileLock.Unlock()
 
 		configErr := deployment.GetLatestConfigError()
 		upstreamErr := deployment.GetLatestUpstreamError()
 		err := errors.Join(configErr, upstreamErr)
 
-		if configApplied || err != nil {
-			obj := &status.QueueObject{
-				UpdateType: status.UpdateAll,
-				Error:      err,
-				Deployment: gw.DeploymentName,
-			}
-			h.cfg.statusQueue.Enqueue(obj)
+		obj := &status.QueueObject{
+			UpdateType: status.UpdateAll,
+			Error:      err,
+			Deployment: gw.DeploymentName,
 		}
+		h.cfg.statusQueue.Enqueue(obj)
 	}
 }
 
@@ -408,16 +406,14 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 func (h *eventHandlerImpl) updateNginxConf(
 	deployment *agent.Deployment,
 	conf dataplane.Configuration,
-) bool {
+) {
 	files := h.cfg.generator.Generate(conf)
-	applied := h.cfg.nginxUpdater.UpdateConfig(deployment, files)
+	h.cfg.nginxUpdater.UpdateConfig(deployment, files)
 
 	// If using NGINX Plus, update upstream servers using the API.
 	if h.cfg.plus {
-		applied = h.cfg.nginxUpdater.UpdateUpstreamServers(deployment, conf) || applied
+		h.cfg.nginxUpdater.UpdateUpstreamServers(deployment, conf)
 	}
-
-	return applied
 }
 
 // updateControlPlaneAndSetStatus updates the control plane configuration and then sets the status

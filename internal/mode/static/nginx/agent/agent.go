@@ -28,8 +28,8 @@ const retryUpstreamTimeout = 5 * time.Second
 
 // NginxUpdater is an interface for updating NGINX using the NGINX agent.
 type NginxUpdater interface {
-	UpdateConfig(deployment *Deployment, files []File) bool
-	UpdateUpstreamServers(deployment *Deployment, conf dataplane.Configuration) bool
+	UpdateConfig(deployment *Deployment, files []File)
+	UpdateUpstreamServers(deployment *Deployment, conf dataplane.Configuration)
 }
 
 // NginxUpdaterImpl implements the NginxUpdater interface.
@@ -74,7 +74,6 @@ func NewNginxUpdater(
 }
 
 // UpdateConfig sends the nginx configuration to the agent.
-// Returns whether the configuration was sent to any agents.
 //
 // The flow of events is as follows:
 // - Set the configuration files on the deployment.
@@ -87,10 +86,10 @@ func NewNginxUpdater(
 func (n *NginxUpdaterImpl) UpdateConfig(
 	deployment *Deployment,
 	files []File,
-) bool {
+) {
 	msg := deployment.SetFiles(files)
 	if msg == nil {
-		return false
+		return
 	}
 
 	applied := deployment.GetBroadcaster().Send(*msg)
@@ -99,19 +98,16 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 	}
 
 	deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
-
-	return applied
 }
 
 // UpdateUpstreamServers sends an APIRequest to the agent to update upstream servers using the NGINX Plus API.
 // Only applicable when using NGINX Plus.
-// Returns whether the configuration was sent to any agents.
 func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 	deployment *Deployment,
 	conf dataplane.Configuration,
-) bool {
+) {
 	if !n.plus {
-		return false
+		return
 	}
 
 	broadcaster := deployment.GetBroadcaster()
@@ -141,7 +137,7 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 	}
 
 	if actionsEqual(deployment.GetNGINXPlusActions(), actions) {
-		return false
+		return
 	}
 
 	for _, action := range actions {
@@ -166,8 +162,6 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 
 	// Store the most recent actions on the deployment so any new subscribers can apply them when first connecting.
 	deployment.SetNGINXPlusActions(actions)
-
-	return applied
 }
 
 func buildHTTPUpstreamServers(upstream dataplane.Upstream) *pb.UpdateHTTPUpstreamServers {

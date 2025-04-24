@@ -102,7 +102,6 @@ var _ = Describe("eventHandler", func() {
 		fakeProcessor.GetLatestGraphReturns(baseGraph)
 		fakeGenerator = &configfakes.FakeGenerator{}
 		fakeNginxUpdater = &agentfakes.FakeNginxUpdater{}
-		fakeNginxUpdater.UpdateConfigReturns(true)
 		fakeProvisioner = &provisionerfakes.FakeProvisioner{}
 		fakeProvisioner.RegisterGatewayReturns(nil)
 		fakeStatusUpdater = &statusfakes.FakeGroupUpdater{}
