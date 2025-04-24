@@ -104,6 +104,29 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			}
 		})
 
+		Context("verify working traffic", func() {
+			It("should return a 200 response for HTTPRoutes", func() {
+				baseCoffeeURL := baseURL + "/coffee"
+				baseTeaURL := baseURL + "/tea"
+
+				Eventually(
+					func() error {
+						return expectRequestToSucceed(baseCoffeeURL, address, "URI: /coffee")
+					}).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+
+				Eventually(
+					func() error {
+						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
+					}).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+			})
+		})
+
 		Context("nginx config", func() {
 			var conf *framework.Payload
 			filePrefix := fmt.Sprintf("/etc/nginx/includes/ClientSettingsPolicy_%s", namespace)
