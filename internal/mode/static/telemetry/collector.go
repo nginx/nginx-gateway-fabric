@@ -34,7 +34,7 @@ type GraphGetter interface {
 
 // ConfigurationGetter gets the latest Configuration.
 type ConfigurationGetter interface {
-	GetLatestConfiguration() *dataplane.Configuration
+	GetLatestConfiguration() []*dataplane.Configuration
 }
 
 // Data is telemetry data.
@@ -192,7 +192,7 @@ func collectGraphResourceCount(
 	configurationGetter ConfigurationGetter,
 ) NGFResourceCounts {
 	ngfResourceCounts := NGFResourceCounts{}
-	cfg := configurationGetter.GetLatestConfiguration()
+	configs := configurationGetter.GetLatestConfiguration()
 
 	ngfResourceCounts.GatewayClassCount = int64(len(g.IgnoredGatewayClasses))
 	if g.GatewayClass != nil {
@@ -209,7 +209,7 @@ func collectGraphResourceCount(
 	ngfResourceCounts.SecretCount = int64(len(g.ReferencedSecrets))
 	ngfResourceCounts.ServiceCount = int64(len(g.ReferencedServices))
 
-	if cfg != nil {
+	for _, cfg := range configs {
 		for _, upstream := range cfg.Upstreams {
 			if upstream.ErrorMsg == "" {
 				ngfResourceCounts.EndpointCount += int64(len(upstream.Endpoints))

@@ -79,6 +79,7 @@ func TestUpdateConfig(t *testing.T) {
 				g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
 				// ensure that the error is cleared after the next config is applied
 				deployment.SetPodErrorStatus("pod1", nil)
+				file.Meta.Hash = "5678"
 				updater.UpdateConfig(deployment, []File{file})
 				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 			} else {
@@ -86,6 +87,38 @@ func TestUpdateConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUpdateConfig_NoChange(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
+
+	deployment := &Deployment{
+		broadcaster: fakeBroadcaster,
+		podStatuses: make(map[string]error),
+	}
+
+	file := File{
+		Meta: &pb.FileMeta{
+			Name: "test.conf",
+			Hash: "12345",
+		},
+		Contents: []byte("test content"),
+	}
+
+	// Set the initial files on the deployment
+	deployment.SetFiles([]File{file})
+
+	// Call UpdateConfig with the same files
+	applied := updater.UpdateConfig(deployment, []File{file})
+
+	// Verify that no new configuration was sent
+	g.Expect(applied).To(BeFalse())
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
 }
 
 func TestUpdateUpstreamServers(t *testing.T) {
@@ -221,7 +254,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 
 			if !test.plus {
 				g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
-			} else {
+			} else if test.buildUpstreams {
 				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
 			}
 
@@ -241,6 +274,84 @@ func TestUpdateUpstreamServers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUpdateUpstreamServers_NoChange(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, true)
+	updater.retryTimeout = 0
+
+	deployment := &Deployment{
+		broadcaster: fakeBroadcaster,
+		podStatuses: make(map[string]error),
+	}
+
+	conf := dataplane.Configuration{
+		Upstreams: []dataplane.Upstream{
+			{
+				Name: "test-upstream",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "1.2.3.4",
+						Port:    8080,
+					},
+				},
+			},
+		},
+		StreamUpstreams: []dataplane.Upstream{
+			{
+				Name: "test-stream-upstream",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "5.6.7.8",
+					},
+				},
+			},
+		},
+	}
+
+	initialActions := []*pb.NGINXPlusAction{
+		{
+			Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
+				UpdateHttpUpstreamServers: &pb.UpdateHTTPUpstreamServers{
+					HttpUpstreamName: "test-upstream",
+					Servers: []*structpb.Struct{
+						{
+							Fields: map[string]*structpb.Value{
+								"server": structpb.NewStringValue("1.2.3.4:8080"),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Action: &pb.NGINXPlusAction_UpdateStreamServers{
+				UpdateStreamServers: &pb.UpdateStreamServers{
+					UpstreamStreamName: "test-stream-upstream",
+					Servers: []*structpb.Struct{
+						{
+							Fields: map[string]*structpb.Value{
+								"server": structpb.NewStringValue("5.6.7.8"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	deployment.SetNGINXPlusActions(initialActions)
+
+	// Call UpdateUpstreamServers with the same configuration
+	applied := updater.UpdateUpstreamServers(deployment, conf)
+
+	// Verify that no new actions were sent
+	g.Expect(applied).To(BeFalse())
+	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
 }
 
 func TestGetPortAndIPFormat(t *testing.T) {

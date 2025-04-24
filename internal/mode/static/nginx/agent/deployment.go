@@ -173,7 +173,7 @@ func (d *Deployment) GetFile(name, hash string) []byte {
 
 // SetFiles updates the nginx files and fileOverviews for the deployment and returns the message to send.
 // The deployment FileLock MUST already be locked before calling this function.
-func (d *Deployment) SetFiles(files []File) broadcast.NginxAgentMessage {
+func (d *Deployment) SetFiles(files []File) *broadcast.NginxAgentMessage {
 	d.files = files
 
 	fileOverviews := make([]*pb.File, 0, len(files))
@@ -194,10 +194,16 @@ func (d *Deployment) SetFiles(files []File) broadcast.NginxAgentMessage {
 		})
 	}
 
-	d.configVersion = filesHelper.GenerateConfigVersion(fileOverviews)
+	newConfigVersion := filesHelper.GenerateConfigVersion(fileOverviews)
+	if d.configVersion == newConfigVersion {
+		// files have not changed, nothing to send
+		return nil
+	}
+
+	d.configVersion = newConfigVersion
 	d.fileOverviews = fileOverviews
 
-	return broadcast.NginxAgentMessage{
+	return &broadcast.NginxAgentMessage{
 		Type:          broadcast.ConfigApplyRequest,
 		FileOverviews: fileOverviews,
 		ConfigVersion: d.configVersion,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -88,7 +89,11 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 	files []File,
 ) bool {
 	msg := deployment.SetFiles(files)
-	applied := deployment.GetBroadcaster().Send(msg)
+	if msg == nil {
+		return false
+	}
+
+	applied := deployment.GetBroadcaster().Send(*msg)
 	if applied {
 		n.logger.Info("Sent nginx configuration to agent")
 	}
@@ -114,12 +119,6 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 	// reset the latest error to nil now that we're applying new config
 	deployment.SetLatestUpstreamError(nil)
 
-	// TODO(sberman): optimize this by only sending updates that are necessary.
-	// Call GetUpstreams first (will need Subscribers to send responses back), and
-	// then determine which upstreams actually need to be updated.
-	// OR we can possibly just use the most recent NGINXPlusActions to see what the last state
-	// of upstreams were, and only update the diff.
-
 	var errs []error
 	var applied bool
 	actions := make([]*pb.NGINXPlusAction, 0, len(conf.Upstreams)+len(conf.StreamUpstreams))
@@ -139,6 +138,10 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 			},
 		}
 		actions = append(actions, action)
+	}
+
+	if actionsEqual(deployment.GetNGINXPlusActions(), actions) {
+		return false
 	}
 
 	for _, action := range actions {
@@ -196,6 +199,11 @@ func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
 
 		servers = append(servers, server)
 	}
+
+	// sort the servers to avoid unnecessary reloads
+	sort.Slice(servers, func(i, j int) bool {
+		return servers[i].Fields["server"].GetStringValue() < servers[j].Fields["server"].GetStringValue()
+	})
 
 	return servers
 }
