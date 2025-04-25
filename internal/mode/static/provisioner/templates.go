@@ -45,7 +45,6 @@ allowed_directories:
 - /usr/share/nginx
 - /var/run/nginx
 features:
-- connection
 - configuration
 - certificates
 {{- if .EnableMetrics }}
