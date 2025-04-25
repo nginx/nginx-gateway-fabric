@@ -9,18 +9,6 @@ in a different namespace from our HTTPRoutes.
 
 1. Follow the [installation instructions](https://docs.nginx.com/nginx-gateway-fabric/installation/) to deploy NGINX Gateway Fabric.
 
-1. Save the public IP address of NGINX Gateway Fabric into a shell variable:
-
-   ```text
-   GW_IP=XXX.YYY.ZZZ.III
-   ```
-
-1. Save the port of NGINX Gateway Fabric:
-
-   ```text
-   GW_PORT=<port number>
-   ```
-
 ## 2. Deploy the Cafe Application
 
 1. Create the cafe namespace and cafe application:
@@ -48,6 +36,15 @@ in a different namespace from our HTTPRoutes.
    ```shell
    kubectl apply -f gateway.yaml
    ```
+
+    After creating the Gateway resource, NGINX Gateway Fabric will provision an NGINX Pod and Service fronting it to route traffic.
+
+    Save the public IP address and port of the NGINX Service into shell variables:
+
+    ```text
+    GW_IP=XXX.YYY.ZZZ.III
+    GW_PORT=<port number>
+    ```
 
 1. Create the HTTPRoute resources:
 

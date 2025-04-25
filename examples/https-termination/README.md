@@ -10,19 +10,6 @@ reference a Secret in a different Namespace.
 
 1. Follow the [installation instructions](https://docs.nginx.com/nginx-gateway-fabric/installation/) to deploy NGINX Gateway Fabric.
 
-1. Save the public IP address of NGINX Gateway Fabric into a shell variable:
-
-   ```text
-   GW_IP=XXX.YYY.ZZZ.III
-   ```
-
-1. Save the ports of NGINX Gateway Fabric:
-
-   ```text
-   GW_HTTP_PORT=<http port number>
-   GW_HTTPS_PORT=<https port number>
-   ```
-
 ## 2. Deploy the Cafe Application
 
 1. Create the coffee and the tea Deployments and Services:
@@ -72,6 +59,16 @@ reference a Secret in a different Namespace.
    This [Gateway](./gateway.yaml) configures:
     - `http` listener for HTTP traffic
     - `https` listener for HTTPS traffic. It terminates TLS connections using the `cafe-secret` we created in step 1.
+
+    After creating the Gateway resource, NGINX Gateway Fabric will provision an NGINX Pod and Service fronting it to route traffic.
+
+    Save the public IP address and ports of the NGINX Service into shell variables:
+
+     ```text
+     GW_IP=XXX.YYY.ZZZ.III
+     GW_HTTP_PORT=<http port number>
+     GW_HTTPS_PORT=<https port number>
+     ```
 
 1. Create the HTTPRoute resources:
 
