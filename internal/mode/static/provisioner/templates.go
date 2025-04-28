@@ -65,11 +65,11 @@ collector:
             collection_interval: 1m0s
             initial_delay: 1s
             scrapers:
-            cpu: {}
-            memory: {}
-            disk: {}
-            network: {}
-            filesystem: {}
+                cpu: {}
+                memory: {}
+                disk: {}
+                network: {}
+                filesystem: {}
     processors:
         batch: {}
     exporters:
