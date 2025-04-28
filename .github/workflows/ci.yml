@@ -59,7 +59,7 @@ jobs:
       - name: Output Variables
         id: vars
         run: |
-          K8S_KIND_VERSION=v1.32.3 # renovate: datasource=docker depName=kindest/node
+          K8S_KIND_VERSION=v1.33.0 # renovate: datasource=docker depName=kindest/node
           echo "go_path=$(go env GOPATH)" >> $GITHUB_OUTPUT
           echo "min_k8s_version=v1.25.16" >> $GITHUB_OUTPUT
           echo "k8s_latest=${K8S_KIND_VERSION}" >> $GITHUB_OUTPUT
