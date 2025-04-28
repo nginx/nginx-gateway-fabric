@@ -460,6 +460,9 @@ func buildNginxService(
 	if serviceCfg.LoadBalancerIP != nil {
 		svc.Spec.LoadBalancerIP = *serviceCfg.LoadBalancerIP
 	}
+	if serviceCfg.LoadBalancerClass != nil {
+		svc.Spec.LoadBalancerClass = serviceCfg.LoadBalancerClass
+	}
 	if serviceCfg.LoadBalancerSourceRanges != nil {
 		svc.Spec.LoadBalancerSourceRanges = serviceCfg.LoadBalancerSourceRanges
 	}
