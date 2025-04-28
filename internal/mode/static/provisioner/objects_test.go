@@ -253,6 +253,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 				ServiceType:              helpers.GetPointer(ngfAPIv1alpha2.ServiceTypeNodePort),
 				ExternalTrafficPolicy:    helpers.GetPointer(ngfAPIv1alpha2.ExternalTrafficPolicyCluster),
 				LoadBalancerIP:           helpers.GetPointer("1.2.3.4"),
+				LoadBalancerClass:        helpers.GetPointer("myLoadBalancerClass"),
 				LoadBalancerSourceRanges: []string{"5.6.7.8"},
 			},
 			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
@@ -299,6 +300,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeNodePort))
 	g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(corev1.ServiceExternalTrafficPolicyTypeCluster))
 	g.Expect(svc.Spec.LoadBalancerIP).To(Equal("1.2.3.4"))
+	g.Expect(*svc.Spec.LoadBalancerClass).To(Equal("myLoadBalancerClass"))
 	g.Expect(svc.Spec.LoadBalancerSourceRanges).To(Equal([]string{"5.6.7.8"}))
 
 	depObj := objects[5]

@@ -4067,6 +4067,11 @@ spec:
                         - Cluster
                         - Local
                         type: string
+                      loadBalancerClass:
+                        description: |-
+                          LoadBalancerClass is the class of the load balancer implementation this Service belongs to.
+                          Requires service type to be LoadBalancer.
+                        type: string
                       loadBalancerIP:
                         description: LoadBalancerIP is a static IP address for the
                           load balancer. Requires service type to be LoadBalancer.
