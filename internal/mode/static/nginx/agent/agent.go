@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -27,8 +28,8 @@ const retryUpstreamTimeout = 5 * time.Second
 
 // NginxUpdater is an interface for updating NGINX using the NGINX agent.
 type NginxUpdater interface {
-	UpdateConfig(deployment *Deployment, files []File) bool
-	UpdateUpstreamServers(deployment *Deployment, conf dataplane.Configuration) bool
+	UpdateConfig(deployment *Deployment, files []File)
+	UpdateUpstreamServers(deployment *Deployment, conf dataplane.Configuration)
 }
 
 // NginxUpdaterImpl implements the NginxUpdater interface.
@@ -73,7 +74,6 @@ func NewNginxUpdater(
 }
 
 // UpdateConfig sends the nginx configuration to the agent.
-// Returns whether the configuration was sent to any agents.
 //
 // The flow of events is as follows:
 // - Set the configuration files on the deployment.
@@ -86,39 +86,34 @@ func NewNginxUpdater(
 func (n *NginxUpdaterImpl) UpdateConfig(
 	deployment *Deployment,
 	files []File,
-) bool {
+) {
 	msg := deployment.SetFiles(files)
-	applied := deployment.GetBroadcaster().Send(msg)
+	if msg == nil {
+		return
+	}
+
+	applied := deployment.GetBroadcaster().Send(*msg)
 	if applied {
 		n.logger.Info("Sent nginx configuration to agent")
 	}
 
 	deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
-
-	return applied
 }
 
 // UpdateUpstreamServers sends an APIRequest to the agent to update upstream servers using the NGINX Plus API.
 // Only applicable when using NGINX Plus.
-// Returns whether the configuration was sent to any agents.
 func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 	deployment *Deployment,
 	conf dataplane.Configuration,
-) bool {
+) {
 	if !n.plus {
-		return false
+		return
 	}
 
 	broadcaster := deployment.GetBroadcaster()
 
 	// reset the latest error to nil now that we're applying new config
 	deployment.SetLatestUpstreamError(nil)
-
-	// TODO(sberman): optimize this by only sending updates that are necessary.
-	// Call GetUpstreams first (will need Subscribers to send responses back), and
-	// then determine which upstreams actually need to be updated.
-	// OR we can possibly just use the most recent NGINXPlusActions to see what the last state
-	// of upstreams were, and only update the diff.
 
 	var errs []error
 	var applied bool
@@ -139,6 +134,10 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 			},
 		}
 		actions = append(actions, action)
+	}
+
+	if actionsEqual(deployment.GetNGINXPlusActions(), actions) {
+		return
 	}
 
 	for _, action := range actions {
@@ -163,8 +162,6 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 
 	// Store the most recent actions on the deployment so any new subscribers can apply them when first connecting.
 	deployment.SetNGINXPlusActions(actions)
-
-	return applied
 }
 
 func buildHTTPUpstreamServers(upstream dataplane.Upstream) *pb.UpdateHTTPUpstreamServers {
@@ -196,6 +193,11 @@ func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
 
 		servers = append(servers, server)
 	}
+
+	// sort the servers to avoid unnecessary reloads
+	sort.Slice(servers, func(i, j int) bool {
+		return servers[i].Fields["server"].GetStringValue() < servers[j].Fields["server"].GetStringValue()
+	})
 
 	return servers
 }

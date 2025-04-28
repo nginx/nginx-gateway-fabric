@@ -9,21 +9,21 @@ import (
 )
 
 type FakeConfigurationGetter struct {
-	GetLatestConfigurationStub        func() *dataplane.Configuration
+	GetLatestConfigurationStub        func() []*dataplane.Configuration
 	getLatestConfigurationMutex       sync.RWMutex
 	getLatestConfigurationArgsForCall []struct {
 	}
 	getLatestConfigurationReturns struct {
-		result1 *dataplane.Configuration
+		result1 []*dataplane.Configuration
 	}
 	getLatestConfigurationReturnsOnCall map[int]struct {
-		result1 *dataplane.Configuration
+		result1 []*dataplane.Configuration
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeConfigurationGetter) GetLatestConfiguration() *dataplane.Configuration {
+func (fake *FakeConfigurationGetter) GetLatestConfiguration() []*dataplane.Configuration {
 	fake.getLatestConfigurationMutex.Lock()
 	ret, specificReturn := fake.getLatestConfigurationReturnsOnCall[len(fake.getLatestConfigurationArgsForCall)]
 	fake.getLatestConfigurationArgsForCall = append(fake.getLatestConfigurationArgsForCall, struct {
@@ -47,32 +47,32 @@ func (fake *FakeConfigurationGetter) GetLatestConfigurationCallCount() int {
 	return len(fake.getLatestConfigurationArgsForCall)
 }
 
-func (fake *FakeConfigurationGetter) GetLatestConfigurationCalls(stub func() *dataplane.Configuration) {
+func (fake *FakeConfigurationGetter) GetLatestConfigurationCalls(stub func() []*dataplane.Configuration) {
 	fake.getLatestConfigurationMutex.Lock()
 	defer fake.getLatestConfigurationMutex.Unlock()
 	fake.GetLatestConfigurationStub = stub
 }
 
-func (fake *FakeConfigurationGetter) GetLatestConfigurationReturns(result1 *dataplane.Configuration) {
+func (fake *FakeConfigurationGetter) GetLatestConfigurationReturns(result1 []*dataplane.Configuration) {
 	fake.getLatestConfigurationMutex.Lock()
 	defer fake.getLatestConfigurationMutex.Unlock()
 	fake.GetLatestConfigurationStub = nil
 	fake.getLatestConfigurationReturns = struct {
-		result1 *dataplane.Configuration
+		result1 []*dataplane.Configuration
 	}{result1}
 }
 
-func (fake *FakeConfigurationGetter) GetLatestConfigurationReturnsOnCall(i int, result1 *dataplane.Configuration) {
+func (fake *FakeConfigurationGetter) GetLatestConfigurationReturnsOnCall(i int, result1 []*dataplane.Configuration) {
 	fake.getLatestConfigurationMutex.Lock()
 	defer fake.getLatestConfigurationMutex.Unlock()
 	fake.GetLatestConfigurationStub = nil
 	if fake.getLatestConfigurationReturnsOnCall == nil {
 		fake.getLatestConfigurationReturnsOnCall = make(map[int]struct {
-			result1 *dataplane.Configuration
+			result1 []*dataplane.Configuration
 		})
 	}
 	fake.getLatestConfigurationReturnsOnCall[i] = struct {
-		result1 *dataplane.Configuration
+		result1 []*dataplane.Configuration
 	}{result1}
 }
 

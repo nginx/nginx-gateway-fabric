@@ -2531,7 +2531,6 @@ func TestBuildConfiguration(t *testing.T) {
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
-				1,
 				false,
 			)
 
@@ -2541,7 +2540,6 @@ func TestBuildConfiguration(t *testing.T) {
 			g.Expect(result.SSLServers).To(ConsistOf(test.expConf.SSLServers))
 			g.Expect(result.TLSPassthroughServers).To(ConsistOf(test.expConf.TLSPassthroughServers))
 			g.Expect(result.SSLKeyPairs).To(Equal(test.expConf.SSLKeyPairs))
-			g.Expect(result.Version).To(Equal(1))
 			g.Expect(result.CertBundles).To(Equal(test.expConf.CertBundles))
 			g.Expect(result.Telemetry).To(Equal(test.expConf.Telemetry))
 			g.Expect(result.BaseHTTPConfig).To(Equal(test.expConf.BaseHTTPConfig))
@@ -2648,7 +2646,6 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
-				1,
 				true,
 			)
 
@@ -2658,7 +2655,6 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 			g.Expect(result.SSLServers).To(ConsistOf(test.expConf.SSLServers))
 			g.Expect(result.TLSPassthroughServers).To(ConsistOf(test.expConf.TLSPassthroughServers))
 			g.Expect(result.SSLKeyPairs).To(Equal(test.expConf.SSLKeyPairs))
-			g.Expect(result.Version).To(Equal(1))
 			g.Expect(result.CertBundles).To(Equal(test.expConf.CertBundles))
 			g.Expect(result.Telemetry).To(Equal(test.expConf.Telemetry))
 			g.Expect(result.BaseHTTPConfig).To(Equal(test.expConf.BaseHTTPConfig))

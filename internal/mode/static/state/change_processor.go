@@ -28,19 +28,6 @@ import (
 
 //go:generate go tool counterfeiter -generate
 
-// ChangeType is the type of change that occurred based on a k8s object event.
-type ChangeType int
-
-const (
-	// NoChange means that nothing changed.
-	NoChange ChangeType = iota
-	// EndpointsOnlyChange means that only the endpoints changed.
-	// If using NGINX Plus, this update can be done using the API without a reload.
-	EndpointsOnlyChange
-	// ClusterStateChange means that something other than endpoints changed. This requires an NGINX reload.
-	ClusterStateChange
-)
-
 //counterfeiter:generate . ChangeProcessor
 
 // ChangeProcessor processes the changes to resources and produces a graph-like representation
@@ -55,8 +42,8 @@ type ChangeProcessor interface {
 	// this ChangeProcessor was created for.
 	CaptureDeleteChange(resourceType ngftypes.ObjectType, nsname types.NamespacedName)
 	// Process produces a graph-like representation of GatewayAPI resources.
-	// If no changes were captured, the changed return argument will be NoChange and graph will be empty.
-	Process() (changeType ChangeType, graphCfg *graph.Graph)
+	// If no changes were captured, the graph will be empty.
+	Process() (graphCfg *graph.Graph)
 	// GetLatestGraph returns the latest Graph.
 	GetLatestGraph() *graph.Graph
 }
@@ -88,7 +75,7 @@ type ChangeProcessorImpl struct {
 	// updater acts upon the cluster state.
 	updater Updater
 	// getAndResetClusterStateChanged tells if and how the cluster state has changed.
-	getAndResetClusterStateChanged func() ChangeType
+	getAndResetClusterStateChanged func() bool
 
 	cfg  ChangeProcessorConfig
 	lock sync.Mutex
@@ -268,13 +255,12 @@ func (c *ChangeProcessorImpl) CaptureDeleteChange(resourceType ngftypes.ObjectTy
 	c.updater.Delete(resourceType, nsname)
 }
 
-func (c *ChangeProcessorImpl) Process() (ChangeType, *graph.Graph) {
+func (c *ChangeProcessorImpl) Process() *graph.Graph {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	changeType := c.getAndResetClusterStateChanged()
-	if changeType == NoChange {
-		return NoChange, nil
+	if !c.getAndResetClusterStateChanged() {
+		return nil
 	}
 
 	c.latestGraph = graph.BuildGraph(
@@ -285,7 +271,7 @@ func (c *ChangeProcessorImpl) Process() (ChangeType, *graph.Graph) {
 		c.cfg.Validators,
 	)
 
-	return changeType, c.latestGraph
+	return c.latestGraph
 }
 
 func (c *ChangeProcessorImpl) GetLatestGraph() *graph.Graph {

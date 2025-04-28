@@ -33,11 +33,10 @@ func BuildConfiguration(
 	g *graph.Graph,
 	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
-	configVersion int,
 	plus bool,
 ) Configuration {
 	if g.GatewayClass == nil || !g.GatewayClass.Valid || gateway == nil {
-		config := GetDefaultConfiguration(g, configVersion, gateway)
+		config := GetDefaultConfiguration(g, gateway)
 		if plus {
 			config.NginxPlus = buildNginxPlus(gateway)
 		}
@@ -70,7 +69,6 @@ func BuildConfiguration(
 		StreamUpstreams:       buildStreamUpstreams(ctx, gateway, serviceResolver, baseHTTPConfig.IPFamily),
 		BackendGroups:         backendGroups,
 		SSLKeyPairs:           buildSSLKeyPairs(g.ReferencedSecrets, gateway.Listeners),
-		Version:               configVersion,
 		CertBundles: buildCertBundles(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
@@ -720,6 +718,12 @@ func buildUpstreams(
 	for _, up := range uniqueUpstreams {
 		upstreams = append(upstreams, up)
 	}
+
+	// Preserve order so that this doesn't trigger an unnecessary reload.
+	sort.Slice(upstreams, func(i, j int) bool {
+		return upstreams[i].Name < upstreams[j].Name
+	})
+
 	return upstreams
 }
 
@@ -1131,9 +1135,8 @@ func buildNginxPlus(gateway *graph.Gateway) NginxPlus {
 	return nginxPlusSettings
 }
 
-func GetDefaultConfiguration(g *graph.Graph, configVersion int, gateway *graph.Gateway) Configuration {
+func GetDefaultConfiguration(g *graph.Graph, gateway *graph.Gateway) Configuration {
 	return Configuration{
-		Version:          configVersion,
 		Logging:          buildLogging(gateway),
 		NginxPlus:        NginxPlus{},
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),

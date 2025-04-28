@@ -57,6 +57,13 @@ func TestSetAndGetFiles(t *testing.T) {
 
 	g.Expect(deployment.GetFile("invalid", "12345")).To(BeNil())
 	g.Expect(deployment.GetFile("test.conf", "invalid")).To(BeNil())
+
+	// Set the same files again
+	msg = deployment.SetFiles(files)
+	g.Expect(msg).To(BeNil())
+
+	newFileOverviews, _ := deployment.GetFileOverviews()
+	g.Expect(newFileOverviews).To(Equal(fileOverviews))
 }
 
 func TestSetNGINXPlusActions(t *testing.T) {
