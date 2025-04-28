@@ -183,7 +183,7 @@ var _ = Describe("Collector", Ordered, func() {
 		fakeConfigurationGetter = &telemetryfakes.FakeConfigurationGetter{}
 
 		fakeGraphGetter.GetLatestGraphReturns(&graph.Graph{})
-		fakeConfigurationGetter.GetLatestConfigurationReturns(&dataplane.Configuration{})
+		fakeConfigurationGetter.GetLatestConfigurationReturns(nil)
 
 		dataCollector = telemetry.NewDataCollectorImpl(telemetry.DataCollectorConfig{
 			K8sClientReader:     k8sClientReader,
@@ -368,31 +368,47 @@ var _ = Describe("Collector", Ordered, func() {
 					},
 				}
 
-				config := &dataplane.Configuration{
-					Upstreams: []dataplane.Upstream{
-						{
-							Name:     "upstream1",
-							ErrorMsg: "",
-							Endpoints: []resolver.Endpoint{
-								{
-									Address: "endpoint1",
-									Port:    80,
-								}, {
-									Address: "endpoint2",
-									Port:    80,
-								}, {
-									Address: "endpoint3",
-									Port:    80,
+				configs := []*dataplane.Configuration{
+					{
+						Upstreams: []dataplane.Upstream{
+							{
+								Name:     "upstream1",
+								ErrorMsg: "",
+								Endpoints: []resolver.Endpoint{
+									{
+										Address: "endpoint1",
+										Port:    80,
+									}, {
+										Address: "endpoint2",
+										Port:    80,
+									}, {
+										Address: "endpoint3",
+										Port:    80,
+									},
+								},
+							},
+							{
+								Name:     "upstream2",
+								ErrorMsg: "",
+								Endpoints: []resolver.Endpoint{
+									{
+										Address: "endpoint1",
+										Port:    80,
+									},
 								},
 							},
 						},
-						{
-							Name:     "upstream2",
-							ErrorMsg: "",
-							Endpoints: []resolver.Endpoint{
-								{
-									Address: "endpoint1",
-									Port:    80,
+					},
+					{
+						Upstreams: []dataplane.Upstream{
+							{
+								Name:     "upstream3",
+								ErrorMsg: "",
+								Endpoints: []resolver.Endpoint{
+									{
+										Address: "endpoint4",
+										Port:    80,
+									},
 								},
 							},
 						},
@@ -400,7 +416,7 @@ var _ = Describe("Collector", Ordered, func() {
 				}
 
 				fakeGraphGetter.GetLatestGraphReturns(graph)
-				fakeConfigurationGetter.GetLatestConfigurationReturns(config)
+				fakeConfigurationGetter.GetLatestConfigurationReturns(configs)
 
 				expData.ClusterNodeCount = 3
 				expData.NGFResourceCounts = telemetry.NGFResourceCounts{
@@ -410,7 +426,7 @@ var _ = Describe("Collector", Ordered, func() {
 					TLSRouteCount:                            3,
 					SecretCount:                              3,
 					ServiceCount:                             3,
-					EndpointCount:                            4,
+					EndpointCount:                            5,
 					GRPCRouteCount:                           2,
 					BackendTLSPolicyCount:                    3,
 					GatewayAttachedClientSettingsPolicyCount: 1,
@@ -569,7 +585,7 @@ var _ = Describe("Collector", Ordered, func() {
 	Describe("NGF resource count collector", func() {
 		var (
 			graph1                          *graph.Graph
-			config1, invalidUpstreamsConfig *dataplane.Configuration
+			config1, invalidUpstreamsConfig []*dataplane.Configuration
 		)
 
 		BeforeAll(func() {
@@ -626,43 +642,47 @@ var _ = Describe("Collector", Ordered, func() {
 				},
 			}
 
-			config1 = &dataplane.Configuration{
-				Upstreams: []dataplane.Upstream{
-					{
-						Name:     "upstream1",
-						ErrorMsg: "",
-						Endpoints: []resolver.Endpoint{
-							{
-								Address: "endpoint1",
-								Port:    80,
+			config1 = []*dataplane.Configuration{
+				{
+					Upstreams: []dataplane.Upstream{
+						{
+							Name:     "upstream1",
+							ErrorMsg: "",
+							Endpoints: []resolver.Endpoint{
+								{
+									Address: "endpoint1",
+									Port:    80,
+								},
 							},
 						},
 					},
 				},
 			}
 
-			invalidUpstreamsConfig = &dataplane.Configuration{
-				Upstreams: []dataplane.Upstream{
-					{
-						Name:     "invalidUpstream",
-						ErrorMsg: "there is an error here",
-						Endpoints: []resolver.Endpoint{
-							{
-								Address: "endpoint1",
-								Port:    80,
-							}, {
-								Address: "endpoint2",
-								Port:    80,
-							}, {
-								Address: "endpoint3",
-								Port:    80,
+			invalidUpstreamsConfig = []*dataplane.Configuration{
+				{
+					Upstreams: []dataplane.Upstream{
+						{
+							Name:     "invalidUpstream",
+							ErrorMsg: "there is an error here",
+							Endpoints: []resolver.Endpoint{
+								{
+									Address: "endpoint1",
+									Port:    80,
+								}, {
+									Address: "endpoint2",
+									Port:    80,
+								}, {
+									Address: "endpoint3",
+									Port:    80,
+								},
 							},
 						},
-					},
-					{
-						Name:      "emptyUpstream",
-						ErrorMsg:  "",
-						Endpoints: []resolver.Endpoint{},
+						{
+							Name:      "emptyUpstream",
+							ErrorMsg:  "",
+							Endpoints: []resolver.Endpoint{},
+						},
 					},
 				},
 			}
@@ -671,7 +691,7 @@ var _ = Describe("Collector", Ordered, func() {
 		When("collecting NGF resource counts", func() {
 			It("collects correct data for graph with no resources", func(ctx SpecContext) {
 				fakeGraphGetter.GetLatestGraphReturns(&graph.Graph{})
-				fakeConfigurationGetter.GetLatestConfigurationReturns(&dataplane.Configuration{})
+				fakeConfigurationGetter.GetLatestConfigurationReturns(nil)
 
 				expData.NGFResourceCounts = telemetry.NGFResourceCounts{}
 
@@ -721,7 +741,7 @@ var _ = Describe("Collector", Ordered, func() {
 			When("it encounters an error while collecting data", func() {
 				BeforeEach(func() {
 					fakeGraphGetter.GetLatestGraphReturns(&graph.Graph{})
-					fakeConfigurationGetter.GetLatestConfigurationReturns(&dataplane.Configuration{})
+					fakeConfigurationGetter.GetLatestConfigurationReturns(nil)
 				})
 				It("should error on nil latest graph", func(ctx SpecContext) {
 					expectedError := errors.New("failed to collect telemetry data: latest graph cannot be nil")

@@ -400,6 +400,26 @@ var _ = Describe("ChangeProcessor", func() {
 			processor state.ChangeProcessor
 		)
 
+		testUpsertTriggersChange := func(obj client.Object) {
+			processor.CaptureUpsertChange(obj)
+			Expect(processor.Process()).ToNot(BeNil())
+		}
+
+		testUpsertDoesNotTriggerChange := func(obj client.Object) {
+			processor.CaptureUpsertChange(obj)
+			Expect(processor.Process()).To(BeNil())
+		}
+
+		testDeleteTriggersChange := func(obj client.Object, nsname types.NamespacedName) {
+			processor.CaptureDeleteChange(obj, nsname)
+			Expect(processor.Process()).ToNot(BeNil())
+		}
+
+		testDeleteDoesNotTriggerChange := func(obj client.Object, nsname types.NamespacedName) {
+			processor.CaptureDeleteChange(obj, nsname)
+			Expect(processor.Process()).To(BeNil())
+		}
+
 		BeforeEach(OncePerOrdered, func() {
 			processor = state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 				GatewayCtlrName:  controllerName,
@@ -432,8 +452,7 @@ var _ = Describe("ChangeProcessor", func() {
 			)
 
 			processAndValidateGraph := func(expGraph *graph.Graph) {
-				changed, graphCfg := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				graphCfg := processor.Process()
 				Expect(helpers.Diff(expGraph, graphCfg)).To(BeEmpty())
 				Expect(helpers.Diff(expGraph, processor.GetLatestGraph())).To(BeEmpty())
 			}
@@ -1208,8 +1227,7 @@ var _ = Describe("ChangeProcessor", func() {
 			})
 			When("no upsert has occurred", func() {
 				It("returns nil graph", func() {
-					changed, graphCfg := processor.Process()
-					Expect(changed).To(Equal(state.NoChange))
+					graphCfg := processor.Process()
 					Expect(graphCfg).To(BeNil())
 					Expect(processor.GetLatestGraph()).To(BeNil())
 				})
@@ -1248,8 +1266,7 @@ var _ = Describe("ChangeProcessor", func() {
 						It("returns nil graph", func() {
 							processor.CaptureUpsertChange(diffNsTLSSecret)
 
-							changed, graphCfg := processor.Process()
-							Expect(changed).To(Equal(state.NoChange))
+							graphCfg := processor.Process()
 							Expect(graphCfg).To(BeNil())
 							Expect(helpers.Diff(&graph.Graph{}, processor.GetLatestGraph())).To(BeEmpty())
 						})
@@ -1562,8 +1579,7 @@ var _ = Describe("ChangeProcessor", func() {
 						gatewayclass.SupportedVersion,
 					)
 
-					changed, graphCfg := processor.Process()
-					Expect(changed).To(Equal(state.NoChange))
+					graphCfg := processor.Process()
 					Expect(graphCfg).To(BeNil())
 					Expect(helpers.Diff(expGraph, processor.GetLatestGraph())).To(BeEmpty())
 				})
@@ -1680,8 +1696,7 @@ var _ = Describe("ChangeProcessor", func() {
 						CertBundle: diffNsTLSCert,
 					}
 
-					changed, graphCfg := processor.Process()
-					Expect(changed).To(Equal(state.NoChange))
+					graphCfg := processor.Process()
 					Expect(graphCfg).To(BeNil())
 					Expect(helpers.Diff(expGraph, processor.GetLatestGraph())).To(BeEmpty())
 				})
@@ -1695,8 +1710,7 @@ var _ = Describe("ChangeProcessor", func() {
 						CertBundle: diffNsTLSCert,
 					}
 
-					changed, graphCfg := processor.Process()
-					Expect(changed).To(Equal(state.NoChange))
+					graphCfg := processor.Process()
 					Expect(graphCfg).To(BeNil())
 					Expect(helpers.Diff(expGraph, processor.GetLatestGraph())).To(BeEmpty())
 				})
@@ -2411,58 +2425,43 @@ var _ = Describe("ChangeProcessor", func() {
 				gw = createGateway("gw", createHTTPListener())
 				processor.CaptureUpsertChange(gc)
 				processor.CaptureUpsertChange(gw)
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				gr := processor.Process()
+				Expect(gr).ToNot(BeNil())
 			})
-
-			testProcessChangedVal := func(expChanged state.ChangeType) {
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(expChanged))
-			}
-
-			testUpsertTriggersChange := func(obj client.Object, expChanged state.ChangeType) {
-				processor.CaptureUpsertChange(obj)
-				testProcessChangedVal(expChanged)
-			}
-
-			testDeleteTriggersChange := func(obj client.Object, nsname types.NamespacedName, expChanged state.ChangeType) {
-				processor.CaptureDeleteChange(obj, nsname)
-				testProcessChangedVal(expChanged)
-			}
 
 			When("hr1 is added", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(hr1, state.ClusterStateChange)
+					testUpsertTriggersChange(hr1)
 				})
 			})
 			When("a hr1 service is added", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(hr1svc, state.ClusterStateChange)
+					testUpsertTriggersChange(hr1svc)
 				})
 			})
 			When("a backendTLSPolicy is added for referenced service", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(btls, state.ClusterStateChange)
+					testUpsertTriggersChange(btls)
 				})
 			})
 			When("an hr1 endpoint slice is added", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(hr1slice1, state.EndpointsOnlyChange)
+					testUpsertTriggersChange(hr1slice1)
 				})
 			})
 			When("an hr1 service is updated", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(hr1svc, state.ClusterStateChange)
+					testUpsertTriggersChange(hr1svc)
 				})
 			})
 			When("another hr1 endpoint slice is added", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(hr1slice2, state.EndpointsOnlyChange)
+					testUpsertTriggersChange(hr1slice2)
 				})
 			})
 			When("an endpoint slice with a missing svc name label is added", func() {
 				It("should not trigger a change", func() {
-					testUpsertTriggersChange(missingSvcNameSlice, state.NoChange)
+					testUpsertDoesNotTriggerChange(missingSvcNameSlice)
 				})
 			})
 			When("an hr1 endpoint slice is deleted", func() {
@@ -2470,7 +2469,6 @@ var _ = Describe("ChangeProcessor", func() {
 					testDeleteTriggersChange(
 						hr1slice1,
 						types.NamespacedName{Namespace: hr1slice1.Namespace, Name: hr1slice1.Name},
-						state.EndpointsOnlyChange,
 					)
 				})
 			})
@@ -2479,13 +2477,12 @@ var _ = Describe("ChangeProcessor", func() {
 					testDeleteTriggersChange(
 						hr1slice2,
 						types.NamespacedName{Namespace: hr1slice2.Namespace, Name: hr1slice2.Name},
-						state.EndpointsOnlyChange,
 					)
 				})
 			})
 			When("the second hr1 endpoint slice is recreated", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(hr1slice2, state.EndpointsOnlyChange)
+					testUpsertTriggersChange(hr1slice2)
 				})
 			})
 			When("hr1 is deleted", func() {
@@ -2493,41 +2490,38 @@ var _ = Describe("ChangeProcessor", func() {
 					testDeleteTriggersChange(
 						hr1,
 						types.NamespacedName{Namespace: hr1.Namespace, Name: hr1.Name},
-						state.ClusterStateChange,
 					)
 				})
 			})
 			When("hr1 service is deleted", func() {
 				It("should not trigger a change", func() {
-					testDeleteTriggersChange(
+					testDeleteDoesNotTriggerChange(
 						hr1svc,
 						types.NamespacedName{Namespace: hr1svc.Namespace, Name: hr1svc.Name},
-						state.NoChange,
 					)
 				})
 			})
 			When("the second hr1 endpoint slice is deleted", func() {
 				It("should not trigger a change", func() {
-					testDeleteTriggersChange(
+					testDeleteDoesNotTriggerChange(
 						hr1slice2,
 						types.NamespacedName{Namespace: hr1slice2.Namespace, Name: hr1slice2.Name},
-						state.NoChange,
 					)
 				})
 			})
 			When("hr2 is added", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(hr2, state.ClusterStateChange)
+					testUpsertTriggersChange(hr2)
 				})
 			})
 			When("a hr3, that shares a backend service with hr2, is added", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(hr3, state.ClusterStateChange)
+					testUpsertTriggersChange(hr3)
 				})
 			})
 			When("sharedSvc, a service referenced by both hr2 and hr3, is added", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(sharedSvc, state.ClusterStateChange)
+					testUpsertTriggersChange(sharedSvc)
 				})
 			})
 			When("hr2 is deleted", func() {
@@ -2535,7 +2529,6 @@ var _ = Describe("ChangeProcessor", func() {
 					testDeleteTriggersChange(
 						hr2,
 						types.NamespacedName{Namespace: hr2.Namespace, Name: hr2.Name},
-						state.ClusterStateChange,
 					)
 				})
 			})
@@ -2544,13 +2537,12 @@ var _ = Describe("ChangeProcessor", func() {
 					testDeleteTriggersChange(
 						sharedSvc,
 						types.NamespacedName{Namespace: sharedSvc.Namespace, Name: sharedSvc.Name},
-						state.ClusterStateChange,
 					)
 				})
 			})
 			When("sharedSvc is recreated", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(sharedSvc, state.ClusterStateChange)
+					testUpsertTriggersChange(sharedSvc)
 				})
 			})
 			When("hr3 is deleted", func() {
@@ -2558,62 +2550,59 @@ var _ = Describe("ChangeProcessor", func() {
 					testDeleteTriggersChange(
 						hr3,
 						types.NamespacedName{Namespace: hr3.Namespace, Name: hr3.Name},
-						state.ClusterStateChange,
 					)
 				})
 			})
 			When("sharedSvc is deleted", func() {
 				It("should not trigger a change", func() {
-					testDeleteTriggersChange(
+					testDeleteDoesNotTriggerChange(
 						sharedSvc,
 						types.NamespacedName{Namespace: sharedSvc.Namespace, Name: sharedSvc.Name},
-						state.NoChange,
 					)
 				})
 			})
 			When("a service that is not referenced by any route is added", func() {
 				It("should not trigger a change", func() {
-					testUpsertTriggersChange(notRefSvc, state.NoChange)
+					testUpsertDoesNotTriggerChange(notRefSvc)
 				})
 			})
 			When("a route with an invalid backend ref type is added", func() {
 				It("should trigger a change", func() {
-					testUpsertTriggersChange(hrInvalidBackendRef, state.ClusterStateChange)
+					testUpsertTriggersChange(hrInvalidBackendRef)
 				})
 			})
 			When("a service with a namespace name that matches invalid backend ref is added", func() {
 				It("should not trigger a change", func() {
-					testUpsertTriggersChange(invalidSvc, state.NoChange)
+					testUpsertDoesNotTriggerChange(invalidSvc)
 				})
 			})
 			When("an endpoint slice that is not owned by a referenced service is added", func() {
 				It("should not trigger a change", func() {
-					testUpsertTriggersChange(noRefSlice, state.NoChange)
+					testUpsertDoesNotTriggerChange(noRefSlice)
 				})
 			})
 			When("an endpoint slice that is not owned by a referenced service is deleted", func() {
 				It("should not trigger a change", func() {
-					testDeleteTriggersChange(
+					testDeleteDoesNotTriggerChange(
 						noRefSlice,
 						types.NamespacedName{Namespace: noRefSlice.Namespace, Name: noRefSlice.Name},
-						state.NoChange,
 					)
 				})
 			})
 			Context("processing a route with multiple rules and three unique backend services", func() {
 				When("route is added", func() {
 					It("should trigger a change", func() {
-						testUpsertTriggersChange(hrMultipleRules, state.ClusterStateChange)
+						testUpsertTriggersChange(hrMultipleRules)
 					})
 				})
 				When("first referenced service is added", func() {
 					It("should trigger a change", func() {
-						testUpsertTriggersChange(bazSvc1, state.ClusterStateChange)
+						testUpsertTriggersChange(bazSvc1)
 					})
 				})
 				When("second referenced service is added", func() {
 					It("should trigger a change", func() {
-						testUpsertTriggersChange(bazSvc2, state.ClusterStateChange)
+						testUpsertTriggersChange(bazSvc2)
 					})
 				})
 				When("first referenced service is deleted", func() {
@@ -2621,23 +2610,22 @@ var _ = Describe("ChangeProcessor", func() {
 						testDeleteTriggersChange(
 							bazSvc1,
 							types.NamespacedName{Namespace: bazSvc1.Namespace, Name: bazSvc1.Name},
-							state.ClusterStateChange,
 						)
 					})
 				})
 				When("first referenced service is recreated", func() {
 					It("should trigger a change", func() {
-						testUpsertTriggersChange(bazSvc1, state.ClusterStateChange)
+						testUpsertTriggersChange(bazSvc1)
 					})
 				})
 				When("third referenced service is added", func() {
 					It("should trigger a change", func() {
-						testUpsertTriggersChange(bazSvc3, state.ClusterStateChange)
+						testUpsertTriggersChange(bazSvc3)
 					})
 				})
 				When("third referenced service is updated", func() {
 					It("should trigger a change", func() {
-						testUpsertTriggersChange(bazSvc3, state.ClusterStateChange)
+						testUpsertTriggersChange(bazSvc3)
 					})
 				})
 				When("route is deleted", func() {
@@ -2648,34 +2636,30 @@ var _ = Describe("ChangeProcessor", func() {
 								Namespace: hrMultipleRules.Namespace,
 								Name:      hrMultipleRules.Name,
 							},
-							state.ClusterStateChange,
 						)
 					})
 				})
 				When("first referenced service is deleted", func() {
 					It("should not trigger a change", func() {
-						testDeleteTriggersChange(
+						testDeleteDoesNotTriggerChange(
 							bazSvc1,
 							types.NamespacedName{Namespace: bazSvc1.Namespace, Name: bazSvc1.Name},
-							state.NoChange,
 						)
 					})
 				})
 				When("second referenced service is deleted", func() {
 					It("should not trigger a change", func() {
-						testDeleteTriggersChange(
+						testDeleteDoesNotTriggerChange(
 							bazSvc2,
 							types.NamespacedName{Namespace: bazSvc2.Namespace, Name: bazSvc2.Name},
-							state.NoChange,
 						)
 					})
 				})
 				When("final referenced service is deleted", func() {
 					It("should not trigger a change", func() {
-						testDeleteTriggersChange(
+						testDeleteDoesNotTriggerChange(
 							bazSvc3,
 							types.NamespacedName{Namespace: bazSvc3.Namespace, Name: bazSvc3.Name},
-							state.NoChange,
 						)
 					})
 				})
@@ -2748,44 +2732,31 @@ var _ = Describe("ChangeProcessor", func() {
 
 			When("a namespace is created that is not linked to a listener", func() {
 				It("does not trigger an update", func() {
-					processor.CaptureUpsertChange(nsNoLabels)
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.NoChange))
+					testUpsertDoesNotTriggerChange(nsNoLabels)
 				})
 			})
 			When("a namespace is created that is linked to a listener", func() {
 				It("triggers an update", func() {
-					processor.CaptureUpsertChange(ns)
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					testUpsertTriggersChange(ns)
 				})
 			})
 			When("a namespace is deleted that is not linked to a listener", func() {
 				It("does not trigger an update", func() {
-					processor.CaptureDeleteChange(nsNoLabels, types.NamespacedName{Name: "no-labels"})
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.NoChange))
+					testDeleteDoesNotTriggerChange(nsNoLabels, types.NamespacedName{Name: "no-labels"})
 				})
 			})
 			When("a namespace is deleted that is linked to a listener", func() {
 				It("triggers an update", func() {
-					processor.CaptureDeleteChange(ns, types.NamespacedName{Name: "ns"})
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					testDeleteTriggersChange(ns, types.NamespacedName{Name: "ns"})
 				})
 			})
 			When("a namespace that is not linked to a listener has its labels changed to match a listener", func() {
 				It("triggers an update", func() {
-					processor.CaptureUpsertChange(nsDifferentLabels)
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.NoChange))
-
+					testUpsertDoesNotTriggerChange(nsDifferentLabels)
 					nsDifferentLabels.Labels = map[string]string{
 						"app": "allowed",
 					}
-					processor.CaptureUpsertChange(nsDifferentLabels)
-					changed, _ = processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					testUpsertTriggersChange(nsDifferentLabels)
 				})
 			})
 			When(
@@ -2795,9 +2766,7 @@ var _ = Describe("ChangeProcessor", func() {
 						nsDifferentLabels.Labels = map[string]string{
 							"oranges": "bananas",
 						}
-						processor.CaptureUpsertChange(nsDifferentLabels)
-						changed, _ := processor.Process()
-						Expect(changed).To(Equal(state.ClusterStateChange))
+						testUpsertTriggersChange(nsDifferentLabels)
 					})
 				},
 			)
@@ -2808,9 +2777,7 @@ var _ = Describe("ChangeProcessor", func() {
 						"oranges": "bananas",
 					}
 					gwChangedLabel.Generation++
-					processor.CaptureUpsertChange(gwChangedLabel)
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					testUpsertTriggersChange(gwChangedLabel)
 
 					// After changing the gateway's labels and generation, the processor should be marked to update
 					// the nginx configuration and build a new graph. When processor.Process() gets called,
@@ -2819,29 +2786,20 @@ var _ = Describe("ChangeProcessor", func() {
 					// the new labels on the gateway, it would not trigger a change as the namespace would no longer
 					// be in the updated referencedNamespaces and the labels no longer match the new labels on the
 					// gateway.
-					processor.CaptureUpsertChange(ns)
-					changed, _ = processor.Process()
-					Expect(changed).To(Equal(state.NoChange))
-
-					processor.CaptureUpsertChange(nsDifferentLabels)
-					changed, _ = processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					testUpsertDoesNotTriggerChange(ns)
+					testUpsertTriggersChange(nsDifferentLabels)
 				})
 			})
 			When("a namespace that is not linked to a listener has its labels removed", func() {
 				It("does not trigger an update", func() {
 					ns.Labels = nil
-					processor.CaptureUpsertChange(ns)
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.NoChange))
+					testUpsertDoesNotTriggerChange(ns)
 				})
 			})
 			When("a namespace that is linked to a listener has its labels removed", func() {
 				It("triggers an update when labels are removed", func() {
 					nsDifferentLabels.Labels = nil
-					processor.CaptureUpsertChange(nsDifferentLabels)
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					testUpsertTriggersChange(nsDifferentLabels)
 				})
 			})
 		})
@@ -2883,23 +2841,23 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(np)
 					processor.CaptureUpsertChange(paramGC)
 
-					changed, graph := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					graph := processor.Process()
+					Expect(graph).ToNot(BeNil())
 					Expect(graph.GatewayClass.NginxProxy.Source).To(Equal(np))
 				})
 				It("captures changes for an NginxProxy", func() {
 					processor.CaptureUpsertChange(npUpdated)
 					processor.CaptureUpsertChange(paramGC)
 
-					changed, graph := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					graph := processor.Process()
+					Expect(graph).ToNot(BeNil())
 					Expect(graph.GatewayClass.NginxProxy.Source).To(Equal(npUpdated))
 				})
 				It("handles deletes for an NginxProxy", func() {
 					processor.CaptureDeleteChange(np, client.ObjectKeyFromObject(np))
 
-					changed, graph := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					graph := processor.Process()
+					Expect(graph).ToNot(BeNil())
 					Expect(graph.GatewayClass.NginxProxy).To(BeNil())
 				})
 			})
@@ -2957,25 +2915,25 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(np)
 					processor.CaptureUpsertChange(paramGW)
 
-					changed, graph := processor.Process()
+					graph := processor.Process()
+					Expect(graph).ToNot(BeNil())
 					gw := graph.Gateways[types.NamespacedName{Namespace: "test", Name: "param-gw"}]
-					Expect(changed).To(Equal(state.ClusterStateChange))
 					Expect(gw.NginxProxy.Source).To(Equal(np))
 				})
 				It("captures changes for an NginxProxy", func() {
 					processor.CaptureUpsertChange(npUpdated)
 					processor.CaptureUpsertChange(paramGW)
 
-					changed, graph := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					graph := processor.Process()
+					Expect(graph).ToNot(BeNil())
 					gw := graph.Gateways[types.NamespacedName{Namespace: "test", Name: "param-gw"}]
 					Expect(gw.NginxProxy.Source).To(Equal(npUpdated))
 				})
 				It("handles deletes for an NginxProxy", func() {
 					processor.CaptureDeleteChange(np, client.ObjectKeyFromObject(np))
 
-					changed, graph := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					graph := processor.Process()
+					Expect(graph).ToNot(BeNil())
 					gw := graph.Gateways[types.NamespacedName{Namespace: "test", Name: "param-gw"}]
 					Expect(gw.NginxProxy).To(BeNil())
 				})
@@ -2995,8 +2953,8 @@ var _ = Describe("ChangeProcessor", func() {
 
 			BeforeAll(func() {
 				processor.CaptureUpsertChange(gc)
-				changed, newGraph := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				newGraph := processor.Process()
+				Expect(newGraph).ToNot(BeNil())
 				Expect(newGraph.GatewayClass.Source).To(Equal(gc))
 				Expect(newGraph.NGFPolicies).To(BeEmpty())
 
@@ -3126,29 +3084,28 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(obs)
 					processor.CaptureUpsertChange(usp)
 
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.NoChange))
+					Expect(processor.Process()).To(BeNil())
 				})
 			})
 			When("the resource the policy references is created", func() {
 				It("populates the graph with the policy", func() {
 					processor.CaptureUpsertChange(gw)
 
-					changed, graph := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					graph := processor.Process()
+					Expect(graph).ToNot(BeNil())
 					Expect(graph.NGFPolicies).To(HaveKey(cspKey))
 					Expect(graph.NGFPolicies[cspKey].Source).To(Equal(csp))
 					Expect(graph.NGFPolicies).ToNot(HaveKey(obsKey))
 
 					processor.CaptureUpsertChange(route)
-					changed, graph = processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					graph = processor.Process()
+					Expect(graph).ToNot(BeNil())
 					Expect(graph.NGFPolicies).To(HaveKey(obsKey))
 					Expect(graph.NGFPolicies[obsKey].Source).To(Equal(obs))
 
 					processor.CaptureUpsertChange(svc)
-					changed, graph = processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					graph = processor.Process()
+					Expect(graph).ToNot(BeNil())
 					Expect(graph.NGFPolicies).To(HaveKey(uspKey))
 					Expect(graph.NGFPolicies[uspKey].Source).To(Equal(usp))
 				})
@@ -3159,8 +3116,8 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(obsUpdated)
 					processor.CaptureUpsertChange(uspUpdated)
 
-					changed, graph := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					graph := processor.Process()
+					Expect(graph).ToNot(BeNil())
 					Expect(graph.NGFPolicies).To(HaveKey(cspKey))
 					Expect(graph.NGFPolicies[cspKey].Source).To(Equal(cspUpdated))
 					Expect(graph.NGFPolicies).To(HaveKey(obsKey))
@@ -3175,8 +3132,8 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureDeleteChange(&ngfAPIv1alpha2.ObservabilityPolicy{}, client.ObjectKeyFromObject(obs))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}, client.ObjectKeyFromObject(usp))
 
-					changed, graph := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					graph := processor.Process()
+					Expect(graph).ToNot(BeNil())
 					Expect(graph.NGFPolicies).To(BeEmpty())
 				})
 			})
@@ -3224,8 +3181,8 @@ var _ = Describe("ChangeProcessor", func() {
 			It("handles upserts for a SnippetsFilter", func() {
 				processor.CaptureUpsertChange(sf)
 
-				changed, graph := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				graph := processor.Process()
+				Expect(graph).ToNot(BeNil())
 
 				processedSf, exists := graph.SnippetsFilters[sfNsName]
 				Expect(exists).To(BeTrue())
@@ -3235,8 +3192,8 @@ var _ = Describe("ChangeProcessor", func() {
 			It("captures changes for a SnippetsFilter", func() {
 				processor.CaptureUpsertChange(sfUpdated)
 
-				changed, graph := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				graph := processor.Process()
+				Expect(graph).ToNot(BeNil())
 
 				processedSf, exists := graph.SnippetsFilters[sfNsName]
 				Expect(exists).To(BeTrue())
@@ -3246,8 +3203,8 @@ var _ = Describe("ChangeProcessor", func() {
 			It("handles deletes for a SnippetsFilter", func() {
 				processor.CaptureDeleteChange(sfUpdated, sfNsName)
 
-				changed, graph := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				graph := processor.Process()
+				Expect(graph).ToNot(BeNil())
 				Expect(graph.SnippetsFilters).To(BeEmpty())
 			})
 		})
@@ -3582,7 +3539,7 @@ var _ = Describe("ChangeProcessor", func() {
 			}
 			npUpdated = np.DeepCopy()
 		})
-		// Changing change - a change that makes processor.Process() report changed
+		// Changing change - a change that makes processor.Process() return a built graph
 		// Non-changing change - a change that doesn't do that
 		// Related resource - a K8s resource that is related to a configured Gateway API resource
 		// Unrelated resource - a K8s resource that is not related to a configured Gateway API resource
@@ -3590,7 +3547,7 @@ var _ = Describe("ChangeProcessor", func() {
 		// Note: in these tests, we deliberately don't fully inspect the returned configuration and statuses
 		// -- this is done in 'Normal cases of processing changes'
 		Describe("Multiple Gateway API resource changes", Ordered, func() {
-			It("should report changed after multiple Upserts", func() {
+			It("should build graph after multiple Upserts", func() {
 				processor.CaptureUpsertChange(gc)
 				processor.CaptureUpsertChange(gw1)
 				processor.CaptureUpsertChange(testNs)
@@ -3601,11 +3558,10 @@ var _ = Describe("ChangeProcessor", func() {
 				processor.CaptureUpsertChange(cm)
 				processor.CaptureUpsertChange(np)
 
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				Expect(processor.Process()).ToNot(BeNil())
 			})
 			When("a upsert of updated resources is followed by an upsert of the same generation", func() {
-				It("should report changed", func() {
+				It("should build graph", func() {
 					// these are changing changes
 					processor.CaptureUpsertChange(gcUpdated)
 					processor.CaptureUpsertChange(gw1Updated)
@@ -3626,22 +3582,20 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(cmUpdated)
 					processor.CaptureUpsertChange(npUpdated)
 
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(processor.Process()).ToNot(BeNil())
 				})
 			})
-			It("should report changed after upserting new resources", func() {
+			It("should build graph after upserting new resources", func() {
 				// we can't have a second GatewayClass, so we don't add it
 				processor.CaptureUpsertChange(gw2)
 				processor.CaptureUpsertChange(hr2)
 				processor.CaptureUpsertChange(gr2)
 				processor.CaptureUpsertChange(rg2)
 
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				Expect(processor.Process()).ToNot(BeNil())
 			})
 			When("resources are deleted followed by upserts with the same generations", func() {
-				It("should report changed", func() {
+				It("should build graph", func() {
 					// these are changing changes
 					processor.CaptureDeleteChange(&v1.GatewayClass{}, gcNsName)
 					processor.CaptureDeleteChange(&v1.Gateway{}, gwNsName)
@@ -3658,20 +3612,18 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(gr2)
 					processor.CaptureUpsertChange(rg2)
 
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(processor.Process()).ToNot(BeNil())
 				})
 			})
-			It("should report changed after deleting resources", func() {
+			It("should build graph after deleting resources", func() {
 				processor.CaptureDeleteChange(&v1.HTTPRoute{}, hr2NsName)
 				processor.CaptureDeleteChange(&v1.HTTPRoute{}, gr2NsName)
 
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				Expect(processor.Process()).ToNot(BeNil())
 			})
 		})
 		Describe("Deleting non-existing Gateway API resource", func() {
-			It("should not report changed after deleting non-existing", func() {
+			It("should not build graph after deleting non-existing", func() {
 				processor.CaptureDeleteChange(&v1.GatewayClass{}, gcNsName)
 				processor.CaptureDeleteChange(&v1.Gateway{}, gwNsName)
 				processor.CaptureDeleteChange(&v1.HTTPRoute{}, hrNsName)
@@ -3680,8 +3632,7 @@ var _ = Describe("ChangeProcessor", func() {
 				processor.CaptureDeleteChange(&v1.HTTPRoute{}, gr2NsName)
 				processor.CaptureDeleteChange(&v1beta1.ReferenceGrant{}, rgNsName)
 
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(state.NoChange))
+				Expect(processor.Process()).To(BeNil())
 			})
 		})
 		Describe("Multiple Kubernetes API resource changes", Ordered, func() {
@@ -3695,31 +3646,28 @@ var _ = Describe("ChangeProcessor", func() {
 				processor.CaptureUpsertChange(secret)
 				processor.CaptureUpsertChange(barSecret)
 				processor.CaptureUpsertChange(cm)
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				Expect(processor.Process()).ToNot(BeNil())
 			})
 
-			It("should report changed after multiple Upserts of related resources", func() {
+			It("should build graph after multiple Upserts of related resources", func() {
 				processor.CaptureUpsertChange(svc)
 				processor.CaptureUpsertChange(slice)
 				processor.CaptureUpsertChange(ns)
 				processor.CaptureUpsertChange(secretUpdated)
 				processor.CaptureUpsertChange(cmUpdated)
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				Expect(processor.Process()).ToNot(BeNil())
 			})
-			It("should report not changed after multiple Upserts of unrelated resources", func() {
+			It("should not build graph after multiple Upserts of unrelated resources", func() {
 				processor.CaptureUpsertChange(unrelatedSvc)
 				processor.CaptureUpsertChange(unrelatedSlice)
 				processor.CaptureUpsertChange(unrelatedNS)
 				processor.CaptureUpsertChange(unrelatedSecret)
 				processor.CaptureUpsertChange(unrelatedCM)
 
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(state.NoChange))
+				Expect(processor.Process()).To(BeNil())
 			})
 			When("upserts of related resources are followed by upserts of unrelated resources", func() {
-				It("should report changed", func() {
+				It("should build graph", func() {
 					// these are changing changes
 					processor.CaptureUpsertChange(barSvc)
 					processor.CaptureUpsertChange(barSlice)
@@ -3734,12 +3682,11 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(unrelatedSecret)
 					processor.CaptureUpsertChange(unrelatedCM)
 
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(processor.Process()).ToNot(BeNil())
 				})
 			})
 			When("deletes of related resources are followed by upserts of unrelated resources", func() {
-				It("should report changed", func() {
+				It("should build graph", func() {
 					// these are changing changes
 					processor.CaptureDeleteChange(&apiv1.Service{}, svcNsName)
 					processor.CaptureDeleteChange(&discoveryV1.EndpointSlice{}, sliceNsName)
@@ -3754,13 +3701,12 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(unrelatedSecret)
 					processor.CaptureUpsertChange(unrelatedCM)
 
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(processor.Process()).ToNot(BeNil())
 				})
 			})
 		})
 		Describe("Multiple Kubernetes API and Gateway API resource changes", Ordered, func() {
-			It("should report changed after multiple Upserts of new and related resources", func() {
+			It("should build graph after multiple Upserts of new and related resources", func() {
 				// new Gateway API resources
 				processor.CaptureUpsertChange(gc)
 				processor.CaptureUpsertChange(gw1)
@@ -3777,10 +3723,9 @@ var _ = Describe("ChangeProcessor", func() {
 				processor.CaptureUpsertChange(secret)
 				processor.CaptureUpsertChange(cm)
 
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(state.ClusterStateChange))
+				Expect(processor.Process()).ToNot(BeNil())
 			})
-			It("should report not changed after multiple Upserts of unrelated resources", func() {
+			It("should not build graph after multiple Upserts of unrelated resources", func() {
 				// unrelated Kubernetes API resources
 				processor.CaptureUpsertChange(unrelatedSvc)
 				processor.CaptureUpsertChange(unrelatedSlice)
@@ -3788,10 +3733,9 @@ var _ = Describe("ChangeProcessor", func() {
 				processor.CaptureUpsertChange(unrelatedSecret)
 				processor.CaptureUpsertChange(unrelatedCM)
 
-				changed, _ := processor.Process()
-				Expect(changed).To(Equal(state.NoChange))
+				Expect(processor.Process()).To(BeNil())
 			})
-			It("should report changed after upserting changed resources followed by upserting unrelated resources",
+			It("should build graph after upserting changed resources followed by upserting unrelated resources",
 				func() {
 					// these are changing changes
 					processor.CaptureUpsertChange(gcUpdated)
@@ -3808,8 +3752,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(unrelatedSecret)
 					processor.CaptureUpsertChange(unrelatedCM)
 
-					changed, _ := processor.Process()
-					Expect(changed).To(Equal(state.ClusterStateChange))
+					Expect(processor.Process()).ToNot(BeNil())
 				},
 			)
 		})
