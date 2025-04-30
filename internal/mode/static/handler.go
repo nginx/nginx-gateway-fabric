@@ -12,6 +12,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -472,8 +473,20 @@ func getGatewayAddresses(
 	if svc == nil {
 		svcName := controller.CreateNginxResourceName(gateway.Source.GetName(), gatewayClassName)
 		key := types.NamespacedName{Name: svcName, Namespace: gateway.Source.GetNamespace()}
-		if err := k8sClient.Get(ctx, key, &gwSvc); err != nil {
-			return nil, fmt.Errorf("error finding Service for Gateway: %w", err)
+
+		if err := wait.PollUntilContextCancel(
+			ctx,
+			500*time.Millisecond,
+			true, /* poll immediately */
+			func(ctx context.Context) (bool, error) {
+				if err := k8sClient.Get(ctx, key, &gwSvc); err != nil {
+					return false, nil //nolint:nilerr // need to retry without returning error
+				}
+
+				return true, nil
+			},
+		); err != nil {
+			return nil, fmt.Errorf("error finding Service %s for Gateway: %w", svcName, err)
 		}
 	} else {
 		gwSvc = *svc
