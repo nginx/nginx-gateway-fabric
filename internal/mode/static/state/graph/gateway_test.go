@@ -339,7 +339,7 @@ func TestBuildGateway(t *testing.T) {
 
 	type gatewayCfg struct {
 		listeners []v1.Listener
-		addresses []v1.GatewayAddress
+		addresses []v1.GatewaySpecAddress
 	}
 
 	var lastCreatedGateway *v1.Gateway
@@ -877,7 +877,7 @@ func TestBuildGateway(t *testing.T) {
 			gateway: createGateway(
 				gatewayCfg{
 					listeners: []v1.Listener{foo80Listener1, foo443HTTPSListener1},
-					addresses: []v1.GatewayAddress{{}},
+					addresses: []v1.GatewaySpecAddress{{}},
 				},
 			),
 			gatewayClass: validGC,
