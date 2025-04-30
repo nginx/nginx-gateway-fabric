@@ -107,12 +107,7 @@ func StartManager(cfg config.Config) error {
 	recorderName := fmt.Sprintf("nginx-gateway-fabric-%s", cfg.GatewayClassName)
 	recorder := mgr.GetEventRecorderFor(recorderName)
 
-	promLogger, err := newLeveledPrometheusLogger()
-	if err != nil {
-		return fmt.Errorf("error creating leveled prometheus logger: %w", err)
-	}
-
-	logLevelSetter := newMultiLogLevelSetter(newZapLogLevelSetter(cfg.AtomicLevel), newPromLogLevelSetter(promLogger))
+	logLevelSetter := newMultiLogLevelSetter(newZapLogLevelSetter(cfg.AtomicLevel))
 
 	ctx := ctlr.SetupSignalHandler()
 
