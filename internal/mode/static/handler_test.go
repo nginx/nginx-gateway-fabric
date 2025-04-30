@@ -3,6 +3,7 @@ package static
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/go-logr/logr"
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
@@ -87,8 +88,13 @@ var _ = Describe("eventHandler", func() {
 		baseGraph = &graph.Graph{
 			Gateways: map[types.NamespacedName]*graph.Gateway{
 				{Namespace: "test", Name: "gateway"}: {
-					Valid:  true,
-					Source: &gatewayv1.Gateway{},
+					Valid: true,
+					Source: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "gateway",
+							Namespace: "test",
+						},
+					},
 					DeploymentName: types.NamespacedName{
 						Namespace: "test",
 						Name:      controller.CreateNginxResourceName("gateway", "nginx"),
@@ -107,8 +113,18 @@ var _ = Describe("eventHandler", func() {
 		fakeStatusUpdater = &statusfakes.FakeGroupUpdater{}
 		fakeEventRecorder = record.NewFakeRecorder(1)
 		zapLogLevelSetter = newZapLogLevelSetter(zap.NewAtomicLevel())
-		fakeK8sClient = fake.NewFakeClient()
 		queue = status.NewQueue()
+
+		gatewaySvc := &v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "gateway-nginx",
+			},
+			Spec: v1.ServiceSpec{
+				ClusterIP: "1.2.3.4",
+			},
+		}
+		fakeK8sClient = fake.NewFakeClient(gatewaySvc)
 
 		handler = newEventHandlerImpl(eventHandlerConfig{
 			ctx:                     ctx,
@@ -520,16 +536,20 @@ var _ = Describe("getGatewayAddresses", func() {
 	It("gets gateway addresses from a Service", func() {
 		fakeClient := fake.NewFakeClient()
 
-		// no Service exists yet, should get error and Pod Address
+		// no Service exists yet, should get error and no Address
 		gateway := &graph.Gateway{
 			Source: &gatewayv1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "gateway",
-					Namespace: "test-ns",
+					Namespace: "test",
 				},
 			},
 		}
-		addrs, err := getGatewayAddresses(context.Background(), fakeClient, nil, gateway, "nginx")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		addrs, err := getGatewayAddresses(ctx, fakeClient, nil, gateway, "nginx")
 		Expect(err).To(HaveOccurred())
 		Expect(addrs).To(BeNil())
 

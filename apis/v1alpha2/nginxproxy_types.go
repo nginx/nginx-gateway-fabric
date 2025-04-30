@@ -533,6 +533,13 @@ type ServiceSpec struct {
 	//
 	// +optional
 	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
+
+	// NodePorts are the list of NodePorts to expose on the NGINX data plane service.
+	// Each NodePort MUST map to a Gateway listener port, otherwise it will be ignored.
+	// The default NodePort range enforced by Kubernetes is 30000-32767.
+	//
+	// +optional
+	NodePorts []NodePort `json:"nodePorts,omitempty"`
 }
 
 // ServiceType describes ingress method for the Service.
@@ -569,3 +576,18 @@ const (
 	// (dropping the traffic if there are no local endpoints).
 	ExternalTrafficPolicyLocal ExternalTrafficPolicy = ExternalTrafficPolicy(corev1.ServiceExternalTrafficPolicyLocal)
 )
+
+// NodePort creates a port on each node on which the NGINX data plane service is exposed. The NodePort MUST
+// map to a Gateway listener port, otherwise it will be ignored. If not specified, Kubernetes allocates a NodePort
+// automatically if required. The default NodePort range enforced by Kubernetes is 30000-32767.
+type NodePort struct {
+	// Port is the NodePort to expose.
+	// kubebuilder:validation:Minimum=1
+	// kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port"`
+
+	// ListenerPort is the Gateway listener port that this NodePort maps to.
+	// kubebuilder:validation:Minimum=1
+	// kubebuilder:validation:Maximum=65535
+	ListenerPort int32 `json:"listenerPort"`
+}

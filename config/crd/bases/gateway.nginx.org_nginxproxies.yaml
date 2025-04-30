@@ -3498,6 +3498,36 @@ spec:
                         items:
                           type: string
                         type: array
+                      nodePorts:
+                        description: |-
+                          NodePorts are the list of NodePorts to expose on the NGINX data plane service.
+                          Each NodePort MUST map to a Gateway listener port, otherwise it will be ignored.
+                          The default NodePort range enforced by Kubernetes is 30000-32767.
+                        items:
+                          description: |-
+                            NodePort creates a port on each node on which the NGINX data plane service is exposed. The NodePort MUST
+                            map to a Gateway listener port, otherwise it will be ignored. If not specified, Kubernetes allocates a NodePort
+                            automatically if required. The default NodePort range enforced by Kubernetes is 30000-32767.
+                          properties:
+                            listenerPort:
+                              description: |-
+                                ListenerPort is the Gateway listener port that this NodePort maps to.
+                                kubebuilder:validation:Minimum=1
+                                kubebuilder:validation:Maximum=65535
+                              format: int32
+                              type: integer
+                            port:
+                              description: |-
+                                Port is the NodePort to expose.
+                                kubebuilder:validation:Minimum=1
+                                kubebuilder:validation:Maximum=65535
+                              format: int32
+                              type: integer
+                          required:
+                          - listenerPort
+                          - port
+                          type: object
+                        type: array
                       type:
                         default: LoadBalancer
                         description: ServiceType describes ingress method for the
