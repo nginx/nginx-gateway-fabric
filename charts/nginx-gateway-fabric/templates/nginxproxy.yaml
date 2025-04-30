@@ -29,5 +29,7 @@ spec:
     {{- end }}
     {{- if .Values.nginx.service }}
     service:
-      {{- toYaml .Values.nginx.service | nindent 6 }}
+      {{- with .Values.nginx.service }}
+      {{- include "filterEmptyFields" . | nindent 6 }}
+      {{- end }}
     {{- end }}

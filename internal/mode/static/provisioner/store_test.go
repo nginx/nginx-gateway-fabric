@@ -618,3 +618,221 @@ func TestGatewayExistsForResource(t *testing.T) {
 		})
 	}
 }
+
+func TestGetResourceVersionForObject(t *testing.T) {
+	t.Parallel()
+
+	store := newStore(nil, "", "", "", "")
+	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
+	store.nginxResources[nsName] = &NginxResources{
+		Deployment: metav1.ObjectMeta{
+			Name:            "test-deployment",
+			Namespace:       "default",
+			ResourceVersion: "1",
+		},
+		Service: metav1.ObjectMeta{
+			Name:            "test-service",
+			Namespace:       "default",
+			ResourceVersion: "2",
+		},
+		ServiceAccount: metav1.ObjectMeta{
+			Name:            "test-serviceaccount",
+			Namespace:       "default",
+			ResourceVersion: "3",
+		},
+		Role: metav1.ObjectMeta{
+			Name:            "test-role",
+			Namespace:       "default",
+			ResourceVersion: "4",
+		},
+		RoleBinding: metav1.ObjectMeta{
+			Name:            "test-rolebinding",
+			Namespace:       "default",
+			ResourceVersion: "5",
+		},
+		BootstrapConfigMap: metav1.ObjectMeta{
+			Name:            "test-bootstrap-configmap",
+			Namespace:       "default",
+			ResourceVersion: "6",
+		},
+		AgentConfigMap: metav1.ObjectMeta{
+			Name:            "test-agent-configmap",
+			Namespace:       "default",
+			ResourceVersion: "7",
+		},
+		AgentTLSSecret: metav1.ObjectMeta{
+			Name:            "test-agent-tls-secret",
+			Namespace:       "default",
+			ResourceVersion: "8",
+		},
+		PlusJWTSecret: metav1.ObjectMeta{
+			Name:            "test-jwt-secret",
+			Namespace:       "default",
+			ResourceVersion: "9",
+		},
+		PlusCASecret: metav1.ObjectMeta{
+			Name:            "test-ca-secret",
+			Namespace:       "default",
+			ResourceVersion: "10",
+		},
+		PlusClientSSLSecret: metav1.ObjectMeta{
+			Name:            "test-client-ssl-secret",
+			Namespace:       "default",
+			ResourceVersion: "11",
+		},
+		DockerSecrets: []metav1.ObjectMeta{
+			{
+				Name:            "test-docker-secret",
+				Namespace:       "default",
+				ResourceVersion: "12",
+			},
+		},
+	}
+
+	tests := []struct {
+		name           string
+		object         client.Object
+		expectedResult string
+	}{
+		{
+			name: "Deployment resource version",
+			object: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-deployment",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "1",
+		},
+		{
+			name: "Service resource version",
+			object: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "2",
+		},
+		{
+			name: "ServiceAccount resource version",
+			object: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-serviceaccount",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "3",
+		},
+		{
+			name: "Role resource version",
+			object: &rbacv1.Role{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-role",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "4",
+		},
+		{
+			name: "RoleBinding resource version",
+			object: &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-rolebinding",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "5",
+		},
+		{
+			name: "Bootstrap ConfigMap resource version",
+			object: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-bootstrap-configmap",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "6",
+		},
+		{
+			name: "Agent ConfigMap resource version",
+			object: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-agent-configmap",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "7",
+		},
+		{
+			name: "Agent TLS Secret resource version",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-agent-tls-secret",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "8",
+		},
+		{
+			name: "JWT Secret resource version",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-jwt-secret",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "9",
+		},
+		{
+			name: "CA Secret resource version",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ca-secret",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "10",
+		},
+		{
+			name: "Client SSL Secret resource version",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-client-ssl-secret",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "11",
+		},
+		{
+			name: "Docker Secret resource version",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-docker-secret",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "12",
+		},
+		{
+			name: "Non-existent resource",
+			object: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "non-existent-service",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := store.getResourceVersionForObject(nsName, test.object)
+			g.Expect(result).To(Equal(test.expectedResult))
+		})
+	}
+}

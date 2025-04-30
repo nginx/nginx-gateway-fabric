@@ -367,10 +367,12 @@ nginx:
   #             value:
   #               type: string
   # @schema
-  # -- The configuration for the data plane that is contained in the NginxProxy resource.
+  # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
+  # managed by this instance of NGINX Gateway Fabric.
   config: {}
 
-  # -- The pod configuration for the NGINX data plane pod.
+  # -- The pod configuration for the NGINX data plane pod. This is applied globally to all Gateways managed by this
+  # instance of NGINX Gateway Fabric.
   pod: {}
     # -- The termination grace period of the NGINX data plane pod.
     # terminationGracePeriodSeconds: 30
@@ -391,7 +393,8 @@ nginx:
     # nginx.container.extraVolumeMounts mount additional volumes to the container.
     # extraVolumes: []
 
-  # -- The container configuration for the NGINX container.
+  # -- The container configuration for the NGINX container. This is applied globally to all Gateways managed by this
+  # instance of NGINX Gateway Fabric.
   container: {}
     # -- The resource requirements of the NGINX container.
     # resources: {}
@@ -402,7 +405,8 @@ nginx:
     # -- extraVolumeMounts are the additional volume mounts for the NGINX container.
     # extraVolumeMounts: []
 
-  # -- The service configuration for the NGINX data plane.
+  # -- The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this
+  # instance of NGINX Gateway Fabric.
   service:
     # @schema
     # enum:
@@ -422,17 +426,39 @@ nginx:
     externalTrafficPolicy: Local
 
     # -- The annotations of the NGINX data plane service.
-    # annotations: {}
+    annotations: {}
 
     # -- The static IP address for the load balancer. Requires nginx.service.type set to LoadBalancer.
-    # loadBalancerIP: ""
+    loadBalancerIP: ""
 
     # -- LoadBalancerClass is the class of the load balancer implementation this Service belongs to.
     # Requires nginx.service.type set to LoadBalancer.
-    # loadBalancerClass: ""
+    loadBalancerClass: ""
 
     # -- The IP ranges (CIDR) that are allowed to access the load balancer. Requires nginx.service.type set to LoadBalancer.
-    # loadBalancerSourceRanges: []
+    loadBalancerSourceRanges: []
+
+    # @schema
+    # type: array
+    # items:
+    #   type: object
+    #   properties:
+    #     port:
+    #       type: integer
+    #       required: true
+    #       minimum: 1
+    #       maximum: 65535
+    #     listenerPort:
+    #       type: integer
+    #       required: true
+    #       minimum: 1
+    #       maximum: 65535
+    # @schema
+    # -- A list of NodePorts to expose on the NGINX data plane service. Each NodePort MUST map to a Gateway listener port,
+    # otherwise it will be ignored. The default NodePort range enforced by Kubernetes is 30000-32767.
+    nodePorts: []
+    # - port: 30025
+    #   listenerPort: 80
 
   # -- Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource.
   debug: false

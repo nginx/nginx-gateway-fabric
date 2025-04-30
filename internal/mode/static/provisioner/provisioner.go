@@ -185,15 +185,10 @@ func (p *NginxProvisioner) provisionNginx(
 	ctx context.Context,
 	resourceName string,
 	gateway *gatewayv1.Gateway,
-	nProxyCfg *graph.EffectiveNginxProxy,
+	objects []client.Object,
 ) error {
 	if !p.isLeader() {
 		return nil
-	}
-
-	objects, err := p.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
-	if err != nil {
-		p.cfg.Logger.Error(err, "error provisioning some nginx resources")
 	}
 
 	p.cfg.Logger.Info(
@@ -261,6 +256,7 @@ func (p *NginxProvisioner) provisionNginx(
 			"namespace", gateway.GetNamespace(),
 			"name", resourceName,
 		)
+		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), obj)
 	}
 
 	// if agent configmap was updated, then we'll need to restart the deployment
@@ -430,7 +426,12 @@ func (p *NginxProvisioner) RegisterGateway(
 	}
 
 	if gateway.Valid {
-		if err := p.provisionNginx(ctx, resourceName, gateway.Source, gateway.EffectiveNginxProxy); err != nil {
+		objects, err := p.buildNginxResourceObjects(resourceName, gateway.Source, gateway.EffectiveNginxProxy)
+		if err != nil {
+			p.cfg.Logger.Error(err, "error building some nginx resources")
+		}
+
+		if err := p.provisionNginx(ctx, resourceName, gateway.Source, objects); err != nil {
 			return fmt.Errorf("error provisioning nginx resources: %w", err)
 		}
 	} else {

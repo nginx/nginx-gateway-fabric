@@ -48,25 +48,28 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gw-nginx",
-			Namespace: "default",
-			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
+			Name:            "gw-nginx",
+			Namespace:       "default",
+			ResourceVersion: "1",
+			Labels:          map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 	}
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gw-nginx",
-			Namespace: "default",
-			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "test-gateway"},
+			Name:            "gw-nginx",
+			Namespace:       "default",
+			ResourceVersion: "1",
+			Labels:          map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 	}
 
 	jwtSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gw-nginx-" + jwtTestSecretName,
-			Namespace: "default",
-			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "test-gateway"},
+			Name:            "gw-nginx-" + jwtTestSecretName,
+			Namespace:       "default",
+			ResourceVersion: "1",
+			Labels:          map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 		Data: map[string][]byte{
 			"data": []byte("oldData"),
@@ -86,8 +89,10 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 
 	dockerSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gw-nginx-" + dockerTestSecretName,
-			Namespace: "default",
+			Name:            "gw-nginx-" + dockerTestSecretName,
+			Namespace:       "default",
+			ResourceVersion: "1",
+			Labels:          map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 		Data: map[string][]byte{
 			"data": []byte("oldDockerData"),
@@ -130,6 +135,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 	handler.HandleEventBatch(ctx, logger, batch)
 
 	g.Expect(provisioner.cfg.StatusQueue.Dequeue(ctx)).ToNot(BeNil())
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(service), &corev1.Service{})).To(Succeed())
 
 	// Test handling provisioned Secret
 	upsertEvent = &events.UpsertEvent{Resource: jwtSecret}
@@ -155,6 +161,10 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 	g.Expect(secret.Data["data"]).To(Equal([]byte("newData")))
 
 	// Test handling user Docker Secret
+	upsertEvent = &events.UpsertEvent{Resource: dockerSecret}
+	batch = events.EventBatch{upsertEvent}
+	handler.HandleEventBatch(ctx, logger, batch)
+
 	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(dockerSecret), secret)).To(Succeed())
 	g.Expect(secret.Data).To(HaveKey("data"))
 	g.Expect(secret.Data["data"]).To(Equal([]byte("oldDockerData")))
@@ -181,6 +191,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 
 	// do the same thing but when provisioner is not leader.
 	// non-leader should not delete resources, but instead track them
+	deployment.ResourceVersion = ""
 	g.Expect(fakeClient.Create(ctx, deployment)).To(Succeed())
 	provisioner.leader = false
 
