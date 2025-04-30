@@ -12,11 +12,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/util/version"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
@@ -60,8 +62,10 @@ type Data struct {
 	// then lastly by directive string.
 	SnippetsFiltersDirectivesCount []int64
 	NGFResourceCounts              // embedding is required by the generator.
-	// NGFReplicaCount is the number of replicas of the NGF Pod.
-	NGFReplicaCount int64
+	// NginxPodCount is the total number of Nginx data plane Pods.
+	NginxPodCount int64
+	// ControlPlanePodCount is the total number of NGF control plane Pods.
+	ControlPlanePodCount int64
 }
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.
@@ -99,6 +103,8 @@ type NGFResourceCounts struct {
 	SnippetsFilterCount int64
 	// UpstreamSettingsPolicyCount is the number of UpstreamSettingsPolicies.
 	UpstreamSettingsPolicyCount int64
+	// GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway.
+	GatewayAttachedNpCount int64
 }
 
 // DataCollectorConfig holds configuration parameters for DataCollectorImpl.
@@ -152,17 +158,16 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		return Data{}, fmt.Errorf("failed to get replica set for pod %v: %w", c.cfg.PodNSName, err)
 	}
 
-	replicaCount, err := getReplicas(replicaSet)
-	if err != nil {
-		return Data{}, fmt.Errorf("failed to collect NGF replica count: %w", err)
-	}
-
 	deploymentID, err := getDeploymentID(replicaSet)
 	if err != nil {
 		return Data{}, fmt.Errorf("failed to get NGF deploymentID: %w", err)
 	}
 
 	snippetsFiltersDirectives, snippetsFiltersDirectivesCount := collectSnippetsFilterDirectives(g)
+
+	nginxPodCount := getNginxPodCount(g)
+
+	controlPlanePodCount := getControlPlanePodCount(ctx, c.cfg.K8sClientReader)
 
 	data := Data{
 		Data: tel.Data{
@@ -179,9 +184,10 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		ImageSource:                    c.cfg.ImageSource,
 		FlagNames:                      c.cfg.Flags.Names,
 		FlagValues:                     c.cfg.Flags.Values,
-		NGFReplicaCount:                int64(replicaCount),
 		SnippetsFiltersDirectives:      snippetsFiltersDirectives,
 		SnippetsFiltersDirectivesCount: snippetsFiltersDirectivesCount,
+		NginxPodCount:                  nginxPodCount,
+		ControlPlanePodCount:           controlPlanePodCount,
 	}
 
 	return data, nil
@@ -240,6 +246,18 @@ func collectGraphResourceCount(
 
 	ngfResourceCounts.NginxProxyCount = int64(len(g.ReferencedNginxProxies))
 	ngfResourceCounts.SnippetsFilterCount = int64(len(g.SnippetsFilters))
+
+	var gatewayAttachedNPCount int64
+	if g.GatewayClass != nil && g.GatewayClass.NginxProxy != nil {
+		gatewayClassNP := g.GatewayClass.NginxProxy
+		for _, np := range g.ReferencedNginxProxies {
+			if np != gatewayClassNP {
+				gatewayAttachedNPCount++
+			}
+		}
+	}
+
+	ngfResourceCounts.GatewayAttachedNpCount = gatewayAttachedNPCount
 
 	return ngfResourceCounts
 }
@@ -307,14 +325,6 @@ func getPodReplicaSet(
 	}
 
 	return &replicaSet, nil
-}
-
-func getReplicas(replicaSet *appsv1.ReplicaSet) (int, error) {
-	if replicaSet.Spec.Replicas == nil {
-		return 0, errors.New("replica set replicas was nil")
-	}
-
-	return int(*replicaSet.Spec.Replicas), nil
 }
 
 // getDeploymentID gets the deployment ID of the provided ReplicaSet.
@@ -494,4 +504,32 @@ func parseDirectiveContextMapIntoLists(directiveContextMap map[sfDirectiveContex
 	}
 
 	return directiveContextList, countList
+}
+
+func getNginxPodCount(g *graph.Graph) int64 {
+	var count int64
+	for _, gateway := range g.Gateways {
+		np := gateway.EffectiveNginxProxy
+		if np != nil &&
+			np.Kubernetes != nil &&
+			np.Kubernetes.Deployment != nil &&
+			np.Kubernetes.Deployment.Replicas != nil {
+			count += int64(*np.Kubernetes.Deployment.Replicas)
+		}
+	}
+
+	return count
+}
+
+func getControlPlanePodCount(ctx context.Context, k8sClient client.Reader) int64 {
+	var podList v1.PodList
+	opts := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set{controller.AppNameLabel: "nginx-gateway-fabric"}),
+	}
+
+	if err := k8sClient.List(ctx, &podList, opts); err != nil {
+		return 0
+	}
+
+	return int64(len(podList.Items))
 }
