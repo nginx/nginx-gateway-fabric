@@ -92,7 +92,25 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	}
 
 	resourceName := "gw-nginx"
-	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
+	objects, err := provisioner.buildNginxResourceObjects(
+		resourceName,
+		gateway,
+		&graph.EffectiveNginxProxy{
+			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				Service: &ngfAPIv1alpha2.ServiceSpec{
+					NodePorts: []ngfAPIv1alpha2.NodePort{
+						{
+							Port:         30000,
+							ListenerPort: 80,
+						},
+						{ // ignored
+							Port:         31000,
+							ListenerPort: 789,
+						},
+					},
+				},
+			},
+		})
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(objects).To(HaveLen(6))
@@ -150,6 +168,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			Port:       80,
 			Name:       "port-80",
 			TargetPort: intstr.FromInt(80),
+			NodePort:   30000,
 		},
 		{
 			Port:       8888,

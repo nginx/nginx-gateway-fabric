@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -66,7 +67,7 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 					gatewayName := objLabels.Get(controller.GatewayLabel)
 					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
 
-					if err := h.updateOrDeleteResources(ctx, obj, gatewayNSName); err != nil {
+					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 						logger.Error(err, "error handling resource update")
 					}
 				}
@@ -76,7 +77,7 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 					gatewayName := objLabels.Get(controller.GatewayLabel)
 					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
 
-					if err := h.updateOrDeleteResources(ctx, obj, gatewayNSName); err != nil {
+					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 						logger.Error(err, "error handling resource update")
 					}
 
@@ -93,12 +94,12 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 					gatewayName := objLabels.Get(controller.GatewayLabel)
 					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
 
-					if err := h.updateOrDeleteResources(ctx, obj, gatewayNSName); err != nil {
+					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 						logger.Error(err, "error handling resource update")
 					}
 				} else if h.provisioner.isUserSecret(obj.GetName()) {
-					if err := h.provisionResourcesForAllGateways(ctx); err != nil {
-						logger.Error(err, "error updating resources")
+					if err := h.provisionResourceForAllGateways(ctx, logger, obj); err != nil {
+						logger.Error(err, "error updating resource")
 					}
 				}
 			default:
@@ -144,6 +145,7 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 // - are updated to the proper state in case a user makes a change directly to the resource.
 func (h *eventHandler) updateOrDeleteResources(
 	ctx context.Context,
+	logger logr.Logger,
 	obj client.Object,
 	gatewayNSName types.NamespacedName,
 ) error {
@@ -160,26 +162,55 @@ func (h *eventHandler) updateOrDeleteResources(
 		return nil
 	}
 
+	if h.store.getResourceVersionForObject(gatewayNSName, obj) == obj.GetResourceVersion() {
+		return nil
+	}
+
 	h.store.registerResourceInGatewayConfig(gatewayNSName, obj)
-	if err := h.provisionResources(ctx, gatewayNSName); err != nil {
+	if err := h.provisionResource(ctx, logger, gatewayNSName, obj); err != nil {
 		return fmt.Errorf("error updating nginx resource: %w", err)
 	}
 
 	return nil
 }
 
-func (h *eventHandler) provisionResources(
+func (h *eventHandler) provisionResource(
 	ctx context.Context,
+	logger logr.Logger,
 	gatewayNSName types.NamespacedName,
+	obj client.Object,
 ) error {
 	resources := h.store.getNginxResourcesForGateway(gatewayNSName)
 	if resources != nil && resources.Gateway != nil {
 		resourceName := controller.CreateNginxResourceName(gatewayNSName.Name, h.gcName)
+
+		objects, err := h.provisioner.buildNginxResourceObjects(
+			resourceName,
+			resources.Gateway.Source,
+			resources.Gateway.EffectiveNginxProxy,
+		)
+		if err != nil {
+			logger.Error(err, "error building some nginx resources")
+		}
+
+		// only provision the object that was updated
+		var objectToProvision client.Object
+		for _, object := range objects {
+			if strings.HasSuffix(object.GetName(), obj.GetName()) && reflect.TypeOf(object) == reflect.TypeOf(obj) {
+				objectToProvision = object
+				break
+			}
+		}
+
+		if objectToProvision == nil {
+			return nil
+		}
+
 		if err := h.provisioner.provisionNginx(
 			ctx,
 			resourceName,
 			resources.Gateway.Source,
-			resources.Gateway.EffectiveNginxProxy,
+			[]client.Object{objectToProvision},
 		); err != nil {
 			return fmt.Errorf("error updating nginx resource: %w", err)
 		}
@@ -204,13 +235,17 @@ func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.D
 	return nil
 }
 
-// provisionResourcesForAllGateways is called when a resource is updated that needs to be applied
+// provisionResourceForAllGateways is called when a resource is updated that needs to be applied
 // to all Gateway deployments. For example, NGINX Plus secrets.
-func (h *eventHandler) provisionResourcesForAllGateways(ctx context.Context) error {
+func (h *eventHandler) provisionResourceForAllGateways(
+	ctx context.Context,
+	logger logr.Logger,
+	obj client.Object,
+) error {
 	var allErrs []error
 	gateways := h.store.getGateways()
 	for gateway := range gateways {
-		if err := h.provisionResources(ctx, gateway); err != nil {
+		if err := h.provisionResource(ctx, logger, gateway, obj); err != nil {
 			allErrs = append(allErrs, err)
 		}
 	}

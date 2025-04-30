@@ -438,6 +438,15 @@ func buildNginxService(
 			Port:       port,
 			TargetPort: intstr.FromInt32(port),
 		}
+
+		if serviceType != corev1.ServiceTypeClusterIP {
+			for _, nodePort := range serviceCfg.NodePorts {
+				if nodePort.ListenerPort == port {
+					servicePort.NodePort = nodePort.Port
+				}
+			}
+		}
+
 		servicePorts = append(servicePorts, servicePort)
 	}
 

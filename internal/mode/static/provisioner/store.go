@@ -107,7 +107,7 @@ func (s *store) getGateways() map[types.NamespacedName]*gatewayv1.Gateway {
 // If the object being updated is the Gateway, check if anything that we care about changed. This ensures that
 // we don't attempt to update nginx resources when the main event handler triggers this call with an unrelated event
 // (like a Route update) that shouldn't result in nginx resource changes.
-func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedName, object interface{}) bool {
+func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedName, object any) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -347,4 +347,76 @@ func secretResourceMatches(resources *NginxResources, nsName types.NamespacedNam
 
 func resourceMatches(objMeta metav1.ObjectMeta, nsName types.NamespacedName) bool {
 	return objMeta.GetName() == nsName.Name && objMeta.GetNamespace() == nsName.Namespace
+}
+
+func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, object client.Object) string {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	resources, exists := s.nginxResources[gatewayNSName]
+	if !exists {
+		return ""
+	}
+
+	switch obj := object.(type) {
+	case *appsv1.Deployment:
+		if resources.Deployment.GetName() == obj.GetName() {
+			return resources.Deployment.GetResourceVersion()
+		}
+	case *corev1.Service:
+		if resources.Service.GetName() == obj.GetName() {
+			return resources.Service.GetResourceVersion()
+		}
+	case *corev1.ServiceAccount:
+		if resources.ServiceAccount.GetName() == obj.GetName() {
+			return resources.ServiceAccount.GetResourceVersion()
+		}
+	case *rbacv1.Role:
+		if resources.Role.GetName() == obj.GetName() {
+			return resources.Role.GetResourceVersion()
+		}
+	case *rbacv1.RoleBinding:
+		if resources.RoleBinding.GetName() == obj.GetName() {
+			return resources.RoleBinding.GetResourceVersion()
+		}
+	case *corev1.ConfigMap:
+		return getResourceVersionForConfigMap(resources, obj)
+	case *corev1.Secret:
+		return getResourceVersionForSecret(resources, obj)
+	}
+
+	return ""
+}
+
+func getResourceVersionForConfigMap(resources *NginxResources, configmap *corev1.ConfigMap) string {
+	if resources.BootstrapConfigMap.GetName() == configmap.GetName() {
+		return resources.BootstrapConfigMap.GetResourceVersion()
+	}
+	if resources.AgentConfigMap.GetName() == configmap.GetName() {
+		return resources.AgentConfigMap.GetResourceVersion()
+	}
+
+	return ""
+}
+
+func getResourceVersionForSecret(resources *NginxResources, secret *corev1.Secret) string {
+	if resources.AgentTLSSecret.GetName() == secret.GetName() {
+		return resources.AgentTLSSecret.GetResourceVersion()
+	}
+	for _, dockerSecret := range resources.DockerSecrets {
+		if dockerSecret.GetName() == secret.GetName() {
+			return dockerSecret.GetResourceVersion()
+		}
+	}
+	if resources.PlusJWTSecret.GetName() == secret.GetName() {
+		return resources.PlusJWTSecret.GetResourceVersion()
+	}
+	if resources.PlusClientSSLSecret.GetName() == secret.GetName() {
+		return resources.PlusClientSSLSecret.GetResourceVersion()
+	}
+	if resources.PlusCASecret.GetName() == secret.GetName() {
+		return resources.PlusCASecret.GetResourceVersion()
+	}
+
+	return ""
 }
