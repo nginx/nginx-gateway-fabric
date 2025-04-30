@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.15
-FROM nginx:1.27.5-alpine-otel
+FROM nginx:1.28.0-alpine-otel
 
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
