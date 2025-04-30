@@ -53,7 +53,7 @@
       "description": "The nginx section contains the configuration for all NGINX data plane deployments\ninstalled by the NGINX Gateway Fabric control plane.",
       "properties": {
         "config": {
-          "description": "The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways.",
+          "description": "The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways\nmanaged by this instance of NGINX Gateway Fabric.",
           "properties": {
             "disableHTTP2": {
               "description": "DisableHTTP2 defines if http2 should be disabled for all servers.",
@@ -266,7 +266,7 @@
           "type": "object"
         },
         "container": {
-          "description": "The container configuration for the NGINX container. This is applied globally to all Gateways.",
+          "description": "The container configuration for the NGINX container. This is applied globally to all Gateways managed by this\ninstance of NGINX Gateway Fabric.",
           "required": [],
           "title": "container",
           "type": "object"
@@ -341,7 +341,7 @@
           "type": "boolean"
         },
         "pod": {
-          "description": "The pod configuration for the NGINX data plane pod. This is applied globally to all Gateways.",
+          "description": "The pod configuration for the NGINX data plane pod. This is applied globally to all Gateways managed by this\ninstance of NGINX Gateway Fabric.",
           "required": [],
           "title": "pod",
           "type": "object"
@@ -354,7 +354,7 @@
           "type": "integer"
         },
         "service": {
-          "description": "The service configuration for the NGINX data plane. This is applied globally to all Gateways.",
+          "description": "The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this\ninstance of NGINX Gateway Fabric.",
           "properties": {
             "annotations": {
               "description": "The annotations of the NGINX data plane service.",

@@ -259,17 +259,17 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `certGenerator.serverTLSSecretName` | The name of the Secret containing TLS CA, certificate, and key for the NGINX Gateway Fabric control plane to securely communicate with the NGINX Agent. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `"server-tls"` |
 | `clusterDomain` | The DNS cluster domain of your Kubernetes cluster. | string | `"cluster.local"` |
 | `nginx` | The nginx section contains the configuration for all NGINX data plane deployments installed by the NGINX Gateway Fabric control plane. | object | `{"config":{},"container":{},"debug":false,"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric/nginx","tag":"edge"},"imagePullSecret":"","imagePullSecrets":[],"kind":"deployment","plus":false,"pod":{},"replicas":1,"service":{"annotations":{},"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"type":"LoadBalancer"},"usage":{"caSecretName":"","clientSSLSecretName":"","endpoint":"","resolver":"","secretName":"nplus-license","skipVerify":false}}` |
-| `nginx.config` | The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways. | object | `{}` |
-| `nginx.container` | The container configuration for the NGINX container. This is applied globally to all Gateways. | object | `{}` |
+| `nginx.config` | The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{}` |
+| `nginx.container` | The container configuration for the NGINX container. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{}` |
 | `nginx.debug` | Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource. | bool | `false` |
 | `nginx.image.repository` | The NGINX image to use. | string | `"ghcr.io/nginx/nginx-gateway-fabric/nginx"` |
 | `nginx.imagePullSecret` | The name of the secret containing docker registry credentials. Secret must exist in the same namespace as the helm release. The control plane will copy this secret into any namespace where NGINX is deployed. | string | `""` |
 | `nginx.imagePullSecrets` | A list of secret names containing docker registry credentials. Secrets must exist in the same namespace as the helm release. The control plane will copy these secrets into any namespace where NGINX is deployed. | list | `[]` |
 | `nginx.kind` | The kind of NGINX deployment. | string | `"deployment"` |
 | `nginx.plus` | Is NGINX Plus image being used. | bool | `false` |
-| `nginx.pod` | The pod configuration for the NGINX data plane pod. This is applied globally to all Gateways. | object | `{}` |
+| `nginx.pod` | The pod configuration for the NGINX data plane pod. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{}` |
 | `nginx.replicas` | The number of replicas of the NGINX Deployment. | int | `1` |
-| `nginx.service` | The service configuration for the NGINX data plane. This is applied globally to all Gateways. | object | `{"annotations":{},"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"type":"LoadBalancer"}` |
+| `nginx.service` | The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{"annotations":{},"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"type":"LoadBalancer"}` |
 | `nginx.service.annotations` | The annotations of the NGINX data plane service. | object | `{}` |
 | `nginx.service.externalTrafficPolicy` | The externalTrafficPolicy of the service. The value Local preserves the client source IP. | string | `"Local"` |
 | `nginx.service.loadBalancerClass` | LoadBalancerClass is the class of the load balancer implementation this Service belongs to. Requires nginx.service.type set to LoadBalancer. | string | `""` |

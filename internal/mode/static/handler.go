@@ -474,8 +474,11 @@ func getGatewayAddresses(
 		svcName := controller.CreateNginxResourceName(gateway.Source.GetName(), gatewayClassName)
 		key := types.NamespacedName{Name: svcName, Namespace: gateway.Source.GetNamespace()}
 
+		pollCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
 		if err := wait.PollUntilContextCancel(
-			ctx,
+			pollCtx,
 			500*time.Millisecond,
 			true, /* poll immediately */
 			func(ctx context.Context) (bool, error) {
