@@ -18,6 +18,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kubernetes/kubernetesfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
@@ -170,7 +172,7 @@ var _ = Describe("Collector", Ordered, func() {
 				ClusterNodeCount:    1,
 			},
 			NGFResourceCounts:              telemetry.NGFResourceCounts{},
-			NGFReplicaCount:                1,
+			ControlPlanePodCount:           1,
 			ImageSource:                    "local",
 			FlagNames:                      flags.Names,
 			FlagValues:                     flags.Values,
@@ -262,6 +264,24 @@ var _ = Describe("Collector", Ordered, func() {
 
 				k8sClientReader.ListCalls(createListCallsFunc(nodes))
 
+				k8sClientReader.GetCalls(mergeGetCallsWithBase(createGetCallsFunc(
+					&appsv1.ReplicaSet{
+						Spec: appsv1.ReplicaSetSpec{
+							Replicas: helpers.GetPointer(int32(2)),
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "replica",
+							OwnerReferences: []metav1.OwnerReference{
+								{
+									Kind: "Deployment",
+									Name: "Deployment1",
+									UID:  "test-uid-replicaSet",
+								},
+							},
+						},
+					},
+				)))
+
 				secret1 := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1"}}
 				secret2 := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret2"}}
 				nilsecret := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "nilsecret"}}
@@ -270,11 +290,33 @@ var _ = Describe("Collector", Ordered, func() {
 				svc2 := &v1.Service{ObjectMeta: metav1.ObjectMeta{Name: "svc2"}}
 				nilsvc := &v1.Service{ObjectMeta: metav1.ObjectMeta{Name: "nilsvc"}}
 
+				gcNP := graph.NginxProxy{
+					Source:  nil,
+					ErrMsgs: nil,
+					Valid:   false,
+				}
+
 				graph := &graph.Graph{
-					GatewayClass: &graph.GatewayClass{},
+					GatewayClass: &graph.GatewayClass{NginxProxy: &gcNP},
 					Gateways: map[types.NamespacedName]*graph.Gateway{
-						{Name: "gateway1"}: {},
-						{Name: "gateway2"}: {},
+						{Name: "gateway1"}: {
+							EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+								Kubernetes: &v1alpha2.KubernetesSpec{
+									Deployment: &v1alpha2.DeploymentSpec{
+										Replicas: helpers.GetPointer(int32(1)),
+									},
+								},
+							},
+						},
+						{Name: "gateway2"}: {
+							EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+								Kubernetes: &v1alpha2.KubernetesSpec{
+									Deployment: &v1alpha2.DeploymentSpec{
+										Replicas: helpers.GetPointer(int32(3)),
+									},
+								},
+							},
+						},
 						{Name: "gateway3"}: {},
 					},
 					IgnoredGatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
@@ -335,9 +377,11 @@ var _ = Describe("Collector", Ordered, func() {
 						}: {},
 					},
 					ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
-						{Namespace: "test", Name: "NginxProxy-1"}: {},
-						{Namespace: "test", Name: "NginxProxy-2"}: {},
-					}, SnippetsFilters: map[types.NamespacedName]*graph.SnippetsFilter{
+						{Namespace: "test", Name: "NginxProxy-1"}: &gcNP,
+						{Namespace: "test", Name: "NginxProxy-2"}: {Valid: true},
+						{Namespace: "test", Name: "NginxProxy-3"}: {Valid: true},
+					},
+					SnippetsFilters: map[types.NamespacedName]*graph.SnippetsFilter{
 						{Namespace: "test", Name: "sf-1"}: {
 							Snippets: map[ngfAPI.NginxContext]string{
 								ngfAPI.NginxContextMain:               "worker_priority 0;",
@@ -432,9 +476,10 @@ var _ = Describe("Collector", Ordered, func() {
 					GatewayAttachedClientSettingsPolicyCount: 1,
 					RouteAttachedClientSettingsPolicyCount:   2,
 					ObservabilityPolicyCount:                 1,
-					NginxProxyCount:                          2,
+					NginxProxyCount:                          3,
 					SnippetsFilterCount:                      3,
 					UpstreamSettingsPolicyCount:              1,
+					GatewayAttachedNpCount:                   2,
 				}
 				expData.ClusterVersion = "1.29.2"
 				expData.ClusterPlatform = "kind"
@@ -461,6 +506,11 @@ var _ = Describe("Collector", Ordered, func() {
 					1,
 					1,
 				}
+
+				// one gateway with one replica + one gateway with three replicas + one gateway with replica field
+				// empty
+				expData.NginxPodCount = int64(5)
+				expData.ControlPlanePodCount = int64(2)
 
 				data, err := dataCollector.Collect(ctx)
 				Expect(err).ToNot(HaveOccurred())
@@ -593,7 +643,7 @@ var _ = Describe("Collector", Ordered, func() {
 			svc := &v1.Service{ObjectMeta: metav1.ObjectMeta{Name: "svc1"}}
 
 			graph1 = &graph.Graph{
-				GatewayClass: &graph.GatewayClass{},
+				GatewayClass: &graph.GatewayClass{NginxProxy: &graph.NginxProxy{Valid: true}},
 				Gateways: map[types.NamespacedName]*graph.Gateway{
 					{Name: "gateway1"}: {},
 				},
@@ -634,11 +684,13 @@ var _ = Describe("Collector", Ordered, func() {
 					}: {},
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
-					{Namespace: "test", Name: "NginxProxy-1"}: {},
-					{Namespace: "test", Name: "NginxProxy-2"}: {},
+					{Namespace: "test", Name: "NginxProxy-1"}: {Valid: true},
 				},
 				SnippetsFilters: map[types.NamespacedName]*graph.SnippetsFilter{
 					{Namespace: "test", Name: "sf-1"}: {},
+				},
+				BackendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
+					{Namespace: "test", Name: "BackendTLSPolicy-1"}: {},
 				},
 			}
 
@@ -716,10 +768,13 @@ var _ = Describe("Collector", Ordered, func() {
 					GatewayAttachedClientSettingsPolicyCount: 1,
 					RouteAttachedClientSettingsPolicyCount:   1,
 					ObservabilityPolicyCount:                 1,
-					NginxProxyCount:                          2,
+					NginxProxyCount:                          1,
 					SnippetsFilterCount:                      1,
 					UpstreamSettingsPolicyCount:              1,
+					GatewayAttachedNpCount:                   1,
+					BackendTLSPolicyCount:                    1,
 				}
+				expData.NginxPodCount = 1
 
 				data, err := dataCollector.Collect(ctx)
 
