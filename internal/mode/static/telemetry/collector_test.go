@@ -19,7 +19,6 @@ import (
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kubernetes/kubernetesfakes"
@@ -88,7 +87,6 @@ var _ = Describe("Collector", Ordered, func() {
 		baseListCalls           listCallsFunc
 		flags                   config.Flags
 		nodeList                *v1.NodeList
-		podList                 *v1.PodList
 	)
 
 	BeforeAll(func() {
@@ -157,17 +155,6 @@ var _ = Describe("Collector", Ordered, func() {
 				},
 			},
 		}
-
-		podList = &v1.PodList{
-			Items: []v1.Pod{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "ngf-pod-1",
-						Labels: map[string]string{controller.AppNameLabel: "nginx-gateway-fabric"},
-					},
-				},
-			},
-		}
 	})
 
 	BeforeEach(func() {
@@ -211,7 +198,7 @@ var _ = Describe("Collector", Ordered, func() {
 		baseGetCalls = createGetCallsFunc(ngfPod, ngfReplicaSet, kubeNamespace)
 		k8sClientReader.GetCalls(baseGetCalls)
 
-		baseListCalls = createListCallsFunc(nodeList, podList)
+		baseListCalls = createListCallsFunc(nodeList)
 		k8sClientReader.ListCalls(baseListCalls)
 	})
 
@@ -273,24 +260,25 @@ var _ = Describe("Collector", Ordered, func() {
 					},
 				}
 
-				podList := &v1.PodList{
-					Items: []v1.Pod{
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:   "ngf-pod-1",
-								Labels: map[string]string{controller.AppNameLabel: "nginx-gateway-fabric"},
-							},
+				k8sClientReader.ListCalls(createListCallsFunc(nodes))
+
+				k8sClientReader.GetCalls(mergeGetCallsWithBase(createGetCallsFunc(
+					&appsv1.ReplicaSet{
+						Spec: appsv1.ReplicaSetSpec{
+							Replicas: helpers.GetPointer(int32(2)),
 						},
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:   "ngf-pod-2",
-								Labels: map[string]string{controller.AppNameLabel: "nginx-gateway-fabric"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "replica",
+							OwnerReferences: []metav1.OwnerReference{
+								{
+									Kind: "Deployment",
+									Name: "Deployment1",
+									UID:  "test-uid-replicaSet",
+								},
 							},
 						},
 					},
-				}
-
-				k8sClientReader.ListCalls(createListCallsFunc(nodes, podList))
+				)))
 
 				secret1 := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1"}}
 				secret2 := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret2"}}
@@ -587,7 +575,7 @@ var _ = Describe("Collector", Ordered, func() {
 						},
 					}
 
-					k8sClientReader.ListCalls(createListCallsFunc(nodes, podList))
+					k8sClientReader.ListCalls(createListCallsFunc(nodes))
 					expData.ClusterVersion = "unknown"
 					expData.ClusterPlatform = "k3s"
 
@@ -603,7 +591,7 @@ var _ = Describe("Collector", Ordered, func() {
 	Describe("node count collector", func() {
 		When("collecting node count data", func() {
 			It("collects correct data for one node", func(ctx SpecContext) {
-				k8sClientReader.ListCalls(createListCallsFunc(nodeList, podList))
+				k8sClientReader.ListCalls(createListCallsFunc(nodeList))
 
 				expData.ClusterNodeCount = 1
 
@@ -891,6 +879,20 @@ var _ = Describe("Collector", Ordered, func() {
 										UID:  "replica-uid",
 									},
 								},
+							},
+						},
+					)))
+
+					_, err := dataCollector.Collect(ctx)
+					Expect(err).To(MatchError(expectedErr))
+				})
+
+				It("should error if the replica set's replicas is nil", func(ctx SpecContext) {
+					expectedErr := errors.New("replica set replicas was nil")
+					k8sClientReader.GetCalls(mergeGetCallsWithBase(createGetCallsFunc(
+						&appsv1.ReplicaSet{
+							Spec: appsv1.ReplicaSetSpec{
+								Replicas: nil,
 							},
 						},
 					)))

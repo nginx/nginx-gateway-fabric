@@ -12,13 +12,11 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/util/version"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
@@ -158,6 +156,11 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		return Data{}, fmt.Errorf("failed to get replica set for pod %v: %w", c.cfg.PodNSName, err)
 	}
 
+	replicaCount, err := getReplicas(replicaSet)
+	if err != nil {
+		return Data{}, fmt.Errorf("failed to collect NGF replica count: %w", err)
+	}
+
 	deploymentID, err := getDeploymentID(replicaSet)
 	if err != nil {
 		return Data{}, fmt.Errorf("failed to get NGF deploymentID: %w", err)
@@ -166,8 +169,6 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 	snippetsFiltersDirectives, snippetsFiltersDirectivesCount := collectSnippetsFilterDirectives(g)
 
 	nginxPodCount := getNginxPodCount(g)
-
-	controlPlanePodCount := getControlPlanePodCount(ctx, c.cfg.K8sClientReader)
 
 	data := Data{
 		Data: tel.Data{
@@ -187,7 +188,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		SnippetsFiltersDirectives:      snippetsFiltersDirectives,
 		SnippetsFiltersDirectivesCount: snippetsFiltersDirectivesCount,
 		NginxPodCount:                  nginxPodCount,
-		ControlPlanePodCount:           controlPlanePodCount,
+		ControlPlanePodCount:           int64(replicaCount),
 	}
 
 	return data, nil
@@ -325,6 +326,14 @@ func getPodReplicaSet(
 	}
 
 	return &replicaSet, nil
+}
+
+func getReplicas(replicaSet *appsv1.ReplicaSet) (int, error) {
+	if replicaSet.Spec.Replicas == nil {
+		return 0, errors.New("replica set replicas was nil")
+	}
+
+	return int(*replicaSet.Spec.Replicas), nil
 }
 
 // getDeploymentID gets the deployment ID of the provided ReplicaSet.
@@ -523,17 +532,4 @@ func getNginxPodCount(g *graph.Graph) int64 {
 	}
 
 	return count
-}
-
-func getControlPlanePodCount(ctx context.Context, k8sClient client.Reader) int64 {
-	var podList v1.PodList
-	opts := &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(labels.Set{controller.AppNameLabel: "nginx-gateway-fabric"}),
-	}
-
-	if err := k8sClient.List(ctx, &podList, opts); err != nil {
-		return 0
-	}
-
-	return int64(len(podList.Items))
 }
