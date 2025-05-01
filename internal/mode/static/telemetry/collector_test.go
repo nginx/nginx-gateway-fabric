@@ -517,7 +517,9 @@ var _ = Describe("Collector", Ordered, func() {
 					1,
 				}
 
-				expData.NginxPodCount = int64(4)
+				// one gateway with one replica + one gateway with three replicas + one gateway with replica field
+				// empty
+				expData.NginxPodCount = int64(5)
 				expData.ControlPlanePodCount = int64(2)
 
 				data, err := dataCollector.Collect(ctx)
@@ -782,6 +784,7 @@ var _ = Describe("Collector", Ordered, func() {
 					GatewayAttachedNpCount:                   1,
 					BackendTLSPolicyCount:                    1,
 				}
+				expData.NginxPodCount = 1
 
 				data, err := dataCollector.Collect(ctx)
 

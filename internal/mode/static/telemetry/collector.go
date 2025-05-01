@@ -509,13 +509,17 @@ func parseDirectiveContextMapIntoLists(directiveContextMap map[sfDirectiveContex
 func getNginxPodCount(g *graph.Graph) int64 {
 	var count int64
 	for _, gateway := range g.Gateways {
+		replicas := int64(1)
+
 		np := gateway.EffectiveNginxProxy
 		if np != nil &&
 			np.Kubernetes != nil &&
 			np.Kubernetes.Deployment != nil &&
 			np.Kubernetes.Deployment.Replicas != nil {
-			count += int64(*np.Kubernetes.Deployment.Replicas)
+			replicas = int64(*np.Kubernetes.Deployment.Replicas)
 		}
+
+		count += replicas
 	}
 
 	return count
