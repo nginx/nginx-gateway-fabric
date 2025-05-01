@@ -37,7 +37,9 @@ type listCallsFunc = func(
 ) error
 
 func createListCallsFunc(objects ...client.ObjectList) listCallsFunc {
-	return func(_ context.Context, object client.ObjectList, _ ...client.ListOption) error {
+	return func(_ context.Context, object client.ObjectList, option ...client.ListOption) error {
+		Expect(option).To(BeEmpty())
+
 		for _, obj := range objects {
 			if reflect.TypeOf(obj) == reflect.TypeOf(object) {
 				reflect.ValueOf(object).Elem().Set(reflect.ValueOf(obj).Elem())
