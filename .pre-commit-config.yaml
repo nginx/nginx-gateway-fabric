@@ -60,7 +60,7 @@ repos:
   # Rules are in .yamllint.yaml file
   # See https://yamllint.readthedocs.io/en/stable/rules.html# for rule descriptions
   - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.37.0
+    rev: v1.37.1
     hooks:
       - id: yamllint
 
