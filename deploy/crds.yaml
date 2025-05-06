@@ -4052,11 +4052,6 @@ spec:
                   service:
                     description: Service is the configuration for the NGINX Service.
                     properties:
-                      annotations:
-                        additionalProperties:
-                          type: string
-                        description: Annotations contain any Service-specific annotations.
-                        type: object
                       externalTrafficPolicy:
                         default: Local
                         description: |-
