@@ -1,8 +1,0 @@
-nginxGateway:
-  name: nginx-gateway
-nginx:
-  service:
-    type: LoadBalancer
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: "external"
-      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
