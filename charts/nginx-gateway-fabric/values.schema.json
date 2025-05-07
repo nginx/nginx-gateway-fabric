@@ -356,12 +356,6 @@
         "service": {
           "description": "The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this\ninstance of NGINX Gateway Fabric.",
           "properties": {
-            "annotations": {
-              "description": "The annotations of the NGINX data plane service.",
-              "required": [],
-              "title": "annotations",
-              "type": "object"
-            },
             "externalTrafficPolicy": {
               "default": "Local",
               "description": "The externalTrafficPolicy of the service. The value Local preserves the client source IP.",

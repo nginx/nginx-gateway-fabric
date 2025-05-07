@@ -425,9 +425,6 @@ nginx:
     # -- The externalTrafficPolicy of the service. The value Local preserves the client source IP.
     externalTrafficPolicy: Local
 
-    # -- The annotations of the NGINX data plane service.
-    annotations: {}
-
     # -- The static IP address for the load balancer. Requires nginx.service.type set to LoadBalancer.
     loadBalancerIP: ""
 
