@@ -32,6 +32,8 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 		}
 
 		namespace = "clientsettings"
+
+		nginxPodName string
 	)
 
 	BeforeAll(func() {
@@ -44,9 +46,20 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		nginxPodName = nginxPodNames[0]
+
+		setUpPortForward(nginxPodName, namespace)
 	})
 
 	AfterAll(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+		cleanUpPortForward()
+
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
@@ -91,18 +104,36 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			}
 		})
 
+		Context("verify working traffic", func() {
+			It("should return a 200 response for HTTPRoutes", func() {
+				baseCoffeeURL := baseURL + "/coffee"
+				baseTeaURL := baseURL + "/tea"
+
+				Eventually(
+					func() error {
+						return expectRequestToSucceed(baseCoffeeURL, address, "URI: /coffee")
+					}).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+
+				Eventually(
+					func() error {
+						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
+					}).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+			})
+		})
+
 		Context("nginx config", func() {
 			var conf *framework.Payload
 			filePrefix := fmt.Sprintf("/etc/nginx/includes/ClientSettingsPolicy_%s", namespace)
 
 			BeforeAll(func() {
-				podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(podNames).To(HaveLen(1))
-
-				ngfPodName := podNames[0]
-
-				conf, err = resourceManager.GetNginxConfig(ngfPodName, ngfNamespace)
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -248,13 +279,12 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 	When("a ClientSettingsPolicy targets an invalid resources", func() {
 		Specify("their accepted condition is set to TargetNotFound", func() {
 			files := []string{
-				"clientsettings/ignored-gateway.yaml",
-				"clientsettings/invalid-csp.yaml",
+				"clientsettings/invalid-route-csp.yaml",
 			}
 
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
-			nsname := types.NamespacedName{Name: "invalid-csp", Namespace: namespace}
+			nsname := types.NamespacedName{Name: "invalid-route-csp", Namespace: namespace}
 			Expect(waitForCSPolicyToHaveTargetNotFoundAcceptedCond(nsname)).To(Succeed())
 
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())

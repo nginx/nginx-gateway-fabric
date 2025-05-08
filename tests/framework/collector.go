@@ -28,6 +28,14 @@ func InstallCollector() ([]byte, error) {
 		return output, err
 	}
 
+	if output, err := exec.Command(
+		"helm",
+		"repo",
+		"update",
+	).CombinedOutput(); err != nil {
+		return output, fmt.Errorf("failed to update helm repos: %w; output: %s", err, string(output))
+	}
+
 	args := []string{
 		"install",
 		collectorChartReleaseName,

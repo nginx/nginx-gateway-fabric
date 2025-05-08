@@ -21,8 +21,8 @@ func main() {
 	rootCmd := createRootCommand()
 
 	rootCmd.AddCommand(
-		createStaticModeCommand(),
-		createProvisionerModeCommand(),
+		createControllerCommand(),
+		createGenerateCertsCommand(),
 		createInitializeCommand(),
 		createSleepCommand(),
 	)

@@ -6,25 +6,25 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 	ctlr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8sConfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/provisioner"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
 	ngxConfig "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
 )
 
 // These flags are shared by multiple commands.
@@ -37,6 +37,9 @@ const (
 	gatewayCtlrNameUsageFmt = `The name of the Gateway controller. ` +
 		`The controller name must be of the form: DOMAIN/PATH. The controller's domain is '%s'`
 	plusFlag = "nginx-plus"
+
+	serverTLSSecret = "server-tls"
+	agentTLSSecret  = "agent-tls"
 )
 
 func createRootCommand() *cobra.Command {
@@ -52,13 +55,12 @@ func createRootCommand() *cobra.Command {
 	return rootCmd
 }
 
-func createStaticModeCommand() *cobra.Command {
+func createControllerCommand() *cobra.Command {
 	// flag names
 	const (
-		gatewayFlag                    = "gateway"
 		configFlag                     = "config"
 		serviceFlag                    = "service"
-		updateGCStatusFlag             = "update-gatewayclass-status"
+		agentTLSSecretFlag             = "agent-tls-secret"
 		metricsDisableFlag             = "metrics-disable"
 		metricsSecureFlag              = "metrics-secure-serving"
 		metricsPortFlag                = "metrics-port"
@@ -68,6 +70,7 @@ func createStaticModeCommand() *cobra.Command {
 		leaderElectionLockNameFlag     = "leader-election-lock-name"
 		productTelemetryDisableFlag    = "product-telemetry-disable"
 		gwAPIExperimentalFlag          = "gateway-api-experimental-features"
+		nginxDockerSecretFlag          = "nginx-docker-secret" //nolint:gosec // not credentials
 		usageReportSecretFlag          = "usage-report-secret"
 		usageReportEndpointFlag        = "usage-report-endpoint"
 		usageReportResolverFlag        = "usage-report-resolver"
@@ -75,6 +78,7 @@ func createStaticModeCommand() *cobra.Command {
 		usageReportClientSSLSecretFlag = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
 		usageReportCASecretFlag        = "usage-report-ca-secret"         //nolint:gosec // not credentials
 		snippetsFiltersFlag            = "snippets-filters"
+		nginxSCCFlag                   = "nginx-scc"
 	)
 
 	// flag values
@@ -87,12 +91,17 @@ func createStaticModeCommand() *cobra.Command {
 			validator: validateResourceName,
 		}
 
-		updateGCStatus bool
-		gateway        = namespacedNameValue{}
-		configName     = stringValidatingValue{
+		configName = stringValidatingValue{
 			validator: validateResourceName,
 		}
 		serviceName = stringValidatingValue{
+			validator: validateResourceName,
+		}
+		agentTLSSecretName = stringValidatingValue{
+			validator: validateResourceName,
+			value:     agentTLSSecret,
+		}
+		nginxSCCName = stringValidatingValue{
 			validator: validateResourceName,
 		}
 		disableMetrics    bool
@@ -119,7 +128,10 @@ func createStaticModeCommand() *cobra.Command {
 
 		snippetsFilters bool
 
-		plus                  bool
+		plus               bool
+		nginxDockerSecrets = stringSliceValidatingValue{
+			validator: validateResourceName,
+		}
 		usageReportSkipVerify bool
 		usageReportSecretName = stringValidatingValue{
 			validator: validateResourceName,
@@ -140,8 +152,8 @@ func createStaticModeCommand() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "static-mode",
-		Short: "Configure NGINX in the scope of a single Gateway resource",
+		Use:   "controller",
+		Short: "Run the NGINX Gateway Fabric control plane",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			atom := zap.NewAtomicLevel()
 
@@ -150,7 +162,7 @@ func createStaticModeCommand() *cobra.Command {
 
 			commit, date, dirty := getBuildInfo()
 			logger.Info(
-				"Starting NGINX Gateway Fabric in static mode",
+				"Starting the NGINX Gateway Fabric control plane",
 				"version", version,
 				"commit", commit,
 				"date", date,
@@ -183,11 +195,6 @@ func createStaticModeCommand() *cobra.Command {
 				return fmt.Errorf("error parsing telemetry endpoint insecure: %w", err)
 			}
 
-			var gwNsName *types.NamespacedName
-			if cmd.Flags().Changed(gatewayFlag) {
-				gwNsName = &gateway.value
-			}
-
 			var usageReportConfig config.UsageReportConfig
 			if plus && usageReportSecretName.value == "" {
 				return errors.New("usage-report-secret is required when using NGINX Plus")
@@ -206,20 +213,18 @@ func createStaticModeCommand() *cobra.Command {
 
 			flagKeys, flagValues := parseFlags(cmd.Flags())
 
-			podConfig, err := createGatewayPodConfig(serviceName.value)
+			podConfig, err := createGatewayPodConfig(version, serviceName.value)
 			if err != nil {
 				return fmt.Errorf("error creating gateway pod config: %w", err)
 			}
 
 			conf := config.Config{
-				GatewayCtlrName:          gatewayCtlrName.value,
-				ConfigName:               configName.String(),
-				Logger:                   logger,
-				AtomicLevel:              atom,
-				GatewayClassName:         gatewayClassName.value,
-				GatewayNsName:            gwNsName,
-				UpdateGatewayClassStatus: updateGCStatus,
-				GatewayPodConfig:         podConfig,
+				GatewayCtlrName:  gatewayCtlrName.value,
+				ConfigName:       configName.String(),
+				Logger:           logger,
+				AtomicLevel:      atom,
+				GatewayClassName: gatewayClassName.value,
+				GatewayPodConfig: podConfig,
 				HealthConfig: config.HealthConfig{
 					Enabled: !disableHealth,
 					Port:    healthListenPort.value,
@@ -242,14 +247,16 @@ func createStaticModeCommand() *cobra.Command {
 					EndpointInsecure: telemetryEndpointInsecure,
 				},
 				Plus:                 plus,
-				Version:              version,
 				ExperimentalFeatures: gwExperimentalFeatures,
 				ImageSource:          imageSource,
 				Flags: config.Flags{
 					Names:  flagKeys,
 					Values: flagValues,
 				},
-				SnippetsFilters: snippetsFilters,
+				SnippetsFilters:        snippetsFilters,
+				NginxDockerSecretNames: nginxDockerSecrets.values,
+				AgentTLSSecretName:     agentTLSSecretName.value,
+				NGINXSCCName:           nginxSCCName.value,
 			}
 
 			if err := static.StartManager(conf); err != nil {
@@ -274,16 +281,6 @@ func createStaticModeCommand() *cobra.Command {
 	)
 	utilruntime.Must(cmd.MarkFlagRequired(gatewayClassFlag))
 
-	cmd.Flags().Var(
-		&gateway,
-		gatewayFlag,
-		"The namespaced name of the Gateway resource to use. "+
-			"Must be of the form: NAMESPACE/NAME. "+
-			"If not specified, the control plane will process all Gateways for the configured GatewayClass. "+
-			"However, among them, it will choose the oldest resource by creation timestamp. If the timestamps are "+
-			"equal, it will choose the resource that appears first in alphabetical order by {namespace}/{name}.",
-	)
-
 	cmd.Flags().VarP(
 		&configName,
 		configFlag,
@@ -299,11 +296,12 @@ func createStaticModeCommand() *cobra.Command {
 			` Lives in the same Namespace as the controller.`,
 	)
 
-	cmd.Flags().BoolVar(
-		&updateGCStatus,
-		updateGCStatusFlag,
-		true,
-		"Update the status of the GatewayClass resource.",
+	cmd.Flags().Var(
+		&agentTLSSecretName,
+		agentTLSSecretFlag,
+		`The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely `+
+			`communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the `+
+			`NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
 	)
 
 	cmd.Flags().BoolVar(
@@ -379,6 +377,13 @@ func createStaticModeCommand() *cobra.Command {
 	)
 
 	cmd.Flags().Var(
+		&nginxDockerSecrets,
+		nginxDockerSecretFlag,
+		"The name of the NGINX docker registry Secret(s). Must exist in the same namespace "+
+			"that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).",
+	)
+
+	cmd.Flags().Var(
 		&usageReportSecretName,
 		usageReportSecretFlag,
 		"The name of the Secret containing the JWT for NGINX Plus usage reporting. Must exist in the same namespace "+
@@ -428,55 +433,207 @@ func createStaticModeCommand() *cobra.Command {
 			"generated NGINX config for HTTPRoute and GRPCRoute resources.",
 	)
 
+	cmd.Flags().Var(
+		&nginxSCCName,
+		nginxSCCFlag,
+		`The name of the SecurityContextConstraints to be used with the NGINX data plane Pods.`+
+			` Only applicable in OpenShift.`,
+	)
+
 	return cmd
 }
 
-func createProvisionerModeCommand() *cobra.Command {
+func createGenerateCertsCommand() *cobra.Command {
+	// flag names
+	const (
+		serverTLSSecretFlag = "server-tls-secret" //nolint:gosec // not credentials
+		agentTLSSecretFlag  = "agent-tls-secret"
+		serviceFlag         = "service"
+		clusterDomainFlag   = "cluster-domain"
+		overwriteFlag       = "overwrite"
+	)
+
+	// flag values
 	var (
-		gatewayCtlrName = stringValidatingValue{
-			validator: validateGatewayControllerName,
+		serverTLSSecretName = stringValidatingValue{
+			validator: validateResourceName,
+			value:     serverTLSSecret,
 		}
-		gatewayClassName = stringValidatingValue{
+		agentTLSSecretName = stringValidatingValue{
+			validator: validateResourceName,
+			value:     agentTLSSecret,
+		}
+		serviceName = stringValidatingValue{
 			validator: validateResourceName,
 		}
+		clusterDomain = stringValidatingValue{
+			validator: validateQualifiedName,
+			value:     defaultDomain,
+		}
+		overwrite bool
 	)
 
 	cmd := &cobra.Command{
-		Use:    "provisioner-mode",
-		Short:  "Provision a static-mode NGINX Gateway Fabric Deployment per Gateway resource",
-		Hidden: true,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			logger := ctlrZap.New()
-			commit, date, dirty := getBuildInfo()
-			logger.Info(
-				"Starting NGINX Gateway Fabric Provisioner",
-				"version", version,
-				"commit", commit,
-				"date", date,
-				"dirty", dirty,
-			)
+		Use:   "generate-certs",
+		Short: "Generate self-signed certificates for securing control plane to data plane communication",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			namespace, err := getValueFromEnv("POD_NAMESPACE")
+			if err != nil {
+				return fmt.Errorf("POD_NAMESPACE must be specified in the ENV")
+			}
 
-			return provisioner.StartManager(provisioner.Config{
-				Logger:           logger,
-				GatewayClassName: gatewayClassName.value,
-				GatewayCtlrName:  gatewayCtlrName.value,
-			})
+			certConfig, err := generateCertificates(serviceName.value, namespace, clusterDomain.value)
+			if err != nil {
+				return fmt.Errorf("error generating certificates: %w", err)
+			}
+
+			k8sClient, err := client.New(k8sConfig.GetConfigOrDie(), client.Options{})
+			if err != nil {
+				return fmt.Errorf("error creating k8s client: %w", err)
+			}
+
+			if err := createSecrets(
+				cmd.Context(),
+				k8sClient,
+				certConfig,
+				serverTLSSecretName.value,
+				agentTLSSecretName.value,
+				namespace,
+				overwrite,
+			); err != nil {
+				return fmt.Errorf("error creating secrets: %w", err)
+			}
+
+			return nil
 		},
 	}
 
 	cmd.Flags().Var(
-		&gatewayCtlrName,
-		gatewayCtlrNameFlag,
-		fmt.Sprintf(gatewayCtlrNameUsageFmt, domain),
+		&serverTLSSecretName,
+		serverTLSSecretFlag,
+		`The name of the Secret containing TLS CA, certificate, and key for the NGINX Gateway Fabric control plane `+
+			`to securely communicate with the NGINX Agent. Must exist in the same namespace that the `+
+			`NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
 	)
-	utilruntime.Must(cmd.MarkFlagRequired(gatewayCtlrNameFlag))
 
 	cmd.Flags().Var(
-		&gatewayClassName,
-		gatewayClassFlag,
-		gatewayClassNameUsage,
+		&agentTLSSecretName,
+		agentTLSSecretFlag,
+		`The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely `+
+			`communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the `+
+			`NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
 	)
-	utilruntime.Must(cmd.MarkFlagRequired(gatewayClassFlag))
+
+	cmd.Flags().Var(
+		&serviceName,
+		serviceFlag,
+		`The name of the Service that fronts the NGINX Gateway Fabric Pod.`+
+			` Lives in the same Namespace as the controller.`,
+	)
+
+	cmd.Flags().Var(
+		&clusterDomain,
+		clusterDomainFlag,
+		`The DNS domain of your Kubernetes cluster.`,
+	)
+
+	cmd.Flags().BoolVar(
+		&overwrite,
+		overwriteFlag,
+		false,
+		"Overwrite existing certificates.",
+	)
+
+	return cmd
+}
+
+func createInitializeCommand() *cobra.Command {
+	// flag names
+	const srcFlag = "source"
+	const destFlag = "destination"
+
+	// flag values
+	var srcFiles []string
+	var destDirs []string
+	var plus bool
+
+	cmd := &cobra.Command{
+		Use:   "initialize",
+		Short: "Write initial configuration files",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := validateCopyArgs(srcFiles, destDirs); err != nil {
+				return err
+			}
+
+			podUID, err := getValueFromEnv("POD_UID")
+			if err != nil {
+				return fmt.Errorf("could not get pod UID: %w", err)
+			}
+
+			clusterCfg := ctlr.GetConfigOrDie()
+			k8sReader, err := client.New(clusterCfg, client.Options{})
+			if err != nil {
+				return fmt.Errorf("unable to initialize k8s client: %w", err)
+			}
+
+			logger := ctlrZap.New()
+			klog.SetLogger(logger)
+			logger.Info(
+				"Starting init container",
+				"source filenames to copy", srcFiles,
+				"destination directories", destDirs,
+				"nginx-plus",
+				plus,
+			)
+			log.SetLogger(logger)
+
+			dcc := licensing.NewDeploymentContextCollector(licensing.DeploymentContextCollectorConfig{
+				K8sClientReader: k8sReader,
+				PodUID:          podUID,
+				Logger:          logger.WithName("deployCtxCollector"),
+			})
+
+			files := make([]fileToCopy, 0, len(srcFiles))
+			for i, src := range srcFiles {
+				files = append(files, fileToCopy{
+					destDirName: destDirs[i],
+					srcFileName: src,
+				})
+			}
+
+			return initialize(initializeConfig{
+				fileManager:   file.NewStdLibOSFileManager(),
+				fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil, logger.WithName("generator")),
+				logger:        logger,
+				plus:          plus,
+				collector:     dcc,
+				copy:          files,
+			})
+		},
+	}
+
+	cmd.Flags().StringSliceVar(
+		&srcFiles,
+		srcFlag,
+		[]string{},
+		"The source files to be copied",
+	)
+
+	cmd.Flags().StringSliceVar(
+		&destDirs,
+		destFlag,
+		[]string{},
+		"The destination directories for the source files at the same array index to be copied to",
+	)
+
+	cmd.Flags().BoolVar(
+		&plus,
+		plusFlag,
+		false,
+		"Use NGINX Plus",
+	)
+
+	cmd.MarkFlagsRequiredTogether(srcFlag, destFlag)
 
 	return cmd
 }
@@ -508,92 +665,6 @@ func createSleepCommand() *cobra.Command {
 		30*time.Second,
 		"Set the duration of sleep. Must be parsable by https://pkg.go.dev/time#ParseDuration",
 	)
-
-	return cmd
-}
-
-func createInitializeCommand() *cobra.Command {
-	// flag names
-	const srcFlag = "source"
-	const destFlag = "destination"
-
-	// flag values
-	var srcFiles []string
-	var dest string
-	var plus bool
-
-	cmd := &cobra.Command{
-		Use:   "initialize",
-		Short: "Write initial configuration files",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := validateCopyArgs(srcFiles, dest); err != nil {
-				return err
-			}
-
-			podUID, err := getValueFromEnv("POD_UID")
-			if err != nil {
-				return fmt.Errorf("could not get pod UID: %w", err)
-			}
-
-			clusterCfg := ctlr.GetConfigOrDie()
-			k8sReader, err := client.New(clusterCfg, client.Options{})
-			if err != nil {
-				return fmt.Errorf("unable to initialize k8s client: %w", err)
-			}
-
-			logger := ctlrZap.New()
-			klog.SetLogger(logger)
-			logger.Info(
-				"Starting init container",
-				"source filenames to copy", srcFiles,
-				"destination directory", dest,
-				"nginx-plus",
-				plus,
-			)
-			log.SetLogger(logger)
-
-			dcc := licensing.NewDeploymentContextCollector(licensing.DeploymentContextCollectorConfig{
-				K8sClientReader: k8sReader,
-				PodUID:          podUID,
-				Logger:          logger.WithName("deployCtxCollector"),
-			})
-
-			return initialize(initializeConfig{
-				fileManager:   file.NewStdLibOSFileManager(),
-				fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil, logger.WithName("generator")),
-				logger:        logger,
-				plus:          plus,
-				collector:     dcc,
-				copy: copyFiles{
-					srcFileNames: srcFiles,
-					destDirName:  dest,
-				},
-			})
-		},
-	}
-
-	cmd.Flags().StringSliceVar(
-		&srcFiles,
-		srcFlag,
-		[]string{},
-		"The source files to be copied",
-	)
-
-	cmd.Flags().StringVar(
-		&dest,
-		destFlag,
-		"",
-		"The destination directory for the source files to be copied to",
-	)
-
-	cmd.Flags().BoolVar(
-		&plus,
-		plusFlag,
-		false,
-		"Use NGINX Plus",
-	)
-
-	cmd.MarkFlagsRequiredTogether(srcFlag, destFlag)
 
 	return cmd
 }
@@ -644,12 +715,7 @@ func getBuildInfo() (commitHash string, commitTime string, dirtyBuild string) {
 	return
 }
 
-func createGatewayPodConfig(svcName string) (config.GatewayPodConfig, error) {
-	podIP, err := getValueFromEnv("POD_IP")
-	if err != nil {
-		return config.GatewayPodConfig{}, err
-	}
-
+func createGatewayPodConfig(version, svcName string) (config.GatewayPodConfig, error) {
 	podUID, err := getValueFromEnv("POD_UID")
 	if err != nil {
 		return config.GatewayPodConfig{}, err
@@ -665,12 +731,30 @@ func createGatewayPodConfig(svcName string) (config.GatewayPodConfig, error) {
 		return config.GatewayPodConfig{}, err
 	}
 
+	instance, err := getValueFromEnv("INSTANCE_NAME")
+	if err != nil {
+		return config.GatewayPodConfig{}, err
+	}
+
+	image, err := getValueFromEnv("IMAGE_NAME")
+	if err != nil {
+		return config.GatewayPodConfig{}, err
+	}
+
+	// use image tag version if set, otherwise fall back to binary version
+	ngfVersion := version
+	if imageParts := strings.Split(image, ":"); len(imageParts) == 2 {
+		ngfVersion = imageParts[1]
+	}
+
 	c := config.GatewayPodConfig{
-		PodIP:       podIP,
-		ServiceName: svcName,
-		Namespace:   ns,
-		Name:        name,
-		UID:         podUID,
+		ServiceName:  svcName,
+		Namespace:    ns,
+		Name:         name,
+		UID:          podUID,
+		InstanceName: instance,
+		Version:      ngfVersion,
+		Image:        image,
 	}
 
 	return c, nil

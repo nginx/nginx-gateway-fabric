@@ -23,19 +23,22 @@ func TestLeaderOrNonLeader(t *testing.T) {
 	g.Expect(leaderOrNonLeader.NeedLeaderElection()).To(BeFalse())
 }
 
-func TestEnableAfterBecameLeader(t *testing.T) {
+func TestCallFunctionsAfterBecameLeader(t *testing.T) {
 	t.Parallel()
-	enabled := false
-	enableAfterBecameLeader := NewEnableAfterBecameLeader(func(_ context.Context) {
-		enabled = true
+	statusUpdaterEnabled := false
+	provisionerEnabled := false
+
+	callFunctionsAfterBecameLeader := NewCallFunctionsAfterBecameLeader([]func(ctx context.Context){
+		func(_ context.Context) { statusUpdaterEnabled = true },
+		func(_ context.Context) { provisionerEnabled = true },
 	})
 
 	g := NewWithT(t)
-	g.Expect(enableAfterBecameLeader.NeedLeaderElection()).To(BeTrue())
-	g.Expect(enabled).To(BeFalse())
+	g.Expect(callFunctionsAfterBecameLeader.NeedLeaderElection()).To(BeTrue())
 
-	err := enableAfterBecameLeader.Start(context.Background())
+	err := callFunctionsAfterBecameLeader.Start(context.Background())
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(enabled).To(BeTrue())
+	g.Expect(statusUpdaterEnabled).To(BeTrue())
+	g.Expect(provisionerEnabled).To(BeTrue())
 }

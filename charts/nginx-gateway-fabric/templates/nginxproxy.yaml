@@ -1,10 +1,35 @@
-{{- if .Values.nginx.config }}
-apiVersion: gateway.nginx.org/v1alpha1
+apiVersion: gateway.nginx.org/v1alpha2
 kind: NginxProxy
 metadata:
   name: {{ include "nginx-gateway.proxy-config-name" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
   {{- include "nginx-gateway.labels" . | nindent 4 }}
 spec:
+  {{- if .Values.nginx.config }}
   {{- toYaml .Values.nginx.config | nindent 2 }}
-{{- end }}
+  {{- end }}
+  kubernetes:
+    {{- if eq .Values.nginx.kind "deployment" }}
+    deployment:
+      replicas: {{ .Values.nginx.replicas }}
+      {{- if .Values.nginx.pod }}
+      pod:
+        {{- toYaml .Values.nginx.pod | nindent 8 }}
+      {{- end }}
+      container:
+        {{- if .Values.nginx.container }}
+          {{- toYaml .Values.nginx.container | nindent 8 }}
+        {{- end }}
+        image:
+          {{- toYaml .Values.nginx.image | nindent 10 }}
+        {{- if .Values.nginx.debug }}
+        debug: {{ .Values.nginx.debug }}
+        {{- end }}
+    {{- end }}
+    {{- if .Values.nginx.service }}
+    service:
+      {{- with .Values.nginx.service }}
+      {{- include "filterEmptyFields" . | nindent 6 }}
+      {{- end }}
+    {{- end }}

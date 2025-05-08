@@ -16,6 +16,7 @@ rules:
   - pods
   - secrets
   - services
+  - serviceaccounts
   verbs:
   - create
   - delete

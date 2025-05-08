@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestValidateGatewayControllerName(t *testing.T) {
@@ -127,137 +126,6 @@ func TestValidateResourceName(t *testing.T) {
 				g.Expect(err).To(HaveOccurred())
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
-			}
-		})
-	}
-}
-
-func TestValidateNamespaceName(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name   string
-		value  string
-		expErr bool
-	}{
-		{
-			name:   "valid",
-			value:  "mynamespace",
-			expErr: false,
-		},
-		{
-			name:   "valid - with dash",
-			value:  "my-namespace",
-			expErr: false,
-		},
-		{
-			name:   "valid - with numbers",
-			value:  "mynamespace123",
-			expErr: false,
-		},
-		{
-			name:   "invalid - empty",
-			value:  "",
-			expErr: true,
-		},
-		{
-			name:   "invalid - invalid character '.'",
-			value:  "my.namespace",
-			expErr: true,
-		},
-		{
-			name:   "invalid - invalid character '/'",
-			value:  "my/namespace",
-			expErr: true,
-		},
-		{
-			name:   "invalid - invalid character '_'",
-			value:  "my_namespace",
-			expErr: true,
-		},
-		{
-			name:   "invalid - invalid character '@'",
-			value:  "my@namespace",
-			expErr: true,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			err := validateNamespaceName(test.value)
-
-			if test.expErr {
-				g.Expect(err).To(HaveOccurred())
-			} else {
-				g.Expect(err).ToNot(HaveOccurred())
-			}
-		})
-	}
-}
-
-func TestParseNamespacedResourceName(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name              string
-		value             string
-		expectedErrPrefix string
-		expectedNsName    types.NamespacedName
-		expectErr         bool
-	}{
-		{
-			name:  "valid",
-			value: "test/my-gateway",
-			expectedNsName: types.NamespacedName{
-				Namespace: "test",
-				Name:      "my-gateway",
-			},
-			expectErr: false,
-		},
-		{
-			name:              "empty",
-			value:             "",
-			expectedNsName:    types.NamespacedName{},
-			expectErr:         true,
-			expectedErrPrefix: "must be set",
-		},
-		{
-			name:              "wrong number of parts",
-			value:             "test",
-			expectedNsName:    types.NamespacedName{},
-			expectErr:         true,
-			expectedErrPrefix: "invalid format; must be NAMESPACE/NAME",
-		},
-		{
-			name:              "invalid namespace",
-			value:             "t@st/my-gateway",
-			expectedNsName:    types.NamespacedName{},
-			expectErr:         true,
-			expectedErrPrefix: "invalid namespace name",
-		},
-		{
-			name:              "invalid name",
-			value:             "test/my-g@teway",
-			expectedNsName:    types.NamespacedName{},
-			expectErr:         true,
-			expectedErrPrefix: "invalid resource name",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			nsName, err := parseNamespacedResourceName(test.value)
-
-			if test.expectErr {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(HavePrefix(test.expectedErrPrefix))
-			} else {
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(nsName).To(Equal(test.expectedNsName))
 			}
 		})
 	}
@@ -554,31 +422,37 @@ func TestEnsureNoPortCollisions(t *testing.T) {
 	g.Expect(ensureNoPortCollisions(9113, 9113)).ToNot(Succeed())
 }
 
-func TestValidateSleepArgs(t *testing.T) {
+func TestValidateInitializeArgs(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name     string
-		dest     string
+		destDirs []string
 		srcFiles []string
 		expErr   bool
 	}{
 		{
 			name:     "valid values",
-			dest:     "/dest/file",
+			destDirs: []string{"/dest/"},
 			srcFiles: []string{"/src/file"},
 			expErr:   false,
 		},
 		{
 			name:     "invalid dest",
-			dest:     "",
+			destDirs: []string{},
 			srcFiles: []string{"/src/file"},
 			expErr:   true,
 		},
 		{
 			name:     "invalid src",
-			dest:     "/dest/file",
+			destDirs: []string{"/dest/"},
 			srcFiles: []string{},
+			expErr:   true,
+		},
+		{
+			name:     "different lengths",
+			destDirs: []string{"/dest/"},
+			srcFiles: []string{"src1", "src2"},
 			expErr:   true,
 		},
 	}
@@ -588,7 +462,7 @@ func TestValidateSleepArgs(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			err := validateCopyArgs(tc.srcFiles, tc.dest)
+			err := validateCopyArgs(tc.srcFiles, tc.destDirs)
 			if !tc.expErr {
 				g.Expect(err).ToNot(HaveOccurred())
 			} else {

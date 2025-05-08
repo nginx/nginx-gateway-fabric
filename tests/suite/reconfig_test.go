@@ -107,7 +107,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		return nil
 	}
 
-	createResourcesGWLast := func(resourceCount int) {
+	createResources := func(resourceCount int) {
 		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.CreateTimeout*5)
 		defer cancel()
 
@@ -140,44 +140,6 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 			}
 			Expect(resourceManager.WaitForPodsToBeReady(ctx, ns.Name)).To(Succeed())
 		}
-
-		Expect(resourceManager.ApplyFromFiles([]string{"reconfig/gateway.yaml"}, reconfigNamespace.Name)).To(Succeed())
-	}
-
-	createResourcesRoutesLast := func(resourceCount int) {
-		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.CreateTimeout*5)
-		defer cancel()
-
-		for i := 1; i <= resourceCount; i++ {
-			ns := core.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "namespace" + strconv.Itoa(i),
-				},
-			}
-			Expect(k8sClient.Create(ctx, &ns)).To(Succeed())
-		}
-
-		Expect(createUniqueResources(resourceCount, "manifests/reconfig/cafe.yaml")).To(Succeed())
-
-		for i := 1; i <= resourceCount; i++ {
-			ns := core.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "namespace" + strconv.Itoa(i),
-				},
-			}
-			Expect(resourceManager.WaitForPodsToBeReady(ctx, ns.Name)).To(Succeed())
-		}
-
-		Expect(resourceManager.Apply([]client.Object{&reconfigNamespace})).To(Succeed())
-		Expect(resourceManager.ApplyFromFiles(
-			[]string{
-				"reconfig/cafe-secret.yaml",
-				"reconfig/reference-grant.yaml",
-				"reconfig/gateway.yaml",
-			},
-			reconfigNamespace.Name)).To(Succeed())
-
-		Expect(createUniqueResources(resourceCount, "manifests/reconfig/cafe-routes.yaml")).To(Succeed())
 	}
 
 	checkResourceCreation := func(resourceCount int) error {
@@ -223,131 +185,64 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		return err
 	}
 
-	getTimeStampFromLogLine := func(logLine string) string {
-		var timeStamp string
+	checkNginxConfIsPopulated := func(nginxPodName string, resourceCount int) error {
+		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.UpdateTimeout*2)
+		defer cancel()
 
-		timeStamp = strings.Split(logLine, "\"ts\":\"")[1]
-		// sometimes the log message will contain information on a "logger" followed by the "msg"
-		// while other times the "logger" will be omitted
-		timeStamp = strings.Split(timeStamp, "\",\"msg\"")[0]
-		timeStamp = strings.Split(timeStamp, "\",\"logger\"")[0]
-
-		return timeStamp
-	}
-
-	calculateTimeDifferenceBetweenLogLines := func(firstLine, secondLine string) (int, error) {
-		layout := time.RFC3339
-
-		firstTS := getTimeStampFromLogLine(firstLine)
-		secondTS := getTimeStampFromLogLine(secondLine)
-
-		parsedTS1, err := time.Parse(layout, firstTS)
-		if err != nil {
-			return 0, err
-		}
-
-		parsedTS2, err := time.Parse(layout, secondTS)
-		if err != nil {
-			return 0, err
-		}
-
-		return int(parsedTS2.Sub(parsedTS1).Seconds()), nil
-	}
-
-	calculateTimeToReadyAverage := func(ngfLogs string) (string, error) {
-		var reconcilingLine, nginxReloadLine string
-		const maxCount = 5
-
-		var times [maxCount]int
-		var count int
-
-		// parse the logs until it reaches a reconciling log line for a gateway resource, then it compares that
-		// timestamp to the next NGINX configuration update. When it reaches the NGINX configuration update line,
-		// it will reset the reconciling log line and set it to the next reconciling log line.
-		for _, line := range strings.Split(ngfLogs, "\n") {
-			if reconcilingLine == "" &&
-				strings.Contains(line, "Reconciling the resource\",\"controller\"") &&
-				strings.Contains(line, "\"controllerGroup\":\"gateway.networking.k8s.io\"") {
-				reconcilingLine = line
+		index := 1
+		conf, _ := resourceManager.GetNginxConfig(nginxPodName, reconfigNamespace.Name, nginxCrossplanePath)
+		for index <= resourceCount {
+			namespace := "namespace" + strconv.Itoa(resourceCount)
+			expUpstream := framework.ExpectedNginxField{
+				Directive: "upstream",
+				Value:     namespace + "_coffee" + namespace + "_80",
+				File:      "http.conf",
 			}
 
-			if strings.Contains(line, "NGINX configuration was successfully updated") && reconcilingLine != "" {
-				nginxReloadLine = line
-
-				timeDifference, err := calculateTimeDifferenceBetweenLogLines(reconcilingLine, nginxReloadLine)
-				if err != nil {
-					return "", err
-				}
-				reconcilingLine = ""
-
-				times[count] = timeDifference
-				count++
-				if count == maxCount-1 {
-					break
+			// each call to ValidateNginxFieldExists takes about 1ms
+			if err := framework.ValidateNginxFieldExists(conf, expUpstream); err != nil {
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("error validating nginx conf was generated in "+namespace+": %w", err.Error())
+				default:
+					// each call to GetNginxConfig takes about 70ms
+					conf, _ = resourceManager.GetNginxConfig(nginxPodName, reconfigNamespace.Name, nginxCrossplanePath)
+					continue
 				}
 			}
+
+			index++
 		}
 
-		var sum float64
-		for _, time := range times {
-			sum += float64(time)
-		}
-
-		avgTime := sum / float64(count+1)
-
-		if avgTime < 1 {
-			return "< 1", nil
-		}
-
-		return strconv.FormatFloat(avgTime, 'f', -1, 64), nil
+		return nil
 	}
 
-	calculateTimeToReadyTotal := func(ngfLogs, startingLogSubstring string) (string, error) {
-		var firstLine, lastLine string
-		for _, line := range strings.Split(ngfLogs, "\n") {
-			if firstLine == "" && strings.Contains(line, startingLogSubstring) {
-				firstLine = line
-			}
+	calculateTimeToReadyTotal := func(nginxPodName string, startTime time.Time, resourceCount int) string {
+		Expect(checkNginxConfIsPopulated(nginxPodName, resourceCount)).To(Succeed())
+		stopTime := time.Now()
 
-			if strings.Contains(line, "NGINX configuration was successfully updated") {
-				lastLine = line
-			}
-		}
+		stringTimeToReadyTotal := strconv.Itoa(int(stopTime.Sub(startTime).Seconds()))
 
-		timeToReadyTotal, err := calculateTimeDifferenceBetweenLogLines(firstLine, lastLine)
-		if err != nil {
-			return "", err
-		}
-
-		stringTimeToReadyTotal := strconv.Itoa(timeToReadyTotal)
 		if stringTimeToReadyTotal == "0" {
 			stringTimeToReadyTotal = "< 1"
 		}
 
-		return stringTimeToReadyTotal, nil
+		return stringTimeToReadyTotal
 	}
 
-	deployNGFReturnsNGFPodNameAndStartTime := func() (string, time.Time) {
-		var startTime time.Time
-
+	collectMetrics := func(
+		resourceCount int,
+		ngfPodName string,
+		startTime time.Time,
+	) reconfigTestResults {
 		getStartTime := func() time.Time { return startTime }
 		modifyStartTime := func() { startTime = startTime.Add(500 * time.Millisecond) }
-
-		cfg := getDefaultSetupCfg()
-		cfg.nfr = true
-		setup(cfg)
-
-		podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(podNames).To(HaveLen(1))
-		ngfPodName := podNames[0]
-		startTime = time.Now()
 
 		queries := []string{
 			fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx-gateway"}`, ngfPodName),
 			fmt.Sprintf(`container_cpu_usage_seconds_total{pod="%s",container="nginx-gateway"}`, ngfPodName),
 			// We don't need to check all nginx_gateway_fabric_* metrics, as they are collected at the same time
-			fmt.Sprintf(`nginx_gateway_fabric_nginx_reloads_total{pod="%s"}`, ngfPodName),
+			fmt.Sprintf(`nginx_gateway_fabric_event_batch_processing_milliseconds_sum{pod="%s"}`, ngfPodName),
 		}
 
 		for _, q := range queries {
@@ -361,16 +256,6 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 			).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
 		}
 
-		return ngfPodName, startTime
-	}
-
-	collectMetrics := func(
-		testDescription string,
-		resourceCount int,
-		timeToReadyStartingLogSubstring string,
-		ngfPodName string,
-		startTime time.Time,
-	) {
 		time.Sleep(2 * scrapeInterval)
 
 		endTime := time.Now()
@@ -388,12 +273,6 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		getEndTime := func() time.Time { return endTime }
 		noOpModifier := func() {}
 
-		queries := []string{
-			fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx-gateway"}`, ngfPodName),
-			// We don't need to check all nginx_gateway_fabric_* metrics, as they are collected at the same time
-			fmt.Sprintf(`nginx_gateway_fabric_nginx_reloads_total{pod="%s"}`, ngfPodName),
-		}
-
 		for _, q := range queries {
 			Eventually(
 				framework.CreateMetricExistChecker(
@@ -406,16 +285,6 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		}
 
 		checkNGFContainerLogsForErrors(ngfPodName)
-		nginxErrorLogs := getNginxErrorLogs(ngfPodName)
-
-		reloadCount, err := framework.GetReloadCount(promInstance, ngfPodName)
-		Expect(err).ToNot(HaveOccurred())
-
-		reloadAvgTime, err := framework.GetReloadAvgTime(promInstance, ngfPodName)
-		Expect(err).ToNot(HaveOccurred())
-
-		reloadBuckets, err := framework.GetReloadBuckets(promInstance, ngfPodName)
-		Expect(err).ToNot(HaveOccurred())
 
 		eventsCount, err := framework.GetEventsCount(promInstance, ngfPodName)
 		Expect(err).ToNot(HaveOccurred())
@@ -426,158 +295,156 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		eventsBuckets, err := framework.GetEventsBuckets(promInstance, ngfPodName)
 		Expect(err).ToNot(HaveOccurred())
 
-		logs, err := resourceManager.GetPodLogs(ngfNamespace, ngfPodName, &core.PodLogOptions{
-			Container: "nginx-gateway",
-		})
-		Expect(err).ToNot(HaveOccurred())
-
-		// FIXME (bjee19): https://github.com/nginx/nginx-gateway-fabric/issues/2374
-		// Find a way to calculate time to ready metrics without having to rely on specific log lines.
-		timeToReadyTotal, err := calculateTimeToReadyTotal(logs, timeToReadyStartingLogSubstring)
-		Expect(err).ToNot(HaveOccurred())
-
-		timeToReadyAvgSingle, err := calculateTimeToReadyAverage(logs)
-		Expect(err).ToNot(HaveOccurred())
-
 		results := reconfigTestResults{
-			TestDescription:      testDescription,
-			EventsBuckets:        eventsBuckets,
-			ReloadBuckets:        reloadBuckets,
-			NumResources:         resourceCount,
-			TimeToReadyTotal:     timeToReadyTotal,
-			TimeToReadyAvgSingle: timeToReadyAvgSingle,
-			NGINXReloads:         int(reloadCount),
-			NGINXReloadAvgTime:   int(reloadAvgTime),
-			NGINXErrorLogs:       nginxErrorLogs,
-			EventsCount:          int(eventsCount),
-			EventsAvgTime:        int(eventsAvgTime),
+			EventsBuckets: eventsBuckets,
+			NumResources:  resourceCount,
+			EventsCount:   int(eventsCount),
+			EventsAvgTime: int(eventsAvgTime),
 		}
 
-		err = writeReconfigResults(outFile, results)
-		Expect(err).ToNot(HaveOccurred())
+		return results
 	}
 
 	When("resources exist before startup", func() {
 		testDescription := "Test 1: Resources exist before startup"
+		timeToReadyDescription := "From when NGF starts to when the NGINX configuration is fully configured"
+		DescribeTable(testDescription,
+			func(resourceCount int) {
+				createResources(resourceCount)
+				Expect(resourceManager.ApplyFromFiles([]string{"reconfig/gateway.yaml"}, reconfigNamespace.Name)).To(Succeed())
+				Expect(checkResourceCreation(resourceCount)).To(Succeed())
 
-		It("gathers metrics after creating 30 resources", func() {
-			resourceCount := 30
-			timeToReadyStartingLogSubstring := "Starting NGINX Gateway Fabric"
+				cfg := getDefaultSetupCfg()
+				cfg.nfr = true
+				setup(cfg)
 
-			createResourcesGWLast(resourceCount)
-			Expect(checkResourceCreation(resourceCount)).To(Succeed())
+				podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(podNames).To(HaveLen(1))
+				ngfPodName := podNames[0]
+				startTime := time.Now()
 
-			ngfPodName, startTime := deployNGFReturnsNGFPodNameAndStartTime()
+				var nginxPodNames []string
+				Eventually(
+					func() bool {
+						nginxPodNames, err = framework.GetReadyNginxPodNames(
+							k8sClient,
+							reconfigNamespace.Name,
+							timeoutConfig.GetStatusTimeout,
+						)
+						return len(nginxPodNames) == 1 && err == nil
+					}).
+					WithTimeout(timeoutConfig.CreateTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(BeTrue())
 
-			collectMetrics(
-				testDescription,
-				resourceCount,
-				timeToReadyStartingLogSubstring,
-				ngfPodName,
-				startTime,
-			)
-		})
+				nginxPodName := nginxPodNames[0]
+				Expect(nginxPodName).ToNot(BeEmpty())
 
-		It("gathers metrics after creating 150 resources", func() {
-			resourceCount := 150
-			timeToReadyStartingLogSubstring := "Starting NGINX Gateway Fabric"
+				timeToReadyTotal := calculateTimeToReadyTotal(nginxPodName, startTime, resourceCount)
 
-			createResourcesGWLast(resourceCount)
-			Expect(checkResourceCreation(resourceCount)).To(Succeed())
+				nginxErrorLogs := getNginxErrorLogs(nginxPodNames[0], reconfigNamespace.Name)
 
-			ngfPodName, startTime := deployNGFReturnsNGFPodNameAndStartTime()
+				results := collectMetrics(
+					resourceCount,
+					ngfPodName,
+					startTime,
+				)
 
-			collectMetrics(
-				testDescription,
-				resourceCount,
-				timeToReadyStartingLogSubstring,
-				ngfPodName,
-				startTime,
-			)
-		})
+				results.NGINXErrorLogs = nginxErrorLogs
+				results.TimeToReadyTotal = timeToReadyTotal
+				results.TestDescription = testDescription
+				results.TimeToReadyDescription = timeToReadyDescription
+
+				err = writeReconfigResults(outFile, results)
+				Expect(err).ToNot(HaveOccurred())
+			},
+			Entry("gathers metrics after creating 30 resources", 30),
+			Entry("gathers metrics after creating 150 resources", 150),
+		)
 	})
 
 	When("NGF and Gateway resource are deployed first", func() {
-		testDescription := "Test 2: Start NGF, deploy Gateway, create many resources attached to GW"
+		testDescription := "Test 2: Start NGF, deploy Gateway, wait until NGINX agent instance connects to NGF, " +
+			"create many resources attached to GW"
+		timeToReadyDescription := "From when NGINX receives the first configuration created by NGF to " +
+			"when the NGINX configuration is fully configured"
+		DescribeTable(testDescription,
+			func(resourceCount int) {
+				cfg := getDefaultSetupCfg()
+				cfg.nfr = true
+				setup(cfg)
 
-		It("gathers metrics after creating 30 resources", func() {
-			resourceCount := 30
-			timeToReadyStartingLogSubstring := "Reconciling the resource\",\"controller\":\"httproute\""
+				podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(podNames).To(HaveLen(1))
+				ngfPodName := podNames[0]
 
-			ngfPodName, startTime := deployNGFReturnsNGFPodNameAndStartTime()
+				Expect(resourceManager.Apply([]client.Object{&reconfigNamespace})).To(Succeed())
+				Expect(resourceManager.ApplyFromFiles([]string{"reconfig/gateway.yaml"}, reconfigNamespace.Name)).To(Succeed())
 
-			createResourcesRoutesLast(resourceCount)
-			Expect(checkResourceCreation(resourceCount)).To(Succeed())
+				var nginxPodNames []string
+				Eventually(
+					func() bool {
+						nginxPodNames, err = framework.GetReadyNginxPodNames(
+							k8sClient,
+							reconfigNamespace.Name,
+							timeoutConfig.GetStatusTimeout,
+						)
+						return len(nginxPodNames) == 1 && err == nil
+					}).
+					WithTimeout(timeoutConfig.CreateTimeout).
+					Should(BeTrue())
 
-			collectMetrics(
-				testDescription,
-				resourceCount,
-				timeToReadyStartingLogSubstring,
-				ngfPodName,
-				startTime,
-			)
-		})
+				nginxPodName := nginxPodNames[0]
+				Expect(nginxPodName).ToNot(BeEmpty())
 
-		It("gathers metrics after creating 150 resources", func() {
-			resourceCount := 150
-			timeToReadyStartingLogSubstring := "Reconciling the resource\",\"controller\":\"httproute\""
+				// this checks if NGF has established a connection with agent and sent over the first nginx conf
+				Eventually(
+					func() bool {
+						conf, _ := resourceManager.GetNginxConfig(nginxPodName, reconfigNamespace.Name, nginxCrossplanePath)
+						// a default upstream NGF creates
+						defaultUpstream := framework.ExpectedNginxField{
+							Directive: "upstream",
+							Value:     "invalid-backend-ref",
+							File:      "http.conf",
+						}
 
-			ngfPodName, startTime := deployNGFReturnsNGFPodNameAndStartTime()
+						return framework.ValidateNginxFieldExists(conf, defaultUpstream) == nil
+					}).
+					WithTimeout(timeoutConfig.CreateTimeout).
+					Should(BeTrue())
+				startTime := time.Now()
 
-			createResourcesRoutesLast(resourceCount)
-			Expect(checkResourceCreation(resourceCount)).To(Succeed())
+				createResources(resourceCount)
+				Expect(checkResourceCreation(resourceCount)).To(Succeed())
 
-			collectMetrics(
-				testDescription,
-				resourceCount,
-				timeToReadyStartingLogSubstring,
-				ngfPodName,
-				startTime,
-			)
-		})
-	})
+				timeToReadyTotal := calculateTimeToReadyTotal(nginxPodName, startTime, resourceCount)
 
-	When("NGF and resources are deployed first", func() {
-		testDescription := "Test 3: Start NGF, create many resources attached to a Gateway, deploy the Gateway"
+				nginxErrorLogs := getNginxErrorLogs(nginxPodName, reconfigNamespace.Name)
 
-		It("gathers metrics after creating 30 resources", func() {
-			resourceCount := 30
-			timeToReadyStartingLogSubstring := "Reconciling the resource\",\"controller\":\"gateway\""
+				results := collectMetrics(
+					resourceCount,
+					ngfPodName,
+					startTime,
+				)
 
-			ngfPodName, startTime := deployNGFReturnsNGFPodNameAndStartTime()
+				results.NGINXErrorLogs = nginxErrorLogs
+				results.TimeToReadyTotal = timeToReadyTotal
+				results.TestDescription = testDescription
+				results.TimeToReadyDescription = timeToReadyDescription
 
-			createResourcesGWLast(resourceCount)
-			Expect(checkResourceCreation(resourceCount)).To(Succeed())
-
-			collectMetrics(
-				testDescription,
-				resourceCount,
-				timeToReadyStartingLogSubstring,
-				ngfPodName,
-				startTime,
-			)
-		})
-
-		It("gathers metrics after creating 150 resources", func() {
-			resourceCount := 150
-			timeToReadyStartingLogSubstring := "Reconciling the resource\",\"controller\":\"gateway\""
-
-			ngfPodName, startTime := deployNGFReturnsNGFPodNameAndStartTime()
-
-			createResourcesGWLast(resourceCount)
-			Expect(checkResourceCreation(resourceCount)).To(Succeed())
-
-			collectMetrics(
-				testDescription,
-				resourceCount,
-				timeToReadyStartingLogSubstring,
-				ngfPodName,
-				startTime,
-			)
-		})
+				err = writeReconfigResults(outFile, results)
+				Expect(err).ToNot(HaveOccurred())
+			},
+			Entry("gathers metrics after creating 30 resources", 30),
+			Entry("gathers metrics after creating 150 resources", 150),
+		)
 	})
 
 	AfterEach(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, reconfigNamespace.Name)
+
 		Expect(cleanupResources()).Should(Succeed())
 		teardown(releaseName)
 	})
@@ -595,32 +462,23 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 })
 
 type reconfigTestResults struct {
-	TestDescription      string
-	TimeToReadyTotal     string
-	TimeToReadyAvgSingle string
-	NGINXErrorLogs       string
-	EventsBuckets        []framework.Bucket
-	ReloadBuckets        []framework.Bucket
-	NumResources         int
-	NGINXReloads         int
-	NGINXReloadAvgTime   int
-	EventsCount          int
-	EventsAvgTime        int
+	TestDescription        string
+	TimeToReadyTotal       string
+	TimeToReadyDescription string
+	NGINXErrorLogs         string
+	EventsBuckets          []framework.Bucket
+	NumResources           int
+	EventsCount            int
+	EventsAvgTime          int
 }
 
 const reconfigResultTemplate = `
 ## {{ .TestDescription }} - NumResources {{ .NumResources }}
 
-### Reloads and Time to Ready
+### Time to Ready
 
+Time To Ready Description: {{ .TimeToReadyDescription }}
 - TimeToReadyTotal: {{ .TimeToReadyTotal }}s
-- TimeToReadyAvgSingle: {{ .TimeToReadyAvgSingle }}s
-- NGINX Reloads: {{ .NGINXReloads }}
-- NGINX Reload Average Time: {{ .NGINXReloadAvgTime }}ms
-- Reload distribution:
-{{- range .ReloadBuckets }}
-	- {{ .Le }}ms: {{ .Val }}
-{{- end }}
 
 ### Event Batch Processing
 

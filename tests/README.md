@@ -19,7 +19,6 @@ This directory contains the tests for NGINX Gateway Fabric. The tests are divide
   - [Step 1 - Install NGINX Gateway Fabric to configured kind cluster](#step-1---install-nginx-gateway-fabric-to-configured-kind-cluster)
     - [Option 1 - Build and install NGINX Gateway Fabric from local to configured kind cluster](#option-1---build-and-install-nginx-gateway-fabric-from-local-to-configured-kind-cluster)
     - [Option 2 - Install NGINX Gateway Fabric from local already built image to configured kind cluster](#option-2---install-nginx-gateway-fabric-from-local-already-built-image-to-configured-kind-cluster)
-    - [Option 3 - Install NGINX Gateway Fabric from edge to configured kind cluster](#option-3---install-nginx-gateway-fabric-from-edge-to-configured-kind-cluster)
   - [Step 2 - Build conformance test runner image](#step-2---build-conformance-test-runner-image)
   - [Step 3 - Run Gateway conformance tests](#step-3---run-gateway-conformance-tests)
   - [Step 4 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric](#step-4---cleanup-the-conformance-test-fixtures-and-uninstall-nginx-gateway-fabric)
@@ -156,15 +155,6 @@ Or, to install NGF with NGINX Plus enabled:
 
 ```makefile
 make install-ngf-local-no-build-with-plus
-```
-
-#### Option 3 - Install NGINX Gateway Fabric from edge to configured kind cluster
-
-You can also skip the build NGF image step and prepare the environment to instead use the `edge` image. Note that this
-option does not currently support installing with NGINX Plus enabled.
-
-```makefile
-make install-ngf-edge
 ```
 
 ### Step 2 - Build conformance test runner image

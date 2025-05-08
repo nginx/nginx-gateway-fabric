@@ -9,7 +9,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 )
@@ -122,18 +121,14 @@ func TestCommonFlagsValidation(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name+"_static_mode", func(t *testing.T) {
+		t.Run(test.name+"_controller", func(t *testing.T) {
 			t.Parallel()
-			testFlag(t, createStaticModeCommand(), test)
-		})
-		t.Run(test.name+"_provisioner_mode", func(t *testing.T) {
-			t.Parallel()
-			testFlag(t, createProvisionerModeCommand(), test)
+			testFlag(t, createControllerCommand(), test)
 		})
 	}
 }
 
-func TestStaticModeCmdFlagValidation(t *testing.T) {
+func TestControllerCmdFlagValidation(t *testing.T) {
 	t.Parallel()
 	tests := []flagTestCase{
 		{
@@ -141,10 +136,9 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 			args: []string{
 				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway", // common and required flag
 				"--gatewayclass=nginx",                                // common and required flag
-				"--gateway=nginx-gateway/nginx",
 				"--config=nginx-gateway-config",
 				"--service=nginx-gateway",
-				"--update-gatewayclass-status=true",
+				"--agent-tls-secret=agent-tls",
 				"--metrics-port=9114",
 				"--metrics-disable",
 				"--metrics-secure-serving",
@@ -153,12 +147,15 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 				"--leader-election-lock-name=my-lock",
 				"--leader-election-disable=false",
 				"--nginx-plus",
+				"--nginx-docker-secret=secret1",
+				"--nginx-docker-secret=secret2",
 				"--usage-report-secret=my-secret",
 				"--usage-report-endpoint=example.com",
 				"--usage-report-resolver=resolver.com",
 				"--usage-report-ca-secret=ca-secret",
 				"--usage-report-client-ssl-secret=client-secret",
 				"--snippets-filters",
+				"--nginx-scc=nginx-sscc-name",
 			},
 			wantErr: false,
 		},
@@ -169,23 +166,6 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 				"--gatewayclass=nginx",                                // common and required flag,
 			},
 			wantErr: false,
-		},
-		{
-			name: "gateway is set to empty string",
-			args: []string{
-				"--gateway=",
-			},
-			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--gateway" flag: must be set`,
-		},
-		{
-			name: "gateway is invalid",
-			args: []string{
-				"--gateway=nginx-gateway", // no namespace
-			},
-			wantErr: true,
-			expectedErrPrefix: `invalid argument "nginx-gateway" for "--gateway" flag: invalid format; ` +
-				"must be NAMESPACE/NAME",
 		},
 		{
 			name: "config is set to empty string",
@@ -220,20 +200,20 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 			expectedErrPrefix: `invalid argument "!@#$" for "--service" flag: invalid format`,
 		},
 		{
-			name: "update-gatewayclass-status is set to empty string",
+			name: "agent-tls-secret is set to empty string",
 			args: []string{
-				"--update-gatewayclass-status=",
+				"--agent-tls-secret=",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--update-gatewayclass-status" flag: strconv.ParseBool`,
+			expectedErrPrefix: `invalid argument "" for "--agent-tls-secret" flag: must be set`,
 		},
 		{
-			name: "update-gatewayclass-status is invalid",
+			name: "agent-tls-secret is set to invalid string",
 			args: []string{
-				"--update-gatewayclass-status=invalid", // not a boolean
+				"--agent-tls-secret=!@#$",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "invalid" for "--update-gatewayclass-status" flag: strconv.ParseBool`,
+			expectedErrPrefix: `invalid argument "!@#$" for "--agent-tls-secret" flag: invalid format`,
 		},
 		{
 			name: "metrics-port is invalid type",
@@ -313,6 +293,31 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "" for "--leader-election-disable" flag: strconv.ParseBool`,
+		},
+		{
+			name: "nginx-docker-secret is set to empty string",
+			args: []string{
+				"--nginx-docker-secret=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--nginx-docker-secret" flag: must be set`,
+		},
+		{
+			name: "nginx-docker-secret is invalid",
+			args: []string{
+				"--nginx-docker-secret=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-docker-secret" flag: invalid format: `,
+		},
+		{
+			name: "one nginx-docker-secret is invalid",
+			args: []string{
+				"--nginx-docker-secret=valid",
+				"--nginx-docker-secret=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-docker-secret" flag: invalid format: `,
 		},
 		{
 			name: "usage-report-secret is set to empty string",
@@ -405,6 +410,22 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "nginx-scc is set to empty string",
+			args: []string{
+				"--nginx-scc=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--nginx-scc" flag: must be set`,
+		},
+		{
+			name: "nginx-scc is invalid",
+			args: []string{
+				"--nginx-scc=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-scc" flag: invalid format: `,
+		},
 	}
 
 	// common flags validation is tested separately
@@ -412,35 +433,24 @@ func TestStaticModeCmdFlagValidation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			cmd := createStaticModeCommand()
+			cmd := createControllerCommand()
 			testFlag(t, cmd, test)
 		})
 	}
 }
 
-func TestProvisionerModeCmdFlagValidation(t *testing.T) {
+func TestGenerateCertsCmdFlagValidation(t *testing.T) {
 	t.Parallel()
-	testCase := flagTestCase{
-		name: "valid flags",
-		args: []string{
-			"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway", // common and required flag
-			"--gatewayclass=nginx",                                // common and required flag
-		},
-		wantErr: false,
-	}
 
-	// common flags validation is tested separately
-
-	testFlag(t, createProvisionerModeCommand(), testCase)
-}
-
-func TestSleepCmdFlagValidation(t *testing.T) {
-	t.Parallel()
 	tests := []flagTestCase{
 		{
 			name: "valid flags",
 			args: []string{
-				"--duration=1s",
+				"--server-tls-secret=server-secret",
+				"--agent-tls-secret=agent-secret",
+				"--service=my-service",
+				"--cluster-domain=cluster.local",
+				"--overwrite",
 			},
 			wantErr: false,
 		},
@@ -450,27 +460,75 @@ func TestSleepCmdFlagValidation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "duration is set to empty string",
+			name: "server-tls-secret is set to empty string",
 			args: []string{
-				"--duration=",
+				"--server-tls-secret=",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--duration" flag: time: invalid duration ""`,
+			expectedErrPrefix: `invalid argument "" for "--server-tls-secret" flag: must be set`,
 		},
 		{
-			name: "duration is invalid",
+			name: "server-tls-secret is invalid",
 			args: []string{
-				"--duration=invalid",
+				"--server-tls-secret=!@#$",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "invalid" for "--duration" flag: time: invalid duration "invalid"`,
+			expectedErrPrefix: `invalid argument "!@#$" for "--server-tls-secret" flag: invalid format`,
+		},
+		{
+			name: "agent-tls-secret is set to empty string",
+			args: []string{
+				"--agent-tls-secret=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--agent-tls-secret" flag: must be set`,
+		},
+		{
+			name: "agent-tls-secret is invalid",
+			args: []string{
+				"--agent-tls-secret=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--agent-tls-secret" flag: invalid format`,
+		},
+		{
+			name: "service is set to empty string",
+			args: []string{
+				"--service=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--service" flag: must be set`,
+		},
+		{
+			name: "service is invalid",
+			args: []string{
+				"--service=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--service" flag: invalid format`,
+		},
+		{
+			name: "cluster-domain is set to empty string",
+			args: []string{
+				"--cluster-domain=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--cluster-domain" flag: must be set`,
+		},
+		{
+			name: "cluster-domain is invalid",
+			args: []string{
+				"--cluster-domain=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--cluster-domain" flag: invalid format`,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			cmd := createSleepCommand()
+			cmd := createGenerateCertsCommand()
 			testFlag(t, cmd, test)
 		})
 	}
@@ -517,6 +575,48 @@ func TestInitializeCmdFlagValidation(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			cmd := createInitializeCommand()
+			testFlag(t, cmd, test)
+		})
+	}
+}
+
+func TestSleepCmdFlagValidation(t *testing.T) {
+	t.Parallel()
+	tests := []flagTestCase{
+		{
+			name: "valid flags",
+			args: []string{
+				"--duration=1s",
+			},
+			wantErr: false,
+		},
+		{
+			name:    "omitted flags",
+			args:    nil,
+			wantErr: false,
+		},
+		{
+			name: "duration is set to empty string",
+			args: []string{
+				"--duration=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--duration" flag: time: invalid duration ""`,
+		},
+		{
+			name: "duration is invalid",
+			args: []string{
+				"--duration=invalid",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "invalid" for "--duration" flag: time: invalid duration "invalid"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cmd := createSleepCommand()
 			testFlag(t, cmd, test)
 		})
 	}
@@ -591,30 +691,6 @@ func TestParseFlags(t *testing.T) {
 	err = flagSet.Set("customStringFlagUserDefined", "changed-test-flag-value")
 	g.Expect(err).To(Not(HaveOccurred()))
 
-	customStringFlagNoDefaultValueUnset := namespacedNameValue{
-		value: types.NamespacedName{},
-	}
-	flagSet.Var(
-		&customStringFlagNoDefaultValueUnset,
-		"customStringFlagNoDefaultValueUnset",
-		"no default value custom string test flag",
-	)
-
-	customStringFlagNoDefaultValueUserDefined := namespacedNameValue{
-		value: types.NamespacedName{},
-	}
-	flagSet.Var(
-		&customStringFlagNoDefaultValueUserDefined,
-		"customStringFlagNoDefaultValueUserDefined",
-		"no default value but with user defined namespacedName test flag",
-	)
-	userDefinedNamespacedName := types.NamespacedName{
-		Namespace: "changed-namespace",
-		Name:      "changed-name",
-	}
-	err = flagSet.Set("customStringFlagNoDefaultValueUserDefined", userDefinedNamespacedName.String())
-	g.Expect(err).To(Not(HaveOccurred()))
-
 	expectedKeys := []string{
 		"boolFlagTrue",
 		"boolFlagFalse",
@@ -624,16 +700,10 @@ func TestParseFlags(t *testing.T) {
 
 		"customStringFlagDefault",
 		"customStringFlagUserDefined",
-
-		"customStringFlagNoDefaultValueUnset",
-		"customStringFlagNoDefaultValueUserDefined",
 	}
 	expectedValues := []string{
 		"true",
 		"false",
-
-		"default",
-		"user-defined",
 
 		"default",
 		"user-defined",
@@ -669,43 +739,62 @@ func TestCreateGatewayPodConfig(t *testing.T) {
 
 	// Order matters here
 	// We start with all env vars set
-	g.Expect(os.Setenv("POD_IP", "10.0.0.0")).To(Succeed())
 	g.Expect(os.Setenv("POD_UID", "1234")).To(Succeed())
 	g.Expect(os.Setenv("POD_NAMESPACE", "default")).To(Succeed())
 	g.Expect(os.Setenv("POD_NAME", "my-pod")).To(Succeed())
+	g.Expect(os.Setenv("INSTANCE_NAME", "my-pod-xyz")).To(Succeed())
+	g.Expect(os.Setenv("IMAGE_NAME", "my-pod-image:tag")).To(Succeed())
+
+	version := "0.0.0"
 
 	expCfg := config.GatewayPodConfig{
-		PodIP:       "10.0.0.0",
-		ServiceName: "svc",
-		Namespace:   "default",
-		Name:        "my-pod",
-		UID:         "1234",
+		ServiceName:  "svc",
+		Namespace:    "default",
+		Name:         "my-pod",
+		UID:          "1234",
+		InstanceName: "my-pod-xyz",
+		Version:      "tag",
+		Image:        "my-pod-image:tag",
 	}
-	cfg, err := createGatewayPodConfig("svc")
+	cfg, err := createGatewayPodConfig(version, "svc")
 	g.Expect(err).To(Not(HaveOccurred()))
 	g.Expect(cfg).To(Equal(expCfg))
 
+	// unset image tag and use provided version
+	g.Expect(os.Setenv("IMAGE_NAME", "my-pod-image")).To(Succeed())
+	expCfg.Version = version
+	expCfg.Image = "my-pod-image"
+	cfg, err = createGatewayPodConfig(version, "svc")
+	g.Expect(err).To(Not(HaveOccurred()))
+	g.Expect(cfg).To(Equal(expCfg))
+
+	// unset image name
+	g.Expect(os.Unsetenv("IMAGE_NAME")).To(Succeed())
+	cfg, err = createGatewayPodConfig(version, "svc")
+	g.Expect(err).To(MatchError(errors.New("environment variable IMAGE_NAME not set")))
+	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
+
+	// unset instance name
+	g.Expect(os.Unsetenv("INSTANCE_NAME")).To(Succeed())
+	cfg, err = createGatewayPodConfig(version, "svc")
+	g.Expect(err).To(MatchError(errors.New("environment variable INSTANCE_NAME not set")))
+	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
+
 	// unset name
 	g.Expect(os.Unsetenv("POD_NAME")).To(Succeed())
-	cfg, err = createGatewayPodConfig("svc")
+	cfg, err = createGatewayPodConfig(version, "svc")
 	g.Expect(err).To(MatchError(errors.New("environment variable POD_NAME not set")))
 	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
 
 	// unset namespace
 	g.Expect(os.Unsetenv("POD_NAMESPACE")).To(Succeed())
-	cfg, err = createGatewayPodConfig("svc")
+	cfg, err = createGatewayPodConfig(version, "svc")
 	g.Expect(err).To(MatchError(errors.New("environment variable POD_NAMESPACE not set")))
 	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
 
 	// unset pod UID
 	g.Expect(os.Unsetenv("POD_UID")).To(Succeed())
-	cfg, err = createGatewayPodConfig("svc")
+	cfg, err = createGatewayPodConfig(version, "svc")
 	g.Expect(err).To(MatchError(errors.New("environment variable POD_UID not set")))
-	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
-
-	// unset IP
-	g.Expect(os.Unsetenv("POD_IP")).To(Succeed())
-	cfg, err = createGatewayPodConfig("svc")
-	g.Expect(err).To(MatchError(errors.New("environment variable POD_IP not set")))
 	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
 }

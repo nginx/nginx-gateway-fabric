@@ -5,6 +5,4 @@ nginx:
   plus: true
   image:
     repository: private-registry.nginx.com/nginx-gateway-fabric/nginx-plus
-
-serviceAccount:
   imagePullSecret: nginx-plus-registry-secret

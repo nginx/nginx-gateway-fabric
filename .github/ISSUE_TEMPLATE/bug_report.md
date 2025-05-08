@@ -24,8 +24,8 @@ A clear and concise description of what you expected to happen.
 * Version of Kubernetes
 * Kubernetes platform (e.g. Mini-kube or GCP)
 * Details on how you expose the NGINX Gateway Fabric Pod (e.g. Service of type LoadBalancer or port-forward)
-* Logs of NGINX container: `kubectl -n nginx-gateway logs -l app=nginx-gateway -c nginx`
-* NGINX Configuration: `kubectl -n nginx-gateway exec <gateway-pod> -c nginx -- nginx -T`
+* Logs of NGINX container: `kubectl -n <nginx-deployment-namespace> logs deployments/<nginx-deployment>`
+* NGINX Configuration: `kubectl -n <nginx-deployment-namespace> exec -it deployments/<nginx-deployment> -- nginx -T`
 
 **Additional context**
 Add any other context about the problem here. Any log files you want to share.

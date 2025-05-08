@@ -9,18 +9,6 @@ to route traffic to that application using GRPCRoute resources.
 
 1. Follow the [installation instructions](https://docs.nginx.com/nginx-gateway-fabric/installation/) to deploy NGINX Gateway Fabric.
 
-1. Save the public IP address of NGINX Gateway Fabric into a shell variable:
-
-    ```text
-    GW_IP=XXX.YYY.ZZZ.III
-    ```
-
-1. Save the port of NGINX Gateway Fabric:
-
-    ```text
-    GW_PORT=<port number>
-    ```
-
 ## 2. Deploy the Helloworld Application
 
 1. Create the two helloworld Deployments and Services:
@@ -60,7 +48,16 @@ There are 3 options to configure gRPC routing. To access the application and tes
     kubectl apply -f exact-method.yaml
     ```
 
-2. Test the Application:
+    After creating the Gateway resource, NGINX Gateway Fabric will provision an NGINX Pod and Service fronting it to route traffic.
+
+    Save the public IP address and port of the NGINX Service into shell variables:
+
+    ```text
+    GW_IP=XXX.YYY.ZZZ.III
+    GW_PORT=<port number>
+    ```
+
+1. Test the Application:
 
     ```shell
     grpcurl -plaintext -proto grpc.proto -authority bar.com -d '{"name": "exact"}' ${GW_IP}:${GW_PORT} helloworld.Greeter/SayHello
@@ -72,7 +69,7 @@ There are 3 options to configure gRPC routing. To access the application and tes
     }
     ```
 
-3. Clean up the Gateway and GRPCRoute resources:
+1. Clean up the Gateway and GRPCRoute resources:
 
     ```shell
     kubectl delete -f exact-method.yaml
@@ -86,7 +83,16 @@ There are 3 options to configure gRPC routing. To access the application and tes
     kubectl apply -f hostname.yaml
     ```
 
-2. Test the Application:
+    After creating the Gateway resource, NGINX Gateway Fabric will provision an NGINX Pod and Service fronting it to route traffic.
+
+    Save the public IP address and port of the NGINX Service into shell variables:
+
+    ```text
+    GW_IP=XXX.YYY.ZZZ.III
+    GW_PORT=<port number>
+    ```
+
+1. Test the Application:
 
     ```shell
     grpcurl -plaintext -proto grpc.proto -authority bar.com -d '{"name": "bar server"}' ${GW_IP}:${GW_PORT} helloworld.Greeter/SayHello
@@ -132,7 +138,7 @@ There are 3 options to configure gRPC routing. To access the application and tes
     2024/04/29 09:29:46 Received: foo bar server
     ```
 
-3. Clean up the Gateway and GRPCRoute resources:
+1. Clean up the Gateway and GRPCRoute resources:
 
     ```shell
     kubectl delete -f hostname.yaml
@@ -146,7 +152,16 @@ There are 3 options to configure gRPC routing. To access the application and tes
     kubectl apply -f headers.yaml
     ```
 
-2. Test the Application:
+    After creating the Gateway resource, NGINX Gateway Fabric will provision an NGINX Pod and Service fronting it to route traffic.
+
+    Save the public IP address and port of the NGINX Service into shell variables:
+
+    ```text
+    GW_IP=XXX.YYY.ZZZ.III
+    GW_PORT=<port number>
+    ```
+
+1. Test the Application:
 
     ```shell
     grpcurl -plaintext -proto grpc.proto -authority bar.com -d '{"name": "version one"}' -H 'version: one' ${GW_IP}:${GW_PORT} helloworld.Greeter/SayHello
@@ -230,7 +245,7 @@ There are 3 options to configure gRPC routing. To access the application and tes
    2024/04/29 09:33:26 Received: version two orange
    ```
 
-3. Clean up the Gateway and GRPCRoute resources:
+1. Clean up the Gateway and GRPCRoute resources:
 
    ```shell
    kubectl delete -f headers.yaml

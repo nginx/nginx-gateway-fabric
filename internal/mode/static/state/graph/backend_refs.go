@@ -11,8 +11,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/sort"
@@ -23,6 +22,10 @@ import (
 type BackendRef struct {
 	// BackendTLSPolicy is the BackendTLSPolicy of the Service which is referenced by the backendRef.
 	BackendTLSPolicy *BackendTLSPolicy
+	// InvalidForGateways is a map of Gateways for which this BackendRef is invalid for, with the corresponding
+	// condition. Certain NginxProxy configurations may result in a backend not being valid for some Gateways,
+	// but not others.
+	InvalidForGateways map[types.NamespacedName]conditions.Condition
 	// SvcNsName is the NamespacedName of the Service referenced by the backendRef.
 	SvcNsName types.NamespacedName
 	// ServicePort is the ServicePort of the Service which is referenced by the backendRef.
@@ -49,10 +52,9 @@ func addBackendRefsToRouteRules(
 	refGrantResolver *referenceGrantResolver,
 	services map[types.NamespacedName]*v1.Service,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
-	npCfg *NginxProxy,
 ) {
 	for _, r := range routes {
-		addBackendRefsToRules(r, refGrantResolver, services, backendTLSPolicies, npCfg)
+		addBackendRefsToRules(r, refGrantResolver, services, backendTLSPolicies)
 	}
 }
 
@@ -63,7 +65,6 @@ func addBackendRefsToRules(
 	refGrantResolver *referenceGrantResolver,
 	services map[types.NamespacedName]*v1.Service,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
-	npCfg *NginxProxy,
 ) {
 	if !route.Valid {
 		return
@@ -92,19 +93,18 @@ func addBackendRefsToRules(
 			}
 			routeNs := route.Source.GetNamespace()
 
-			ref, cond := createBackendRef(
+			ref, conds := createBackendRef(
 				ref,
-				routeNs,
+				route,
 				refGrantResolver.refAllowedFrom(getRefGrantFromResourceForRoute(route.RouteType, routeNs)),
 				services,
 				refPath,
 				backendTLSPolicies,
-				npCfg,
 			)
 
 			backendRefs = append(backendRefs, ref)
-			if cond != nil {
-				route.Conditions = append(route.Conditions, *cond)
+			if len(conds) > 0 {
+				route.Conditions = append(route.Conditions, conds...)
 			}
 		}
 
@@ -124,13 +124,12 @@ func addBackendRefsToRules(
 
 func createBackendRef(
 	ref RouteBackendRef,
-	sourceNamespace string,
+	route *L7Route,
 	refGrantResolver func(resource toResource) bool,
 	services map[types.NamespacedName]*v1.Service,
 	refPath *field.Path,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
-	npCfg *NginxProxy,
-) (BackendRef, *conditions.Condition) {
+) (BackendRef, []conditions.Condition) {
 	// Data plane will handle invalid ref by responding with 500.
 	// Because of that, we always need to add a BackendRef to group.Backends, even if the ref is invalid.
 	// Additionally, we always calculate the weight, even if it is invalid.
@@ -144,80 +143,75 @@ func createBackendRef(
 		}
 	}
 
-	var backendRef BackendRef
-
-	valid, cond := validateRouteBackendRef(ref, sourceNamespace, refGrantResolver, refPath)
+	valid, cond := validateRouteBackendRef(ref, route.Source.GetNamespace(), refGrantResolver, refPath)
 	if !valid {
-		backendRef = BackendRef{
-			Weight:          weight,
-			Valid:           false,
-			IsMirrorBackend: ref.MirrorBackendIdx != nil,
+		backendRef := BackendRef{
+			Weight:             weight,
+			Valid:              false,
+			IsMirrorBackend:    ref.MirrorBackendIdx != nil,
+			InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 		}
 
-		return backendRef, &cond
+		return backendRef, []conditions.Condition{cond}
 	}
 
-	ns := sourceNamespace
+	ns := route.Source.GetNamespace()
 	if ref.Namespace != nil {
 		ns = string(*ref.Namespace)
 	}
 	svcNsName := types.NamespacedName{Name: string(ref.Name), Namespace: ns}
 	svcIPFamily, svcPort, err := getIPFamilyAndPortFromRef(ref.BackendRef, svcNsName, services, refPath)
 	if err != nil {
-		backendRef = BackendRef{
-			Weight:          weight,
-			Valid:           false,
-			SvcNsName:       svcNsName,
-			ServicePort:     v1.ServicePort{},
-			IsMirrorBackend: ref.MirrorBackendIdx != nil,
+		backendRef := BackendRef{
+			Weight:             weight,
+			Valid:              false,
+			SvcNsName:          svcNsName,
+			ServicePort:        v1.ServicePort{},
+			IsMirrorBackend:    ref.MirrorBackendIdx != nil,
+			InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 		}
 
-		cond := staticConds.NewRouteBackendRefRefBackendNotFound(err.Error())
-		return backendRef, &cond
+		return backendRef, []conditions.Condition{staticConds.NewRouteBackendRefRefBackendNotFound(err.Error())}
 	}
 
-	if err := verifyIPFamily(npCfg, svcIPFamily); err != nil {
-		backendRef = BackendRef{
-			SvcNsName:       svcNsName,
-			ServicePort:     svcPort,
-			Weight:          weight,
-			Valid:           false,
-			IsMirrorBackend: ref.MirrorBackendIdx != nil,
+	var conds []conditions.Condition
+	invalidForGateways := make(map[types.NamespacedName]conditions.Condition)
+	for _, parentRef := range route.ParentRefs {
+		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
+			invalidForGateways[parentRef.Gateway.NamespacedName] = staticConds.NewRouteInvalidIPFamily(err.Error())
 		}
-
-		cond := staticConds.NewRouteInvalidIPFamily(err.Error())
-		return backendRef, &cond
 	}
 
 	backendTLSPolicy, err := findBackendTLSPolicyForService(
 		backendTLSPolicies,
 		ref.Namespace,
 		string(ref.Name),
-		sourceNamespace,
+		route.Source.GetNamespace(),
 	)
 	if err != nil {
-		backendRef = BackendRef{
-			SvcNsName:       svcNsName,
-			ServicePort:     svcPort,
-			Weight:          weight,
-			Valid:           false,
-			IsMirrorBackend: ref.MirrorBackendIdx != nil,
+		backendRef := BackendRef{
+			SvcNsName:          svcNsName,
+			ServicePort:        svcPort,
+			Weight:             weight,
+			Valid:              false,
+			IsMirrorBackend:    ref.MirrorBackendIdx != nil,
+			InvalidForGateways: invalidForGateways,
 		}
 
-		cond := staticConds.NewRouteBackendRefUnsupportedValue(err.Error())
-		return backendRef, &cond
+		return backendRef, append(conds, staticConds.NewRouteBackendRefUnsupportedValue(err.Error()))
 	}
 
-	backendRef = BackendRef{
-		SvcNsName:        svcNsName,
-		BackendTLSPolicy: backendTLSPolicy,
-		ServicePort:      svcPort,
-		Valid:            true,
-		Weight:           weight,
-		IsMirrorBackend:  ref.MirrorBackendIdx != nil,
+	backendRef := BackendRef{
+		SvcNsName:          svcNsName,
+		BackendTLSPolicy:   backendTLSPolicy,
+		ServicePort:        svcPort,
+		Valid:              true,
+		Weight:             weight,
+		IsMirrorBackend:    ref.MirrorBackendIdx != nil,
+		InvalidForGateways: invalidForGateways,
 	}
 
-	return backendRef, nil
+	return backendRef, conds
 }
 
 // validateBackendTLSPolicyMatchingAllBackends validates that all backends in a rule reference the same
@@ -327,30 +321,32 @@ func getIPFamilyAndPortFromRef(
 	return svc.Spec.IPFamilies, svcPort, nil
 }
 
-func verifyIPFamily(npCfg *NginxProxy, svcIPFamily []v1.IPFamily) error {
-	if npCfg == nil || npCfg.Source == nil || !npCfg.Valid {
+func verifyIPFamily(npCfg *EffectiveNginxProxy, svcIPFamily []v1.IPFamily) error {
+	if npCfg == nil {
 		return nil
 	}
 
-	// we can access this field since we have already validated that ipFamily is not nil in validateNginxProxy.
-	npIPFamily := npCfg.Source.Spec.IPFamily
-	if *npIPFamily == ngfAPI.IPv4 {
-		if slices.Contains(svcIPFamily, v1.IPv6Protocol) {
-			// capitalizing error message to match the rest of the error messages associated with a condition
-			//nolint: stylecheck
-			return errors.New(
-				"service configured with IPv6 family but NginxProxy is configured with IPv4",
-			)
-		}
+	containsIPv6 := slices.Contains(svcIPFamily, v1.IPv6Protocol)
+	containsIPv4 := slices.Contains(svcIPFamily, v1.IPv4Protocol)
+
+	//nolint: stylecheck // used in status condition which is normally capitalized
+	errIPv6Mismatch := errors.New("service configured with IPv6 family but NginxProxy is configured with IPv4")
+	//nolint: stylecheck // used in status condition which is normally capitalized
+	errIPv4Mismatch := errors.New("service configured with IPv4 family but NginxProxy is configured with IPv6")
+
+	npIPFamily := npCfg.IPFamily
+
+	if npIPFamily == nil {
+		// default is dual so we don't need to check the service IPFamily.
+		return nil
 	}
-	if *npIPFamily == ngfAPI.IPv6 {
-		if slices.Contains(svcIPFamily, v1.IPv4Protocol) {
-			// capitalizing error message to match the rest of the error messages associated with a condition
-			//nolint: stylecheck
-			return errors.New(
-				"service configured with IPv4 family but NginxProxy is configured with IPv6",
-			)
-		}
+
+	if *npIPFamily == ngfAPIv1alpha2.IPv4 && containsIPv6 {
+		return errIPv6Mismatch
+	}
+
+	if *npIPFamily == ngfAPIv1alpha2.IPv6 && containsIPv4 {
+		return errIPv4Mismatch
 	}
 
 	return nil

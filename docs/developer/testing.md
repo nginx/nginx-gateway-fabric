@@ -69,19 +69,19 @@ Follow the steps below for manual testing:
    - Logs of the `nginx-gateway` container. Look out for unexpected error logs or panics.
 
      ```shell
-     kubectl logs -n nginx-gateway -l app=nginx-gateway
+     kubectl -n nginx-gateway logs <ngf-pod-name>
      ```
 
    - Logs of the `nginx` container. Look for unexpected error logs and verify the access logs are correct.
 
      ```shell
-     kubectl logs -n nginx-gateway -l app=nginx
+     kubectl -n <nginx-pod-namespace> logs <nginx-pod-name>
      ```
 
    - The generated nginx config. Make sure it's correct.
 
      ```shell
-     kubectl exec -it -n nginx-gateway <nginx gateway pod> -c nginx -- nginx -T
+     kubectl exec -it -n <nginx-pod-namespace> <nginx-pod-name> -- nginx -T
      ```
 
    - The statuses of the Gateway API Resources. Make sure they look correct.

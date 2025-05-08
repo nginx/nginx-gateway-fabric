@@ -70,20 +70,21 @@ var (
 
 var (
 	//go:embed manifests/*
-	manifests         embed.FS
-	k8sClient         client.Client
-	resourceManager   framework.ResourceManager
-	portForwardStopCh chan struct{}
-	portFwdPort       int
-	portFwdHTTPSPort  int
-	timeoutConfig     framework.TimeoutConfig
-	localChartPath    string
-	address           string
-	version           string
-	chartVersion      string
-	clusterInfo       framework.ClusterInfo
-	skipNFRTests      bool
-	logs              string
+	manifests           embed.FS
+	k8sClient           client.Client
+	resourceManager     framework.ResourceManager
+	portForwardStopCh   chan struct{}
+	portFwdPort         int
+	portFwdHTTPSPort    int
+	timeoutConfig       framework.TimeoutConfig
+	localChartPath      string
+	address             string
+	version             string
+	chartVersion        string
+	clusterInfo         framework.ClusterInfo
+	skipNFRTests        bool
+	logs                string
+	nginxCrossplanePath string
 )
 
 var formatNginxPlusEdgeImagePath = "us-docker.pkg.dev/%s/nginx-gateway-fabric/nginx-plus"
@@ -171,6 +172,8 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 		version = "edge"
 	}
 
+	nginxCrossplanePath = "us-docker.pkg.dev/" + *gkeProject + "/nginx-gateway-fabric"
+
 	if !cfg.deploy {
 		return
 	}
@@ -185,18 +188,32 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 	)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(podNames).ToNot(BeEmpty())
+}
+
+func setUpPortForward(nginxPodName, nginxNamespace string) {
+	var err error
 
 	if *serviceType != "LoadBalancer" {
 		ports := []string{fmt.Sprintf("%d:80", ngfHTTPForwardedPort), fmt.Sprintf("%d:443", ngfHTTPSForwardedPort)}
 		portForwardStopCh = make(chan struct{})
-		err = framework.PortForward(k8sConfig, installCfg.Namespace, podNames[0], ports, portForwardStopCh)
+		err = framework.PortForward(resourceManager.K8sConfig, nginxNamespace, nginxPodName, ports, portForwardStopCh)
 		address = "127.0.0.1"
 		portFwdPort = ngfHTTPForwardedPort
 		portFwdHTTPSPort = ngfHTTPSForwardedPort
 	} else {
-		address, err = resourceManager.GetLBIPAddress(installCfg.Namespace)
+		address, err = resourceManager.GetLBIPAddress(nginxNamespace)
 	}
 	Expect(err).ToNot(HaveOccurred())
+}
+
+// cleanUpPortForward closes the port forward channel and needs to be called before deleting any gateways or else
+// the logs will be flooded with port forward errors.
+func cleanUpPortForward() {
+	if portFwdPort != 0 {
+		close(portForwardStopCh)
+		portFwdPort = 0
+		portFwdHTTPSPort = 0
+	}
 }
 
 func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framework.InstallationConfig {
@@ -252,12 +269,6 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 }
 
 func teardown(relName string) {
-	if portFwdPort != 0 {
-		close(portForwardStopCh)
-		portFwdPort = 0
-		portFwdHTTPSPort = 0
-	}
-
 	cfg := framework.InstallationConfig{
 		ReleaseName: relName,
 		Namespace:   ngfNamespace,
@@ -340,7 +351,7 @@ var _ = AfterSuite(func() {
 	AddReportEntry("Events", events, ReportEntryVisibilityNever)
 
 	logs = framework.GetLogs(resourceManager, ngfNamespace, releaseName)
-	AddReportEntry("Logs", logs, ReportEntryVisibilityNever)
+	AddReportEntry("NGF Logs", logs, ReportEntryVisibilityNever)
 
 	labelFilter := GinkgoLabelFilter()
 	if !strings.Contains(labelFilter, "longevity-setup") {

@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
@@ -84,12 +84,27 @@ func TestBuildGRPCRoutes(t *testing.T) {
 	t.Parallel()
 	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
 
+	gateways := map[types.NamespacedName]*Gateway{
+		gwNsName: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "gateway",
+				},
+			},
+			Valid: true,
+			EffectiveNginxProxy: &EffectiveNginxProxy{
+				DisableHTTP2: helpers.GetPointer(false),
+			},
+		},
+	}
+
 	snippetsFilterRef := v1.GRPCRouteFilter{
 		Type: v1.GRPCRouteFilterExtensionRef,
 		ExtensionRef: &v1.LocalObjectReference{
 			Name:  "sf",
 			Kind:  kinds.SnippetsFilter,
-			Group: ngfAPI.GroupName,
+			Group: ngfAPIv1alpha1.GroupName,
 		},
 	}
 
@@ -111,15 +126,15 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		client.ObjectKeyFromObject(grWrongGateway): grWrongGateway,
 	}
 
-	sf := &ngfAPI.SnippetsFilter{
+	sf := &ngfAPIv1alpha1.SnippetsFilter{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test",
 			Name:      "sf",
 		},
-		Spec: ngfAPI.SnippetsFilterSpec{
-			Snippets: []ngfAPI.Snippet{
+		Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
+			Snippets: []ngfAPIv1alpha1.Snippet{
 				{
-					Context: ngfAPI.NginxContextHTTP,
+					Context: ngfAPIv1alpha1.NginxContextHTTP,
 					Value:   "http snippet",
 				},
 			},
@@ -127,12 +142,12 @@ func TestBuildGRPCRoutes(t *testing.T) {
 	}
 
 	tests := []struct {
-		expected  map[RouteKey]*L7Route
-		name      string
-		gwNsNames []types.NamespacedName
+		expected map[RouteKey]*L7Route
+		gateways map[types.NamespacedName]*Gateway
+		name     string
 	}{
 		{
-			gwNsNames: []types.NamespacedName{gwNsName},
+			gateways: gateways,
 			expected: map[RouteKey]*L7Route{
 				CreateRouteKey(gr): {
 					RouteType: RouteTypeGRPC,
@@ -140,7 +155,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 					ParentRefs: []ParentRef{
 						{
 							Idx:         0,
-							Gateway:     gwNsName,
+							Gateway:     CreateParentRefGateway(gateways[gwNsName]),
 							SectionName: gr.Spec.ParentRefs[0].SectionName,
 						},
 					},
@@ -159,8 +174,8 @@ func TestBuildGRPCRoutes(t *testing.T) {
 											ResolvedExtensionRef: &ExtensionRefFilter{
 												SnippetsFilter: &SnippetsFilter{
 													Source: sf,
-													Snippets: map[ngfAPI.NginxContext]string{
-														ngfAPI.NginxContextHTTP: "http snippet",
+													Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+														ngfAPIv1alpha1.NginxContextHTTP: "http snippet",
 													},
 													Valid:      true,
 													Referenced: true,
@@ -187,21 +202,13 @@ func TestBuildGRPCRoutes(t *testing.T) {
 			name: "normal case",
 		},
 		{
-			gwNsNames: []types.NamespacedName{},
-			expected:  nil,
-			name:      "no gateways",
+			gateways: nil,
+			expected: nil,
+			name:     "no gateways",
 		},
 	}
 
 	validator := &validationfakes.FakeHTTPFieldsValidator{}
-
-	npCfg := &NginxProxy{
-		Source: &ngfAPI.NginxProxy{
-			Spec: ngfAPI.NginxProxySpec{
-				DisableHTTP2: false,
-			},
-		},
-	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -212,8 +219,8 @@ func TestBuildGRPCRoutes(t *testing.T) {
 				client.ObjectKeyFromObject(sf): {
 					Source: sf,
 					Valid:  true,
-					Snippets: map[ngfAPI.NginxContext]string{
-						ngfAPI.NginxContextHTTP: "http snippet",
+					Snippets: map[ngfAPIv1alpha1.NginxContext]string{
+						ngfAPIv1alpha1.NginxContextHTTP: "http snippet",
 					},
 				},
 			}
@@ -222,8 +229,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 				validator,
 				map[types.NamespacedName]*v1.HTTPRoute{},
 				grRoutes,
-				test.gwNsNames,
-				npCfg,
+				test.gateways,
 				snippetsFilters,
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
@@ -233,7 +239,20 @@ func TestBuildGRPCRoutes(t *testing.T) {
 
 func TestBuildGRPCRoute(t *testing.T) {
 	t.Parallel()
-	gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+	gw := &Gateway{
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "gateway",
+			},
+		},
+		Valid: true,
+		EffectiveNginxProxy: &EffectiveNginxProxy{
+			DisableHTTP2: helpers.GetPointer(false),
+		},
+	}
+	gatewayNsName := client.ObjectKeyFromObject(gw.Source)
 
 	methodMatchRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
 	headersMatchRule := createGRPCHeadersMatch("Exact", "MyHeader", "SomeValue")
@@ -353,7 +372,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	grValidFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
 	grValidHeaderMatch := createGRPCHeadersMatch("RegularExpression", "MyHeader", "headers-[a-z]+")
 	validSnippetsFilterRef := &v1.LocalObjectReference{
-		Group: ngfAPI.GroupName,
+		Group: ngfAPIv1alpha1.GroupName,
 		Kind:  kinds.SnippetsFilter,
 		Name:  "sf",
 	}
@@ -414,7 +433,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
 			ExtensionRef: &v1.LocalObjectReference{
-				Group: ngfAPI.GroupName,
+				Group: ngfAPIv1alpha1.GroupName,
 				Kind:  kinds.SnippetsFilter,
 				Name:  "does-not-exist",
 			},
@@ -433,7 +452,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
 			ExtensionRef: &v1.LocalObjectReference{
-				Group: ngfAPI.GroupName,
+				Group: ngfAPIv1alpha1.GroupName,
 				Kind:  kinds.SnippetsFilter,
 				Name:  "does-not-exist",
 			},
@@ -492,11 +511,10 @@ func TestBuildGRPCRoute(t *testing.T) {
 	}
 
 	tests := []struct {
-		validator     *validationfakes.FakeHTTPFieldsValidator
-		gr            *v1.GRPCRoute
-		expected      *L7Route
-		name          string
-		http2disabled bool
+		validator *validationfakes.FakeHTTPFieldsValidator
+		gr        *v1.GRPCRoute
+		expected  *L7Route
+		name      string
 	}{
 		{
 			validator: createAllValidValidator(),
@@ -507,7 +525,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grBoth.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -548,7 +566,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grEmptyMatch.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -580,7 +598,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grValidFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -623,7 +641,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grInvalidMatchesEmptyMethodFields.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -667,7 +685,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grInvalidMatchesInvalidMethodFields.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -706,28 +724,6 @@ func TestBuildGRPCRoute(t *testing.T) {
 		},
 		{
 			validator: createAllValidValidator(),
-			gr:        grBoth,
-			expected: &L7Route{
-				RouteType: RouteTypeGRPC,
-				Source:    grBoth,
-				ParentRefs: []ParentRef{
-					{
-						Idx:         0,
-						Gateway:     gatewayNsName,
-						SectionName: grBoth.Spec.ParentRefs[0].SectionName,
-					},
-				},
-				Conditions: []conditions.Condition{
-					staticConds.NewRouteUnsupportedConfiguration(
-						`HTTP2 is disabled - cannot configure GRPCRoutes`,
-					),
-				},
-			},
-			http2disabled: true,
-			name:          "invalid route with disabled http2",
-		},
-		{
-			validator: createAllValidValidator(),
 			gr:        grOneInvalid,
 			expected: &L7Route{
 				Source:     grOneInvalid,
@@ -737,7 +733,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grOneInvalid.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -783,7 +779,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grInvalidHeadersInvalidType.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -821,7 +817,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grInvalidHeadersEmptyType.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -859,7 +855,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grInvalidMatchesNilMethodType.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -896,7 +892,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grInvalidFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -941,7 +937,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grInvalidHostname.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -964,7 +960,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -1002,7 +998,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -1041,7 +1037,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				ParentRefs: []ParentRef{
 					{
 						Idx:         0,
-						Gateway:     gatewayNsName,
+						Gateway:     CreateParentRefGateway(gw),
 						SectionName: grInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
@@ -1075,7 +1071,9 @@ func TestBuildGRPCRoute(t *testing.T) {
 		},
 	}
 
-	gatewayNsNames := []types.NamespacedName{gatewayNsName}
+	gws := map[types.NamespacedName]*Gateway{
+		gatewayNsName: gw,
+	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -1085,7 +1083,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			snippetsFilters := map[types.NamespacedName]*SnippetsFilter{
 				{Namespace: "test", Name: "sf"}: {Valid: true},
 			}
-			route := buildGRPCRoute(test.validator, test.gr, gatewayNsNames, test.http2disabled, snippetsFilters)
+			route := buildGRPCRoute(test.validator, test.gr, gws, snippetsFilters)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
 	}
@@ -1093,7 +1091,23 @@ func TestBuildGRPCRoute(t *testing.T) {
 
 func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 	t.Parallel()
+
 	gatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+	gateways := map[types.NamespacedName]*Gateway{
+		gatewayNsName: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "gateway",
+				},
+			},
+			Valid: true,
+			EffectiveNginxProxy: &EffectiveNginxProxy{
+				DisableHTTP2: helpers.GetPointer(false),
+			},
+		},
+	}
 
 	// Create a route with a request mirror filter and another random filter
 	mirrorFilter := v1.GRPCRouteFilter{
@@ -1172,7 +1186,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 		ParentRefs: []ParentRef{
 			{
 				Idx:         0,
-				Gateway:     gatewayNsName,
+				Gateway:     CreateParentRefGateway(gateways[gatewayNsName]),
 				SectionName: gr.Spec.ParentRefs[0].SectionName,
 			},
 		},
@@ -1217,16 +1231,15 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 	}
 
 	validator := &validationfakes.FakeHTTPFieldsValidator{}
-	gatewayNsNames := []types.NamespacedName{gatewayNsName}
 	snippetsFilters := map[types.NamespacedName]*SnippetsFilter{}
 
 	g := NewWithT(t)
 
 	routes := map[RouteKey]*L7Route{}
-	l7route := buildGRPCRoute(validator, gr, gatewayNsNames, false, snippetsFilters)
+	l7route := buildGRPCRoute(validator, gr, gateways, snippetsFilters)
 	g.Expect(l7route).NotTo(BeNil())
 
-	buildGRPCMirrorRoutes(routes, l7route, gr, gatewayNsNames, snippetsFilters, false)
+	buildGRPCMirrorRoutes(routes, l7route, gr, gateways, snippetsFilters)
 
 	obj, ok := expectedMirrorRoute.Source.(*v1.GRPCRoute)
 	g.Expect(ok).To(BeTrue())

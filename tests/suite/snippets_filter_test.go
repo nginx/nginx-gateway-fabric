@@ -10,7 +10,6 @@ import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -28,6 +27,8 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 		}
 
 		namespace = "snippets-filter"
+
+		nginxPodName string
 	)
 
 	BeforeAll(func() {
@@ -40,9 +41,19 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		nginxPodName = nginxPodNames[0]
+
+		setUpPortForward(nginxPodName, namespace)
 	})
 
 	AfterAll(func() {
+		cleanUpPortForward()
+
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
@@ -56,6 +67,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 		})
 
 		AfterAll(func() {
+			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 			Expect(resourceManager.DeleteFromFiles(snippetsFilter, namespace)).To(Succeed())
 		})
 
@@ -68,8 +80,11 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 			for _, name := range snippetsFilterNames {
 				nsname := types.NamespacedName{Name: name, Namespace: namespace}
 
-				err := waitForSnippetsFilterToBeAccepted(nsname)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
+				Eventually(checkForSnippetsFilterToBeAccepted).
+					WithArguments(nsname).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500*time.Millisecond).
+					Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
 			}
 		})
 
@@ -104,13 +119,8 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 			grpcRouteSuffix := fmt.Sprintf("%s_grpc-all-contexts.conf", namespace)
 
 			BeforeAll(func() {
-				podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(podNames).To(HaveLen(1))
-
-				ngfPodName := podNames[0]
-
-				conf, err = resourceManager.GetNginxConfig(ngfPodName, ngfNamespace)
+				var err error
+				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -221,7 +231,11 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
 			nsname := types.NamespacedName{Name: "tea", Namespace: namespace}
-			Expect(waitForHTTPRouteToHaveGatewayNotProgrammedCond(nsname)).To(Succeed())
+			Eventually(checkHTTPRouteToHaveGatewayNotProgrammedCond).
+				WithArguments(nsname).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
 
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		})
@@ -232,116 +246,99 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
 			nsname := types.NamespacedName{Name: "soda", Namespace: namespace}
-			Expect(waitForHTTPRouteToHaveGatewayNotProgrammedCond(nsname)).To(Succeed())
+			Eventually(checkHTTPRouteToHaveGatewayNotProgrammedCond).
+				WithArguments(nsname).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
 
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		})
 	})
 })
 
-func waitForHTTPRouteToHaveGatewayNotProgrammedCond(httpRouteNsName types.NamespacedName) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout*2)
+func checkHTTPRouteToHaveGatewayNotProgrammedCond(httpRouteNsName types.NamespacedName) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
 	defer cancel()
 
 	GinkgoWriter.Printf(
-		"Waiting for HTTPRoute %q to have the condition Accepted/True/GatewayNotProgrammed\n",
+		"Checking for HTTPRoute %q to have the condition Accepted/True/GatewayNotProgrammed\n",
 		httpRouteNsName,
 	)
 
-	return wait.PollUntilContextCancel(
-		ctx,
-		500*time.Millisecond,
-		true, /* poll immediately */
-		func(ctx context.Context) (bool, error) {
-			var hr v1.HTTPRoute
-			var err error
+	var hr v1.HTTPRoute
+	var err error
 
-			if err = k8sClient.Get(ctx, httpRouteNsName, &hr); err != nil {
-				return false, err
-			}
+	if err = k8sClient.Get(ctx, httpRouteNsName, &hr); err != nil {
+		return err
+	}
 
-			if len(hr.Status.Parents) == 0 {
-				return false, nil
-			}
+	if len(hr.Status.Parents) != 1 {
+		return fmt.Errorf("httproute has %d parent statuses, expected 1", len(hr.Status.Parents))
+	}
 
-			if len(hr.Status.Parents) != 1 {
-				return false, fmt.Errorf("httproute has %d parent statuses, expected 1", len(hr.Status.Parents))
-			}
+	parent := hr.Status.Parents[0]
+	if parent.Conditions == nil {
+		return fmt.Errorf("expected parent conditions to not be nil")
+	}
 
-			parent := hr.Status.Parents[0]
-			if parent.Conditions == nil {
-				return false, fmt.Errorf("expected parent conditions to not be nil")
-			}
+	cond := parent.Conditions[1]
+	if cond.Type != string(v1.GatewayConditionAccepted) {
+		return fmt.Errorf("expected condition type to be Accepted, got %s", cond.Type)
+	}
 
-			cond := parent.Conditions[1]
-			if cond.Type != string(v1.GatewayConditionAccepted) {
-				return false, fmt.Errorf("expected condition type to be Accepted, got %s", cond.Type)
-			}
+	if cond.Status != metav1.ConditionFalse {
+		return fmt.Errorf("expected condition status to be False, got %s", cond.Status)
+	}
 
-			if cond.Status != metav1.ConditionFalse {
-				return false, fmt.Errorf("expected condition status to be False, got %s", cond.Status)
-			}
+	if cond.Reason != string(conditions.RouteReasonGatewayNotProgrammed) {
+		return fmt.Errorf("expected condition reason to be GatewayNotProgrammed, got %s", cond.Reason)
+	}
 
-			if cond.Reason != string(conditions.RouteReasonGatewayNotProgrammed) {
-				return false, fmt.Errorf("expected condition reason to be GatewayNotProgrammed, got %s", cond.Reason)
-			}
-			return err == nil, err
-		},
-	)
+	return nil
 }
 
-func waitForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedName) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+func checkForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedName) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
 	defer cancel()
 
 	GinkgoWriter.Printf(
-		"Waiting for SnippetsFilter %q to have the condition Accepted/True/Accepted\n",
+		"Checking for SnippetsFilter %q to have the condition Accepted/True/Accepted\n",
 		snippetsFilterNsNames,
 	)
 
-	return wait.PollUntilContextCancel(
-		ctx,
-		500*time.Millisecond,
-		true, /* poll immediately */
-		func(ctx context.Context) (bool, error) {
-			var sf ngfAPI.SnippetsFilter
-			var err error
+	var sf ngfAPI.SnippetsFilter
+	var err error
 
-			if err = k8sClient.Get(ctx, snippetsFilterNsNames, &sf); err != nil {
-				return false, err
-			}
+	if err = k8sClient.Get(ctx, snippetsFilterNsNames, &sf); err != nil {
+		return err
+	}
 
-			if len(sf.Status.Controllers) == 0 {
-				return false, nil
-			}
+	if len(sf.Status.Controllers) != 1 {
+		return fmt.Errorf("snippetsFilter has %d controller statuses, expected 1", len(sf.Status.Controllers))
+	}
 
-			if len(sf.Status.Controllers) != 1 {
-				return false, fmt.Errorf("snippetsFilter has %d controller statuses, expected 1", len(sf.Status.Controllers))
-			}
+	status := sf.Status.Controllers[0]
+	if status.ControllerName != ngfControllerName {
+		return fmt.Errorf("expected controller name to be %s, got %s", ngfControllerName, status.ControllerName)
+	}
 
-			status := sf.Status.Controllers[0]
-			if status.ControllerName != ngfControllerName {
-				return false, fmt.Errorf("expected controller name to be %s, got %s", ngfControllerName, status.ControllerName)
-			}
+	condition := status.Conditions[0]
+	if condition.Type != string(ngfAPI.SnippetsFilterConditionTypeAccepted) {
+		return fmt.Errorf("expected condition type to be Accepted, got %s", condition.Type)
+	}
 
-			condition := status.Conditions[0]
-			if condition.Type != string(ngfAPI.SnippetsFilterConditionTypeAccepted) {
-				return false, fmt.Errorf("expected condition type to be Accepted, got %s", condition.Type)
-			}
+	if status.Conditions[0].Status != metav1.ConditionTrue {
+		return fmt.Errorf("expected condition status to be %s, got %s", metav1.ConditionTrue, condition.Status)
+	}
 
-			if status.Conditions[0].Status != metav1.ConditionTrue {
-				return false, fmt.Errorf("expected condition status to be %s, got %s", metav1.ConditionTrue, condition.Status)
-			}
+	if status.Conditions[0].Reason != string(ngfAPI.SnippetsFilterConditionReasonAccepted) {
+		return fmt.Errorf(
+			"expected condition reason to be %s, got %s",
+			ngfAPI.SnippetsFilterConditionReasonAccepted,
+			condition.Reason,
+		)
+	}
 
-			if status.Conditions[0].Reason != string(ngfAPI.SnippetsFilterConditionReasonAccepted) {
-				return false, fmt.Errorf(
-					"expected condition reason to be %s, got %s",
-					ngfAPI.SnippetsFilterConditionReasonAccepted,
-					condition.Reason,
-				)
-			}
-
-			return err == nil, err
-		},
-	)
+	return nil
 }

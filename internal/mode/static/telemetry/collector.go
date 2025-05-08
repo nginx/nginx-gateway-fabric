@@ -34,7 +34,7 @@ type GraphGetter interface {
 
 // ConfigurationGetter gets the latest Configuration.
 type ConfigurationGetter interface {
-	GetLatestConfiguration() *dataplane.Configuration
+	GetLatestConfiguration() []*dataplane.Configuration
 }
 
 // Data is telemetry data.
@@ -60,8 +60,10 @@ type Data struct {
 	// then lastly by directive string.
 	SnippetsFiltersDirectivesCount []int64
 	NGFResourceCounts              // embedding is required by the generator.
-	// NGFReplicaCount is the number of replicas of the NGF Pod.
-	NGFReplicaCount int64
+	// NginxPodCount is the total number of Nginx data plane Pods.
+	NginxPodCount int64
+	// ControlPlanePodCount is the total number of NGF control plane Pods.
+	ControlPlanePodCount int64
 }
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.
@@ -99,6 +101,8 @@ type NGFResourceCounts struct {
 	SnippetsFilterCount int64
 	// UpstreamSettingsPolicyCount is the number of UpstreamSettingsPolicies.
 	UpstreamSettingsPolicyCount int64
+	// GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway.
+	GatewayAttachedNpCount int64
 }
 
 // DataCollectorConfig holds configuration parameters for DataCollectorImpl.
@@ -145,10 +149,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		return Data{}, fmt.Errorf("failed to collect cluster information: %w", err)
 	}
 
-	graphResourceCount, err := collectGraphResourceCount(g, c.cfg.ConfigurationGetter)
-	if err != nil {
-		return Data{}, fmt.Errorf("failed to collect NGF resource counts: %w", err)
-	}
+	graphResourceCount := collectGraphResourceCount(g, c.cfg.ConfigurationGetter)
 
 	replicaSet, err := getPodReplicaSet(ctx, c.cfg.K8sClientReader, c.cfg.PodNSName)
 	if err != nil {
@@ -167,6 +168,8 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 
 	snippetsFiltersDirectives, snippetsFiltersDirectivesCount := collectSnippetsFilterDirectives(g)
 
+	nginxPodCount := getNginxPodCount(g)
+
 	data := Data{
 		Data: tel.Data{
 			ProjectName:         "NGF",
@@ -182,9 +185,10 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		ImageSource:                    c.cfg.ImageSource,
 		FlagNames:                      c.cfg.Flags.Names,
 		FlagValues:                     c.cfg.Flags.Values,
-		NGFReplicaCount:                int64(replicaCount),
 		SnippetsFiltersDirectives:      snippetsFiltersDirectives,
 		SnippetsFiltersDirectivesCount: snippetsFiltersDirectivesCount,
+		NginxPodCount:                  nginxPodCount,
+		ControlPlanePodCount:           int64(replicaCount),
 	}
 
 	return data, nil
@@ -193,23 +197,16 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 func collectGraphResourceCount(
 	g *graph.Graph,
 	configurationGetter ConfigurationGetter,
-) (NGFResourceCounts, error) {
+) NGFResourceCounts {
 	ngfResourceCounts := NGFResourceCounts{}
-	cfg := configurationGetter.GetLatestConfiguration()
-
-	if cfg == nil {
-		return ngfResourceCounts, errors.New("latest configuration cannot be nil")
-	}
+	configs := configurationGetter.GetLatestConfiguration()
 
 	ngfResourceCounts.GatewayClassCount = int64(len(g.IgnoredGatewayClasses))
 	if g.GatewayClass != nil {
 		ngfResourceCounts.GatewayClassCount++
 	}
 
-	ngfResourceCounts.GatewayCount = int64(len(g.IgnoredGateways))
-	if g.Gateway != nil {
-		ngfResourceCounts.GatewayCount++
-	}
+	ngfResourceCounts.GatewayCount = int64(len(g.Gateways))
 
 	routeCounts := computeRouteCount(g.Routes, g.L4Routes)
 	ngfResourceCounts.HTTPRouteCount = routeCounts.HTTPRouteCount
@@ -219,9 +216,11 @@ func collectGraphResourceCount(
 	ngfResourceCounts.SecretCount = int64(len(g.ReferencedSecrets))
 	ngfResourceCounts.ServiceCount = int64(len(g.ReferencedServices))
 
-	for _, upstream := range cfg.Upstreams {
-		if upstream.ErrorMsg == "" {
-			ngfResourceCounts.EndpointCount += int64(len(upstream.Endpoints))
+	for _, cfg := range configs {
+		for _, upstream := range cfg.Upstreams {
+			if upstream.ErrorMsg == "" {
+				ngfResourceCounts.EndpointCount += int64(len(upstream.Endpoints))
+			}
 		}
 	}
 
@@ -246,13 +245,22 @@ func collectGraphResourceCount(
 		}
 	}
 
-	if g.NginxProxy != nil {
-		ngfResourceCounts.NginxProxyCount = 1
-	}
-
+	ngfResourceCounts.NginxProxyCount = int64(len(g.ReferencedNginxProxies))
 	ngfResourceCounts.SnippetsFilterCount = int64(len(g.SnippetsFilters))
 
-	return ngfResourceCounts, nil
+	var gatewayAttachedNPCount int64
+	if g.GatewayClass != nil && g.GatewayClass.NginxProxy != nil {
+		gatewayClassNP := g.GatewayClass.NginxProxy
+		for _, np := range g.ReferencedNginxProxies {
+			if np != gatewayClassNP {
+				gatewayAttachedNPCount++
+			}
+		}
+	}
+
+	ngfResourceCounts.GatewayAttachedNpCount = gatewayAttachedNPCount
+
+	return ngfResourceCounts
 }
 
 type RouteCounts struct {
@@ -505,4 +513,23 @@ func parseDirectiveContextMapIntoLists(directiveContextMap map[sfDirectiveContex
 	}
 
 	return directiveContextList, countList
+}
+
+func getNginxPodCount(g *graph.Graph) int64 {
+	var count int64
+	for _, gateway := range g.Gateways {
+		replicas := int64(1)
+
+		np := gateway.EffectiveNginxProxy
+		if np != nil &&
+			np.Kubernetes != nil &&
+			np.Kubernetes.Deployment != nil &&
+			np.Kubernetes.Deployment.Replicas != nil {
+			replicas = int64(*np.Kubernetes.Deployment.Replicas)
+		}
+
+		count += replicas
+	}
+
+	return count
 }

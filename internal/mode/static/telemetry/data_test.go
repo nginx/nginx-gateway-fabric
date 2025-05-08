@@ -40,10 +40,12 @@ func TestDataAttributes(t *testing.T) {
 			NginxProxyCount:                          12,
 			SnippetsFilterCount:                      13,
 			UpstreamSettingsPolicyCount:              14,
+			GatewayAttachedNpCount:                   15,
 		},
-		NGFReplicaCount:                3,
 		SnippetsFiltersDirectives:      []string{"main-three-count", "http-two-count", "server-one-count"},
 		SnippetsFiltersDirectivesCount: []int64{3, 2, 1},
+		NginxPodCount:                  3,
+		ControlPlanePodCount:           3,
 	}
 
 	expected := []attribute.KeyValue{
@@ -79,7 +81,9 @@ func TestDataAttributes(t *testing.T) {
 		attribute.Int64("NginxProxyCount", 12),
 		attribute.Int64("SnippetsFilterCount", 13),
 		attribute.Int64("UpstreamSettingsPolicyCount", 14),
-		attribute.Int64("NGFReplicaCount", 3),
+		attribute.Int64("GatewayAttachedNpCount", 15),
+		attribute.Int64("NginxPodCount", 3),
+		attribute.Int64("ControlPlanePodCount", 3),
 	}
 
 	result := data.Attributes()
@@ -122,7 +126,9 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.Int64("NginxProxyCount", 0),
 		attribute.Int64("SnippetsFilterCount", 0),
 		attribute.Int64("UpstreamSettingsPolicyCount", 0),
-		attribute.Int64("NGFReplicaCount", 0),
+		attribute.Int64("GatewayAttachedNpCount", 0),
+		attribute.Int64("NginxPodCount", 0),
+		attribute.Int64("ControlPlanePodCount", 0),
 	}
 
 	result := data.Attributes()

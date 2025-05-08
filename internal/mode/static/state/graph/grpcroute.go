@@ -19,8 +19,7 @@ import (
 func buildGRPCRoute(
 	validator validation.HTTPFieldsValidator,
 	ghr *v1.GRPCRoute,
-	gatewayNsNames []types.NamespacedName,
-	http2disabled bool,
+	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 ) *L7Route {
 	r := &L7Route{
@@ -28,7 +27,7 @@ func buildGRPCRoute(
 		RouteType: RouteTypeGRPC,
 	}
 
-	sectionNameRefs, err := buildSectionNameRefs(ghr.Spec.ParentRefs, ghr.Namespace, gatewayNsNames)
+	sectionNameRefs, err := buildSectionNameRefs(ghr.Spec.ParentRefs, ghr.Namespace, gws)
 	if err != nil {
 		r.Valid = false
 
@@ -39,14 +38,6 @@ func buildGRPCRoute(
 		return nil
 	}
 	r.ParentRefs = sectionNameRefs
-
-	if http2disabled {
-		r.Valid = false
-		msg := "HTTP2 is disabled - cannot configure GRPCRoutes"
-		r.Conditions = append(r.Conditions, staticConds.NewRouteUnsupportedConfiguration(msg))
-
-		return r
-	}
 
 	if err := validateHostnames(
 		ghr.Spec.Hostnames,
@@ -78,9 +69,8 @@ func buildGRPCMirrorRoutes(
 	routes map[RouteKey]*L7Route,
 	l7route *L7Route,
 	route *v1.GRPCRoute,
-	gatewayNsNames []types.NamespacedName,
+	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
-	http2disabled bool,
 ) {
 	for idx, rule := range l7route.Spec.Rules {
 		if rule.Filters.Valid {
@@ -110,8 +100,7 @@ func buildGRPCMirrorRoutes(
 				mirrorRoute := buildGRPCRoute(
 					validation.SkipValidator{},
 					tmpMirrorRoute,
-					gatewayNsNames,
-					http2disabled,
+					gateways,
 					snippetsFilters,
 				)
 

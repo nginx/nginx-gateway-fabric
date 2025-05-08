@@ -54,8 +54,6 @@ type Configuration struct {
 	NginxPlus NginxPlus
 	// BaseHTTPConfig holds the configuration options at the http context.
 	BaseHTTPConfig BaseHTTPConfig
-	// Version represents the version of the generated configuration.
-	Version int
 }
 
 // SSLKeyPairID is a unique identifier for a SSLKeyPair.

@@ -3,8 +3,6 @@ package static
 import (
 	"errors"
 
-	"github.com/go-kit/log"
-	"github.com/prometheus/common/promlog"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -62,42 +60,4 @@ func (z zapLogLevelSetter) SetLevel(level string) error {
 // Enabled returns true if the given level is at or above the current level.
 func (z zapLogLevelSetter) Enabled(level zapcore.Level) bool {
 	return z.atomicLevel.Enabled(level)
-}
-
-// leveledPrometheusLogger is a leveled prometheus logger.
-// This interface is required because the promlog.NewDynamic returns an unexported type *logger.
-type leveledPrometheusLogger interface {
-	log.Logger
-	SetLevel(level *promlog.AllowedLevel)
-}
-
-type promLogLevelSetter struct {
-	logger leveledPrometheusLogger
-}
-
-func newPromLogLevelSetter(logger leveledPrometheusLogger) promLogLevelSetter {
-	return promLogLevelSetter{logger: logger}
-}
-
-func newLeveledPrometheusLogger() (leveledPrometheusLogger, error) {
-	logFormat := &promlog.AllowedFormat{}
-
-	if err := logFormat.Set("json"); err != nil {
-		return nil, err
-	}
-
-	logConfig := &promlog.Config{Format: logFormat}
-	logger := promlog.NewDynamic(logConfig)
-
-	return logger, nil
-}
-
-func (p promLogLevelSetter) SetLevel(level string) error {
-	al := &promlog.AllowedLevel{}
-	if err := al.Set(level); err != nil {
-		return err
-	}
-
-	p.logger.SetLevel(al)
-	return nil
 }

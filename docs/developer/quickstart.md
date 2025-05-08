@@ -183,13 +183,13 @@ This will build the docker images `nginx-gateway-fabric:<your-user>` and `nginx-
    - To install with Helm (where your release name is `my-release`):
 
      ```shell
-     helm install my-release ./charts/nginx-gateway-fabric --create-namespace --wait --set service.type=NodePort --set nginxGateway.image.repository=nginx-gateway-fabric --set nginxGateway.image.tag=$(whoami) --set nginxGateway.image.pullPolicy=Never --set nginx.image.repository=nginx-gateway-fabric/nginx --set nginx.image.tag=$(whoami) --set nginx.image.pullPolicy=Never -n nginx-gateway
+     helm install my-release ./charts/nginx-gateway-fabric --create-namespace --wait --set nginx.service.type=NodePort --set nginxGateway.image.repository=nginx-gateway-fabric --set nginxGateway.image.tag=$(whoami) --set nginxGateway.image.pullPolicy=Never --set nginx.image.repository=nginx-gateway-fabric/nginx --set nginx.image.tag=$(whoami) --set nginx.image.pullPolicy=Never -n nginx-gateway
      ```
 
    - To install NGINX Plus with Helm (where your release name is `my-release`):
 
      ```shell
-     helm install my-release ./charts/nginx-gateway-fabric --create-namespace --wait --set service.type=NodePort --set nginxGateway.image.repository=nginx-gateway-fabric --set nginxGateway.image.tag=$(whoami) --set nginxGateway.image.pullPolicy=Never --set nginx.image.repository=nginx-gateway-fabric/nginx-plus --set nginx.image.tag=$(whoami) --set nginx.image.pullPolicy=Never --set nginx.plus=true -n nginx-gateway
+     helm install my-release ./charts/nginx-gateway-fabric --create-namespace --wait --set nginx.service.type=NodePort --set nginxGateway.image.repository=nginx-gateway-fabric --set nginxGateway.image.tag=$(whoami) --set nginxGateway.image.pullPolicy=Never --set nginx.image.repository=nginx-gateway-fabric/nginx-plus --set nginx.image.tag=$(whoami) --set nginx.image.pullPolicy=Never --set nginx.plus=true -n nginx-gateway
      ```
 
    > For more information on Helm configuration options see the Helm [README](../../charts/nginx-gateway-fabric/README.md).

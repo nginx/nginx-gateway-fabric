@@ -25,23 +25,8 @@ func NewValidator(genericValidator validation.GenericValidator) *Validator {
 }
 
 // Validate validates the spec of an ObservabilityPolicy.
-func (v *Validator) Validate(
-	policy policies.Policy,
-	globalSettings *policies.GlobalSettings,
-) []conditions.Condition {
+func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 	obs := helpers.MustCastObject[*ngfAPIv1alpha2.ObservabilityPolicy](policy)
-
-	if globalSettings == nil || !globalSettings.NginxProxyValid {
-		return []conditions.Condition{
-			staticConds.NewPolicyNotAcceptedNginxProxyNotSet(staticConds.PolicyMessageNginxProxyInvalid),
-		}
-	}
-
-	if !globalSettings.TelemetryEnabled {
-		return []conditions.Condition{
-			staticConds.NewPolicyNotAcceptedNginxProxyNotSet(staticConds.PolicyMessageTelemetryNotEnabled),
-		}
-	}
 
 	targetRefPath := field.NewPath("spec").Child("targetRefs")
 	supportedKinds := []gatewayv1.Kind{kinds.HTTPRoute, kinds.GRPCRoute}
@@ -55,6 +40,26 @@ func (v *Validator) Validate(
 
 	if err := v.validateSettings(obs.Spec); err != nil {
 		return []conditions.Condition{staticConds.NewPolicyInvalid(err.Error())}
+	}
+
+	return nil
+}
+
+// ValidateGlobalSettings validates an ObservabilityPolicy with respect to the NginxProxy global settings.
+func (v *Validator) ValidateGlobalSettings(
+	_ policies.Policy,
+	globalSettings *policies.GlobalSettings,
+) []conditions.Condition {
+	if globalSettings == nil {
+		return []conditions.Condition{
+			staticConds.NewPolicyNotAcceptedNginxProxyNotSet(staticConds.PolicyMessageNginxProxyInvalid),
+		}
+	}
+
+	if !globalSettings.TelemetryEnabled {
+		return []conditions.Condition{
+			staticConds.NewPolicyNotAcceptedNginxProxyNotSet(staticConds.PolicyMessageTelemetryNotEnabled),
+		}
 	}
 
 	return nil

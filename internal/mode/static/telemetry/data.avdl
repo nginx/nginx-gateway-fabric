@@ -102,8 +102,14 @@ attached at the Gateway level. */
 		/** UpstreamSettingsPolicyCount is the number of UpstreamSettingsPolicies. */
 		long? UpstreamSettingsPolicyCount = null;
 		
-		/** NGFReplicaCount is the number of replicas of the NGF Pod. */
-		long? NGFReplicaCount = null;
+		/** GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway. */
+		long? GatewayAttachedNpCount = null;
+		
+		/** NginxPodCount is the total number of Nginx data plane Pods. */
+		long? NginxPodCount = null;
+		
+		/** ControlPlanePodCount is the total number of NGF control plane Pods. */
+		long? ControlPlanePodCount = null;
 		
 	}
 }

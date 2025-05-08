@@ -67,7 +67,12 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
 
-		var err error
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		setUpPortForward(nginxPodNames[0], ns.Name)
+
 		resultsDir, err = framework.CreateResultsDir("ngf-upgrade", version)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -78,12 +83,16 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 	})
 
 	AfterEach(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, ns.Name)
+		cleanUpPortForward()
+
 		Expect(resourceManager.DeleteFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
 		resultsFile.Close()
 	})
 
 	It("upgrades NGF with zero downtime", func() {
+		Skip("Skipping test until version 2.1.0 since 2.0.0 is a breaking change")
 		nginxImage := *nginxImageRepository
 		if *plusEnabled {
 			nginxImage = *nginxPlusImageRepository

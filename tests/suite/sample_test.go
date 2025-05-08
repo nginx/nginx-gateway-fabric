@@ -17,29 +17,40 @@ import (
 )
 
 var _ = Describe("Basic test example", Label("functional"), func() {
-	files := []string{
-		"hello-world/apps.yaml",
-		"hello-world/gateway.yaml",
-		"hello-world/routes.yaml",
-	}
+	var (
+		files = []string{
+			"hello-world/apps.yaml",
+			"hello-world/gateway.yaml",
+			"hello-world/routes.yaml",
+		}
 
-	var ns core.Namespace
+		namespace = "helloworld"
+	)
 
 	BeforeEach(func() {
-		ns = core.Namespace{
+		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "helloworld",
+				Name: namespace,
 			},
 		}
 
-		Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
-		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
+		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		setUpPortForward(nginxPodNames[0], namespace)
 	})
 
 	AfterEach(func() {
-		Expect(resourceManager.DeleteFromFiles(files, ns.Name)).To(Succeed())
-		Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+		cleanUpPortForward()
+
+		Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
+		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
 	It("sends traffic", func() {

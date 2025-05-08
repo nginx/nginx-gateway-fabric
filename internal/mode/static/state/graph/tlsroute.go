@@ -7,22 +7,20 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/conditions"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	staticConds "github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 )
 
 func buildTLSRoute(
 	gtr *v1alpha2.TLSRoute,
-	gatewayNsNames []types.NamespacedName,
+	gws map[types.NamespacedName]*Gateway,
 	services map[types.NamespacedName]*apiv1.Service,
-	npCfg *NginxProxy,
 	refGrantResolver func(resource toResource) bool,
 ) *L4Route {
 	r := &L4Route{
 		Source: gtr,
 	}
 
-	sectionNameRefs, err := buildSectionNameRefs(gtr.Spec.ParentRefs, gtr.Namespace, gatewayNsNames)
+	sectionNameRefs, err := buildSectionNameRefs(gtr.Spec.ParentRefs, gtr.Namespace, gws)
 	if err != nil {
 		r.Valid = false
 
@@ -54,14 +52,14 @@ func buildTLSRoute(
 		return r
 	}
 
-	br, cond := validateBackendRefTLSRoute(gtr, services, npCfg, refGrantResolver)
+	br, conds := validateBackendRefTLSRoute(gtr, services, r.ParentRefs, refGrantResolver)
 
 	r.Spec.BackendRef = br
 	r.Valid = true
 	r.Attachable = true
 
-	if cond != nil {
-		r.Conditions = append(r.Conditions, *cond)
+	if len(conds) > 0 {
+		r.Conditions = append(r.Conditions, conds...)
 	}
 
 	return r
@@ -70,9 +68,9 @@ func buildTLSRoute(
 func validateBackendRefTLSRoute(
 	gtr *v1alpha2.TLSRoute,
 	services map[types.NamespacedName]*apiv1.Service,
-	npCfg *NginxProxy,
+	parentRefs []ParentRef,
 	refGrantResolver func(resource toResource) bool,
-) (BackendRef, *conditions.Condition) {
+) (BackendRef, []conditions.Condition) {
 	// Length of BackendRefs and Rules is guaranteed to be one due to earlier check in buildTLSRoute
 	refPath := field.NewPath("spec").Child("rules").Index(0).Child("backendRefs").Index(0)
 
@@ -85,10 +83,11 @@ func validateBackendRefTLSRoute(
 		refPath,
 	); !valid {
 		backendRef := BackendRef{
-			Valid: false,
+			Valid:              false,
+			InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 		}
 
-		return backendRef, &cond
+		return backendRef, []conditions.Condition{cond}
 	}
 
 	ns := gtr.Namespace
@@ -109,22 +108,25 @@ func validateBackendRefTLSRoute(
 	)
 
 	backendRef := BackendRef{
-		SvcNsName:   svcNsName,
-		ServicePort: svcPort,
-		Valid:       true,
+		SvcNsName:          svcNsName,
+		ServicePort:        svcPort,
+		Valid:              true,
+		InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 	}
 
 	if err != nil {
 		backendRef.Valid = false
 
-		return backendRef, helpers.GetPointer(staticConds.NewRouteBackendRefRefBackendNotFound(err.Error()))
+		return backendRef, []conditions.Condition{staticConds.NewRouteBackendRefRefBackendNotFound(err.Error())}
 	}
 
-	if err := verifyIPFamily(npCfg, svcIPFamily); err != nil {
-		backendRef.Valid = false
-
-		return backendRef, helpers.GetPointer(staticConds.NewRouteInvalidIPFamily(err.Error()))
+	var conds []conditions.Condition
+	for _, parentRef := range parentRefs {
+		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
+			backendRef.Valid = backendRef.Valid || false
+			backendRef.InvalidForGateways[parentRef.Gateway.NamespacedName] = staticConds.NewRouteInvalidIPFamily(err.Error())
+		}
 	}
 
-	return backendRef, nil
+	return backendRef, conds
 }

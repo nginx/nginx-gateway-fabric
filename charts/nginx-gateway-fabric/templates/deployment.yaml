@@ -10,7 +10,7 @@ metadata:
   {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  replicas: {{ .Values.nginxGateway.replicaCount }}
+  replicas: {{ .Values.nginxGateway.replicas }}
   selector:
     matchLabels:
     {{- include "nginx-gateway.selectorLabels" . | nindent 6 }}
@@ -21,68 +21,36 @@ spec:
       {{- with .Values.nginxGateway.labels }}
       {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or .Values.nginxGateway.podAnnotations .Values.metrics.enable }}
+      {{- if or .Values.nginxGateway.podAnnotations .Values.nginxGateway.metrics.enable }}
       annotations:
         {{- if .Values.nginxGateway.podAnnotations }}
         {{- toYaml .Values.nginxGateway.podAnnotations | nindent 8 }}
         {{- end }}
-        {{- if .Values.metrics.enable }}
+        {{- if .Values.nginxGateway.metrics.enable }}
         prometheus.io/scrape: "true"
-        prometheus.io/port: "{{ .Values.metrics.port }}"
-        {{- if .Values.metrics.secure }}
+        prometheus.io/port: "{{ .Values.nginxGateway.metrics.port }}"
+        {{- if .Values.nginxGateway.metrics.secure }}
         prometheus.io/scheme: "https"
         {{- end }}
         {{- end }}
       {{- end }}
     spec:
-      {{- if .Values.topologySpreadConstraints }}
-      topologySpreadConstraints:
-        {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
-      {{- end }}
-      initContainers:
-      - name: init
-        image: {{ .Values.nginxGateway.image.repository }}:{{ default .Chart.AppVersion .Values.nginxGateway.image.tag }}
-        imagePullPolicy: {{ .Values.nginxGateway.image.pullPolicy }}
-        command:
-        - /usr/bin/gateway
-        - initialize
-        - --source
-        - /includes/main.conf
-        {{- if .Values.nginx.plus }}
-        - --source
-        - /includes/mgmt.conf
-        - --nginx-plus
-        {{- end }}
-        - --destination
-        - /etc/nginx/main-includes
-        env:
-        - name: POD_UID
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.uid
-        securityContext:
-          seccompProfile:
-            type: RuntimeDefault
-          capabilities:
-            add:
-            - KILL # Set because the binary has CAP_KILL for the main controller process. Not used by init.
-            drop:
-            - ALL
-          readOnlyRootFilesystem: true
-          runAsUser: 102
-          runAsGroup: 1001
-        volumeMounts:
-        - name: nginx-includes-bootstrap
-          mountPath: /includes
-        - name: nginx-main-includes
-          mountPath: /etc/nginx/main-includes
       containers:
       - args:
-        - static-mode
+        - controller
         - --gateway-ctlr-name={{ .Values.nginxGateway.gatewayControllerName }}
         - --gatewayclass={{ .Values.nginxGateway.gatewayClassName }}
         - --config={{ include "nginx-gateway.config-name" . }}
         - --service={{ include "nginx-gateway.fullname" . }}
+        - --agent-tls-secret={{ .Values.certGenerator.agentTLSSecretName }}
+        {{- if .Values.nginx.imagePullSecret }}
+        - --nginx-docker-secret={{ .Values.nginx.imagePullSecret }}
+        {{- end }}
+        {{- if .Values.nginx.imagePullSecrets }}
+          {{- range .Values.nginx.imagePullSecrets }}
+        - --nginx-docker-secret={{ . }}
+          {{- end }}
+        {{- end }}
         {{- if .Values.nginx.plus }}
         - --nginx-plus
           {{- if .Values.nginx.usage.secretName }}
@@ -104,9 +72,9 @@ spec:
         - --usage-report-client-ssl-secret={{ .Values.nginx.usage.clientSSLSecretName }}
           {{- end }}
         {{- end }}
-        {{- if .Values.metrics.enable }}
-        - --metrics-port={{ .Values.metrics.port }}
-        {{- if .Values.metrics.secure  }}
+        {{- if .Values.nginxGateway.metrics.enable }}
+        - --metrics-port={{ .Values.nginxGateway.metrics.port }}
+        {{- if .Values.nginxGateway.metrics.secure  }}
         - --metrics-secure-serving
         {{- end }}
         {{- else }}
@@ -131,11 +99,10 @@ spec:
         {{- if .Values.nginxGateway.snippetsFilters.enable }}
         - --snippets-filters
         {{- end }}
+        {{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
+        - --nginx-scc={{ include "nginx-gateway.scc-name" . }}-nginx
+        {{- end}}
         env:
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -148,6 +115,12 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.uid
+        - name: INSTANCE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['app.kubernetes.io/instance']
+        - name: IMAGE_NAME
+          value: {{ .Values.nginxGateway.image.repository }}:{{ default .Chart.AppVersion .Values.nginxGateway.image.tag }}
         image: {{ .Values.nginxGateway.image.repository }}:{{ default .Chart.AppVersion .Values.nginxGateway.image.tag }}
         imagePullPolicy: {{ .Values.nginxGateway.image.pullPolicy }}
         name: nginx-gateway
@@ -160,9 +133,11 @@ spec:
         {{- toYaml .Values.nginxGateway.resources | nindent 10 }}
         {{- end }}
         ports:
-        {{- if .Values.metrics.enable }}
+        - name: agent-grpc
+          containerPort: 8443
+        {{- if .Values.nginxGateway.metrics.enable }}
         - name: metrics
-          containerPort: {{ .Values.metrics.port }}
+          containerPort: {{ .Values.nginxGateway.metrics.port }}
         {{- end }}
         {{- if .Values.nginxGateway.readinessProbe.enable }}
         - name: health
@@ -177,151 +152,45 @@ spec:
         securityContext:
           seccompProfile:
             type: RuntimeDefault
-          allowPrivilegeEscalation: {{ .Values.nginxGateway.securityContext.allowPrivilegeEscalation }}
           capabilities:
-            add:
-            - KILL
             drop:
             - ALL
-          readOnlyRootFilesystem: true
-          runAsUser: 102
-          runAsGroup: 1001
-        volumeMounts:
-        - name: nginx-conf
-          mountPath: /etc/nginx/conf.d
-        - name: nginx-stream-conf
-          mountPath: /etc/nginx/stream-conf.d
-        - name: nginx-main-includes
-          mountPath: /etc/nginx/main-includes
-        - name: nginx-secrets
-          mountPath: /etc/nginx/secrets
-        - name: nginx-run
-          mountPath: /var/run/nginx
-        - name: nginx-includes
-          mountPath: /etc/nginx/includes
-        {{- with .Values.nginxGateway.extraVolumeMounts -}}
-        {{ toYaml . | nindent 8 }}
-        {{- end }}
-      - image: {{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag | default .Chart.AppVersion }}
-        imagePullPolicy: {{ .Values.nginx.image.pullPolicy }}
-        name: nginx
-        {{- if .Values.nginx.lifecycle }}
-        lifecycle:
-        {{- toYaml .Values.nginx.lifecycle | nindent 10 }}
-        {{- end }}
-        ports:
-        - containerPort: 80
-          name: http
-        - containerPort: 443
-          name: https
-        securityContext:
-          seccompProfile:
-            type: RuntimeDefault
-          capabilities:
-            add:
-            - NET_BIND_SERVICE
-            drop:
-            - ALL
+          allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           runAsUser: 101
           runAsGroup: 1001
         volumeMounts:
-        - name: nginx-conf
-          mountPath: /etc/nginx/conf.d
-        - name: nginx-stream-conf
-          mountPath: /etc/nginx/stream-conf.d
-        - name: nginx-main-includes
-          mountPath: /etc/nginx/main-includes
-        - name: nginx-secrets
-          mountPath: /etc/nginx/secrets
-        - name: nginx-run
-          mountPath: /var/run/nginx
-        - name: nginx-cache
-          mountPath: /var/cache/nginx
-        - name: nginx-includes
-          mountPath: /etc/nginx/includes
-        {{- if .Values.nginx.plus }}
-        - name: nginx-lib
-          mountPath: /var/lib/nginx/state
-          {{- if .Values.nginx.usage.secretName }}
-        - name: nginx-plus-license
-          mountPath: /etc/nginx/license.jwt
-          subPath: license.jwt
-          {{- end }}
-          {{- if or .Values.nginx.usage.caSecretName .Values.nginx.usage.clientSSLSecretName }}
-        - name: nginx-plus-usage-certs
-          mountPath: /etc/nginx/certs-bootstrap/
-          {{- end }}
-        {{- end }}
-        {{- with .Values.nginx.extraVolumeMounts -}}
+        - name: nginx-agent-tls
+          mountPath: /var/run/secrets/ngf
+        {{- with .Values.nginxGateway.extraVolumeMounts -}}
         {{ toYaml . | nindent 8 }}
         {{- end }}
-        {{- if .Values.nginx.debug }}
-        command:
-          - "/bin/sh"
-        args:
-          - "-c"
-          - "rm -rf /var/run/nginx/*.sock && nginx-debug -g 'daemon off;'"
-        {{- end }}
-      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
-      {{- if .Values.affinity }}
+      {{- if .Values.nginxGateway.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.nginxGateway.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.nginxGateway.terminationGracePeriodSeconds }}
+      {{- if .Values.nginxGateway.affinity }}
       affinity:
-      {{- toYaml .Values.affinity | nindent 8 }}
+      {{- toYaml .Values.nginxGateway.affinity | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "nginx-gateway.serviceAccountName" . }}
-      shareProcessNamespace: true
       securityContext:
         fsGroup: 1001
         runAsNonRoot: true
-      {{- if .Values.tolerations }}
+      {{- if .Values.nginxGateway.tolerations }}
       tolerations:
-      {{- toYaml .Values.tolerations | nindent 6 }}
+      {{- toYaml .Values.nginxGateway.tolerations | nindent 6 }}
       {{- end }}
-      {{- if .Values.nodeSelector }}
+      {{- if .Values.nginxGateway.nodeSelector }}
       nodeSelector:
-      {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- toYaml .Values.nginxGateway.nodeSelector | nindent 8 }}
       {{- end }}
       volumes:
-      - name: nginx-conf
-        emptyDir: {}
-      - name: nginx-stream-conf
-        emptyDir: {}
-      - name: nginx-main-includes
-        emptyDir: {}
-      - name: nginx-secrets
-        emptyDir: {}
-      - name: nginx-run
-        emptyDir: {}
-      - name: nginx-cache
-        emptyDir: {}
-      - name: nginx-includes
-        emptyDir: {}
-      - name: nginx-includes-bootstrap
-        configMap:
-          name: nginx-includes-bootstrap
-      {{- if .Values.nginx.plus }}
-      - name: nginx-lib
-        emptyDir: {}
-        {{- if .Values.nginx.usage.secretName }}
-      - name: nginx-plus-license
+      - name: nginx-agent-tls
         secret:
-          secretName: {{ .Values.nginx.usage.secretName }}
-        {{- end }}
-        {{- if or .Values.nginx.usage.caSecretName .Values.nginx.usage.clientSSLSecretName }}
-      - name: nginx-plus-usage-certs
-        projected:
-          sources:
-          {{- if .Values.nginx.usage.caSecretName }}
-          - secret:
-              name: {{ .Values.nginx.usage.caSecretName }}
-          {{- end }}
-          {{- if .Values.nginx.usage.clientSSLSecretName }}
-          - secret:
-              name: {{ .Values.nginx.usage.clientSSLSecretName }}
-          {{- end }}
-        {{- end }}
-      {{- end }}
-      {{- with .Values.extraVolumes -}}
+          secretName: {{ .Values.certGenerator.serverTLSSecretName }}
+      {{- with .Values.nginxGateway.extraVolumes -}}
       {{ toYaml . | nindent 6 }}
       {{- end }}
 {{- end }}

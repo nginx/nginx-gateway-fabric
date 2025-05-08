@@ -45,10 +45,9 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 		cfg                 config.Config
 	}{
 		{
-			name: "gwNsName is nil",
+			name: "base case",
 			cfg: config.Config{
 				GatewayClassName:     gcName,
-				GatewayNsName:        nil,
 				ExperimentalFeatures: false,
 				SnippetsFilters:      false,
 			},
@@ -63,7 +62,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&gatewayv1.HTTPRouteList{},
 				&gatewayv1.GatewayList{},
 				&gatewayv1beta1.ReferenceGrantList{},
-				&ngfAPIv1alpha1.NginxProxyList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
 				&gatewayv1.GRPCRouteList{},
 				partialObjectMetadataList,
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
@@ -72,49 +71,14 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "gwNsName is not nil",
+			name: "experimental enabled",
 			cfg: config.Config{
-				GatewayClassName: gcName,
-				GatewayNsName: &types.NamespacedName{
-					Namespace: "test",
-					Name:      "my-gateway",
-				},
-				ExperimentalFeatures: false,
-				SnippetsFilters:      false,
-			},
-			expectedObjects: []client.Object{
-				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
-				&gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "my-gateway", Namespace: "test"}},
-			},
-			expectedObjectLists: []client.ObjectList{
-				&apiv1.ServiceList{},
-				&apiv1.SecretList{},
-				&apiv1.NamespaceList{},
-				&discoveryV1.EndpointSliceList{},
-				&gatewayv1.HTTPRouteList{},
-				&gatewayv1beta1.ReferenceGrantList{},
-				&ngfAPIv1alpha1.NginxProxyList{},
-				&gatewayv1.GRPCRouteList{},
-				partialObjectMetadataList,
-				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
-				&ngfAPIv1alpha2.ObservabilityPolicyList{},
-				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
-			},
-		},
-		{
-			name: "gwNsName is not nil and experimental enabled",
-			cfg: config.Config{
-				GatewayClassName: gcName,
-				GatewayNsName: &types.NamespacedName{
-					Namespace: "test",
-					Name:      "my-gateway",
-				},
+				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
 				SnippetsFilters:      false,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
-				&gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "my-gateway", Namespace: "test"}},
 			},
 			expectedObjectLists: []client.ObjectList{
 				&apiv1.ServiceList{},
@@ -123,8 +87,9 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&apiv1.ConfigMapList{},
 				&discoveryV1.EndpointSliceList{},
 				&gatewayv1.HTTPRouteList{},
+				&gatewayv1.GatewayList{},
 				&gatewayv1beta1.ReferenceGrantList{},
-				&ngfAPIv1alpha1.NginxProxyList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
 				partialObjectMetadataList,
 				&gatewayv1alpha3.BackendTLSPolicyList{},
 				&gatewayv1alpha2.TLSRouteList{},
@@ -135,19 +100,14 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "gwNsName is not nil and snippets filters enabled",
+			name: "snippets filters enabled",
 			cfg: config.Config{
-				GatewayClassName: gcName,
-				GatewayNsName: &types.NamespacedName{
-					Namespace: "test",
-					Name:      "my-gateway",
-				},
+				GatewayClassName:     gcName,
 				ExperimentalFeatures: false,
 				SnippetsFilters:      true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
-				&gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "my-gateway", Namespace: "test"}},
 			},
 			expectedObjectLists: []client.ObjectList{
 				&apiv1.ServiceList{},
@@ -155,8 +115,9 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&apiv1.NamespaceList{},
 				&discoveryV1.EndpointSliceList{},
 				&gatewayv1.HTTPRouteList{},
+				&gatewayv1.GatewayList{},
 				&gatewayv1beta1.ReferenceGrantList{},
-				&ngfAPIv1alpha1.NginxProxyList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
 				partialObjectMetadataList,
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
@@ -166,19 +127,14 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "gwNsName is not nil, experimental and snippets filters enabled",
+			name: "experimental and snippets filters enabled",
 			cfg: config.Config{
-				GatewayClassName: gcName,
-				GatewayNsName: &types.NamespacedName{
-					Namespace: "test",
-					Name:      "my-gateway",
-				},
+				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
 				SnippetsFilters:      true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
-				&gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "my-gateway", Namespace: "test"}},
 			},
 			expectedObjectLists: []client.ObjectList{
 				&apiv1.ServiceList{},
@@ -187,8 +143,9 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&apiv1.ConfigMapList{},
 				&discoveryV1.EndpointSliceList{},
 				&gatewayv1.HTTPRouteList{},
+				&gatewayv1.GatewayList{},
 				&gatewayv1beta1.ReferenceGrantList{},
-				&ngfAPIv1alpha1.NginxProxyList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
 				partialObjectMetadataList,
 				&gatewayv1alpha3.BackendTLSPolicyList{},
 				&gatewayv1alpha2.TLSRouteList{},

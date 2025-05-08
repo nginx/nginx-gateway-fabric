@@ -119,30 +119,16 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 	type scaleTestResults struct {
 		Name                   string
 		EventsBuckets          []framework.Bucket
-		ReloadBuckets          []framework.Bucket
 		EventsAvgTime          int
 		EventsCount            int
 		NGFContainerRestarts   int
 		NGFErrors              int
 		NginxContainerRestarts int
 		NginxErrors            int
-		ReloadAvgTime          int
-		ReloadCount            int
-		ReloadErrsCount        int
 	}
 
 	const scaleResultTemplate = `
 ## Test {{ .Name }}
-
-### Reloads
-
-- Total: {{ .ReloadCount }}
-- Total Errors: {{ .ReloadErrsCount }}
-- Average Time: {{ .ReloadAvgTime }}ms
-- Reload distribution:
-{{- range .ReloadBuckets }}
-	- {{ .Le }}ms: {{ .Val }}
-{{- end }}
 
 ### Event Batch Processing
 
@@ -176,12 +162,14 @@ The logs are attached only if there are errors.
 	}
 
 	checkLogErrors := func(
-		containerName string,
+		containerName,
+		podName,
+		namespace,
+		fileName string,
 		substrings []string,
 		ignoredSubstrings []string,
-		fileName string,
 	) int {
-		logs, err := resourceManager.GetPodLogs(ngfNamespace, ngfPodName, &core.PodLogOptions{
+		logs, err := resourceManager.GetPodLogs(namespace, podName, &core.PodLogOptions{
 			Container: containerName,
 		})
 		Expect(err).ToNot(HaveOccurred())
@@ -237,7 +225,7 @@ The logs are attached only if there are errors.
 			fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx-gateway"}`, ngfPodName),
 			fmt.Sprintf(`container_cpu_usage_seconds_total{pod="%s",container="nginx-gateway"}`, ngfPodName),
 			// We don't need to check all nginx_gateway_fabric_* metrics, as they are collected at the same time
-			fmt.Sprintf(`nginx_gateway_fabric_nginx_reloads_total{pod="%s"}`, ngfPodName),
+			fmt.Sprintf(`nginx_gateway_fabric_event_batch_processing_milliseconds_sum{pod="%s"}`, ngfPodName),
 		}
 
 		for _, q := range queries {
@@ -280,7 +268,7 @@ The logs are attached only if there are errors.
 		queries = []string{
 			fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx-gateway"}`, ngfPodName),
 			// We don't need to check all nginx_gateway_fabric_* metrics, as they are collected at the same time
-			fmt.Sprintf(`nginx_gateway_fabric_nginx_reloads_total{pod="%s"}`, ngfPodName),
+			fmt.Sprintf(`nginx_gateway_fabric_event_batch_processing_milliseconds_sum{pod="%s"}`, ngfPodName),
 		}
 
 		for _, q := range queries {
@@ -337,18 +325,6 @@ The logs are attached only if there are errors.
 
 		Expect(os.Remove(cpuCSV)).To(Succeed())
 
-		reloadCount, err := framework.GetReloadCountWithStartTime(promInstance, ngfPodName, startTime)
-		Expect(err).ToNot(HaveOccurred())
-
-		reloadErrsCount, err := framework.GetReloadErrsCountWithStartTime(promInstance, ngfPodName, startTime)
-		Expect(err).ToNot(HaveOccurred())
-
-		reloadAvgTime, err := framework.GetReloadAvgTimeWithStartTime(promInstance, ngfPodName, startTime)
-		Expect(err).ToNot(HaveOccurred())
-
-		reloadBuckets, err := framework.GetReloadBucketsWithStartTime(promInstance, ngfPodName, startTime)
-		Expect(err).ToNot(HaveOccurred())
-
 		eventsCount, err := framework.GetEventsCountWithStartTime(promInstance, ngfPodName, startTime)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -362,43 +338,53 @@ The logs are attached only if there are errors.
 
 		ngfErrors := checkLogErrors(
 			"nginx-gateway",
+			ngfPodName,
+			ngfNamespace,
+			filepath.Join(testResultsDir, framework.CreateResultsFilename("log", "ngf", *plusEnabled)),
 			[]string{"error"},
 			[]string{`"logger":"usageReporter`}, // ignore usageReporter errors
-			filepath.Join(testResultsDir, framework.CreateResultsFilename("log", "ngf", *plusEnabled)),
 		)
+
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		nginxPodName := nginxPodNames[0]
+
 		nginxErrors := checkLogErrors(
 			"nginx",
+			nginxPodName,
+			namespace,
+			filepath.Join(testResultsDir, framework.CreateResultsFilename("log", "nginx", *plusEnabled)),
 			[]string{framework.ErrorNGINXLog, framework.EmergNGINXLog, framework.CritNGINXLog, framework.AlertNGINXLog},
 			nil,
-			filepath.Join(testResultsDir, framework.CreateResultsFilename("log", "nginx", *plusEnabled)),
 		)
 
 		// Check container restarts
 
-		pod, err := resourceManager.GetPod(ngfNamespace, ngfPodName)
+		ngfPod, err := resourceManager.GetPod(ngfNamespace, ngfPodName)
 		Expect(err).ToNot(HaveOccurred())
 
-		findRestarts := func(name string) int {
+		nginxPod, err := resourceManager.GetPod(namespace, nginxPodName)
+		Expect(err).ToNot(HaveOccurred())
+
+		findRestarts := func(containerName string, pod *core.Pod) int {
 			for _, containerStatus := range pod.Status.ContainerStatuses {
-				if containerStatus.Name == name {
+				if containerStatus.Name == containerName {
 					return int(containerStatus.RestartCount)
 				}
 			}
-			Fail(fmt.Sprintf("container %s not found", name))
+			Fail(fmt.Sprintf("container %s not found", containerName))
 			return 0
 		}
 
-		ngfRestarts := findRestarts("nginx-gateway")
-		nginxRestarts := findRestarts("nginx")
+		ngfRestarts := findRestarts("nginx-gateway", ngfPod)
+		nginxRestarts := findRestarts("nginx", nginxPod)
 
 		// Write results
 
 		results := scaleTestResults{
 			Name:                   testName,
-			ReloadCount:            int(reloadCount),
-			ReloadErrsCount:        int(reloadErrsCount),
-			ReloadAvgTime:          int(reloadAvgTime),
-			ReloadBuckets:          reloadBuckets,
 			EventsCount:            int(eventsCount),
 			EventsAvgTime:          int(eventsAvgTime),
 			EventsBuckets:          eventsBuckets,
@@ -428,6 +414,22 @@ The logs are attached only if there are errors.
 		for i := range len(objects.ScaleIterationGroups) {
 			Expect(resourceManager.Apply(objects.ScaleIterationGroups[i])).To(Succeed())
 
+			if i == 0 {
+				var nginxPodNames []string
+				Eventually(
+					func() bool {
+						nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+						return len(nginxPodNames) == 1 && err == nil
+					}).
+					WithTimeout(timeoutConfig.CreateTimeout).
+					Should(BeTrue())
+
+				nginxPodName := nginxPodNames[0]
+				Expect(nginxPodName).ToNot(BeEmpty())
+
+				setUpPortForward(nginxPodName, namespace)
+			}
+
 			var url string
 			if protocol == "http" && portFwdPort != 0 {
 				url = fmt.Sprintf("%s://%d.example.com:%d", protocol, i, portFwdPort)
@@ -441,7 +443,7 @@ The logs are attached only if there are errors.
 
 			Eventually(
 				framework.CreateResponseChecker(url, address, timeoutConfig.RequestTimeout),
-			).WithTimeout(5 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
+			).WithTimeout(6 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
 
 			ttr := time.Since(startCheck)
 
@@ -465,6 +467,21 @@ The logs are attached only if there are errors.
 	runScaleUpstreams := func() {
 		Expect(resourceManager.ApplyFromFiles(upstreamsManifests, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+		var nginxPodNames []string
+		var err error
+		Eventually(
+			func() bool {
+				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+				return len(nginxPodNames) == 1 && err == nil
+			}).
+			WithTimeout(timeoutConfig.CreateTimeout).
+			Should(BeTrue())
+
+		nginxPodName := nginxPodNames[0]
+		Expect(nginxPodName).ToNot(BeEmpty())
+
+		setUpPortForward(nginxPodName, namespace)
 
 		var url string
 		if portFwdPort != 0 {
@@ -598,6 +615,21 @@ The logs are attached only if there are errors.
 		Expect(resourceManager.ApplyFromFiles(matchesManifests, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
+		var nginxPodNames []string
+		var err error
+		Eventually(
+			func() bool {
+				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+				return len(nginxPodNames) == 1 && err == nil
+			}).
+			WithTimeout(timeoutConfig.CreateTimeout).
+			Should(BeTrue())
+
+		nginxPodName := nginxPodNames[0]
+		Expect(nginxPodName).ToNot(BeEmpty())
+
+		setUpPortForward(nginxPodName, namespace)
+
 		var port int
 		if portFwdPort != 0 {
 			port = portFwdPort
@@ -611,7 +643,7 @@ The logs are attached only if there are errors.
 
 		text := fmt.Sprintf("\n## Test %s\n\n", testName)
 
-		_, err := fmt.Fprint(outFile, text)
+		_, err = fmt.Fprint(outFile, text)
 		Expect(err).ToNot(HaveOccurred())
 
 		run := func(t framework.Target) {
@@ -650,8 +682,10 @@ The logs are attached only if there are errors.
 	})
 
 	AfterEach(func() {
-		teardown(releaseName)
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+		cleanUpPortForward()
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
+		teardown(releaseName)
 	})
 
 	AfterAll(func() {
@@ -678,13 +712,13 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 	}
 
 	var (
-		outFile           *os.File
-		resultsDir        string
-		ngfDeploymentName string
-		ns                core.Namespace
-		metricsCh         chan *metricsResults
+		outFile    *os.File
+		resultsDir string
+		ns         core.Namespace
+		metricsCh  chan *metricsResults
 
-		files = []string{
+		numCoffeeAndTeaPods = 20
+		files               = []string{
 			"scale/zero-downtime/cafe.yaml",
 			"scale/zero-downtime/cafe-secret.yaml",
 			"scale/zero-downtime/gateway-1.yaml",
@@ -825,12 +859,12 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 		numReplicas int
 	}{
 		{
-			name:        "One NGF Pod runs per node",
+			name:        "One NGINX Pod runs per node",
 			valuesFile:  "manifests/scale/zero-downtime/values-affinity.yaml",
 			numReplicas: 12, // equals number of nodes
 		},
 		{
-			name:        "Multiple NGF Pods run per node",
+			name:        "Multiple NGINX Pods run per node",
 			valuesFile:  "manifests/scale/zero-downtime/values.yaml",
 			numReplicas: 24, // twice the number of nodes
 		},
@@ -843,19 +877,33 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				cfg.nfr = true
 				setup(cfg, "--values", test.valuesFile)
 
-				deploy, err := resourceManager.GetNGFDeployment(ngfNamespace, releaseName)
-				Expect(err).ToNot(HaveOccurred())
-				ngfDeploymentName = deploy.GetName()
-
 				Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
+
+				var nginxPodNames []string
+				var err error
+				Eventually(
+					func() bool {
+						nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
+						return len(nginxPodNames) == 1 && err == nil
+					}).
+					WithTimeout(timeoutConfig.CreateTimeout).
+					Should(BeTrue())
+
+				nginxPodName := nginxPodNames[0]
+				Expect(nginxPodName).ToNot(BeEmpty())
+
+				setUpPortForward(nginxPodName, ns.Name)
 
 				_, err = fmt.Fprintf(outFile, "\n## %s Test Results\n", test.name)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterAll(func() {
+				framework.AddNginxLogsAndEventsToReport(resourceManager, ns.Name)
+				cleanUpPortForward()
+
 				teardown(releaseName)
 				Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
 			})
@@ -882,8 +930,8 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 
 				// scale NGF up one at a time
 				for i := 2; i <= test.numReplicas; i++ {
-					Eventually(resourceManager.ScaleDeployment).
-						WithArguments(ngfNamespace, ngfDeploymentName, int32(i)).
+					Eventually(resourceManager.ScaleNginxDeployment).
+						WithArguments(ngfNamespace, releaseName, int32(i)).
 						WithTimeout(timeoutConfig.UpdateTimeout).
 						WithPolling(500 * time.Millisecond).
 						Should(Succeed())
@@ -893,7 +941,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 
 					ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.UpdateTimeout)
 
-					Expect(resourceManager.WaitForPodsToBeReadyWithCount(ctx, ngfNamespace, i)).To(Succeed())
+					Expect(resourceManager.WaitForPodsToBeReadyWithCount(ctx, ns.Name, i+numCoffeeAndTeaPods)).To(Succeed())
 					Expect(resourceManager.WaitForGatewayObservedGeneration(ctx, ns.Name, "gateway", i)).To(Succeed())
 
 					cancel()
@@ -935,8 +983,8 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				// scale NGF down one at a time
 				currentGen := test.numReplicas
 				for i := test.numReplicas - 1; i >= 1; i-- {
-					Eventually(resourceManager.ScaleDeployment).
-						WithArguments(ngfNamespace, ngfDeploymentName, int32(i)).
+					Eventually(resourceManager.ScaleNginxDeployment).
+						WithArguments(ngfNamespace, releaseName, int32(i)).
 						WithTimeout(timeoutConfig.UpdateTimeout).
 						WithPolling(500 * time.Millisecond).
 						Should(Succeed())
@@ -1005,7 +1053,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				// allow traffic flow to start
 				time.Sleep(2 * time.Second)
 
-				Expect(resourceManager.ScaleDeployment(ngfNamespace, ngfDeploymentName, int32(test.numReplicas))).To(Succeed())
+				Expect(resourceManager.ScaleNginxDeployment(ngfNamespace, releaseName, int32(test.numReplicas))).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles([]string{"scale/zero-downtime/gateway-2.yaml"}, ns.Name)).To(Succeed())
 				checkGatewayListeners(3)
 
@@ -1037,7 +1085,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				// allow traffic flow to start
 				time.Sleep(2 * time.Second)
 
-				Expect(resourceManager.ScaleDeployment(ngfNamespace, ngfDeploymentName, int32(1))).To(Succeed())
+				Expect(resourceManager.ScaleNginxDeployment(ngfNamespace, releaseName, int32(1))).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles([]string{"scale/zero-downtime/gateway-1.yaml"}, ns.Name)).To(Succeed())
 				checkGatewayListeners(2)
 

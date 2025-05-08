@@ -155,7 +155,7 @@ spec:
       name: my-annotation
 ```
 
-Infrastructure labels and annotations should be applied to all resources created in response to the Gateway. This only applies to _automated deployments_ (i.e., provisioner mode), implementations that automatically deploy the data plane based on a Gateway.
+Infrastructure labels and annotations should be applied to all resources created in response to the Gateway.
 Other use cases for this API are Service type, Service IP, CPU memory requests, affinity rules, and Gateway routability (public, private, and cluster).
 
 ### TLS Options

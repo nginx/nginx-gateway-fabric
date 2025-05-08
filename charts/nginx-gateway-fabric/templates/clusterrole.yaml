@@ -7,39 +7,36 @@ metadata:
 rules:
 - apiGroups:
   - ""
+  - apps
+  resources:
+  - secrets
+  - configmaps
+  - serviceaccounts
+  - services
+  - deployments
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
+  - ""
   resources:
   - namespaces
-  - services
-  - secrets
-{{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
-  - configmaps
-{{- end }}
+  - pods
   verbs:
   - get
   - list
   - watch
-{{- if or .Values.nginxGateway.productTelemetry.enable .Values.nginx.plus }}
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
 - apiGroups:
   - apps
   resources:
   - replicasets
   verbs:
   - get
-{{- end }}
-{{- if .Values.nginx.plus }}
-- apiGroups:
-  - apps
-  resources:
-  - replicasets
-  verbs:
   - list
-{{- end }}
 {{- if or .Values.nginxGateway.productTelemetry.enable .Values.nginx.plus }}
 - apiGroups:
   - ""
@@ -62,6 +59,12 @@ rules:
   verbs:
   - list
   - watch
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
@@ -147,6 +150,19 @@ rules:
   - securitycontextconstraints
   resourceNames:
   - {{ include "nginx-gateway.scc-name" . }}
+  - {{ include "nginx-gateway.scc-name" . }}-nginx
   verbs:
   - use
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
 {{- end }}

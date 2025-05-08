@@ -43,21 +43,7 @@ func TestExecutePlusAPI_EmptyNginxPlus(t *testing.T) {
 	}
 
 	g := NewWithT(t)
-	expSubStrings := map[string]int{
-		"listen unix:/var/run/nginx/nginx-plus-api.sock;": 0,
-		"access_log off;":               0,
-		"api write=on;":                 0,
-		"listen 8765;":                  0,
-		"root /usr/share/nginx/html;":   0,
-		"allow 127.0.0.1;":              0,
-		"deny all;":                     0,
-		"location = /dashboard.html {}": 0,
-		"api write=off;":                0,
-	}
 
-	for expSubStr, expCount := range expSubStrings {
-		res := executePlusAPI(conf)
-		g.Expect(res).To(HaveLen(1))
-		g.Expect(expCount).To(Equal(strings.Count(string(res[0].data), expSubStr)))
-	}
+	res := executePlusAPI(conf)
+	g.Expect(res).To(BeNil())
 }

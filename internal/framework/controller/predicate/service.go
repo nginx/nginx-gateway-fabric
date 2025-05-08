@@ -2,9 +2,7 @@ package predicate
 
 import (
 	apiv1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -64,55 +62,4 @@ func (ServicePortsChangedPredicate) Update(e event.UpdateEvent) bool {
 	}
 
 	return len(newPortSet) > 0
-}
-
-// GatewayServicePredicate implements predicate functions for this Pod's Service.
-type GatewayServicePredicate struct {
-	predicate.Funcs
-	NSName types.NamespacedName
-}
-
-// Update implements the default UpdateEvent filter for the Gateway Service.
-func (gsp GatewayServicePredicate) Update(e event.UpdateEvent) bool {
-	if e.ObjectOld == nil {
-		return false
-	}
-	if e.ObjectNew == nil {
-		return false
-	}
-
-	oldSvc, ok := e.ObjectOld.(*apiv1.Service)
-	if !ok {
-		return false
-	}
-
-	newSvc, ok := e.ObjectNew.(*apiv1.Service)
-	if !ok {
-		return false
-	}
-
-	if client.ObjectKeyFromObject(newSvc) != gsp.NSName {
-		return false
-	}
-
-	if oldSvc.Spec.Type != newSvc.Spec.Type {
-		return true
-	}
-
-	if newSvc.Spec.Type == apiv1.ServiceTypeLoadBalancer {
-		oldIngress := oldSvc.Status.LoadBalancer.Ingress
-		newIngress := newSvc.Status.LoadBalancer.Ingress
-
-		if len(oldIngress) != len(newIngress) {
-			return true
-		}
-
-		for i, ingress := range oldIngress {
-			if ingress.IP != newIngress[i].IP || ingress.Hostname != newIngress[i].Hostname {
-				return true
-			}
-		}
-	}
-
-	return false
 }

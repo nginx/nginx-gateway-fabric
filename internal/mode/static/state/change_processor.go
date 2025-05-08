@@ -28,19 +28,6 @@ import (
 
 //go:generate go tool counterfeiter -generate
 
-// ChangeType is the type of change that occurred based on a k8s object event.
-type ChangeType int
-
-const (
-	// NoChange means that nothing changed.
-	NoChange ChangeType = iota
-	// EndpointsOnlyChange means that only the endpoints changed.
-	// If using NGINX Plus, this update can be done using the API without a reload.
-	EndpointsOnlyChange
-	// ClusterStateChange means that something other than endpoints changed. This requires an NGINX reload.
-	ClusterStateChange
-)
-
 //counterfeiter:generate . ChangeProcessor
 
 // ChangeProcessor processes the changes to resources and produces a graph-like representation
@@ -55,8 +42,8 @@ type ChangeProcessor interface {
 	// this ChangeProcessor was created for.
 	CaptureDeleteChange(resourceType ngftypes.ObjectType, nsname types.NamespacedName)
 	// Process produces a graph-like representation of GatewayAPI resources.
-	// If no changes were captured, the changed return argument will be NoChange and graph will be empty.
-	Process() (changeType ChangeType, graphCfg *graph.Graph)
+	// If no changes were captured, the graph will be empty.
+	Process() (graphCfg *graph.Graph)
 	// GetLatestGraph returns the latest Graph.
 	GetLatestGraph() *graph.Graph
 }
@@ -69,8 +56,6 @@ type ChangeProcessorConfig struct {
 	EventRecorder record.EventRecorder
 	// MustExtractGVK is a function that extracts schema.GroupVersionKind from a client.Object.
 	MustExtractGVK kinds.MustExtractGVK
-	// ProtectedPorts are the ports that may not be configured by a listener with a descriptive name of the ports.
-	ProtectedPorts graph.ProtectedPorts
 	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
 	PlusSecrets map[types.NamespacedName][]graph.PlusSecretFile
 	// Logger is the logger for this Change Processor.
@@ -90,7 +75,7 @@ type ChangeProcessorImpl struct {
 	// updater acts upon the cluster state.
 	updater Updater
 	// getAndResetClusterStateChanged tells if and how the cluster state has changed.
-	getAndResetClusterStateChanged func() ChangeType
+	getAndResetClusterStateChanged func() bool
 
 	cfg  ChangeProcessorConfig
 	lock sync.Mutex
@@ -109,7 +94,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		CRDMetadata:        make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
 		BackendTLSPolicies: make(map[types.NamespacedName]*v1alpha3.BackendTLSPolicy),
 		ConfigMaps:         make(map[types.NamespacedName]*apiv1.ConfigMap),
-		NginxProxies:       make(map[types.NamespacedName]*ngfAPIv1alpha1.NginxProxy),
+		NginxProxies:       make(map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy),
 		GRPCRoutes:         make(map[types.NamespacedName]*v1.GRPCRoute),
 		TLSRoutes:          make(map[types.NamespacedName]*v1alpha2.TLSRoute),
 		NGFPolicies:        make(map[graph.PolicyKey]policies.Policy),
@@ -203,7 +188,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 				predicate: annotationChangedPredicate{annotation: gatewayclass.BundleVersionAnnotation},
 			},
 			{
-				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.NginxProxy{}),
+				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha2.NginxProxy{}),
 				store:     newObjectStoreMapAdapter(clusterStore.NginxProxies),
 				predicate: funcPredicate{stateChanged: isReferenced},
 			},
@@ -270,13 +255,12 @@ func (c *ChangeProcessorImpl) CaptureDeleteChange(resourceType ngftypes.ObjectTy
 	c.updater.Delete(resourceType, nsname)
 }
 
-func (c *ChangeProcessorImpl) Process() (ChangeType, *graph.Graph) {
+func (c *ChangeProcessorImpl) Process() *graph.Graph {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	changeType := c.getAndResetClusterStateChanged()
-	if changeType == NoChange {
-		return NoChange, nil
+	if !c.getAndResetClusterStateChanged() {
+		return nil
 	}
 
 	c.latestGraph = graph.BuildGraph(
@@ -285,10 +269,9 @@ func (c *ChangeProcessorImpl) Process() (ChangeType, *graph.Graph) {
 		c.cfg.GatewayClassName,
 		c.cfg.PlusSecrets,
 		c.cfg.Validators,
-		c.cfg.ProtectedPorts,
 	)
 
-	return changeType, c.latestGraph
+	return c.latestGraph
 }
 
 func (c *ChangeProcessorImpl) GetLatestGraph() *graph.Graph {

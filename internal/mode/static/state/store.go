@@ -3,7 +3,6 @@ package state
 import (
 	"fmt"
 
-	discoveryV1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -188,7 +187,7 @@ type changeTrackingUpdater struct {
 	extractGVK    kinds.MustExtractGVK
 	supportedGVKs gvkList
 
-	changeType ChangeType
+	changed bool
 }
 
 func newChangeTrackingUpdater(
@@ -221,7 +220,6 @@ func newChangeTrackingUpdater(
 		extractGVK:             extractGVK,
 		supportedGVKs:          supportedGVKs,
 		stateChangedPredicates: stateChangedPredicates,
-		changeType:             NoChange,
 	}
 }
 
@@ -255,7 +253,7 @@ func (s *changeTrackingUpdater) Upsert(obj client.Object) {
 
 	changingUpsert := s.upsert(obj)
 
-	s.setChangeType(obj, changingUpsert)
+	s.changed = s.changed || changingUpsert
 }
 
 func (s *changeTrackingUpdater) delete(objType ngftypes.ObjectType, nsname types.NamespacedName) (changed bool) {
@@ -282,28 +280,13 @@ func (s *changeTrackingUpdater) Delete(objType ngftypes.ObjectType, nsname types
 
 	changingDelete := s.delete(objType, nsname)
 
-	s.setChangeType(objType, changingDelete)
+	s.changed = s.changed || changingDelete
 }
 
-// getAndResetChangedStatus returns the type of change that occurred based on the previous updates (Upserts/Deletes).
-// It also resets the changed status to NoChange.
-func (s *changeTrackingUpdater) getAndResetChangedStatus() ChangeType {
-	changeType := s.changeType
-	s.changeType = NoChange
-	return changeType
-}
-
-// setChangeType determines and sets the type of change that occurred.
-// - if no change occurred on this object, then keep the changeType as-is (could've been set by another object event)
-// - if changeType is already a ClusterStateChange, then we don't need to update the value
-// - otherwise, if we are processing an Endpoint update, then this is an EndpointsOnlyChange changeType
-// - otherwise, this is a different object, and is a ClusterStateChange changeType.
-func (s *changeTrackingUpdater) setChangeType(obj client.Object, changed bool) {
-	if changed && s.changeType != ClusterStateChange {
-		if _, ok := obj.(*discoveryV1.EndpointSlice); ok {
-			s.changeType = EndpointsOnlyChange
-		} else {
-			s.changeType = ClusterStateChange
-		}
-	}
+// getAndResetChangedStatus returns if a change occurred based on the previous updates (Upserts/Deletes).
+// It also resets the changed status to false.
+func (s *changeTrackingUpdater) getAndResetChangedStatus() bool {
+	changed := s.changed
+	s.changed = false
+	return changed
 }

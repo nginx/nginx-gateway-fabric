@@ -58,19 +58,3 @@ func TestZapLogLevelSetter_SetLevel(t *testing.T) {
 
 	g.Expect(zapSetter.SetLevel("invalid")).ToNot(Succeed())
 }
-
-func TestPromLogLevelSetter_SetLevel(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	logger, err := newLeveledPrometheusLogger()
-	g.Expect(err).ToNot(HaveOccurred())
-
-	promSetter := newPromLogLevelSetter(logger)
-
-	g.Expect(promSetter.SetLevel("error")).To(Succeed())
-	g.Expect(promSetter.SetLevel("info")).To(Succeed())
-	g.Expect(promSetter.SetLevel("debug")).To(Succeed())
-
-	g.Expect(promSetter.SetLevel("invalid")).ToNot(Succeed())
-}

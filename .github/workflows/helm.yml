@@ -176,4 +176,4 @@ jobs:
           --set=nginx.plus=${{ inputs.image == 'plus' }} \
           --set=nginx.image.tag=nightly \
           --set=nginxGateway.productTelemetry.enable=false \
-          ${{ inputs.image == 'plus' && '--set=serviceAccount.imagePullSecret=nginx-plus-registry-secret --set=nginx.image.repository=private-registry.nginx.com/nginx-gateway-fabric/nginx-plus' || '' }}"
+          ${{ inputs.image == 'plus' && '--set=nginx.imagePullSecret=nginx-plus-registry-secret --set=nginx.image.repository=private-registry.nginx.com/nginx-gateway-fabric/nginx-plus' || '' }}"
