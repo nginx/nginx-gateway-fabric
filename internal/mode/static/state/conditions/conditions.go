@@ -53,14 +53,6 @@ const (
 	// invalid. Used with ResolvedRefs (false).
 	RouteReasonInvalidFilter v1.RouteConditionReason = "InvalidFilter"
 
-	// GatewayReasonGatewayConflict indicates there are multiple Gateway resources to choose from,
-	// and we ignored the resource in question and picked another Gateway as the winner.
-	// This reason is used with GatewayConditionAccepted (false).
-	GatewayReasonGatewayConflict v1.GatewayConditionReason = "GatewayConflict"
-
-	// GatewayMessageGatewayConflict is a message that describes GatewayReasonGatewayConflict.
-	GatewayMessageGatewayConflict = "The resource is ignored due to a conflicting Gateway resource"
-
 	// GatewayReasonUnsupportedValue is used with GatewayConditionAccepted (false) when a value of a field in a Gateway
 	// is invalid or not supported.
 	GatewayReasonUnsupportedValue v1.GatewayConditionReason = "UnsupportedValue"
@@ -574,19 +566,6 @@ func NewGatewayAccepted() conditions.Condition {
 	}
 }
 
-// NewGatewayConflict returns Conditions that indicate the Gateway has a conflict with another Gateway.
-func NewGatewayConflict() []conditions.Condition {
-	return []conditions.Condition{
-		{
-			Type:    string(v1.GatewayConditionAccepted),
-			Status:  metav1.ConditionFalse,
-			Reason:  string(GatewayReasonGatewayConflict),
-			Message: GatewayMessageGatewayConflict,
-		},
-		NewGatewayConflictNotProgrammed(),
-	}
-}
-
 // NewGatewayAcceptedListenersNotValid returns a Condition that indicates the Gateway is accepted,
 // but has at least one listener that is invalid.
 func NewGatewayAcceptedListenersNotValid() conditions.Condition {
@@ -665,17 +644,6 @@ func NewGatewayNotProgrammedInvalid(msg string) conditions.Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.GatewayReasonInvalid),
 		Message: msg,
-	}
-}
-
-// NewGatewayConflictNotProgrammed returns a custom Programmed Condition that indicates the Gateway has a
-// conflict with another Gateway.
-func NewGatewayConflictNotProgrammed() conditions.Condition {
-	return conditions.Condition{
-		Type:    string(v1.GatewayConditionProgrammed),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(GatewayReasonGatewayConflict),
-		Message: GatewayMessageGatewayConflict,
 	}
 }
 
