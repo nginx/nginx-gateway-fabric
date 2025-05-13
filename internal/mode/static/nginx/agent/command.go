@@ -522,9 +522,9 @@ func getNginxInstanceID(instances []*pb.Instance) string {
 }
 
 // UpdateDataPlaneHealth includes full health information about the data plane as reported by the agent.
-func (cs *commandService) UpdateDataPlaneHealth(
-	_ context.Context,
-	_ *pb.UpdateDataPlaneHealthRequest,
+func (*commandService) UpdateDataPlaneHealth(
+	context.Context,
+	*pb.UpdateDataPlaneHealthRequest,
 ) (*pb.UpdateDataPlaneHealthResponse, error) {
 	return &pb.UpdateDataPlaneHealthResponse{}, nil
 }

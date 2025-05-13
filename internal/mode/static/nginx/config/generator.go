@@ -143,6 +143,7 @@ func (g GeneratorImpl) GenerateDeploymentContext(depCtx dataplane.DeploymentCont
 			Name:        mainIncludesFolder + "/deployment_ctx.json",
 			Hash:        filesHelper.GenerateHash(depCtxBytes),
 			Permissions: file.RegularFileMode,
+			Size:        int64(len(depCtxBytes)),
 		},
 		Contents: depCtxBytes,
 	}
@@ -178,6 +179,7 @@ func (g GeneratorImpl) executeConfigTemplates(
 				Name:        fp,
 				Hash:        filesHelper.GenerateHash(bytes),
 				Permissions: file.RegularFileMode,
+				Size:        int64(len(bytes)),
 			},
 			Contents: bytes,
 		})
@@ -218,6 +220,7 @@ func generatePEM(id dataplane.SSLKeyPairID, cert []byte, key []byte) agent.File 
 			Name:        generatePEMFileName(id),
 			Hash:        filesHelper.GenerateHash(c),
 			Permissions: file.SecretFileMode,
+			Size:        int64(len(c)),
 		},
 		Contents: c,
 	}
@@ -233,6 +236,7 @@ func generateCertBundle(id dataplane.CertBundleID, cert []byte) agent.File {
 			Name:        generateCertBundleFileName(id),
 			Hash:        filesHelper.GenerateHash(cert),
 			Permissions: file.SecretFileMode,
+			Size:        int64(len(cert)),
 		},
 		Contents: cert,
 	}

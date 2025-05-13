@@ -69,6 +69,7 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 			Name:        secretsFolder + "/license.jwt",
 			Hash:        filesHelper.GenerateHash(tokenContent),
 			Permissions: file.SecretFileMode,
+			Size:        int64(len(tokenContent)),
 		},
 		Contents: tokenContent,
 	}
@@ -87,6 +88,7 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 				Name:        secretsFolder + "/mgmt-ca.crt",
 				Hash:        filesHelper.GenerateHash(content),
 				Permissions: file.SecretFileMode,
+				Size:        int64(len(content)),
 			},
 			Contents: content,
 		}
@@ -100,6 +102,7 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 				Name:        secretsFolder + "/mgmt-tls.crt",
 				Hash:        filesHelper.GenerateHash(content),
 				Permissions: file.SecretFileMode,
+				Size:        int64(len(content)),
 			},
 			Contents: content,
 		}
@@ -113,6 +116,7 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 				Name:        secretsFolder + "/mgmt-tls.key",
 				Hash:        filesHelper.GenerateHash(content),
 				Permissions: file.SecretFileMode,
+				Size:        int64(len(content)),
 			},
 			Contents: content,
 		}
@@ -133,6 +137,7 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 			Name:        mgmtIncludesFile,
 			Hash:        filesHelper.GenerateHash(mgmtContents),
 			Permissions: file.RegularFileMode,
+			Size:        int64(len(mgmtContents)),
 		},
 		Contents: mgmtContents,
 	}

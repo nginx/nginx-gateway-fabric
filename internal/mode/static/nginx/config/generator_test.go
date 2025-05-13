@@ -261,6 +261,7 @@ func TestGenerate(t *testing.T) {
 			Name:        "/etc/nginx/secrets/test-keypair.pem",
 			Hash:        filesHelper.GenerateHash([]byte("test-cert\ntest-key")),
 			Permissions: file.SecretFileMode,
+			Size:        int64(len([]byte("test-cert\ntest-key"))),
 		},
 		Contents: []byte("test-cert\ntest-key"),
 	}))
