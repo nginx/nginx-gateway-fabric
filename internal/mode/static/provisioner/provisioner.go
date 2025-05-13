@@ -260,7 +260,7 @@ func (p *NginxProvisioner) provisionNginx(
 	}
 
 	// if agent configmap was updated, then we'll need to restart the deployment
-	if agentConfigMapUpdated && !deploymentCreated {
+	if agentConfigMapUpdated && !deploymentCreated && deploymentObj != nil {
 		updateCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 

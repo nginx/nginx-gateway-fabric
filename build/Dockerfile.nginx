@@ -12,7 +12,7 @@ WORKDIR /tmp
 RUN apk add --no-cache git make \
     && git clone https://github.com/nginx/agent.git \
     && cd agent \
-    && git checkout v3 \
+    && git checkout e745a3236e0f02a579461a5a435b3bcd410a686c \
     && make build
 
 FROM nginx:1.28.0-alpine-otel
