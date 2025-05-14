@@ -523,11 +523,6 @@ type ServiceSpec struct {
 	// +optional
 	LoadBalancerClass *string `json:"loadBalancerClass,omitempty"`
 
-	// Annotations contain any Service-specific annotations.
-	//
-	// +optional
-	Annotations map[string]string `json:"annotations,omitempty"`
-
 	// LoadBalancerSourceRanges are the IP ranges (CIDR) that are allowed to access the load balancer.
 	// Requires service type to be LoadBalancer.
 	//

@@ -550,13 +550,6 @@ func (in *ServiceSpec) DeepCopyInto(out *ServiceSpec) {
 		*out = new(string)
 		**out = **in
 	}
-	if in.Annotations != nil {
-		in, out := &in.Annotations, &out.Annotations
-		*out = make(map[string]string, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
-		}
-	}
 	if in.LoadBalancerSourceRanges != nil {
 		in, out := &in.LoadBalancerSourceRanges, &out.LoadBalancerSourceRanges
 		*out = make([]string, len(*in))
