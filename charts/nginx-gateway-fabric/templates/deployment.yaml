@@ -212,8 +212,14 @@ spec:
         ports:
         - containerPort: 80
           name: http
+          {{- if .Values.nginx.hostPort.enable }}
+          hostPort: {{ .Values.nginx.hostPort.http }}
+          {{- end }}
         - containerPort: 443
           name: https
+          {{- if .Values.nginx.hostPort.enable }}
+          hostPort: {{ .Values.nginx.hostPort.https }}
+          {{- end }}
         securityContext:
           seccompProfile:
             type: RuntimeDefault
