@@ -21,6 +21,11 @@ permissions:
 
 jobs:
   codeql:
+    permissions:
+      packages: read
+      actions: read # for github/codeql-action/init to get workflow details
+      contents: read # for actions/checkout to fetch code
+      security-events: write # for github/codeql-action/autobuild to send a status report
     uses: nginxinc/compliance-rules/.github/workflows/codeql.yml@v0.1
     with:
       requested_languages: go,javascript-typescript
