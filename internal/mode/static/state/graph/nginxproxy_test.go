@@ -801,7 +801,7 @@ func TestValidateNginxProxy(t *testing.T) {
 						TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
 							{
 								Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
-								Value: "2001:db8:a0b:12f0::1/32",
+								Value: "2001:db8:a0b:12f0::1/128",
 							},
 							{
 								Type:  ngfAPIv1alpha2.RewriteClientIPIPAddressType,
@@ -925,7 +925,7 @@ func TestValidateRewriteClientIP(t *testing.T) {
 						TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
 							{
 								Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
-								Value: "2001:db8:a0b:12f0::1/32",
+								Value: "2001:db8:a0b:12f0::1/128",
 							},
 							{
 								Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
@@ -1048,27 +1048,27 @@ func TestValidateRewriteClientIP(t *testing.T) {
 					RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
 						Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
 						TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
+							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
 						},
 					},
 				},
@@ -1086,7 +1086,7 @@ func TestValidateRewriteClientIP(t *testing.T) {
 						TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
 							{
 								Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
-								Value: "2001:db8:a0b:12f0::1/32",
+								Value: "2001:db8:a0b:12f0::1/128",
 							},
 							{
 								Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
@@ -1312,7 +1312,7 @@ func TestValidateNginxPlus(t *testing.T) {
 					NginxPlus: &ngfAPIv1alpha2.NginxPlus{
 						AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
 							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "2001:db8:a0b:12f0::1"},
-							{Type: ngfAPIv1alpha2.NginxPlusAllowCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
+							{Type: ngfAPIv1alpha2.NginxPlusAllowCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
 							{Type: ngfAPIv1alpha2.NginxPlusAllowIPAddressType, Value: "127.0.0.3"},
 							{Type: ngfAPIv1alpha2.NginxPlusAllowCIDRAddressType, Value: "127.0.0.3/32"},
 						},
@@ -1328,7 +1328,7 @@ func TestValidateNginxPlus(t *testing.T) {
 				Spec: ngfAPIv1alpha2.NginxProxySpec{
 					NginxPlus: &ngfAPIv1alpha2.NginxPlus{
 						AllowedAddresses: []ngfAPIv1alpha2.NginxPlusAllowAddress{
-							{Type: ngfAPIv1alpha2.NginxPlusAllowCIDRAddressType, Value: "2001:db8:a0b:12f0::1/32"},
+							{Type: ngfAPIv1alpha2.NginxPlusAllowCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
 							{Type: ngfAPIv1alpha2.NginxPlusAllowCIDRAddressType, Value: "127.0.0.3/37"},
 						},
 					},
