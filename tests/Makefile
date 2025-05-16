@@ -9,7 +9,6 @@ GITHUB_OUTPUT =
 GW_API_VERSION ?= $(shell sed -n 's/.*ref=v\(.*\)/\1/p' ../config/crd/gateway-api/standard/kustomization.yaml)## Supported Gateway API version from current NGF
 GW_API_PREV_VERSION ?= 1.2.1## Supported Gateway API version from previous NGF release
 GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
-GW_SVC_GKE_INTERNAL = false
 NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY = Never## Pull policy for the images
 NGINX_CONF_DIR = internal/mode/static/nginx/conf
@@ -127,9 +126,8 @@ stop-longevity-test: nfr-test ## Stop the longevity test and collects results
 		--gateway-api-prev-version=$(GW_API_PREV_VERSION) --image-tag=$(TAG) --version-under-test=$(NGF_VERSION) \
 		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
-		--is-gke-internal-lb=$(GW_SVC_GKE_INTERNAL) --plus-enabled=$(PLUS_ENABLED) \
-		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
-		--gke-project=$(GKE_PROJECT)
+		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
+		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT)
 
 .PHONY: test
 test: build-crossplane-image ## Runs the functional tests on your kind k8s cluster
@@ -141,7 +139,7 @@ test: build-crossplane-image ## Runs the functional tests on your kind k8s clust
 		--image-tag=$(TAG) --version-under-test=$(NGF_VERSION) \
 		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
-		--is-gke-internal-lb=$(GW_SVC_GKE_INTERNAL) --cluster-name=$(CLUSTER_NAME) --plus-enabled=$(PLUS_ENABLED) \
+		--cluster-name=$(CLUSTER_NAME) --plus-enabled=$(PLUS_ENABLED) \
 		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT)
 
 .PHONY: test-with-plus

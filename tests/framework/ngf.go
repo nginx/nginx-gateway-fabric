@@ -35,7 +35,6 @@ type InstallationConfig struct {
 	ServiceType          string
 	PlusUsageEndpoint    string
 	Plus                 bool
-	IsGKEInternalLB      bool
 	Telemetry            bool
 }
 
@@ -231,11 +230,6 @@ func setImageArgs(cfg InstallationConfig) []string {
 
 	if cfg.ServiceType != "" {
 		args = append(args, formatValueSet("nginx.service.type", cfg.ServiceType)...)
-		if cfg.ServiceType == "LoadBalancer" && cfg.IsGKEInternalLB {
-			args = append(
-				args,
-				formatValueSet(`service.annotations.networking\.gke\.io\/load-balancer-type`, "Internal")...)
-		}
 	}
 
 	return args

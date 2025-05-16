@@ -60,7 +60,6 @@ var (
 	versionUnderTest         = flag.String("version-under-test", "", "Version of NGF that is being tested")
 	imagePullPolicy          = flag.String("pull-policy", "", "Image pull policy for NGF images")
 	serviceType              = flag.String("service-type", "NodePort", "Type of service fronting NGF to be deployed")
-	isGKEInternalLB          = flag.Bool("is-gke-internal-lb", false, "Is the LB service GKE internal only")
 	plusEnabled              = flag.Bool("plus-enabled", false, "Is NGINX Plus enabled")
 	plusLicenseFileName      = flag.String("plus-license-file-name", "", "File name containing the NGINX Plus JWT")
 	plusUsageEndpoint        = flag.String("plus-usage-endpoint", "", "Endpoint for reporting NGINX Plus usage")
@@ -222,7 +221,6 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		Namespace:         ngfNamespace,
 		ChartPath:         cfg.chartPath,
 		ServiceType:       *serviceType,
-		IsGKEInternalLB:   *isGKEInternalLB,
 		Plus:              *plusEnabled,
 		PlusUsageEndpoint: *plusUsageEndpoint,
 		Telemetry:         cfg.telemetry,

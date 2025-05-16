@@ -4,6 +4,9 @@ metadata:
   name: gateway
 spec:
   gatewayClassName: nginx
+  infrastructure:
+    annotations:
+      service.annotations.networking.gke.io/load-balancer-type: Internal
   listeners:
   - name: http
     port: 80

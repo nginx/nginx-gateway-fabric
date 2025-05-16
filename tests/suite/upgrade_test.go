@@ -108,7 +108,6 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 			ImageTag:             *imageTag,
 			ImagePullPolicy:      *imagePullPolicy,
 			ServiceType:          *serviceType,
-			IsGKEInternalLB:      *isGKEInternalLB,
 			Plus:                 *plusEnabled,
 			PlusUsageEndpoint:    *plusUsageEndpoint,
 		}
