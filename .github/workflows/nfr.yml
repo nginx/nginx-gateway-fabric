@@ -168,6 +168,7 @@ jobs:
         if: always()
         run: |
           bash scripts/cleanup-vm.sh true
+          bash scripts/cleanup-router.sh true
           make delete-gke-cluster
           rm -rf scripts/vars.env
 
