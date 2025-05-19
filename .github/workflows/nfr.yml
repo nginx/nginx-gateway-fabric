@@ -144,6 +144,10 @@ jobs:
         working-directory: ./tests
         run: make create-and-setup-vm
 
+      - name: Create and setup Router
+        working-directory: ./tests
+        run: make create-gke-router
+
       - name: Run Tests
         working-directory: ./tests
         run: |
