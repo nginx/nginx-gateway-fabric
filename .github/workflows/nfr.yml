@@ -146,7 +146,7 @@ jobs:
 
       - name: Create and setup Router
         working-directory: ./tests
-        run: make create-gke-router
+        run: make create-gke-router || true
 
       - name: Run Tests
         working-directory: ./tests

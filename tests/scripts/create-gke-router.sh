@@ -11,5 +11,5 @@ gcloud compute routers create "${RESOURCE_NAME}" \
 gcloud compute routers nats create "${RESOURCE_NAME}" \
     --router-region "${GKE_CLUSTER_REGION}" \
     --router "${RESOURCE_NAME}" \
-    --auto-allocate-nat-external-ips \
-    --nat-custom-subnet-ip-ranges="default"
+    --nat-all-subnet-ip-ranges \
+    --auto-allocate-nat-external-ips
