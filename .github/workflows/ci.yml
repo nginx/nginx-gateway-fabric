@@ -59,7 +59,7 @@ jobs:
       - name: Output Variables
         id: vars
         run: |
-          K8S_KIND_VERSION=v1.33.0 # renovate: datasource=docker depName=kindest/node
+          K8S_KIND_VERSION=v1.33.1 # renovate: datasource=docker depName=kindest/node
           echo "go_path=$(go env GOPATH)" >> $GITHUB_OUTPUT
           echo "min_k8s_version=v1.25.16" >> $GITHUB_OUTPUT
           echo "k8s_latest=${K8S_KIND_VERSION}" >> $GITHUB_OUTPUT
@@ -94,7 +94,7 @@ jobs:
         run: make unit-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
+        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -122,7 +122,7 @@ jobs:
         run: npm --prefix ${{ github.workspace }}/internal/mode/static/nginx/modules install-ci-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
+        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -161,7 +161,7 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
 
       - name: Download Syft
-        uses: anchore/sbom-action/download-syft@9f7302141466aa6482940f15371237e9d9f4c34a # v0.19.0
+        uses: anchore/sbom-action/download-syft@e11c554f704a0b820cbf8c51673f6945e0731532 # v0.20.0
         if: github.ref_type == 'tag'
 
       - name: Install Cosign
