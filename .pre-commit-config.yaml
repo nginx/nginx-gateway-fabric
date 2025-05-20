@@ -27,7 +27,7 @@ repos:
         exclude: (^examples/|^docs/|.*_test.go$)
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.25.1
+    rev: v8.26.0
     hooks:
       - id: gitleaks
 
