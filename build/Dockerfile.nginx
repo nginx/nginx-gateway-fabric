@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.15
+# syntax=docker/dockerfile:1.16
 # TODO(sberman): the commented out lines are for when we use the published agent release
 # FROM scratch AS nginx-files
 
