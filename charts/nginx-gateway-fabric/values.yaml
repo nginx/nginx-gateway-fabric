@@ -478,6 +478,9 @@ certGenerator:
   # -- Overwrite existing TLS Secrets on startup.
   overwrite: false
 
+# -- A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.
+gateways: []
+
 # Example gateway object:
 # name: nginx-gateway
 # namespace: default
@@ -503,6 +506,3 @@ certGenerator:
 #       allowedRoutes:
 #         namespaces:
 #           from: Same
-
-# -- A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.
-gateways: []
