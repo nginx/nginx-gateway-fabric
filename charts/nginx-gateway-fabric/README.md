@@ -214,8 +214,8 @@ being performed on NGF), you may need to configure delayed termination on the NG
 
 > [!NOTE]
 >
-> More information on container lifecycle hooks can be found
-> [here](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks) and a detailed
+> More information on container lifecycle hooks can be found in the official
+> [kubernetes documentation](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks) and a detailed
 > description of Pod termination behavior can be found in
 > [Termination of Pods](https://kubernetes.io/docs/concepts/workloads/Pods/Pod-lifecycle/#Pod-termination).
 
@@ -258,6 +258,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `certGenerator.overwrite` | Overwrite existing TLS Secrets on startup. | bool | `false` |
 | `certGenerator.serverTLSSecretName` | The name of the Secret containing TLS CA, certificate, and key for the NGINX Gateway Fabric control plane to securely communicate with the NGINX Agent. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `"server-tls"` |
 | `clusterDomain` | The DNS cluster domain of your Kubernetes cluster. | string | `"cluster.local"` |
+| `gateways` | A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference. | list | `[]` |
 | `nginx` | The nginx section contains the configuration for all NGINX data plane deployments installed by the NGINX Gateway Fabric control plane. | object | `{"config":{},"container":{},"debug":false,"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric/nginx","tag":"edge"},"imagePullSecret":"","imagePullSecrets":[],"kind":"deployment","plus":false,"pod":{},"replicas":1,"service":{"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"type":"LoadBalancer"},"usage":{"caSecretName":"","clientSSLSecretName":"","endpoint":"","resolver":"","secretName":"nplus-license","skipVerify":false}}` |
 | `nginx.config` | The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{}` |
 | `nginx.container` | The container configuration for the NGINX container. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{}` |
