@@ -168,7 +168,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 
 	snippetsFiltersDirectives, snippetsFiltersDirectivesCount := collectSnippetsFilterDirectives(g)
 
-	nginxPodCount := getNginxPodCount(g)
+	nginxPodCount := getNginxPodCount(g, clusterInfo.NodeCount)
 
 	data := Data{
 		Data: tel.Data{
@@ -515,17 +515,18 @@ func parseDirectiveContextMapIntoLists(directiveContextMap map[sfDirectiveContex
 	return directiveContextList, countList
 }
 
-func getNginxPodCount(g *graph.Graph) int64 {
+func getNginxPodCount(g *graph.Graph, nodeCount int) int64 {
 	var count int64
 	for _, gateway := range g.Gateways {
 		replicas := int64(1)
 
 		np := gateway.EffectiveNginxProxy
-		if np != nil &&
-			np.Kubernetes != nil &&
-			np.Kubernetes.Deployment != nil &&
-			np.Kubernetes.Deployment.Replicas != nil {
-			replicas = int64(*np.Kubernetes.Deployment.Replicas)
+		if np != nil && np.Kubernetes != nil {
+			if np.Kubernetes.Deployment != nil && np.Kubernetes.Deployment.Replicas != nil {
+				replicas = int64(*np.Kubernetes.Deployment.Replicas)
+			} else if np.Kubernetes.DaemonSet != nil {
+				replicas = int64(nodeCount)
+			}
 		}
 
 		count += replicas

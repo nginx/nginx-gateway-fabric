@@ -16,6 +16,8 @@ func objectSpecSetter(object client.Object) controllerutil.MutateFn {
 	switch obj := object.(type) {
 	case *appsv1.Deployment:
 		return deploymentSpecSetter(obj, obj.Spec, obj.ObjectMeta)
+	case *appsv1.DaemonSet:
+		return daemonSetSpecSetter(obj, obj.Spec, obj.ObjectMeta)
 	case *corev1.Service:
 		return serviceSpecSetter(obj, obj.Spec, obj.ObjectMeta)
 	case *corev1.ServiceAccount:
@@ -42,6 +44,19 @@ func deploymentSpecSetter(
 		deployment.Labels = objectMeta.Labels
 		deployment.Annotations = objectMeta.Annotations
 		deployment.Spec = spec
+		return nil
+	}
+}
+
+func daemonSetSpecSetter(
+	daemonSet *appsv1.DaemonSet,
+	spec appsv1.DaemonSetSpec,
+	objectMeta metav1.ObjectMeta,
+) controllerutil.MutateFn {
+	return func() error {
+		daemonSet.Labels = objectMeta.Labels
+		daemonSet.Annotations = objectMeta.Annotations
+		daemonSet.Spec = spec
 		return nil
 	}
 }

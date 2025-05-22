@@ -505,7 +505,18 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		clientSSLSecretName,
 	)
 
-	var object client.Object
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.DaemonSet != nil {
+		return &appsv1.DaemonSet{
+			ObjectMeta: objectMeta,
+			Spec: appsv1.DaemonSetSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: selectorLabels,
+				},
+				Template: podTemplateSpec,
+			},
+		}
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: objectMeta,
 		Spec: appsv1.DeploymentSpec{
@@ -525,9 +536,7 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		deployment.Spec.Replicas = deploymentCfg.Replicas
 	}
 
-	object = deployment
-
-	return object
+	return deployment
 }
 
 //nolint:gocyclo // will refactor at some point
@@ -731,6 +740,9 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		if nProxyCfg.Kubernetes.Deployment != nil {
 			podSpec = &nProxyCfg.Kubernetes.Deployment.Pod
 			containerSpec = &nProxyCfg.Kubernetes.Deployment.Container
+		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
+			podSpec = &nProxyCfg.Kubernetes.DaemonSet.Pod
+			containerSpec = &nProxyCfg.Kubernetes.DaemonSet.Container
 		}
 
 		if podSpec != nil {
@@ -861,6 +873,8 @@ func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (str
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
 		if nProxyCfg.Kubernetes.Deployment != nil {
 			image, tag, pullPolicy = getImageAndPullPolicy(nProxyCfg.Kubernetes.Deployment.Container)
+		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
+			image, tag, pullPolicy = getImageAndPullPolicy(nProxyCfg.Kubernetes.DaemonSet.Container)
 		}
 	}
 
@@ -887,11 +901,14 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 	deployment := &appsv1.Deployment{
 		ObjectMeta: objectMeta,
 	}
+	daemonSet := &appsv1.DaemonSet{
+		ObjectMeta: objectMeta,
+	}
 	service := &corev1.Service{
 		ObjectMeta: objectMeta,
 	}
 
-	objects := []client.Object{deployment, service}
+	objects := []client.Object{deployment, daemonSet, service}
 
 	if p.isOpenshift {
 		role := &rbacv1.Role{

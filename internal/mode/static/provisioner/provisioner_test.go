@@ -394,3 +394,67 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 
 	g.Expect(dep.Spec.Template.GetAnnotations()).To(HaveKey(controller.RestartedAnnotation))
 }
+
+func TestProvisionerRestartsDaemonSet(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Valid: true,
+		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{},
+			},
+			Logging: &ngfAPIv1alpha2.NginxLogging{
+				AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelDebug),
+			},
+		},
+	}
+
+	// provision everything first
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, agentTLSSecret)
+	provisioner.cfg.Plus = false
+	provisioner.cfg.NginxDockerSecretNames = nil
+
+	key := types.NamespacedName{Name: "gw-nginx", Namespace: "default"}
+	g.Expect(provisioner.RegisterGateway(context.TODO(), gateway, "gw-nginx")).To(Succeed())
+	g.Expect(fakeClient.Get(context.TODO(), key, &appsv1.DaemonSet{})).To(Succeed())
+
+	// update agent config
+	updatedConfig := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Valid: true,
+		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{},
+			},
+			Logging: &ngfAPIv1alpha2.NginxLogging{
+				AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelInfo),
+			},
+		},
+	}
+	g.Expect(provisioner.RegisterGateway(context.TODO(), updatedConfig, "gw-nginx")).To(Succeed())
+
+	// verify daemonset was updated with the restart annotation
+	ds := &appsv1.DaemonSet{}
+	g.Expect(fakeClient.Get(context.TODO(), key, ds)).To(Succeed())
+	g.Expect(ds.Spec.Template.GetAnnotations()).To(HaveKey(controller.RestartedAnnotation))
+}

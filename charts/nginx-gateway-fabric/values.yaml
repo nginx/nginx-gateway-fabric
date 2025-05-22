@@ -185,6 +185,7 @@ nginx:
   # @schema
   # enum:
   #   - deployment
+  #   - daemonSet
   # @schema
   # -- The kind of NGINX deployment.
   kind: deployment

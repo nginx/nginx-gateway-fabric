@@ -614,6 +614,91 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	}))
 }
 
+func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+	fakeClient := fake.NewFakeClient(agentTLSSecret)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+		},
+		k8sClient: fakeClient,
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": "nginx",
+			},
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+	}
+
+	nProxyCfg := &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+				Pod: ngfAPIv1alpha2.PodSpec{
+					TerminationGracePeriodSeconds: helpers.GetPointer[int64](25),
+				},
+				Container: ngfAPIv1alpha2.ContainerSpec{
+					Image: &ngfAPIv1alpha2.Image{
+						Repository: helpers.GetPointer("nginx-repo"),
+						Tag:        helpers.GetPointer("1.1.1"),
+						PullPolicy: helpers.GetPointer(ngfAPIv1alpha2.PullAlways),
+					},
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU: resource.Quantity{Format: "100m"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	resourceName := "gw-nginx"
+	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	g.Expect(objects).To(HaveLen(6))
+
+	expLabels := map[string]string{
+		"app":                                    "nginx",
+		"gateway.networking.k8s.io/gateway-name": "gw",
+		"app.kubernetes.io/name":                 "gw-nginx",
+	}
+
+	dsObj := objects[5]
+	ds, ok := dsObj.(*appsv1.DaemonSet)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(ds.GetLabels()).To(Equal(expLabels))
+
+	template := ds.Spec.Template
+	g.Expect(template.GetAnnotations()).To(HaveKey("prometheus.io/scrape"))
+	g.Expect(*template.Spec.TerminationGracePeriodSeconds).To(Equal(int64(25)))
+
+	container := template.Spec.Containers[0]
+	g.Expect(container.Image).To(Equal("nginx-repo:1.1.1"))
+	g.Expect(container.ImagePullPolicy).To(Equal(corev1.PullAlways))
+	g.Expect(container.Resources.Limits).To(HaveKey(corev1.ResourceCPU))
+	g.Expect(container.Resources.Limits[corev1.ResourceCPU].Format).To(Equal(resource.Format("100m")))
+}
+
 func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -714,7 +799,7 @@ func TestBuildNginxResourceObjectsForDeletion(t *testing.T) {
 
 	objects := provisioner.buildNginxResourceObjectsForDeletion(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(6))
+	g.Expect(objects).To(HaveLen(7))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -726,22 +811,27 @@ func TestBuildNginxResourceObjectsForDeletion(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(dep, deploymentNSName.Name)
 
-	svcObj := objects[1]
+	dsObj := objects[1]
+	ds, ok := dsObj.(*appsv1.DaemonSet)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(ds, deploymentNSName.Name)
+
+	svcObj := objects[2]
 	svc, ok := svcObj.(*corev1.Service)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svc, deploymentNSName.Name)
 
-	svcAcctObj := objects[2]
+	svcAcctObj := objects[3]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svcAcct, deploymentNSName.Name)
 
-	cmObj := objects[3]
+	cmObj := objects[4]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxIncludesConfigMapNameSuffix))
 
-	cmObj = objects[4]
+	cmObj = objects[5]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxAgentConfigMapNameSuffix))
@@ -771,7 +861,7 @@ func TestBuildNginxResourceObjectsForDeletion_Plus(t *testing.T) {
 
 	objects := provisioner.buildNginxResourceObjectsForDeletion(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(10))
+	g.Expect(objects).To(HaveLen(11))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
@@ -783,27 +873,32 @@ func TestBuildNginxResourceObjectsForDeletion_Plus(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(dep, deploymentNSName.Name)
 
-	svcObj := objects[1]
+	dsObj := objects[1]
+	ds, ok := dsObj.(*appsv1.DaemonSet)
+	g.Expect(ok).To(BeTrue())
+	validateMeta(ds, deploymentNSName.Name)
+
+	svcObj := objects[2]
 	svc, ok := svcObj.(*corev1.Service)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svc, deploymentNSName.Name)
 
-	svcAcctObj := objects[2]
+	svcAcctObj := objects[3]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(svcAcct, deploymentNSName.Name)
 
-	cmObj := objects[3]
+	cmObj := objects[4]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxIncludesConfigMapNameSuffix))
 
-	cmObj = objects[4]
+	cmObj = objects[5]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(cm, controller.CreateNginxResourceName(deploymentNSName.Name, nginxAgentConfigMapNameSuffix))
 
-	secretObj := objects[5]
+	secretObj := objects[6]
 	secret, ok := secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -811,7 +906,7 @@ func TestBuildNginxResourceObjectsForDeletion_Plus(t *testing.T) {
 		provisioner.cfg.AgentTLSSecretName,
 	))
 
-	secretObj = objects[6]
+	secretObj = objects[7]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -819,7 +914,7 @@ func TestBuildNginxResourceObjectsForDeletion_Plus(t *testing.T) {
 		provisioner.cfg.NginxDockerSecretNames[0],
 	))
 
-	secretObj = objects[7]
+	secretObj = objects[8]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -827,7 +922,7 @@ func TestBuildNginxResourceObjectsForDeletion_Plus(t *testing.T) {
 		provisioner.cfg.PlusUsageConfig.CASecretName,
 	))
 
-	secretObj = objects[8]
+	secretObj = objects[9]
 	secret, ok = secretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(secret, controller.CreateNginxResourceName(
@@ -849,19 +944,19 @@ func TestBuildNginxResourceObjectsForDeletion_OpenShift(t *testing.T) {
 
 	objects := provisioner.buildNginxResourceObjectsForDeletion(deploymentNSName)
 
-	g.Expect(objects).To(HaveLen(8))
+	g.Expect(objects).To(HaveLen(9))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))
 		g.Expect(obj.GetNamespace()).To(Equal(deploymentNSName.Namespace))
 	}
 
-	roleObj := objects[2]
+	roleObj := objects[3]
 	role, ok := roleObj.(*rbacv1.Role)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(role, deploymentNSName.Name)
 
-	roleBindingObj := objects[3]
+	roleBindingObj := objects[4]
 	roleBinding, ok := roleBindingObj.(*rbacv1.RoleBinding)
 	g.Expect(ok).To(BeTrue())
 	validateMeta(roleBinding, deploymentNSName.Name)

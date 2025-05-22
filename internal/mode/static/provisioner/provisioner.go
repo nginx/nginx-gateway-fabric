@@ -199,6 +199,7 @@ func (p *NginxProvisioner) provisionNginx(
 
 	var agentConfigMapUpdated, deploymentCreated bool
 	var deploymentObj *appsv1.Deployment
+	var daemonSetObj *appsv1.DaemonSet
 	for _, obj := range objects {
 		createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 
@@ -239,6 +240,11 @@ func (p *NginxProvisioner) provisionNginx(
 			if res == controllerutil.OperationResultCreated {
 				deploymentCreated = true
 			}
+		case *appsv1.DaemonSet:
+			daemonSetObj = o
+			if res == controllerutil.OperationResultCreated {
+				deploymentCreated = true
+			}
 		case *corev1.ConfigMap:
 			if res == controllerutil.OperationResultUpdated &&
 				strings.Contains(obj.GetName(), nginxAgentConfigMapNameSuffix) {
@@ -260,24 +266,34 @@ func (p *NginxProvisioner) provisionNginx(
 	}
 
 	// if agent configmap was updated, then we'll need to restart the deployment
-	if agentConfigMapUpdated && !deploymentCreated && deploymentObj != nil {
+	if agentConfigMapUpdated && !deploymentCreated {
 		updateCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
+		var object client.Object
+		if deploymentObj != nil {
+			if deploymentObj.Spec.Template.Annotations == nil {
+				deploymentObj.Annotations = make(map[string]string)
+			}
+			deploymentObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
+			object = deploymentObj
+		} else if daemonSetObj != nil {
+			if daemonSetObj.Spec.Template.Annotations == nil {
+				daemonSetObj.Annotations = make(map[string]string)
+			}
+			daemonSetObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
+			object = daemonSetObj
+		}
+
 		p.cfg.Logger.V(1).Info(
 			"Restarting nginx deployment after agent configmap update",
-			"name", deploymentObj.GetName(),
-			"namespace", deploymentObj.GetNamespace(),
+			"name", object.GetName(),
+			"namespace", object.GetNamespace(),
 		)
 
-		if deploymentObj.Spec.Template.Annotations == nil {
-			deploymentObj.Annotations = make(map[string]string)
-		}
-		deploymentObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
-
-		if err := p.k8sClient.Update(updateCtx, deploymentObj); err != nil && !apierrors.IsConflict(err) {
+		if err := p.k8sClient.Update(updateCtx, object); err != nil && !apierrors.IsConflict(err) {
 			p.cfg.EventRecorder.Eventf(
-				deploymentObj,
+				object,
 				corev1.EventTypeWarning,
 				"RestartFailed",
 				"Failed to restart nginx deployment after agent config update: %s",

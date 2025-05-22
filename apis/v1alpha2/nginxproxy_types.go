@@ -359,12 +359,21 @@ const (
 )
 
 // KubernetesSpec contains the configuration for the NGINX Deployment and Service Kubernetes objects.
+//
+// +kubebuilder:validation:XValidation:message="only one of deployment or daemonSet can be set",rule="(!has(self.deployment) && !has(self.daemonSet)) || ((has(self.deployment) && !has(self.daemonSet)) || (!has(self.deployment) && has(self.daemonSet)))"
+//
+//nolint:lll
 type KubernetesSpec struct {
 	// Deployment is the configuration for the NGINX Deployment.
 	// This is the default deployment option.
 	//
 	// +optional
 	Deployment *DeploymentSpec `json:"deployment,omitempty"`
+
+	// DaemonSet is the configuration for the NGINX DaemonSet.
+	//
+	// +optional
+	DaemonSet *DaemonSetSpec `json:"daemonSet,omitempty"`
 
 	// Service is the configuration for the NGINX Service.
 	//
@@ -382,12 +391,25 @@ type DeploymentSpec struct {
 	// Pod defines Pod-specific fields.
 	//
 	// +optional
-	Pod PodSpec `json:"pod,omitempty"`
+	Pod PodSpec `json:"pod"`
 
 	// Container defines container fields for the NGINX container.
 	//
 	// +optional
-	Container ContainerSpec `json:"container,omitempty"`
+	Container ContainerSpec `json:"container"`
+}
+
+// DaemonSet is the configuration for the NGINX DaemonSet.
+type DaemonSetSpec struct {
+	// Pod defines Pod-specific fields.
+	//
+	// +optional
+	Pod PodSpec `json:"pod"`
+
+	// Container defines container fields for the NGINX container.
+	//
+	// +optional
+	Container ContainerSpec `json:"container"`
 }
 
 // PodSpec defines Pod-specific fields.

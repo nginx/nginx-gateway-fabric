@@ -328,7 +328,8 @@
           "default": "deployment",
           "description": "The kind of NGINX deployment.",
           "enum": [
-            "deployment"
+            "deployment",
+            "daemonSet"
           ],
           "required": [],
           "title": "kind"

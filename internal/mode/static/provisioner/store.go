@@ -20,6 +20,7 @@ import (
 type NginxResources struct {
 	Gateway             *graph.Gateway
 	Deployment          metav1.ObjectMeta
+	DaemonSet           metav1.ObjectMeta
 	Service             metav1.ObjectMeta
 	ServiceAccount      metav1.ObjectMeta
 	Role                metav1.ObjectMeta
@@ -107,6 +108,8 @@ func (s *store) getGateways() map[types.NamespacedName]*gatewayv1.Gateway {
 // If the object being updated is the Gateway, check if anything that we care about changed. This ensures that
 // we don't attempt to update nginx resources when the main event handler triggers this call with an unrelated event
 // (like a Route update) that shouldn't result in nginx resource changes.
+//
+//nolint:gocyclo
 func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedName, object any) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -129,6 +132,14 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 			}
 		} else {
 			cfg.Deployment = obj.ObjectMeta
+		}
+	case *appsv1.DaemonSet:
+		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
+			s.nginxResources[gatewayNSName] = &NginxResources{
+				DaemonSet: obj.ObjectMeta,
+			}
+		} else {
+			cfg.DaemonSet = obj.ObjectMeta
 		}
 	case *corev1.Service:
 		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
@@ -290,6 +301,10 @@ func (s *store) gatewayExistsForResource(object client.Object, nsName types.Name
 			if resourceMatches(resources.Deployment, nsName) {
 				return resources.Gateway
 			}
+		case *appsv1.DaemonSet:
+			if resourceMatches(resources.DaemonSet, nsName) {
+				return resources.Gateway
+			}
 		case *corev1.Service:
 			if resourceMatches(resources.Service, nsName) {
 				return resources.Gateway
@@ -349,6 +364,7 @@ func resourceMatches(objMeta metav1.ObjectMeta, nsName types.NamespacedName) boo
 	return objMeta.GetName() == nsName.Name && objMeta.GetNamespace() == nsName.Namespace
 }
 
+//nolint:gocyclo
 func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, object client.Object) string {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -362,6 +378,10 @@ func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, 
 	case *appsv1.Deployment:
 		if resources.Deployment.GetName() == obj.GetName() {
 			return resources.Deployment.GetResourceVersion()
+		}
+	case *appsv1.DaemonSet:
+		if resources.DaemonSet.GetName() == obj.GetName() {
+			return resources.DaemonSet.GetResourceVersion()
 		}
 	case *corev1.Service:
 		if resources.Service.GetName() == obj.GetName() {

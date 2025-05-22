@@ -318,6 +318,13 @@ var _ = Describe("Collector", Ordered, func() {
 							},
 						},
 						{Name: "gateway3"}: {},
+						{Name: "gateway4"}: {
+							EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+								Kubernetes: &v1alpha2.KubernetesSpec{
+									DaemonSet: &v1alpha2.DaemonSetSpec{},
+								},
+							},
+						},
 					},
 					IgnoredGatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
 						{Name: "ignoredGC1"}: {},
@@ -464,7 +471,7 @@ var _ = Describe("Collector", Ordered, func() {
 
 				expData.ClusterNodeCount = 3
 				expData.NGFResourceCounts = telemetry.NGFResourceCounts{
-					GatewayCount:                             3,
+					GatewayCount:                             4,
 					GatewayClassCount:                        3,
 					HTTPRouteCount:                           3,
 					TLSRouteCount:                            3,
@@ -508,8 +515,8 @@ var _ = Describe("Collector", Ordered, func() {
 				}
 
 				// one gateway with one replica + one gateway with three replicas + one gateway with replica field
-				// empty
-				expData.NginxPodCount = int64(5)
+				// empty + one gateway using daemonset
+				expData.NginxPodCount = int64(8)
 				expData.ControlPlanePodCount = int64(2)
 
 				data, err := dataCollector.Collect(ctx)
