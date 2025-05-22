@@ -11,7 +11,7 @@ WORKDIR /tmp
 RUN apk add --no-cache git make \
     && git clone https://github.com/nginx/agent.git \
     && cd agent \
-    && git checkout 9b574fa90848c9a7c123e6e7e6153ccd602ae724 \
+    && git checkout 3dad26582af6c17e013302d08a4f1ed5d5504296 \
     && make build
 
 FROM alpine:3.21

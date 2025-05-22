@@ -60,19 +60,17 @@ log:
 {{- if .EnableMetrics }}
 collector:
     receivers:
+        container_metrics:
+            collection_interval: 1m0s
         host_metrics:
             collection_interval: 1m0s
             initial_delay: 1s
             scrapers:
-                cpu: {}
-                memory: {}
-                disk: {}
                 network: {}
-                filesystem: {}
     processors:
         batch: {}
     exporters:
-        prometheus_exporter:
+        prometheus:
             server:
                 host: "0.0.0.0"
                 port: {{ .MetricsPort }}
