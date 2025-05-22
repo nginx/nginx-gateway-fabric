@@ -268,40 +268,25 @@ func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, sec
 
 		switch {
 		case strings.HasSuffix(resources.AgentTLSSecret.Name, secret):
-			if err := h.provisioner.deleteSecret(
-				ctx,
-				controller.ObjectMetaToNamespacedName(resources.AgentTLSSecret),
-			); err != nil {
+			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.AgentTLSSecret}); err != nil {
 				allErrs = append(allErrs, err)
 			}
 		case strings.HasSuffix(resources.PlusJWTSecret.Name, secret):
-			if err := h.provisioner.deleteSecret(
-				ctx,
-				controller.ObjectMetaToNamespacedName(resources.PlusJWTSecret),
-			); err != nil {
+			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.PlusJWTSecret}); err != nil {
 				allErrs = append(allErrs, err)
 			}
 		case strings.HasSuffix(resources.PlusCASecret.Name, secret):
-			if err := h.provisioner.deleteSecret(
-				ctx,
-				controller.ObjectMetaToNamespacedName(resources.PlusCASecret),
-			); err != nil {
+			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.PlusCASecret}); err != nil {
 				allErrs = append(allErrs, err)
 			}
 		case strings.HasSuffix(resources.PlusClientSSLSecret.Name, secret):
-			if err := h.provisioner.deleteSecret(
-				ctx,
-				controller.ObjectMetaToNamespacedName(resources.PlusClientSSLSecret),
-			); err != nil {
+			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.PlusClientSSLSecret}); err != nil {
 				allErrs = append(allErrs, err)
 			}
 		default:
 			for _, dockerSecret := range resources.DockerSecrets {
 				if strings.HasSuffix(dockerSecret.Name, secret) {
-					if err := h.provisioner.deleteSecret(
-						ctx,
-						controller.ObjectMetaToNamespacedName(dockerSecret),
-					); err != nil {
+					if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: dockerSecret}); err != nil {
 						allErrs = append(allErrs, err)
 					}
 				}

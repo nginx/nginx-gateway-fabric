@@ -265,7 +265,7 @@ func (p *NginxProvisioner) provisionNginx(
 		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), obj)
 	}
 
-	// if agent configmap was updated, then we'll need to restart the deployment
+	// if agent configmap was updated, then we'll need to restart the deployment/daemonset
 	if agentConfigMapUpdated && !deploymentCreated {
 		updateCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
@@ -286,7 +286,7 @@ func (p *NginxProvisioner) provisionNginx(
 		}
 
 		p.cfg.Logger.V(1).Info(
-			"Restarting nginx deployment after agent configmap update",
+			"Restarting nginx after agent configmap update",
 			"name", object.GetName(),
 			"namespace", object.GetNamespace(),
 		)
@@ -296,7 +296,7 @@ func (p *NginxProvisioner) provisionNginx(
 				object,
 				corev1.EventTypeWarning,
 				"RestartFailed",
-				"Failed to restart nginx deployment after agent config update: %s",
+				"Failed to restart nginx after agent config update: %s",
 				err.Error(),
 			)
 			return err
@@ -361,11 +361,11 @@ func (p *NginxProvisioner) deprovisionNginx(ctx context.Context, gatewayNSName t
 
 		objects := p.buildNginxResourceObjectsForDeletion(deploymentNSName)
 
-		createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		deleteCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
 		for _, obj := range objects {
-			if err := p.k8sClient.Delete(createCtx, obj); err != nil && !apierrors.IsNotFound(err) {
+			if err := p.k8sClient.Delete(deleteCtx, obj); err != nil && !apierrors.IsNotFound(err) {
 				p.cfg.EventRecorder.Eventf(
 					obj,
 					corev1.EventTypeWarning,
@@ -380,6 +380,28 @@ func (p *NginxProvisioner) deprovisionNginx(ctx context.Context, gatewayNSName t
 
 	p.store.deleteResourcesForGateway(gatewayNSName)
 	p.cfg.DeploymentStore.Remove(deploymentNSName)
+
+	return nil
+}
+
+func (p *NginxProvisioner) deleteObject(ctx context.Context, obj client.Object) error {
+	if !p.isLeader() {
+		return nil
+	}
+
+	deleteCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	if err := p.k8sClient.Delete(deleteCtx, obj); err != nil && !apierrors.IsNotFound(err) {
+		p.cfg.EventRecorder.Eventf(
+			obj,
+			corev1.EventTypeWarning,
+			"DeleteFailed",
+			"Failed to delete nginx resource: %s",
+			err.Error(),
+		)
+		return err
+	}
 
 	return nil
 }
@@ -402,25 +424,6 @@ func (p *NginxProvisioner) isUserSecret(name string) bool {
 	}
 
 	return false
-}
-
-func (p *NginxProvisioner) deleteSecret(ctx context.Context, secretNSName types.NamespacedName) error {
-	if !p.isLeader() {
-		return nil
-	}
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretNSName.Name,
-			Namespace: secretNSName.Namespace,
-		},
-	}
-
-	if err := p.k8sClient.Delete(ctx, secret); err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
-
-	return nil
 }
 
 // RegisterGateway is called by the main event handler when a Gateway API resource event occurs
@@ -447,6 +450,20 @@ func (p *NginxProvisioner) RegisterGateway(
 			p.cfg.Logger.Error(err, "error building some nginx resources")
 		}
 
+		// If NGINX deployment type switched between Deployment and DaemonSet, clean up the old one.
+		nginxResources := p.store.getNginxResourcesForGateway(gatewayNSName)
+		if nginxResources != nil {
+			if needToDeleteDaemonSet(nginxResources) {
+				if err := p.deleteObject(ctx, &appsv1.DaemonSet{ObjectMeta: nginxResources.DaemonSet}); err != nil {
+					p.cfg.Logger.Error(err, "error deleting nginx resource")
+				}
+			} else if needToDeleteDeployment(nginxResources) {
+				if err := p.deleteObject(ctx, &appsv1.Deployment{ObjectMeta: nginxResources.Deployment}); err != nil {
+					p.cfg.Logger.Error(err, "error deleting nginx resource")
+				}
+			}
+		}
+
 		if err := p.provisionNginx(ctx, resourceName, gateway.Source, objects); err != nil {
 			return fmt.Errorf("error provisioning nginx resources: %w", err)
 		}
@@ -457,4 +474,32 @@ func (p *NginxProvisioner) RegisterGateway(
 	}
 
 	return nil
+}
+
+func needToDeleteDeployment(cfg *NginxResources) bool {
+	if cfg.Deployment.Name != "" {
+		if cfg.Gateway != nil && cfg.Gateway.EffectiveNginxProxy != nil &&
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes != nil &&
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes.DaemonSet != nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+func needToDeleteDaemonSet(cfg *NginxResources) bool {
+	if cfg.DaemonSet.Name != "" && cfg.Gateway != nil {
+		if cfg.Gateway.EffectiveNginxProxy != nil &&
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes != nil &&
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes.Deployment != nil {
+			return true
+		} else if cfg.Gateway.EffectiveNginxProxy == nil ||
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes == nil ||
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes.DaemonSet == nil {
+			return true
+		}
+	}
+
+	return false
 }

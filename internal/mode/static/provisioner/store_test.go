@@ -104,7 +104,7 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	store := newStore([]string{"docker-secret"}, "agent-tls-secret", "jwt-secret", "ca-secret", "client-ssl-secret")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 
-	registerAndGetResources := func(obj interface{}) *NginxResources {
+	registerAndGetResources := func(obj any) *NginxResources {
 		changed := store.registerResourceInGatewayConfig(nsName, obj)
 		g.Expect(changed).To(BeTrue(), fmt.Sprintf("failed: %T", obj))
 		g.Expect(store.nginxResources).To(HaveKey(nsName), fmt.Sprintf("failed: %T", obj))
