@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent"
 )
 
 //go:generate go tool counterfeiter -generate

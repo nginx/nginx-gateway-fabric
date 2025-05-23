@@ -149,8 +149,8 @@ jobs:
           sbom: true
           provenance: mode=max
           build-args: |
-            NJS_DIR=internal/mode/static/nginx/modules/src
-            NGINX_CONF_DIR=internal/mode/static/nginx/conf
+            NJS_DIR=internal/controller/nginx/modules/src
+            NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
           secrets: |
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}

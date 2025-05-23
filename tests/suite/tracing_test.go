@@ -19,8 +19,8 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/tests/framework"
 )
 
