@@ -20,11 +20,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/nginx/nginx-gateway-fabric/internal/controller"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/licensing"
+	ngxConfig "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
-	ngxConfig "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
 )
 
 // These flags are shared by multiple commands.
@@ -259,7 +259,7 @@ func createControllerCommand() *cobra.Command {
 				NGINXSCCName:           nginxSCCName.value,
 			}
 
-			if err := static.StartManager(conf); err != nil {
+			if err := controller.StartManager(conf); err != nil {
 				return fmt.Errorf("failed to start control loop: %w", err)
 			}
 

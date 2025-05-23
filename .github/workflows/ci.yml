@@ -119,7 +119,7 @@ jobs:
           node-version-file: .nvmrc
 
       - name: Run tests
-        run: npm --prefix ${{ github.workspace }}/internal/mode/static/nginx/modules install-ci-test
+        run: npm --prefix ${{ github.workspace }}/internal/controller/nginx/modules install-ci-test
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3

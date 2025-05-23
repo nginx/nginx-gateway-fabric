@@ -37,7 +37,7 @@ tests/**/*.csv
 node_modules/
 
 # JS test coverage
-internal/mode/static/nginx/modules/coverage
+internal/controller/nginx/modules/coverage
 
 # MacOS Finder
 .DS_Store

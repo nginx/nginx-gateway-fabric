@@ -58,8 +58,8 @@ jobs:
         id: prettier-run
         uses: rutajdash/prettier-cli-action@d42c4325a3b344f3bd4be482bc34de521998d557 # v1.0.2
         with:
-          config_path: ${{ github.workspace }}/internal/mode/static/nginx/modules/.prettierrc
-          file_pattern: ${{ github.workspace }}/internal/mode/static/nginx/modules/**/*.js
+          config_path: ${{ github.workspace }}/internal/controller/nginx/modules/.prettierrc
+          file_pattern: ${{ github.workspace }}/internal/controller/nginx/modules/**/*.js
           prettier_version: 3.3.3 # renovate: datasource=npm depName=prettier
 
       - name: Prettier Output

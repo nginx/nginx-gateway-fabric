@@ -100,8 +100,8 @@ jobs:
           cache-from: type=gha,scope=${{ inputs.image }}
           pull: true
           build-args: |
-            NJS_DIR=internal/mode/static/nginx/modules/src
-            NGINX_CONF_DIR=internal/mode/static/nginx/conf
+            NJS_DIR=internal/controller/nginx/modules/src
+            NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
 
       - name: Setup license file for plus
