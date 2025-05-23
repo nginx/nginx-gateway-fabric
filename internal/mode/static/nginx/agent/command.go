@@ -447,9 +447,13 @@ func (cs *commandService) getPodOwner(podName string) (types.NamespacedName, err
 		return types.NamespacedName{}, fmt.Errorf("expected one owner reference of the nginx Pod, got %d", len(podOwnerRefs))
 	}
 
-	if podOwnerRefs[0].Kind != "ReplicaSet" {
-		err := fmt.Errorf("expected pod owner reference to be ReplicaSet, got %s", podOwnerRefs[0].Kind)
+	if podOwnerRefs[0].Kind != "ReplicaSet" && podOwnerRefs[0].Kind != "DaemonSet" {
+		err := fmt.Errorf("expected pod owner reference to be ReplicaSet or DaemonSet, got %s", podOwnerRefs[0].Kind)
 		return types.NamespacedName{}, err
+	}
+
+	if podOwnerRefs[0].Kind == "DaemonSet" {
+		return types.NamespacedName{Namespace: pod.Namespace, Name: podOwnerRefs[0].Name}, nil
 	}
 
 	var replicaSet appsv1.ReplicaSet

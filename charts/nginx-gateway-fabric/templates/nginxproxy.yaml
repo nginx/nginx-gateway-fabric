@@ -27,6 +27,22 @@ spec:
         debug: {{ .Values.nginx.debug }}
         {{- end }}
     {{- end }}
+    {{- if eq .Values.nginx.kind "daemonSet" }}
+    daemonSet:
+      {{- if .Values.nginx.pod }}
+      pod:
+        {{- toYaml .Values.nginx.pod | nindent 8 }}
+      {{- end }}
+      container:
+        {{- if .Values.nginx.container }}
+          {{- toYaml .Values.nginx.container | nindent 8 }}
+        {{- end }}
+        image:
+          {{- toYaml .Values.nginx.image | nindent 10 }}
+        {{- if .Values.nginx.debug }}
+        debug: {{ .Values.nginx.debug }}
+        {{- end }}
+    {{- end }}
     {{- if .Values.nginx.service }}
     service:
       {{- with .Values.nginx.service }}

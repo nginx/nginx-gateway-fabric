@@ -314,6 +314,80 @@ func TestRegisterGateway(t *testing.T) {
 	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
 }
 
+func TestRegisterGateway_CleansUpOldDeploymentOrDaemonSet(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Setup: Gateway switches from Deployment to DaemonSet
+	gateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Valid: true,
+		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{},
+			},
+		},
+	}
+
+	// Create a fake deployment that should be cleaned up
+	oldDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx",
+			Namespace: "default",
+		},
+	}
+	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, oldDeployment)
+	// Simulate store tracking an old Deployment
+	provisioner.store.nginxResources[types.NamespacedName{Name: "gw", Namespace: "default"}] = &NginxResources{
+		Deployment: oldDeployment.ObjectMeta,
+	}
+
+	// RegisterGateway should clean up the Deployment and create a DaemonSet
+	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
+
+	// Deployment should be deleted
+	err := fakeClient.Get(t.Context(), types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, &appsv1.Deployment{})
+	g.Expect(err).To(HaveOccurred())
+
+	// DaemonSet should exist
+	err = fakeClient.Get(t.Context(), types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, &appsv1.DaemonSet{})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Now test the opposite: switch from DaemonSet to Deployment
+	gateway.EffectiveNginxProxy = &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{},
+		},
+	}
+
+	oldDaemonSet := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx",
+			Namespace: "default",
+		},
+	}
+
+	provisioner, fakeClient, _ = defaultNginxProvisioner(gateway.Source, oldDaemonSet)
+	provisioner.store.nginxResources[types.NamespacedName{Name: "gw", Namespace: "default"}] = &NginxResources{
+		DaemonSet: oldDaemonSet.ObjectMeta,
+	}
+
+	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
+
+	// DaemonSet should be deleted
+	err = fakeClient.Get(t.Context(), types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, &appsv1.DaemonSet{})
+	g.Expect(err).To(HaveOccurred())
+
+	// Deployment should exist
+	err = fakeClient.Get(t.Context(), types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, &appsv1.Deployment{})
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
 func TestNonLeaderProvisioner(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -393,4 +467,68 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 	g.Expect(fakeClient.Get(context.TODO(), key, dep)).To(Succeed())
 
 	g.Expect(dep.Spec.Template.GetAnnotations()).To(HaveKey(controller.RestartedAnnotation))
+}
+
+func TestProvisionerRestartsDaemonSet(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Valid: true,
+		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{},
+			},
+			Logging: &ngfAPIv1alpha2.NginxLogging{
+				AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelDebug),
+			},
+		},
+	}
+
+	// provision everything first
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, agentTLSSecret)
+	provisioner.cfg.Plus = false
+	provisioner.cfg.NginxDockerSecretNames = nil
+
+	key := types.NamespacedName{Name: "gw-nginx", Namespace: "default"}
+	g.Expect(provisioner.RegisterGateway(context.TODO(), gateway, "gw-nginx")).To(Succeed())
+	g.Expect(fakeClient.Get(context.TODO(), key, &appsv1.DaemonSet{})).To(Succeed())
+
+	// update agent config
+	updatedConfig := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Valid: true,
+		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{},
+			},
+			Logging: &ngfAPIv1alpha2.NginxLogging{
+				AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelInfo),
+			},
+		},
+	}
+	g.Expect(provisioner.RegisterGateway(context.TODO(), updatedConfig, "gw-nginx")).To(Succeed())
+
+	// verify daemonset was updated with the restart annotation
+	ds := &appsv1.DaemonSet{}
+	g.Expect(fakeClient.Get(context.TODO(), key, ds)).To(Succeed())
+	g.Expect(ds.Spec.Template.GetAnnotations()).To(HaveKey(controller.RestartedAnnotation))
 }

@@ -74,6 +74,18 @@ func newEventLoop(
 			},
 		},
 		{
+			objectType: &appsv1.DaemonSet{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.GenerationChangedPredicate{},
+						nginxResourceLabelPredicate,
+						predicate.RestartDeploymentAnnotationPredicate{},
+					),
+				),
+			},
+		},
+		{
 			objectType: &corev1.Service{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(

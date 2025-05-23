@@ -104,7 +104,7 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	store := newStore([]string{"docker-secret"}, "agent-tls-secret", "jwt-secret", "ca-secret", "client-ssl-secret")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 
-	registerAndGetResources := func(obj interface{}) *NginxResources {
+	registerAndGetResources := func(obj any) *NginxResources {
 		changed := store.registerResourceInGatewayConfig(nsName, obj)
 		g.Expect(changed).To(BeTrue(), fmt.Sprintf("failed: %T", obj))
 		g.Expect(store.nginxResources).To(HaveKey(nsName), fmt.Sprintf("failed: %T", obj))
@@ -140,6 +140,18 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// Deployment again, already exists
 	resources = registerAndGetResources(dep)
 	g.Expect(resources.Deployment).To(Equal(defaultMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	// DaemonSet
+	ds := &appsv1.DaemonSet{ObjectMeta: defaultMeta}
+	resources = registerAndGetResources(ds)
+	g.Expect(resources.DaemonSet).To(Equal(defaultMeta))
+
+	// DaemonSet again, already exists
+	resources = registerAndGetResources(ds)
+	g.Expect(resources.DaemonSet).To(Equal(defaultMeta))
 
 	// clear out resources before next test
 	store.deleteResourcesForGateway(nsName)
@@ -423,6 +435,10 @@ func TestGatewayExistsForResource(t *testing.T) {
 			Name:      "test-deployment",
 			Namespace: "default",
 		},
+		DaemonSet: metav1.ObjectMeta{
+			Name:      "test-daemonset",
+			Namespace: "default",
+		},
 		Service: metav1.ObjectMeta{
 			Name:      "test-service",
 			Namespace: "default",
@@ -481,6 +497,16 @@ func TestGatewayExistsForResource(t *testing.T) {
 			object: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-deployment",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
+			name: "DaemonSet exists",
+			object: &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-daemonset",
 					Namespace: "default",
 				},
 			},
@@ -630,61 +656,66 @@ func TestGetResourceVersionForObject(t *testing.T) {
 			Namespace:       "default",
 			ResourceVersion: "1",
 		},
+		DaemonSet: metav1.ObjectMeta{
+			Name:            "test-daemonset",
+			Namespace:       "default",
+			ResourceVersion: "2",
+		},
 		Service: metav1.ObjectMeta{
 			Name:            "test-service",
 			Namespace:       "default",
-			ResourceVersion: "2",
+			ResourceVersion: "3",
 		},
 		ServiceAccount: metav1.ObjectMeta{
 			Name:            "test-serviceaccount",
 			Namespace:       "default",
-			ResourceVersion: "3",
+			ResourceVersion: "4",
 		},
 		Role: metav1.ObjectMeta{
 			Name:            "test-role",
 			Namespace:       "default",
-			ResourceVersion: "4",
+			ResourceVersion: "5",
 		},
 		RoleBinding: metav1.ObjectMeta{
 			Name:            "test-rolebinding",
 			Namespace:       "default",
-			ResourceVersion: "5",
+			ResourceVersion: "6",
 		},
 		BootstrapConfigMap: metav1.ObjectMeta{
 			Name:            "test-bootstrap-configmap",
 			Namespace:       "default",
-			ResourceVersion: "6",
+			ResourceVersion: "7",
 		},
 		AgentConfigMap: metav1.ObjectMeta{
 			Name:            "test-agent-configmap",
 			Namespace:       "default",
-			ResourceVersion: "7",
+			ResourceVersion: "8",
 		},
 		AgentTLSSecret: metav1.ObjectMeta{
 			Name:            "test-agent-tls-secret",
 			Namespace:       "default",
-			ResourceVersion: "8",
+			ResourceVersion: "9",
 		},
 		PlusJWTSecret: metav1.ObjectMeta{
 			Name:            "test-jwt-secret",
 			Namespace:       "default",
-			ResourceVersion: "9",
+			ResourceVersion: "10",
 		},
 		PlusCASecret: metav1.ObjectMeta{
 			Name:            "test-ca-secret",
 			Namespace:       "default",
-			ResourceVersion: "10",
+			ResourceVersion: "11",
 		},
 		PlusClientSSLSecret: metav1.ObjectMeta{
 			Name:            "test-client-ssl-secret",
 			Namespace:       "default",
-			ResourceVersion: "11",
+			ResourceVersion: "12",
 		},
 		DockerSecrets: []metav1.ObjectMeta{
 			{
 				Name:            "test-docker-secret",
 				Namespace:       "default",
-				ResourceVersion: "12",
+				ResourceVersion: "13",
 			},
 		},
 	}
@@ -705,6 +736,16 @@ func TestGetResourceVersionForObject(t *testing.T) {
 			expectedResult: "1",
 		},
 		{
+			name: "DaemonSet resource version",
+			object: &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-daemonset",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "2",
+		},
+		{
 			name: "Service resource version",
 			object: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -712,7 +753,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "2",
+			expectedResult: "3",
 		},
 		{
 			name: "ServiceAccount resource version",
@@ -722,7 +763,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "3",
+			expectedResult: "4",
 		},
 		{
 			name: "Role resource version",
@@ -732,7 +773,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "4",
+			expectedResult: "5",
 		},
 		{
 			name: "RoleBinding resource version",
@@ -742,7 +783,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "5",
+			expectedResult: "6",
 		},
 		{
 			name: "Bootstrap ConfigMap resource version",
@@ -752,7 +793,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "6",
+			expectedResult: "7",
 		},
 		{
 			name: "Agent ConfigMap resource version",
@@ -762,7 +803,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "7",
+			expectedResult: "8",
 		},
 		{
 			name: "Agent TLS Secret resource version",
@@ -772,7 +813,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "8",
+			expectedResult: "9",
 		},
 		{
 			name: "JWT Secret resource version",
@@ -782,7 +823,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "9",
+			expectedResult: "10",
 		},
 		{
 			name: "CA Secret resource version",
@@ -792,7 +833,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "10",
+			expectedResult: "11",
 		},
 		{
 			name: "Client SSL Secret resource version",
@@ -802,7 +843,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "11",
+			expectedResult: "12",
 		},
 		{
 			name: "Docker Secret resource version",
@@ -812,7 +853,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "12",
+			expectedResult: "13",
 		},
 		{
 			name: "Non-existent resource",

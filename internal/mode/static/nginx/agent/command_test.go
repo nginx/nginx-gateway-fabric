@@ -690,7 +690,7 @@ func TestGetPodOwner(t *testing.T) {
 		expected   types.NamespacedName
 	}{
 		{
-			name:    "successfully gets pod owner",
+			name:    "successfully gets pod owner; ReplicaSet",
 			podName: "nginx-pod",
 			podList: &v1.PodList{
 				Items: []v1.Pod{
@@ -726,6 +726,31 @@ func TestGetPodOwner(t *testing.T) {
 			},
 		},
 		{
+			name:    "successfully gets pod owner; DaemonSet",
+			podName: "nginx-pod",
+			podList: &v1.PodList{
+				Items: []v1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "nginx-pod",
+							Namespace: "test",
+							OwnerReferences: []metav1.OwnerReference{
+								{
+									Kind: "DaemonSet",
+									Name: "nginx-daemonset",
+								},
+							},
+						},
+					},
+				},
+			},
+			replicaSet: &appsv1.ReplicaSet{},
+			expected: types.NamespacedName{
+				Namespace: "test",
+				Name:      "nginx-daemonset",
+			},
+		},
+		{
 			name:       "error listing pods",
 			podName:    "nginx-pod",
 			podList:    &v1.PodList{},
@@ -745,7 +770,7 @@ func TestGetPodOwner(t *testing.T) {
 			errString:  "should only be one pod with name",
 		},
 		{
-			name:    "pod owner reference is not ReplicaSet",
+			name:    "pod owner reference is not ReplicaSet or DaemonSet",
 			podName: "nginx-pod",
 			podList: &v1.PodList{
 				Items: []v1.Pod{
@@ -763,7 +788,7 @@ func TestGetPodOwner(t *testing.T) {
 				},
 			},
 			replicaSet: &appsv1.ReplicaSet{},
-			errString:  "expected pod owner reference to be ReplicaSet",
+			errString:  "expected pod owner reference to be ReplicaSet or DaemonSet",
 		},
 		{
 			name:    "pod has multiple owners",
