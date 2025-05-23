@@ -2,8 +2,8 @@
 VERSION = edge
 SELF_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CHART_DIR = $(SELF_DIR)charts/nginx-gateway-fabric
-NGINX_CONF_DIR = internal/mode/static/nginx/conf
-NJS_DIR = internal/mode/static/nginx/modules/src
+NGINX_CONF_DIR = internal/controller/nginx/conf
+NJS_DIR = internal/controller/nginx/modules/src
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
 BUILD_AGENT = local
@@ -202,7 +202,7 @@ unit-test: ## Run unit tests for the go code
 .PHONY: njs-unit-test
 njs-unit-test: ## Run unit tests for the njs httpmatches module
 	docker run --rm -w /modules \
-		-v $(CURDIR)/internal/mode/static/nginx/modules:/modules/ \
+		-v $(CURDIR)/internal/controller/nginx/modules:/modules/ \
 		node:${NODE_VERSION} \
 		/bin/bash -c "npm ci && npm test && npm run clean"
 

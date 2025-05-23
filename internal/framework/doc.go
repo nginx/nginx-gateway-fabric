@@ -1,4 +1,4 @@
 /*
-Package framework contains all the packages that are shared by the provisioner and static modes of the project.
+Package framework contains general packages for building the controller.
 */
 package framework
