@@ -36,7 +36,6 @@ NGINX App Protect WAF v5 imposes specific architectural requirements that fundam
 - **Multi-container deployment**: Requires separate `waf-enforcer` and `waf-config-mgr` containers alongside the main NGINX container
 - **Pre-compiled policies**: WAF policies must be compiled externally using NAP tooling before deployment (cannot be defined inline in Kubernetes resources)
 - **Shared volume architecture**: Containers communicate through shared filesystem volumes rather than direct API calls
-- **External storage requirement**: Compiled policy bundles must be distributed via external storage systems (S3, HTTP, MinIO)
 
 ### Design Philosophy
 
@@ -205,7 +204,7 @@ The architecture demonstrates separation of concerns: external policy compilatio
 
 ### Network Access Requirements
 
-NGF requires outbound network access to fetch WAF policies from remote locations:
+NGF requires outbound network access to fetch WAF policies from _remote_ locations:
 
 - **HTTPS/HTTP access** to policy storage endpoints (S3, Azure Blob, HTTP servers, etc.)
 - **DNS resolution** for policy storage hostnames
@@ -220,6 +219,20 @@ NGF requires outbound network access to fetch WAF policies from remote locations
 - Configure service mesh policies for external traffic (if applicable)
 
 **Note**: Network access configuration is environment-specific and handled through standard Kubernetes networking patterns rather than NGF-specific configuration options.
+
+#### Air-Gapped Environments
+
+- **In-cluster policy storage**: Deploy MinIO or HTTP server within cluster boundaries
+- **Offline compilation**: Use NAP v5 tools in secure environments & upload bundles manually, or do this step within cluster boundaries
+- **No external dependencies**: Complete WAF functionality without internet access
+
+Example air-gapped configuration:
+
+```yaml
+spec:
+  policySource:
+    fileLocation: "http://policy-server.nginx-system.svc.cluster.local/policies/prod-policy.tgz"
+```
 
 ### Policy Development Workflow
 
@@ -241,21 +254,14 @@ Example CI/CD integration for manual updates:
 docker run --rm -v $(pwd):/policies nginx/nap-compiler:5.6.0 \
   compile --input /policies/app-policy.json --output /policies/compiled-policy.tgz
 
-# Compile custom logging profile (optional - can use built-in profiles)
-docker run --rm -v $(pwd):/policies nginx/nap-compiler:5.6.0 \
-  compile --input /policies/custom-log-profile.json --output /policies/log-profile.tgz
-
-# Generate checksums for integrity verification
+# Generate checksum for integrity verification
 sha256sum compiled-policy.tgz > compiled-policy.tgz.sha256
-sha256sum log-profile.tgz > log-profile.tgz.sha256
 
 # Publish to storage
 aws s3 cp compiled-policy.tgz s3://company-policies/prod-policy-v$(date +%Y%m%d).tgz
 aws s3 cp compiled-policy.tgz.sha256 s3://company-policies/prod-policy-v$(date +%Y%m%d).tgz.sha256
-aws s3 cp log-profile.tgz s3://company-policies/logging/custom-log-profile.tgz
-aws s3 cp log-profile.tgz.sha256 s3://company-policies/logging/custom-log-profile.tgz.sha256
 
-# Manual update: Modify WafPolicy resource to reference new policy and logging
+# Manual update: Modify WafPolicy resource to reference new policy
 kubectl patch wafpolicy gateway-protection \
   --patch '{"spec":{"policySource":{"fileLocation":"s3://company-policies/prod-policy-v'$(date +%Y%m%d)'.tgz"}}}'
 ```
@@ -360,18 +366,17 @@ metadata:
   namespace: nginx-gateway
 spec:
   # WAF policy configuration (extensible design)
-  waf:
-    policy: "Enabled"  # "Enabled" | "Disabled"
-    # configuration tweaks optional, e.g.:
+  waf: "Enabled"  # "Enabled" | "Disabled"
+# configuration tweaks optional, e.g.:
 #   kubernetes:
 #     deployment:
-#       # NGINX container with NAP module (will set to default if waf policy is "Enabled" but these values are not configured)
+#       # NGINX container with NAP module (will set to default if waf is "Enabled" but these values are not configured)
 #       container:
 #         image:
 #           repository: private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-waf
 #           tag: "2.1.0"
 
-#       # NAP v5 required containers (will set to defaults if waf policy is "Enabled" but these values are not configured)
+#       # NAP v5 required containers (will set to defaults if waf is "Enabled" but these values are not configured)
 #       wafContainers:
 #         enforcer:
 #           image:
@@ -385,8 +390,6 @@ spec:
 ```
 
 ### WafPolicy Custom Resource with Policy Attachment
-
-Due to NAP v5's pre-compilation requirement, policies must be referenced from external sources and use targetRefs for policy attachment:
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -402,7 +405,6 @@ spec:
     name: secure-gateway
     namespace: applications
 
-  # Policy source (required due to NAP v5 pre-compilation)
   policySource:
     fileLocation: "s3://ngf-waf-policies/production/gateway-policy-v1.2.3.tgz"
     authSecret:
@@ -486,10 +488,6 @@ spec:
       type: "Stderr"
 
 ---
-# Status examples showing WafPolicy Conditions
-# TODO - Need to design Conditions
-```
-
 ### Gateway and Route Resources
 
 #### Gateway Configuration
@@ -653,91 +651,61 @@ data:
   token: <base64>
 ```
 
-## Use Cases
+### Status
 
-### Hierarchical WAF Protection
+#### CRD Label
 
-#### Gateway-Level Default Protection
+According to the [Policy and Metaresources GEP](https://gateway-api.sigs.k8s.io/geps/gep-713/), the `WafPolicy` CRD must have the `gateway.networking.k8s.io/policy: inherited` label to specify that it is an inherited policy.
+This label will help with discoverability and will be used by the planned Gateway API Policy [kubectl plugin](https://gateway-api.sigs.k8s.io/geps/gep-713/#kubectl-plugin-or-command-line-tool).
 
-```yaml
-# Provides base WAF protection for all routes
-apiVersion: gateway.nginx.org/v1alpha1
-kind: WafPolicy
-metadata:
-  name: gateway-base-protection
-  namespace: applications
-spec:
-  targetRefs:
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-    name: main-gateway
-  policySource:
-    fileLocation: "s3://policies/base-protection.tgz"
+#### Conditions
+
+According to the [Policy and Metaresources GEP](https://gateway-api.sigs.k8s.io/geps/gep-713/), the `WafPolicy` CRD must include a `status` stanza with a slice of Conditions.
+
+The `Accepted` Condition must be populated on the `WafPolicy` CRD using the reasons defined in the [PolicyCondition API](https://github.com/kubernetes-sigs/gateway-api/blob/main/apis/v1alpha2/policy_types.go). If these reasons are not sufficient, we can add implementation-specific reasons.
+
+#### Setting Status on Objects Affected by a Policy
+
+In the Policy and Metaresources GEP, there's a [provisional status described here](https://gateway-api.sigs.k8s.io/geps/gep-713/#standard-status-condition-on-policy-affected-objects) that involves adding a Condition or annotation to all objects affected by a Policy.
+
+This solution gives the object owners some knowledge that their object is affected by a policy but minimizes status updates by limiting them to when the affected object starts or stops being affected by a policy.
+Even though this status is provisional, implementing it now will help with discoverability and allow us to give feedback on the solution.
+
+Implementing this involves defining a new Condition type and reason:
+
+```go
+package conditions
+
+import (
+    gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+)
+
+
+const (
+    WafPolicyAffected gatewayv1alpha2.PolicyConditionType = "gateway.nginx.org/WafPolicyAffected"
+    PolicyAffectedReason gatewayv1alpha2.PolicyConditionReason = "PolicyAffected"
+)
+
 ```
 
-**Result**: All HTTPRoutes and GRPCRoutes attached to `main-gateway` automatically inherit WAF protection.
-
-#### Route-Level Override
-
-```yaml
-# Stricter protection for sensitive endpoints
-apiVersion: gateway.nginx.org/v1alpha1
-kind: WafPolicy
-metadata:
-  name: admin-strict-protection
-  namespace: applications
-spec:
-  targetRefs:
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: admin-routes
-  policySource:
-    fileLocation: "s3://policies/strict-admin-protection.tgz"
-```
-
-**Result**: Admin routes get stricter protection while other routes continue using base protection.
-
-### Enterprise Security Operations
-
-- **SecOps teams** compile and manage WAF policies using existing NAP v5 tooling
-- **CI/CD pipelines** automate policy compilation, testing, and distribution
-- **Platform teams** deploy WAF-enabled gateways with inherited protection for all applications
-- **Development teams** can override Gateway policies for specific routes when needed
-- **Operations teams** benefit from simplified policy management with automatic inheritance
-
-### Multi-Environment Deployment
-
-- **Development**: Gateway-level monitoring mode with detailed logging for policy tuning
-- **Staging**: WAF-enabled Gateway for comprehensive policy testing with route-specific overrides
-- **Production**: Full enforcement with performance-optimized policy bundles and granular route policies
-
-### Selective WAF Deployment
-
-- **Mixed Environment**: Some Gateways with WAF protection, others without, all managed by single NGF control plane
-- **Resource Optimization**: WAF containers only deployed where needed, reducing resource consumption
-- **Independent Scaling**: Each Gateway's NGINX Pod scales independently based on traffic requirements
-- **Flexible Protection**: Default Gateway protection with route-specific overrides as needed
-
-### Air-Gapped Environments
-
-- **In-cluster policy storage**: Deploy MinIO or HTTP server within cluster boundaries
-- **Offline compilation**: Use NAP v5 tools in secure environments, upload bundles manually
-- **No external dependencies**: Complete WAF functionality without internet access
-
-Example air-gapped configuration:
+NGINX Gateway Fabric must set this Condition on all HTTPRoutes and Gateways affected by a `WafPolicy`.
+Below is an example of what this Condition may look like:
 
 ```yaml
-spec:
-  policySource:
-    fileLocation: "http://policy-server.nginx-system.svc.cluster.local/policies/prod-policy.tgz"
+Conditions:
+  Type:                  gateway.nginx.org/WafPolicyAffected
+  Message:               Object affected by a WafPolicy.
+  Observed Generation:   1
+  Reason:                PolicyAffected
+  Status:                True
 ```
 
-### Regulatory Compliance
+Some additional rules:
 
-- **Audit trails**: Complete policy version history and deployment tracking
-- **Change control**: Formal approval processes for policy compilation and deployment
-- **Immutable policies**: Compiled policy bundles provide tamper-proof security configurations
-- **Policy inheritance tracking**: Clear visibility into which policies apply to which routes
+- This Condition should be added when the affected object starts being affected by a `WafPolicy`.
+- If an object is affected by multiple `WafPolicy`, only one Condition should exist.
+- When the last `WafPolicy` affecting that object is removed, the Condition should be removed.
+- The Observed Generation is the generation of the affected object, not the generation of the `WafPolicy`.
 
 ## Testing
 
@@ -756,7 +724,6 @@ spec:
 - **End-to-End Workflows**: Complete policy compilation, distribution, and enforcement across multiple Gateway scenarios
 - **NGF Control Plane**: Single NGF Pod managing multiple WAF-enabled and standard NGINX Pods
 - **Policy Distribution**: Centralized policy fetching with distribution to appropriate NGINX Pods via gRPC
-- **Multi-Container Pod**: NAP v5 container interaction via shared volumes in Gateway-specific NGINX Pods
 - **Authentication**: Various credential types and failure handling for policy sources
 - **Network Scenarios**: Policy fetching from different source types (S3, HTTP, in-cluster)
 - **Selective Deployment**: Testing WAF enablement on subset of Gateways while others remain standard
@@ -770,7 +737,7 @@ spec:
 - **Scale Testing**: Multiple WafPolicy resources and policy updates under load
 - **Ephemeral Volume Performance**: Volume I/O performance and sizing validation
 - **Policy Inheritance Performance**: Impact of policy resolution on request processing
-- Note: current NFR testing likely covers all of these scenarios, but we may want to add a separate NGINX Plus WAF run
+- Note: current NFR testing likely covers all of these scenarios, but we may want to add a separate NGINX Plus with WAF run
 
 ### Conformance Testing
 
@@ -819,6 +786,13 @@ spec:
 - **Network Segmentation**: Operators must configure NetworkPolicies for controlled egress access
 - **Source Authorization**: Operators responsible for ensuring policy sources are legitimate and approved
 - **Access Logging**: Standard Kubernetes audit logging captures WafPolicy resource operations; policy fetch operations logged via NGF's existing logging mechanisms
+
+### Regulatory Compliance
+
+- **Audit trails**: Complete policy version history and deployment tracking
+- **Change control**: Formal approval processes for policy compilation and deployment
+- **Immutable policies**: Compiled policy bundles provide tamper-proof security configurations
+- **Policy inheritance tracking**: Clear visibility into which policies apply to which routes
 
 ## Alternatives
 
@@ -890,8 +864,7 @@ metadata:
   name: waf-enabled-proxy
   namespace: nginx-gateway
 spec:
-  waf:
-    policy: "Enabled"
+  waf: "Enabled"
 
 ---
 # 3. Gateway using WAF-enabled proxy
