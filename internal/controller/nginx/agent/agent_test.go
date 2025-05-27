@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/broadcast/broadcastfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/resolver"
@@ -223,7 +224,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 								Servers: []*structpb.Struct{
 									{
 										Fields: map[string]*structpb.Value{
-											"server": structpb.NewStringValue("unix:/var/run/nginx/nginx-503-server.sock"),
+											"server": structpb.NewStringValue(nginx.Nginx503Server),
 										},
 									},
 								},

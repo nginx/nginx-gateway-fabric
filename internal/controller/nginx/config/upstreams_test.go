@@ -7,6 +7,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/upstreamsettings"
@@ -216,7 +217,7 @@ func TestCreateUpstreams(t *testing.T) {
 			ZoneSize: ossZoneSize,
 			Servers: []http.UpstreamServer{
 				{
-					Address: nginx503Server,
+					Address: nginx.Nginx503Server,
 				},
 			},
 		},
@@ -277,7 +278,7 @@ func TestCreateUpstream(t *testing.T) {
 				ZoneSize: ossZoneSize,
 				Servers: []http.UpstreamServer{
 					{
-						Address: nginx503Server,
+						Address: nginx.Nginx503Server,
 					},
 				},
 			},
@@ -293,7 +294,7 @@ func TestCreateUpstream(t *testing.T) {
 				ZoneSize: ossZoneSize,
 				Servers: []http.UpstreamServer{
 					{
-						Address: nginx503Server,
+						Address: nginx.Nginx503Server,
 					},
 				},
 			},
@@ -581,7 +582,7 @@ func TestCreateUpstreamPlus(t *testing.T) {
 				StateFile: stateDir + "/no-endpoints.conf",
 				Servers: []http.UpstreamServer{
 					{
-						Address: nginx503Server,
+						Address: nginx.Nginx503Server,
 					},
 				},
 			},

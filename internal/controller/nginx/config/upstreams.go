@@ -4,6 +4,7 @@ import (
 	"fmt"
 	gotemplate "text/template"
 
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/stream"
@@ -17,8 +18,6 @@ var (
 )
 
 const (
-	// nginx503Server is used as a backend for services that cannot be resolved (have no IP address).
-	nginx503Server = "unix:/var/run/nginx/nginx-503-server.sock"
 	// nginx500Server is used as a server for the invalid backend ref upstream.
 	nginx500Server = "unix:/var/run/nginx/nginx-500-server.sock"
 	// invalidBackendRef is used as an upstream name for invalid backend references.
@@ -159,7 +158,7 @@ func (g GeneratorImpl) createUpstream(
 			StateFile: stateFile,
 			Servers: []http.UpstreamServer{
 				{
-					Address: nginx503Server,
+					Address: nginx.Nginx503Server,
 				},
 			},
 		}

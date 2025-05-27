@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/broadcast"
 	agentgrpc "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
@@ -183,7 +184,7 @@ func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
 		return []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
-					"server": structpb.NewStringValue("unix:/var/run/nginx/nginx-503-server.sock"),
+					"server": structpb.NewStringValue(nginx.Nginx503Server),
 				},
 			},
 		}
