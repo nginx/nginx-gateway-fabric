@@ -179,6 +179,10 @@ func TestUpdateUpstreamServers(t *testing.T) {
 								},
 							},
 						},
+						{
+							Name:      "empty-upstream",
+							Endpoints: []resolver.Endpoint{},
+						},
 					},
 					StreamUpstreams: []dataplane.Upstream{
 						{
@@ -213,6 +217,20 @@ func TestUpdateUpstreamServers(t *testing.T) {
 						},
 					},
 					{
+						Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
+							UpdateHttpUpstreamServers: &pb.UpdateHTTPUpstreamServers{
+								HttpUpstreamName: "empty-upstream",
+								Servers: []*structpb.Struct{
+									{
+										Fields: map[string]*structpb.Value{
+											"server": structpb.NewStringValue("unix:/var/run/nginx/nginx-503-server.sock"),
+										},
+									},
+								},
+							},
+						},
+					},
+					{
 						Action: &pb.NGINXPlusAction_UpdateStreamServers{
 							UpdateStreamServers: &pb.UpdateStreamServers{
 								UpstreamStreamName: "test-stream-upstream",
@@ -234,11 +252,12 @@ func TestUpdateUpstreamServers(t *testing.T) {
 				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
 			} else if test.buildUpstreams {
 				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
-				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(2))
+				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
 			}
 
 			if test.expErr {
 				expErr := errors.Join(
+					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
 					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
 					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
 				)

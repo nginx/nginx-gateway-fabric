@@ -179,6 +179,16 @@ func buildStreamUpstreamServers(upstream dataplane.Upstream) *pb.UpdateStreamSer
 }
 
 func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
+	if len(upstream.Endpoints) == 0 {
+		return []*structpb.Struct{
+			{
+				Fields: map[string]*structpb.Value{
+					"server": structpb.NewStringValue("unix:/var/run/nginx/nginx-503-server.sock"),
+				},
+			},
+		}
+	}
+
 	servers := make([]*structpb.Struct, 0, len(upstream.Endpoints))
 
 	for _, endpoint := range upstream.Endpoints {
