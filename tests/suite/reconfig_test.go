@@ -486,7 +486,7 @@ Time To Ready Description: {{ .TimeToReadyDescription }}
 {{- end }}
 
 ### NGINX Error Logs
-{{ .NGINXErrorLogs }}
+{{ .NGINXErrorLogs -}}
 `
 
 func writeReconfigResults(dest io.Writer, results reconfigTestResults) error {

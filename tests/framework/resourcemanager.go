@@ -227,16 +227,14 @@ func (rm *ResourceManager) DeleteNamespaces(names []string) error {
 	defer cancel()
 
 	var combinedErrors error
-	ns := &core.Namespace{}
 	for _, name := range names {
-		if err := rm.K8sClient.Get(ctx, types.NamespacedName{Name: name}, ns); err != nil {
+		ns := &core.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
+
+		if err := rm.K8sClient.Delete(ctx, ns); err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			combinedErrors = errors.Join(combinedErrors, fmt.Errorf("error getting namespace: %w", err))
-		}
 
-		if err := rm.K8sClient.Delete(ctx, ns); err != nil {
 			combinedErrors = errors.Join(combinedErrors, fmt.Errorf("error deleting namespace: %w", err))
 		}
 	}
