@@ -4,10 +4,10 @@ import (
 	"fmt"
 	gotemplate "text/template"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/stream"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 )
@@ -158,7 +158,7 @@ func (g GeneratorImpl) createUpstream(
 			StateFile: stateFile,
 			Servers: []http.UpstreamServer{
 				{
-					Address: nginx.Nginx503Server,
+					Address: types.Nginx503Server,
 				},
 			},
 		}
