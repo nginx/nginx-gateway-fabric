@@ -170,16 +170,12 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 	cleanupResources := func() error {
 		var err error
 
-		// FIXME (bjee19): https://github.com/nginx/nginx-gateway-fabric/issues/2376
-		// Find a way to bulk delete these namespaces.
-		for i := 1; i <= maxResourceCount; i++ {
-			nsName := "namespace" + strconv.Itoa(i)
-			resultError := resourceManager.DeleteNamespace(nsName)
-			if resultError != nil {
-				err = resultError
-			}
+		namespaces := make([]string, maxResourceCount)
+		for i := range maxResourceCount {
+			namespaces[i] = "namespace" + strconv.Itoa(i+1)
 		}
 
+		err = resourceManager.DeleteNamespaces(namespaces)
 		Expect(resourceManager.DeleteNamespace(reconfigNamespace.Name)).To(Succeed())
 
 		return err
@@ -490,7 +486,7 @@ Time To Ready Description: {{ .TimeToReadyDescription }}
 {{- end }}
 
 ### NGINX Error Logs
-{{ .NGINXErrorLogs }}
+{{ .NGINXErrorLogs -}}
 `
 
 func writeReconfigResults(dest io.Writer, results reconfigTestResults) error {

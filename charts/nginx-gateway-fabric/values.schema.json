@@ -43,6 +43,15 @@
       "title": "clusterDomain",
       "type": "string"
     },
+    "gateways": {
+      "description": "A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.",
+      "items": {
+        "required": []
+      },
+      "required": [],
+      "title": "gateways",
+      "type": "array"
+    },
     "global": {
       "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
       "required": [],
