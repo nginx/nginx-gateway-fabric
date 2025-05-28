@@ -192,7 +192,7 @@ This architecture demonstrates the hierarchical policy attachment system where G
 
 **Data Plane (Green/Red):** When WAF is enabled through NginxProxy configuration, each Gateway deploys as a multi-container NGINX Pod containing the main NGINX container with NAP module, plus the required WAF Enforcer and WAF Config Manager containers. These containers communicate through shared ephemeral volumes rather than network calls, maintaining NAP v5's architectural requirements.
 
-**Application Namespace Resources:** All user-facing resources (Gateway, HTTPRoute, GRPCRoute, WafPolicy, NginxProxy, and optional authentication Secret) reside in application namespaces for proper isolation and RBAC management. The Secret is only required when using fallback authentication methods for accessing external policy storage - native cloud authentication for accessing external policy storage (S3, Azure Blob, etc.) uses annotations on the NGF service account in the nginx-gateway namespace.
+**Application Namespace Resources:** All user-facing resources (Gateway, HTTPRoute, GRPCRoute, WafPolicy, NginxProxy, and optional authentication Secret) reside in application namespaces for proper isolation and RBAC management. The Secret is only required when using fallback authentication methods for accessing external policy storage - native cloud authentication (where available) uses annotations on the NGF service account in the nginx-gateway namespace.
 
 **Policy Attachment Flow (Orange):** WafPolicy resources use targetRefs to attach to Gateways or Routes. Gateway-level policies provide inherited protection for all attached HTTPRoutes and GRPCRoutes. Route-level policies can override Gateway-level policies for specific routes requiring different protection levels.
 
