@@ -245,11 +245,8 @@ nginx:
     ## Enables hostPort.
     enable: false
 
-    ## The HTTP hostPort configuration for NGINX.
-    http: 80
-
-    ## The HTTPS hostPort configuration for NGINX.
-    https: 443
+    ## The hostPort configuration for NGINX.
+    port: 443
   
   # @schema
   # type: object
