@@ -11,12 +11,12 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/licensing/licensingfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/configfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/file/filefakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing/licensingfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/configfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/dataplane"
 )
 
 func TestInitialize_OSS(t *testing.T) {

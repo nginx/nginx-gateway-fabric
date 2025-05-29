@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.15
+# syntax=docker/dockerfile:1.16
 FROM scratch AS nginx-files
 
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
@@ -11,7 +11,7 @@ WORKDIR /tmp
 RUN apk add --no-cache git make \
     && git clone https://github.com/nginx/agent.git \
     && cd agent \
-    && git checkout e745a3236e0f02a579461a5a435b3bcd410a686c \
+    && git checkout 3dad26582af6c17e013302d08a4f1ed5d5504296 \
     && make build
 
 FROM alpine:3.21

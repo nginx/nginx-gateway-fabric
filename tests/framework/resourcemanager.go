@@ -29,6 +29,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -219,6 +220,45 @@ func (rm *ResourceManager) DeleteNamespace(name string) error {
 			}
 			return false, nil
 		})
+}
+
+func (rm *ResourceManager) DeleteNamespaces(names []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.DeleteNamespaceTimeout*2)
+	defer cancel()
+
+	var combinedErrors error
+	for _, name := range names {
+		ns := &core.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
+
+		if err := rm.K8sClient.Delete(ctx, ns); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+
+			combinedErrors = errors.Join(combinedErrors, fmt.Errorf("error deleting namespace: %w", err))
+		}
+	}
+
+	err := wait.PollUntilContextCancel(
+		ctx,
+		500*time.Millisecond,
+		true, /* poll immediately */
+		func(ctx context.Context) (bool, error) {
+			nsList := &core.NamespaceList{}
+			if err := rm.K8sClient.List(ctx, nsList); err != nil {
+				return false, nil //nolint:nilerr // retry on error
+			}
+
+			for _, namespace := range nsList.Items {
+				if slices.Contains(names, namespace.Name) {
+					return false, nil
+				}
+			}
+
+			return true, nil
+		})
+
+	return errors.Join(combinedErrors, err)
 }
 
 // DeleteFromFiles deletes Kubernetes resources defined within the provided YAML files.

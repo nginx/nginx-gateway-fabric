@@ -132,7 +132,7 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
 
       - name: Build Docker Image
-        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || '' }}
           context: "."
@@ -149,8 +149,8 @@ jobs:
           sbom: true
           provenance: mode=max
           build-args: |
-            NJS_DIR=internal/mode/static/nginx/modules/src
-            NGINX_CONF_DIR=internal/mode/static/nginx/conf
+            NJS_DIR=internal/controller/nginx/modules/src
+            NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
           secrets: |
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}
@@ -171,7 +171,7 @@ jobs:
           fail-build: false
 
       - name: Upload scan result to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@60168efe1c415ce0f5521ea06d5c2062adbeed1b # v3.28.17
+        uses: github/codeql-action/upload-sarif@ff0a06e83cb2de871e5a09832bc6a81e7276941f # v3.28.18
         continue-on-error: true
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}

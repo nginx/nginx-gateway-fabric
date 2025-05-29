@@ -585,9 +585,6 @@ func getUnexpectedNginxErrorLogs(nginxPodName, namespace string) string {
 		"connect() failed (111: Connection refused)",
 		"could not be resolved (host not found) during usage report",
 		"server returned 429",
-		// FIXME(salonichf5) remove this error message check
-		// when https://github.com/nginx/nginx-gateway-fabric/issues/2090 is completed.
-		"no live upstreams while connecting to upstream",
 	}
 
 	unexpectedErrors := ""

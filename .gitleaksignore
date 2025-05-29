@@ -3,4 +3,4 @@
 68d1f6eb80d23c8650c11629459dd6a06c986ca1:internal/state/graph/graph_test.go:private-key:44
 890fddb787ff3560b9b743647a36b649d498ae51:internal/state/graph/secret_test.go:private-key:35
 890fddb787ff3560b9b743647a36b649d498ae51:internal/state/change_processor_test.go:private-key:211
-internal/mode/static/state/graph/config_maps_test.go:private-key:35
+internal/controller/state/graph/config_maps_test.go:private-key:35

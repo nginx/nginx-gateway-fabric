@@ -58,8 +58,8 @@ jobs:
         id: prettier-run
         uses: rutajdash/prettier-cli-action@d42c4325a3b344f3bd4be482bc34de521998d557 # v1.0.2
         with:
-          config_path: ${{ github.workspace }}/internal/mode/static/nginx/modules/.prettierrc
-          file_pattern: ${{ github.workspace }}/internal/mode/static/nginx/modules/**/*.js
+          config_path: ${{ github.workspace }}/internal/controller/nginx/modules/.prettierrc
+          file_pattern: ${{ github.workspace }}/internal/controller/nginx/modules/**/*.js
           prettier_version: 3.3.3 # renovate: datasource=npm depName=prettier
 
       - name: Prettier Output
@@ -90,7 +90,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Lint Markdown
-        uses: DavidAnson/markdownlint-cli2-action@05f32210e84442804257b2a6f20b273450ec8265 # v19.1.0
+        uses: DavidAnson/markdownlint-cli2-action@992badcdf24e3b8eb7e87ff9287fe931bcb00c6e # v20.0.0
         with:
           config: .markdownlint-cli2.yaml
           globs: "**/*.md"

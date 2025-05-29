@@ -9,9 +9,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/file/filefakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent"
 )
 
 var _ = Describe("Write files", Ordered, func() {
