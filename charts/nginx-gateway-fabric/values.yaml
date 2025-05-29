@@ -251,7 +251,7 @@ nginx:
     # minimum: 1
     # maximum: 65535
     # @schema
-    # -- The port configuration for NGINX.
+    # -- The port
     port: 443
 
   # @schema
