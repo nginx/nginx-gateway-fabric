@@ -5,9 +5,9 @@
     "schedule:daily"
   ],
   "kubernetes": {
-    "fileMatch": [
-      "examples/.+\\.yaml$",
-      "suite/.+\\.yaml$"
+    "managerFilePatterns": [
+      "/examples/.+\\.yaml$/",
+      "/suite/.+\\.yaml$/"
     ]
   }
 }

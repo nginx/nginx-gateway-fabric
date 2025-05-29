@@ -3,16 +3,18 @@ package static
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/go-logr/logr"
 	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
+	authv1 "k8s.io/api/authentication/v1"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,23 +47,25 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/runnables"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/status"
+	frameworkStatus "github.com/nginx/nginx-gateway-fabric/internal/framework/status"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/licensing"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/metrics/collectors"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent"
+	agentgrpc "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/agent/grpc"
 	ngxcfg "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/policies/upstreamsettings"
 	ngxvalidation "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/config/validation"
-	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/file"
-	ngxruntime "github.com/nginx/nginx-gateway-fabric/internal/mode/static/nginx/runtime"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/status"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/telemetry"
 )
 
@@ -73,6 +77,7 @@ const (
 	plusCAField         = "ca.crt"
 	plusClientCertField = "tls.crt"
 	plusClientKeyField  = "tls.key"
+	grpcServerPort      = 8443
 )
 
 var scheme = runtime.NewScheme()
@@ -88,12 +93,13 @@ func init() {
 	utilruntime.Must(ngfAPIv1alpha2.AddToScheme(scheme))
 	utilruntime.Must(apiext.AddToScheme(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(authv1.AddToScheme(scheme))
+	utilruntime.Must(rbacv1.AddToScheme(scheme))
 }
 
-//nolint:gocyclo
 func StartManager(cfg config.Config) error {
-	nginxChecker := newNginxConfiguredOnStartChecker()
-	mgr, err := createManager(cfg, nginxChecker)
+	healthChecker := newGraphBuiltHealthChecker()
+	mgr, err := createManager(cfg, healthChecker)
 	if err != nil {
 		return fmt.Errorf("cannot build runtime manager: %w", err)
 	}
@@ -101,12 +107,7 @@ func StartManager(cfg config.Config) error {
 	recorderName := fmt.Sprintf("nginx-gateway-fabric-%s", cfg.GatewayClassName)
 	recorder := mgr.GetEventRecorderFor(recorderName)
 
-	promLogger, err := newLeveledPrometheusLogger()
-	if err != nil {
-		return fmt.Errorf("error creating leveled prometheus logger: %w", err)
-	}
-
-	logLevelSetter := newMultiLogLevelSetter(newZapLogLevelSetter(cfg.AtomicLevel), newPromLogLevelSetter(promLogger))
+	logLevelSetter := newMultiLogLevelSetter(newZapLogLevelSetter(cfg.AtomicLevel))
 
 	ctx := ctlr.SetupSignalHandler()
 
@@ -117,12 +118,6 @@ func StartManager(cfg config.Config) error {
 	}
 	if err := registerControllers(ctx, cfg, mgr, recorder, logLevelSetter, eventCh, controlConfigNSName); err != nil {
 		return err
-	}
-
-	// protectedPorts is the map of ports that may not be configured by a listener, and the name of what it is used for
-	protectedPorts := map[int32]string{
-		int32(cfg.MetricsConfig.Port): "MetricsPort", //nolint:gosec // port will not overflow int32
-		int32(cfg.HealthConfig.Port):  "HealthPort",  //nolint:gosec // port will not overflow int32
 	}
 
 	mustExtractGVK := kinds.NewMustExtractGKV(scheme)
@@ -146,117 +141,119 @@ func StartManager(cfg config.Config) error {
 		},
 		EventRecorder:  recorder,
 		MustExtractGVK: mustExtractGVK,
-		ProtectedPorts: protectedPorts,
 		PlusSecrets:    plusSecrets,
 	})
 
-	// Clear the configuration folders to ensure that no files are left over in case the control plane was restarted
-	// (this assumes the folders are in a shared volume).
-	removedPaths, err := file.ClearFolders(file.NewStdLibOSFileManager(), ngxcfg.ConfigFolders)
-	for _, path := range removedPaths {
-		cfg.Logger.Info("removed configuration file", "path", path)
-	}
-	if err != nil {
-		return fmt.Errorf("cannot clear NGINX configuration folders: %w", err)
-	}
-
-	processHandler := ngxruntime.NewProcessHandlerImpl(os.ReadFile, os.Stat)
-
-	// Ensure NGINX is running before registering metrics & starting the manager.
-	p, err := processHandler.FindMainProcess(ctx, ngxruntime.PidFileTimeout)
-	if err != nil {
-		return fmt.Errorf("NGINX is not running: %w", err)
-	}
-	cfg.Logger.V(1).Info("NGINX is running with PID", "pid", p)
-
-	var (
-		ngxruntimeCollector ngxruntime.MetricsCollector = collectors.NewManagerNoopCollector()
-		handlerCollector    handlerMetricsCollector     = collectors.NewControllerNoopCollector()
-	)
-
-	var ngxPlusClient ngxruntime.NginxPlusClient
-	if cfg.Plus {
-		ngxPlusClient, err = ngxruntime.CreatePlusClient()
-		if err != nil {
-			return fmt.Errorf("error creating NGINX plus client: %w", err)
-		}
-	}
+	var handlerCollector handlerMetricsCollector = collectors.NewControllerNoopCollector()
 
 	if cfg.MetricsConfig.Enabled {
 		constLabels := map[string]string{"class": cfg.GatewayClassName}
-		var ngxCollector prometheus.Collector
-		if cfg.Plus {
-			ngxCollector, err = collectors.NewNginxPlusMetricsCollector(ngxPlusClient, constLabels, promLogger)
-		} else {
-			ngxCollector = collectors.NewNginxMetricsCollector(constLabels, promLogger)
-		}
-		if err != nil {
-			return fmt.Errorf("cannot create nginx metrics collector: %w", err)
-		}
 
-		ngxruntimeCollector = collectors.NewManagerMetricsCollector(constLabels)
 		handlerCollector = collectors.NewControllerCollector(constLabels)
-
-		ngxruntimeCollector, ok := ngxruntimeCollector.(prometheus.Collector)
-		if !ok {
-			return fmt.Errorf("ngxruntimeCollector is not a prometheus.Collector: %w", status.ErrFailedAssert)
-		}
 		handlerCollector, ok := handlerCollector.(prometheus.Collector)
 		if !ok {
-			return fmt.Errorf("handlerCollector is not a prometheus.Collector: %w", status.ErrFailedAssert)
+			return fmt.Errorf("handlerCollector is not a prometheus.Collector: %w", frameworkStatus.ErrFailedAssert)
 		}
 
-		metrics.Registry.MustRegister(
-			ngxCollector,
-			ngxruntimeCollector,
-			handlerCollector,
-		)
+		metrics.Registry.MustRegister(handlerCollector)
 	}
 
-	statusUpdater := status.NewUpdater(
+	statusUpdater := frameworkStatus.NewUpdater(
 		mgr.GetClient(),
 		cfg.Logger.WithName("statusUpdater"),
 	)
 
-	groupStatusUpdater := status.NewLeaderAwareGroupUpdater(statusUpdater)
+	groupStatusUpdater := frameworkStatus.NewLeaderAwareGroupUpdater(statusUpdater)
 	deployCtxCollector := licensing.NewDeploymentContextCollector(licensing.DeploymentContextCollectorConfig{
 		K8sClientReader: mgr.GetAPIReader(),
 		PodUID:          cfg.GatewayPodConfig.UID,
 		Logger:          cfg.Logger.WithName("deployCtxCollector"),
 	})
 
+	statusQueue := status.NewQueue()
+	resetConnChan := make(chan struct{})
+	nginxUpdater := agent.NewNginxUpdater(
+		cfg.Logger.WithName("nginxUpdater"),
+		mgr.GetAPIReader(),
+		statusQueue,
+		resetConnChan,
+		cfg.Plus,
+	)
+
+	tokenAudience := fmt.Sprintf(
+		"%s.%s.svc",
+		cfg.GatewayPodConfig.ServiceName,
+		cfg.GatewayPodConfig.Namespace,
+	)
+
+	grpcServer := agentgrpc.NewServer(
+		cfg.Logger.WithName("agentGRPCServer"),
+		grpcServerPort,
+		[]func(*grpc.Server){
+			nginxUpdater.CommandService.Register,
+			nginxUpdater.FileService.Register,
+		},
+		mgr.GetClient(),
+		tokenAudience,
+		resetConnChan,
+	)
+
+	if err = mgr.Add(&runnables.LeaderOrNonLeader{Runnable: grpcServer}); err != nil {
+		return fmt.Errorf("cannot register grpc server: %w", err)
+	}
+
+	nginxProvisioner, provLoop, err := provisioner.NewNginxProvisioner(
+		ctx,
+		mgr,
+		provisioner.Config{
+			DeploymentStore:        nginxUpdater.NginxDeployments,
+			StatusQueue:            statusQueue,
+			Logger:                 cfg.Logger.WithName("provisioner"),
+			EventRecorder:          recorder,
+			GatewayPodConfig:       &cfg.GatewayPodConfig,
+			GCName:                 cfg.GatewayClassName,
+			AgentTLSSecretName:     cfg.AgentTLSSecretName,
+			NGINXSCCName:           cfg.NGINXSCCName,
+			Plus:                   cfg.Plus,
+			NginxDockerSecretNames: cfg.NginxDockerSecretNames,
+			PlusUsageConfig:        &cfg.UsageReportConfig,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("error building provisioner: %w", err)
+	}
+
+	if err := mgr.Add(&runnables.LeaderOrNonLeader{Runnable: provLoop}); err != nil {
+		return fmt.Errorf("cannot register provisioner event loop: %w", err)
+	}
+
 	eventHandler := newEventHandlerImpl(eventHandlerConfig{
-		nginxFileMgr: file.NewManagerImpl(
-			cfg.Logger.WithName("nginxFileManager"),
-			file.NewStdLibOSFileManager(),
-		),
+		ctx:              ctx,
+		nginxUpdater:     nginxUpdater,
+		nginxProvisioner: nginxProvisioner,
 		metricsCollector: handlerCollector,
-		nginxRuntimeMgr: ngxruntime.NewManagerImpl(
-			ngxPlusClient,
-			ngxruntimeCollector,
-			cfg.Logger.WithName("nginxRuntimeManager"),
-			processHandler,
-			ngxruntime.NewVerifyClient(ngxruntime.NginxReloadTimeout),
-		),
-		statusUpdater:   groupStatusUpdater,
-		processor:       processor,
-		serviceResolver: resolver.NewServiceResolverImpl(mgr.GetClient()),
+		statusUpdater:    groupStatusUpdater,
+		processor:        processor,
+		serviceResolver:  resolver.NewServiceResolverImpl(mgr.GetClient()),
 		generator: ngxcfg.NewGeneratorImpl(
 			cfg.Plus,
 			&cfg.UsageReportConfig,
 			cfg.Logger.WithName("generator"),
 		),
-		k8sClient:                     mgr.GetClient(),
-		k8sReader:                     mgr.GetAPIReader(),
-		logLevelSetter:                logLevelSetter,
-		eventRecorder:                 recorder,
-		deployCtxCollector:            deployCtxCollector,
-		nginxConfiguredOnStartChecker: nginxChecker,
-		gatewayPodConfig:              cfg.GatewayPodConfig,
-		controlConfigNSName:           controlConfigNSName,
-		gatewayCtlrName:               cfg.GatewayCtlrName,
-		updateGatewayClassStatus:      cfg.UpdateGatewayClassStatus,
-		plus:                          cfg.Plus,
+		k8sClient:               mgr.GetClient(),
+		k8sReader:               mgr.GetAPIReader(),
+		logger:                  cfg.Logger.WithName("eventHandler"),
+		logLevelSetter:          logLevelSetter,
+		eventRecorder:           recorder,
+		deployCtxCollector:      deployCtxCollector,
+		graphBuiltHealthChecker: healthChecker,
+		gatewayPodConfig:        cfg.GatewayPodConfig,
+		controlConfigNSName:     controlConfigNSName,
+		gatewayCtlrName:         cfg.GatewayCtlrName,
+		gatewayClassName:        cfg.GatewayClassName,
+		plus:                    cfg.Plus,
+		statusQueue:             statusQueue,
+		nginxDeployments:        nginxUpdater.NginxDeployments,
 	})
 
 	objects, objectLists := prepareFirstEventBatchPreparerArgs(cfg)
@@ -273,8 +270,12 @@ func StartManager(cfg config.Config) error {
 		return fmt.Errorf("cannot register event loop: %w", err)
 	}
 
-	if err = mgr.Add(runnables.NewEnableAfterBecameLeader(groupStatusUpdater.Enable)); err != nil {
-		return fmt.Errorf("cannot register status updater: %w", err)
+	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
+		groupStatusUpdater.Enable,
+		nginxProvisioner.Enable,
+		eventHandler.enable,
+	})); err != nil {
+		return fmt.Errorf("cannot register functions that get called after Pod becomes leader: %w", err)
 	}
 
 	if cfg.ProductTelemetryConfig.Enabled {
@@ -282,7 +283,7 @@ func StartManager(cfg config.Config) error {
 			K8sClientReader:     mgr.GetAPIReader(),
 			GraphGetter:         processor,
 			ConfigurationGetter: eventHandler,
-			Version:             cfg.Version,
+			Version:             cfg.GatewayPodConfig.Version,
 			PodNSName: types.NamespacedName{
 				Namespace: cfg.GatewayPodConfig.Namespace,
 				Name:      cfg.GatewayPodConfig.Name,
@@ -291,7 +292,7 @@ func StartManager(cfg config.Config) error {
 			Flags:       cfg.Flags,
 		})
 
-		job, err := createTelemetryJob(cfg, dataCollector, nginxChecker.getReadyCh())
+		job, err := createTelemetryJob(cfg, dataCollector, healthChecker.getReadyCh())
 		if err != nil {
 			return fmt.Errorf("cannot create telemetry job: %w", err)
 		}
@@ -332,7 +333,7 @@ func createPolicyManager(
 	return policies.NewManager(mustExtractGVK, cfgs...)
 }
 
-func createManager(cfg config.Config, nginxChecker *nginxConfiguredOnStartChecker) (manager.Manager, error) {
+func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (manager.Manager, error) {
 	options := manager.Options{
 		Scheme:  scheme,
 		Logger:  cfg.Logger.V(1),
@@ -367,9 +368,22 @@ func createManager(cfg config.Config, nginxChecker *nginxConfiguredOnStartChecke
 	}
 
 	if cfg.HealthConfig.Enabled {
-		if err := mgr.AddReadyzCheck("readyz", nginxChecker.readyCheck); err != nil {
+		if err := mgr.AddReadyzCheck("readyz", healthChecker.readyCheck); err != nil {
 			return nil, fmt.Errorf("error adding ready check: %w", err)
 		}
+	}
+
+	// Add an indexer to get pods by their IP address. This is used when validating that an agent
+	// connection is coming from the right place.
+	var podIPIndexFunc client.IndexerFunc = index.PodIPIndexFunc
+	if err := controller.AddIndex(
+		context.Background(),
+		mgr.GetFieldIndexer(),
+		&apiv1.Pod{},
+		"status.podIP",
+		podIPIndexFunc,
+	); err != nil {
+		return nil, fmt.Errorf("error adding pod IP indexer: %w", err)
 	}
 
 	return mgr, nil
@@ -415,12 +429,6 @@ func registerControllers(
 				options := []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				}
-				if cfg.GatewayNsName != nil {
-					options = append(
-						options,
-						controller.WithNamespacedNameFilter(filter.CreateSingleResourceFilter(*cfg.GatewayNsName)),
-					)
-				}
 				return options
 			}(),
 		},
@@ -436,19 +444,6 @@ func registerControllers(
 			options: []controller.Option{
 				controller.WithK8sPredicate(predicate.ServicePortsChangedPredicate{}),
 			},
-		},
-		{
-			objectType: &apiv1.Service{},
-			name:       "ngf-service", // unique controller names are needed and we have multiple Service ctlrs
-			options: func() []controller.Option {
-				svcNSName := types.NamespacedName{
-					Namespace: cfg.GatewayPodConfig.Namespace,
-					Name:      cfg.GatewayPodConfig.ServiceName,
-				}
-				return []controller.Option{
-					controller.WithK8sPredicate(predicate.GatewayServicePredicate{NSName: svcNSName}),
-				}
-			}(),
 		},
 		{
 			objectType: &apiv1.Secret{},
@@ -485,7 +480,7 @@ func registerControllers(
 			},
 		},
 		{
-			objectType: &ngfAPIv1alpha1.NginxProxy{},
+			objectType: &ngfAPIv1alpha2.NginxProxy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -545,6 +540,7 @@ func registerControllers(
 				objectType: &ngfAPIv1alpha1.NginxGateway{},
 				options: []controller.Option{
 					controller.WithNamespacedNameFilter(filter.CreateSingleResourceFilter(controlConfigNSName)),
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
 			})
 		if err := setInitialConfig(
@@ -746,7 +742,7 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 		&discoveryV1.EndpointSliceList{},
 		&gatewayv1.HTTPRouteList{},
 		&gatewayv1beta1.ReferenceGrantList{},
-		&ngfAPIv1alpha1.NginxProxyList{},
+		&ngfAPIv1alpha2.NginxProxyList{},
 		&gatewayv1.GRPCRouteList{},
 		&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 		&ngfAPIv1alpha2.ObservabilityPolicyList{},
@@ -770,16 +766,7 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 		)
 	}
 
-	gwNsName := cfg.GatewayNsName
-
-	if gwNsName == nil {
-		objectLists = append(objectLists, &gatewayv1.GatewayList{})
-	} else {
-		objects = append(
-			objects,
-			&gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: gwNsName.Name, Namespace: gwNsName.Namespace}},
-		)
-	}
+	objectLists = append(objectLists, &gatewayv1.GatewayList{})
 
 	return objects, objectLists
 }

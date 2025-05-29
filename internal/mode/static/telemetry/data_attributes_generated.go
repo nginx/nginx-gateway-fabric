@@ -20,7 +20,8 @@ func (d *Data) Attributes() []attribute.KeyValue {
 	attrs = append(attrs, attribute.StringSlice("SnippetsFiltersDirectives", d.SnippetsFiltersDirectives))
 	attrs = append(attrs, attribute.Int64Slice("SnippetsFiltersDirectivesCount", d.SnippetsFiltersDirectivesCount))
 	attrs = append(attrs, d.NGFResourceCounts.Attributes()...)
-	attrs = append(attrs, attribute.Int64("NGFReplicaCount", d.NGFReplicaCount))
+	attrs = append(attrs, attribute.Int64("NginxPodCount", d.NginxPodCount))
+	attrs = append(attrs, attribute.Int64("ControlPlanePodCount", d.ControlPlanePodCount))
 
 	return attrs
 }

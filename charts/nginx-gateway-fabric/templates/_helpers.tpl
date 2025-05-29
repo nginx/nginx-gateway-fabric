@@ -78,7 +78,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Create the name of the ServiceAccount to use
 */}}
 {{- define "nginx-gateway.serviceAccountName" -}}
-{{- default (include "nginx-gateway.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "nginx-gateway.fullname" .) .Values.nginxGateway.serviceAccount.name }}
 {{- end }}
 
 {{/*
@@ -91,3 +91,16 @@ Expand leader election lock name.
 {{- printf "%s-%s" (include "nginx-gateway.fullname" .) "leader-election" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Filters out empty fields from a struct.
+*/}}
+{{- define "filterEmptyFields" -}}
+{{- $result := dict }}
+{{- range $key, $value := . }}
+  {{- if and (not (empty $value)) (not (and (kindIs "slice" $value) (eq (len $value) 0))) }}
+    {{- $result = merge $result (dict $key $value) }}
+  {{- end }}
+{{- end }}
+{{- $result | toYaml }}
+{{- end }}

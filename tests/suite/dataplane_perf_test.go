@@ -18,50 +18,59 @@ import (
 )
 
 var _ = Describe("Dataplane performance", Ordered, Label("nfr", "performance"), func() {
-	files := []string{
-		"dp-perf/coffee.yaml",
-		"dp-perf/gateway.yaml",
-		"dp-perf/cafe-routes.yaml",
-	}
+	var (
+		files = []string{
+			"dp-perf/coffee.yaml",
+			"dp-perf/gateway.yaml",
+			"dp-perf/cafe-routes.yaml",
+		}
 
-	var ns core.Namespace
+		namespace = "dp-perf"
 
-	var addr string
-	targetURL := "http://cafe.example.com"
-	var outFile *os.File
+		targetURL = "http://cafe.example.com"
 
-	t1 := framework.Target{
-		Method: "GET",
-		URL:    fmt.Sprintf("%s%s", targetURL, "/latte"),
-	}
-	t2 := framework.Target{
-		Method: "GET",
-		URL:    fmt.Sprintf("%s%s", targetURL, "/coffee"),
-		Header: http.Header{"version": []string{"v2"}},
-	}
-	t3 := framework.Target{
-		Method: "GET",
-		URL:    fmt.Sprintf("%s%s", targetURL, "/coffee?TEST=v2"),
-	}
-	t4 := framework.Target{
-		Method: "GET",
-		URL:    fmt.Sprintf("%s%s", targetURL, "/tea"),
-	}
-	t5 := framework.Target{
-		Method: "POST",
-		URL:    fmt.Sprintf("%s%s", targetURL, "/tea"),
-	}
+		t1 = framework.Target{
+			Method: "GET",
+			URL:    fmt.Sprintf("%s%s", targetURL, "/latte"),
+		}
+		t2 = framework.Target{
+			Method: "GET",
+			URL:    fmt.Sprintf("%s%s", targetURL, "/coffee"),
+			Header: http.Header{"version": []string{"v2"}},
+		}
+		t3 = framework.Target{
+			Method: "GET",
+			URL:    fmt.Sprintf("%s%s", targetURL, "/coffee?TEST=v2"),
+		}
+		t4 = framework.Target{
+			Method: "GET",
+			URL:    fmt.Sprintf("%s%s", targetURL, "/tea"),
+		}
+		t5 = framework.Target{
+			Method: "POST",
+			URL:    fmt.Sprintf("%s%s", targetURL, "/tea"),
+		}
+
+		outFile *os.File
+		addr    string
+	)
 
 	BeforeAll(func() {
-		ns = core.Namespace{
+		ns := core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "dp-perf",
+				Name: namespace,
 			},
 		}
 
 		Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
+
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		setUpPortForward(nginxPodNames[0], namespace)
 
 		port := ":80"
 		if portFwdPort != 0 {
@@ -79,8 +88,11 @@ var _ = Describe("Dataplane performance", Ordered, Label("nfr", "performance"), 
 	})
 
 	AfterAll(func() {
-		Expect(resourceManager.DeleteFromFiles(files, ns.Name)).To(Succeed())
-		Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+		cleanUpPortForward()
+
+		Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
+		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 		outFile.Close()
 	})
 

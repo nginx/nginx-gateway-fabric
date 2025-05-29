@@ -52,13 +52,13 @@ func PortForward(config *rest.Config, namespace, podName string, ports []string,
 		for {
 			if err := forward(); err != nil {
 				slog.Error("error forwarding ports", "error", err)
-				slog.Info("retrying port forward in 100ms...")
+				slog.Info("retrying port forward in 1s...")
 			}
 
 			select {
 			case <-stopCh:
 				return
-			case <-time.After(100 * time.Millisecond):
+			case <-time.After(1 * time.Second):
 				// retrying
 			}
 		}

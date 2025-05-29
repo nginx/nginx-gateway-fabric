@@ -19,6 +19,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/tests/framework"
 )
@@ -26,26 +27,58 @@ import (
 // This test can be flaky when waiting to see traces show up in the collector logs.
 // Sometimes they get there right away, sometimes it takes 30 seconds. Retries were
 // added to attempt to mitigate the issue, but it didn't fix it 100%.
-var _ = Describe("Tracing", FlakeAttempts(2), Label("functional", "tracing"), func() {
+var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "tracing"), func() {
+	// To run the tracing test, you must build NGF with the following values:
+	// TELEMETRY_ENDPOINT=otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317
+	// TELEMETRY_ENDPOINT_INSECURE = true
+
 	var (
 		files = []string{
 			"hello-world/apps.yaml",
 			"hello-world/gateway.yaml",
 			"hello-world/routes.yaml",
 		}
-		nginxProxyFile     = "tracing/nginxproxy.yaml"
 		policySingleFile   = "tracing/policy-single.yaml"
 		policyMultipleFile = "tracing/policy-multiple.yaml"
 
-		ns core.Namespace
+		namespace = "helloworld"
 
 		collectorPodName, helloURL, worldURL, helloworldURL string
 	)
 
+	updateNginxProxyTelemetrySpec := func(telemetry ngfAPIv1alpha2.Telemetry) {
+		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.UpdateTimeout)
+		defer cancel()
+
+		key := types.NamespacedName{Name: "ngf-test-proxy-config", Namespace: "nginx-gateway"}
+		var nginxProxy ngfAPIv1alpha2.NginxProxy
+		Expect(k8sClient.Get(ctx, key, &nginxProxy)).To(Succeed())
+
+		nginxProxy.Spec.Telemetry = &telemetry
+
+		Expect(k8sClient.Update(ctx, &nginxProxy)).To(Succeed())
+	}
+
+	BeforeAll(func() {
+		telemetry := ngfAPIv1alpha2.Telemetry{
+			Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+				Endpoint: helpers.GetPointer("otel-collector-opentelemetry-collector.collector.svc:4317"),
+			},
+			ServiceName: helpers.GetPointer("my-test-svc"),
+			SpanAttributes: []ngfAPIv1alpha1.SpanAttribute{{
+				Key:   "testkey1",
+				Value: "testval1",
+			}},
+		}
+
+		updateNginxProxyTelemetrySpec(telemetry)
+	})
+
+	// BeforeEach is needed because FlakeAttempts do not re-run BeforeAll/AfterAll nodes
 	BeforeEach(func() {
-		ns = core.Namespace{
+		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "helloworld",
+				Name: namespace,
 			},
 		}
 
@@ -55,9 +88,15 @@ var _ = Describe("Tracing", FlakeAttempts(2), Label("functional", "tracing"), fu
 		collectorPodName, err = framework.GetCollectorPodName(resourceManager)
 		Expect(err).ToNot(HaveOccurred())
 
-		Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
-		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
+		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		setUpPortForward(nginxPodNames[0], namespace)
 
 		url := "http://foo.example.com"
 		helloURL = url + "/hello"
@@ -71,44 +110,21 @@ var _ = Describe("Tracing", FlakeAttempts(2), Label("functional", "tracing"), fu
 	})
 
 	AfterEach(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		output, err := framework.UninstallCollector(resourceManager)
 		Expect(err).ToNot(HaveOccurred(), string(output))
 
-		Expect(resourceManager.DeleteFromFiles(files, ns.Name)).To(Succeed())
+		cleanUpPortForward()
+
+		Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.DeleteFromFiles(
-			[]string{nginxProxyFile, policySingleFile, policyMultipleFile}, ns.Name)).To(Succeed())
-		Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
-
-		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.CreateTimeout)
-		defer cancel()
-
-		key := types.NamespacedName{Name: gatewayClassName}
-		var gwClass gatewayv1.GatewayClass
-		Expect(k8sClient.Get(ctx, key, &gwClass)).To(Succeed())
-
-		gwClass.Spec.ParametersRef = nil
-
-		Expect(k8sClient.Update(ctx, &gwClass)).To(Succeed())
+			[]string{policySingleFile, policyMultipleFile}, namespace)).To(Succeed())
+		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
-	updateGatewayClass := func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.CreateTimeout)
-		defer cancel()
-
-		key := types.NamespacedName{Name: gatewayClassName}
-		var gwClass gatewayv1.GatewayClass
-		if err := k8sClient.Get(ctx, key, &gwClass); err != nil {
-			return err
-		}
-
-		gwClass.Spec.ParametersRef = &gatewayv1.ParametersReference{
-			Group: ngfAPIv1alpha1.GroupName,
-			Kind:  gatewayv1.Kind("NginxProxy"),
-			Name:  "nginx-proxy",
-		}
-
-		return k8sClient.Update(ctx, &gwClass)
-	}
+	AfterAll(func() {
+		updateNginxProxyTelemetrySpec(ngfAPIv1alpha2.Telemetry{})
+	})
 
 	sendRequests := func(url string, count int) {
 		for range count {
@@ -168,11 +184,9 @@ var _ = Describe("Tracing", FlakeAttempts(2), Label("functional", "tracing"), fu
 
 		// install tracing configuration
 		traceFiles := []string{
-			nginxProxyFile,
 			policySingleFile,
 		}
-		Expect(resourceManager.ApplyFromFiles(traceFiles, ns.Name)).To(Succeed())
-		Expect(updateGatewayClass()).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(traceFiles, namespace)).To(Succeed())
 
 		checkStatusAndTraces()
 
@@ -192,11 +206,9 @@ var _ = Describe("Tracing", FlakeAttempts(2), Label("functional", "tracing"), fu
 	It("sends tracing spans for one policy attached to multiple routes", func() {
 		// install tracing configuration
 		traceFiles := []string{
-			nginxProxyFile,
 			policyMultipleFile,
 		}
-		Expect(resourceManager.ApplyFromFiles(traceFiles, ns.Name)).To(Succeed())
-		Expect(updateGatewayClass()).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(traceFiles, namespace)).To(Succeed())
 
 		checkStatusAndTraces()
 

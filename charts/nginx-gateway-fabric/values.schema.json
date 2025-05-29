@@ -1,20 +1,47 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "properties": {
-    "affinity": {
-      "description": "The affinity of the NGINX Gateway Fabric pod.",
-      "required": [],
-      "title": "affinity",
-      "type": "object"
-    },
-    "extraVolumes": {
-      "description": "extraVolumes for the NGINX Gateway Fabric pod. Use in conjunction with\nnginxGateway.extraVolumeMounts and nginx.extraVolumeMounts to mount additional volumes to the containers.",
-      "items": {
-        "required": []
+    "certGenerator": {
+      "description": "The certGenerator section contains the configuration for the cert-generator Job.",
+      "properties": {
+        "agentTLSSecretName": {
+          "default": "agent-tls",
+          "description": "The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely\ncommunicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the\nNGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).",
+          "required": [],
+          "title": "agentTLSSecretName",
+          "type": "string"
+        },
+        "annotations": {
+          "description": "The annotations of the cert-generator Job.",
+          "required": [],
+          "title": "annotations",
+          "type": "object"
+        },
+        "overwrite": {
+          "default": false,
+          "description": "Overwrite existing TLS Secrets on startup.",
+          "required": [],
+          "title": "overwrite",
+          "type": "boolean"
+        },
+        "serverTLSSecretName": {
+          "default": "server-tls",
+          "description": "The name of the Secret containing TLS CA, certificate, and key for the NGINX Gateway Fabric control plane\nto securely communicate with the NGINX Agent. Must exist in the same namespace that the NGINX Gateway Fabric\ncontrol plane is running in (default namespace: nginx-gateway).",
+          "required": [],
+          "title": "serverTLSSecretName",
+          "type": "string"
+        }
       },
       "required": [],
-      "title": "extraVolumes",
-      "type": "array"
+      "title": "certGenerator",
+      "type": "object"
+    },
+    "clusterDomain": {
+      "default": "cluster.local",
+      "description": "The DNS cluster domain of your Kubernetes cluster.",
+      "required": [],
+      "title": "clusterDomain",
+      "type": "string"
     },
     "global": {
       "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
@@ -22,40 +49,11 @@
       "title": "global",
       "type": "object"
     },
-    "metrics": {
-      "properties": {
-        "enable": {
-          "default": true,
-          "description": "Enable exposing metrics in the Prometheus format.",
-          "required": [],
-          "title": "enable",
-          "type": "boolean"
-        },
-        "port": {
-          "default": 9113,
-          "description": "Set the port where the Prometheus metrics are exposed.",
-          "maximum": 65535,
-          "minimum": 1,
-          "required": [],
-          "title": "port",
-          "type": "integer"
-        },
-        "secure": {
-          "default": false,
-          "description": "Enable serving metrics via https. By default metrics are served via http.\nPlease note that this endpoint will be secured with a self-signed certificate.",
-          "required": [],
-          "title": "secure",
-          "type": "boolean"
-        }
-      },
-      "required": [],
-      "title": "metrics",
-      "type": "object"
-    },
     "nginx": {
+      "description": "The nginx section contains the configuration for all NGINX data plane deployments\ninstalled by the NGINX Gateway Fabric control plane.",
       "properties": {
         "config": {
-          "description": "The configuration for the data plane that is contained in the NginxProxy resource.",
+          "description": "The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways\nmanaged by this instance of NGINX Gateway Fabric.",
           "properties": {
             "disableHTTP2": {
               "description": "DisableHTTP2 defines if http2 should be disabled for all servers.",
@@ -75,6 +73,17 @@
             "logging": {
               "description": "Logging defines logging related settings for NGINX.",
               "properties": {
+                "agentLevel": {
+                  "enum": [
+                    "debug",
+                    "info",
+                    "error",
+                    "panic",
+                    "fatal"
+                  ],
+                  "required": [],
+                  "type": "string"
+                },
                 "errorLevel": {
                   "enum": [
                     "debug",
@@ -88,6 +97,23 @@
                   ],
                   "required": [],
                   "type": "string"
+                }
+              },
+              "required": [],
+              "type": "object"
+            },
+            "metrics": {
+              "description": "Metrics defines the configuration for Prometheus scraping metrics.",
+              "properties": {
+                "disable": {
+                  "required": [],
+                  "type": "boolean"
+                },
+                "port": {
+                  "maximum": 65535,
+                  "minimum": 1,
+                  "required": [],
+                  "type": "integer"
                 }
               },
               "required": [],
@@ -165,6 +191,17 @@
             "telemetry": {
               "description": "Telemetry specifies the OpenTelemetry configuration.",
               "properties": {
+                "disabledFeatures": {
+                  "items": {
+                    "enum": [
+                      "DisableTracing"
+                    ],
+                    "required": [],
+                    "type": "string"
+                  },
+                  "required": [],
+                  "type": "array"
+                },
                 "exporter": {
                   "properties": {
                     "batchCount": {
@@ -228,21 +265,18 @@
           "title": "config",
           "type": "object"
         },
+        "container": {
+          "description": "The container configuration for the NGINX container. This is applied globally to all Gateways managed by this\ninstance of NGINX Gateway Fabric.",
+          "required": [],
+          "title": "container",
+          "type": "object"
+        },
         "debug": {
           "default": false,
           "description": "Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource.",
           "required": [],
           "title": "debug",
           "type": "boolean"
-        },
-        "extraVolumeMounts": {
-          "description": "extraVolumeMounts are the additional volume mounts for the nginx container.",
-          "items": {
-            "required": []
-          },
-          "required": [],
-          "title": "extraVolumeMounts",
-          "type": "array"
         },
         "image": {
           "properties": {
@@ -274,18 +308,126 @@
           "title": "image",
           "type": "object"
         },
-        "lifecycle": {
-          "description": "The lifecycle of the nginx container.",
+        "imagePullSecret": {
+          "default": "",
+          "description": "The name of the secret containing docker registry credentials.\nSecret must exist in the same namespace as the helm release. The control\nplane will copy this secret into any namespace where NGINX is deployed.",
           "required": [],
-          "title": "lifecycle",
-          "type": "object"
+          "title": "imagePullSecret",
+          "type": "string"
+        },
+        "imagePullSecrets": {
+          "description": "A list of secret names containing docker registry credentials.\nSecrets must exist in the same namespace as the helm release. The control\nplane will copy these secrets into any namespace where NGINX is deployed.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "imagePullSecrets",
+          "type": "array"
+        },
+        "kind": {
+          "default": "deployment",
+          "description": "The kind of NGINX deployment.",
+          "enum": [
+            "deployment"
+          ],
+          "required": [],
+          "title": "kind"
         },
         "plus": {
           "default": false,
-          "description": "Is NGINX Plus image being used",
+          "description": "Is NGINX Plus image being used.",
           "required": [],
           "title": "plus",
           "type": "boolean"
+        },
+        "pod": {
+          "description": "The pod configuration for the NGINX data plane pod. This is applied globally to all Gateways managed by this\ninstance of NGINX Gateway Fabric.",
+          "required": [],
+          "title": "pod",
+          "type": "object"
+        },
+        "replicas": {
+          "default": 1,
+          "description": "The number of replicas of the NGINX Deployment.",
+          "required": [],
+          "title": "replicas",
+          "type": "integer"
+        },
+        "service": {
+          "description": "The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this\ninstance of NGINX Gateway Fabric.",
+          "properties": {
+            "externalTrafficPolicy": {
+              "default": "Local",
+              "description": "The externalTrafficPolicy of the service. The value Local preserves the client source IP.",
+              "enum": [
+                "Cluster",
+                "Local"
+              ],
+              "required": [],
+              "title": "externalTrafficPolicy"
+            },
+            "loadBalancerClass": {
+              "default": "",
+              "description": "LoadBalancerClass is the class of the load balancer implementation this Service belongs to.\nRequires nginx.service.type set to LoadBalancer.",
+              "required": [],
+              "title": "loadBalancerClass",
+              "type": "string"
+            },
+            "loadBalancerIP": {
+              "default": "",
+              "description": "The static IP address for the load balancer. Requires nginx.service.type set to LoadBalancer.",
+              "required": [],
+              "title": "loadBalancerIP",
+              "type": "string"
+            },
+            "loadBalancerSourceRanges": {
+              "description": "The IP ranges (CIDR) that are allowed to access the load balancer. Requires nginx.service.type set to LoadBalancer.",
+              "items": {
+                "required": []
+              },
+              "required": [],
+              "title": "loadBalancerSourceRanges",
+              "type": "array"
+            },
+            "nodePorts": {
+              "description": "A list of NodePorts to expose on the NGINX data plane service. Each NodePort MUST map to a Gateway listener port,\notherwise it will be ignored. The default NodePort range enforced by Kubernetes is 30000-32767.",
+              "items": {
+                "properties": {
+                  "listenerPort": {
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "required": [],
+                    "type": "integer"
+                  },
+                  "port": {
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "required": [],
+                    "type": "integer"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              },
+              "required": [],
+              "title": "nodePorts",
+              "type": "array"
+            },
+            "type": {
+              "default": "LoadBalancer",
+              "description": "The type of service to create for the NGINX data plane.",
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ],
+              "required": [],
+              "title": "type"
+            }
+          },
+          "required": [],
+          "title": "service",
+          "type": "object"
         },
         "usage": {
           "description": "Configuration for NGINX Plus usage reporting.",
@@ -343,7 +485,14 @@
       "type": "object"
     },
     "nginxGateway": {
+      "description": "The nginxGateway section contains configuration for the NGINX Gateway Fabric control plane deployment.",
       "properties": {
+        "affinity": {
+          "description": "The affinity of the NGINX Gateway Fabric control plane pod.",
+          "required": [],
+          "title": "affinity",
+          "type": "object"
+        },
         "config": {
           "description": "The dynamic configuration for the control plane that is contained in the NginxGateway resource.",
           "properties": {
@@ -385,6 +534,15 @@
           "title": "extraVolumeMounts",
           "type": "array"
         },
+        "extraVolumes": {
+          "description": "extraVolumes for the NGINX Gateway Fabric control plane pod. Use in conjunction with\nnginxGateway.extraVolumeMounts mount additional volumes to the container.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "extraVolumes",
+          "type": "array"
+        },
         "gatewayClassAnnotations": {
           "description": "Set of custom annotations for GatewayClass objects.",
           "required": [],
@@ -420,6 +578,7 @@
           "type": "object"
         },
         "image": {
+          "description": "The image configuration for the NGINX Gateway Fabric control plane.",
           "properties": {
             "pullPolicy": {
               "default": "Always",
@@ -490,6 +649,42 @@
           "title": "lifecycle",
           "type": "object"
         },
+        "metrics": {
+          "properties": {
+            "enable": {
+              "default": true,
+              "description": "Enable exposing metrics in the Prometheus format.",
+              "required": [],
+              "title": "enable",
+              "type": "boolean"
+            },
+            "port": {
+              "default": 9113,
+              "description": "Set the port where the Prometheus metrics are exposed.",
+              "maximum": 65535,
+              "minimum": 1,
+              "required": [],
+              "title": "port",
+              "type": "integer"
+            },
+            "secure": {
+              "default": false,
+              "description": "Enable serving metrics via https. By default metrics are served via http.\nPlease note that this endpoint will be secured with a self-signed certificate.",
+              "required": [],
+              "title": "secure",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "metrics",
+          "type": "object"
+        },
+        "nodeSelector": {
+          "description": "The nodeSelector of the NGINX Gateway Fabric control plane pod.",
+          "required": [],
+          "title": "nodeSelector",
+          "type": "object"
+        },
         "podAnnotations": {
           "description": "Set of custom annotations for the NGINX Gateway Fabric pods.",
           "required": [],
@@ -511,7 +706,7 @@
           "type": "object"
         },
         "readinessProbe": {
-          "description": "# Defines the settings for the control plane readiness probe. This probe returns Ready when the controller\n# has started and configured NGINX to serve traffic.",
+          "description": "# Defines the settings for the control plane readiness probe. This probe returns Ready when the controller\n# has started and is ready to configure NGINX.",
           "properties": {
             "enable": {
               "default": true,
@@ -541,11 +736,11 @@
           "title": "readinessProbe",
           "type": "object"
         },
-        "replicaCount": {
+        "replicas": {
           "default": 1,
           "description": "The number of replicas of the NGINX Gateway Fabric Deployment.",
           "required": [],
-          "title": "replicaCount",
+          "title": "replicas",
           "type": "integer"
         },
         "resources": {
@@ -554,18 +749,55 @@
           "title": "resources",
           "type": "object"
         },
-        "securityContext": {
+        "service": {
+          "description": "The service configuration for the NGINX Gateway Fabric control plane.",
           "properties": {
-            "allowPrivilegeEscalation": {
-              "default": false,
-              "description": "Some environments may need this set to true in order for the control plane to successfully reload NGINX.",
+            "annotations": {
+              "description": "The annotations of the NGINX Gateway Fabric control plane service.",
               "required": [],
-              "title": "allowPrivilegeEscalation",
-              "type": "boolean"
+              "title": "annotations",
+              "type": "object"
             }
           },
           "required": [],
-          "title": "securityContext",
+          "title": "service",
+          "type": "object"
+        },
+        "serviceAccount": {
+          "description": "The serviceaccount configuration for the NGINX Gateway Fabric control plane.",
+          "properties": {
+            "annotations": {
+              "description": "Set of custom annotations for the NGINX Gateway Fabric control plane service account.",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "imagePullSecret": {
+              "default": "",
+              "description": "The name of the secret containing docker registry credentials for the control plane.\nSecret must exist in the same namespace as the helm release.",
+              "required": [],
+              "title": "imagePullSecret",
+              "type": "string"
+            },
+            "imagePullSecrets": {
+              "description": "A list of secret names containing docker registry credentials for the control plane.\nSecrets must exist in the same namespace as the helm release.",
+              "items": {
+                "required": []
+              },
+              "required": [],
+              "title": "imagePullSecrets",
+              "type": "array"
+            },
+            "name": {
+              "default": "",
+              "description": "The name of the service account of the NGINX Gateway Fabric control plane pods. Used for RBAC.",
+              "required": [],
+              "title": "name",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "serviceAccount",
           "type": "object"
         },
         "snippetsFilters": {
@@ -581,6 +813,31 @@
           "required": [],
           "title": "snippetsFilters",
           "type": "object"
+        },
+        "terminationGracePeriodSeconds": {
+          "default": 30,
+          "description": "The termination grace period of the NGINX Gateway Fabric control plane pod.",
+          "required": [],
+          "title": "terminationGracePeriodSeconds",
+          "type": "integer"
+        },
+        "tolerations": {
+          "description": "Tolerations for the NGINX Gateway Fabric control plane pod.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "tolerations",
+          "type": "array"
+        },
+        "topologySpreadConstraints": {
+          "description": "The topology spread constraints for the NGINX Gateway Fabric control plane pod.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "topologySpreadConstraints",
+          "type": "array"
         }
       },
       "required": [
@@ -589,166 +846,6 @@
       ],
       "title": "nginxGateway",
       "type": "object"
-    },
-    "nodeSelector": {
-      "description": "The nodeSelector of the NGINX Gateway Fabric pod.",
-      "required": [],
-      "title": "nodeSelector",
-      "type": "object"
-    },
-    "service": {
-      "properties": {
-        "annotations": {
-          "description": "The annotations of the NGINX Gateway Fabric service.",
-          "required": [],
-          "title": "annotations",
-          "type": "object"
-        },
-        "create": {
-          "default": true,
-          "description": "Creates a service to expose the NGINX Gateway Fabric pods.",
-          "required": [],
-          "title": "create",
-          "type": "boolean"
-        },
-        "externalTrafficPolicy": {
-          "default": "Local",
-          "description": "The externalTrafficPolicy of the service. The value Local preserves the client source IP.",
-          "enum": [
-            "Cluster",
-            "Local"
-          ],
-          "required": [],
-          "title": "externalTrafficPolicy"
-        },
-        "loadBalancerIP": {
-          "default": "",
-          "description": "The static IP address for the load balancer. Requires service.type set to LoadBalancer.",
-          "required": [],
-          "title": "loadBalancerIP",
-          "type": "string"
-        },
-        "loadBalancerSourceRanges": {
-          "description": "The IP ranges (CIDR) that are allowed to access the load balancer. Requires service.type set to LoadBalancer.",
-          "items": {
-            "required": []
-          },
-          "required": [],
-          "title": "loadBalancerSourceRanges",
-          "type": "array"
-        },
-        "ports": {
-          "description": "A list of ports to expose through the NGINX Gateway Fabric service. Update it to match the listener ports from\nyour Gateway resource. Follows the conventional Kubernetes yaml syntax for service ports.",
-          "items": {
-            "properties": {
-              "name": {
-                "required": [],
-                "type": "string"
-              },
-              "port": {
-                "maximum": 65535,
-                "minimum": 1,
-                "required": [],
-                "type": "integer"
-              },
-              "protocol": {
-                "enum": [
-                  "TCP",
-                  "UDP"
-                ],
-                "required": [],
-                "type": "string"
-              },
-              "targetPort": {
-                "maximum": 65535,
-                "minimum": 1,
-                "required": [],
-                "type": "integer"
-              }
-            },
-            "required": [],
-            "type": "object"
-          },
-          "required": [],
-          "title": "ports",
-          "type": "array"
-        },
-        "type": {
-          "default": "LoadBalancer",
-          "description": "The type of service to create for the NGINX Gateway Fabric.",
-          "enum": [
-            "ClusterIP",
-            "NodePort",
-            "LoadBalancer"
-          ],
-          "required": [],
-          "title": "type"
-        }
-      },
-      "required": [],
-      "title": "service",
-      "type": "object"
-    },
-    "serviceAccount": {
-      "properties": {
-        "annotations": {
-          "description": "Set of custom annotations for the NGINX Gateway Fabric service account.",
-          "required": [],
-          "title": "annotations",
-          "type": "object"
-        },
-        "imagePullSecret": {
-          "default": "",
-          "description": "The name of the secret containing docker registry credentials.\nSecret must exist in the same namespace as the helm release.",
-          "required": [],
-          "title": "imagePullSecret",
-          "type": "string"
-        },
-        "imagePullSecrets": {
-          "description": "A list of secret names containing docker registry credentials.\nSecrets must exist in the same namespace as the helm release.",
-          "items": {
-            "required": []
-          },
-          "required": [],
-          "title": "imagePullSecrets",
-          "type": "array"
-        },
-        "name": {
-          "default": "",
-          "description": "The name of the service account of the NGINX Gateway Fabric pods. Used for RBAC.",
-          "required": [],
-          "title": "name",
-          "type": "string"
-        }
-      },
-      "required": [],
-      "title": "serviceAccount",
-      "type": "object"
-    },
-    "terminationGracePeriodSeconds": {
-      "default": 30,
-      "description": "The termination grace period of the NGINX Gateway Fabric pod.",
-      "required": [],
-      "title": "terminationGracePeriodSeconds",
-      "type": "integer"
-    },
-    "tolerations": {
-      "description": "Tolerations for the NGINX Gateway Fabric pod.",
-      "items": {
-        "required": []
-      },
-      "required": [],
-      "title": "tolerations",
-      "type": "array"
-    },
-    "topologySpreadConstraints": {
-      "description": "The topology spread constraints for the NGINX Gateway Fabric pod.",
-      "items": {
-        "required": []
-      },
-      "required": [],
-      "title": "topologySpreadConstraints",
-      "type": "array"
     }
   },
   "required": [],

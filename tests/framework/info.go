@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
+	. "github.com/onsi/ginkgo/v2"
 	core "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -80,4 +81,28 @@ func GetBuildInfo() (commitHash string, commitTime string, dirtyBuild string) {
 	}
 
 	return
+}
+
+// AddNginxLogsAndEventsToReport adds nginx logs and events from the namespace to the report if the spec failed.
+func AddNginxLogsAndEventsToReport(rm ResourceManager, namespace string) {
+	if CurrentSpecReport().Failed() {
+		var returnLogs string
+
+		nginxPodNames, _ := GetReadyNginxPodNames(rm.K8sClient, namespace, rm.TimeoutConfig.GetStatusTimeout)
+
+		for _, nginxPodName := range nginxPodNames {
+			returnLogs += fmt.Sprintf("Logs for Nginx Pod %s:\n", nginxPodName)
+			nginxLogs, _ := rm.GetPodLogs(
+				namespace,
+				nginxPodName,
+				&core.PodLogOptions{Container: "nginx"},
+			)
+
+			returnLogs += fmt.Sprintf("  %s\n", nginxLogs)
+		}
+		AddReportEntry("Nginx Logs", returnLogs, ReportEntryVisibilityNever)
+
+		events := GetEvents(rm, namespace)
+		AddReportEntry("Test Events", events, ReportEntryVisibilityNever)
+	}
 }

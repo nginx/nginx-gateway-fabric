@@ -1,18 +1,41 @@
 # syntax=docker/dockerfile:1.15
+# TODO(sberman): the commented out lines are for when we use the published agent release
+# FROM scratch AS nginx-files
+
+# # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
+# ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
+
+FROM golang:alpine AS builder
+
+WORKDIR /tmp
+
+RUN apk add --no-cache git make \
+    && git clone https://github.com/nginx/agent.git \
+    && cd agent \
+    && git checkout e745a3236e0f02a579461a5a435b3bcd410a686c \
+    && make build
+
 FROM nginx:1.28.0-alpine-otel
 
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
-RUN apk add --no-cache libcap \
+# RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
+#     printf "%s\n" "http://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
+#     && apk add --no-cache nginx-agent
+
+RUN apk add --no-cache libcap bash \
     && mkdir -p /usr/lib/nginx/modules \
-	&& setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx \
-	&& setcap -v 'cap_net_bind_service=+ep' /usr/sbin/nginx \
+    && setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx \
+    && setcap -v 'cap_net_bind_service=+ep' /usr/sbin/nginx \
     && setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx-debug \
     && setcap -v 'cap_net_bind_service=+ep' /usr/sbin/nginx-debug \
     && apk del libcap
 
+COPY --from=builder /tmp/agent/build/nginx-agent /usr/bin/nginx-agent
+
+COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/httpmatches.js /usr/lib/nginx/modules/njs/httpmatches.js
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
@@ -24,4 +47,4 @@ LABEL org.nginx.ngf.image.build.agent="${BUILD_AGENT}"
 
 USER 101:1001
 
-CMD ["sh", "-c", "rm -rf /var/run/nginx/*.sock && nginx -g 'daemon off;'"]
+ENTRYPOINT ["/agent/entrypoint.sh"]

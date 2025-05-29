@@ -13,8 +13,7 @@ GW_SVC_GKE_INTERNAL = false
 NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY = Never## Pull policy for the images
 NGINX_CONF_DIR = internal/mode/static/nginx/conf
-PROVISIONER_MANIFEST = conformance/provisioner/provisioner.yaml
-SUPPORTED_EXTENDED_FEATURES = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation
+SUPPORTED_EXTENDED_FEATURES = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation
 STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC
 EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
@@ -45,7 +44,7 @@ build-test-runner-image: ## Build conformance test runner image
 
 .PHONY: build-crossplane-image
 build-crossplane-image: ## Build the crossplane image
-	docker build --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) -t nginx-crossplane:latest -f framework/crossplane/Dockerfile ..
+	docker build --platform $(GOOS)/$(GOARCH) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) -t nginx-crossplane:latest -f framework/crossplane/Dockerfile ..
 
 .PHONY: run-conformance-tests
 run-conformance-tests: ## Run conformance tests
@@ -73,9 +72,6 @@ run-conformance-tests: ## Run conformance tests
 cleanup-conformance-tests: ## Clean up conformance tests fixtures
 	kubectl delete pod conformance
 	kubectl delete -f conformance/conformance-rbac.yaml
-
-.PHONY: build
-build: generate-static-deployment
 
 .PHONY: reset-go-modules
 reset-go-modules: ## Reset the go modules changes
@@ -109,7 +105,9 @@ sync-files-to-vm: ## Syncs your local NGF files with the NGF repo on the VM
 	./scripts/sync-files-to-vm.sh
 
 .PHONY: nfr-test
-nfr-test: check-for-plus-usage-endpoint ## Run the NFR tests on a GCP VM
+nfr-test: GOARCH=amd64
+nfr-test: check-for-plus-usage-endpoint build-crossplane-image  ## Run the NFR tests on a GCP VM
+	./scripts/push-crossplane-image.sh
 	CI=$(CI) ./scripts/run-tests-gcp-vm.sh
 
 .PHONY: start-longevity-test
@@ -169,16 +167,7 @@ delete-gke-cluster: ## Delete the GKE cluster
 add-local-ip-to-cluster: ## Add local IP to the GKE cluster master-authorized-networks
 	./scripts/add-local-ip-auth-networks.sh
 
-HELM_PARAMETERS += --set nameOverride=nginx-gateway --set nginxGateway.kind=skip --set service.create=false --skip-schema-validation
-
-.PHONY: deploy-updated-provisioner
-deploy-updated-provisioner: ## Update provisioner manifest and deploy to the configured kind cluster
-	yq '(select(di != 3))' $(PROVISIONER_MANIFEST) | kubectl apply -f -
-	yq '(select(.spec.template.spec.containers[].image) | .spec.template.spec.containers[].image="$(PREFIX):$(TAG)" | .spec.template.spec.containers[].imagePullPolicy = "Never")' $(PROVISIONER_MANIFEST) | kubectl apply -f -
-
-.PHONY: generate-static-deployment
-generate-static-deployment:
-	helm template nginx-gateway $(CHART_DIR) --set nameOverride=nginx-gateway --set metrics.enable=false --set nginxGateway.productTelemetry.enable=false -n nginx-gateway -s templates/deployment.yaml --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginxGateway.image.pullPolicy=Never --set nginx.image.repository=$(NGINX_PREFIX) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=Never --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) --set nginx.plus=$(PLUS_ENABLED) --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) > $(SELF_DIR)config/tests/static-deployment.yaml
+HELM_PARAMETERS += --set nameOverride=nginx-gateway --set nginx.service.type=ClusterIP --skip-schema-validation
 
 # this target is used to install the gateway-api CRDs from the main branch (only used in the nightly CI job)
 # it overrides the target in the main Makefile when the GW_API_VERSION is set to main
@@ -187,27 +176,15 @@ install-gateway-crds:
 	kubectl kustomize "https://github.com/kubernetes-sigs/gateway-api/config/crd/$(if $(filter true,$(ENABLE_EXPERIMENTAL)),experimental,)?timeout=120&ref=main" | kubectl apply -f -
 endif
 
-.PHONY: install-ngf-local-build
-install-ngf-local-build: deploy-updated-provisioner
-
 .PHONY: install-ngf-local-no-build
-install-ngf-local-no-build: load-images helm-install-local deploy-updated-provisioner ## Install NGF from local build with provisioner on configured kind cluster but do not build the NGF image
-
-.PHONY: install-ngf-local-build-with-plus
-install-ngf-local-build-with-plus: deploy-updated-provisioner
+install-ngf-local-no-build: load-images helm-install-local ## Install NGF from local build on configured kind cluster but do not build the NGF image
 
 .PHONY: install-ngf-local-no-build-with-plus
-install-ngf-local-no-build-with-plus: load-images-with-plus helm-install-local-with-plus deploy-updated-provisioner ## Install NGF with Plus from local build with provisioner on configured kind cluster but do not build the NGF image
-
-.PHONY: install-ngf-edge
-install-ngf-edge: load-images helm-install-local ## Install NGF with provisioner from edge on configured kind cluster
-	kubectl apply -f $(PROVISIONER_MANIFEST)
+install-ngf-local-no-build-with-plus: load-images-with-plus helm-install-local-with-plus ## Install NGF with Plus from local build on configured kind cluster but do not build the NGF image
 
 .PHONY: uninstall-ngf
-uninstall-ngf: ## Uninstall NGF on configured kind cluster and undo manifest changes
+uninstall-ngf: ## Uninstall NGF on configured kind cluster
 	-helm uninstall nginx-gateway -n nginx-gateway
 	-make uninstall-gateway-crds
-	-kubectl delete clusterrole nginx-gateway-provisioner
-	-kubectl delete clusterrolebinding nginx-gateway-provisioner
 	-kubectl delete namespace nginx-gateway
 	-kubectl kustomize ../config/crd | kubectl delete -f -

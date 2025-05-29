@@ -18,6 +18,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kubernetes/kubernetesfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/config"
@@ -170,7 +172,7 @@ var _ = Describe("Collector", Ordered, func() {
 				ClusterNodeCount:    1,
 			},
 			NGFResourceCounts:              telemetry.NGFResourceCounts{},
-			NGFReplicaCount:                1,
+			ControlPlanePodCount:           1,
 			ImageSource:                    "local",
 			FlagNames:                      flags.Names,
 			FlagValues:                     flags.Values,
@@ -183,7 +185,7 @@ var _ = Describe("Collector", Ordered, func() {
 		fakeConfigurationGetter = &telemetryfakes.FakeConfigurationGetter{}
 
 		fakeGraphGetter.GetLatestGraphReturns(&graph.Graph{})
-		fakeConfigurationGetter.GetLatestConfigurationReturns(&dataplane.Configuration{})
+		fakeConfigurationGetter.GetLatestConfigurationReturns(nil)
 
 		dataCollector = telemetry.NewDataCollectorImpl(telemetry.DataCollectorConfig{
 			K8sClientReader:     k8sClientReader,
@@ -262,6 +264,24 @@ var _ = Describe("Collector", Ordered, func() {
 
 				k8sClientReader.ListCalls(createListCallsFunc(nodes))
 
+				k8sClientReader.GetCalls(mergeGetCallsWithBase(createGetCallsFunc(
+					&appsv1.ReplicaSet{
+						Spec: appsv1.ReplicaSetSpec{
+							Replicas: helpers.GetPointer(int32(2)),
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "replica",
+							OwnerReferences: []metav1.OwnerReference{
+								{
+									Kind: "Deployment",
+									Name: "Deployment1",
+									UID:  "test-uid-replicaSet",
+								},
+							},
+						},
+					},
+				)))
+
 				secret1 := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1"}}
 				secret2 := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret2"}}
 				nilsecret := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "nilsecret"}}
@@ -270,16 +290,38 @@ var _ = Describe("Collector", Ordered, func() {
 				svc2 := &v1.Service{ObjectMeta: metav1.ObjectMeta{Name: "svc2"}}
 				nilsvc := &v1.Service{ObjectMeta: metav1.ObjectMeta{Name: "nilsvc"}}
 
+				gcNP := graph.NginxProxy{
+					Source:  nil,
+					ErrMsgs: nil,
+					Valid:   false,
+				}
+
 				graph := &graph.Graph{
-					GatewayClass: &graph.GatewayClass{},
-					Gateway:      &graph.Gateway{},
+					GatewayClass: &graph.GatewayClass{NginxProxy: &gcNP},
+					Gateways: map[types.NamespacedName]*graph.Gateway{
+						{Name: "gateway1"}: {
+							EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+								Kubernetes: &v1alpha2.KubernetesSpec{
+									Deployment: &v1alpha2.DeploymentSpec{
+										Replicas: helpers.GetPointer(int32(1)),
+									},
+								},
+							},
+						},
+						{Name: "gateway2"}: {
+							EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+								Kubernetes: &v1alpha2.KubernetesSpec{
+									Deployment: &v1alpha2.DeploymentSpec{
+										Replicas: helpers.GetPointer(int32(3)),
+									},
+								},
+							},
+						},
+						{Name: "gateway3"}: {},
+					},
 					IgnoredGatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
 						{Name: "ignoredGC1"}: {},
 						{Name: "ignoredGC2"}: {},
-					},
-					IgnoredGateways: map[types.NamespacedName]*gatewayv1.Gateway{
-						{Name: "ignoredGw1"}: {},
-						{Name: "ignoredGw2"}: {},
 					},
 					Routes: map[graph.RouteKey]*graph.L7Route{
 						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "hr-1"}}: {RouteType: graph.RouteTypeHTTP},
@@ -334,7 +376,11 @@ var _ = Describe("Collector", Ordered, func() {
 							GVK:    schema.GroupVersionKind{Kind: kinds.UpstreamSettingsPolicy},
 						}: {},
 					},
-					NginxProxy: &graph.NginxProxy{},
+					ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
+						{Namespace: "test", Name: "NginxProxy-1"}: &gcNP,
+						{Namespace: "test", Name: "NginxProxy-2"}: {Valid: true},
+						{Namespace: "test", Name: "NginxProxy-3"}: {Valid: true},
+					},
 					SnippetsFilters: map[types.NamespacedName]*graph.SnippetsFilter{
 						{Namespace: "test", Name: "sf-1"}: {
 							Snippets: map[ngfAPI.NginxContext]string{
@@ -366,31 +412,47 @@ var _ = Describe("Collector", Ordered, func() {
 					},
 				}
 
-				config := &dataplane.Configuration{
-					Upstreams: []dataplane.Upstream{
-						{
-							Name:     "upstream1",
-							ErrorMsg: "",
-							Endpoints: []resolver.Endpoint{
-								{
-									Address: "endpoint1",
-									Port:    80,
-								}, {
-									Address: "endpoint2",
-									Port:    80,
-								}, {
-									Address: "endpoint3",
-									Port:    80,
+				configs := []*dataplane.Configuration{
+					{
+						Upstreams: []dataplane.Upstream{
+							{
+								Name:     "upstream1",
+								ErrorMsg: "",
+								Endpoints: []resolver.Endpoint{
+									{
+										Address: "endpoint1",
+										Port:    80,
+									}, {
+										Address: "endpoint2",
+										Port:    80,
+									}, {
+										Address: "endpoint3",
+										Port:    80,
+									},
+								},
+							},
+							{
+								Name:     "upstream2",
+								ErrorMsg: "",
+								Endpoints: []resolver.Endpoint{
+									{
+										Address: "endpoint1",
+										Port:    80,
+									},
 								},
 							},
 						},
-						{
-							Name:     "upstream2",
-							ErrorMsg: "",
-							Endpoints: []resolver.Endpoint{
-								{
-									Address: "endpoint1",
-									Port:    80,
+					},
+					{
+						Upstreams: []dataplane.Upstream{
+							{
+								Name:     "upstream3",
+								ErrorMsg: "",
+								Endpoints: []resolver.Endpoint{
+									{
+										Address: "endpoint4",
+										Port:    80,
+									},
 								},
 							},
 						},
@@ -398,7 +460,7 @@ var _ = Describe("Collector", Ordered, func() {
 				}
 
 				fakeGraphGetter.GetLatestGraphReturns(graph)
-				fakeConfigurationGetter.GetLatestConfigurationReturns(config)
+				fakeConfigurationGetter.GetLatestConfigurationReturns(configs)
 
 				expData.ClusterNodeCount = 3
 				expData.NGFResourceCounts = telemetry.NGFResourceCounts{
@@ -408,15 +470,16 @@ var _ = Describe("Collector", Ordered, func() {
 					TLSRouteCount:                            3,
 					SecretCount:                              3,
 					ServiceCount:                             3,
-					EndpointCount:                            4,
+					EndpointCount:                            5,
 					GRPCRouteCount:                           2,
 					BackendTLSPolicyCount:                    3,
 					GatewayAttachedClientSettingsPolicyCount: 1,
 					RouteAttachedClientSettingsPolicyCount:   2,
 					ObservabilityPolicyCount:                 1,
-					NginxProxyCount:                          1,
+					NginxProxyCount:                          3,
 					SnippetsFilterCount:                      3,
 					UpstreamSettingsPolicyCount:              1,
+					GatewayAttachedNpCount:                   2,
 				}
 				expData.ClusterVersion = "1.29.2"
 				expData.ClusterPlatform = "kind"
@@ -443,6 +506,11 @@ var _ = Describe("Collector", Ordered, func() {
 					1,
 					1,
 				}
+
+				// one gateway with one replica + one gateway with three replicas + one gateway with replica field
+				// empty
+				expData.NginxPodCount = int64(5)
+				expData.ControlPlanePodCount = int64(2)
 
 				data, err := dataCollector.Collect(ctx)
 				Expect(err).ToNot(HaveOccurred())
@@ -567,7 +635,7 @@ var _ = Describe("Collector", Ordered, func() {
 	Describe("NGF resource count collector", func() {
 		var (
 			graph1                          *graph.Graph
-			config1, invalidUpstreamsConfig *dataplane.Configuration
+			config1, invalidUpstreamsConfig []*dataplane.Configuration
 		)
 
 		BeforeAll(func() {
@@ -575,8 +643,10 @@ var _ = Describe("Collector", Ordered, func() {
 			svc := &v1.Service{ObjectMeta: metav1.ObjectMeta{Name: "svc1"}}
 
 			graph1 = &graph.Graph{
-				GatewayClass: &graph.GatewayClass{},
-				Gateway:      &graph.Gateway{},
+				GatewayClass: &graph.GatewayClass{NginxProxy: &graph.NginxProxy{Valid: true}},
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					{Name: "gateway1"}: {},
+				},
 				Routes: map[graph.RouteKey]*graph.L7Route{
 					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "hr-1"}}: {RouteType: graph.RouteTypeHTTP},
 				},
@@ -613,49 +683,58 @@ var _ = Describe("Collector", Ordered, func() {
 						GVK:    schema.GroupVersionKind{Kind: kinds.UpstreamSettingsPolicy},
 					}: {},
 				},
-				NginxProxy: &graph.NginxProxy{},
+				ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
+					{Namespace: "test", Name: "NginxProxy-1"}: {Valid: true},
+				},
 				SnippetsFilters: map[types.NamespacedName]*graph.SnippetsFilter{
 					{Namespace: "test", Name: "sf-1"}: {},
 				},
+				BackendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
+					{Namespace: "test", Name: "BackendTLSPolicy-1"}: {},
+				},
 			}
 
-			config1 = &dataplane.Configuration{
-				Upstreams: []dataplane.Upstream{
-					{
-						Name:     "upstream1",
-						ErrorMsg: "",
-						Endpoints: []resolver.Endpoint{
-							{
-								Address: "endpoint1",
-								Port:    80,
+			config1 = []*dataplane.Configuration{
+				{
+					Upstreams: []dataplane.Upstream{
+						{
+							Name:     "upstream1",
+							ErrorMsg: "",
+							Endpoints: []resolver.Endpoint{
+								{
+									Address: "endpoint1",
+									Port:    80,
+								},
 							},
 						},
 					},
 				},
 			}
 
-			invalidUpstreamsConfig = &dataplane.Configuration{
-				Upstreams: []dataplane.Upstream{
-					{
-						Name:     "invalidUpstream",
-						ErrorMsg: "there is an error here",
-						Endpoints: []resolver.Endpoint{
-							{
-								Address: "endpoint1",
-								Port:    80,
-							}, {
-								Address: "endpoint2",
-								Port:    80,
-							}, {
-								Address: "endpoint3",
-								Port:    80,
+			invalidUpstreamsConfig = []*dataplane.Configuration{
+				{
+					Upstreams: []dataplane.Upstream{
+						{
+							Name:     "invalidUpstream",
+							ErrorMsg: "there is an error here",
+							Endpoints: []resolver.Endpoint{
+								{
+									Address: "endpoint1",
+									Port:    80,
+								}, {
+									Address: "endpoint2",
+									Port:    80,
+								}, {
+									Address: "endpoint3",
+									Port:    80,
+								},
 							},
 						},
-					},
-					{
-						Name:      "emptyUpstream",
-						ErrorMsg:  "",
-						Endpoints: []resolver.Endpoint{},
+						{
+							Name:      "emptyUpstream",
+							ErrorMsg:  "",
+							Endpoints: []resolver.Endpoint{},
+						},
 					},
 				},
 			}
@@ -664,7 +743,7 @@ var _ = Describe("Collector", Ordered, func() {
 		When("collecting NGF resource counts", func() {
 			It("collects correct data for graph with no resources", func(ctx SpecContext) {
 				fakeGraphGetter.GetLatestGraphReturns(&graph.Graph{})
-				fakeConfigurationGetter.GetLatestConfigurationReturns(&dataplane.Configuration{})
+				fakeConfigurationGetter.GetLatestConfigurationReturns(nil)
 
 				expData.NGFResourceCounts = telemetry.NGFResourceCounts{}
 
@@ -692,7 +771,10 @@ var _ = Describe("Collector", Ordered, func() {
 					NginxProxyCount:                          1,
 					SnippetsFilterCount:                      1,
 					UpstreamSettingsPolicyCount:              1,
+					GatewayAttachedNpCount:                   1,
+					BackendTLSPolicyCount:                    1,
 				}
+				expData.NginxPodCount = 1
 
 				data, err := dataCollector.Collect(ctx)
 
@@ -714,19 +796,11 @@ var _ = Describe("Collector", Ordered, func() {
 			When("it encounters an error while collecting data", func() {
 				BeforeEach(func() {
 					fakeGraphGetter.GetLatestGraphReturns(&graph.Graph{})
-					fakeConfigurationGetter.GetLatestConfigurationReturns(&dataplane.Configuration{})
+					fakeConfigurationGetter.GetLatestConfigurationReturns(nil)
 				})
 				It("should error on nil latest graph", func(ctx SpecContext) {
 					expectedError := errors.New("failed to collect telemetry data: latest graph cannot be nil")
 					fakeGraphGetter.GetLatestGraphReturns(nil)
-
-					_, err := dataCollector.Collect(ctx)
-					Expect(err).To(MatchError(expectedError))
-				})
-
-				It("should error on nil latest configuration", func(ctx SpecContext) {
-					expectedError := errors.New("latest configuration cannot be nil")
-					fakeConfigurationGetter.GetLatestConfigurationReturns(nil)
 
 					_, err := dataCollector.Collect(ctx)
 					Expect(err).To(MatchError(expectedError))

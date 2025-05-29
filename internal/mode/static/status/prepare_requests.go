@@ -19,18 +19,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/mode/static/state/graph"
 )
 
-// NginxReloadResult describes the result of an NGINX reload.
-type NginxReloadResult struct {
-	// Error is the error that occurred during the reload.
-	Error error
-}
-
 // PrepareRouteRequests prepares status UpdateRequests for the given Routes.
 func PrepareRouteRequests(
 	l4routes map[graph.L4RouteKey]*graph.L4Route,
 	routes map[graph.RouteKey]*graph.L7Route,
 	transitionTime metav1.Time,
-	nginxReloadRes NginxReloadResult,
+	nginxReloadRes graph.NginxReloadResult,
 	gatewayCtlrName string,
 ) []frameworkStatus.UpdateRequest {
 	reqs := make([]frameworkStatus.UpdateRequest, 0, len(routes))
@@ -107,7 +101,7 @@ func prepareRouteStatus(
 	gatewayCtlrName string,
 	parentRefs []graph.ParentRef,
 	conds []conditions.Condition,
-	nginxReloadRes NginxReloadResult,
+	nginxReloadRes graph.NginxReloadResult,
 	transitionTime metav1.Time,
 	srcGeneration int64,
 ) v1.RouteStatus {
@@ -117,8 +111,8 @@ func prepareRouteStatus(
 
 	for _, ref := range parentRefs {
 		failedAttachmentCondCount := 0
-		if ref.Attachment != nil && !ref.Attachment.Attached {
-			failedAttachmentCondCount = 1
+		if ref.Attachment != nil {
+			failedAttachmentCondCount = len(ref.Attachment.FailedConditions)
 		}
 		allConds := make([]conditions.Condition, 0, len(conds)+len(defaultConds)+failedAttachmentCondCount)
 
@@ -126,8 +120,8 @@ func prepareRouteStatus(
 		// ensured by DeduplicateConditions.
 		allConds = append(allConds, defaultConds...)
 		allConds = append(allConds, conds...)
-		if failedAttachmentCondCount == 1 {
-			allConds = append(allConds, ref.Attachment.FailedCondition)
+		if failedAttachmentCondCount > 0 {
+			allConds = append(allConds, ref.Attachment.FailedConditions...)
 		}
 
 		if nginxReloadRes.Error != nil {
@@ -142,8 +136,8 @@ func prepareRouteStatus(
 
 		ps := v1.RouteParentStatus{
 			ParentRef: v1.ParentReference{
-				Namespace:   helpers.GetPointer(v1.Namespace(ref.Gateway.Namespace)),
-				Name:        v1.ObjectName(ref.Gateway.Name),
+				Namespace:   helpers.GetPointer(v1.Namespace(ref.Gateway.NamespacedName.Namespace)),
+				Name:        v1.ObjectName(ref.Gateway.NamespacedName.Name),
 				SectionName: ref.SectionName,
 			},
 			ControllerName: v1.GatewayController(gatewayCtlrName),
@@ -211,26 +205,14 @@ func PrepareGatewayClassRequests(
 // PrepareGatewayRequests prepares status UpdateRequests for the given Gateways.
 func PrepareGatewayRequests(
 	gateway *graph.Gateway,
-	ignoredGateways map[types.NamespacedName]*v1.Gateway,
 	transitionTime metav1.Time,
 	gwAddresses []v1.GatewayStatusAddress,
-	nginxReloadRes NginxReloadResult,
+	nginxReloadRes graph.NginxReloadResult,
 ) []frameworkStatus.UpdateRequest {
-	reqs := make([]frameworkStatus.UpdateRequest, 0, 1+len(ignoredGateways))
+	reqs := make([]frameworkStatus.UpdateRequest, 0, 1)
 
 	if gateway != nil {
 		reqs = append(reqs, prepareGatewayRequest(gateway, transitionTime, gwAddresses, nginxReloadRes))
-	}
-
-	for nsname, gw := range ignoredGateways {
-		apiConds := conditions.ConvertConditions(staticConds.NewGatewayConflict(), gw.Generation, transitionTime)
-		reqs = append(reqs, frameworkStatus.UpdateRequest{
-			NsName:       nsname,
-			ResourceType: &v1.Gateway{},
-			Setter: newGatewayStatusSetter(v1.GatewayStatus{
-				Conditions: apiConds,
-			}),
-		})
 	}
 
 	return reqs
@@ -240,7 +222,7 @@ func prepareGatewayRequest(
 	gateway *graph.Gateway,
 	transitionTime metav1.Time,
 	gwAddresses []v1.GatewayStatusAddress,
-	nginxReloadRes NginxReloadResult,
+	nginxReloadRes graph.NginxReloadResult,
 ) frameworkStatus.UpdateRequest {
 	if !gateway.Valid {
 		conds := conditions.ConvertConditions(
@@ -272,9 +254,10 @@ func prepareGatewayRequest(
 		}
 
 		if nginxReloadRes.Error != nil {
+			msg := fmt.Sprintf("%s: %s", staticConds.ListenerMessageFailedNginxReload, nginxReloadRes.Error.Error())
 			conds = append(
 				conds,
-				staticConds.NewListenerNotProgrammedInvalid(staticConds.ListenerMessageFailedNginxReload),
+				staticConds.NewListenerNotProgrammedInvalid(msg),
 			)
 		}
 
@@ -293,6 +276,8 @@ func prepareGatewayRequest(
 	}
 
 	gwConds := staticConds.NewDefaultGatewayConditions()
+	gwConds = append(gwConds, gateway.Conditions...)
+
 	if validListenerCount == 0 {
 		gwConds = append(gwConds, staticConds.NewGatewayNotAcceptedListenersNotValid()...)
 	} else if validListenerCount < len(gateway.Listeners) {
@@ -300,9 +285,10 @@ func prepareGatewayRequest(
 	}
 
 	if nginxReloadRes.Error != nil {
+		msg := fmt.Sprintf("%s: %s", staticConds.GatewayMessageFailedNginxReload, nginxReloadRes.Error.Error())
 		gwConds = append(
 			gwConds,
-			staticConds.NewGatewayNotProgrammedInvalid(staticConds.GatewayMessageFailedNginxReload),
+			staticConds.NewGatewayNotProgrammedInvalid(msg),
 		)
 	}
 
@@ -385,19 +371,24 @@ func PrepareBackendTLSPolicyRequests(
 		conds := conditions.DeduplicateConditions(pol.Conditions)
 		apiConds := conditions.ConvertConditions(conds, pol.Source.Generation, transitionTime)
 
-		status := v1alpha2.PolicyStatus{
-			Ancestors: []v1alpha2.PolicyAncestorStatus{
-				{
-					AncestorRef: v1.ParentReference{
-						Namespace: (*v1.Namespace)(&pol.Gateway.Namespace),
-						Name:      v1alpha2.ObjectName(pol.Gateway.Name),
-						Group:     helpers.GetPointer[v1.Group](v1.GroupName),
-						Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
-					},
-					ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
-					Conditions:     apiConds,
+		policyAncestors := make([]v1alpha2.PolicyAncestorStatus, 0, len(pol.Gateways))
+		for _, gwNsName := range pol.Gateways {
+			policyAncestorStatus := v1alpha2.PolicyAncestorStatus{
+				AncestorRef: v1.ParentReference{
+					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
+					Name:      v1.ObjectName(gwNsName.Name),
+					Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+					Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
 				},
-			},
+				ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
+				Conditions:     apiConds,
+			}
+
+			policyAncestors = append(policyAncestors, policyAncestorStatus)
+		}
+
+		status := v1alpha2.PolicyStatus{
+			Ancestors: policyAncestors,
 		}
 
 		reqs = append(reqs, frameworkStatus.UpdateRequest{

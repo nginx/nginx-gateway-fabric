@@ -12,9 +12,8 @@ metadata:
   {{- end }}
 spec:
   controllerName: {{ .Values.nginxGateway.gatewayControllerName }}
-  {{- if .Values.nginx.config }}
   parametersRef:
     group: gateway.nginx.org
     kind: NginxProxy
     name: {{ include "nginx-gateway.proxy-config-name" . }}
-  {{- end }}
+    namespace: {{ .Release.Namespace }}

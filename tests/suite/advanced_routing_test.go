@@ -39,9 +39,18 @@ var _ = Describe("AdvancedRouting", Ordered, Label("functional", "routing"), fun
 		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nginxPodNames).To(HaveLen(1))
+
+		setUpPortForward(nginxPodNames[0], namespace)
 	})
 
 	AfterAll(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+		cleanUpPortForward()
+
 		Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})

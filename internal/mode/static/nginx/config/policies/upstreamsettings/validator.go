@@ -25,7 +25,7 @@ func NewValidator(genericValidator validation.GenericValidator) Validator {
 }
 
 // Validate validates the spec of an UpstreamsSettingsPolicy.
-func (v Validator) Validate(policy policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
+func (v Validator) Validate(policy policies.Policy) []conditions.Condition {
 	usp := helpers.MustCastObject[*ngfAPI.UpstreamSettingsPolicy](policy)
 
 	targetRefsPath := field.NewPath("spec").Child("targetRefs")
@@ -43,6 +43,14 @@ func (v Validator) Validate(policy policies.Policy, _ *policies.GlobalSettings) 
 		return []conditions.Condition{staticConds.NewPolicyInvalid(err.Error())}
 	}
 
+	return nil
+}
+
+// ValidateGlobalSettings validates an UpstreamSettingsPolicy with respect to the NginxProxy global settings.
+func (v Validator) ValidateGlobalSettings(
+	_ policies.Policy,
+	_ *policies.GlobalSettings,
+) []conditions.Condition {
 	return nil
 }
 

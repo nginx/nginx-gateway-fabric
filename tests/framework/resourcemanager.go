@@ -46,6 +46,8 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 )
 
 // ResourceManager handles creating/updating/deleting Kubernetes resources.
@@ -647,6 +649,44 @@ func (rm *ResourceManager) GetNGFDeployment(namespace, releaseName string) (*app
 	return &deployment, nil
 }
 
+func (rm *ResourceManager) getGatewayClassNginxProxy(
+	namespace,
+	releaseName string,
+) (*ngfAPIv1alpha2.NginxProxy, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.GetTimeout)
+	defer cancel()
+
+	var proxy ngfAPIv1alpha2.NginxProxy
+	proxyName := releaseName + "-proxy-config"
+
+	if err := rm.K8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: proxyName}, &proxy); err != nil {
+		return nil, err
+	}
+
+	return &proxy, nil
+}
+
+// ScaleNginxDeployment scales the Nginx Deployment to the specified number of replicas.
+func (rm *ResourceManager) ScaleNginxDeployment(namespace, releaseName string, replicas int32) error {
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.UpdateTimeout)
+	defer cancel()
+
+	// If there is another NginxProxy which "overrides" the gateway class  one, then this won't work and
+	// may need refactoring.
+	proxy, err := rm.getGatewayClassNginxProxy(namespace, releaseName)
+	if err != nil {
+		return fmt.Errorf("error getting NginxProxy: %w", err)
+	}
+
+	proxy.Spec.Kubernetes.Deployment.Replicas = &replicas
+
+	if err = rm.K8sClient.Update(ctx, proxy); err != nil {
+		return fmt.Errorf("error updating NginxProxy: %w", err)
+	}
+
+	return nil
+}
+
 // GetEvents returns all Events in the specified namespace.
 func (rm *ResourceManager) GetEvents(namespace string) (*core.EventList, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.GetTimeout)
@@ -692,31 +732,84 @@ func GetReadyNGFPodNames(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	var podList core.PodList
-	if err := k8sClient.List(
+	var ngfPodNames []string
+
+	err := wait.PollUntilContextCancel(
 		ctx,
-		&podList,
-		client.InNamespace(namespace),
-		client.MatchingLabels{
-			"app.kubernetes.io/instance": releaseName,
+		500*time.Millisecond,
+		true, // poll immediately
+		func(ctx context.Context) (bool, error) {
+			var podList core.PodList
+			if err := k8sClient.List(
+				ctx,
+				&podList,
+				client.InNamespace(namespace),
+				client.MatchingLabels{
+					"app.kubernetes.io/instance": releaseName,
+				},
+			); err != nil {
+				return false, fmt.Errorf("error getting list of NGF Pods: %w", err)
+			}
+
+			ngfPodNames = getReadyPodNames(podList)
+			return len(ngfPodNames) > 0, nil
 		},
-	); err != nil {
-		return nil, fmt.Errorf("error getting list of Pods: %w", err)
+	)
+	if err != nil {
+		return nil, fmt.Errorf("timed out waiting for NGF Pods to be ready: %w", err)
 	}
 
-	if len(podList.Items) > 0 {
-		var names []string
-		for _, pod := range podList.Items {
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type == core.PodReady && cond.Status == core.ConditionTrue {
-					names = append(names, pod.Name)
-				}
+	return ngfPodNames, nil
+}
+
+// GetReadyNginxPodNames returns the name(s) of the NGINX Pod(s).
+func GetReadyNginxPodNames(
+	k8sClient client.Client,
+	namespace string,
+	timeout time.Duration,
+) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	var nginxPodNames []string
+
+	err := wait.PollUntilContextCancel(
+		ctx,
+		500*time.Millisecond,
+		true, // poll immediately
+		func(ctx context.Context) (bool, error) {
+			var podList core.PodList
+			if err := k8sClient.List(
+				ctx,
+				&podList,
+				client.InNamespace(namespace),
+				client.HasLabels{"gateway.networking.k8s.io/gateway-name"},
+			); err != nil {
+				return false, fmt.Errorf("error getting list of NGINX Pods: %w", err)
+			}
+
+			nginxPodNames = getReadyPodNames(podList)
+			return len(nginxPodNames) > 0, nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("timed out waiting for NGINX Pods to be ready: %w", err)
+	}
+
+	return nginxPodNames, nil
+}
+
+func getReadyPodNames(podList core.PodList) []string {
+	var names []string
+	for _, pod := range podList.Items {
+		for _, cond := range pod.Status.Conditions {
+			if cond.Type == core.PodReady && cond.Status == core.ConditionTrue {
+				names = append(names, pod.Name)
 			}
 		}
-		return names, nil
 	}
 
-	return nil, errors.New("unable to find NGF Pod(s)")
+	return names
 }
 
 func countNumberOfReadyParents(parents []v1.RouteParentStatus) int {
@@ -733,34 +826,7 @@ func countNumberOfReadyParents(parents []v1.RouteParentStatus) int {
 	return readyCount
 }
 
-func (rm *ResourceManager) WaitForAppsToBeReadyWithPodCount(namespace string, podCount int) error {
-	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.CreateTimeout)
-	defer cancel()
-
-	return rm.WaitForAppsToBeReadyWithCtxWithPodCount(ctx, namespace, podCount)
-}
-
-func (rm *ResourceManager) WaitForAppsToBeReadyWithCtxWithPodCount(
-	ctx context.Context,
-	namespace string,
-	podCount int,
-) error {
-	if err := rm.WaitForPodsToBeReadyWithCount(ctx, namespace, podCount); err != nil {
-		return err
-	}
-
-	if err := rm.waitForHTTPRoutesToBeReady(ctx, namespace); err != nil {
-		return err
-	}
-
-	if err := rm.waitForGRPCRoutesToBeReady(ctx, namespace); err != nil {
-		return err
-	}
-
-	return rm.waitForGatewaysToBeReady(ctx, namespace)
-}
-
-// WaitForPodsToBeReady waits for all Pods in the specified namespace to be ready or
+// WaitForPodsToBeReadyWithCount waits for all Pods in the specified namespace to be ready or
 // until the provided context is canceled.
 func (rm *ResourceManager) WaitForPodsToBeReadyWithCount(ctx context.Context, namespace string, count int) error {
 	return wait.PollUntilContextCancel(
@@ -817,17 +883,19 @@ func (rm *ResourceManager) WaitForGatewayObservedGeneration(
 }
 
 // GetNginxConfig uses crossplane to get the nginx configuration and convert it to JSON.
-func (rm *ResourceManager) GetNginxConfig(ngfPodName, namespace string) (*Payload, error) {
+// If the crossplane image is loaded locally on the node, crossplaneImageRepo can be empty.
+func (rm *ResourceManager) GetNginxConfig(nginxPodName, namespace, crossplaneImageRepo string) (*Payload, error) {
 	if err := injectCrossplaneContainer(
 		rm.ClientGoClient,
 		rm.TimeoutConfig.UpdateTimeout,
-		ngfPodName,
+		nginxPodName,
 		namespace,
+		crossplaneImageRepo,
 	); err != nil {
 		return nil, err
 	}
 
-	exec, err := createCrossplaneExecutor(rm.ClientGoClient, rm.K8sConfig, ngfPodName, namespace)
+	exec, err := createCrossplaneExecutor(rm.ClientGoClient, rm.K8sConfig, nginxPodName, namespace)
 	if err != nil {
 		return nil, err
 	}
