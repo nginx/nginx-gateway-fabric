@@ -28,4 +28,4 @@ jobs:
       security-events: write # for github/codeql-action/autobuild to send a status report
     uses: nginxinc/compliance-rules/.github/workflows/codeql.yml@c903bfe6c668eaba362cde6a7882278bc1564401 # v0.1
     with:
-      requested_languages: go,javascript-typescript
+      requested_languages: go,javascript-typescript,actions
