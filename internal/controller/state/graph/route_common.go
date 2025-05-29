@@ -285,22 +285,44 @@ func buildSectionNameRefs(
 	}
 	uniqueSectionsPerGateway := make(map[key]struct{})
 
-	for i, p := range parentRefs {
+	parentRefIndex := 0
+
+	for _, p := range parentRefs {
 		gw := findGatewayForParentRef(p, routeNamespace, gws)
 		if gw == nil {
 			continue
 		}
 
-		var sectionName string
-		if p.SectionName != nil {
-			sectionName = string(*p.SectionName)
-		}
-
 		gwNsName := client.ObjectKeyFromObject(gw.Source)
 		k := key{
-			gwNsName:    gwNsName,
-			sectionName: sectionName,
+			gwNsName: gwNsName,
 		}
+
+		// If there is no section name, we create ParentRefs for each listener in the gateway
+		if p.SectionName == nil {
+			for _, l := range gw.Listeners {
+				sectionName := string(l.Source.Name)
+				k.sectionName = sectionName
+
+				if _, exist := uniqueSectionsPerGateway[k]; exist {
+					return nil, fmt.Errorf("duplicate section name %q for Gateway %s", sectionName, gwNsName.String())
+				}
+				uniqueSectionsPerGateway[k] = struct{}{}
+
+				sectionNameRefs = append(sectionNameRefs, ParentRef{
+					Idx:         parentRefIndex,
+					Gateway:     CreateParentRefGateway(gw),
+					SectionName: &l.Source.Name,
+					Port:        p.Port,
+				})
+				parentRefIndex++
+			}
+			continue
+		}
+
+		sectionName := string(*p.SectionName)
+
+		k.sectionName = sectionName
 
 		if _, exist := uniqueSectionsPerGateway[k]; exist {
 			return nil, fmt.Errorf("duplicate section name %q for Gateway %s", sectionName, gwNsName.String())
@@ -308,11 +330,12 @@ func buildSectionNameRefs(
 		uniqueSectionsPerGateway[k] = struct{}{}
 
 		sectionNameRefs = append(sectionNameRefs, ParentRef{
-			Idx:         i,
+			Idx:         parentRefIndex,
 			Gateway:     CreateParentRefGateway(gw),
 			SectionName: p.SectionName,
 			Port:        p.Port,
 		})
+		parentRefIndex++
 	}
 
 	return sectionNameRefs, nil

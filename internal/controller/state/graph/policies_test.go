@@ -1126,6 +1126,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 	policyGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "MyPolicy"}
 	pol1, pol1Key := createTestPolicyAndKey(policyGVK, "pol1", hrRefCoffee)
 	pol2, pol2Key := createTestPolicyAndKey(policyGVK, "pol2", hrRefCoffee, hrRefCoffeeTea)
+	pol3, pol3Key := createTestPolicyAndKey(policyGVK, "pol3", hrRefCoffeeTea)
 
 	tests := []struct {
 		validator     validation.PolicyValidator
@@ -1150,6 +1151,25 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 					RouteType:      RouteTypeHTTP,
 					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr2"},
 				}: createTestRouteWithPaths("hr2", "/tea"),
+			},
+			valid: true,
+		},
+		{
+			name:      "no overlap two policies",
+			validator: &policiesfakes.FakeValidator{},
+			policies: map[PolicyKey]policies.Policy{
+				pol1Key: pol1,
+				pol3Key: pol3,
+			},
+			routes: map[RouteKey]*L7Route{
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee"},
+				}: createTestRouteWithPaths("hr-coffee", "/coffee"),
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee-tea"},
+				}: createTestRouteWithPaths("hr-coffee-tea", "/coffee-tea"),
 			},
 			valid: true,
 		},
@@ -1256,7 +1276,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			g := NewWithT(t)
 
 			processed := processPolicies(test.policies, test.validator, test.routes, nil, gateways)
-			g.Expect(processed).To(HaveLen(1))
+			g.Expect(processed).To(HaveLen(len(test.policies)))
 
 			for _, pol := range processed {
 				g.Expect(pol.Valid).To(Equal(test.valid))

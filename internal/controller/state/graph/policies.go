@@ -325,12 +325,18 @@ func checkTargetRoutesForOverlap(
 func checkForRouteOverlap(route *L7Route, hostPortPaths map[string]string) *conditions.Condition {
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Attachment != nil {
+			// fmt.Printf("This is the parentRef attachment: %#v\n", parentRef.Attachment)
 			port := parentRef.Attachment.ListenerPort
 			for _, hostname := range parentRef.Attachment.AcceptedHostnames {
+				// fmt.Println("Here is the keyName: " + keyName)
+				// fmt.Printf("This is the parentref hostnames: %v\n", hostname)
 				for _, rule := range route.Spec.Rules {
+					// fmt.Printf("This is the routeRule: %v\n", rule)
 					for _, match := range rule.Matches {
+						// fmt.Printf("This is the match: %v\n", match)
 						if match.Path != nil && match.Path.Value != nil {
 							key := fmt.Sprintf("%s:%d%s", hostname, port, *match.Path.Value)
+							// fmt.Println("This is the key: " + key)
 							if val, ok := hostPortPaths[key]; !ok {
 								hostPortPaths[key] = fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 							} else {
