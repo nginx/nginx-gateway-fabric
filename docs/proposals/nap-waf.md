@@ -5,7 +5,7 @@
 
 ## Summary
 
-This proposal describes the integration of NGINX App Protect (NAP) WAF v5 into NGINX Gateway Fabric (NGF) to provide comprehensive WAF protection at Gateway and Route levels while working within NAP v5's architectural constraints of multi-container deployment and pre-compiled policy requirements. The design uses Gateway API inherited policy attachment to provide flexible, hierarchical WAF protection.
+This proposal describes the integration of NGINX App Protect (NAP) WAF v5 into NGINX Gateway Fabric (NGF) to provide comprehensive WAF protection at Gateway and Route levels while working within NAP v5's architectural constraints of multi-container deployment and pre-compiled policy requirements. The design uses Gateway API inherited policy attachment to provide flexible, hierarchical WAF protection with GitOps-friendly static policy references through automatic polling and change detection.
 
 ## Goals
 
@@ -13,6 +13,7 @@ This proposal describes the integration of NGINX App Protect (NAP) WAF v5 into N
 - Design WafPolicy custom resource using inherited policy attachment for hierarchical WAF configuration
 - Define deployment workflows that accommodate NAP v5's external policy compilation requirements
 - Provide secure and automated policy distribution mechanisms from external sources
+- Support GitOps workflows with static policy file references and automatic change detection
 - Deliver enterprise-grade WAF capabilities through Kubernetes-native APIs with intuitive policy inheritance
 - Maintain alignment with NGF's existing security and operational patterns
 - Support configurable security logging for WAF events and policy violations
@@ -40,6 +41,14 @@ NGINX App Protect WAF v5 imposes specific architectural requirements that fundam
 ### Design Philosophy
 
 This proposal provides the best possible Kubernetes-native experience while respecting NAP v5 constraints, abstracting complexity from end users where possible while maintaining operational flexibility for enterprise environments. The design uses Gateway API's inherited policy attachment pattern to provide intuitive hierarchical security with the ability to override policies at more specific levels.
+
+### GitOps Integration
+
+A key design principle is seamless GitOps workflow support through automatic change detection:
+
+- **Automatic Polling**: When polling is enabled, NGF periodically checks for policy changes using checksum validation
+- **Efficient Updates**: Only downloads policy bundles when content actually changes
+- **CI/CD Friendly**: Teams can update policies without modifying Kubernetes resources
 
 ### Policy Attachment Strategy
 
@@ -132,6 +141,7 @@ graph TB
     NGFPod -->|Watches Resources| NginxProxy
     NGFPod -->|Watches Resources| GatewayWafPolicy
     NGFPod -->|Watches Resources| RouteWafPolicy
+    NGFPod -->|Periodic Polling<br/>Checksum Validation| Store
     NGFPod -->|Fetches Policy<br/>Native Cloud Auth| Store
     NGFServiceAccount -.->|Cloud Provider<br/>Authentication| Store
     NGFPod -.->|Fallback: Uses Credentials| Secret
@@ -177,16 +187,11 @@ graph TB
     class PublicEndpoint endpoint
     class Secret optional
 
-    %% Notes about the architecture
-    classDef note fill:#fffacd,stroke:#daa520,stroke-width:1px,stroke-dasharray: 5 5
-    Note1[📝 Note: Gateway-level WafPolicy provides inherited protection<br/>Route-level WafPolicy can override for specific routes]
-    Note2[📝 Note: Secret only required for fallback authentication<br/>Native cloud auth uses NGF Service Account annotations]
-    class Note1,Note2 note
 ```
 
 This architecture demonstrates the hierarchical policy attachment system where Gateway-level WafPolicies provide default protection that can be overridden by Route-level policies for granular control:
 
-**External Policy Management (Blue):** Security teams develop WAF policies using NAP v5 JSON schema, compile them using NAP v5 compiler tools, and publish the compiled policy bundles to accessible storage locations (S3, HTTP servers, or MinIO).
+**External Policy Management (Blue):** Security teams develop WAF policies using NAP v5 JSON schema, compile them using NAP v5 compiler tools, and publish the compiled policy bundles to accessible storage locations (S3, HTTP servers, MinIO etc).
 
 **Control Plane (Purple):** The NGF Pod in the `nginx-gateway` namespace acts as the centralized control plane, watching for NginxProxy and WafPolicy resources across application namespaces, fetching compiled policies from external storage using appropriate authentication, and distributing policy configurations to NGINX Pods via secure gRPC connections.
 
@@ -199,6 +204,8 @@ This architecture demonstrates the hierarchical policy attachment system where G
 **Traffic Flow (Yellow/Gold):** Client traffic (HTTP, HTTPS, and gRPC) flows through the public load balancer endpoint to the WAF-protected NGINX container, where NAP v5 applies security policies before forwarding filtered traffic to backend applications.
 
 **Policy Inheritance:** Gateway-level WafPolicies automatically protect all routes attached to the Gateway. Route-level WafPolicies can override Gateway policies with more specific protection. This design supports both broad default protection and granular security controls while maintaining operational simplicity.
+
+- **GitOps Integration**: Optional automatic polling detects policy changes without requiring Kubernetes resource updates
 
 The architecture demonstrates separation of concerns: external policy compilation and storage, centralized policy distribution with inheritance hierarchy, and distributed policy enforcement, while maintaining security through ephemeral storage and immutable infrastructure principles.
 
@@ -232,6 +239,9 @@ Example air-gapped configuration:
 spec:
   policySource:
     fileLocation: "http://policy-server.nginx-system.svc.cluster.local/policies/prod-policy.tgz"
+    polling:
+      enabled: true
+      interval: "5m"
 ```
 
 ### Policy Development Workflow
@@ -243,7 +253,7 @@ Given NAP v5 constraints, users must follow this workflow:
 3. **Compilation**: Use NAP v5 compiler tools to create policy and logging profile bundles
 4. **Distribution**: Publish compiled policies and log profiles to accessible storage (S3, HTTP)
 5. **Configuration**: Create WafPolicy CR with targetRefs referencing Gateway or Routes and configuring security logging
-6. **Automatic Application**: NGF fetches and applies policies when WafPolicy is created or updated, with automatic inheritance
+6. **Automatic Application**: NGF fetches and applies policies when WafPolicy is created or updated, with automatic inheritance. Policies can also be updated by publishing new content to the same configured file path; when polling is enabled, NGF automatically detects and applies changes.
 
 **Note**: Policy enforcement mode and behavior are defined within the compiled NAP policy itself. Security logging profiles can be either built-in names or custom compiled bundles.
 
@@ -258,13 +268,23 @@ docker run --rm -v $(pwd):/policies nginx/nap-compiler:5.6.0 \
 sha256sum compiled-policy.tgz > compiled-policy.tgz.sha256
 
 # Publish to storage
-aws s3 cp compiled-policy.tgz s3://company-policies/prod-policy-v$(date +%Y%m%d).tgz
-aws s3 cp compiled-policy.tgz.sha256 s3://company-policies/prod-policy-v$(date +%Y%m%d).tgz.sha256
+aws s3 cp compiled-policy.tgz s3://company-policies/prod-policy.tgz
+aws s3 cp compiled-policy.tgz.sha256 s3://company-policies/prod-policy.tgz.sha256
 
-# Manual update: Modify WafPolicy resource to reference new policy
-kubectl patch wafpolicy gateway-protection \
-  --patch '{"spec":{"policySource":{"fileLocation":"s3://company-policies/prod-policy-v'$(date +%Y%m%d)'.tgz"}}}'
+# No Kubernetes resource changes needed - NGF automatically detects the update
+echo "Policy updated. NGF will detect changes within polling interval."
 ```
+
+### Policy Polling and Change Detection
+
+NGF supports automatic policy change detection to support GitOps workflows:
+
+**Polling Mechanism:**
+
+- Configurable polling interval (default: 5 minutes)
+- Checksum-based change detection for efficiency
+- Only downloads policy bundles when content changes
+- New policies applied immediately upon detection
 
 ### Security Logging Configuration
 
@@ -284,6 +304,7 @@ The securityLogs section supports multiple logging configurations, each generati
 - Reference compiled logging profile bundles from remote sources
 - Same fetch and validation mechanisms as policy bundles
 - Support for checksums and retry policies
+- Automatic polling for log profile updates
 
 **Destination Types:**
 
@@ -347,10 +368,11 @@ The design supports hierarchical policy application with clear precedence rules:
 
 The integration leverages NGF's existing architecture:
 
-- **Single NGF Pod**: Centralized control plane in `nginx-gateway` namespace manages all WAF operations
+- **Single NGF Deployment**: Centralized control plane in `nginx-gateway` namespace manages all WAF operations and policy polling
 - **Per-Gateway Deployment**: Each Gateway with WAF enabled gets a dedicated multi-container NGINX Pod
 - **Selective WAF Enablement**: Only Gateways configured with WAF-enabled NginxProxy resources deploy NAP v5 containers
 - **Centralized Policy Management**: NGF controllers fetch policies and distribute them to appropriate NGINX Pods via the existing Agent gRPC connection
+- **Automatic Change Detection**: NGF polling engine can detect policy changes and trigger updates across affected Gateways
 
 ## API, Customer Driven Interfaces, and User Experience
 
@@ -414,6 +436,14 @@ spec:
       # Note: Policy content validation handled by NAP v5 components
       # We will support signature verification in the future
 
+    # Polling configuration for automatic change detection
+    polling:
+      enabled: true
+      interval: "5m"        # Check every 5 minutes
+      # Optional: explicit checksum location
+      # If not specified, defaults to <fileLocation>.sha256
+      checksumLocation: "s3://ngf-waf-policies/production/gateway-policy-v1.2.3.tgz"
+
     # Retry configuration for policy fetch failures
     retryPolicy:
       attempts: 3
@@ -441,6 +471,11 @@ spec:
         name: "policy-store-credentials"
       validation:
         methods: ["Checksum"]
+      # Log profiles also support polling for updates
+      polling:
+        enabled: true
+        interval: "10m"
+        # ChecksumLocation defaults to <fileLocation>.sha256
       retryPolicy:
         attempts: 3
         backoff: "exponential"
@@ -481,6 +516,9 @@ spec:
     fileLocation: "s3://ngf-waf-policies/production/admin-strict-policy-v1.0.0.tgz"
     authSecret:
       name: "policy-store-credentials"
+    polling:
+      enabled: true
+      interval: "2m"
   securityLogs:
   - name: "admin-logging"
     logProfile: "log_all"  # Log everything for admin routes
@@ -716,6 +754,7 @@ Some additional rules:
 - **Policy Attachment Logic**: targetRefs validation and inheritance resolution
 - **Multi-container Orchestration**: Container startup sequences and ephemeral volume management
 - **Policy Validation**: Compiled policy bundle checksum integrity checking
+- **Polling Engine**: Change detection logic and retry mechanisms
 
 ### Integration Testing
 
@@ -727,6 +766,7 @@ Some additional rules:
 - **Authentication**: Various credential types and failure handling for policy sources
 - **Network Scenarios**: Policy fetching from different source types (S3, HTTP, in-cluster)
 - **Selective Deployment**: Testing WAF enablement on subset of Gateways while others remain standard
+- **Polling and Updates**: Automatic change detection and policy application without resource modifications
 
 ### Performance Testing
 
@@ -737,6 +777,7 @@ Some additional rules:
 - **Scale Testing**: Multiple WafPolicy resources and policy updates under load
 - **Ephemeral Volume Performance**: Volume I/O performance and sizing validation
 - **Policy Inheritance Performance**: Impact of policy resolution on request processing
+- **Polling Performance**: Resource impact of periodic policy checks and change detection
 - Note: current NFR testing likely covers all of these scenarios, but we may want to add a separate NGINX Plus with WAF run
 
 ### Conformance Testing
@@ -753,6 +794,7 @@ Some additional rules:
 - **Integrity Verification**: Checksum validation of compiled policy bundles prevents tampering
 - **Secure Transport**: TLS encryption for all policy downloads from external sources
 - **Access Control**: RBAC restrictions on WafPolicy resource creation and modification
+- **Polling Security**: Secure change detection mechanisms prevent unauthorized policy modifications
 
 ### Credential Management
 
@@ -825,6 +867,16 @@ Some additional rules:
 
 **Approach**: Have NGINX containers fetch policies directly using njs
 **Rejected Reason**: Creates distributed system complexity, inconsistent state issues, and violates NGF's centralized control plane pattern
+
+### Alternative 7: Manual Policy Updates Only
+
+**Approach**: Require users to manually update WafPolicy resources for each policy change
+**Rejected Reason**: Breaks GitOps workflows and creates operational overhead; teams want to update policies without modifying Kubernetes resources
+
+### Alternative 8: Webhook-Only Updates
+
+**Approach**: Use only webhook notifications for policy updates, no polling
+**Rejected Reason**: Creates dependency on reliable webhook delivery; polling provides fallback mechanism and works in environments where webhooks are not feasible
 
 ## Future Enhancements
 
@@ -905,10 +957,19 @@ spec:
     namespace: applications
 
   policySource:
-    fileLocation: "s3://company-waf-policies/production/base-policy-v2.1.0.tgz"
+    fileLocation: "s3://company-waf-policies/production/base-policy.tgz"
     # Secret referenced for fallback - NGF will use IRSA if available, secret if not
     authSecret:
       name: "policy-store-credentials"
+
+    # Automatic change detection for GitOps workflows
+    polling:
+      enabled: true
+      interval: "5m"
+      # Optional explicit checksum location
+      # If not specified, defaults to base-policy.tgz.sha256
+      checksumLocation: "s3://company-waf-policies/production/base-policy.tgz.sha256"
+
   securityLogs:
   - name: "gateway-logging"
     logProfile: "log_blocked"
@@ -931,7 +992,10 @@ spec:
     namespace: applications
 
   policySource:
-    fileLocation: "s3://company-waf-policies/production/admin-strict-policy-v1.0.0.tgz"
+    fileLocation: "s3://company-waf-policies/production/admin-strict-policy.tgz"
+    polling:
+      enabled: true
+
   securityLogs:
   - name: "admin-logging"
     logProfile: "log_all"  # More verbose logging for admin routes
@@ -1025,7 +1089,10 @@ spec:
     namespace: applications
 
   policySource:
-    fileLocation: "s3://company-waf-policies/production/api-specific-policy-v1.5.0.tgz"
+    fileLocation: "s3://company-waf-policies/production/api-specific-policy.tgz"
+    polling:
+      enabled: true
+
   securityLogs:
   - name: "api-logging"
     logProfile: "log_blocked"
@@ -1043,3 +1110,4 @@ This complete example demonstrates:
 - **HTTP and gRPC route support** with seamless policy inheritance
 - **Native cloud authentication** with fallback secret support
 - **Flexible logging configuration** per policy level
+- **Automatic change detection** through configurable polling intervals
