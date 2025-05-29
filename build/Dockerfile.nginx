@@ -31,6 +31,8 @@ RUN apk add --no-cache libcap bash \
     && setcap -v 'cap_net_bind_service=+ep' /usr/sbin/nginx \
     && setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx-debug \
     && setcap -v 'cap_net_bind_service=+ep' /usr/sbin/nginx-debug \
+    # Update packages for CVE-2025-32414 and CVE-2025-32415
+    && apk --no-cache upgrade libxml2 \
     && apk del libcap
 
 COPY --from=builder /tmp/agent/build/nginx-agent /usr/bin/nginx-agent
