@@ -95,6 +95,8 @@ func PrepareRouteRequests(
 	return reqs
 }
 
+// removeDuplicateIndexParentRefs removes duplicate ParentRefs by Idx, keeping the first occurrence.
+// If an Idx is duplicated, the SectionName for the stored ParentRef is nil.
 func removeDuplicateIndexParentRefs(parentRefs []graph.ParentRef) []graph.ParentRef {
 	idxCount := make(map[int]int)
 	for _, ref := range parentRefs {
@@ -129,6 +131,10 @@ func prepareRouteStatus(
 	transitionTime metav1.Time,
 	srcGeneration int64,
 ) v1.RouteStatus {
+	// If a route did not specify a sectionName in its parentRefs section, it will attempt to attach to all available
+	// listeners. In this case, parentRefs will be created and attached to the route for each attachable listener.
+	// These parentRefs will all have the same Idx, and in order to not duplicate route statuses for the same Gateway,
+	// we need to remove these duplicates. Additionally, we remove the sectionName.
 	processedParentRefs := removeDuplicateIndexParentRefs(parentRefs)
 
 	parents := make([]v1.RouteParentStatus, 0, len(processedParentRefs))
