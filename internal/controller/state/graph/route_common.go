@@ -294,9 +294,7 @@ func buildSectionNameRefs(
 		return nil
 	}
 
-	parentRefIndex := 0
-
-	for _, p := range parentRefs {
+	for i, p := range parentRefs {
 		gw := findGatewayForParentRef(p, routeNamespace, gws)
 		if gw == nil {
 			continue
@@ -317,17 +315,16 @@ func buildSectionNameRefs(
 				}
 
 				sectionNameRefs = append(sectionNameRefs, ParentRef{
-					Idx:         parentRefIndex,
+					// if the ParentRefs we create are for each listener in the same gateway, we keep the
+					// parentRefIndex the same so when we look at a route's parentRef's we can see
+					// if the parentRef is a unique parentRef or one we created internally
+					Idx:         i,
 					Gateway:     CreateParentRefGateway(gw),
 					SectionName: &l.Source.Name,
 					Port:        p.Port,
 				})
 			}
 
-			// if the ParentRefs we create are for each listener in the same gateway, we keep the
-			// parentRefIndex the same so when we look at a route's parentRef's we can see
-			// if the parentRef is a unique parentRef or one we created internally
-			parentRefIndex++
 			continue
 		}
 
@@ -337,12 +334,11 @@ func buildSectionNameRefs(
 		}
 
 		sectionNameRefs = append(sectionNameRefs, ParentRef{
-			Idx:         parentRefIndex,
+			Idx:         i,
 			Gateway:     CreateParentRefGateway(gw),
 			SectionName: p.SectionName,
 			Port:        p.Port,
 		})
-		parentRefIndex++
 	}
 
 	return sectionNameRefs, nil

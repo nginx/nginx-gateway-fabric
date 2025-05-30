@@ -104,27 +104,27 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			SectionName: parentRefs[0].SectionName,
 		},
 		{
-			Idx:         1,
+			Idx:         2,
 			Gateway:     CreateParentRefGateway(gws[gwNsName2]),
 			SectionName: parentRefs[2].SectionName,
 		},
 		{
-			Idx:         2,
+			Idx:         3,
 			Gateway:     CreateParentRefGateway(gws[gwNsName1]),
 			SectionName: parentRefs[3].SectionName,
 		},
 		{
-			Idx:         3,
+			Idx:         4,
 			Gateway:     CreateParentRefGateway(gws[gwNsName2]),
 			SectionName: parentRefs[4].SectionName,
 		},
 		{
-			Idx:         4,
+			Idx:         6,
 			Gateway:     CreateParentRefGateway(gws[gwNsName3]),
 			SectionName: helpers.GetPointer[gatewayv1.SectionName]("http"),
 		},
 		{
-			Idx:         4,
+			Idx:         6,
 			Gateway:     CreateParentRefGateway(gws[gwNsName3]),
 			SectionName: helpers.GetPointer[gatewayv1.SectionName]("https"),
 		},
