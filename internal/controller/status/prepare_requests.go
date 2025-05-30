@@ -98,29 +98,36 @@ func PrepareRouteRequests(
 // removeDuplicateIndexParentRefs removes duplicate ParentRefs by Idx, keeping the first occurrence.
 // If an Idx is duplicated, the SectionName for the stored ParentRef is nil.
 func removeDuplicateIndexParentRefs(parentRefs []graph.ParentRef) []graph.ParentRef {
-	idxCount := make(map[int]int)
+	idxToParentRef := make(map[int][]graph.ParentRef)
 	for _, ref := range parentRefs {
-		idxCount[ref.Idx]++
+		idxToParentRef[ref.Idx] = append(idxToParentRef[ref.Idx], ref)
 	}
 
-	seen := make(map[int]bool)
-	result := make([]graph.ParentRef, 0, len(parentRefs))
+	results := make([]graph.ParentRef, len(idxToParentRef))
 
-	for _, ref := range parentRefs {
-		if seen[ref.Idx] {
-			continue // skip duplicates
-		}
-		seen[ref.Idx] = true
-
-		// If this Idx was duplicated, clear SectionName
-		if idxCount[ref.Idx] > 1 {
-			ref.SectionName = nil
+	for idx, refs := range idxToParentRef {
+		if len(refs) == 1 {
+			results[idx] = refs[0]
+			continue
 		}
 
-		result = append(result, ref)
+		winningParentRef := graph.ParentRef{
+			Idx:        idx,
+			Gateway:    refs[0].Gateway,
+			Attachment: refs[0].Attachment,
+		}
+
+		for _, ref := range refs {
+			if ref.Attachment.Attached {
+				if len(ref.Attachment.FailedConditions) == 0 || winningParentRef.Attachment == nil {
+					winningParentRef.Attachment = ref.Attachment
+				}
+			}
+		}
+		results[idx] = winningParentRef
 	}
 
-	return result
+	return results
 }
 
 func prepareRouteStatus(
