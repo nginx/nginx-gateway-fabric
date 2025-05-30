@@ -156,6 +156,20 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			name:          "duplicate sectionNames",
 			expectedError: errors.New("duplicate section name \"http\" for Gateway test/gateway-1"),
 		},
+		{
+			parentRefs: []gatewayv1.ParentReference{
+				{
+					Name:        gatewayv1.ObjectName(gwNsName3.Name),
+					SectionName: helpers.GetPointer[gatewayv1.SectionName]("http"),
+				},
+				{
+					Name:        gatewayv1.ObjectName(gwNsName3.Name),
+					SectionName: nil,
+				},
+			},
+			name:          "duplicate sectionNames when one parentRef has no sectionName",
+			expectedError: errors.New("duplicate section name \"http\" for Gateway test/gateway-3"),
+		},
 	}
 
 	for _, test := range tests {
