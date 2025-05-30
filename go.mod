@@ -4,7 +4,7 @@ go 1.24.2
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/nginx/agent/v3 v3.0.0-20250522105044-3dad26582af6
