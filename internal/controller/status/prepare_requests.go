@@ -95,6 +95,32 @@ func PrepareRouteRequests(
 	return reqs
 }
 
+func removeDuplicateIndexParentRefs(parentRefs []graph.ParentRef) []graph.ParentRef {
+	idxCount := make(map[int]int)
+	for _, ref := range parentRefs {
+		idxCount[ref.Idx]++
+	}
+
+	seen := make(map[int]bool)
+	result := make([]graph.ParentRef, 0, len(parentRefs))
+
+	for _, ref := range parentRefs {
+		if seen[ref.Idx] {
+			continue // skip duplicates
+		}
+		seen[ref.Idx] = true
+
+		// If this Idx was duplicated, clear SectionName
+		if idxCount[ref.Idx] > 1 {
+			ref.SectionName = nil
+		}
+
+		result = append(result, ref)
+	}
+
+	return result
+}
+
 func prepareRouteStatus(
 	gatewayCtlrName string,
 	parentRefs []graph.ParentRef,
@@ -103,11 +129,13 @@ func prepareRouteStatus(
 	transitionTime metav1.Time,
 	srcGeneration int64,
 ) v1.RouteStatus {
-	parents := make([]v1.RouteParentStatus, 0, len(parentRefs))
+	processedParentRefs := removeDuplicateIndexParentRefs(parentRefs)
+
+	parents := make([]v1.RouteParentStatus, 0, len(processedParentRefs))
 
 	defaultConds := conditions.NewDefaultRouteConditions()
 
-	for _, ref := range parentRefs {
+	for _, ref := range processedParentRefs {
 		failedAttachmentCondCount := 0
 		if ref.Attachment != nil {
 			failedAttachmentCondCount = len(ref.Attachment.FailedConditions)

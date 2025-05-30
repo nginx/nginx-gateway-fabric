@@ -786,7 +786,7 @@ func TestBuildGraph(t *testing.T) {
 				SectionName: &gw1.Source.Spec.Listeners[0].Name,
 			},
 			{
-				Idx: 1,
+				Idx: 0,
 				Gateway: &ParentRefGateway{
 					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
 					EffectiveNginxProxy: np1Effective,
@@ -799,7 +799,7 @@ func TestBuildGraph(t *testing.T) {
 				SectionName: &gw1.Source.Spec.Listeners[1].Name,
 			},
 			{
-				Idx: 2,
+				Idx: 0,
 				Gateway: &ParentRefGateway{
 					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
 					EffectiveNginxProxy: np1Effective,
@@ -816,7 +816,7 @@ func TestBuildGraph(t *testing.T) {
 				SectionName: &gw1.Source.Spec.Listeners[2].Name,
 			},
 			{
-				Idx: 3,
+				Idx: 0,
 				Gateway: &ParentRefGateway{
 					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
 					EffectiveNginxProxy: np1Effective,
@@ -868,7 +868,7 @@ func TestBuildGraph(t *testing.T) {
 				SectionName: &gw1.Source.Spec.Listeners[0].Name,
 			},
 			{
-				Idx: 1,
+				Idx: 0,
 				Gateway: &ParentRefGateway{
 					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
 					EffectiveNginxProxy: np1Effective,
@@ -881,7 +881,7 @@ func TestBuildGraph(t *testing.T) {
 				SectionName: &gw1.Source.Spec.Listeners[1].Name,
 			},
 			{
-				Idx: 2,
+				Idx: 0,
 				Gateway: &ParentRefGateway{
 					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
 					EffectiveNginxProxy: np1Effective,
@@ -894,7 +894,7 @@ func TestBuildGraph(t *testing.T) {
 				SectionName: &gw1.Source.Spec.Listeners[2].Name,
 			},
 			{
-				Idx: 3,
+				Idx: 0,
 				Gateway: &ParentRefGateway{
 					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
 					EffectiveNginxProxy: np1Effective,

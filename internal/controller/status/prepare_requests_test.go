@@ -72,6 +72,12 @@ var (
 			{
 				SectionName: helpers.GetPointer[v1.SectionName]("listener-80-3"),
 			},
+			{
+				SectionName: helpers.GetPointer[v1.SectionName]("listener-443-1"),
+			},
+			{
+				SectionName: helpers.GetPointer[v1.SectionName]("listener-443-2"),
+			},
 		},
 	}
 
@@ -108,6 +114,22 @@ var (
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         true,
 				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+			},
+		},
+		{
+			Idx:         3,
+			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
+			SectionName: commonRouteSpecValid.ParentRefs[3].SectionName,
+			Attachment: &graph.ParentRefAttachmentStatus{
+				Attached: true,
+			},
+		},
+		{
+			Idx:         3,
+			Gateway:     &graph.ParentRefGateway{NamespacedName: gwNsName},
+			SectionName: commonRouteSpecValid.ParentRefs[4].SectionName,
+			Attachment: &graph.ParentRefAttachmentStatus{
+				Attached: true,
 			},
 		},
 	}
@@ -210,6 +232,31 @@ var (
 						Status:             metav1.ConditionTrue,
 						ObservedGeneration: 3,
 						LastTransitionTime: transitionTime,
+					},
+				},
+			},
+			{
+				ParentRef: v1.ParentReference{
+					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
+					Name:      v1.ObjectName(gwNsName.Name),
+				},
+				ControllerName: gatewayCtlrName,
+				Conditions: []metav1.Condition{
+					{
+						Type:               string(v1.RouteConditionAccepted),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonAccepted),
+						Message:            "The route is accepted",
+					},
+					{
+						Type:               string(v1.RouteConditionResolvedRefs),
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 3,
+						LastTransitionTime: transitionTime,
+						Reason:             string(v1.RouteReasonResolvedRefs),
+						Message:            "All references are resolved",
 					},
 				},
 			},

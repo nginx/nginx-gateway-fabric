@@ -322,8 +322,12 @@ func buildSectionNameRefs(
 					SectionName: &l.Source.Name,
 					Port:        p.Port,
 				})
-				parentRefIndex++
 			}
+
+			// if the ParentRefs we create are for each listener in the same gateway, we keep the
+			// parentRefIndex the same so when we look at a route's parentRef's we can see
+			// if the parentRef is a unique parentRef or one we created internally
+			parentRefIndex++
 			continue
 		}
 
