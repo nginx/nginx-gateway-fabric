@@ -14,7 +14,7 @@ RUN apk add --no-cache git make \
     && git checkout 0de3ba3451d8b05cced5eedb744a82db90db7e53 \
     && make build
 
-FROM alpine:3.21
+FROM alpine:3.22
 
 ARG NGINX_PLUS_VERSION=R34
 ARG NJS_DIR
