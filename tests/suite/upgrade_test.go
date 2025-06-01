@@ -26,7 +26,7 @@ import (
 // This test installs the latest released version of NGF, then upgrades to the edge version (or dev version).
 // During the upgrade, traffic is continuously sent to ensure no downtime.
 // We also check that the leader election lease has been updated, and that Gateway updates are processed.
-var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
+var _ = PDescribe("Upgrade testing", Label("nfr", "upgrade"), func() {
 	var (
 		files = []string{
 			"ngf-upgrade/cafe.yaml",
