@@ -493,7 +493,7 @@ gateways: []
 #   gatewayClassName: nginx
 #   infrastructure:
 #     annotations:
-#       service.annotations.networking.gke.io/load-balancer-type: Internal
+#       networking.gke.io/load-balancer-type: Internal
 #   listeners:
 #     - name: https
 #       port: 80
