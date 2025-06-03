@@ -4,6 +4,54 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.0.0
+
+* Remove documentation site and GitHub Action,  update README references by @ADubhlaoich in https://github.com/nginx/nginx-gateway-fabric/pull/3047
+* De-duplicate base headers if specified by user by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/3249
+* Upgrade to NGINX Plus R34 by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/3281
+* Add support for RequestMirror filter by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/3306
+* Separate control plane and data plane; support multiple Gateways by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/3318
+* Add fix to route parentRef internal logic by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/3418
+
+%%DATE%%
+
+FEATURES:
+
+-
+
+BUG FIXES:
+
+-
+
+DOCUMENTATION:
+
+-
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.0.0
+-
+
+UPGRADE:
+
+-
+
+KNOWN ISSUES:
+
+-
+
+COMPATIBILITY:
+
+- Gateway API version: ``
+- NGINX version: ``
+- NGINX Plus version: ``
+- Kubernetes version: ``
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.0.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.0.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.0.0`
 ## Release 1.6.2
 
 _March 11, 2025_
