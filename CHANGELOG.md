@@ -12,7 +12,7 @@ BREAKING CHANGES:
 
 [How to upgrade to 2.0.0](https://docs.nginx.com/nginx-gateway-fabric/install/upgrade-version/#upgrade-from-v1x-to-v2x).
 
-The following change are breaking and require users to fully uninstall NGINX Gateway Fabric (including NGINX Gateway Fabric CRDs) before re-installing the new version. Gateway API resources (such as Gateway, HTTPRoute, etc) are unaffected and can be left alone. [3318](https://github.com/nginx/nginx-gateway-fabric/pull/3318)
+The following changes are breaking and require users to fully uninstall NGINX Gateway Fabric (including NGINX Gateway Fabric CRDs) before re-installing the new version. Gateway API resources (such as Gateway, HTTPRoute, etc) are unaffected and can be left alone. [3318](https://github.com/nginx/nginx-gateway-fabric/pull/3318)
 
 - Control plane and data plane have been separated into different Deployments. The control plane will provision an NGINX data plane Deployment and Service when a Gateway object is created.
 - NginxProxy CRD resource is now namespace-scoped (was cluster-scoped).
