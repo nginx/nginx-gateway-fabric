@@ -59,7 +59,7 @@ COMPATIBILITY:
 
 - Gateway API version: `1.3.0`
 - NGINX version: `1.28.0`
-- NGINX Plus version: `R24`
+- NGINX Plus version: `R34`
 - NGINX Agent version: `v3.0.0`
 - Kubernetes version: `1.25+`
 
