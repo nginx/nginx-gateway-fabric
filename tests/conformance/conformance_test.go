@@ -51,6 +51,7 @@ func TestConformance(t *testing.T) {
 			"https://github.com/nginx/nginx-gateway-fabric/discussions/new/choose",
 		},
 	}
+	opts.Debug = true
 
 	testSuite, err := suite.NewConformanceTestSuite(opts)
 	g.Expect(err).To(Not(HaveOccurred()))
