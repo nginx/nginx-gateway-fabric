@@ -32,7 +32,7 @@ Reserve GitHub issues for feature requests and bugs rather than general question
 
 ## Getting Started
 
-Follow our [Installation Instructions](https://docs.nginx.com/nginx-gateway-fabric/installation/) to get the NGINX Gateway Fabric up and running.
+Follow our [Installation Instructions](https://docs.nginx.com/nginx-gateway-fabric/install/) to get the NGINX Gateway Fabric up and running.
 
 ### Project Structure
 

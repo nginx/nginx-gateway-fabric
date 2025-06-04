@@ -12,4 +12,4 @@ use the following command to apply the manifests:
 kubectl kustomize | kubectl apply -f -
 ```
 
-For more information on how to deploy NGINX Gateway Fabric and the Gateway API CRDs see the [installation guide](https://docs.nginx.com/nginx-gateway-fabric/installation/installing-ngf/manifests/).
+For more information on how to deploy NGINX Gateway Fabric and the Gateway API CRDs see the [installation guide](https://docs.nginx.com/nginx-gateway-fabric/install/manifests/).
