@@ -27,7 +27,7 @@ NGINX Gateway Fabric uses [NGINX Agent](https://github.com/nginx/agent) to confi
 1. [Get started using a kind cluster](https://docs.nginx.com/nginx-gateway-fabric/get-started/).
 2. [Install](https://docs.nginx.com/nginx-gateway-fabric/install/) NGINX Gateway Fabric.
 3. Deploy various [examples](examples).
-4. Follow instructions for common use cass such as [routing](https://docs.nginx.com/nginx-gateway-fabric/traffic-management/basic-routing) and [securing](https://docs.nginx.com/nginx-gateway-fabric/traffic-security/) traffic, or [monitoring](https://docs.nginx.com/nginx-gateway-fabric//monitoring/) your cluster.
+4. Follow instructions for common use cases such as [routing](https://docs.nginx.com/nginx-gateway-fabric/traffic-management/) and [securing](https://docs.nginx.com/nginx-gateway-fabric/traffic-security/) traffic, or [monitoring](https://docs.nginx.com/nginx-gateway-fabric//monitoring/) your cluster.
 
 You can find the comprehensive NGINX Gateway Fabric user documentation on the [NGINX Documentation](https://docs.nginx.com/nginx-gateway-fabric/) website.
 
@@ -106,7 +106,7 @@ docker buildx imagetools inspect ghcr.io/nginx/nginx-gateway-fabric:edge --forma
 
 ## Troubleshooting
 
-For troubleshooting help, see the [Troubleshooting](https://docs.nginx.com/nginx-gateway-fabric/how-to/monitoring/troubleshooting/) document.
+For troubleshooting help, see the [Troubleshooting](https://docs.nginx.com/nginx-gateway-fabric/troubleshooting/) document.
 
 ## Contacts
 
