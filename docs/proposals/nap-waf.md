@@ -61,9 +61,10 @@ A key design principle is seamless GitOps workflow support through automatic cha
 
 The design uses **inherited policy attachment** following Gateway API best practices:
 
+- **Single target per policy**: A WafPolicy targets a single resource (either a Gateway or a Route) following [gep-2649 guidelines](https://gateway-api.sigs.k8s.io/geps/gep-2649/#policy-targetref-api).
 - **Gateway-level policies** provide default protection for all routes attached to the Gateway
 - **Route-level policies** can override Gateway-level policies for specific routes requiring different protection
-  - NB: cannot _disable_ WAF protection on a per route level, but the Route level WAFPolicy configuration will completely override the Gateway level WAFPolicy configuration
+  - NB: Route-level WafPolicies always override Gateway-level WafPolicies for routes they explicitly target. However, it is not possible to completely disable WAF protection for a specific Route when a Gateway-level WafPolicy is active. Instead, the Route-level policy configuration entirely replaces the Gateway-level policy for that route.
 - **Policy precedence**: More specific policies (Route-level) override less specific policies (Gateway-level)
 - **Automatic inheritance**: New routes automatically receive Gateway-level protection without explicit configuration
 
@@ -207,7 +208,7 @@ This architecture demonstrates the hierarchical policy attachment system where G
 
 **Application Namespace Resources:** All user-facing resources (Gateway, HTTPRoute, GRPCRoute, WafPolicy, NginxProxy, and optional authentication Secret) reside in application namespaces for proper isolation and RBAC management. The Secret is only required when using fallback authentication methods for accessing external policy storage - native cloud authentication (where available) uses annotations on the NGF service account in the nginx-gateway namespace.
 
-**Policy Attachment Flow (Orange):** WafPolicy resources use targetRefs to attach to Gateways or Routes. Gateway-level policies provide inherited protection for all attached HTTPRoutes and GRPCRoutes. Route-level policies can override Gateway-level policies for specific routes requiring different protection levels.
+**Policy Attachment Flow (Orange):** WafPolicy resources use targetRef to attach to Gateways or Routes. Only one resource can be targeted at a time. Gateway-level policies provide inherited protection for all attached HTTPRoutes and GRPCRoutes. Route-level policies can override Gateway-level policies for specific routes requiring different protection levels.
 
 **Traffic Flow (Yellow/Gold):** Client traffic (HTTP, HTTPS, and gRPC) flows through the public load balancer endpoint to the WAF-protected NGINX container, where NAP v5 applies security policies before forwarding filtered traffic to backend applications.
 
@@ -258,7 +259,7 @@ spec:
 2. **Log Profile Development**: Create custom logging profiles or use built-in profiles (log_all, log_blocked, etc.)
 3. **Compilation**: Use NAP v5 compiler tools to create policy and logging profile bundles
 4. **Distribution**: Publish compiled policies and log profiles to accessible storage (S3, HTTP)
-5. **Configuration**: Create WafPolicy CR with targetRefs referencing Gateway or Routes and configuring security logging
+5. **Configuration**: Create WafPolicy CR with targetRef referencing a Gateway or a Route and configuring security logging
 6. **Automatic Application**: NGF fetches and applies policies when WafPolicy is created or updated, with automatic inheritance. Policies can also be updated by publishing new content to the same configured file path; when polling is enabled, NGF automatically detects and applies changes.
 
 **Note**: Policy enforcement mode and behavior are defined within the compiled NAP policy itself. Security logging profiles can be either built-in names or custom compiled bundles.
@@ -434,8 +435,8 @@ metadata:
   namespace: applications
 spec:
   # Policy attachment - targets Gateway for inherited protection
-  targetRefs:
-  - group: gateway.networking.k8s.io
+  targetRef:
+    group: gateway.networking.k8s.io
     kind: Gateway
     name: secure-gateway
     namespace: applications
@@ -518,8 +519,8 @@ metadata:
   namespace: applications
 spec:
   # Policy attachment - targets specific HTTPRoute to override Gateway policy
-  targetRefs:
-  - group: gateway.networking.k8s.io
+  targetRef:
+    group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: admin-route
     namespace: applications
@@ -603,7 +604,7 @@ spec:
     backendRefs:
     - name: admin-service
       port: 8080
-  # Uses admin-strict-policy WafPolicy override via targetRefs
+  # Uses admin-strict-policy WafPolicy override via targetRef
 ```
 
 #### GRPCRoute Integration
@@ -802,7 +803,7 @@ Some additional rules:
 
 - **NginxProxy Extensions**: WAF enablement configuration parsing and validation
 - **WafPolicy Controller**: CRUD operations, status management, and policy fetching logic
-- **Policy Attachment Logic**: targetRefs validation and inheritance resolution
+- **Policy Attachment Logic**: targetRef validation and inheritance resolution
 - **Multi-container Orchestration**: Container startup sequences and ephemeral volume management
 - **Policy Validation**: Compiled policy bundle checksum integrity checking
 - **Polling Engine**: Change detection logic and retry mechanisms
@@ -1001,8 +1002,8 @@ metadata:
   namespace: applications
 spec:
   # Policy attachment - protects entire Gateway and inherits to all routes
-  targetRefs:
-  - group: gateway.networking.k8s.io
+  targetRef:
+    group: gateway.networking.k8s.io
     kind: Gateway
     name: secure-gateway
     namespace: applications
@@ -1036,8 +1037,8 @@ metadata:
   namespace: applications
 spec:
   # Policy attachment - overrides Gateway policy for specific route
-  targetRefs:
-  - group: gateway.networking.k8s.io
+  targetRef:
+    group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: admin-route
     namespace: applications
@@ -1093,7 +1094,7 @@ spec:
     backendRefs:
     - name: admin-service
       port: 8080
-  # Uses admin-strict-protection WafPolicy override via targetRefs
+  # Uses admin-strict-protection WafPolicy override via targetRef
 
 ---
 # 8. GRPCRoute inheriting Gateway protection
@@ -1116,48 +1117,10 @@ spec:
       port: 9000
   # Inherits gateway-base-protection WafPolicy automatically
 
----
-# 9. Example showing multiple route targeting
-apiVersion: gateway.nginx.org/v1alpha1
-kind: WafPolicy
-metadata:
-  name: api-routes-protection
-  namespace: applications
-spec:
-  # Policy attachment - targets multiple routes with same policy
-  targetRefs:
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: public-api-route
-    namespace: applications
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: partner-api-route
-    namespace: applications
-  - group: gateway.networking.k8s.io
-    kind: GRPCRoute
-    name: api-grpc-service
-    namespace: applications
-
-  policySource:
-    fileLocation: "s3://company-waf-policies/production/api-specific-policy.tgz"
-    polling:
-      enabled: true
-
-  securityLogs:
-  - name: "api-logging"
-    logProfile: "log_blocked"
-    destination:
-      type: "Syslog"
-      syslog:
-        server: "syslog-svc.default:514"
-```
-
 This complete example demonstrates:
 
 - **Gateway-level inherited protection** for all routes by default
 - **Route-level policy overrides** for specific security requirements
-- **Multi-route targeting** for applying the same policy to multiple routes
 - **HTTP and gRPC route support** with seamless policy inheritance
 - **Native cloud authentication** with fallback secret support
 - **Flexible logging configuration** per policy level
