@@ -1,29 +1,20 @@
 # syntax=docker/dockerfile:1.16
-# TODO(sberman): the commented out lines are for when we use the published agent release
-# FROM scratch AS nginx-files
+FROM scratch AS nginx-files
 
-# # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
-# ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
-
-FROM golang:alpine AS builder
-
-WORKDIR /tmp
-
-RUN apk add --no-cache git make \
-    && git clone https://github.com/nginx/agent.git \
-    && cd agent \
-    && git checkout 0de3ba3451d8b05cced5eedb744a82db90db7e53 \
-    && make build
+# the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
+ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
 FROM nginx:1.28.0-alpine-otel
 
+# renovate: datasource=github-tags depName=nginx/agent extractVersion=^v?(?<version>.*)$
+ARG NGINX_AGENT_VERSION=3.0.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
-# RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
-#     printf "%s\n" "http://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-#     && apk add --no-cache nginx-agent
+RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
+    printf "%s\n" "https://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
+    && apk add --no-cache nginx-agent=${NGINX_AGENT_VERSION}
 
 RUN apk add --no-cache libcap bash \
     && mkdir -p /usr/lib/nginx/modules \
@@ -33,9 +24,10 @@ RUN apk add --no-cache libcap bash \
     && setcap -v 'cap_net_bind_service=+ep' /usr/sbin/nginx-debug \
     # Update packages for CVE-2025-32414 and CVE-2025-32415
     && apk --no-cache upgrade libxml2 \
-    && apk del libcap
-
-COPY --from=builder /tmp/agent/build/nginx-agent /usr/bin/nginx-agent
+    && apk del libcap \
+    # forward request and error logs to docker log collector
+    && ln -sf /dev/stdout /var/log/nginx/access.log \
+    && ln -sf /dev/stderr /var/log/nginx/error.log
 
 COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/httpmatches.js /usr/lib/nginx/modules/njs/httpmatches.js
