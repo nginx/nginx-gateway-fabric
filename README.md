@@ -25,9 +25,9 @@ NGINX Gateway Fabric uses [NGINX Agent](https://github.com/nginx/agent) to confi
 ## Getting Started
 
 1. [Get started using a kind cluster](https://docs.nginx.com/nginx-gateway-fabric/get-started/).
-2. [Install](https://docs.nginx.com/nginx-gateway-fabric/installation/) NGINX Gateway Fabric.
+2. [Install](https://docs.nginx.com/nginx-gateway-fabric/install/) NGINX Gateway Fabric.
 3. Deploy various [examples](examples).
-4. Read our [How-to guides](https://docs.nginx.com/nginx-gateway-fabric/how-to/).
+4. Follow instructions for common use cases such as [routing](https://docs.nginx.com/nginx-gateway-fabric/traffic-management/) and [securing](https://docs.nginx.com/nginx-gateway-fabric/traffic-security/) traffic, or [monitoring](https://docs.nginx.com/nginx-gateway-fabric//monitoring/) your cluster.
 
 You can find the comprehensive NGINX Gateway Fabric user documentation on the [NGINX Documentation](https://docs.nginx.com/nginx-gateway-fabric/) website.
 
@@ -106,7 +106,7 @@ docker buildx imagetools inspect ghcr.io/nginx/nginx-gateway-fabric:edge --forma
 
 ## Troubleshooting
 
-For troubleshooting help, see the [Troubleshooting](https://docs.nginx.com/nginx-gateway-fabric/how-to/monitoring/troubleshooting/) document.
+For troubleshooting help, see the [Troubleshooting](https://docs.nginx.com/nginx-gateway-fabric/troubleshooting/) document.
 
 ## Contacts
 
@@ -136,4 +136,4 @@ Please read our [Contributing guide](CONTRIBUTING.md) if you'd like to contribut
 
 If your team needs dedicated support for NGINX Gateway Fabric in your environment, or you would like to leverage our [advanced NGINX Plus features](https://docs.nginx.com/nginx-gateway-fabric/overview/nginx-plus/), you can reach out [here](https://www.f5.com/content/f5-com/en_us/products/get-f5).
 
-To try NGINX Gateway Fabric with NGINX Plus, you can start your free [30-day trial](https://www.f5.com/trials), then follow the [installation guide](https://docs.nginx.com/nginx-gateway-fabric/installation/installing-ngf/helm/) for installing with NGINX Plus.
+To try NGINX Gateway Fabric with NGINX Plus, you can start your free [30-day trial](https://www.f5.com/trials), then follow the [installation guide](https://docs.nginx.com/nginx-gateway-fabric/install/helm/) for installing with NGINX Plus.
