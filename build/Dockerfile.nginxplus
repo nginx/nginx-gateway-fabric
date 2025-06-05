@@ -4,19 +4,11 @@ FROM scratch AS nginx-files
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
-FROM golang:alpine AS builder
-
-WORKDIR /tmp
-
-RUN apk add --no-cache git make \
-    && git clone https://github.com/nginx/agent.git \
-    && cd agent \
-    && git checkout 0de3ba3451d8b05cced5eedb744a82db90db7e53 \
-    && make build
-
 FROM alpine:3.21
 
 ARG NGINX_PLUS_VERSION=R34
+# renovate: datasource=github-tags depName=nginx/agent extractVersion=^v?(?<version>.*)$
+ARG NGINX_AGENT_VERSION=3.0.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
@@ -27,7 +19,10 @@ RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
     addgroup -g 1001 -S nginx \
     && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
     && printf "%s\n" "https://pkgs.nginx.com/plus/${NGINX_PLUS_VERSION}/alpine/v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && apk add --no-cache nginx-plus nginx-plus-module-njs nginx-plus-module-otel libcap bash \
+    && printf "%s\n" "https://pkgs.nginx.com/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
+    && apk add --no-cache nginx-plus nginx-plus-module-njs nginx-plus-module-otel nginx-agent=${NGINX_AGENT_VERSION}
+
+RUN apk add --no-cache libcap bash \
     && mkdir -p /usr/lib/nginx/modules \
 	&& setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx \
 	&& setcap -v 'cap_net_bind_service=+ep' /usr/sbin/nginx \
@@ -37,8 +32,6 @@ RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
     # forward request and error logs to docker log collector
     && ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log
-
-COPY --from=builder /tmp/agent/build/nginx-agent /usr/bin/nginx-agent
 
 COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/httpmatches.js /usr/lib/nginx/modules/njs/httpmatches.js
