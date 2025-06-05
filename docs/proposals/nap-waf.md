@@ -50,12 +50,20 @@ A key design principle is seamless GitOps workflow support through automatic cha
 - **Efficient Updates**: Only downloads policy bundles when content actually changes
 - **CI/CD Friendly**: Teams can update policies without modifying Kubernetes resources
 
+**Polling Mechanism:**
+
+- Configurable polling interval (default: 5 minutes)
+- Checksum-based change detection for efficiency
+- Only downloads policy bundles when content changes
+- New policies applied immediately upon detection
+
 ### Policy Attachment Strategy
 
 The design uses **inherited policy attachment** following Gateway API best practices:
 
 - **Gateway-level policies** provide default protection for all routes attached to the Gateway
 - **Route-level policies** can override Gateway-level policies for specific routes requiring different protection
+  - NB: cannot _disable_ WAF protection on a per route level, but the Route level WAFPolicy configuration will completely override the Gateway level WAFPolicy configuration
 - **Policy precedence**: More specific policies (Route-level) override less specific policies (Gateway-level)
 - **Automatic inheritance**: New routes automatically receive Gateway-level protection without explicit configuration
 
@@ -246,8 +254,6 @@ spec:
 
 ### Policy Development Workflow
 
-Given NAP v5 constraints, users must follow this workflow:
-
 1. **Policy Development**: Write WAF policies using NAP v5 JSON schema
 2. **Log Profile Development**: Create custom logging profiles or use built-in profiles (log_all, log_blocked, etc.)
 3. **Compilation**: Use NAP v5 compiler tools to create policy and logging profile bundles
@@ -256,6 +262,24 @@ Given NAP v5 constraints, users must follow this workflow:
 6. **Automatic Application**: NGF fetches and applies policies when WafPolicy is created or updated, with automatic inheritance. Policies can also be updated by publishing new content to the same configured file path; when polling is enabled, NGF automatically detects and applies changes.
 
 **Note**: Policy enforcement mode and behavior are defined within the compiled NAP policy itself. Security logging profiles can be either built-in names or custom compiled bundles.
+
+```mermaid
+sequenceDiagram
+    participant SecTeam as Security Team
+    participant Compiler as Policy Compiler
+    participant Store as Policy Store
+    participant NGF as NGF Control Plane
+    participant NGINX as NGINX Data Plane
+
+    SecTeam->>Compiler: Develop WAF Policies
+    Compiler->>Store: Publish Compiled Policies
+    NGF->>Store: Fetch Policies (Periodic Polling)
+    NGF->>NGF: Validate Policies (Checksum Verification)
+    NGF->>NGINX: Push Policies to Shared Volume
+    NGINX->>NGINX: Apply Policies
+    Client->>NGINX: Send HTTP/gRPC Requests
+    NGINX->>Client: Respond with Filtered Traffic
+```
 
 Example CI/CD integration for manual updates:
 
@@ -274,17 +298,6 @@ aws s3 cp compiled-policy.tgz.sha256 s3://company-policies/prod-policy.tgz.sha25
 # No Kubernetes resource changes needed - NGF automatically detects the update
 echo "Policy updated. NGF will detect changes within polling interval."
 ```
-
-### Policy Polling and Change Detection
-
-NGF supports automatic policy change detection to support GitOps workflows:
-
-**Polling Mechanism:**
-
-- Configurable polling interval (default: 5 minutes)
-- Checksum-based change detection for efficiency
-- Only downloads policy bundles when content changes
-- New policies applied immediately upon detection
 
 ### Security Logging Configuration
 
@@ -700,7 +713,45 @@ This label will help with discoverability and will be used by the planned Gatewa
 
 According to the [Policy and Metaresources GEP](https://gateway-api.sigs.k8s.io/geps/gep-713/), the `WafPolicy` CRD must include a `status` stanza with a slice of Conditions.
 
-The `Accepted` Condition must be populated on the `WafPolicy` CRD using the reasons defined in the [PolicyCondition API](https://github.com/kubernetes-sigs/gateway-api/blob/main/apis/v1alpha2/policy_types.go). If these reasons are not sufficient, we can add implementation-specific reasons.
+The `Accepted` Condition must be populated on the `WafPolicy` CRD using the reasons defined in the [PolicyCondition API](https://github.com/kubernetes-sigs/gateway-api/blob/main/apis/v1alpha2/policy_types.go). Below are example implementation-specific reasons that describe the lifecycle phases and potential issues encountered while processing the policy:
+
+| **Reason**               | **Description**                                                                                   | **Example Message**                                               |
+|---------------------------|---------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
+| **PolicySourceInvalid**   | The `policySource` contains invalid or incomplete information.                                    | "The policy source is invalid. Ensure fileLocation is correct."    |
+| **PolicyFetchError**      | Failed to fetch the policy due to network issues, authentication problems, or source misconfiguration. | "Failed to fetch policy bundle due to a network issue or invalid credentials." |
+| **PolicyIntegrityInvalid**| Checksum verification failed for the fetched policy bundle.                                       | "Policy integrity check failed because of a checksum mismatch."    |
+| **PolicyValidationError** | The WAF policy bundle failed schema or format validation for NGINX App Protect WAF.              | "The policy bundle did not pass schema validation. Update the policy and retry compilation." |
+| **PolicyDeployed**        | The policy was successfully deployed to the NGINX Data Plane (Pods).                             | "The policy has been successfully deployed and is now protecting the targeted resources." |
+| **PolicyDeployedUpdate**  | An updated version of the policy was successfully deployed to the NGINX Data Plane (Pods) after polling or change detection. | "The policy has been updated and successfully redeployed to the targeted resources." |
+| **PolicyDeploymentError** | The data plane (NGINX Pods) failed to apply the policy.                                          | "Failed to deploy the WAF policy to the NGINX Pods."               |
+| **AuthenticationError**   | Authentication to the external store (e.g., S3, HTTP) failed.                                    | "Authentication error while trying to fetch the policy bundle."    |
+| **PolicyConfigError**     | The policy configuration prevents proper processing.                 | "The policy configuration is incomplete or incorrectly formatted. Correct the configuration and retry." |
+
+### Example Status Conditions in `WafPolicy`
+
+```yaml
+status:
+  conditions:
+  - type: Accepted
+    status: "True"
+    reason: PolicyDeployedUpdate
+    message: "The policy has been updated and successfully redeployed to the Gateway."
+
+  - type: Accepted
+    status: "False"
+    reason: PolicyFetchError
+    message: "Failed to fetch policy bundle due to a network issue or invalid credentials."
+
+  - type: Accepted
+    status: "True"
+    reason: PolicyDeployed
+    message: "The policy has been successfully deployed and is now protecting the targeted resources."
+
+  - type: Accepted
+    status: "False"
+    reason: PolicyIntegrityInvalid
+    message: "Policy integrity check failed because of a checksum mismatch."
+```
 
 #### Setting Status on Objects Affected by a Policy
 
@@ -1111,3 +1162,7 @@ This complete example demonstrates:
 - **Native cloud authentication** with fallback secret support
 - **Flexible logging configuration** per policy level
 - **Automatic change detection** through configurable polling intervals
+
+## Open questions
+
+- Will NAP automatically pick up policy changes when the bundle is changed on disk? Do we need to reload NGINX?
