@@ -20,12 +20,14 @@ the [Gateway API Compatibility](https://docs.nginx.com/nginx-gateway-fabric/over
 
 Learn about our [design principles](/docs/developer/design-principles.md) and [architecture](https://docs.nginx.com/nginx-gateway-fabric/overview/gateway-architecture/).
 
+NGINX Gateway Fabric uses [NGINX Agent](https://github.com/nginx/agent) to configure NGINX.
+
 ## Getting Started
 
 1. [Get started using a kind cluster](https://docs.nginx.com/nginx-gateway-fabric/get-started/).
-2. [Install](https://docs.nginx.com/nginx-gateway-fabric/installation/) NGINX Gateway Fabric.
+2. [Install](https://docs.nginx.com/nginx-gateway-fabric/install/) NGINX Gateway Fabric.
 3. Deploy various [examples](examples).
-4. Read our [How-to guides](https://docs.nginx.com/nginx-gateway-fabric/how-to/).
+4. Follow instructions for common use cases such as [routing](https://docs.nginx.com/nginx-gateway-fabric/traffic-management/) and [securing](https://docs.nginx.com/nginx-gateway-fabric/traffic-security/) traffic, or [monitoring](https://docs.nginx.com/nginx-gateway-fabric//monitoring/) your cluster.
 
 You can find the comprehensive NGINX Gateway Fabric user documentation on the [NGINX Documentation](https://docs.nginx.com/nginx-gateway-fabric/) website.
 
@@ -34,7 +36,7 @@ You can find the comprehensive NGINX Gateway Fabric user documentation on the [N
 We publish NGINX Gateway Fabric releases on GitHub. See
 our [releases page](https://github.com/nginx/nginx-gateway-fabric/releases).
 
-The latest release is [1.6.2](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v1.6.2).
+The latest release is [2.0.0](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.0.0).
 
 The edge version is useful for experimenting with new features that are not yet published in a release. To use, choose
 the _edge_ version built from the [latest commit](https://github.com/nginx/nginx-gateway-fabric/commits/main)
@@ -45,7 +47,7 @@ to the correct versions:
 
 | Version        | Description                              | Installation Manifests                                                         | Documentation and Examples                                                                                                                                           |
 |----------------|------------------------------------------|--------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Latest release | For production use                       | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.2/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v1.6.2/examples).                        |
+| Latest release | For production use                       | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.0.0/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.0.0/examples).                        |
 | Edge           | For experimental use and latest features | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/main/deploy).   | [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/main/examples). |
 
 ### Versioning
@@ -64,19 +66,20 @@ the [Issue Lifecycle](ISSUE_LIFECYCLE.md) document for information on issue crea
 
 The following table lists the software versions NGINX Gateway Fabric supports.
 
-| NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS | NGINX Plus |
-|----------------------|-------------|------------|-----------|------------|
-| Edge                 | 1.3.0       | 1.25+      | 1.28.0    | R34        |
-| 1.6.2                | 1.2.1       | 1.25+      | 1.27.4    | R33        |
-| 1.6.1                | 1.2.1       | 1.25+      | 1.27.4    | R33        |
-| 1.6.0                | 1.2.1       | 1.25+      | 1.27.3    | R33        |
-| 1.5.1                | 1.2.0       | 1.25+      | 1.27.2    | R33        |
-| 1.5.0                | 1.2.0       | 1.25+      | 1.27.2    | R33        |
-| 1.4.0                | 1.1.0       | 1.25+      | 1.27.1    | R32        |
-| 1.3.0                | 1.1.0       | 1.25+      | 1.27.0    | R32        |
-| 1.2.0                | 1.0.0       | 1.23+      | 1.25.4    | R31        |
-| 1.1.0                | 1.0.0       | 1.23+      | 1.25.3    | n/a        |
-| 1.0.0                | 0.8.1       | 1.23+      | 1.25.2    | n/a        |
+| NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS | NGINX Plus | NGINX Agent |
+|----------------------|-------------|------------|-----------|------------|-------------|
+| Edge                 | 1.3.0       | 1.25+      | 1.28.0    | R34        | v3.0.0      |
+| 2.0.0                | 1.3.0       | 1.25+      | 1.28.0    | R34        | v3.0.0      |
+| 1.6.2                | 1.2.1       | 1.25+      | 1.27.4    | R33        | ---         |
+| 1.6.1                | 1.2.1       | 1.25+      | 1.27.4    | R33        | ---         |
+| 1.6.0                | 1.2.1       | 1.25+      | 1.27.3    | R33        | ---         |
+| 1.5.1                | 1.2.0       | 1.25+      | 1.27.2    | R33        | ---         |
+| 1.5.0                | 1.2.0       | 1.25+      | 1.27.2    | R33        | ---         |
+| 1.4.0                | 1.1.0       | 1.25+      | 1.27.1    | R32        | ---         |
+| 1.3.0                | 1.1.0       | 1.25+      | 1.27.0    | R32        | ---         |
+| 1.2.0                | 1.0.0       | 1.23+      | 1.25.4    | R31        | ---         |
+| 1.1.0                | 1.0.0       | 1.23+      | 1.25.3    | n/a        | ---         |
+| 1.0.0                | 0.8.1       | 1.23+      | 1.25.2    | n/a        | ---         |
 
 ## SBOM (Software Bill of Materials)
 
@@ -103,7 +106,7 @@ docker buildx imagetools inspect ghcr.io/nginx/nginx-gateway-fabric:edge --forma
 
 ## Troubleshooting
 
-For troubleshooting help, see the [Troubleshooting](https://docs.nginx.com/nginx-gateway-fabric/how-to/monitoring/troubleshooting/) document.
+For troubleshooting help, see the [Troubleshooting](https://docs.nginx.com/nginx-gateway-fabric/troubleshooting/) document.
 
 ## Contacts
 
@@ -133,4 +136,4 @@ Please read our [Contributing guide](CONTRIBUTING.md) if you'd like to contribut
 
 If your team needs dedicated support for NGINX Gateway Fabric in your environment, or you would like to leverage our [advanced NGINX Plus features](https://docs.nginx.com/nginx-gateway-fabric/overview/nginx-plus/), you can reach out [here](https://www.f5.com/content/f5-com/en_us/products/get-f5).
 
-To try NGINX Gateway Fabric with NGINX Plus, you can start your free [30-day trial](https://www.f5.com/trials), then follow the [installation guide](https://docs.nginx.com/nginx-gateway-fabric/installation/installing-ngf/helm/) for installing with NGINX Plus.
+To try NGINX Gateway Fabric with NGINX Plus, you can start your free [30-day trial](https://www.f5.com/trials), then follow the [installation guide](https://docs.nginx.com/nginx-gateway-fabric/install/helm/) for installing with NGINX Plus.

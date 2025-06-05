@@ -4,6 +4,71 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.0.0
+
+_June 5, 2025_
+
+BREAKING CHANGES:
+
+[How to upgrade to 2.0.0](https://docs.nginx.com/nginx-gateway-fabric/install/upgrade-version/#upgrade-from-v1x-to-v2x).
+
+The following changes are breaking and require users to fully uninstall NGINX Gateway Fabric (including NGINX Gateway Fabric CRDs) before re-installing the new version. Gateway API resources (such as Gateway, HTTPRoute, etc) are unaffected and can be left alone. [3318](https://github.com/nginx/nginx-gateway-fabric/pull/3318)
+
+- Control plane and data plane have been separated into different Deployments. The control plane will provision an NGINX data plane Deployment and Service when a Gateway object is created.
+- NginxProxy CRD resource is now namespace-scoped (was cluster-scoped).
+- NginxProxy resource controls infrastructure fields for the NGINX Deployment and Service, such as replicas, loadBalancerIP, serviceType, etc. Users who want to set or update these fields must do so either at installation time through the helm chart (which sets them globally), or per Gateway. Updating these fields directly on a provisioned nginx Deployment or Service will not take effect. This does not apply to the the NGINX Gateway Fabric control plane Deployment.
+- Helm values structure has changed slightly to better support the separate Deployments.
+- `nginxGateway.replicaCount` Helm value has been renamed to `nginxGateway.replicas`.
+
+FEATURES:
+
+- Support for creating and deploying multiple Gateways. [3318](https://github.com/nginx/nginx-gateway-fabric/pull/3318)
+- NginxProxy resource can now additionally be attached to a Gateway, and will overwrite any settings that are attached at the GatewayClass level, for the Gateway that it's attached to. [3318](https://github.com/nginx/nginx-gateway-fabric/pull/3318)
+- Listener isolation supported for all routes. [3067](https://github.com/nginx/nginx-gateway-fabric/pull/3067)
+- Allow configuration of NGINX Plus API access. [3066](https://github.com/nginx/nginx-gateway-fabric/pull/3066)
+- Adds regex matching for headers and query params for HTTPRoutes and headers for GRPCRoutes. [3093](https://github.com/nginx/nginx-gateway-fabric/pull/3093)
+- Add support for request mirroring using the RequestMirror filter. [3066](https://github.com/nginx/nginx-gateway-fabric/pull/3306)
+
+BUG FIXES:
+
+- Fix an issue where default headers were still being set when overwritten by a user. [3249](https://github.com/nginx/nginx-gateway-fabric/pull/3249)
+- Add 503 status code when there are zero upstream endpoints. [3406](https://github.com/nginx/nginx-gateway-fabric/pull/3406)
+- Fixed bug that occurred when a route's ParentRef does not include a sectionName and the Gateway's listeners have duplicate hostnames. This would cause conflicts when the route tries to attach to all the listeners and falsely trigger validation checks around overlapping routes. [3418](https://github.com/nginx/nginx-gateway-fabric/pull/3418)
+
+DOCUMENTATION:
+
+- Migrated the documentation website into the [NGINX documentation repository](https://github.com/nginx/documentation). [3047](https://github.com/nginx/nginx-gateway-fabric/pull/3047)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.0.0
+- Helm values structure has changed slightly to better support the separate Deployments.
+- `nginxGateway.replicaCount` Helm value has been renamed to `nginxGateway.replicas`.
+- Add support for control plane Deployment labels. [3194](https://github.com/nginx/nginx-gateway-fabric/pull/3194). Thanks to [Butterneck](https://github.com/Butterneck).
+
+UPGRADE:
+
+- [Upgrade to 2.0.0](https://docs.nginx.com/nginx-gateway-fabric/install/upgrade-version/#upgrade-from-v1x-to-v2x)
+
+DEPENDENCIES:
+
+- NGINX Plus was updated to R34. [3281](https://github.com/nginx/nginx-gateway-fabric/pull/3281)
+- Update to v1.3.0 of the Gateway API. [3348](https://github.com/nginx/nginx-gateway-fabric/pull/3348)
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.28.0`
+- NGINX Plus version: `R34`
+- NGINX Agent version: `v3.0.0`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.0.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.0.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.0.0`
+
 ## Release 1.6.2
 
 _March 11, 2025_
