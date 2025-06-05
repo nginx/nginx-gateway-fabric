@@ -287,6 +287,30 @@
           "title": "debug",
           "type": "boolean"
         },
+        "hostPort": {
+          "description": "The hostPort configuration",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enables hostPort.",
+              "required": [],
+              "title": "enable",
+              "type": "boolean"
+            },
+            "port": {
+              "default": 443,
+              "description": "The port",
+              "maximum": 65535,
+              "minimum": 1,
+              "required": [],
+              "title": "port",
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "title": "hostPort",
+          "type": "object"
+        },
         "image": {
           "properties": {
             "pullPolicy": {

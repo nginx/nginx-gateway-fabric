@@ -241,6 +241,19 @@ nginx:
     # Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).
     clientSSLSecretName: ""
 
+  # -- The hostPort configuration
+  hostPort:
+    # -- Enables hostPort.
+    enable: false
+
+    # @schema
+    # type: integer
+    # minimum: 1
+    # maximum: 65535
+    # @schema
+    # -- The port
+    port: 443
+
   # @schema
   # type: object
   # properties:
