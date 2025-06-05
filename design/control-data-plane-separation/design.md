@@ -713,7 +713,7 @@ have a use case for runtime configuration at the moment.
 
 [agent-config]: https://github.com/nginx/agent/blob/ea3a1b4df5d7ecf95bd3d9297d26e420f5e1dd57/sdk/proto/agent.pb.go#L320
 
-[cli]: https://docs.nginx.com/nginx-management-suite/nginx-agent/install-nginx-agent/#nginx-agent-cli-flags-usage
+[cli]: https://docs.nginx.com/nginx-agent/configuration/configuration-overview/#cli-flags--environment-variables
 
 ## Edge Cases
 

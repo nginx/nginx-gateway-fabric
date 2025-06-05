@@ -7,7 +7,7 @@ to route traffic to that application using HTTPRoute resources.
 
 ## 1. Deploy NGINX Gateway Fabric
 
-1. Follow the [installation instructions](https://docs.nginx.com/nginx-gateway-fabric/installation/) to deploy NGINX Gateway Fabric.
+1. Follow the [installation instructions](https://docs.nginx.com/nginx-gateway-fabric/install/) to deploy NGINX Gateway Fabric.
 
 ## 2. Deploy the Cafe Application
 
