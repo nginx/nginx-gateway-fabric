@@ -54,6 +54,8 @@ type Configuration struct {
 	NginxPlus NginxPlus
 	// BaseHTTPConfig holds the configuration options at the http context.
 	BaseHTTPConfig BaseHTTPConfig
+	// WAF holds the WAF configuration.
+	WAF WafConfig
 }
 
 // SSLKeyPairID is a unique identifier for a SSLKeyPair.
@@ -444,4 +446,11 @@ type DeploymentContext struct {
 	ClusterNodeCount *int `json:"cluster_node_count,omitempty"`
 	// Integration is "ngf".
 	Integration string `json:"integration"`
+}
+
+// WafConfig holds the WAF configuration for the dataplane.
+// It is used to determine whether WAF is enabled and to load the WAF module.
+type WafConfig struct {
+	// Enabled indicates whether WAF is enabled.
+	Enabled bool
 }

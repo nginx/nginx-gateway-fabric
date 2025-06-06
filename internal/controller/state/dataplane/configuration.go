@@ -79,6 +79,7 @@ func BuildConfiguration(
 		NginxPlus:        nginxPlus,
 		MainSnippets:     buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
+		WAF:              WafConfig{Enabled: graph.WAFEnabledForNginxProxy(gateway.EffectiveNginxProxy)},
 	}
 
 	return config

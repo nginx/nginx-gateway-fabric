@@ -3,6 +3,10 @@ package config
 const baseHTTPTemplateText = `
 {{- if .HTTP2 }}http2 on;{{ end }}
 
+{{ if .WAF -}}
+app_protect_enforcer_address 127.0.0.1:50000;
+{{ end -}}
+
 # Set $gw_api_compliant_host variable to the value of $http_host unless $http_host is empty, then set it to the value
 # of $host. We prefer $http_host because it contains the original value of the host header, which is required by the
 # Gateway API. However, in an HTTP/1.0 request, it's possible that $http_host can be empty. In this case, we will use
