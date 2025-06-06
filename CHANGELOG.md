@@ -28,6 +28,7 @@ FEATURES:
 - Allow configuration of NGINX Plus API access. [3066](https://github.com/nginx/nginx-gateway-fabric/pull/3066)
 - Adds regex matching for headers and query params for HTTPRoutes and headers for GRPCRoutes. [3093](https://github.com/nginx/nginx-gateway-fabric/pull/3093)
 - Add support for request mirroring using the RequestMirror filter. [3066](https://github.com/nginx/nginx-gateway-fabric/pull/3306)
+- Adds support for Secrets to be used in BackendTLSPolicy for TLS certificates and CA certificates. [3084](https://github.com/nginx/nginx-gateway-fabric/pull/3084). Thanks to [porthorian](https://github.com/porthorian).
 
 BUG FIXES:
 
