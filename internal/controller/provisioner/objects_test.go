@@ -161,6 +161,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	validateMeta(svc)
 	g.Expect(svc.Spec.Type).To(Equal(defaultServiceType))
 	g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(defaultServicePolicy))
+	g.Expect(*svc.Spec.IPFamilyPolicy).To(Equal(corev1.IPFamilyPolicyPreferDualStack))
 
 	// service ports is sorted in ascending order by port number when we make the nginx object
 	g.Expect(svc.Spec.Ports).To(Equal([]corev1.ServicePort{
@@ -260,6 +261,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 
 	resourceName := "gw-nginx"
 	nProxyCfg := &graph.EffectiveNginxProxy{
+		IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv4),
 		Logging: &ngfAPIv1alpha2.NginxLogging{
 			ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
 			AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelDebug),
@@ -321,6 +323,8 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(svc.Spec.LoadBalancerIP).To(Equal("1.2.3.4"))
 	g.Expect(*svc.Spec.LoadBalancerClass).To(Equal("myLoadBalancerClass"))
 	g.Expect(svc.Spec.LoadBalancerSourceRanges).To(Equal([]string{"5.6.7.8"}))
+	g.Expect(*svc.Spec.IPFamilyPolicy).To(Equal(corev1.IPFamilyPolicySingleStack))
+	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv4Protocol}))
 
 	depObj := objects[5]
 	dep, ok := depObj.(*appsv1.Deployment)
