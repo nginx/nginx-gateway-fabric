@@ -28,6 +28,7 @@ FEATURES:
 - Allow configuration of NGINX Plus API access. [3066](https://github.com/nginx/nginx-gateway-fabric/pull/3066)
 - Adds regex matching for headers and query params for HTTPRoutes and headers for GRPCRoutes. [3093](https://github.com/nginx/nginx-gateway-fabric/pull/3093)
 - Add support for request mirroring using the RequestMirror filter. [3066](https://github.com/nginx/nginx-gateway-fabric/pull/3306)
+- Adds support for Secrets to be used in BackendTLSPolicy for TLS certificates and CA certificates. [3084](https://github.com/nginx/nginx-gateway-fabric/pull/3084). Thanks to [porthorian](https://github.com/porthorian).
 
 BUG FIXES:
 
@@ -49,6 +50,10 @@ HELM CHART:
 UPGRADE:
 
 - [Upgrade to 2.0.0](https://docs.nginx.com/nginx-gateway-fabric/install/upgrade-version/#upgrade-from-v1x-to-v2x)
+
+KNOWN ISSUES:
+
+- NGINX LoadBalancer Service IPFamily uses Kubernetes default (likely SingleStack IPv4) instead of matching the ipFamily set in the NginxProxy resource, which defaults to DualStack. [3473](https://github.com/nginx/nginx-gateway-fabric/issues/3473)
 
 DEPENDENCIES:
 
