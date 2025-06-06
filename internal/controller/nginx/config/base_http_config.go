@@ -13,6 +13,7 @@ var baseHTTPTemplate = gotemplate.Must(gotemplate.New("baseHttp").Parse(baseHTTP
 type httpConfig struct {
 	Includes []shared.Include
 	HTTP2    bool
+	WAF      bool
 }
 
 func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
@@ -21,6 +22,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
 	hc := httpConfig{
 		HTTP2:    conf.BaseHTTPConfig.HTTP2,
 		Includes: includes,
+		WAF:      conf.WAF.Enabled,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
