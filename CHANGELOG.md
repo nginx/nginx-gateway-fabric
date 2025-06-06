@@ -51,6 +51,10 @@ UPGRADE:
 
 - [Upgrade to 2.0.0](https://docs.nginx.com/nginx-gateway-fabric/install/upgrade-version/#upgrade-from-v1x-to-v2x)
 
+KNOWN ISSUES:
+
+- NGINX LoadBalancer Service IPFamily uses Kubernetes default (likely SingleStack IPv4) instead of matching the ipFamily set in the NginxProxy resource, which defaults to DualStack. [3473](https://github.com/nginx/nginx-gateway-fabric/issues/3473)
+
 DEPENDENCIES:
 
 - NGINX Plus was updated to R34. [3281](https://github.com/nginx/nginx-gateway-fabric/pull/3281)
