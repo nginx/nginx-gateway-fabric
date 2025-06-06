@@ -965,3 +965,40 @@ func TestBuildNginxResourceObjectsForDeletion_OpenShift(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	validateMeta(roleBinding, deploymentNSName.Name)
 }
+
+func TestSetIPFamily(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	newSvc := func() *corev1.Service {
+		return &corev1.Service{
+			Spec: corev1.ServiceSpec{},
+		}
+	}
+
+	// nProxyCfg is nil, should not set anything
+	svc := newSvc()
+	setIPFamily(nil, svc)
+	g.Expect(svc.Spec.IPFamilyPolicy).To(BeNil())
+	g.Expect(svc.Spec.IPFamilies).To(BeNil())
+
+	// nProxyCfg.IPFamily is nil, should not set anything
+	svc = newSvc()
+	setIPFamily(&graph.EffectiveNginxProxy{}, svc)
+	g.Expect(svc.Spec.IPFamilyPolicy).To(BeNil())
+	g.Expect(svc.Spec.IPFamilies).To(BeNil())
+
+	// nProxyCfg.IPFamily is IPv4, should set SingleStack and IPFamilies to IPv4
+	svc = newSvc()
+	ipFamily := ngfAPIv1alpha2.IPv4
+	setIPFamily(&graph.EffectiveNginxProxy{IPFamily: &ipFamily}, svc)
+	g.Expect(svc.Spec.IPFamilyPolicy).To(Equal(helpers.GetPointer(corev1.IPFamilyPolicySingleStack)))
+	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv4Protocol}))
+
+	// nProxyCfg.IPFamily is IPv6, should set SingleStack and IPFamilies to IPv6
+	svc = newSvc()
+	ipFamily = ngfAPIv1alpha2.IPv6
+	setIPFamily(&graph.EffectiveNginxProxy{IPFamily: &ipFamily}, svc)
+	g.Expect(svc.Spec.IPFamilyPolicy).To(Equal(helpers.GetPointer(corev1.IPFamilyPolicySingleStack)))
+	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv6Protocol}))
+}
