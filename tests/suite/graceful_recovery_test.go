@@ -585,6 +585,7 @@ func getUnexpectedNginxErrorLogs(nginxPodName, namespace string) string {
 		"connect() failed (111: Connection refused)",
 		"could not be resolved (host not found) during usage report",
 		"server returned 429",
+		"no live upstreams while connecting to upstream",
 	}
 
 	unexpectedErrors := ""
