@@ -252,7 +252,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 
 | Key | Description | Type | Default |
 |-----|-------------|------|---------|
-| `certGenerator` | The certGenerator section contains the configuration for the cert-generator Job. | object | `{"agentTLSSecretName":"agent-tls","annotations":{},"overwrite":false,"serverTLSSecretName":"server-tls"}` |
+| `certGenerator` | The certGenerator section contains the configuration for the cert-generator Job. | object | `{"agentTLSSecretName":"agent-tls","annotations":{},"overwrite":false,"serverTLSSecretName":"server-tls","ttlSecondsAfterFinished":0}` |
 | `certGenerator.agentTLSSecretName` | The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `"agent-tls"` |
 | `certGenerator.annotations` | The annotations of the cert-generator Job. | object | `{}` |
 | `certGenerator.overwrite` | Overwrite existing TLS Secrets on startup. | bool | `false` |

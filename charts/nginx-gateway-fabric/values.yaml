@@ -479,6 +479,8 @@ certGenerator:
   # -- Overwrite existing TLS Secrets on startup.
   overwrite: false
 
+  ttlSecondsAfterFinished: 0
+
 # -- A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.
 gateways: []
 

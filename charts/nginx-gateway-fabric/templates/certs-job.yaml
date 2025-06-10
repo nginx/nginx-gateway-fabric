@@ -153,4 +153,4 @@ spec:
       securityContext:
         fsGroup: 1001
         runAsNonRoot: true
-  ttlSecondsAfterFinished: 0
+  ttlSecondsAfterFinished: {{ .Values.certGenerator.ttlSecondsAfterFinished }}

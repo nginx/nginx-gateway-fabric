@@ -30,6 +30,12 @@
           "required": [],
           "title": "serverTLSSecretName",
           "type": "string"
+        },
+        "ttlSecondsAfterFinished": {
+          "default": 0,
+          "required": [],
+          "title": "ttlSecondsAfterFinished",
+          "type": "integer"
         }
       },
       "required": [],
