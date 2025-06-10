@@ -287,6 +287,15 @@
           "title": "debug",
           "type": "boolean"
         },
+        "extraContainers": {
+          "description": "Extra containers to be added to the NGINX Gateway Fabric control plane pod.\nUse this to add additional containers to the control plane pod, such as sidecars.\nNote that these containers will not have access to the NGINX Gateway Fabric control plane's service account.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "extraContainers",
+          "type": "array"
+        },
         "image": {
           "properties": {
             "pullPolicy": {
