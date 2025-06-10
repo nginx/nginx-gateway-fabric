@@ -45,8 +45,8 @@ spec:
         {{- if .Values.nginx.debug }}
         debug: {{ .Values.nginx.debug }}
         {{- end }}
-      {{- if .Values.nginxGateway.extraContainers }}
-      {{- toYaml .Values.nginxGateway.extraContainers | nindent 6 }}
+      {{- if .Values.nginx.extraContainers }}
+      {{- toYaml .Values.nginx.extraContainers | nindent 6 }}
       {{- end }}
     {{- end }}
     {{- if .Values.nginx.service }}
