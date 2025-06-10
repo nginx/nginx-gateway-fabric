@@ -45,7 +45,6 @@ HELM_SCHEMA_VERSION = 0.18.1
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
 NGINX_PREFIX ?= $(PREFIX)/nginx## The name of the nginx image. For example: nginx-gateway-fabric/nginx
 NGINX_PLUS_PREFIX ?= $(PREFIX)/nginx-plus## The name of the nginx plus image. For example: nginx-gateway-fabric/nginx-plus
-NGINX_PLUS_WAF_PREFIX ?= $(PREFIX)/nginx-plus-waf## The name of the nginx plus image with NAP WAF. For example: nginx-gateway-fabric/nginx-plus-waf
 TAG ?= $(VERSION:v%=%)## The tag of the image. For example, 1.1.0
 TARGET ?= local## The target of the build. Possible values: local and container
 OUT_DIR ?= build/out## The folder where the binary will be stored
@@ -110,7 +109,7 @@ build-nginx-plus-image-with-nap-waf: check-for-docker ## Build the custom nginx 
 	@if [ $(GOARCH) = "arm64" ]; then \
 		echo "\033[0;31mIMPORTANT:\033[0m The nginx-plus-waf image cannot be built for arm64 architecture and will be built for amd64."; \
 	fi
-	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) -f $(SELF_DIR)build/Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_WAF_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) -f $(SELF_DIR)build/Dockerfile.nginxplus -t $(strip $(NGINX_PLU_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: check-for-docker
 check-for-docker: ## Check if Docker is installed

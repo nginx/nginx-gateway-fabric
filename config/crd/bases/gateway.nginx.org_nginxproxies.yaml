@@ -7771,15 +7771,15 @@ spec:
                     x-kubernetes-list-type: map
                 type: object
               waf:
-                default: Disabled
+                default: disabled
                 description: |-
                   WAF enables NGINX App Protect WAF functionality.
                   When enabled, NGINX Gateway Fabric will deploy additional WAF containers
                   (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
-                  Default is "Disabled".
+                  Default is "disabled".
                 enum:
-                - Enabled
-                - Disabled
+                - enabled
+                - disabled
                 type: string
             type: object
         required:

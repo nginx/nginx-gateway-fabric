@@ -1114,7 +1114,7 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 	// Validate NGINX container (first container)
 	nginxContainer := template.Spec.Containers[0]
 	g.Expect(nginxContainer.Name).To(Equal("nginx"))
-	g.Expect(nginxContainer.Image).To(Equal(fmt.Sprintf("%s:1.0.0", defaultNginxPlusWafImagePath)))
+	g.Expect(nginxContainer.Image).To(Equal(fmt.Sprintf("%s:1.0.0", defaultNginxImagePath)))
 
 	// Check NGINX container has WAF volume mounts
 	wafVolumeMountNames := []string{

@@ -75,10 +75,10 @@ type NginxProxySpec struct {
 	// WAF enables NGINX App Protect WAF functionality.
 	// When enabled, NGINX Gateway Fabric will deploy additional WAF containers
 	// (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
-	// Default is "Disabled".
+	// Default is "disabled".
 	//
 	// +optional
-	// +kubebuilder:default:=Disabled
+	// +kubebuilder:default:=disabled
 	WAF *WAFState `json:"waf,omitempty"`
 	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
 	//
@@ -88,17 +88,17 @@ type NginxProxySpec struct {
 
 // WAFState defines the state of WAF functionality.
 //
-// +kubebuilder:validation:Enum=Enabled;Disabled
+// +kubebuilder:validation:Enum=enabled;disabled
 type WAFState string
 
 const (
 	// WAFEnabled enables NGINX App Protect WAF functionality.
 	// This will deploy additional containers for WAF enforcement and configuration management.
-	WAFEnabled WAFState = "Enabled"
+	WAFEnabled WAFState = "enabled"
 
 	// WAFDisabled disables NGINX App Protect WAF functionality.
 	// Only the standard NGINX container will be deployed.
-	WAFDisabled WAFState = "Disabled"
+	WAFDisabled WAFState = "disabled"
 )
 
 // Telemetry specifies the OpenTelemetry configuration.

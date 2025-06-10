@@ -272,8 +272,8 @@
             "waf": {
               "description": "WAF enables NGINX App Protect WAF functionality.",
               "enum": [
-                "Enabled",
-                "Disabled"
+                "enabled",
+                "disabled"
               ],
               "required": [],
               "type": "string"

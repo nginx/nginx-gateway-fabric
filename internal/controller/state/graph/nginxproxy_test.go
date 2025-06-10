@@ -536,6 +536,22 @@ func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
 				WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFDisabled),
 			},
 		},
+		{
+			name: "both have WAF unset",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{},
+				},
+			},
+			exp: &EffectiveNginxProxy{},
+		},
 	}
 
 	for _, test := range tests {

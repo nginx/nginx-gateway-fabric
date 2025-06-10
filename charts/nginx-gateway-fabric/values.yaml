@@ -371,8 +371,8 @@ nginx:
   #     type: string
   #     description: WAF enables NGINX App Protect WAF functionality.
   #     enum:
-  #       - Enabled
-  #       - Disabled
+  #       - enabled
+  #       - disabled
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.

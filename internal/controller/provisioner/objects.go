@@ -33,10 +33,8 @@ const (
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
 
-	defaultNginxImagePath        = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
-	defaultNginxPlusImagePath    = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
-	defaultNginxPlusWafImagePath = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-waf"
-	defaultImagePullPolicy       = corev1.PullIfNotPresent
+	defaultNginxImagePath  = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
+	defaultImagePullPolicy = corev1.PullIfNotPresent
 
 	// WAF container defaults.
 	defaultWAFEnforcerImagePath  = "private-registry.nginx.com/nap/waf-enforcer"
@@ -914,7 +912,8 @@ func (p *NginxProvisioner) configureNginxPlus(
 	initCmd = append(initCmd,
 		"--source", "/includes/mgmt.conf",
 		"--destination", "/etc/nginx/main-includes",
-		"--nginx-plus")
+		"--nginx-plus",
+	)
 	spec.Spec.InitContainers[0].Command = initCmd
 
 	// Add NGINX Plus volumes and volume mounts
@@ -983,10 +982,6 @@ func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (str
 	image := defaultNginxImagePath
 	tag := p.cfg.GatewayPodConfig.Version
 	pullPolicy := defaultImagePullPolicy
-
-	if graph.WAFEnabledForNginxProxy(nProxyCfg) {
-		image = defaultNginxPlusWafImagePath
-	}
 
 	getImageAndPullPolicy := func(container ngfAPIv1alpha2.ContainerSpec) (string, string, corev1.PullPolicy) {
 		if container.Image != nil {
@@ -1114,7 +1109,12 @@ func (p *NginxProvisioner) buildWAFEnforcerContainer(
 		Image:           image,
 		ImagePullPolicy: defaultImagePullPolicy,
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser: helpers.GetPointer[int64](101),
+			RunAsUser:                helpers.GetPointer[int64](101),
+			AllowPrivilegeEscalation: helpers.GetPointer(false),
+			RunAsNonRoot:             helpers.GetPointer(false),
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"all"},
+			},
 		},
 		Env: []corev1.EnvVar{
 			{Name: "ENFORCER_PORT", Value: "50000"},
