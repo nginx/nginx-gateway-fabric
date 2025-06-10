@@ -779,18 +779,58 @@ func TestBuildGraph(t *testing.T) {
 					EffectiveNginxProxy: np1Effective,
 				},
 				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[0].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[1].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
 					Attached: true,
 					AcceptedHostnames: map[string][]string{
 						CreateGatewayListenerKey(
 							client.ObjectKeyFromObject(gw1.Source),
 							"listener-443-2",
 						): {"fizz.example.org"},
+					},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[2].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					Attached: true,
+					AcceptedHostnames: map[string][]string{
 						CreateGatewayListenerKey(
 							client.ObjectKeyFromObject(gw1.Source),
 							"listener-8443",
 						): {"fizz.example.org"},
 					},
 				},
+				SectionName: &gw1.Source.Spec.Listeners[3].Name,
 			},
 		},
 		Spec: L4RouteSpec{
@@ -823,8 +863,48 @@ func TestBuildGraph(t *testing.T) {
 				Attachment: &ParentRefAttachmentStatus{
 					Attached:          false,
 					AcceptedHostnames: map[string][]string{},
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[0].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[1].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					Attached:          false,
+					AcceptedHostnames: map[string][]string{},
 					FailedConditions:  []conditions.Condition{conditions.NewRouteHostnameConflict()},
 				},
+				SectionName: &gw1.Source.Spec.Listeners[2].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					Attached:          false,
+					AcceptedHostnames: map[string][]string{},
+					FailedConditions:  []conditions.Condition{conditions.NewRouteHostnameConflict()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[3].Name,
 			},
 		},
 		Spec: L4RouteSpec{

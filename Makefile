@@ -35,7 +35,7 @@ CONTROLLER_TOOLS_VERSION = v0.18.0
 # renovate: datasource=docker depName=node
 NODE_VERSION = 22
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
-CHART_TESTING_VERSION = v3.12.0
+CHART_TESTING_VERSION = v3.13.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
 HELM_SCHEMA_VERSION = 0.18.1
 

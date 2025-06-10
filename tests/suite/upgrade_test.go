@@ -92,7 +92,6 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 	})
 
 	It("upgrades NGF with zero downtime", func() {
-		Skip("Skipping test until version 2.1.0 since 2.0.0 is a breaking change")
 		nginxImage := *nginxImageRepository
 		if *plusEnabled {
 			nginxImage = *nginxPlusImageRepository

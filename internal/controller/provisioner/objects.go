@@ -463,8 +463,11 @@ func buildNginxService(
 			Ports:                 servicePorts,
 			ExternalTrafficPolicy: servicePolicy,
 			Selector:              selectorLabels,
+			IPFamilyPolicy:        helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
 		},
 	}
+
+	setIPFamily(nProxyCfg, svc)
 
 	if serviceCfg.LoadBalancerIP != nil {
 		svc.Spec.LoadBalancerIP = *serviceCfg.LoadBalancerIP
@@ -477,6 +480,17 @@ func buildNginxService(
 	}
 
 	return svc
+}
+
+func setIPFamily(nProxyCfg *graph.EffectiveNginxProxy, svc *corev1.Service) {
+	if nProxyCfg != nil && nProxyCfg.IPFamily != nil && *nProxyCfg.IPFamily != ngfAPIv1alpha2.Dual {
+		svc.Spec.IPFamilyPolicy = helpers.GetPointer(corev1.IPFamilyPolicySingleStack)
+		if *nProxyCfg.IPFamily == ngfAPIv1alpha2.IPv4 {
+			svc.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv4Protocol}
+		} else {
+			svc.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv6Protocol}
+		}
+	}
 }
 
 func (p *NginxProvisioner) buildNginxDeployment(

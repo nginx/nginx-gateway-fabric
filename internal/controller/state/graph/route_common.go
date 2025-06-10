@@ -277,13 +277,22 @@ func buildSectionNameRefs(
 	routeNamespace string,
 	gws map[types.NamespacedName]*Gateway,
 ) ([]ParentRef, error) {
-	sectionNameRefs := make([]ParentRef, 0, len(parentRefs))
-
 	type key struct {
 		gwNsName    types.NamespacedName
 		sectionName string
 	}
 	uniqueSectionsPerGateway := make(map[key]struct{})
+
+	sectionNameRefs := make([]ParentRef, 0, len(parentRefs))
+
+	checkUniqueSections := func(key key) error {
+		if _, exist := uniqueSectionsPerGateway[key]; exist {
+			return fmt.Errorf("duplicate section name %q for Gateway %s", key.sectionName, key.gwNsName.String())
+		}
+
+		uniqueSectionsPerGateway[key] = struct{}{}
+		return nil
+	}
 
 	for i, p := range parentRefs {
 		gw := findGatewayForParentRef(p, routeNamespace, gws)
@@ -291,21 +300,38 @@ func buildSectionNameRefs(
 			continue
 		}
 
-		var sectionName string
-		if p.SectionName != nil {
-			sectionName = string(*p.SectionName)
-		}
-
 		gwNsName := client.ObjectKeyFromObject(gw.Source)
 		k := key{
-			gwNsName:    gwNsName,
-			sectionName: sectionName,
+			gwNsName: gwNsName,
 		}
 
-		if _, exist := uniqueSectionsPerGateway[k]; exist {
-			return nil, fmt.Errorf("duplicate section name %q for Gateway %s", sectionName, gwNsName.String())
+		// If there is no section name, we create ParentRefs for each listener in the gateway
+		if p.SectionName == nil {
+			for _, l := range gw.Listeners {
+				k.sectionName = string(l.Source.Name)
+
+				if err := checkUniqueSections(k); err != nil {
+					return nil, err
+				}
+
+				sectionNameRefs = append(sectionNameRefs, ParentRef{
+					// if the ParentRefs we create are for each listener in the same gateway, we keep the
+					// parentRefIndex the same so when we look at a route's parentRef's we can see
+					// if the parentRef is a unique parentRef or one we created internally
+					Idx:         i,
+					Gateway:     CreateParentRefGateway(gw),
+					SectionName: &l.Source.Name,
+					Port:        p.Port,
+				})
+			}
+
+			continue
 		}
-		uniqueSectionsPerGateway[k] = struct{}{}
+
+		k.sectionName = string(*p.SectionName)
+		if err := checkUniqueSections(k); err != nil {
+			return nil, err
+		}
 
 		sectionNameRefs = append(sectionNameRefs, ParentRef{
 			Idx:         i,

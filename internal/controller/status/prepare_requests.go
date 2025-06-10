@@ -95,6 +95,41 @@ func PrepareRouteRequests(
 	return reqs
 }
 
+// removeDuplicateIndexParentRefs removes duplicate ParentRefs by Idx, keeping the first occurrence.
+// If an Idx is duplicated, the SectionName for the stored ParentRef is nil.
+func removeDuplicateIndexParentRefs(parentRefs []graph.ParentRef) []graph.ParentRef {
+	idxToParentRef := make(map[int][]graph.ParentRef)
+	for _, ref := range parentRefs {
+		idxToParentRef[ref.Idx] = append(idxToParentRef[ref.Idx], ref)
+	}
+
+	results := make([]graph.ParentRef, len(idxToParentRef))
+
+	for idx, refs := range idxToParentRef {
+		if len(refs) == 1 {
+			results[idx] = refs[0]
+			continue
+		}
+
+		winningParentRef := graph.ParentRef{
+			Idx:        idx,
+			Gateway:    refs[0].Gateway,
+			Attachment: refs[0].Attachment,
+		}
+
+		for _, ref := range refs {
+			if ref.Attachment.Attached {
+				if len(ref.Attachment.FailedConditions) == 0 || winningParentRef.Attachment == nil {
+					winningParentRef.Attachment = ref.Attachment
+				}
+			}
+		}
+		results[idx] = winningParentRef
+	}
+
+	return results
+}
+
 func prepareRouteStatus(
 	gatewayCtlrName string,
 	parentRefs []graph.ParentRef,
@@ -103,11 +138,17 @@ func prepareRouteStatus(
 	transitionTime metav1.Time,
 	srcGeneration int64,
 ) v1.RouteStatus {
-	parents := make([]v1.RouteParentStatus, 0, len(parentRefs))
+	// If a route did not specify a sectionName in its parentRefs section, it will attempt to attach to all available
+	// listeners. In this case, parentRefs will be created and attached to the route for each attachable listener.
+	// These parentRefs will all have the same Idx, and in order to not duplicate route statuses for the same Gateway,
+	// we need to remove these duplicates. Additionally, we remove the sectionName.
+	processedParentRefs := removeDuplicateIndexParentRefs(parentRefs)
+
+	parents := make([]v1.RouteParentStatus, 0, len(processedParentRefs))
 
 	defaultConds := conditions.NewDefaultRouteConditions()
 
-	for _, ref := range parentRefs {
+	for _, ref := range processedParentRefs {
 		failedAttachmentCondCount := 0
 		if ref.Attachment != nil {
 			failedAttachmentCondCount = len(ref.Attachment.FailedConditions)

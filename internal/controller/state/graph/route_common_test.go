@@ -25,6 +25,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 
 	gwNsName1 := types.NamespacedName{Namespace: routeNamespace, Name: "gateway-1"}
 	gwNsName2 := types.NamespacedName{Namespace: routeNamespace, Name: "gateway-2"}
+	gwNsName3 := types.NamespacedName{Namespace: routeNamespace, Name: "gateway-3"}
 
 	parentRefs := []gatewayv1.ParentReference{
 		{
@@ -51,6 +52,10 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			Name:        gatewayv1.ObjectName("some-other-gateway"),
 			SectionName: helpers.GetPointer[gatewayv1.SectionName]("same-name"),
 		},
+		{
+			Name:        gatewayv1.ObjectName(gwNsName3.Name),
+			SectionName: nil,
+		},
 	}
 
 	gws := map[types.NamespacedName]*Gateway{
@@ -67,6 +72,26 @@ func TestBuildSectionNameRefs(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      gwNsName2.Name,
 					Namespace: gwNsName2.Namespace,
+				},
+			},
+		},
+		gwNsName3: {
+			Listeners: []*Listener{
+				{
+					Source: gatewayv1.Listener{
+						Name: "http",
+					},
+				},
+				{
+					Source: gatewayv1.Listener{
+						Name: "https",
+					},
+				},
+			},
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      gwNsName3.Name,
+					Namespace: gwNsName3.Namespace,
 				},
 			},
 		},
@@ -92,6 +117,16 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			Idx:         4,
 			Gateway:     CreateParentRefGateway(gws[gwNsName2]),
 			SectionName: parentRefs[4].SectionName,
+		},
+		{
+			Idx:         6,
+			Gateway:     CreateParentRefGateway(gws[gwNsName3]),
+			SectionName: helpers.GetPointer[gatewayv1.SectionName]("http"),
+		},
+		{
+			Idx:         6,
+			Gateway:     CreateParentRefGateway(gws[gwNsName3]),
+			SectionName: helpers.GetPointer[gatewayv1.SectionName]("https"),
 		},
 	}
 
@@ -124,16 +159,16 @@ func TestBuildSectionNameRefs(t *testing.T) {
 		{
 			parentRefs: []gatewayv1.ParentReference{
 				{
-					Name:        gatewayv1.ObjectName(gwNsName1.Name),
-					SectionName: nil,
+					Name:        gatewayv1.ObjectName(gwNsName3.Name),
+					SectionName: helpers.GetPointer[gatewayv1.SectionName]("http"),
 				},
 				{
-					Name:        gatewayv1.ObjectName(gwNsName1.Name),
+					Name:        gatewayv1.ObjectName(gwNsName3.Name),
 					SectionName: nil,
 				},
 			},
-			name:          "nil sectionNames",
-			expectedError: errors.New("duplicate section name \"\" for Gateway test/gateway-1"),
+			name:          "duplicate sectionNames when one parentRef has no sectionName",
+			expectedError: errors.New("duplicate section name \"http\" for Gateway test/gateway-3"),
 		},
 	}
 

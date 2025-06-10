@@ -121,7 +121,7 @@ This will build the docker images `nginx-gateway-fabric:<your-user>` and `nginx-
 
 > Note: You will need a valid NGINX Plus license certificate and key named `nginx-repo.crt` and `nginx-repo.key` in the
 > root of this repo to build the NGINX Plus image.
-> You will also need a valid NGINX Plus JSON Web Token (JWT) to deploy NGF with NGINX Plus. That JWT should be stored in the `license.jwt` file in the root of the `nginx-gateway-fabric/` directory. See the [documentation](https://docs.nginx.com/nginx-gateway-fabric/installation/nginx-plus-jwt/) for instructions on how to download and set up the JWT.
+> You will also need a valid NGINX Plus JSON Web Token (JWT) to deploy NGF with NGINX Plus. That JWT should be stored in the `license.jwt` file in the root of the `nginx-gateway-fabric/` directory. See the [documentation](https://docs.nginx.com/nginx-gateway-fabric/install/nginx-plus/) for instructions on how to download and set up the JWT.
 > Additionally, you need to set the NGINX Plus usage endpoint in your environment. For development and testing, export `PLUS_USAGE_ENDPOINT=<N1 staging endpoint>`.
 
 To build the NGINX Gateway Fabric and NGINX Plus container images from source run the following make command:
