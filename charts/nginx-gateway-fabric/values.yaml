@@ -31,6 +31,11 @@ nginxGateway:
   # -- Set of custom annotations for GatewayClass objects.
   gatewayClassAnnotations: {}
 
+  # Extra containers to be added to the NGINX Gateway Fabric control plane pod.
+  # Use this to add additional containers to the control plane pod, such as sidecars.
+  # Note that these containers will not have access to the NGINX Gateway Fabric control plane's service account.
+  extraContainers: []
+
   # @schema
   # pattern: ^gateway.nginx.org/.*
   # required: true
