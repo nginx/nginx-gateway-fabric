@@ -31,11 +31,6 @@ nginxGateway:
   # -- Set of custom annotations for GatewayClass objects.
   gatewayClassAnnotations: {}
 
-  # Extra containers to be added to the NGINX Gateway Fabric control plane pod.
-  # Use this to add additional containers to the control plane pod, such as sidecars.
-  # Note that these containers will not have access to the NGINX Gateway Fabric control plane's service account.
-  extraContainers: []
-
   # @schema
   # pattern: ^gateway.nginx.org/.*
   # required: true
@@ -410,6 +405,11 @@ nginx:
 
     # -- extraVolumeMounts are the additional volume mounts for the NGINX container.
     # extraVolumeMounts: []
+
+  # Extra containers to be added to the NGINX Gateway Fabric control plane pod.
+  # Use this to add additional containers to the control plane pod, such as sidecars.
+  # Note that these containers will not have access to the NGINX Gateway Fabric control plane's service account.
+  extraContainers: []
 
   # -- The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this
   # instance of NGINX Gateway Fabric.
