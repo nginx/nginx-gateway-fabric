@@ -383,33 +383,15 @@ type KubernetesSpec struct {
 
 // Deployment is the configuration for the NGINX Deployment.
 type DeploymentSpec struct {
-	// Number of desired Pods.
-	//
-	// +optional
-	Replicas *int32 `json:"replicas,omitempty"`
-
-	// Pod defines Pod-specific fields.
-	//
-	// +optional
-	Pod PodSpec `json:"pod"`
-
-	// Container defines container fields for the NGINX container.
-	//
-	// +optional
 	Container ContainerSpec `json:"container"`
+	Replicas  *int32        `json:"replicas,omitempty"`
+	Pod       PodSpec       `json:"pod"`
 }
 
 // DaemonSet is the configuration for the NGINX DaemonSet.
 type DaemonSetSpec struct {
-	// Pod defines Pod-specific fields.
-	//
-	// +optional
-	Pod PodSpec `json:"pod"`
-
-	// Container defines container fields for the NGINX container.
-	//
-	// +optional
 	Container ContainerSpec `json:"container"`
+	Pod       PodSpec       `json:"pod"`
 }
 
 // PodSpec defines Pod-specific fields.
@@ -457,32 +439,12 @@ type PodSpec struct {
 
 // ContainerSpec defines container fields for the NGINX container.
 type ContainerSpec struct {
-	// Debug enables debugging for NGINX by using the nginx-debug binary.
-	//
-	// +optional
-	Debug *bool `json:"debug,omitempty"`
-
-	// Image is the NGINX image to use.
-	//
-	// +optional
-	Image *Image `json:"image,omitempty"`
-
-	// Resources describes the compute resource requirements.
-	//
-	// +optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// Lifecycle describes actions that the management system should take in response to container lifecycle
-	// events. For the PostStart and PreStop lifecycle handlers, management of the container blocks
-	// until the action is complete, unless the container process fails, in which case the handler is aborted.
-	//
-	// +optional
-	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
-
-	// VolumeMounts describe the mounting of Volumes within a container.
-	//
-	// +optional
-	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+	Debug        *bool                        `json:"debug,omitempty"`
+	Image        *Image                       `json:"image,omitempty"`
+	Resources    *corev1.ResourceRequirements `json:"resources,omitempty"`
+	Lifecycle    *corev1.Lifecycle            `json:"lifecycle,omitempty"`
+	HostPort     *HostPort                    `json:"hostPort,omitempty"`
+	VolumeMounts []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 }
 
 // Image is the NGINX image to use.
@@ -607,4 +569,16 @@ type NodePort struct {
 	// kubebuilder:validation:Minimum=1
 	// kubebuilder:validation:Maximum=65535
 	ListenerPort int32 `json:"listenerPort"`
+}
+
+type HostPort struct {
+	// Whether to enable hostPort feature
+	// If not specified, or set to false, hostPort will not be enabled.
+	// +optional
+	Enable bool `json:"enable,omitempty"`
+
+	// Number of port to expose on the host.
+	// kubebuilder:validation:Minimum=1
+	// kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port"`
 }

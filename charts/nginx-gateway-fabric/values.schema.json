@@ -276,6 +276,32 @@
         },
         "container": {
           "description": "The container configuration for the NGINX container. This is applied globally to all Gateways managed by this\ninstance of NGINX Gateway Fabric.",
+          "properties": {
+            "hostPort": {
+              "description": "The hostPort configuration",
+              "properties": {
+                "enable": {
+                  "default": false,
+                  "description": "Enables hostPort.",
+                  "required": [],
+                  "title": "enable",
+                  "type": "boolean"
+                },
+                "port": {
+                  "default": 443,
+                  "description": "The port",
+                  "maximum": 65535,
+                  "minimum": 1,
+                  "required": [],
+                  "title": "port",
+                  "type": "integer"
+                }
+              },
+              "required": [],
+              "title": "hostPort",
+              "type": "object"
+            }
+          },
           "required": [],
           "title": "container",
           "type": "object"
@@ -286,30 +312,6 @@
           "required": [],
           "title": "debug",
           "type": "boolean"
-        },
-        "hostPort": {
-          "description": "The hostPort configuration",
-          "properties": {
-            "enable": {
-              "default": false,
-              "description": "Enables hostPort.",
-              "required": [],
-              "title": "enable",
-              "type": "boolean"
-            },
-            "port": {
-              "default": 443,
-              "description": "The port",
-              "maximum": 65535,
-              "minimum": 1,
-              "required": [],
-              "title": "port",
-              "type": "integer"
-            }
-          },
-          "required": [],
-          "title": "hostPort",
-          "type": "object"
         },
         "image": {
           "properties": {

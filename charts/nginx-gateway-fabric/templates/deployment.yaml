@@ -135,9 +135,6 @@ spec:
         ports:
         - name: agent-grpc
           containerPort: 8443
-          {{- if .Values.nginx.hostPort.enable }}
-          hostPort: {{ .Values.nginx.hostPort.port }}
-          {{- end }}
         {{- if .Values.nginxGateway.metrics.enable }}
         - name: metrics
           containerPort: {{ .Values.nginxGateway.metrics.port }}
