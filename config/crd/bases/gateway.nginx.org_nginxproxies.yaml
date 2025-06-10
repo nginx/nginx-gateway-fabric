@@ -337,6 +337,19 @@ spec:
                                   StopSignal can only be set for Pods with a non-empty .spec.os.name
                                 type: string
                             type: object
+                          hostPort:
+                            description: |-
+                              Number of port to expose on the host.
+                              If specified, this must be a valid port number, 0 < x < 65536.
+                            properties:
+                              enable:
+                                description: |-
+                                  Whether to enable hostPort
+                                type: boolean
+                              port:
+                                description: |-
+                                  Port number
+                                type: integer
                           resources:
                             description: Resources describes the compute resource
                               requirements.
