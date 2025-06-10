@@ -7,7 +7,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 )
 
-// +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:resource:categories=nginx-gateway-fabric,scope=Namespaced
