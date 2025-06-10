@@ -33,8 +33,9 @@ const (
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
 
-	defaultNginxImagePath  = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
-	defaultImagePullPolicy = corev1.PullIfNotPresent
+	defaultNginxImagePath     = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
+	defaultNginxPlusImagePath = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
+	defaultImagePullPolicy    = corev1.PullIfNotPresent
 
 	// WAF container defaults.
 	defaultWAFEnforcerImagePath  = "private-registry.nginx.com/nap/waf-enforcer"
@@ -983,6 +984,10 @@ func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (str
 	tag := p.cfg.GatewayPodConfig.Version
 	pullPolicy := defaultImagePullPolicy
 
+	if p.cfg.Plus {
+		image = defaultNginxPlusImagePath
+	}
+
 	getImageAndPullPolicy := func(container ngfAPIv1alpha2.ContainerSpec) (string, string, corev1.PullPolicy) {
 		if container.Image != nil {
 			if container.Image.Repository != nil {
@@ -1111,7 +1116,8 @@ func (p *NginxProvisioner) buildWAFEnforcerContainer(
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser:                helpers.GetPointer[int64](101),
 			AllowPrivilegeEscalation: helpers.GetPointer(false),
-			RunAsNonRoot:             helpers.GetPointer(false),
+			RunAsNonRoot:             helpers.GetPointer(true),
+			ReadOnlyRootFilesystem:   helpers.GetPointer(true),
 			Capabilities: &corev1.Capabilities{
 				Drop: []corev1.Capability{"all"},
 			},
@@ -1160,6 +1166,7 @@ func (p *NginxProvisioner) buildWAFConfigManagerContainer(
 			AllowPrivilegeEscalation: helpers.GetPointer(false),
 			RunAsNonRoot:             helpers.GetPointer(false),
 			RunAsUser:                helpers.GetPointer[int64](101),
+			ReadOnlyRootFilesystem:   helpers.GetPointer(true),
 			Capabilities: &corev1.Capabilities{
 				Drop: []corev1.Capability{"all"},
 			},

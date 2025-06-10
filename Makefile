@@ -109,7 +109,7 @@ build-nginx-plus-image-with-nap-waf: check-for-docker ## Build the custom nginx 
 	@if [ $(GOARCH) = "arm64" ]; then \
 		echo "\033[0;31mIMPORTANT:\033[0m The nginx-plus-waf image cannot be built for arm64 architecture and will be built for amd64."; \
 	fi
-	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) -f $(SELF_DIR)build/Dockerfile.nginxplus -t $(strip $(NGINX_PLU_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) -f $(SELF_DIR)build/Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: check-for-docker
 check-for-docker: ## Check if Docker is installed
