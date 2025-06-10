@@ -397,6 +397,12 @@ type DeploymentSpec struct {
 	//
 	// +optional
 	Container ContainerSpec `json:"container"`
+
+	// ExtraContainers defines additional containers to be added to the NGINX Pod.
+	// Uses upstream corev1.Container to allow arbitrary sidecars.
+	//
+	// +optional
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 }
 
 // DaemonSet is the configuration for the NGINX DaemonSet.
@@ -410,6 +416,11 @@ type DaemonSetSpec struct {
 	//
 	// +optional
 	Container ContainerSpec `json:"container"`
+	// ExtraContainers defines additional containers to be added to the NGINX Pod.
+	// Uses upstream corev1.Container to allow arbitrary sidecars.
+	//
+	// +optional
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 }
 
 // PodSpec defines Pod-specific fields.

@@ -754,9 +754,11 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		if nProxyCfg.Kubernetes.Deployment != nil {
 			podSpec = &nProxyCfg.Kubernetes.Deployment.Pod
 			containerSpec = &nProxyCfg.Kubernetes.Deployment.Container
+			// extraContainers = &nProxyCfg.Kubernetes.Deployment.ExtraContainers
 		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
 			podSpec = &nProxyCfg.Kubernetes.DaemonSet.Pod
 			containerSpec = &nProxyCfg.Kubernetes.DaemonSet.Container
+			// extraContainers = &nProxyCfg.Kubernetes.Deployment.ExtraContainers
 		}
 
 		if podSpec != nil {
@@ -781,6 +783,13 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 				container.Args = append(container.Args, "debug")
 			}
 			spec.Spec.Containers[0] = container
+		}
+
+		// Insert extra containers if specified
+		if nProxyCfg.Kubernetes.Deployment != nil {
+			spec.Spec.Containers = append(spec.Spec.Containers, nProxyCfg.Kubernetes.Deployment.ExtraContainers...)
+		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
+			spec.Spec.Containers = append(spec.Spec.Containers, nProxyCfg.Kubernetes.DaemonSet.ExtraContainers...)
 		}
 	}
 

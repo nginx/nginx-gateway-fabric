@@ -671,6 +671,26 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 						},
 					},
 				},
+				ExtraContainers: []corev1.Container{
+					{
+						Image:           "hello-wordl:linux",
+						ImagePullPolicy: corev1.PullAlways,
+						Resources: corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.Quantity{Format: "100m"},
+							},
+						},
+					},
+					{
+						Image:           "hello-wordl:nanoserver-ltsc2025",
+						ImagePullPolicy: corev1.PullAlways,
+						Resources: corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.Quantity{Format: "100m"},
+							},
+						},
+					},
+				},
 			},
 		},
 	}
