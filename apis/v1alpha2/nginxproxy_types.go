@@ -618,7 +618,7 @@ type HostPort struct {
 	// Whether to enable hostPort feature
 	// If not specified, or set to false, hostPort will not be enabled.
 	// +optional
-	Enable bool `json:"enable,omitempty"`
+	Enable bool `json:"enable"`
 
 	// Number of port to expose on the host.
 	// kubebuilder:validation:Minimum=1
