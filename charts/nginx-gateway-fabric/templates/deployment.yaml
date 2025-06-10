@@ -165,9 +165,6 @@ spec:
         {{- with .Values.nginxGateway.extraVolumeMounts -}}
         {{ toYaml . | nindent 8 }}
         {{- end }}
-      {{- if .Values.nginxGateway.extraContainers }}
-      {{- toYaml .Values.nginxGateway.extraContainers | nindent 6 }}
-      {{- end }}              
       {{- if .Values.nginxGateway.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- toYaml .Values.nginxGateway.topologySpreadConstraints | nindent 8 }}

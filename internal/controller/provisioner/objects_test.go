@@ -673,7 +673,7 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 				},
 				ExtraContainers: []corev1.Container{
 					{
-						Image:           "hello-wordl:linux",
+						Image:           "hello-world:linux",
 						ImagePullPolicy: corev1.PullAlways,
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
@@ -682,7 +682,7 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 						},
 					},
 					{
-						Image:           "hello-wordl:nanoserver-ltsc2025",
+						Image:           "hello-world:nanoserver-ltsc2025",
 						ImagePullPolicy: corev1.PullAlways,
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
@@ -721,8 +721,19 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 	g.Expect(container.ImagePullPolicy).To(Equal(corev1.PullAlways))
 	g.Expect(container.Resources.Limits).To(HaveKey(corev1.ResourceCPU))
 	g.Expect(container.Resources.Limits[corev1.ResourceCPU].Format).To(Equal(resource.Format("100m")))
-}
 
+	extraContainerOne := template.Spec.Containers[1]
+	g.Expect(extraContainerOne.Image).To(Equal("hello-world:linux"))
+	g.Expect(extraContainerOne.ImagePullPolicy).To(Equal(corev1.PullAlways))
+	g.Expect(extraContainerOne.Resources.Limits).To(HaveKey(corev1.ResourceCPU))
+	g.Expect(extraContainerOne.Resources.Limits[corev1.ResourceCPU].Format).To(Equal(resource.Format("100m")))
+
+	extraContainerTwo := template.Spec.Containers[2]
+	g.Expect(extraContainerTwo.Image).To(Equal("hello-world:nanoserver-ltsc2025"))
+	g.Expect(extraContainerTwo.ImagePullPolicy).To(Equal(corev1.PullAlways))
+	g.Expect(extraContainerTwo.Resources.Limits).To(HaveKey(corev1.ResourceCPU))
+	g.Expect(extraContainerTwo.Resources.Limits[corev1.ResourceCPU].Format).To(Equal(resource.Format("100m")))
+}
 func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
