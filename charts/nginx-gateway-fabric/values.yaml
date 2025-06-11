@@ -479,6 +479,18 @@ certGenerator:
   # -- Overwrite existing TLS Secrets on startup.
   overwrite: false
 
+  # -- Tolerations for the cert-generator pod.
+  tolerations: []
+
+  # -- The nodeSelector of the cert-generator pod.
+  nodeSelector: {}
+
+  # -- The affinity of the cert-generator pod.
+  affinity: {}
+
+  # -- The topology spread constraints for the cert-generator pod.
+  topologySpreadConstraints: []
+
 # -- A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.
 gateways: []
 
