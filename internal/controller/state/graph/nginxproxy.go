@@ -123,6 +123,11 @@ func MetricsEnabledForNginxProxy(np *EffectiveNginxProxy) (*int32, bool) {
 	return nil, true
 }
 
+// WAFEnabledForNginxProxy returns whether WAF is enabled for the given NginxProxy configuration.
+func WAFEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
+	return np != nil && np.WAF != nil && *np.WAF == ngfAPIv1alpha2.WAFEnabled
+}
+
 func processNginxProxies(
 	nps map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy,
 	validator validation.GenericValidator,

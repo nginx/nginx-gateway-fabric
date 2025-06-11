@@ -26,6 +26,10 @@ spec:
         {{- if .Values.nginx.debug }}
         debug: {{ .Values.nginx.debug }}
         {{- end }}
+      {{- if and .Values.nginx.wafContainers }}
+      wafContainers:
+        {{- toYaml .Values.nginx.wafContainers | nindent 8 }}
+      {{- end }}
     {{- end }}
     {{- if eq .Values.nginx.kind "daemonSet" }}
     daemonSet:
@@ -42,6 +46,10 @@ spec:
         {{- if .Values.nginx.debug }}
         debug: {{ .Values.nginx.debug }}
         {{- end }}
+      {{- if and .Values.nginx.wafContainers }}
+      wafContainers:
+        {{- toYaml .Values.nginx.wafContainers | nindent 8 }}
+      {{- end }}
     {{- end }}
     {{- if .Values.nginx.service }}
     service:

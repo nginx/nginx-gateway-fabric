@@ -71,11 +71,34 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
+	// WAF enables NGINX App Protect WAF functionality.
+	// When enabled, NGINX Gateway Fabric will deploy additional WAF containers
+	// (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
+	// Default is "disabled".
+	//
+	// +optional
+	// +kubebuilder:default:=disabled
+	WAF *WAFState `json:"waf,omitempty"`
 	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
 	//
 	// +optional
 	Kubernetes *KubernetesSpec `json:"kubernetes,omitempty"`
 }
+
+// WAFState defines the state of WAF functionality.
+//
+// +kubebuilder:validation:Enum=enabled;disabled
+type WAFState string
+
+const (
+	// WAFEnabled enables NGINX App Protect WAF functionality.
+	// This will deploy additional containers for WAF enforcement and configuration management.
+	WAFEnabled WAFState = "enabled"
+
+	// WAFDisabled disables NGINX App Protect WAF functionality.
+	// Only the standard NGINX container will be deployed.
+	WAFDisabled WAFState = "disabled"
+)
 
 // Telemetry specifies the OpenTelemetry configuration.
 type Telemetry struct {
@@ -387,6 +410,12 @@ type DeploymentSpec struct {
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 
+	// WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
+	// These containers are only deployed when WAF is enabled in the NginxProxy spec.
+	//
+	// +optional
+	WAFContainers *WAFContainerSpec `json:"wafContainers,omitempty"`
+
 	// Pod defines Pod-specific fields.
 	//
 	// +optional
@@ -400,6 +429,12 @@ type DeploymentSpec struct {
 
 // DaemonSet is the configuration for the NGINX DaemonSet.
 type DaemonSetSpec struct {
+	// WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
+	// These containers are only deployed when WAF is enabled in the NginxProxy spec.
+	//
+	// +optional
+	WAFContainers *WAFContainerSpec `json:"wafContainers,omitempty"`
+
 	// Pod defines Pod-specific fields.
 	//
 	// +optional
@@ -479,6 +514,40 @@ type ContainerSpec struct {
 	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
 
 	// VolumeMounts describe the mounting of Volumes within a container.
+	//
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+}
+
+// WAFContainerSpec defines the container specifications for NGINX App Protect WAF v5.
+// NAP v5 requires two additional containers: waf-enforcer and waf-config-mgr.
+type WAFContainerSpec struct {
+	// Enforcer defines the configuration for the WAF enforcer container.
+	// This container performs the actual WAF enforcement and policy application.
+	//
+	// +optional
+	Enforcer *WAFContainerConfig `json:"enforcer,omitempty"`
+
+	// ConfigManager defines the configuration for the WAF configuration manager container.
+	// This container manages policy configuration and communication with the enforcer.
+	//
+	// +optional
+	ConfigManager *WAFContainerConfig `json:"configManager,omitempty"`
+}
+
+// WAFContainerConfig defines the configuration for a single WAF container.
+type WAFContainerConfig struct {
+	// Image is the container image to use for this WAF container.
+	//
+	// +optional
+	Image *Image `json:"image,omitempty"`
+
+	// Resources describes the compute resource requirements for this WAF container.
+	//
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// VolumeMounts describe the mounting of Volumes within the WAF container.
 	//
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
