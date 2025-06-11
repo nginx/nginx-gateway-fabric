@@ -4,6 +4,35 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.0.1
+
+_June 11, 2025_
+
+Bug Fixes:
+
+- Set proper IP family policy on NGINX LB Service. [3475](https://github.com/nginx/nginx-gateway-fabric/pull/3475).
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.0.1.
+- Add support to configure `cert-generator` job pod placement. [3493](https://github.com/nginx/nginx-gateway-fabric/pull/3493). Thanks to [Baburciu](https://github.com/baburciu).
+- Add support for configuring the `ttlSecondsAfterFinished` field for the cert-generator job. The default is set to 30s. [3487](https://github.com/nginx/nginx-gateway-fabric/pull/3487). Thanks to [Ab-andresc](https://github.com/ab-andresc).
+- Adds support for all additional labels for the control plane service. [3499](https://github.com/nginx/nginx-gateway-fabric/pull/3499). Thanks to [MichasHL](https://github.com/michasHL).
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.28.0`
+- NGINX Plus version: `R34`
+- NGINX Agent version: `v3.0.1`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.0.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.0.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.0.1`
+
 ## Release 2.0.0
 
 _June 5, 2025_
