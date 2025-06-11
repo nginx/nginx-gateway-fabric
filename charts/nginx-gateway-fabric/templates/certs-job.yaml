@@ -155,7 +155,7 @@ spec:
         runAsNonRoot: true
       {{- if .Values.certGenerator.topologySpreadConstraints }}
       topologySpreadConstraints:
-        {{- toYaml .Values.certGenerator.topologySpreadConstraints | nindent 8 }}
+      {{- toYaml .Values.certGenerator.topologySpreadConstraints | nindent 6 }}
       {{- end }}
       {{- if .Values.certGenerator.affinity }}
       affinity:
