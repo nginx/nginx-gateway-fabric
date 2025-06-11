@@ -10,7 +10,7 @@ This proposal describes the integration of NGINX App Protect (NAP) WAF v5 into N
 ## Goals
 
 - Extend NginxProxy resource to enable NAP WAF for GatewayClass/Gateway with multi-container orchestration
-- Design WafPolicy custom resource using inherited policy attachment for hierarchical WAF configuration
+- Design WAFPolicy custom resource using inherited policy attachment for hierarchical WAF configuration
 - Define deployment workflows that accommodate NAP v5's external policy compilation requirements
 - Provide secure and automated policy distribution mechanisms from external sources
 - Support GitOps workflows with static policy file references and automatic change detection
@@ -61,10 +61,10 @@ A key design principle is seamless GitOps workflow support through automatic cha
 
 The design uses **inherited policy attachment** following Gateway API best practices:
 
-- **Single target per policy**: A WafPolicy targets a single resource (either a Gateway or a Route) following [gep-2649 guidelines](https://gateway-api.sigs.k8s.io/geps/gep-2649/#policy-targetref-api).
+- **Single target per policy**: A WAFPolicy targets a single resource (either a Gateway or a Route) following [gep-2649 guidelines](https://gateway-api.sigs.k8s.io/geps/gep-2649/#policy-targetref-api).
 - **Gateway-level policies** provide default protection for all routes attached to the Gateway
 - **Route-level policies** can override Gateway-level policies for specific routes requiring different protection
-  - NB: Route-level WafPolicies always override Gateway-level WafPolicies for routes they explicitly target. However, it is not possible to completely disable WAF protection for a specific Route when a Gateway-level WafPolicy is active. Instead, the Route-level policy configuration entirely replaces the Gateway-level policy for that route.
+  - NB: Route-level WafPolicies always override Gateway-level WafPolicies for routes they explicitly target. However, it is not possible to completely disable WAF protection for a specific Route when a Gateway-level WAFPolicy is active. Instead, the Route-level policy configuration entirely replaces the Gateway-level policy for that route.
 - **Policy precedence**: More specific policies (Route-level) override less specific policies (Gateway-level)
 - **Automatic inheritance**: New routes automatically receive Gateway-level protection without explicit configuration
 
@@ -108,8 +108,8 @@ graph TB
 
             %% Custom Resources (all in app namespace)
             NginxProxy[NginxProxy<br/>waf.enabled=true]
-            GatewayWafPolicy[WafPolicy<br/>Gateway-level Protection]
-            RouteWafPolicy[WafPolicy<br/>Route-level Override]
+            GatewayWAFPolicy[WAFPolicy<br/>Gateway-level Protection]
+            RouteWAFPolicy[WAFPolicy<br/>Route-level Override]
             Secret[Secret<br/>Store Credentials<br/>Optional - Fallback Auth Only]
 
             %% NGINX Data Plane (WAF Enabled)
@@ -136,20 +136,20 @@ graph TB
     Compiler -->|Publish Bundle| Store
 
     %% Policy Attachment Flow
-    GatewayWafPolicy -.->|Targets & Protects| Gateway
-    RouteWafPolicy -.->|Targets & Overrides| HTTPRoute
+    GatewayWAFPolicy -.->|Targets & Protects| Gateway
+    RouteWAFPolicy -.->|Targets & Overrides| HTTPRoute
     Gateway -->|Inherits Protection| HTTPRoute
     Gateway -->|Inherits Protection| GRPCRoute
 
     %% Configuration Flow
-    Store -.->|Policy Location| GatewayWafPolicy
-    Store -.->|Policy Location| RouteWafPolicy
+    Store -.->|Policy Location| GatewayWAFPolicy
+    Store -.->|Policy Location| RouteWAFPolicy
     NginxProxy -.->|Enables WAF| Gateway
 
     %% Control Plane Operations
     NGFPod -->|Watches Resources| NginxProxy
-    NGFPod -->|Watches Resources| GatewayWafPolicy
-    NGFPod -->|Watches Resources| RouteWafPolicy
+    NGFPod -->|Watches Resources| GatewayWAFPolicy
+    NGFPod -->|Watches Resources| RouteWAFPolicy
     NGFPod -->|Periodic Polling<br/>Checksum Validation| Store
     NGFPod -->|Fetches Policy<br/>Native Cloud Auth| Store
     NGFServiceAccount -.->|Cloud Provider<br/>Authentication| Store
@@ -190,7 +190,7 @@ graph TB
     class NGFServiceAccount cloudAuth
     class Gateway,HTTPRoute,GRPCRoute gateway
     class WafEnforcer,WafConfigMgr,PolicyVol,NginxProxy wafRequired
-    class GatewayWafPolicy,RouteWafPolicy policy
+    class GatewayWAFPolicy,RouteWAFPolicy policy
     class Application app
     class PolicyVol,ConfigVol volume
     class PublicEndpoint endpoint
@@ -202,13 +202,13 @@ This architecture demonstrates the hierarchical policy attachment system where G
 
 **External Policy Management (Blue):** Security teams develop WAF policies using NAP v5 JSON schema, compile them using NAP v5 compiler tools, and publish the compiled policy bundles to accessible storage locations (S3, HTTP servers, MinIO etc).
 
-**Control Plane (Purple):** The NGF Pod in the `nginx-gateway` namespace acts as the centralized control plane, watching for NginxProxy and WafPolicy resources across application namespaces, fetching compiled policies from external storage using appropriate authentication, and distributing policy configurations to NGINX Pods via secure gRPC connections.
+**Control Plane (Purple):** The NGF Pod in the `nginx-gateway` namespace acts as the centralized control plane, watching for NginxProxy and WAFPolicy resources across application namespaces, fetching compiled policies from external storage using appropriate authentication, and distributing policy configurations to NGINX Pods via secure gRPC connections.
 
 **Data Plane (Green/Red):** When WAF is enabled through NginxProxy configuration, each Gateway deploys as a multi-container NGINX Pod containing the main NGINX container with NAP module, plus the required WAF Enforcer and WAF Config Manager containers. These containers communicate through shared ephemeral volumes rather than network calls, maintaining NAP v5's architectural requirements.
 
-**Application Namespace Resources:** All user-facing resources (Gateway, HTTPRoute, GRPCRoute, WafPolicy, NginxProxy, and optional authentication Secret) reside in application namespaces for proper isolation and RBAC management. The Secret is only required when using fallback authentication methods for accessing external policy storage - native cloud authentication (where available) uses annotations on the NGF service account in the nginx-gateway namespace.
+**Application Namespace Resources:** All user-facing resources (Gateway, HTTPRoute, GRPCRoute, WAFPolicy, NginxProxy, and optional authentication Secret) reside in application namespaces for proper isolation and RBAC management. The Secret is only required when using fallback authentication methods for accessing external policy storage - native cloud authentication (where available) uses annotations on the NGF service account in the nginx-gateway namespace.
 
-**Policy Attachment Flow (Orange):** WafPolicy resources use targetRef to attach to Gateways or Routes. Only one resource can be targeted at a time. Gateway-level policies provide inherited protection for all attached HTTPRoutes and GRPCRoutes. Route-level policies can override Gateway-level policies for specific routes requiring different protection levels.
+**Policy Attachment Flow (Orange):** WAFPolicy resources use targetRef to attach to Gateways or Routes. Only one resource can be targeted at a time. Gateway-level policies provide inherited protection for all attached HTTPRoutes and GRPCRoutes. Route-level policies can override Gateway-level policies for specific routes requiring different protection levels.
 
 **Traffic Flow (Yellow/Gold):** Client traffic (HTTP, HTTPS, and gRPC) flows through the public load balancer endpoint to the WAF-protected NGINX container, where NAP v5 applies security policies before forwarding filtered traffic to backend applications.
 
@@ -259,8 +259,8 @@ spec:
 2. **Log Profile Development**: Create custom logging profiles or use built-in profiles (log_all, log_blocked, etc.)
 3. **Compilation**: Use NAP v5 compiler tools to create policy and logging profile bundles
 4. **Distribution**: Publish compiled policies and log profiles to accessible storage (S3, HTTP)
-5. **Configuration**: Create WafPolicy CR with targetRef referencing a Gateway or a Route and configuring security logging
-6. **Automatic Application**: NGF fetches and applies policies when WafPolicy is created or updated, with automatic inheritance. Policies can also be updated by publishing new content to the same configured file path; when polling is enabled, NGF automatically detects and applies changes.
+5. **Configuration**: Create WAFPolicy CR with targetRef referencing a Gateway or a Route and configuring security logging
+6. **Automatic Application**: NGF fetches and applies policies when WAFPolicy is created or updated, with automatic inheritance. Policies can also be updated by publishing new content to the same configured file path; when polling is enabled, NGF automatically detects and applies changes.
 
 **Note**: Policy enforcement mode and behavior are defined within the compiled NAP policy itself. Security logging profiles can be either built-in names or custom compiled bundles.
 
@@ -365,12 +365,12 @@ The design supports hierarchical policy application with clear precedence rules:
 
 **Inheritance Hierarchy:**
 
-- Gateway-level WafPolicy → HTTPRoute (inherited)
-- Gateway-level WafPolicy → GRPCRoute (inherited)
+- Gateway-level WAFPolicy → HTTPRoute (inherited)
+- Gateway-level WAFPolicy → GRPCRoute (inherited)
 
 **Override Precedence (most specific wins):**
 
-- Route-level WafPolicy > Gateway-level WafPolicy
+- Route-level WAFPolicy > Gateway-level WAFPolicy
 
 **Conflict Resolution:**
 
@@ -401,8 +401,8 @@ metadata:
   name: nginx-proxy-waf
   namespace: nginx-gateway
 spec:
-  # WAF policy configuration (extensible design)
-  waf: "Enabled"  # "Enabled" | "Disabled"
+  # WAF deployment configuration
+  waf: "enabled"  # "enabled" | "disabled"
 # configuration tweaks optional, e.g.:
 #   kubernetes:
 #     deployment:
@@ -425,11 +425,11 @@ spec:
 #             tag: "5.6.0"
 ```
 
-### WafPolicy Custom Resource with Policy Attachment
+### WAFPolicy Custom Resource with Policy Attachment
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WafPolicy
+kind: WAFPolicy
 metadata:
   name: gateway-protection-policy
   namespace: applications
@@ -513,7 +513,7 @@ spec:
 ---
 # Route-level override example
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WafPolicy
+kind: WAFPolicy
 metadata:
   name: admin-strict-policy
   namespace: applications
@@ -604,7 +604,7 @@ spec:
     backendRefs:
     - name: admin-service
       port: 8080
-  # Uses admin-strict-policy WafPolicy override via targetRef
+  # Uses admin-strict-policy WAFPolicy override via targetRef
 ```
 
 #### GRPCRoute Integration
@@ -627,7 +627,7 @@ spec:
     backendRefs:
     - name: grpc-service
       port: 9000
-  # WAF protection inherited from Gateway-level WafPolicy
+  # WAF protection inherited from Gateway-level WAFPolicy
 ```
 
 ### Authentication Methods
@@ -651,7 +651,7 @@ For cloud-hosted policy storage, NGF automatically detects and uses native cloud
 **AWS S3 with IAM Roles for Service Accounts (IRSA):**
 
 ```yaml
-# Cluster operator configures service account (no WafPolicy changes needed)
+# Cluster operator configures service account (no WAFPolicy changes needed)
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -660,7 +660,7 @@ metadata:
   annotations:
     eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/NGFPolicyAccessRole"
 
-# WafPolicy uses S3 without explicit credentials
+# WAFPolicy uses S3 without explicit credentials
 # NGF service account in nginx-gateway namespace provides IRSA authentication
 spec:
   policySource:
@@ -707,14 +707,14 @@ data:
 
 #### CRD Label
 
-According to the [Policy and Metaresources GEP](https://gateway-api.sigs.k8s.io/geps/gep-713/), the `WafPolicy` CRD must have the `gateway.networking.k8s.io/policy: inherited` label to specify that it is an inherited policy.
+According to the [Policy and Metaresources GEP](https://gateway-api.sigs.k8s.io/geps/gep-713/), the `WAFPolicy` CRD must have the `gateway.networking.k8s.io/policy: inherited` label to specify that it is an inherited policy.
 This label will help with discoverability and will be used by the planned Gateway API Policy [kubectl plugin](https://gateway-api.sigs.k8s.io/geps/gep-713/#kubectl-plugin-or-command-line-tool).
 
 #### Conditions
 
-According to the [Policy and Metaresources GEP](https://gateway-api.sigs.k8s.io/geps/gep-713/), the `WafPolicy` CRD must include a `status` stanza with a slice of Conditions.
+According to the [Policy and Metaresources GEP](https://gateway-api.sigs.k8s.io/geps/gep-713/), the `WAFPolicy` CRD must include a `status` stanza with a slice of Conditions.
 
-The `Accepted` Condition must be populated on the `WafPolicy` CRD using the reasons defined in the [PolicyCondition API](https://github.com/kubernetes-sigs/gateway-api/blob/main/apis/v1alpha2/policy_types.go). Below are example implementation-specific reasons that describe the lifecycle phases and potential issues encountered while processing the policy:
+The `Accepted` Condition must be populated on the `WAFPolicy` CRD using the reasons defined in the [PolicyCondition API](https://github.com/kubernetes-sigs/gateway-api/blob/main/apis/v1alpha2/policy_types.go). Below are example implementation-specific reasons that describe the lifecycle phases and potential issues encountered while processing the policy:
 
 | **Reason**               | **Description**                                                                                   | **Example Message**                                               |
 |---------------------------|---------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
@@ -728,7 +728,7 @@ The `Accepted` Condition must be populated on the `WafPolicy` CRD using the reas
 | **AuthenticationError**   | Authentication to the external store (e.g., S3, HTTP) failed.                                    | "Authentication error while trying to fetch the policy bundle."    |
 | **PolicyConfigError**     | The policy configuration prevents proper processing.                 | "The policy configuration is incomplete or incorrectly formatted. Correct the configuration and retry." |
 
-### Example Status Conditions in `WafPolicy`
+### Example Status Conditions in `WAFPolicy`
 
 ```yaml
 status:
@@ -772,19 +772,19 @@ import (
 
 
 const (
-    WafPolicyAffected gatewayv1alpha2.PolicyConditionType = "gateway.nginx.org/WafPolicyAffected"
+    WAFPolicyAffected gatewayv1alpha2.PolicyConditionType = "gateway.nginx.org/WAFPolicyAffected"
     PolicyAffectedReason gatewayv1alpha2.PolicyConditionReason = "PolicyAffected"
 )
 
 ```
 
-NGINX Gateway Fabric must set this Condition on all HTTPRoutes and Gateways affected by a `WafPolicy`.
+NGINX Gateway Fabric must set this Condition on all HTTPRoutes and Gateways affected by a `WAFPolicy`.
 Below is an example of what this Condition may look like:
 
 ```yaml
 Conditions:
-  Type:                  gateway.nginx.org/WafPolicyAffected
-  Message:               Object affected by a WafPolicy.
+  Type:                  gateway.nginx.org/WAFPolicyAffected
+  Message:               Object affected by a WAFPolicy.
   Observed Generation:   1
   Reason:                PolicyAffected
   Status:                True
@@ -792,17 +792,17 @@ Conditions:
 
 Some additional rules:
 
-- This Condition should be added when the affected object starts being affected by a `WafPolicy`.
-- If an object is affected by multiple `WafPolicy`, only one Condition should exist.
-- When the last `WafPolicy` affecting that object is removed, the Condition should be removed.
-- The Observed Generation is the generation of the affected object, not the generation of the `WafPolicy`.
+- This Condition should be added when the affected object starts being affected by a `WAFPolicy`.
+- If an object is affected by multiple `WAFPolicy`, only one Condition should exist.
+- When the last `WAFPolicy` affecting that object is removed, the Condition should be removed.
+- The Observed Generation is the generation of the affected object, not the generation of the `WAFPolicy`.
 
 ## Testing
 
 ### Unit Testing
 
 - **NginxProxy Extensions**: WAF enablement configuration parsing and validation
-- **WafPolicy Controller**: CRUD operations, status management, and policy fetching logic
+- **WAFPolicy Controller**: CRUD operations, status management, and policy fetching logic
 - **Policy Attachment Logic**: targetRef validation and inheritance resolution
 - **Multi-container Orchestration**: Container startup sequences and ephemeral volume management
 - **Policy Validation**: Compiled policy bundle checksum integrity checking
@@ -826,7 +826,7 @@ Some additional rules:
 - **Throughput Analysis**: Concurrent request handling capacity with WAF protection
 - **Resource Utilization**: Memory and CPU consumption of multi-container pods
 - **Policy Size Impact**: Large compiled policy bundle handling and distribution timing
-- **Scale Testing**: Multiple WafPolicy resources and policy updates under load
+- **Scale Testing**: Multiple WAFPolicy resources and policy updates under load
 - **Ephemeral Volume Performance**: Volume I/O performance and sizing validation
 - **Policy Inheritance Performance**: Impact of policy resolution on request processing
 - **Polling Performance**: Resource impact of periodic policy checks and change detection
@@ -845,7 +845,7 @@ Some additional rules:
 
 - **Integrity Verification**: Checksum validation of compiled policy bundles prevents tampering
 - **Secure Transport**: TLS encryption for all policy downloads from external sources
-- **Access Control**: RBAC restrictions on WafPolicy resource creation and modification
+- **Access Control**: RBAC restrictions on WAFPolicy resource creation and modification
 - **Polling Security**: Secure change detection mechanisms prevent unauthorized policy modifications
 
 ### Credential Management
@@ -879,7 +879,7 @@ Some additional rules:
 
 - **Network Segmentation**: Operators must configure NetworkPolicies for controlled egress access
 - **Source Authorization**: Operators responsible for ensuring policy sources are legitimate and approved
-- **Access Logging**: Standard Kubernetes audit logging captures WafPolicy resource operations; policy fetch operations logged via NGF's existing logging mechanisms
+- **Access Logging**: Standard Kubernetes audit logging captures WAFPolicy resource operations; policy fetch operations logged via NGF's existing logging mechanisms
 
 ### Regulatory Compliance
 
@@ -922,7 +922,7 @@ Some additional rules:
 
 ### Alternative 7: Manual Policy Updates Only
 
-**Approach**: Require users to manually update WafPolicy resources for each policy change
+**Approach**: Require users to manually update WAFPolicy resources for each policy change
 **Rejected Reason**: Breaks GitOps workflows and creates operational overhead; teams want to update policies without modifying Kubernetes resources
 
 ### Alternative 8: Webhook-Only Updates
@@ -994,9 +994,9 @@ spec:
     hostname: "grpc.example.com"
 
 ---
-# 4. Gateway-level WafPolicy (inherited by all routes)
+# 4. Gateway-level WAFPolicy (inherited by all routes)
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WafPolicy
+kind: WAFPolicy
 metadata:
   name: gateway-base-protection
   namespace: applications
@@ -1029,9 +1029,9 @@ spec:
       type: "Stderr"
 
 ---
-# 5. Route-level WafPolicy override for admin endpoints
+# 5. Route-level WAFPolicy override for admin endpoints
 apiVersion: gateway.nginx.org/v1alpha1
-kind: WafPolicy
+kind: WAFPolicy
 metadata:
   name: admin-strict-protection
   namespace: applications
@@ -1074,7 +1074,7 @@ spec:
     backendRefs:
     - name: api-service
       port: 8080
-  # Inherits gateway-base-protection WafPolicy automatically
+  # Inherits gateway-base-protection WAFPolicy automatically
 
 ---
 # 7. HTTPRoute with policy override
@@ -1094,7 +1094,7 @@ spec:
     backendRefs:
     - name: admin-service
       port: 8080
-  # Uses admin-strict-protection WafPolicy override via targetRef
+  # Uses admin-strict-protection WAFPolicy override via targetRef
 
 ---
 # 8. GRPCRoute inheriting Gateway protection
@@ -1115,7 +1115,7 @@ spec:
     backendRefs:
     - name: user-grpc-service
       port: 9000
-  # Inherits gateway-base-protection WafPolicy automatically
+  # Inherits gateway-base-protection WAFPolicy automatically
 
 This complete example demonstrates:
 
