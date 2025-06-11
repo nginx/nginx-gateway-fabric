@@ -268,6 +268,15 @@
               },
               "required": [],
               "type": "object"
+            },
+            "waf": {
+              "description": "WAF enables NGINX App Protect WAF functionality.",
+              "enum": [
+                "enabled",
+                "disabled"
+              ],
+              "required": [],
+              "type": "string"
             }
           },
           "required": [],
@@ -487,6 +496,12 @@
           },
           "required": [],
           "title": "usage",
+          "type": "object"
+        },
+        "wafContainers": {
+          "description": "Configuration for NGINX App Protect WAF v5 containers.\nThese containers are only deployed when WAF is enabled via nginx.config.waf: \"Enabled\".\nAll settings are optional overrides - defaults are provided by NGF.",
+          "required": [],
+          "title": "wafContainers",
           "type": "object"
         }
       },

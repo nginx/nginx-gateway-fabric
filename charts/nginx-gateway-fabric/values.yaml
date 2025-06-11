@@ -367,6 +367,12 @@ nginx:
   #                 - IPAddress
   #             value:
   #               type: string
+  #   waf:
+  #     type: string
+  #     description: WAF enables NGINX App Protect WAF functionality.
+  #     enum:
+  #       - enabled
+  #       - disabled
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.
@@ -405,6 +411,33 @@ nginx:
 
     # -- extraVolumeMounts are the additional volume mounts for the NGINX container.
     # extraVolumeMounts: []
+
+  # -- Configuration for NGINX App Protect WAF v5 containers.
+  # These containers are only deployed when WAF is enabled via nginx.config.waf: "Enabled".
+  # All settings are optional overrides - defaults are provided by NGF.
+  wafContainers: {}
+    # -- WAF Enforcer container configuration.
+    # enforcer:
+    #   image: {}
+
+    # -- The resource requirements of the WAF Enforcer container.
+    #   resources: {}
+    #
+    #   # -- Additional volume mounts for the WAF enforcer container.
+    #   # NAP v5 shared volumes are automatically configured by NGF.
+    #   volumeMounts: []
+
+    # -- WAF Configuration Manager container configuration.
+    # configManager:
+    #   # -- Container image configuration
+    #   image: {}
+    #
+    #   # -- The resource requirements of the WAF config manager container.
+    #   resources: {}
+
+    #   # -- Additional volume mounts for the WAF config manager container.
+    #   # NAP v5 shared volumes are automatically configured by NGF.
+    #   volumeMounts: []
 
   # -- The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this
   # instance of NGINX Gateway Fabric.
