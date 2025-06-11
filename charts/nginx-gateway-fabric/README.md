@@ -252,11 +252,15 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 
 | Key | Description | Type | Default |
 |-----|-------------|------|---------|
-| `certGenerator` | The certGenerator section contains the configuration for the cert-generator Job. | object | `{"agentTLSSecretName":"agent-tls","annotations":{},"overwrite":false,"serverTLSSecretName":"server-tls"}` |
+| `certGenerator` | The certGenerator section contains the configuration for the cert-generator Job. | object | `{"affinity":{},"agentTLSSecretName":"agent-tls","annotations":{},"nodeSelector":{},"overwrite":false,"serverTLSSecretName":"server-tls","tolerations":[],"topologySpreadConstraints":[]}` |
+| `certGenerator.affinity` | The affinity of the cert-generator pod. | object | `{}` |
 | `certGenerator.agentTLSSecretName` | The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `"agent-tls"` |
 | `certGenerator.annotations` | The annotations of the cert-generator Job. | object | `{}` |
+| `certGenerator.nodeSelector` | The nodeSelector of the cert-generator pod. | object | `{}` |
 | `certGenerator.overwrite` | Overwrite existing TLS Secrets on startup. | bool | `false` |
 | `certGenerator.serverTLSSecretName` | The name of the Secret containing TLS CA, certificate, and key for the NGINX Gateway Fabric control plane to securely communicate with the NGINX Agent. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `"server-tls"` |
+| `certGenerator.tolerations` | Tolerations for the cert-generator pod. | list | `[]` |
+| `certGenerator.topologySpreadConstraints` | The topology spread constraints for the cert-generator pod. | list | `[]` |
 | `clusterDomain` | The DNS cluster domain of your Kubernetes cluster. | string | `"cluster.local"` |
 | `gateways` | A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference. | list | `[]` |
 | `nginx` | The nginx section contains the configuration for all NGINX data plane deployments installed by the NGINX Gateway Fabric control plane. | object | `{"config":{},"container":{},"debug":false,"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric/nginx","tag":"edge"},"imagePullSecret":"","imagePullSecrets":[],"kind":"deployment","plus":false,"pod":{},"replicas":1,"service":{"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"type":"LoadBalancer"},"usage":{"caSecretName":"","clientSSLSecretName":"","endpoint":"","resolver":"","secretName":"nplus-license","skipVerify":false}}` |
