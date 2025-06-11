@@ -9,7 +9,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway
   namespace: nginx-gateway
 ---
@@ -19,7 +19,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway-cert-generator
   namespace: nginx-gateway
 ---
@@ -29,7 +29,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway-cert-generator
   namespace: nginx-gateway
 rules:
@@ -48,7 +48,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway
 rules:
 - apiGroups:
@@ -181,7 +181,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway-cert-generator
   namespace: nginx-gateway
 roleRef:
@@ -199,7 +199,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -216,7 +216,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway
   namespace: nginx-gateway
 spec:
@@ -236,7 +236,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway
   namespace: nginx-gateway
 spec:
@@ -287,8 +287,8 @@ spec:
             fieldRef:
               fieldPath: metadata.labels['app.kubernetes.io/instance']
         - name: IMAGE_NAME
-          value: ghcr.io/nginx/nginx-gateway-fabric:2.0.0
-        image: ghcr.io/nginx/nginx-gateway-fabric:2.0.0
+          value: ghcr.io/nginx/nginx-gateway-fabric:2.0.1
+        image: ghcr.io/nginx/nginx-gateway-fabric:2.0.1
         imagePullPolicy: IfNotPresent
         name: nginx-gateway
         ports:
@@ -333,7 +333,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway-cert-generator
   namespace: nginx-gateway
 spec:
@@ -353,7 +353,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: ghcr.io/nginx/nginx-gateway-fabric:2.0.0
+        image: ghcr.io/nginx/nginx-gateway-fabric:2.0.1
         imagePullPolicy: IfNotPresent
         name: cert-generator
         securityContext:
@@ -379,7 +379,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx
 spec:
   controllerName: gateway.nginx.org/nginx-gateway-controller
@@ -395,7 +395,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway-config
   namespace: nginx-gateway
 spec:
@@ -408,7 +408,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: 2.0.0
+    app.kubernetes.io/version: 2.0.1
   name: nginx-gateway-proxy-config
   namespace: nginx-gateway
 spec:
@@ -418,7 +418,7 @@ spec:
         image:
           pullPolicy: IfNotPresent
           repository: private-registry.nginx.com/nginx-gateway-fabric/nginx-plus
-          tag: 2.0.0
+          tag: 2.0.1
       replicas: 1
     service:
       externalTrafficPolicy: Local
