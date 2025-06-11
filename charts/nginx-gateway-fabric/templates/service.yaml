@@ -5,6 +5,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "nginx-gateway.labels" . | nindent 4 }}
+{{- if .Values.nginxGateway.service.labels }}
+{{ toYaml .Values.nginxGateway.service.labels | indent 4 }}
+{{- end }}
 {{- if .Values.nginxGateway.service.annotations }}
   annotations:
 {{ toYaml .Values.nginxGateway.service.annotations | indent 4 }}
