@@ -479,6 +479,9 @@ certGenerator:
   # -- Overwrite existing TLS Secrets on startup.
   overwrite: false
 
+  # -- How long to wait after the cert generator job has finished before it is removed by the job controller.
+  ttlSecondsAfterFinished: 30
+
   # -- Tolerations for the cert-generator pod.
   tolerations: []
 

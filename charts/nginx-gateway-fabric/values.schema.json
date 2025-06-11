@@ -60,6 +60,13 @@
           "required": [],
           "title": "topologySpreadConstraints",
           "type": "array"
+        },
+        "ttlSecondsAfterFinished": {
+          "default": 30,
+          "description": "How long to wait after the cert generator job has finished before it is removed by the job controller.",
+          "required": [],
+          "title": "ttlSecondsAfterFinished",
+          "type": "integer"
         }
       },
       "required": [],
