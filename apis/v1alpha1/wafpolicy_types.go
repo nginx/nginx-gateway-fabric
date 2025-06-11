@@ -38,8 +38,8 @@ type WAFPolicyList struct {
 type WAFPolicySpec struct {
 	// PolicySource defines the source location and configuration for the compiled WAF policy bundle.
 	//
-	// +kubebuilder:validation:Required
-	PolicySource WAFPolicySource `json:"policySource"`
+	// +optional
+	PolicySource *WAFPolicySource `json:"policySource,omitempty"`
 
 	// TargetRef identifies an API object to apply the policy to.
 	// Object must be in the same namespace as the policy.
@@ -88,7 +88,7 @@ type WAFPolicySource struct {
 	// FileLocation defines the location of the WAF policy file.
 	//
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:MaxLength=256
 	FileLocation string `json:"fileLocation"`
 }
 
@@ -127,7 +127,7 @@ const (
 // WAFPolicyPolling defines the polling configuration for automatic WAF policy change detection.
 type WAFPolicyPolling struct {
 	// Enabled indicates whether polling is enabled for automatic WAF policy change detection.
-	// When enabled, NGF will periodically check for policy changes using checksum validation.
+	// When enabled, NGINX Gateway Fabric will periodically check for policy changes using checksum validation.
 	//
 	// +optional
 	// +kubebuilder:default=false
@@ -163,7 +163,6 @@ type WAFPolicyRetry struct {
 	// Supported values: "exponential", "linear"
 	//
 	// +optional
-	// +kubebuilder:validation:Enum=exponential;linear
 	// +kubebuilder:default="exponential"
 	Backoff *WAFPolicyRetryBackoff `json:"backoff,omitempty"`
 
@@ -241,7 +240,7 @@ type SecurityLogDestination struct {
 	// Type identifies the type of security log destination.
 	//
 	// +unionDiscriminator
-	// +kubebuilder:default=stderr
+	// +kubebuilder:default:=stderr
 	Type SecurityLogDestinationType `json:"type"`
 }
 
@@ -265,7 +264,7 @@ type SecurityLogFile struct {
 	// Must be accessible to the waf-enforcer container.
 	//
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=4096
+	// +kubebuilder:validation:MaxLength=256
 	// +kubebuilder:validation:Pattern=`^/.*$`
 	Path string `json:"path"`
 }
@@ -281,6 +280,7 @@ type SecurityLogSyslog struct {
 }
 
 // LogProfile defines the built-in logging profiles available in NGINX App Protect.
+//
 // +kubebuilder:validation:Enum=log_default;log_all;log_illegal;log_blocked;log_grpc_all;log_grpc_blocked;log_grpc_illegal
 //
 //nolint:lll

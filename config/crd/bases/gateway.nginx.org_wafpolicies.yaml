@@ -68,11 +68,9 @@ spec:
                     - name
                     type: object
                   fileLocation:
-                    description: |-
-                      FileLocation defines the location of the WAF policy file.
-                      Supports various protocols: s3://, https://, http://, file://
-                      Examples: "s3://bucket/policy.tgz", "https://example.com/policy.tgz"
-                    maxLength: 2048
+                    description: FileLocation defines the location of the WAF policy
+                      file.
+                    maxLength: 256
                     minLength: 1
                     type: string
                   polling:
@@ -89,7 +87,7 @@ spec:
                         default: false
                         description: |-
                           Enabled indicates whether polling is enabled for automatic WAF policy change detection.
-                          When enabled, NGF will periodically check for policy changes using checksum validation.
+                          When enabled, NGINX Gateway Fabric will periodically check for policy changes using checksum validation.
                         type: boolean
                       interval:
                         default: 5m
@@ -113,17 +111,13 @@ spec:
                         minimum: 0
                         type: integer
                       backoff:
-                        allOf:
-                        - enum:
-                          - exponential
-                          - linear
-                        - enum:
-                          - exponential
-                          - linear
                         default: exponential
                         description: |-
                           Backoff defines the backoff strategy for retry attempts.
                           Supported values: "exponential", "linear"
+                        enum:
+                        - exponential
+                        - linear
                         type: string
                       maxDelay:
                         default: 5m
@@ -180,7 +174,7 @@ spec:
                               description: |-
                                 Path is the file path where security logs will be written.
                                 Must be accessible to the waf-enforcer container.
-                              maxLength: 4096
+                              maxLength: 256
                               minLength: 1
                               pattern: ^/.*$
                               type: string
@@ -255,11 +249,9 @@ spec:
                           - name
                           type: object
                         fileLocation:
-                          description: |-
-                            FileLocation defines the location of the WAF policy file.
-                            Supports various protocols: s3://, https://, http://, file://
-                            Examples: "s3://bucket/policy.tgz", "https://example.com/policy.tgz"
-                          maxLength: 2048
+                          description: FileLocation defines the location of the WAF
+                            policy file.
+                          maxLength: 256
                           minLength: 1
                           type: string
                         polling:
@@ -276,7 +268,7 @@ spec:
                               default: false
                               description: |-
                                 Enabled indicates whether polling is enabled for automatic WAF policy change detection.
-                                When enabled, NGF will periodically check for policy changes using checksum validation.
+                                When enabled, NGINX Gateway Fabric will periodically check for policy changes using checksum validation.
                               type: boolean
                             interval:
                               default: 5m
@@ -300,17 +292,13 @@ spec:
                               minimum: 0
                               type: integer
                             backoff:
-                              allOf:
-                              - enum:
-                                - exponential
-                                - linear
-                              - enum:
-                                - exponential
-                                - linear
                               default: exponential
                               description: |-
                                 Backoff defines the backoff strategy for retry attempts.
                                 Supported values: "exponential", "linear"
+                              enum:
+                              - exponential
+                              - linear
                               type: string
                             maxDelay:
                               default: 5m
@@ -396,7 +384,6 @@ spec:
                 - message: TargetRef Group must be gateway.networking.k8s.io.
                   rule: (self.group=='gateway.networking.k8s.io')
             required:
-            - policySource
             - targetRef
             type: object
           status:
