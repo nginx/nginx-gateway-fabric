@@ -257,9 +257,6 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 			Name:      "gw",
 			Namespace: "default",
 		},
-		Spec: gatewayv1.GatewaySpec{
-			Listeners: []gatewayv1.Listener{},
-		},
 	}
 
 	resourceName := "gw-nginx"
