@@ -6,15 +6,15 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.p
 
 FROM nginx:1.28.0-alpine-otel
 
-# renovate: datasource=github-tags depName=nginx/agent extractVersion=^v?(?<version>.*)$
-ARG NGINX_AGENT_VERSION=3.0.0
+# renovate: datasource=github-tags depName=nginx/agent
+ARG NGINX_AGENT_VERSION=v3.0.1
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     printf "%s\n" "https://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && apk add --no-cache nginx-agent=${NGINX_AGENT_VERSION}
+    && apk add --no-cache nginx-agent=${NGINX_AGENT_VERSION#v}
 
 RUN apk add --no-cache libcap bash \
     && mkdir -p /usr/lib/nginx/modules \
