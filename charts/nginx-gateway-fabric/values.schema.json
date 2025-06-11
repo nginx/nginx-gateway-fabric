@@ -43,11 +43,6 @@
           "title": "serverTLSSecretName",
           "type": "string"
         },
-        "ttlSecondsAfterFinished": {
-          "default": 0,
-          "required": [],
-          "title": "ttlSecondsAfterFinished",
-          "type": "integer"
         "tolerations": {
           "description": "Tolerations for the cert-generator pod.",
           "items": {
@@ -65,6 +60,13 @@
           "required": [],
           "title": "topologySpreadConstraints",
           "type": "array"
+        },
+        "ttlSecondsAfterFinished": {
+          "default": 30,
+          "description": "How long to wait after the cert generato job has finished before it is reaped by the job controller",
+          "required": [],
+          "title": "ttlSecondsAfterFinished",
+          "type": "integer"
         }
       },
       "required": [],

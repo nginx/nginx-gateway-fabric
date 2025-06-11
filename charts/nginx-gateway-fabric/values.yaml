@@ -480,7 +480,7 @@ certGenerator:
   overwrite: false
 
 # -- How long to wait after the cert generato job has finished before it is reaped by the job controller
-  ttlSecondsAfterFinished: 90
+  ttlSecondsAfterFinished: 30
   # -- Tolerations for the cert-generator pod.
   tolerations: []
 
