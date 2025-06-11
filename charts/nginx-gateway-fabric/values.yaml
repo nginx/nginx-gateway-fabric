@@ -111,8 +111,8 @@ nginxGateway:
   # -- The image configuration for the NGINX Gateway Fabric control plane.
   image:
     # -- The NGINX Gateway Fabric image to use
-    repository: 743287612805.dkr.ecr.us-west-2.amazonaws.com/frontend-client
-    tag: nginx-controller
+    repository: ghcr.io/nginx/nginx-gateway-fabric
+    tag: edge
     # @schema
     # enum:
     #   - Always
