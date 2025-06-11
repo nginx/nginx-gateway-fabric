@@ -257,6 +257,9 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 			Name:      "gw",
 			Namespace: "default",
 		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{},
+		},
 	}
 
 	resourceName := "gw-nginx"
@@ -293,6 +296,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 							corev1.ResourceCPU: resource.Quantity{Format: "100m"},
 						},
 					},
+					HostPort: &ngfAPIv1alpha2.HostPort{Enable: true, Port: int32(8443)},
 				},
 			},
 		},
@@ -338,6 +342,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(container.Ports).To(ContainElement(corev1.ContainerPort{
 		ContainerPort: 8080,
 		Name:          "metrics",
+		HostPort:      int32(8443),
 	}))
 
 	g.Expect(container.Image).To(Equal("nginx-repo:1.1.1"))

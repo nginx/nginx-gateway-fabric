@@ -781,7 +781,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 				container.Args = append(container.Args, "debug")
 			}
 
-			if containerSpec.HostPort != nil && containerSpec.HostPort.Enable && len(container.Ports) > 1 {
+			if containerSpec.HostPort != nil && containerSpec.HostPort.Enable && len(container.Ports) > 0 {
 				container.Ports[0].HostPort = containerSpec.HostPort.Port
 			}
 
