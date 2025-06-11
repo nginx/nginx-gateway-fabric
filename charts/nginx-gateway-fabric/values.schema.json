@@ -804,6 +804,12 @@
               "required": [],
               "title": "annotations",
               "type": "object"
+            },
+            "labels": {
+              "description": "The labels of the NGINX Gateway Fabric control plane service.",
+              "required": [],
+              "title": "labels",
+              "type": "object"
             }
           },
           "required": [],

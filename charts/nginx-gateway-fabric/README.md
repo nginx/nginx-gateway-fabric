@@ -318,6 +318,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.resources` | The resource requests and/or limits of the nginx-gateway container. | object | `{}` |
 | `nginxGateway.service` | The service configuration for the NGINX Gateway Fabric control plane. | object | `{"annotations":{}}` |
 | `nginxGateway.service.annotations` | The annotations of the NGINX Gateway Fabric control plane service. | object | `{}` |
+| `nginxGateway.service.labels` | The labels of the NGINX Gateway Fabric control plane service. | object | `{}` |
 | `nginxGateway.serviceAccount` | The serviceaccount configuration for the NGINX Gateway Fabric control plane. | object | `{"annotations":{},"imagePullSecret":"","imagePullSecrets":[],"name":""}` |
 | `nginxGateway.serviceAccount.annotations` | Set of custom annotations for the NGINX Gateway Fabric control plane service account. | object | `{}` |
 | `nginxGateway.serviceAccount.imagePullSecret` | The name of the secret containing docker registry credentials for the control plane. Secret must exist in the same namespace as the helm release. | string | `""` |
