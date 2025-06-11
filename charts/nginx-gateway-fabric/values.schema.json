@@ -4,6 +4,12 @@
     "certGenerator": {
       "description": "The certGenerator section contains the configuration for the cert-generator Job.",
       "properties": {
+        "affinity": {
+          "description": "The affinity of the cert-generator pod.",
+          "required": [],
+          "title": "affinity",
+          "type": "object"
+        },
         "agentTLSSecretName": {
           "default": "agent-tls",
           "description": "The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely\ncommunicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the\nNGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).",
@@ -15,6 +21,12 @@
           "description": "The annotations of the cert-generator Job.",
           "required": [],
           "title": "annotations",
+          "type": "object"
+        },
+        "nodeSelector": {
+          "description": "The nodeSelector of the cert-generator pod.",
+          "required": [],
+          "title": "nodeSelector",
           "type": "object"
         },
         "overwrite": {
@@ -30,6 +42,24 @@
           "required": [],
           "title": "serverTLSSecretName",
           "type": "string"
+        },
+        "tolerations": {
+          "description": "Tolerations for the cert-generator pod.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "tolerations",
+          "type": "array"
+        },
+        "topologySpreadConstraints": {
+          "description": "The topology spread constraints for the cert-generator pod.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "topologySpreadConstraints",
+          "type": "array"
         }
       },
       "required": [],

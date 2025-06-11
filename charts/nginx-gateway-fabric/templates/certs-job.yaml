@@ -153,4 +153,20 @@ spec:
       securityContext:
         fsGroup: 1001
         runAsNonRoot: true
+      {{- if .Values.certGenerator.topologySpreadConstraints }}
+      topologySpreadConstraints:
+      {{- toYaml .Values.certGenerator.topologySpreadConstraints | nindent 6 }}
+      {{- end }}
+      {{- if .Values.certGenerator.affinity }}
+      affinity:
+      {{- toYaml .Values.certGenerator.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.certGenerator.tolerations }}
+      tolerations:
+      {{- toYaml .Values.certGenerator.tolerations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.certGenerator.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.certGenerator.nodeSelector | nindent 8 }}
+      {{- end }}
   ttlSecondsAfterFinished: 0
