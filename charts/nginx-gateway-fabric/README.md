@@ -316,7 +316,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.readinessProbe.port` | Port in which the readiness endpoint is exposed. | int | `8081` |
 | `nginxGateway.replicas` | The number of replicas of the NGINX Gateway Fabric Deployment. | int | `1` |
 | `nginxGateway.resources` | The resource requests and/or limits of the nginx-gateway container. | object | `{}` |
-| `nginxGateway.service` | The service configuration for the NGINX Gateway Fabric control plane. | object | `{"annotations":{}}` |
+| `nginxGateway.service` | The service configuration for the NGINX Gateway Fabric control plane. | object | `{"annotations":{},"labels":{}}` |
 | `nginxGateway.service.annotations` | The annotations of the NGINX Gateway Fabric control plane service. | object | `{}` |
 | `nginxGateway.service.labels` | The labels of the NGINX Gateway Fabric control plane service. | object | `{}` |
 | `nginxGateway.serviceAccount` | The serviceaccount configuration for the NGINX Gateway Fabric control plane. | object | `{"annotations":{},"imagePullSecret":"","imagePullSecrets":[],"name":""}` |
