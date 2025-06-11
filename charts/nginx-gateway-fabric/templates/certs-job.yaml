@@ -169,4 +169,4 @@ spec:
       nodeSelector:
       {{- toYaml .Values.certGenerator.nodeSelector | nindent 8 }}
       {{- end }}
-  ttlSecondsAfterFinished: 0
+  ttlSecondsAfterFinished: {{ .Values.certGenerator.ttlSecondsAfterFinished }}
