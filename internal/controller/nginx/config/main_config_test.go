@@ -60,12 +60,12 @@ func TestExecuteMainConfig_Waf(t *testing.T) {
 	t.Parallel()
 
 	wafOff := dataplane.Configuration{
-		WAF: dataplane.WafConfig{
+		WAF: dataplane.WAFConfig{
 			Enabled: false,
 		},
 	}
 	wafOn := dataplane.Configuration{
-		WAF: dataplane.WafConfig{
+		WAF: dataplane.WAFConfig{
 			Enabled: true,
 		},
 	}

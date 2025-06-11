@@ -61,13 +61,13 @@ func TestExecuteBaseHttp_HTTP2(t *testing.T) {
 func TestExecuteBaseHttp_WAF(t *testing.T) {
 	t.Parallel()
 	confOn := dataplane.Configuration{
-		WAF: dataplane.WafConfig{
+		WAF: dataplane.WAFConfig{
 			Enabled: true,
 		},
 	}
 
 	confOff := dataplane.Configuration{
-		WAF: dataplane.WafConfig{
+		WAF: dataplane.WAFConfig{
 			Enabled: false,
 		},
 	}
