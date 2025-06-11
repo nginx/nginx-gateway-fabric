@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,7 +63,7 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 			case *gatewayv1.Gateway:
 				h.store.updateGateway(obj)
 			case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.ServiceAccount,
-				*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding:
+				*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
 				objLabels := labels.Set(obj.GetLabels())
 				if h.labelSelector.Matches(objLabels) {
 					gatewayName := objLabels.Get(controller.GatewayLabel)
@@ -118,7 +119,7 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 				}
 				h.store.deleteGateway(e.NamespacedName)
 			case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.Service, *corev1.ServiceAccount,
-				*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding:
+				*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
 				if err := h.reprovisionResources(ctx, e); err != nil {
 					logger.Error(err, "error re-provisioning nginx resources")
 				}
