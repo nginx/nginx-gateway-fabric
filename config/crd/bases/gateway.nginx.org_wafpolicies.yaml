@@ -12,8 +12,8 @@ spec:
   names:
     categories:
     - nginx-gateway-fabric
-    kind: WafPolicy
-    listKind: WafPolicyList
+    kind: WAFPolicy
+    listKind: WAFPolicyList
     plural: wafpolicies
     singular: wafpolicy
   scope: Namespaced
@@ -26,7 +26,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          WafPolicy is an Inherited Attached Policy. It provides a way to configure NGINX App Protect Web Application Firewall
+          WAFPolicy is an Inherited Attached Policy. It provides a way to configure NGINX App Protect Web Application Firewall
           for Gateways and Routes.
         properties:
           apiVersion:
@@ -47,12 +47,14 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the desired state of the WafPolicy.
+            description: Spec defines the desired state of the WAFPolicy.
             properties:
               policySource:
+                description: PolicySource defines the source location and configuration
+                  for the compiled WAF policy bundle.
                 properties:
                   authSecret:
-                    description: WafPolicyAuthSecret is the Secret containing authentication
+                    description: AuthSecret is the Secret containing authentication
                       credentials for the WAF policy source.
                     properties:
                       name:
@@ -66,8 +68,11 @@ spec:
                     - name
                     type: object
                   fileLocation:
-                    description: FileLocation defines the location of the WAF policy
-                      file.
+                    description: |-
+                      FileLocation defines the location of the WAF policy file.
+                      Supports various protocols: s3://, https://, http://, file://
+                      Examples: "s3://bucket/policy.tgz", "https://example.com/policy.tgz"
+                    maxLength: 2048
                     minLength: 1
                     type: string
                   polling:
@@ -75,14 +80,23 @@ spec:
                       WAF policy change detection.
                     properties:
                       checksumLocation:
+                        description: |-
+                          ChecksumLocation specifies the location of the checksum file for the policy bundle.
+                          If not specified, defaults to <fileLocation>.sha256
+                        maxLength: 2048
                         type: string
                       enabled:
-                        description: Enabled indicates whether polling is enabled
-                          for automatic WAF policy change detection.
+                        default: false
+                        description: |-
+                          Enabled indicates whether polling is enabled for automatic WAF policy change detection.
+                          When enabled, NGF will periodically check for policy changes using checksum validation.
                         type: boolean
                       interval:
-                        description: Interval is the polling interval to check for
-                          WAF policy changes.
+                        default: 5m
+                        description: |-
+                          Interval is the polling interval to check for WAF policy changes.
+                          Must be a valid duration string (e.g., "5m", "30s", "1h").
+                          Defaults to "5m" if polling is enabled.
                         pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                         type: string
                     type: object
@@ -91,19 +105,31 @@ spec:
                       fetch failures.
                     properties:
                       attempts:
-                        description: Attempts is the number of retry attempts for
-                          fetching the WAF policy.
+                        default: 3
+                        description: |-
+                          Attempts is the number of retry attempts for fetching the WAF policy.
+                          Set to 0 to disable retries.
                         format: int32
                         minimum: 0
                         type: integer
                       backoff:
+                        allOf:
+                        - enum:
+                          - exponential
+                          - linear
+                        - enum:
+                          - exponential
+                          - linear
+                        default: exponential
+                        description: |-
+                          Backoff defines the backoff strategy for retry attempts.
+                          Supported values: "exponential", "linear"
                         type: string
                       maxDelay:
+                        default: 5m
                         description: |-
-                          Duration is a string value representing a duration in time.
-                          Duration can be specified in milliseconds (ms), seconds (s), minutes (m), hours (h).
-                          A value without a suffix is seconds.
-                          Examples: 120s, 50ms, 5m, 1h.
+                          MaxDelay is the maximum delay between retry attempts.
+                          Must be a valid duration string (e.g., "5m", "30s").
                         pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                         type: string
                     type: object
@@ -112,61 +138,95 @@ spec:
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
                   validation:
+                    description: Validation defines the validation methods for policy
+                      integrity verification.
                     properties:
                       methods:
+                        description: |-
+                          Methods specifies the validation methods to use for policy integrity verification.
+                          Currently supported: ["checksum"]
                         items:
+                          description: WAFPolicyValidationMethod defines the supported
+                            validation methods.
+                          enum:
+                          - checksum
                           type: string
                         type: array
+                        uniqueItems: true
+                        x-kubernetes-list-type: set
                     type: object
                 required:
                 - fileLocation
                 type: object
               securityLogs:
+                description: |-
+                  SecurityLogs defines the security logging configuration for app_protect_security_log directives.
+                  Multiple logging configurations can be specified to send logs to different destinations.
                 items:
                   description: |-
-                    WafSecurityLog defines the security logging configuration for app_protect_security_log directives.
+                    WAFSecurityLog defines the security logging configuration for app_protect_security_log directives.
                     LogProfile and LogProfileBundle are mutually exclusive per security log entry.
                   properties:
                     destination:
+                      description: Destination defines where the security logs should
+                        be sent.
                       properties:
                         file:
+                          description: |-
+                            File defines the file destination configuration.
+                            Only valid when type is "file".
                           properties:
                             path:
+                              description: |-
+                                Path is the file path where security logs will be written.
+                                Must be accessible to the waf-enforcer container.
+                              maxLength: 4096
+                              minLength: 1
+                              pattern: ^/.*$
                               type: string
                           required:
                           - path
                           type: object
                         syslog:
+                          description: |-
+                            Syslog defines the syslog destination configuration.
+                            Only valid when type is "syslog".
                           properties:
                             server:
+                              description: Server is the syslog server address in
+                                the format "host:port".
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[a-zA-Z0-9.-]+:[0-9]+$
                               type: string
                           required:
                           - server
                           type: object
                         type:
-                          default: Stderr
+                          default: stderr
                           description: Type identifies the type of security log destination.
                           enum:
-                          - Stderr
-                          - File
-                          - Syslog
+                          - stderr
+                          - file
+                          - syslog
                           type: string
                       required:
                       - type
                       type: object
                       x-kubernetes-validations:
                       - message: destination.file must be nil if the destination.type
-                          is not File
-                        rule: '!(has(self.file) && self.type != ''File'')'
-                      - message: destination.file must be specified for File destination.type
-                        rule: '!(!has(self.file) && self.type == ''File'')'
+                          is not file
+                        rule: '!(has(self.file) && self.type != ''file'')'
+                      - message: destination.file must be specified for file destination.type
+                        rule: '!(!has(self.file) && self.type == ''file'')'
                       - message: destination.syslog must be nil if the destination.type
-                          is not Syslog
-                        rule: '!(has(self.syslog) && self.type != ''Syslog'')'
-                      - message: destination.syslog must be specified for Syslog destination.type
-                        rule: '!(!has(self.syslog) && self.type == ''Syslog'')'
+                          is not syslog
+                        rule: '!(has(self.syslog) && self.type != ''syslog'')'
+                      - message: destination.syslog must be specified for syslog destination.type
+                        rule: '!(!has(self.syslog) && self.type == ''syslog'')'
                     logProfile:
-                      description: LogProfile defines the built-in logging profile.
+                      description: LogProfile defines the built-in logging profile
+                        to use.
                       enum:
                       - log_default
                       - log_all
@@ -177,12 +237,12 @@ spec:
                       - log_grpc_illegal
                       type: string
                     logProfileBundle:
-                      description: LogProfile defines a custom logging profile bundle,
-                        similar to policy bundle.
+                      description: LogProfileBundle defines a custom logging profile
+                        bundle, similar to policy bundle.
                       properties:
                         authSecret:
-                          description: WafPolicyAuthSecret is the Secret containing
-                            authentication credentials for the WAF policy source.
+                          description: AuthSecret is the Secret containing authentication
+                            credentials for the WAF policy source.
                           properties:
                             name:
                               description: Name is the name of the Secret containing
@@ -195,8 +255,11 @@ spec:
                           - name
                           type: object
                         fileLocation:
-                          description: FileLocation defines the location of the WAF
-                            policy file.
+                          description: |-
+                            FileLocation defines the location of the WAF policy file.
+                            Supports various protocols: s3://, https://, http://, file://
+                            Examples: "s3://bucket/policy.tgz", "https://example.com/policy.tgz"
+                          maxLength: 2048
                           minLength: 1
                           type: string
                         polling:
@@ -204,14 +267,23 @@ spec:
                             automatic WAF policy change detection.
                           properties:
                             checksumLocation:
+                              description: |-
+                                ChecksumLocation specifies the location of the checksum file for the policy bundle.
+                                If not specified, defaults to <fileLocation>.sha256
+                              maxLength: 2048
                               type: string
                             enabled:
-                              description: Enabled indicates whether polling is enabled
-                                for automatic WAF policy change detection.
+                              default: false
+                              description: |-
+                                Enabled indicates whether polling is enabled for automatic WAF policy change detection.
+                                When enabled, NGF will periodically check for policy changes using checksum validation.
                               type: boolean
                             interval:
-                              description: Interval is the polling interval to check
-                                for WAF policy changes.
+                              default: 5m
+                              description: |-
+                                Interval is the polling interval to check for WAF policy changes.
+                                Must be a valid duration string (e.g., "5m", "30s", "1h").
+                                Defaults to "5m" if polling is enabled.
                               pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                               type: string
                           type: object
@@ -220,19 +292,31 @@ spec:
                             policy fetch failures.
                           properties:
                             attempts:
-                              description: Attempts is the number of retry attempts
-                                for fetching the WAF policy.
+                              default: 3
+                              description: |-
+                                Attempts is the number of retry attempts for fetching the WAF policy.
+                                Set to 0 to disable retries.
                               format: int32
                               minimum: 0
                               type: integer
                             backoff:
+                              allOf:
+                              - enum:
+                                - exponential
+                                - linear
+                              - enum:
+                                - exponential
+                                - linear
+                              default: exponential
+                              description: |-
+                                Backoff defines the backoff strategy for retry attempts.
+                                Supported values: "exponential", "linear"
                               type: string
                             maxDelay:
+                              default: 5m
                               description: |-
-                                Duration is a string value representing a duration in time.
-                                Duration can be specified in milliseconds (ms), seconds (s), minutes (m), hours (h).
-                                A value without a suffix is seconds.
-                                Examples: 120s, 50ms, 5m, 1h.
+                                MaxDelay is the maximum delay between retry attempts.
+                                Must be a valid duration string (e.g., "5m", "30s").
                               pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                               type: string
                           type: object
@@ -241,25 +325,42 @@ spec:
                           pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                           type: string
                         validation:
+                          description: Validation defines the validation methods for
+                            policy integrity verification.
                           properties:
                             methods:
+                              description: |-
+                                Methods specifies the validation methods to use for policy integrity verification.
+                                Currently supported: ["checksum"]
                               items:
+                                description: WAFPolicyValidationMethod defines the
+                                  supported validation methods.
+                                enum:
+                                - checksum
                                 type: string
                               type: array
+                              uniqueItems: true
+                              x-kubernetes-list-type: set
                           type: object
                       required:
                       - fileLocation
                       type: object
                     name:
                       description: Name is the name of the security log configuration.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$
                       type: string
                   required:
                   - destination
-                  - name
                   type: object
                   x-kubernetes-validations:
                   - message: only one of logProfile or logProfileBundle may be set
                     rule: '!(has(self.logProfile) && has(self.logProfileBundle))'
+                  - message: at least one of logProfile or logProfileBundle must be
+                      set
+                    rule: has(self.logProfile) || has(self.logProfileBundle)
+                maxItems: 32
                 type: array
               targetRef:
                 description: |-
@@ -295,10 +396,11 @@ spec:
                 - message: TargetRef Group must be gateway.networking.k8s.io.
                   rule: (self.group=='gateway.networking.k8s.io')
             required:
+            - policySource
             - targetRef
             type: object
           status:
-            description: Status defines the state of the WafPolicy.
+            description: Status defines the state of the WAFPolicy.
             properties:
               ancestors:
                 description: |-
