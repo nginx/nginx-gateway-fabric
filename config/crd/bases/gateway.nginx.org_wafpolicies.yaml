@@ -146,7 +146,6 @@ spec:
                           - checksum
                           type: string
                         type: array
-                        uniqueItems: true
                         x-kubernetes-list-type: set
                     type: object
                 required:
@@ -327,7 +326,6 @@ spec:
                                 - checksum
                                 type: string
                               type: array
-                              uniqueItems: true
                               x-kubernetes-list-type: set
                           type: object
                       required:

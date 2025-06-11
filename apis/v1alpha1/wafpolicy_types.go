@@ -109,7 +109,6 @@ type WAFPolicyValidation struct {
 	// Currently supported: ["checksum"]
 	//
 	// +optional
-	// +kubebuilder:validation:UniqueItems=true
 	// +listType=set
 	Methods []WAFPolicyValidationMethod `json:"methods,omitempty"`
 }
@@ -240,7 +239,7 @@ type SecurityLogDestination struct {
 	// Type identifies the type of security log destination.
 	//
 	// +unionDiscriminator
-	// +kubebuilder:default:=stderr
+	// +kubebuilder:default=stderr
 	Type SecurityLogDestinationType `json:"type"`
 }
 

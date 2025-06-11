@@ -41,7 +41,7 @@ type NginxProxySpec struct {
 	// Default is "dual", meaning the server will use both IPv4 and IPv6.
 	//
 	// +optional
-	// +kubebuilder:default:=dual
+	// +kubebuilder:default=dual
 	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
 	// Telemetry specifies the OpenTelemetry configuration.
 	//
@@ -498,7 +498,7 @@ type Image struct {
 	// PullPolicy describes a policy for if/when to pull a container image.
 	//
 	// +optional
-	// +kubebuilder:default:=IfNotPresent
+	// +kubebuilder:default=IfNotPresent
 	PullPolicy *PullPolicy `json:"pullPolicy,omitempty"`
 }
 
@@ -522,7 +522,7 @@ type ServiceSpec struct {
 	// ServiceType describes ingress method for the Service.
 	//
 	// +optional
-	// +kubebuilder:default:=LoadBalancer
+	// +kubebuilder:default=LoadBalancer
 	ServiceType *ServiceType `json:"type,omitempty"`
 
 	// ExternalTrafficPolicy describes how nodes distribute service traffic they
@@ -530,7 +530,7 @@ type ServiceSpec struct {
 	// and LoadBalancer IPs.
 	//
 	// +optional
-	// +kubebuilder:default:=Local
+	// +kubebuilder:default=Local
 	ExternalTrafficPolicy *ExternalTrafficPolicy `json:"externalTrafficPolicy,omitempty"`
 
 	// LoadBalancerIP is a static IP address for the load balancer. Requires service type to be LoadBalancer.
