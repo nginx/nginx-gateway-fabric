@@ -464,6 +464,8 @@ type PodSpec struct {
 	//
 	// +optional
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+
+	SecurityContext *corev1.PodSecurityContext `json:"securityContext,omitempty"`
 }
 
 // ContainerSpec defines container fields for the NGINX container.

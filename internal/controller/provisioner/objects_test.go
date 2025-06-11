@@ -281,6 +281,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 				Replicas: helpers.GetPointer[int32](3),
 				Pod: ngfAPIv1alpha2.PodSpec{
 					TerminationGracePeriodSeconds: helpers.GetPointer[int64](25),
+					SecurityContext:               &corev1.PodSecurityContext{},
 				},
 				Container: ngfAPIv1alpha2.ContainerSpec{
 					Image: &ngfAPIv1alpha2.Image{
@@ -332,6 +333,10 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 
 	template := dep.Spec.Template
 	g.Expect(*template.Spec.TerminationGracePeriodSeconds).To(Equal(int64(25)))
+
+	g.Expect(template.Spec.SecurityContext).To(Equal(
+		&corev1.PodSecurityContext{},
+	))
 
 	container := template.Spec.Containers[0]
 
@@ -658,6 +663,10 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 			DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
 				Pod: ngfAPIv1alpha2.PodSpec{
 					TerminationGracePeriodSeconds: helpers.GetPointer[int64](25),
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsUser:  helpers.GetPointer[int64](1000),
+						RunAsGroup: helpers.GetPointer[int64](3000),
+					},
 				},
 				Container: ngfAPIv1alpha2.ContainerSpec{
 					Image: &ngfAPIv1alpha2.Image{
@@ -733,6 +742,11 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 	g.Expect(extraContainerTwo.ImagePullPolicy).To(Equal(corev1.PullAlways))
 	g.Expect(extraContainerTwo.Resources.Limits).To(HaveKey(corev1.ResourceCPU))
 	g.Expect(extraContainerTwo.Resources.Limits[corev1.ResourceCPU].Format).To(Equal(resource.Format("100m")))
+
+	securityContext := template.Spec.SecurityContext
+	g.Expect(securityContext.RunAsUser).To(Equal(helpers.GetPointer[int64](1000)))
+	g.Expect(securityContext.RunAsGroup).To(Equal(helpers.GetPointer[int64](3000)))
+	g.Expect(securityContext.RunAsNonRoot).To(BeNil())
 }
 func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 	t.Parallel()

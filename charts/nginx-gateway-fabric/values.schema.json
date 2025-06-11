@@ -610,14 +610,14 @@
               "title": "pullPolicy"
             },
             "repository": {
-              "default": "ghcr.io/nginx/nginx-gateway-fabric",
+              "default": "743287612805.dkr.ecr.us-west-2.amazonaws.com/frontend-client",
               "description": "The NGINX Gateway Fabric image to use",
               "required": [],
               "title": "repository",
               "type": "string"
             },
             "tag": {
-              "default": "edge",
+              "default": "nginx-controller",
               "required": [],
               "title": "tag",
               "type": "string"
