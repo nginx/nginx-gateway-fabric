@@ -614,9 +614,11 @@ type NodePort struct {
 	ListenerPort int32 `json:"listenerPort"`
 }
 
+// HostPort to expose on the host.
 type HostPort struct {
 	// Whether to enable hostPort feature
 	// If not specified, or set to false, hostPort will not be enabled.
+	//
 	// +optional
 	Enable bool `json:"enable"`
 
