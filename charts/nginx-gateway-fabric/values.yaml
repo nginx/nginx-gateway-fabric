@@ -59,6 +59,9 @@ nginxGateway:
     # -- The annotations of the NGINX Gateway Fabric control plane service.
     annotations: {}
 
+    # -- The labels of the NGINX Gateway Fabric control plane service.
+    labels: {}
+
   # -- The serviceaccount configuration for the NGINX Gateway Fabric control plane.
   serviceAccount:
     # -- Set of custom annotations for the NGINX Gateway Fabric control plane service account.
