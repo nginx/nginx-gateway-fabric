@@ -922,13 +922,13 @@ spec:
                                   StopSignal can only be set for Pods with a non-empty .spec.os.name
                                 type: string
                             type: object
-                          hostPort:
+                          hostPorts:
                             description: |-
                               List of ports to expose on the host.
                             items:
                               containerPort:
                                 description: |-
-                                  ContainerPort number of nginx
+                                  ContainerPort of nginx
                                 type: integer
                               hostPort:
                                 description: |-
