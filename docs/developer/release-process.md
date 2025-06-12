@@ -66,6 +66,7 @@ To create a new release, follow these steps:
     5. Any references in the docs to the previous release.
     6. Any installation instructions to ensure that the supported Gateway API and NGF versions are correct. Specifically, helm README.
 8. Prepare and merge a PR into the main branch of the [documentation repository](https://github.com/nginx/documentation) from the relevant release branch, such as `ngf-release-2.0`.
+   - In the NGF repo, run `make generate-api-docs` and copy the generated file from `docs/api/content.md` into the documentation repo to `content/ngf/reference/api.md`.
    - Update the HTML file located at `layouts/shortcodes/version-ngf.html` with the latest version. Ensure you do not add an empty line to the file.
    - Documentation is built and deployed automatically from `main`, and will trigger when merging to it.
    - Create a new branch for the next release version, in the format `ngf-release-<i>.<i>`, substituting the *i* placeholders for major and minor version numbers.
@@ -94,4 +95,4 @@ To create a new release, follow these steps:
 4. Test the release branch for release-readiness.
 5. If a problem is found, return to Step 2.
 6. Follow Steps 5-7 from the [Major or Minor Release](#major-or-minor-release) section.
-7. Prepare and merge a PR into the main branch of the [documentation repository](https://github.com/nginx/documentation) to update the NGF version in `layouts/shortcodes/version-ngf.html`.
+7. Prepare and merge a PR into the main branch of the [documentation repository](https://github.com/nginx/documentation) to update the NGF version in `layouts/shortcodes/version-ngf.html`. If any of our APIs have changed, in the NGF repo, run `make generate-api-docs` and copy the generated file from `docs/api/content.md` into the documentation repo to `content/ngf/reference/api.md`.
