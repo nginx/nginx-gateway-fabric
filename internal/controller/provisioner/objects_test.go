@@ -293,7 +293,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 							corev1.ResourceCPU: resource.Quantity{Format: "100m"},
 						},
 					},
-					HostPort: &ngfAPIv1alpha2.HostPort{Enable: true, Port: int32(8443)},
+					HostPorts: []ngfAPIv1alpha2.HostPort{{ContainerPort: int32(8443), HostPort: int32(8443)}},
 				},
 			},
 		},
@@ -339,7 +339,6 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(container.Ports).To(ContainElement(corev1.ContainerPort{
 		ContainerPort: 8080,
 		Name:          "metrics",
-		HostPort:      int32(8443),
 	}))
 
 	g.Expect(container.Image).To(Equal("nginx-repo:1.1.1"))

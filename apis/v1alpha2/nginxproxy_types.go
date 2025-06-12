@@ -479,10 +479,10 @@ type ContainerSpec struct {
 	// +optional
 	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
 
-	// HostPort configuration
+	// HostPorts are the list of ports to expose on the host
 	//
 	// +optional
-	HostPort *HostPort `json:"hostPort,omitempty"`
+	HostPorts []HostPort `json:"hostPorts,omitempty"`
 
 	// VolumeMounts describe the mounting of Volumes within a container.
 	//
@@ -616,14 +616,13 @@ type NodePort struct {
 
 // HostPort to expose on the host.
 type HostPort struct {
-	// Whether to enable hostPort feature
-	// If not specified, or set to false, hostPort will not be enabled.
-	//
-	// +optional
-	Enable bool `json:"enable"`
+	// ContainerPort is nginx port.
+	// kubebuilder:validation:Minimum=1
+	// kubebuilder:validation:Maximum=65535
+	ContainerPort int32 `json:"containerPort"`
 
 	// Number of port to expose on the host.
 	// kubebuilder:validation:Minimum=1
 	// kubebuilder:validation:Maximum=65535
-	Port int32 `json:"port"`
+	HostPort int32 `json:"hostPort"`
 }
