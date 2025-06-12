@@ -43,3 +43,15 @@ func (p *UpstreamSettingsPolicy) GetPolicyStatus() v1alpha2.PolicyStatus {
 func (p *UpstreamSettingsPolicy) SetPolicyStatus(status v1alpha2.PolicyStatus) {
 	p.Status = status
 }
+
+func (p *WAFPolicy) GetTargetRefs() []v1alpha2.LocalPolicyTargetReference {
+	return []v1alpha2.LocalPolicyTargetReference{p.Spec.TargetRef}
+}
+
+func (p *WAFPolicy) GetPolicyStatus() v1alpha2.PolicyStatus {
+	return p.Status
+}
+
+func (p *WAFPolicy) SetPolicyStatus(status v1alpha2.PolicyStatus) {
+	p.Status = status
+}
