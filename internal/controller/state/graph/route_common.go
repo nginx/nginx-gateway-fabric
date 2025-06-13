@@ -72,6 +72,8 @@ const (
 	RouteTypeHTTP RouteType = "http"
 	// RouteTypeGRPC indicates that the RouteType of the L7Route is gRPC.
 	RouteTypeGRPC RouteType = "grpc"
+	// RouteTypeTLS indicates that the RouteType of the L4Route is TLS.
+	RouteTypeTLS RouteType = "tls"
 )
 
 // L4RouteKey is the unique identifier for a L4Route.
@@ -769,6 +771,8 @@ func bindL7RouteToListeners(
 				if cond, ok := backendRef.InvalidForGateways[gwNsName]; ok {
 					attachment.FailedConditions = append(attachment.FailedConditions, cond)
 				}
+
+				checkAppProtocolH2CConditional(backendRef, gw.EffectiveNginxProxy, route)
 			}
 		}
 
@@ -790,6 +794,23 @@ func bindL7RouteToListeners(
 		}
 
 		attachment.Attached = true
+	}
+}
+
+func checkAppProtocolH2CConditional(backendRef BackendRef, npCfg *EffectiveNginxProxy, route *L7Route) {
+	// For all backendRefs referring to a Service with appProtocol h2c, we need to also check if http2
+	// is enabled. Don't need to check for RouteTypeGRPC since there are checks before this which fail the
+	// route from connecting to the Gateway.
+	if backendRef.ServicePort.AppProtocol != nil &&
+		*backendRef.ServicePort.AppProtocol == AppProtocolTypeH2C &&
+		route.RouteType == RouteTypeHTTP &&
+		isHTTP2Disabled(npCfg) {
+		backendRef.Valid = false
+		route.Conditions = append(route.Conditions, conditions.NewRouteBackendRefUnsupportedProtocol(
+			fmt.Errorf("HTTP2 is disabled - cannot support appProtocol h2c on route type %s",
+				route.RouteType,
+			).Error(),
+		))
 	}
 }
 

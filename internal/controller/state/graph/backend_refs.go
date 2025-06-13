@@ -17,6 +17,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 )
 
+const (
+	AppProtocolTypeH2C string = "kubernetes.io/h2c"
+	AppProtocolTypeWS  string = "kubernetes.io/ws"
+	AppProtocolTypeWSS string = "kubernetes.io/wss"
+)
+
 // BackendRef is an internal representation of a backendRef in an HTTP/GRPC/TLSRoute.
 type BackendRef struct {
 	// BackendTLSPolicy is the BackendTLSPolicy of the Service which is referenced by the backendRef.
@@ -198,6 +204,33 @@ func createBackendRef(
 		}
 
 		return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(err.Error()))
+	}
+
+	if svcPort.AppProtocol != nil {
+		valid = validateRouteBackendRefAppProtocol(route.RouteType, *svcPort.AppProtocol, backendTLSPolicy)
+		if !valid {
+			backendRef := BackendRef{
+				SvcNsName:          svcNsName,
+				BackendTLSPolicy:   backendTLSPolicy,
+				ServicePort:        svcPort,
+				Weight:             weight,
+				Valid:              false,
+				IsMirrorBackend:    ref.MirrorBackendIdx != nil,
+				InvalidForGateways: invalidForGateways,
+			}
+
+			err := fmt.Errorf(
+				"route type %s does not support service port appProtocol %s",
+				route.RouteType,
+				*svcPort.AppProtocol,
+			).Error()
+
+			if route.RouteType == RouteTypeHTTP && *svcPort.AppProtocol == AppProtocolTypeWSS && backendTLSPolicy == nil {
+				err += "; missing corresponding BackendTLSPolicy"
+			}
+
+			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedProtocol(err))
+		}
 	}
 
 	backendRef := BackendRef{
@@ -412,6 +445,24 @@ func validateBackendRef(
 	}
 
 	return true, conditions.Condition{}
+}
+
+func validateRouteBackendRefAppProtocol(
+	routeType RouteType,
+	appProtocol string,
+	backendTLSPolicy *BackendTLSPolicy,
+) (valid bool) {
+	// Currently we only support recognition of the Kubernetes Standard Application Protocols defined in KEP-3726.
+	switch appProtocol {
+	case AppProtocolTypeH2C:
+		return routeType == RouteTypeHTTP || routeType == RouteTypeGRPC
+	case AppProtocolTypeWS:
+		return routeType == RouteTypeHTTP
+	case AppProtocolTypeWSS:
+		return (routeType == RouteTypeHTTP && backendTLSPolicy != nil) || routeType == RouteTypeTLS
+	}
+
+	return true
 }
 
 func validateWeight(weight int32) error {
