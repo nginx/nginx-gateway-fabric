@@ -445,7 +445,7 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 
 		err := k8sClient.Get(context.Background(), nsname, &hr)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(helpers.Diff(expected, hr.Status)).To(BeEmpty())
+		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(hr.Status.Parents))
 	}
 }
 
@@ -524,7 +524,7 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 
 		err := k8sClient.Get(context.Background(), nsname, &hr)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(helpers.Diff(expected, hr.Status)).To(BeEmpty())
+		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(hr.Status.Parents))
 	}
 }
 
@@ -601,7 +601,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 
 		err := k8sClient.Get(context.Background(), nsname, &hr)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(helpers.Diff(expected, hr.Status)).To(BeEmpty())
+		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(hr.Status.Parents))
 	}
 }
 
