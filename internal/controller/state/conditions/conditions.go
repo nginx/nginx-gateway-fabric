@@ -433,7 +433,7 @@ func NewRouteBackendRefUnsupportedProtocol(msg string) Condition {
 	return Condition{
 		Type:    string(v1.RouteConditionResolvedRefs),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(RouteReasonBackendRefUnsupportedValue),
+		Reason:  string(RouteReasonBackendRefUnsupportedProtocol),
 		Message: msg,
 	}
 }
