@@ -394,6 +394,34 @@ func TestBindRouteToListeners(t *testing.T) {
 		return normalHTTPRoute
 	}
 
+	normalHTTPRouteWithH2CBackendRef := &L7Route{
+		RouteType: RouteTypeHTTP,
+		Source:    hr,
+		Spec: L7RouteSpec{
+			Hostnames: hr.Spec.Hostnames,
+			Rules: []RouteRule{
+				{
+					BackendRefs: []BackendRef{
+						{
+							ServicePort: v1.ServicePort{
+								AppProtocol: helpers.GetPointer(AppProtocolTypeH2C),
+							},
+						},
+					},
+				},
+			},
+		},
+		Valid:      true,
+		Attachable: true,
+		ParentRefs: []ParentRef{
+			{
+				Idx:         0,
+				Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
+				SectionName: hr.Spec.ParentRefs[0].SectionName,
+			},
+		},
+	}
+
 	getLastNormalHTTPRoute := func() *L7Route {
 		return normalHTTPRoute
 	}
@@ -609,6 +637,89 @@ func TestBindRouteToListeners(t *testing.T) {
 				}),
 			},
 			name: "normal case",
+		},
+		{
+			route: normalHTTPRouteWithH2CBackendRef,
+			gateway: &Gateway{
+				Source: gw,
+				Valid:  true,
+				Listeners: []*Listener{
+					createListener("listener-80-1"),
+				},
+				EffectiveNginxProxy: &EffectiveNginxProxy{
+					DisableHTTP2: helpers.GetPointer(false),
+				},
+			},
+			expectedSectionNameRefs: []ParentRef{
+				{
+					Idx:         0,
+					Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
+					SectionName: hr.Spec.ParentRefs[0].SectionName,
+					Attachment: &ParentRefAttachmentStatus{
+						Attached: true,
+						AcceptedHostnames: map[string][]string{
+							CreateGatewayListenerKey(
+								client.ObjectKeyFromObject(gw),
+								"listener-80-1",
+							): {"foo.example.com"},
+						},
+					},
+				},
+			},
+			expectedGatewayListeners: []*Listener{
+				createModifiedListener("listener-80-1", func(l *Listener) {
+					l.Routes = map[RouteKey]*L7Route{
+						CreateRouteKey(hr): normalHTTPRouteWithH2CBackendRef,
+					}
+				}),
+			},
+			name: "httpRoute with h2c service port protocol in backend and h2c is enabled",
+		},
+		{
+			route: normalHTTPRouteWithH2CBackendRef,
+			gateway: &Gateway{
+				Source: gw,
+				Valid:  true,
+				Listeners: []*Listener{
+					createListener("listener-80-1"),
+				},
+				EffectiveNginxProxy: &EffectiveNginxProxy{
+					DisableHTTP2: helpers.GetPointer(true),
+				},
+			},
+			expectedSectionNameRefs: []ParentRef{
+				{
+					Idx:         0,
+					Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
+					SectionName: hr.Spec.ParentRefs[0].SectionName,
+					Attachment: &ParentRefAttachmentStatus{
+						Attached: true,
+						AcceptedHostnames: map[string][]string{
+							CreateGatewayListenerKey(
+								client.ObjectKeyFromObject(gw),
+								"listener-80-1",
+							): {"foo.example.com"},
+						},
+					},
+				},
+			},
+			expectedGatewayListeners: []*Listener{
+				createModifiedListener("listener-80-1", func(l *Listener) {
+					route := *normalHTTPRouteWithH2CBackendRef
+					route.Conditions = []conditions.Condition{
+						conditions.NewRouteBackendRefUnsupportedProtocol(
+							"HTTP2 is disabled - cannot support appProtocol h2c on route type http"),
+					}
+					l.Routes = map[RouteKey]*L7Route{
+						CreateRouteKey(hr): &route,
+					}
+				}),
+			},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedProtocol(
+					"HTTP2 is disabled - cannot support appProtocol h2c on route type http"),
+			},
+			name: "httpRoute with h2c service port protocol in backend and h2c is disabled",
 		},
 		{
 			route: routeWithMissingSectionName,
