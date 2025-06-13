@@ -254,6 +254,20 @@ func TestBuildTLSRoute(t *testing.T) {
 		}
 	}
 
+	createSvcWithAppProtocol := func(name, appProtocol string, port int32) *apiv1.Service {
+		return &apiv1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      name,
+			},
+			Spec: apiv1.ServiceSpec{
+				Ports: []apiv1.ServicePort{
+					{Port: port, AppProtocol: &appProtocol},
+				},
+			},
+		}
+	}
+
 	diffNsSvc := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "diff",
@@ -349,6 +363,64 @@ func TestBuildTLSRoute(t *testing.T) {
 			services: map[types.NamespacedName]*apiv1.Service{},
 			resolver: alwaysTrueRefGrantResolver,
 			name:     "invalid rule",
+		},
+		{
+			gtr: validRefSameNs,
+			expected: &L4Route{
+				Source:     validRefSameNs,
+				ParentRefs: []ParentRef{parentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRef: BackendRef{
+						SvcNsName:          svcNsName,
+						ServicePort:        apiv1.ServicePort{Port: 80, AppProtocol: helpers.GetPointer(AppProtocolTypeH2C)},
+						Valid:              false,
+						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					},
+				},
+				Attachable: true,
+				Valid:      true,
+				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(
+					"route type tls does not support service port appProtocol kubernetes.io/h2c",
+				)},
+			},
+			gateway: createGateway(),
+			services: map[types.NamespacedName]*apiv1.Service{
+				svcNsName: createSvcWithAppProtocol("hi", AppProtocolTypeH2C, 80),
+			},
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "invalid service port appProtocol h2c",
+		},
+		{
+			gtr: validRefSameNs,
+			expected: &L4Route{
+				Source:     validRefSameNs,
+				ParentRefs: []ParentRef{parentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRef: BackendRef{
+						SvcNsName:          svcNsName,
+						ServicePort:        apiv1.ServicePort{Port: 80, AppProtocol: helpers.GetPointer(AppProtocolTypeWS)},
+						Valid:              false,
+						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					},
+				},
+				Attachable: true,
+				Valid:      true,
+				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(
+					"route type tls does not support service port appProtocol kubernetes.io/ws",
+				)},
+			},
+			gateway: createGateway(),
+			services: map[types.NamespacedName]*apiv1.Service{
+				svcNsName: createSvcWithAppProtocol("hi", AppProtocolTypeWS, 80),
+			},
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "invalid service port appProtocol WS",
 		},
 		{
 			gtr: backedRefDNEGtr,
@@ -585,6 +657,32 @@ func TestBuildTLSRoute(t *testing.T) {
 			},
 			resolver: alwaysTrueRefGrantResolver,
 			name:     "valid; same namespace",
+		},
+		{
+			gtr: validRefSameNs,
+			expected: &L4Route{
+				Source:     validRefSameNs,
+				ParentRefs: []ParentRef{parentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRef: BackendRef{
+						SvcNsName:          svcNsName,
+						ServicePort:        apiv1.ServicePort{Port: 80, AppProtocol: helpers.GetPointer(AppProtocolTypeWSS)},
+						Valid:              true,
+						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					},
+				},
+				Attachable: true,
+				Valid:      true,
+			},
+			gateway: createGateway(),
+			services: map[types.NamespacedName]*apiv1.Service{
+				svcNsName: createSvcWithAppProtocol("hi", AppProtocolTypeWSS, 80),
+			},
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "valid; same namespace, valid appProtocol",
 		},
 	}
 
