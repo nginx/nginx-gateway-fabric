@@ -51,6 +51,21 @@ func createHTTPRoute(
 					},
 				},
 			},
+			BackendRefs: []gatewayv1.HTTPBackendRef{
+				{
+					BackendRef: gatewayv1.BackendRef{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
+							Name: "backend",
+						},
+					},
+					Filters: []gatewayv1.HTTPRouteFilter{
+						{
+							Type: gatewayv1.HTTPRouteFilterExtensionRef,
+						},
+					},
+				},
+			},
 		})
 	}
 
@@ -86,6 +101,20 @@ func addFilterToPath(hr *gatewayv1.HTTPRoute, path string, filter gatewayv1.HTTP
 			}
 		}
 	}
+}
+
+var expRouteBackendRef = RouteBackendRef{
+	BackendRef: gatewayv1.BackendRef{
+		BackendObjectReference: gatewayv1.BackendObjectReference{
+			Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
+			Name: "backend",
+		},
+	},
+	Filters: []any{
+		gatewayv1.HTTPRouteFilter{
+			Type: gatewayv1.HTTPRouteFilterExtensionRef,
+		},
+	},
 }
 
 func TestBuildHTTPRoutes(t *testing.T) {
@@ -196,7 +225,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 									},
 								},
 								Matches:          hr.Spec.Rules[0].Matches,
-								RouteBackendRefs: []RouteBackendRef{},
+								RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 							},
 						},
 					},
@@ -394,7 +423,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: []Filter{},
 							},
 							Matches:          hr.Spec.Rules[0].Matches,
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 						{
 							ValidMatches: true,
@@ -403,7 +432,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hr.Spec.Rules[1].Filters),
 							},
 							Matches:          hr.Spec.Rules[1].Matches,
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 					},
 				},
@@ -439,7 +468,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Valid:   true,
 								Filters: []Filter{},
 							},
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 							Matches:          hrInvalidMatchesEmptyPathType.Spec.Rules[0].Matches,
 						},
 					},
@@ -485,7 +514,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Valid:   true,
 								Filters: []Filter{},
 							},
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 							Matches:          hrInvalidMatchesEmptyPathValue.Spec.Rules[0].Matches,
 						},
 					},
@@ -552,7 +581,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: []Filter{},
 							},
 							Matches:          hrInvalidMatches.Spec.Rules[0].Matches,
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 					},
 				},
@@ -590,7 +619,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrInvalidFilters.Spec.Rules[0].Filters),
 							},
 							Matches:          hrInvalidFilters.Spec.Rules[0].Matches,
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 					},
 				},
@@ -627,7 +656,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: []Filter{},
 							},
 							Matches:          hrDroppedInvalidMatches.Spec.Rules[0].Matches,
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 						{
 							ValidMatches: true,
@@ -636,7 +665,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: []Filter{},
 							},
 							Matches:          hrDroppedInvalidMatches.Spec.Rules[1].Matches,
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 					},
 				},
@@ -676,7 +705,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: []Filter{},
 							},
 							Matches:          hrDroppedInvalidMatchesAndInvalidFilters.Spec.Rules[0].Matches,
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 						{
 							ValidMatches: true,
@@ -687,7 +716,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 									hrDroppedInvalidMatchesAndInvalidFilters.Spec.Rules[1].Filters,
 								),
 							},
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 						{
 							ValidMatches: true,
@@ -696,7 +725,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: []Filter{},
 							},
 							Matches:          hrDroppedInvalidMatchesAndInvalidFilters.Spec.Rules[2].Matches,
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 					},
 				},
@@ -734,7 +763,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrDroppedInvalidFilters.Spec.Rules[0].Filters),
 								Valid:   true,
 							},
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 						{
 							ValidMatches: true,
@@ -743,7 +772,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrDroppedInvalidFilters.Spec.Rules[1].Filters),
 								Valid:   false,
 							},
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 					},
 				},
@@ -785,7 +814,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								},
 								Valid: true,
 							},
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 					},
 				},
@@ -823,7 +852,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrInvalidSnippetsFilter.Spec.Rules[0].Filters),
 								Valid:   false,
 							},
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 					},
 				},
@@ -862,7 +891,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrUnresolvableSnippetsFilter.Spec.Rules[0].Filters),
 								Valid:   false,
 							},
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 					},
 				},
@@ -907,7 +936,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								),
 								Valid: false,
 							},
-							RouteBackendRefs: []RouteBackendRef{},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
 						},
 					},
 				},
