@@ -187,11 +187,11 @@ func processHTTPRouteRule(
 
 	// rule.BackendRefs are validated separately because of their special requirements
 	for _, b := range specRule.BackendRefs {
-		var interfaceFilters []interface{}
+		var interfaceFilters []any
 		if len(b.Filters) > 0 {
-			interfaceFilters = make([]interface{}, 0, len(b.Filters))
-			for i, v := range b.Filters {
-				interfaceFilters[i] = v
+			interfaceFilters = make([]any, 0, len(b.Filters))
+			for _, filter := range b.Filters {
+				interfaceFilters = append(interfaceFilters, filter)
 			}
 		}
 		rbr := RouteBackendRef{
@@ -211,7 +211,7 @@ func processHTTPRouteRule(
 				BackendRef: v1.BackendRef{
 					BackendObjectReference: filter.RequestMirror.BackendRef,
 				},
-				MirrorBackendIdx: helpers.GetPointer[int](i),
+				MirrorBackendIdx: helpers.GetPointer(i),
 			}
 			backendRefs = append(backendRefs, rbr)
 		}
