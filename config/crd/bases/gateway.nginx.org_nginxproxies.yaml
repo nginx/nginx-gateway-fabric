@@ -343,11 +343,11 @@ spec:
                             items:
                               port:
                                 description: |-
-                                  HostPort number to expose on the host
+                                  Number of port to expose on the host.
                                 type: integer
                               containerPort:
                                 description: |-
-                                  ContainerPort number of nginx
+                                  ContainerPort is the port on the nginx container to map to the HostPort.
                                 type: integer
                               required:
                               - port
