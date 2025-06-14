@@ -298,7 +298,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 							corev1.ResourceCPU: resource.Quantity{Format: "100m"},
 						},
 					},
-					HostPorts: []ngfAPIv1alpha2.HostPort{{ContainerPort: int32(8443), HostPort: int32(8443)}},
+					HostPorts: []ngfAPIv1alpha2.HostPort{{ContainerPort: int32(8443), Port: int32(8443)}},
 				},
 			},
 		},

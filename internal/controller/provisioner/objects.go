@@ -784,7 +784,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			for _, hostPort := range containerSpec.HostPorts {
 				for i, port := range container.Ports {
 					if hostPort.ContainerPort == port.ContainerPort {
-						container.Ports[i].HostPort = hostPort.HostPort
+						container.Ports[i].HostPort = hostPort.Port
 					}
 				}
 			}

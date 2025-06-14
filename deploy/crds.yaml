@@ -926,17 +926,17 @@ spec:
                             description: |-
                               List of ports to expose on the host.
                             items:
+                              port:
+                                description: |-
+                                  HostPort number to expose on the host
+                                type: integer
                               containerPort:
                                 description: |-
                                   ContainerPort of nginx
                                 type: integer
-                              hostPort:
-                                description: |-
-                                  HostPort number to expose on the host
-                                type: integer
                               required:
+                              - port
                               - containerPort
-                              - hostPort
                             type: array
                           resources:
                             description: Resources describes the compute resource

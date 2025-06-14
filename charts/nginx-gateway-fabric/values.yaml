@@ -406,12 +406,12 @@ nginx:
     # items:
     #   type: object
     #   properties:
-    #     containerPort:
+    #     port:
     #       type: integer
     #       required: true
     #       minimum: 1
     #       maximum: 65535
-    #     hostPort:
+    #     containerPort:
     #       type: integer
     #       required: true
     #       minimum: 1
@@ -419,8 +419,8 @@ nginx:
     # @schema
     # -- The hostPort configuration
     hostPorts: []
-    # - containerPort: 80
-    #   hostPort: 80
+    # - port: 80
+    #   containerPort: 80
 
     # -- The resource requirements of the NGINX container.
     # resources: {}
