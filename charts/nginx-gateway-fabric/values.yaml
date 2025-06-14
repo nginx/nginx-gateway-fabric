@@ -417,7 +417,12 @@ nginx:
     #       minimum: 1
     #       maximum: 65535
     # @schema
-    # -- The hostPort configuration
+    # -- A list of HostPorts to expose on the host.
+    # This configuration allows containers to bind to a specific port on the host node,
+    # enabling external network traffic to reach the container directly through the host's IP address and port.
+    # Use this option when you need to expose container ports on the host for direct access,
+    # such as for debugging, legacy integrations, or when NodePort/LoadBalancer services are not suitable.
+    # Note: Using hostPort may have security and scheduling implications, as it ties pods to specific nodes and ports.
     hostPorts: []
     # - port: 80
     #   containerPort: 80
