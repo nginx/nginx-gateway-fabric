@@ -103,11 +103,11 @@ func removeDuplicateIndexParentRefs(parentRefs []graph.ParentRef) []graph.Parent
 		idxToParentRef[ref.Idx] = append(idxToParentRef[ref.Idx], ref)
 	}
 
-	results := make([]graph.ParentRef, len(idxToParentRef))
+	results := make([]graph.ParentRef, 0, len(idxToParentRef))
 
 	for idx, refs := range idxToParentRef {
 		if len(refs) == 1 {
-			results[idx] = refs[0]
+			results = append(results, refs[0])
 			continue
 		}
 
@@ -124,7 +124,7 @@ func removeDuplicateIndexParentRefs(parentRefs []graph.ParentRef) []graph.Parent
 				}
 			}
 		}
-		results[idx] = winningParentRef
+		results = append(results, winningParentRef)
 	}
 
 	return results
