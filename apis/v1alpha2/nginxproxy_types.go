@@ -479,7 +479,7 @@ type ContainerSpec struct {
 	// +optional
 	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
 
-	// HostPorts are the list of ports to expose on the host
+	// HostPorts are the list of ports to expose on the host.
 	//
 	// +optional
 	HostPorts []HostPort `json:"hostPorts,omitempty"`
