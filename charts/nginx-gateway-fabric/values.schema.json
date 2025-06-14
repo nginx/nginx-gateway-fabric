@@ -540,6 +540,62 @@
           "title": "affinity",
           "type": "object"
         },
+        "autoscaling": {
+          "properties": {
+            "annotations": {
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "behavior": {
+              "required": [],
+              "title": "behavior",
+              "type": "object"
+            },
+            "enabled": {
+              "default": false,
+              "description": "Enable or disable Horizontal Pod Autoscaler",
+              "required": [],
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "maxReplicas": {
+              "default": 11,
+              "required": [],
+              "title": "maxReplicas",
+              "type": "integer"
+            },
+            "minReplicas": {
+              "default": 1,
+              "required": [],
+              "title": "minReplicas",
+              "type": "integer"
+            },
+            "targetCPUUtilizationPercentage": {
+              "default": 50,
+              "required": [],
+              "title": "targetCPUUtilizationPercentage",
+              "type": "integer"
+            },
+            "targetMemoryUtilizationPercentage": {
+              "default": 50,
+              "required": [],
+              "title": "targetMemoryUtilizationPercentage",
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "title": "autoscaling",
+          "type": "object"
+        },
+        "autoscalingTemplate": {
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "autoscalingTemplate",
+          "type": "array"
+        },
         "config": {
           "description": "The dynamic configuration for the control plane that is contained in the NginxGateway resource.",
           "properties": {
