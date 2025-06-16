@@ -616,7 +616,7 @@ type NodePort struct {
 
 // HostPort exposes an nginx container port on the host.
 type HostPort struct {
-	// Number of port to expose on the host.
+	// Port to expose on the host.
 	// kubebuilder:validation:Minimum=1
 	// kubebuilder:validation:Maximum=65535
 	Port int32 `json:"port"`
