@@ -403,6 +403,7 @@ func TestBindRouteToListeners(t *testing.T) {
 				{
 					BackendRefs: []BackendRef{
 						{
+							Valid: true,
 							ServicePort: v1.ServicePort{
 								AppProtocol: helpers.GetPointer(AppProtocolTypeH2C),
 							},
@@ -421,6 +422,9 @@ func TestBindRouteToListeners(t *testing.T) {
 			},
 		},
 	}
+
+	invalidBackendRefH2c := *normalHTTPRouteWithH2CBackendRef
+	invalidBackendRefH2c.Spec.Rules[0].BackendRefs[0].Valid = false
 
 	getLastNormalHTTPRoute := func() *L7Route {
 		return normalHTTPRoute
@@ -599,8 +603,9 @@ func TestBindRouteToListeners(t *testing.T) {
 	tests := []struct {
 		route                    *L7Route
 		gateway                  *Gateway
-		expectedGatewayListeners []*Listener
+		expectedModifiedRoute    *L7Route
 		name                     string
+		expectedGatewayListeners []*Listener
 		expectedSectionNameRefs  []ParentRef
 		expectedConditions       []conditions.Condition
 	}{
@@ -719,7 +724,8 @@ func TestBindRouteToListeners(t *testing.T) {
 				conditions.NewRouteBackendRefUnsupportedProtocol(
 					"HTTP2 is disabled - cannot support appProtocol h2c on route type http"),
 			},
-			name: "httpRoute with h2c service port protocol in backend and h2c is disabled",
+			expectedModifiedRoute: &invalidBackendRefH2c,
+			name:                  "httpRoute with h2c service port protocol in backend and h2c is disabled",
 		},
 		{
 			route: routeWithMissingSectionName,
@@ -1509,6 +1515,12 @@ func TestBindRouteToListeners(t *testing.T) {
 			g.Expect(test.route.ParentRefs).To(Equal(test.expectedSectionNameRefs))
 			g.Expect(helpers.Diff(test.gateway.Listeners, test.expectedGatewayListeners)).To(BeEmpty())
 			g.Expect(helpers.Diff(test.route.Conditions, test.expectedConditions)).To(BeEmpty())
+
+			// in situations where bindRouteToListeners modifies the route spec, for instance marking a backendRef
+			// as invalid
+			if test.expectedModifiedRoute != nil {
+				g.Expect(helpers.Diff(test.route.Spec, test.expectedModifiedRoute.Spec)).To(BeEmpty())
+			}
 		})
 	}
 }
