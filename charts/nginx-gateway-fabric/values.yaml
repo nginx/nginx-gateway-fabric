@@ -400,7 +400,6 @@ nginx:
   # -- The container configuration for the NGINX container. This is applied globally to all Gateways managed by this
   # instance of NGINX Gateway Fabric.
   container:
-
     # @schema
     # type: array
     # items:
