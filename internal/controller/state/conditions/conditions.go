@@ -33,10 +33,6 @@ const (
 	// Route rules has a backendRef with an unsupported value.
 	RouteReasonBackendRefUnsupportedValue v1.RouteConditionReason = "UnsupportedValue"
 
-	// RouteReasonBackendRefUnsupportedProtocol is used with the "ResolvedRefs" condition when one of the
-	// Route rules has a backendRef with an unsupported protocol.
-	RouteReasonBackendRefUnsupportedProtocol v1.RouteConditionReason = "UnsupportedProtocol"
-
 	// RouteReasonInvalidGateway is used with the "Accepted" (false) condition when the Gateway the Route
 	// references is invalid.
 	RouteReasonInvalidGateway v1.RouteConditionReason = "InvalidGateway"
@@ -433,7 +429,7 @@ func NewRouteBackendRefUnsupportedProtocol(msg string) Condition {
 	return Condition{
 		Type:    string(v1.RouteConditionResolvedRefs),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(RouteReasonBackendRefUnsupportedProtocol),
+		Reason:  string(v1.RouteReasonUnsupportedProtocol),
 		Message: msg,
 	}
 }
