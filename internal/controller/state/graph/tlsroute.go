@@ -1,8 +1,6 @@
 package graph
 
 import (
-	"fmt"
-
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -122,16 +120,11 @@ func validateBackendRefTLSRoute(
 	}
 
 	if svcPort.AppProtocol != nil {
-		valid := validateRouteBackendRefAppProtocol(RouteTypeTLS, *svcPort.AppProtocol, nil)
-		if !valid {
+		err = validateRouteBackendRefAppProtocol(RouteTypeTLS, *svcPort.AppProtocol, nil)
+		if err != nil {
 			backendRef.Valid = false
 
-			return backendRef, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(
-				fmt.Errorf(
-					"route type %s does not support service port appProtocol %s",
-					RouteTypeTLS,
-					*svcPort.AppProtocol,
-				).Error())}
+			return backendRef, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(err.Error())}
 		}
 	}
 
