@@ -50,14 +50,14 @@ func (ServiceChangedPredicate) Update(e event.UpdateEvent) bool {
 	newPortSet := make(map[portInfo]struct{})
 
 	for i := range len(oldSvc.Spec.Ports) {
-		var oldAppProtocol, newAppProtocl string
+		var oldAppProtocol, newAppProtocol string
 
 		if oldPorts[i].AppProtocol != nil {
 			oldAppProtocol = *oldPorts[i].AppProtocol
 		}
 
 		if newPorts[i].AppProtocol != nil {
-			newAppProtocl = *newPorts[i].AppProtocol
+			newAppProtocol = *newPorts[i].AppProtocol
 		}
 
 		oldPortSet[portInfo{
@@ -68,7 +68,7 @@ func (ServiceChangedPredicate) Update(e event.UpdateEvent) bool {
 		newPortSet[portInfo{
 			servicePort: newPorts[i].Port,
 			targetPort:  newPorts[i].TargetPort,
-			appProtocol: newAppProtocl,
+			appProtocol: newAppProtocol,
 		}] = struct{}{}
 	}
 
