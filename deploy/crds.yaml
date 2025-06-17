@@ -926,17 +926,19 @@ spec:
                             description: |-
                               List of ports to expose on the host.
                             items:
-                              port:
-                                description: |-
-                                  Number of port to expose on the host.
-                                type: integer
-                              containerPort:
-                                description: |-
-                                  ContainerPort is the port on the nginx container to map to the HostPort.
-                                type: integer
+                              properties:
+                                port:
+                                  description: |-
+                                    Number of port to expose on the host.
+                                  type: integer
+                                containerPort:
+                                  description: |-
+                                    ContainerPort is the port on the nginx container to map to the HostPort.
+                                  type: integer
                               required:
                               - port
                               - containerPort
+                              type: object
                             type: array
                           resources:
                             description: Resources describes the compute resource
@@ -4324,6 +4326,24 @@ spec:
                                   StopSignal can only be set for Pods with a non-empty .spec.os.name
                                 type: string
                             type: object
+                          hostPorts:
+                            description: |-
+                              List of ports to expose on the host.
+                            items:
+                              properties:
+                                port:
+                                  description: |-
+                                    Number of port to expose on the host.
+                                  type: integer
+                                containerPort:
+                                  description: |-
+                                    ContainerPort is the port on the nginx container to map to the HostPort.
+                                  type: integer
+                              required:
+                              - port
+                              - containerPort
+                              type: object
+                            type: array
                           resources:
                             description: Resources describes the compute resource
                               requirements.
