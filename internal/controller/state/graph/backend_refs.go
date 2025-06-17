@@ -207,8 +207,8 @@ func createBackendRef(
 	}
 
 	if svcPort.AppProtocol != nil {
-		valid = validateRouteBackendRefAppProtocol(route.RouteType, *svcPort.AppProtocol, backendTLSPolicy)
-		if !valid {
+		err = validateRouteBackendRefAppProtocol(route.RouteType, *svcPort.AppProtocol, backendTLSPolicy)
+		if err != nil {
 			backendRef := BackendRef{
 				SvcNsName:          svcNsName,
 				BackendTLSPolicy:   backendTLSPolicy,
@@ -219,17 +219,7 @@ func createBackendRef(
 				InvalidForGateways: invalidForGateways,
 			}
 
-			err := fmt.Errorf(
-				"route type %s does not support service port appProtocol %s",
-				route.RouteType,
-				*svcPort.AppProtocol,
-			).Error()
-
-			if route.RouteType == RouteTypeHTTP && *svcPort.AppProtocol == AppProtocolTypeWSS && backendTLSPolicy == nil {
-				err += "; missing corresponding BackendTLSPolicy"
-			}
-
-			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedProtocol(err))
+			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedProtocol(err.Error()))
 		}
 	}
 
@@ -447,22 +437,50 @@ func validateBackendRef(
 	return true, conditions.Condition{}
 }
 
+// validateRouteBackendRefAppProtocol checks if a given RouteType supports sending traffic to a service AppProtocol.
+// Returns nil if true or AppProtocol is not a Kubernetes Standard Application Protocol.
 func validateRouteBackendRefAppProtocol(
 	routeType RouteType,
 	appProtocol string,
 	backendTLSPolicy *BackendTLSPolicy,
-) (valid bool) {
+) error {
+	err := fmt.Errorf(
+		"route type %s does not support service port appProtocol %s",
+		routeType,
+		appProtocol,
+	)
+
 	// Currently we only support recognition of the Kubernetes Standard Application Protocols defined in KEP-3726.
 	switch appProtocol {
 	case AppProtocolTypeH2C:
-		return routeType == RouteTypeHTTP || routeType == RouteTypeGRPC
+		if routeType == RouteTypeHTTP || routeType == RouteTypeGRPC {
+			return nil
+		}
+
+		return err
 	case AppProtocolTypeWS:
-		return routeType == RouteTypeHTTP
+		if routeType == RouteTypeHTTP {
+			return nil
+		}
+
+		return err
 	case AppProtocolTypeWSS:
-		return (routeType == RouteTypeHTTP && backendTLSPolicy != nil) || routeType == RouteTypeTLS
+		if routeType == RouteTypeHTTP {
+			if backendTLSPolicy != nil {
+				return nil
+			}
+
+			return fmt.Errorf("%w; missing corresponding BackendTLSPolicy", err)
+		}
+
+		if routeType == RouteTypeTLS {
+			return nil
+		}
+
+		return err
 	}
 
-	return true
+	return nil
 }
 
 func validateWeight(weight int32) error {
