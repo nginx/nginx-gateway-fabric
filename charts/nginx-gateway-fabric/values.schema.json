@@ -726,6 +726,13 @@
           "title": "metrics",
           "type": "object"
         },
+        "name": {
+          "default": "",
+          "description": "The name of the NGINX Gateway Fabric deployment - if not present, then by default uses release name given during installation.",
+          "required": [],
+          "title": "name",
+          "type": "string"
+        },
         "nodeSelector": {
           "description": "The nodeSelector of the NGINX Gateway Fabric control plane pod.",
           "required": [],
