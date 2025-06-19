@@ -9,7 +9,7 @@ generate_manifests() {
     manifest=deploy/${chart}/deploy.yaml
     mkdir -p deploy/${chart}
 
-    helm_parameters="--namespace nginx-gateway --set nameOverride=nginx-gateway --skip-crds"
+    helm_parameters="--namespace nginx-gateway --set nginxGateway.name=nginx-gateway --skip-crds"
     if [ "${chart}" == "openshift" ]; then
         chart="default"
         helm_parameters="${helm_parameters} --api-versions security.openshift.io/v1/SecurityContextConstraints"
