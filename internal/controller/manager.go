@@ -440,7 +440,7 @@ func registerControllers(
 			objectType: &apiv1.Service{},
 			name:       "user-service", // unique controller names are needed and we have multiple Service ctlrs
 			options: []controller.Option{
-				controller.WithK8sPredicate(predicate.ServicePortsChangedPredicate{}),
+				controller.WithK8sPredicate(predicate.ServiceChangedPredicate{}),
 			},
 		},
 		{
