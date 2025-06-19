@@ -18,8 +18,8 @@ spec:
         {{- toYaml .Values.nginx.pod | nindent 8 }}
       {{- end }}
       container:
-        {{- if .Values.nginx.container }}
-          {{- toYaml .Values.nginx.container | nindent 8 }}
+        {{- with .Values.nginx.container }}
+        {{- include "filterEmptyFields" . | nindent 8 }}
         {{- end }}
         image:
           {{- toYaml .Values.nginx.image | nindent 10 }}
@@ -34,8 +34,8 @@ spec:
         {{- toYaml .Values.nginx.pod | nindent 8 }}
       {{- end }}
       container:
-        {{- if .Values.nginx.container }}
-          {{- toYaml .Values.nginx.container | nindent 8 }}
+        {{- with .Values.nginx.container }}
+        {{- include "filterEmptyFields" . | nindent 8 }}
         {{- end }}
         image:
           {{- toYaml .Values.nginx.image | nindent 10 }}
