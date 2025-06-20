@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"maps"
 	"sort"
 	"strconv"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +35,8 @@ const (
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
 
-	defaultNginxImagePath     = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
+	//defaultNginxImagePath     = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
+	defaultNginxImagePath     = "prodonlinelabcontainerreg.azurecr.io/nginx-gateway-fabric/nginx"
 	defaultNginxPlusImagePath = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
 	defaultImagePullPolicy    = corev1.PullIfNotPresent
 )
@@ -152,6 +155,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// role/binding (if openshift)
 	// service
 	// deployment/daemonset
+	// hpa
 
 	objects := make([]client.Object, 0, len(configmaps)+len(secrets)+len(openshiftObjs)+3)
 	objects = append(objects, secrets...)
@@ -160,7 +164,24 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	if p.isOpenshift {
 		objects = append(objects, openshiftObjs...)
 	}
-	objects = append(objects, service, deployment)
+
+	if nProxyCfg.Kubernetes.Deployment.Autoscaling.Enabled {
+		// hpaAnnotations := make(map[string]string)
+		// if nProxyCfg.Kubernetes.Deployment.Autoscaling.HPAAnnotations != nil {
+		// 	for key, value := range nProxyCfg.Kubernetes.Deployment.Autoscaling.HPAAnnotations {
+		// 		hpaAnnotations[string(key)] = string(value)
+		// 	}
+		// }
+		// objectMeta.Annotations = hpaAnnotations
+
+		hpa := buildNginxDeploymentHPA(
+			objectMeta,
+			nProxyCfg,
+		)
+		objects = append(objects, service, deployment, hpa)
+	} else {
+		objects = append(objects, service, deployment)
+	}
 
 	return objects, err
 }
@@ -895,6 +916,64 @@ func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (str
 	return fmt.Sprintf("%s:%s", image, tag), pullPolicy
 }
 
+func buildNginxDeploymentHPA(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+) *autoscalingv2.HorizontalPodAutoscaler {
+	var metrics []autoscalingv2.MetricSpec
+
+	cpuUtil := nProxyCfg.Kubernetes.Deployment.Autoscaling.TargetCPUUtilizationPercentage
+	memUtil := nProxyCfg.Kubernetes.Deployment.Autoscaling.TargetMemoryUtilizationPercentage
+
+	if cpuUtil != nil {
+		metrics = append(metrics, autoscalingv2.MetricSpec{
+			Type: autoscalingv2.ResourceMetricSourceType,
+			Resource: &autoscalingv2.ResourceMetricSource{
+				Name: "cpu",
+				Target: autoscalingv2.MetricTarget{
+					Type:               autoscalingv2.UtilizationMetricType,
+					AverageUtilization: cpuUtil,
+				},
+			},
+		})
+	}
+
+	if memUtil != nil {
+		metrics = append(metrics, autoscalingv2.MetricSpec{
+			Type: autoscalingv2.ResourceMetricSourceType,
+			Resource: &autoscalingv2.ResourceMetricSource{
+				Name: "memory",
+				Target: autoscalingv2.MetricTarget{
+					Type:               autoscalingv2.UtilizationMetricType,
+					AverageUtilization: memUtil,
+				},
+			},
+		})
+	}
+
+	if len(metrics) == 0 {
+		log.Fatal("No HPA metric provided")
+		return nil
+	}
+	//log.Fatal("HPA Behavior", nProxyCfg.Kubernetes.Deployment.Autoscaling.Behavior)
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: objectMeta,
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       objectMeta.Name,
+			},
+			MinReplicas: &nProxyCfg.Kubernetes.Deployment.Autoscaling.MinReplicas,
+			MaxReplicas: nProxyCfg.Kubernetes.Deployment.Autoscaling.MaxReplicas,
+			Metrics:     metrics,
+			//Behavior:    nProxyCfg.Kubernetes.Deployment.Autoscaling.Behavior,
+		},
+	}
+
+	return hpa
+}
+
 // TODO(sberman): see about how this can be made more elegant. Maybe create some sort of Object factory
 // that can better store/build all the objects we need, to reduce the amount of duplicate object lists that we
 // have everywhere.
@@ -906,6 +985,7 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 	// serviceaccount
 	// configmaps
 	// secrets
+	// hpa
 
 	objectMeta := metav1.ObjectMeta{
 		Name:      deploymentNSName.Name,
@@ -921,8 +1001,11 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 	service := &corev1.Service{
 		ObjectMeta: objectMeta,
 	}
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: objectMeta,
+	}
 
-	objects := []client.Object{deployment, daemonSet, service}
+	objects := []client.Object{deployment, daemonSet, service, hpa}
 
 	if p.isOpenshift {
 		role := &rbacv1.Role{

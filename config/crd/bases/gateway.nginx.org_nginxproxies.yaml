@@ -3459,6 +3459,32 @@ spec:
                       Deployment is the configuration for the NGINX Deployment.
                       This is the default deployment option.
                     properties:
+                      autoscaling:
+                        description: Horizontal Pod Autoscaling.
+                        properties:
+                          enabled:
+                            description: Enable or disable Horizontal Pod Autoscaler
+                            type: boolean
+                          maxReplicas:
+                            description: Minimun of replicas.
+                            format: int32
+                            type: integer
+                          minReplicas:
+                            description: Minimun of replicas.
+                            format: int32
+                            type: integer
+                          targetCPUUtilizationPercentage:
+                            description: Target cpu utilization percentage of HPA.
+                            format: int32
+                            type: integer
+                          targetMemoryUtilizationPercentage:
+                            description: Target memory utilization percentage of HPA.
+                            format: int32
+                            type: integer
+                        required:
+                        - enabled
+                        - maxReplicas
+                        type: object
                       container:
                         description: Container defines container fields for the NGINX
                           container.

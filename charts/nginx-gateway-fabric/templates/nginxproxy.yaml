@@ -12,7 +12,15 @@ spec:
   kubernetes:
     {{- if eq .Values.nginx.kind "deployment" }}
     deployment:
+      {{- if .Values.nginx.replicas }}
       replicas: {{ .Values.nginx.replicas }}
+      {{- end }}
+      autoscaling:
+        enabled: {{ .Values.nginx.autoscaling.enabled }}
+        minReplicas: {{ .Values.nginx.autoscaling.minReplicas }}
+        maxReplicas: {{ .Values.nginx.autoscaling.maxReplicas }}
+        targetCPUUtilizationPercentage: {{ .Values.nginx.autoscaling.targetCPUUtilizationPercentage }}
+        targetMemoryUtilizationPercentage: {{ .Values.nginx.autoscaling.targetMemoryUtilizationPercentage }}
       {{- if .Values.nginx.pod }}
       pod:
         {{- toYaml .Values.nginx.pod | nindent 8 }}
