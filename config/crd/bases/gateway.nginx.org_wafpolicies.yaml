@@ -151,6 +151,9 @@ spec:
                 required:
                 - fileLocation
                 type: object
+                x-kubernetes-validations:
+                - message: policySource is required when securityLogs are specified
+                  rule: '!has(self.securityLogs) || has(self.policySource)'
               securityLogs:
                 description: |-
                   SecurityLogs defines the security logging configuration for app_protect_security_log directives.
@@ -331,6 +334,9 @@ spec:
                       required:
                       - fileLocation
                       type: object
+                      x-kubernetes-validations:
+                      - message: policySource is required when securityLogs are specified
+                        rule: '!has(self.securityLogs) || has(self.policySource)'
                     name:
                       description: Name is the name of the security log configuration.
                       maxLength: 63

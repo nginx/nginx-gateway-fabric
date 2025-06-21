@@ -2940,13 +2940,14 @@ var _ = Describe("ChangeProcessor", func() {
 
 		Describe("NGF Policy resource changes", Ordered, func() {
 			var (
-				gw                     *v1.Gateway
-				route                  *v1.HTTPRoute
-				svc                    *apiv1.Service
-				csp, cspUpdated        *ngfAPIv1alpha1.ClientSettingsPolicy
-				obs, obsUpdated        *ngfAPIv1alpha2.ObservabilityPolicy
-				usp, uspUpdated        *ngfAPIv1alpha1.UpstreamSettingsPolicy
-				cspKey, obsKey, uspKey graph.PolicyKey
+				gw                             *v1.Gateway
+				route                          *v1.HTTPRoute
+				svc                            *apiv1.Service
+				csp, cspUpdated                *ngfAPIv1alpha1.ClientSettingsPolicy
+				obs, obsUpdated                *ngfAPIv1alpha2.ObservabilityPolicy
+				usp, uspUpdated                *ngfAPIv1alpha1.UpstreamSettingsPolicy
+				waf, wafUpdated                *ngfAPIv1alpha1.WAFPolicy
+				cspKey, obsKey, uspKey, wafKey graph.PolicyKey
 			)
 
 			BeforeAll(func() {
@@ -3068,6 +3069,35 @@ var _ = Describe("ChangeProcessor", func() {
 						Version: "v1alpha1",
 					},
 				}
+
+				waf = &ngfAPIv1alpha1.WAFPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "waf",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.WAFPolicySpec{
+						TargetRef: v1alpha2.LocalPolicyTargetReference{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gw",
+						},
+						PolicySource: &ngfAPIv1alpha1.WAFPolicySource{
+							FileLocation: "http://example.com/policy.tgz",
+						},
+					},
+				}
+
+				wafUpdated = waf.DeepCopy()
+				wafUpdated.Spec.PolicySource.FileLocation = "http://example.com/updated-policy.tgz"
+
+				wafKey = graph.PolicyKey{
+					NsName: types.NamespacedName{Name: "waf", Namespace: "test"},
+					GVK: schema.GroupVersionKind{
+						Group:   ngfAPIv1alpha1.GroupName,
+						Kind:    kinds.WAFPolicy,
+						Version: "v1alpha1",
+					},
+				}
 			})
 
 			/*
@@ -3079,6 +3109,7 @@ var _ = Describe("ChangeProcessor", func() {
 			When("a policy is created that references a resource that is not in the last graph", func() {
 				It("reports no changes", func() {
 					processor.CaptureUpsertChange(csp)
+					processor.CaptureUpsertChange(waf)
 					processor.CaptureUpsertChange(obs)
 					processor.CaptureUpsertChange(usp)
 
@@ -3093,6 +3124,8 @@ var _ = Describe("ChangeProcessor", func() {
 					Expect(graph).ToNot(BeNil())
 					Expect(graph.NGFPolicies).To(HaveKey(cspKey))
 					Expect(graph.NGFPolicies[cspKey].Source).To(Equal(csp))
+					Expect(graph.NGFPolicies).To(HaveKey(wafKey))
+					Expect(graph.NGFPolicies[wafKey].Source).To(Equal(waf))
 					Expect(graph.NGFPolicies).ToNot(HaveKey(obsKey))
 
 					processor.CaptureUpsertChange(route)
@@ -3113,6 +3146,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(cspUpdated)
 					processor.CaptureUpsertChange(obsUpdated)
 					processor.CaptureUpsertChange(uspUpdated)
+					processor.CaptureUpsertChange(wafUpdated)
 
 					graph := processor.Process()
 					Expect(graph).ToNot(BeNil())
@@ -3122,6 +3156,8 @@ var _ = Describe("ChangeProcessor", func() {
 					Expect(graph.NGFPolicies[obsKey].Source).To(Equal(obsUpdated))
 					Expect(graph.NGFPolicies).To(HaveKey(uspKey))
 					Expect(graph.NGFPolicies[uspKey].Source).To(Equal(uspUpdated))
+					Expect(graph.NGFPolicies).To(HaveKey(wafKey))
+					Expect(graph.NGFPolicies[wafKey].Source).To(Equal(wafUpdated))
 				})
 			})
 			When("the policy is deleted", func() {
@@ -3129,6 +3165,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.ClientSettingsPolicy{}, client.ObjectKeyFromObject(csp))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha2.ObservabilityPolicy{}, client.ObjectKeyFromObject(obs))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}, client.ObjectKeyFromObject(usp))
+					processor.CaptureDeleteChange(&ngfAPIv1alpha1.WAFPolicy{}, client.ObjectKeyFromObject(waf))
 
 					graph := processor.Process()
 					Expect(graph).ToNot(BeNil())
