@@ -149,6 +149,7 @@ rules:
   - clientsettingspolicies
   - observabilitypolicies
   - upstreamsettingspolicies
+  - wafpolicies
   verbs:
   - list
   - watch
@@ -159,6 +160,7 @@ rules:
   - clientsettingspolicies/status
   - observabilitypolicies/status
   - upstreamsettingspolicies/status
+  - wafpolicies/status
   verbs:
   - update
 - apiGroups:

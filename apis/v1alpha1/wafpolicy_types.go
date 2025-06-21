@@ -59,6 +59,10 @@ type WAFPolicySpec struct {
 }
 
 // WAFPolicySource defines the source location and configuration for fetching WAF policy bundles.
+//
+// +kubebuilder:validation:XValidation:message="policySource is required when securityLogs are specified",rule="!has(self.securityLogs) || has(self.policySource)"
+//
+//nolint:lll
 type WAFPolicySource struct {
 	// AuthSecret is the Secret containing authentication credentials for the WAF policy source.
 	//
