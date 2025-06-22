@@ -13,6 +13,9 @@ nginxGateway:
   # -- The kind of the NGINX Gateway Fabric installation - currently, only deployment is supported.
   kind: deployment
 
+  # -- The name of the NGINX Gateway Fabric deployment - if not present, then by default uses release name given during installation.
+  name: ""
+
   # @schema
   # required: true
   # type: string
