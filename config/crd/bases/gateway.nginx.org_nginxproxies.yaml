@@ -81,6 +81,32 @@ spec:
                             description: Debug enables debugging for NGINX by using
                               the nginx-debug binary.
                             type: boolean
+                          hostPorts:
+                            description: HostPorts are the list of ports to expose
+                              on the host.
+                            items:
+                              description: HostPort exposes an nginx container port
+                                on the host.
+                              properties:
+                                containerPort:
+                                  description: |-
+                                    ContainerPort is the port on the nginx container to map to the HostPort.
+                                    kubebuilder:validation:Minimum=1
+                                    kubebuilder:validation:Maximum=65535
+                                  format: int32
+                                  type: integer
+                                port:
+                                  description: |-
+                                    Port to expose on the host.
+                                    kubebuilder:validation:Minimum=1
+                                    kubebuilder:validation:Maximum=65535
+                                  format: int32
+                                  type: integer
+                              required:
+                              - containerPort
+                              - port
+                              type: object
+                            type: array
                           image:
                             description: Image is the NGINX image to use.
                             properties:
@@ -337,24 +363,6 @@ spec:
                                   StopSignal can only be set for Pods with a non-empty .spec.os.name
                                 type: string
                             type: object
-                          hostPorts:
-                            description: |-
-                              List of ports to expose on the host.
-                            items:
-                              properties:
-                                port:
-                                  description: |-
-                                    Number of port to expose on the host.
-                                  type: integer
-                                containerPort:
-                                  description: |-
-                                    ContainerPort is the port on the nginx container to map to the HostPort.
-                                  type: integer
-                              required:
-                              - port
-                              - containerPort
-                              type: object
-                            type: array
                           resources:
                             description: Resources describes the compute resource
                               requirements.
@@ -3485,6 +3493,32 @@ spec:
                             description: Debug enables debugging for NGINX by using
                               the nginx-debug binary.
                             type: boolean
+                          hostPorts:
+                            description: HostPorts are the list of ports to expose
+                              on the host.
+                            items:
+                              description: HostPort exposes an nginx container port
+                                on the host.
+                              properties:
+                                containerPort:
+                                  description: |-
+                                    ContainerPort is the port on the nginx container to map to the HostPort.
+                                    kubebuilder:validation:Minimum=1
+                                    kubebuilder:validation:Maximum=65535
+                                  format: int32
+                                  type: integer
+                                port:
+                                  description: |-
+                                    Port to expose on the host.
+                                    kubebuilder:validation:Minimum=1
+                                    kubebuilder:validation:Maximum=65535
+                                  format: int32
+                                  type: integer
+                              required:
+                              - containerPort
+                              - port
+                              type: object
+                            type: array
                           image:
                             description: Image is the NGINX image to use.
                             properties:
@@ -3741,24 +3775,6 @@ spec:
                                   StopSignal can only be set for Pods with a non-empty .spec.os.name
                                 type: string
                             type: object
-                          hostPorts:
-                            description: |-
-                              List of ports to expose on the host.
-                            items:
-                              properties:
-                                port:
-                                  description: |-
-                                    Number of port to expose on the host.
-                                  type: integer
-                                containerPort:
-                                  description: |-
-                                    ContainerPort is the port on the nginx container to map to the HostPort.
-                                  type: integer
-                              required:
-                              - port
-                              - containerPort
-                              type: object
-                            type: array
                           resources:
                             description: Resources describes the compute resource
                               requirements.
