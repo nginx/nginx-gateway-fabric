@@ -35,6 +35,10 @@ type WAFPolicyList struct {
 }
 
 // WAFPolicySpec defines the desired state of a WAFPolicy.
+//
+// +kubebuilder:validation:XValidation:message="policySource is required when securityLogs are specified",rule="!has(self.securityLogs) || has(self.policySource)"
+//
+//nolint:lll
 type WAFPolicySpec struct {
 	// PolicySource defines the source location and configuration for the compiled WAF policy bundle.
 	//

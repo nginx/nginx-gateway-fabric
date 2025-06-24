@@ -145,6 +145,7 @@ rules:
   - clientsettingspolicies
   - observabilitypolicies
   - upstreamsettingspolicies
+  - wafpolicies
   - snippetsfilters
   verbs:
   - list
@@ -156,6 +157,7 @@ rules:
   - clientsettingspolicies/status
   - observabilitypolicies/status
   - upstreamsettingspolicies/status
+  - wafpolicies/status
   - snippetsfilters/status
   verbs:
   - update
