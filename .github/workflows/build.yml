@@ -87,7 +87,7 @@ jobs:
           token_format: access_token
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-        if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
+        if: ${{ github.event_name != 'pull_request' && (contains(inputs.image, 'plus') || inputs.image == 'plus-waf') }}
 
       - name: Login to GAR
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
@@ -95,7 +95,7 @@ jobs:
           registry: us-docker.pkg.dev
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
-        if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
+        if: ${{ github.event_name != 'pull_request' && (contains(inputs.image, 'plus') || inputs.image == 'plus-waf') }}
 
       - name: Docker meta
         id: meta
@@ -106,7 +106,9 @@ jobs:
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric,enable=${{ inputs.image == 'ngf' && github.event_name != 'pull_request' }}
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx,enable=${{ inputs.image == 'nginx' && github.event_name != 'pull_request' }}
             name=docker-mgmt.nginx.com/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
+            name=docker-mgmt.nginx.com/nginx-gateway-fabric/nginx-plus-nap-waf,enable=${{ inputs.image == 'plus-waf' && github.event_name != 'pull_request' }}
             name=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
+            name=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus-nap-waf,enable=${{ inputs.image == 'plus-waf' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
           flavor: |
             latest=${{ (inputs.tag != '' && 'true') || 'auto' }}
@@ -134,7 +136,7 @@ jobs:
       - name: Build Docker Image
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
-          file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || '' }}
+          file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ (inputs.image == 'plus' || inputs.image == 'plus-waf') && '.nginxplus' || '' }}
           context: "."
           target: ${{ inputs.image == 'ngf' && 'goreleaser' || '' }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -146,17 +148,20 @@ jobs:
           cache-to: type=gha,scope=${{ inputs.image }},mode=max
           pull: true
           no-cache: ${{ github.event_name != 'pull_request' }}
-          sbom: true
+          sbom: ${{ inputs.image != 'plus-waf' }}
           provenance: mode=max
           build-args: |
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
+            ${{ inputs.image == 'plus-waf' && 'ALPINE_VERSION=3.19' || '' }}
+            ${{ inputs.image == 'plus-waf' && 'INCLUDE_NAP_WAF=true' || '' }}
           secrets: |
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', secrets.NGINX_KEY) || '' }}
 
       - name: Inspect SBOM and output manifest
+        if: ${{ inputs.image != 'plus-waf' }}
         run: |
           docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > sbom-${{ inputs.image }}.json
           docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --raw
@@ -169,6 +174,7 @@ jobs:
           only-fixed: true
           add-cpes-if-none: true
           fail-build: false
+        if: inputs.image != 'plus-waf'
 
       - name: Upload scan result to GitHub Security tab
         uses: github/codeql-action/upload-sarif@ce28f5bb42b7a9f2c824e633a3f6ee835bab6858 # v3.29.0
@@ -176,4 +182,4 @@ jobs:
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: build-${{ inputs.image }}
-        if: always()
+        if: always() && inputs.image != 'plus-waf'
