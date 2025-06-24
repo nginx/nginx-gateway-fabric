@@ -207,6 +207,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 				predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 			},
 			{
+				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
+				store:     commonPolicyObjectStore,
+				predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+			},
+			{
 				gvk:       cfg.MustExtractGVK(&v1alpha2.TLSRoute{}),
 				store:     newObjectStoreMapAdapter(clusterStore.TLSRoutes),
 				predicate: nil,

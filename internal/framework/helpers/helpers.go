@@ -3,6 +3,8 @@ package helpers
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"text/template"
 
@@ -86,4 +88,11 @@ func MustExecuteTemplate(templ *template.Template, data interface{}) []byte {
 	}
 
 	return buf.Bytes()
+}
+
+// ToSafeFileName converts any string to a filesystem-safe filename using SHA256 hash.
+func ToSafeFileName(input string) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(input))
+	return base64.URLEncoding.EncodeToString(hasher.Sum(nil))
 }
