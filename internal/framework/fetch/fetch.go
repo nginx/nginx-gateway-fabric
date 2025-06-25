@@ -167,11 +167,11 @@ func (f *DefaultFetcher) GetRemoteFile(url string, opts ...Option) ([]byte, erro
 		return true, nil
 	})
 
-	// Return the most meaningful error
 	if result != nil {
 		return result, nil
 	}
 
+	// Return the most meaningful error
 	if lastErr != nil {
 		return nil, lastErr
 	}
@@ -215,7 +215,13 @@ func (f *DefaultFetcher) validateFileContent(ctx context.Context, data []byte, u
 	for _, method := range options.validationMethods {
 		switch method {
 		case "checksum":
-			if err := f.validateChecksum(ctx, data, url, options.checksumLocation); err != nil {
+			if err := f.validateChecksum(
+				ctx,
+				data,
+				options.timeout,
+				url,
+				options.checksumLocation,
+			); err != nil {
 				return fmt.Errorf("checksum validation failed: %w", err)
 			}
 		default:
@@ -226,7 +232,12 @@ func (f *DefaultFetcher) validateFileContent(ctx context.Context, data []byte, u
 }
 
 // validateChecksum validates the file content against a SHA256 checksum.
-func (f *DefaultFetcher) validateChecksum(ctx context.Context, data []byte, url, checksumLocation string) error {
+func (f *DefaultFetcher) validateChecksum(
+	ctx context.Context,
+	data []byte,
+	timeout time.Duration,
+	url, checksumLocation string,
+) error {
 	// If no checksum location is provided, default to <url>.sha256
 	checksumURL := checksumLocation
 	if checksumURL == "" {
@@ -238,7 +249,7 @@ func (f *DefaultFetcher) validateChecksum(ctx context.Context, data []byte, url,
 		return &ChecksumFetchError{URL: checksumURL, Err: fmt.Errorf("failed to convert S3 checksum URL: %w", err)}
 	}
 
-	client := f.createHTTPClientWithTimeout(30 * time.Second)
+	client := f.createHTTPClientWithTimeout(timeout)
 	checksumData, err := f.fetchFileContent(ctx, client, fetchChecksumURL)
 	if err != nil {
 		return &ChecksumFetchError{URL: checksumURL, Err: err}
