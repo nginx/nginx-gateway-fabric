@@ -384,6 +384,9 @@ spec:
             required:
             - targetRef
             type: object
+            x-kubernetes-validations:
+            - message: policySource is required when securityLogs are specified
+              rule: '!has(self.securityLogs) || has(self.policySource)'
           status:
             description: Status defines the state of the WAFPolicy.
             properties:

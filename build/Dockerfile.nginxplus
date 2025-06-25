@@ -1,4 +1,8 @@
 # syntax=docker/dockerfile:1.17
+
+# renovate: datasource=docker depName=alpine
+ARG ALPINE_VERSION=3.21
+
 FROM scratch AS nginx-files
 
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
