@@ -199,28 +199,14 @@ func ConvertConditions(
 
 // HasMatchingCondition checks if the given condition matches any of the existing conditions.
 func HasMatchingCondition(existingConditions []Condition, cond Condition) bool {
-	condMap := make(map[Condition]struct{}, len(existingConditions))
-	for _, cond := range existingConditions {
-		key := Condition{
-			Type:    cond.Type,
-			Status:  cond.Status,
-			Reason:  cond.Reason,
-			Message: cond.Message,
+	for _, existing := range existingConditions {
+		if existing.Type == cond.Type &&
+			existing.Status == cond.Status &&
+			existing.Reason == cond.Reason &&
+			existing.Message == cond.Message {
+			return true
 		}
-		condMap[key] = struct{}{}
 	}
-
-	key := Condition{
-		Type:    cond.Type,
-		Status:  cond.Status,
-		Reason:  cond.Reason,
-		Message: cond.Message,
-	}
-
-	if _, exists := condMap[key]; exists {
-		return true
-	}
-
 	return false
 }
 

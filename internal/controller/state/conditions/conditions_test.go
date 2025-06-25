@@ -106,7 +106,7 @@ func TestConvertConditions(t *testing.T) {
 	g.Expect(result).Should(Equal(expected))
 }
 
-func TestHasMatchingConding(t *testing.T) {
+func TestHasMatchingCondition(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
