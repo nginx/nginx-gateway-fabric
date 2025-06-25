@@ -450,7 +450,7 @@ func refGroupKind(group v1.Group, kind v1.Kind) string {
 }
 
 // addPolicyAffectedStatusToTargetRefs adds the policyAffected status to the target references
-// of ClientSetttingsPolicies and ObservabilityPolicies.
+// of ClientSettingsPolicies and ObservabilityPolicies.
 func addPolicyAffectedStatusToTargetRefs(
 	processedPolicies map[PolicyKey]*Policy,
 	routes map[RouteKey]*L7Route,
