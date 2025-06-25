@@ -319,6 +319,11 @@ func TestTelemetryEnabledForNginxProxy(t *testing.T) {
 		enabled bool
 	}{
 		{
+			name:    "effective nginx proxy is nil",
+			ep:      nil,
+			enabled: false,
+		},
+		{
 			name: "telemetry struct is nil",
 			ep: &EffectiveNginxProxy{
 				Telemetry: nil,
