@@ -8,14 +8,32 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+const (
+	// Default configuration values.
+	defaultTimeout              = 30 * time.Second
+	defaultRetryAttempts        = 3
+	defaultRetryMaxDelay        = 5 * time.Minute
+	defaultRetryInitialDuration = 200 * time.Millisecond
+	defaultRetryJitter          = 0.1
+	defaultRetryLinearFactor    = 1.0
+	exponentialBackoffFactor    = 2.0
+
+	// HTTP configuration.
+	userAgent = "nginx-gateway-fabric"
+
+	// Checksum configuration.
+	checksumFileSuffix = ".sha256"
+)
 
 // ChecksumMismatchError represents an error when the calculated checksum doesn't match the expected checksum.
 // This type of error should not trigger retries as it indicates data corruption or tampering.
@@ -28,37 +46,68 @@ func (e *ChecksumMismatchError) Error() string {
 	return fmt.Sprintf("checksum mismatch: expected %s, got %s", e.Expected, e.Actual)
 }
 
-// ChecksumFetchError represents an error when fetching the checksum file fails.
-// This type of error should trigger retries as it may be a temporary network issue.
-type ChecksumFetchError struct {
+// S3Error represents an error when fetching from S3 fails.
+type S3Error struct {
+	Err    error
+	Bucket string
+	Key    string
+}
+
+func (e *S3Error) Error() string {
+	return fmt.Sprintf("S3 error for s3://%s/%s: %v", e.Bucket, e.Key, e.Err)
+}
+
+func (e *S3Error) Unwrap() error {
+	return e.Err
+}
+
+// HTTPStatusError represents an error for an unexpected HTTP status code.
+type HTTPStatusError struct {
+	StatusCode int
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("unexpected status code: %d", e.StatusCode)
+}
+
+// HTTPError represents an error when fetching via HTTP fails.
+type HTTPError struct {
 	Err error
 	URL string
 }
 
-func (e *ChecksumFetchError) Error() string {
-	return fmt.Sprintf("failed to fetch checksum from %s: %v", e.URL, e.Err)
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("HTTP error for %s: %v", e.URL, e.Err)
 }
 
-func (e *ChecksumFetchError) Unwrap() error {
+func (e *HTTPError) Unwrap() error {
 	return e.Err
 }
 
-// options contains the internal configuration for fetching remote files.
+// RetryBackoffType defines supported backoff strategies.
+type RetryBackoffType string
+
+const (
+	RetryBackoffExponential RetryBackoffType = "exponential"
+	RetryBackoffLinear      RetryBackoffType = "linear"
+)
+
+// options contains the configuration for fetching remote files.
 type options struct {
-	checksumLocation  string
-	retryBackoff      RetryBackoffType
-	validationMethods []string
-	timeout           time.Duration
-	retryMaxDelay     time.Duration
-	retryAttempts     int32
+	checksumLocation string
+	retryBackoff     RetryBackoffType
+	timeout          time.Duration
+	retryMaxDelay    time.Duration
+	retryAttempts    int32
+	checksumEnabled  bool
 }
 
 // defaults returns options with sensible default values.
 func defaults() options {
 	return options{
-		timeout:       30 * time.Second,
-		retryAttempts: 3,
-		retryMaxDelay: 5 * time.Minute,
+		timeout:       defaultTimeout,
+		retryAttempts: defaultRetryAttempts,
+		retryMaxDelay: defaultRetryMaxDelay,
 		retryBackoff:  RetryBackoffExponential,
 	}
 }
@@ -73,7 +122,7 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithRetryAttempts sets the number of retry attempts.
+// WithRetryAttempts sets the number of retry attempts (total attempts = 1 + retries).
 func WithRetryAttempts(attempts int32) Option {
 	return func(o *options) {
 		o.retryAttempts = attempts
@@ -95,36 +144,75 @@ func WithMaxRetryDelay(delay time.Duration) Option {
 }
 
 // WithChecksum enables checksum validation with an optional custom checksum location.
-// If no location is provided, defaults to <fileURL>.sha256.
+// For HTTP URLs: if no location is provided, defaults to <fileURL>.sha256
+// For S3 URLs: if no location is provided, defaults to <key>.sha256 in the same bucket.
 func WithChecksum(checksumLocation ...string) Option {
 	return func(o *options) {
-		o.validationMethods = append(o.validationMethods, "checksum")
+		o.checksumEnabled = true
 		if len(checksumLocation) > 0 {
 			o.checksumLocation = checksumLocation[0]
 		}
 	}
 }
 
+// S3Client defines the interface for S3 operations.
+//
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 . S3Client
+type S3Client interface {
+	GetObject(ctx context.Context, input *s3.GetObjectInput, opts ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+}
+
 // Fetcher defines the interface for fetching remote files.
 //
-//counterfeiter:generate . Fetcher
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
 type Fetcher interface {
-	GetRemoteFile(url string, opts ...Option) ([]byte, error)
+	GetRemoteFile(targetURL string, opts ...Option) ([]byte, error)
 }
 
 // DefaultFetcher is the default implementation of Fetcher.
-type DefaultFetcher struct{}
+// It supports both HTTP(S) and S3 URLs with automatic protocol detection.
+type DefaultFetcher struct {
+	s3Client   S3Client
+	httpClient *http.Client
+}
 
-// RetryBackoffType defines supported backoff strategies.
-type RetryBackoffType string
+// NewDefaultFetcher creates a new DefaultFetcher with AWS and HTTP clients configured.
+// If AWS credentials are not available, S3 functionality will be disabled but HTTP will still work.
+func NewDefaultFetcher() (*DefaultFetcher, error) {
+	// Try to load AWS config
+	// Note: We don't return an error if AWS config fails - HTTP fetching should still work
+	var s3Client S3Client
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	if err == nil {
+		s3Client = s3.NewFromConfig(cfg)
+	}
 
-const (
-	RetryBackoffExponential RetryBackoffType = "exponential"
-	RetryBackoffLinear      RetryBackoffType = "linear"
-)
+	httpClient := &http.Client{
+		Timeout: defaultTimeout,
+	}
 
-// GetRemoteFile fetches a remote file with retry logic and validation.
-func (f *DefaultFetcher) GetRemoteFile(url string, opts ...Option) ([]byte, error) {
+	return &DefaultFetcher{
+		s3Client:   s3Client,
+		httpClient: httpClient,
+	}, nil
+}
+
+// NewDefaultFetcherWithS3Client creates a new DefaultFetcher with a custom S3 client.
+// This is primarily used for testing with fake S3 clients.
+func NewDefaultFetcherWithS3Client(s3Client S3Client) *DefaultFetcher {
+	httpClient := &http.Client{
+		Timeout: defaultTimeout,
+	}
+
+	return &DefaultFetcher{
+		s3Client:   s3Client,
+		httpClient: httpClient,
+	}
+}
+
+// GetRemoteFile fetches a remote file with retry logic and optional validation.
+// Supports both HTTP(S) and S3 URLs with automatic protocol detection.
+func (f *DefaultFetcher) GetRemoteFile(targetURL string, opts ...Option) ([]byte, error) {
 	ctx := context.Background()
 
 	// Apply options to defaults
@@ -133,33 +221,50 @@ func (f *DefaultFetcher) GetRemoteFile(url string, opts ...Option) ([]byte, erro
 		opt(&options)
 	}
 
-	fetchURL, err := f.convertS3URLToHTTPS(url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert S3 URL: %w", err)
+	// Route to appropriate fetcher based on URL scheme
+	if strings.HasPrefix(targetURL, "s3://") {
+		return f.fetchS3File(ctx, targetURL, options)
 	}
 
-	backoff := f.createBackoffConfig(options.retryBackoff, options.retryAttempts, options.retryMaxDelay)
+	if strings.HasPrefix(targetURL, "http://") || strings.HasPrefix(targetURL, "https://") {
+		return f.fetchHTTPFile(ctx, targetURL, options)
+	}
 
+	return nil, fmt.Errorf("unsupported URL scheme: %s (supported: http://, https://, s3://)", targetURL)
+}
+
+// fetchS3File fetches a file from S3 using the AWS SDK.
+func (f *DefaultFetcher) fetchS3File(ctx context.Context, s3URL string, opts options) ([]byte, error) {
+	if f.s3Client == nil {
+		return nil, fmt.Errorf("S3 client not available - AWS credentials may not be configured")
+	}
+
+	bucket, key, err := parseS3URL(s3URL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid S3 URL %s: %w", s3URL, err)
+	}
+
+	backoff := createBackoffConfig(opts.retryBackoff, opts.retryAttempts, opts.retryMaxDelay)
 	var lastErr error
 	var result []byte
 
 	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(ctx context.Context) (bool, error) {
-		client := f.createHTTPClientWithTimeout(options.timeout)
-		data, err := f.fetchFileContent(ctx, client, fetchURL)
+		data, err := f.getS3Object(ctx, bucket, key, opts.timeout)
 		if err != nil {
-			lastErr = fmt.Errorf("failed to fetch file from %s: %w", url, err)
-			return false, nil
+			lastErr = &S3Error{Bucket: bucket, Key: key, Err: err}
+			// Intentionally return nil error to signal retry mechanism to continue
+			return false, nil //nolint:nilerr // Retry on S3 errors
 		}
 
-		if len(options.validationMethods) > 0 {
-			if err := f.validateFileContent(ctx, data, url, options); err != nil {
+		if opts.checksumEnabled {
+			if err := f.validateS3FileContent(ctx, data, bucket, key, opts); err != nil {
 				lastErr = err
-				// Don't retry on checksum mismatches as they indicate data corruption
-				var checksumMismatchErr *ChecksumMismatchError
-				if errors.As(err, &checksumMismatchErr) {
-					return false, err
+				// Don't retry on checksum mismatches
+				var checksumErr *ChecksumMismatchError
+				if errors.As(err, &checksumErr) {
+					return false, err // Stop retrying
 				}
-				return false, nil
+				return false, nil // Retry on other checksum errors
 			}
 		}
 
@@ -177,89 +282,234 @@ func (f *DefaultFetcher) GetRemoteFile(url string, opts ...Option) ([]byte, erro
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("retry operation failed: %w", err)
+		return nil, fmt.Errorf("failed to fetch S3 file after retries: %w", err)
 	}
 
-	return nil, fmt.Errorf("failed to fetch file from %s: unknown error", url)
+	return nil, fmt.Errorf("failed to fetch S3 file %s: unknown error", s3URL)
 }
 
-func (f *DefaultFetcher) createBackoffConfig(
-	backoffType RetryBackoffType,
-	attempts int32,
-	maxDelay time.Duration,
-) wait.Backoff {
-	switch backoffType {
-	case RetryBackoffLinear:
-		return wait.Backoff{
-			Duration: 200 * time.Millisecond,
-			Factor:   1.0,
-			Jitter:   0.1,
-			Steps:    int(attempts + 1),
-			Cap:      maxDelay,
-		}
-	case RetryBackoffExponential:
-		fallthrough
-	default:
-		return wait.Backoff{
-			Duration: 200 * time.Millisecond,
-			Factor:   2.0,
-			Jitter:   0.1,
-			Steps:    int(attempts + 1),
-			Cap:      maxDelay,
-		}
-	}
-}
+// fetchHTTPFile fetches a file using HTTP(S).
+func (f *DefaultFetcher) fetchHTTPFile(ctx context.Context, targetURL string, opts options) ([]byte, error) {
+	backoff := createBackoffConfig(opts.retryBackoff, opts.retryAttempts, opts.retryMaxDelay)
+	var lastErr error
+	var result []byte
 
-// validateFileContent validates the fetched file content using the specified methods.
-func (f *DefaultFetcher) validateFileContent(ctx context.Context, data []byte, url string, options options) error {
-	for _, method := range options.validationMethods {
-		switch method {
-		case "checksum":
-			if err := f.validateChecksum(
-				ctx,
-				data,
-				options.timeout,
-				url,
-				options.checksumLocation,
-			); err != nil {
-				return fmt.Errorf("checksum validation failed: %w", err)
+	err := wait.ExponentialBackoffWithContext(ctx, backoff, func(ctx context.Context) (bool, error) {
+		data, err := f.getHTTPContent(ctx, targetURL, opts.timeout)
+		if err != nil {
+			lastErr = &HTTPError{URL: targetURL, Err: err}
+
+			var statusErr *HTTPStatusError
+			if errors.As(err, &statusErr) {
+				switch statusErr.StatusCode {
+				case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+					return false, nil // Retry on retryable status codes
+				default:
+					return false, err // Stop retrying on non-retryable status codes
+				}
 			}
-		default:
-			return fmt.Errorf("unsupported validation method: %s", method)
+
+			return false, nil
+		}
+
+		if opts.checksumEnabled {
+			if err := f.validateHTTPFileContent(ctx, data, targetURL, opts); err != nil {
+				lastErr = err
+				// Don't retry on checksum mismatches
+				var checksumErr *ChecksumMismatchError
+				if errors.As(err, &checksumErr) {
+					return false, err // Stop retrying
+				}
+				return false, nil // Retry on other checksum errors
+			}
+		}
+
+		result = data
+		return true, nil
+	})
+	if err != nil {
+		// If the backoff timed out or was aborted by a non-retryable error,
+		// return the last recorded error for better context.
+		if lastErr != nil {
+			return nil, lastErr
+		}
+		return nil, fmt.Errorf("failed to fetch HTTP file after retries: %w", err)
+	}
+
+	if result != nil {
+		return result, nil
+	}
+
+	// This case should ideally not be reached, but as a fallback, return the last known error.
+	if lastErr != nil {
+		return nil, lastErr
+	}
+
+	return nil, fmt.Errorf("failed to fetch HTTP file %s: unknown error", targetURL)
+}
+
+// getS3Object fetches an object from S3.
+func (f *DefaultFetcher) getS3Object(
+	ctx context.Context,
+	bucket, key string,
+	timeout time.Duration,
+) ([]byte, error) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	input := &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}
+
+	result, err := f.s3Client.GetObject(ctxWithTimeout, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get S3 object: %w", err)
+	}
+	defer result.Body.Close()
+
+	data, err := io.ReadAll(result.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read S3 object body: %w", err)
+	}
+
+	return data, nil
+}
+
+// getHTTPContent fetches content via HTTP(S).
+func (f *DefaultFetcher) getHTTPContent(
+	ctx context.Context,
+	targetURL string,
+	timeout time.Duration,
+) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := f.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, &HTTPStatusError{StatusCode: resp.StatusCode}
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read HTTP response body: %w", err)
+	}
+
+	return body, nil
+}
+
+// validateS3FileContent validates the fetched S3 file content using the enabled validation methods.
+func (f *DefaultFetcher) validateS3FileContent(
+	ctx context.Context,
+	data []byte,
+	bucket, key string,
+	opts options,
+) error {
+	if opts.checksumEnabled {
+		if err := f.validateS3Checksum(ctx, data, bucket, key, opts); err != nil {
+			return fmt.Errorf("checksum validation failed: %w", err)
 		}
 	}
 	return nil
 }
 
-// validateChecksum validates the file content against a SHA256 checksum.
-func (f *DefaultFetcher) validateChecksum(
+// validateS3Checksum validates S3 file content against a SHA256 checksum.
+func (f *DefaultFetcher) validateS3Checksum(
 	ctx context.Context,
 	data []byte,
-	timeout time.Duration,
-	url, checksumLocation string,
+	bucket, key string,
+	opts options,
 ) error {
-	// If no checksum location is provided, default to <url>.sha256
-	checksumURL := checksumLocation
+	checksumBucket := bucket
+	checksumKey := key + checksumFileSuffix
+
+	if opts.checksumLocation != "" {
+		if strings.HasPrefix(opts.checksumLocation, "s3://") {
+			// Parse full S3 URL
+			var err error
+			checksumBucket, checksumKey, err = parseS3URL(opts.checksumLocation)
+			if err != nil {
+				return fmt.Errorf("invalid checksum S3 URL: %w", err)
+			}
+		} else {
+			checksumKey = opts.checksumLocation
+		}
+	}
+
+	checksumData, err := f.getS3Object(ctx, checksumBucket, checksumKey, opts.timeout)
+	if err != nil {
+		checksumURL := fmt.Sprintf("s3://%s/%s", checksumBucket, checksumKey)
+		return &S3Error{
+			Bucket: checksumBucket,
+			Key:    checksumKey,
+			Err:    fmt.Errorf("failed to fetch checksum from %s: %w", checksumURL, err),
+		}
+	}
+
+	return validateChecksum(data, checksumData)
+}
+
+// validateHTTPFileContent validates the fetched HTTP file content using the enabled validation methods.
+func (f *DefaultFetcher) validateHTTPFileContent(
+	ctx context.Context,
+	data []byte,
+	targetURL string,
+	opts options,
+) error {
+	if opts.checksumEnabled {
+		if err := f.validateHTTPChecksum(ctx, data, targetURL, opts); err != nil {
+			return fmt.Errorf("checksum validation failed: %w", err)
+		}
+	}
+	return nil
+}
+
+// validateHTTPChecksum validates HTTP file content against a SHA256 checksum.
+func (f *DefaultFetcher) validateHTTPChecksum(
+	ctx context.Context,
+	data []byte,
+	targetURL string,
+	opts options,
+) error {
+	// Determine checksum URL
+	checksumURL := opts.checksumLocation
 	if checksumURL == "" {
-		checksumURL = url + ".sha256"
+		checksumURL = targetURL + checksumFileSuffix
 	}
 
-	fetchChecksumURL, err := f.convertS3URLToHTTPS(checksumURL)
+	// Fetch checksum file
+	checksumData, err := f.getHTTPContent(ctx, checksumURL, opts.timeout)
 	if err != nil {
-		return &ChecksumFetchError{URL: checksumURL, Err: fmt.Errorf("failed to convert S3 checksum URL: %w", err)}
+		return &HTTPError{URL: checksumURL, Err: fmt.Errorf("failed to fetch checksum: %w", err)}
 	}
 
-	client := f.createHTTPClientWithTimeout(timeout)
-	checksumData, err := f.fetchFileContent(ctx, client, fetchChecksumURL)
-	if err != nil {
-		return &ChecksumFetchError{URL: checksumURL, Err: err}
-	}
+	return validateChecksum(data, checksumData)
+}
 
-	// Parse the checksum (assume it's in the format "hash filename" or just "hash")
+// validateChecksum validates data against checksum content.
+func validateChecksum(data, checksumData []byte) error {
+	// Parse checksum (format: "hash filename" or just "hash")
 	checksumStr := strings.TrimSpace(string(checksumData))
-	expectedChecksum := strings.Fields(checksumStr)[0] // Take the first field (the hash)
+	checksumFields := strings.Fields(checksumStr)
 
-	// Calculate the actual checksum
+	if len(checksumFields) == 0 {
+		return fmt.Errorf("checksum file is empty or contains only whitespace")
+	}
+
+	expectedChecksum := checksumFields[0]
+
+	// Calculate actual checksum
 	hasher := sha256.New()
 	hasher.Write(data)
 	actualChecksum := hex.EncodeToString(hasher.Sum(nil))
@@ -271,129 +521,49 @@ func (f *DefaultFetcher) validateChecksum(
 	return nil
 }
 
-// createHTTPClientWithTimeout creates an HTTP client with the specified timeout duration.
-func (f *DefaultFetcher) createHTTPClientWithTimeout(timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout: timeout,
-	}
-}
-
-// fetchFileContent performs the actual HTTP GET request and reads the response body.
-func (f *DefaultFetcher) fetchFileContent(ctx context.Context, client *http.Client, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+// parseS3URL parses an S3 URL and returns bucket and key.
+func parseS3URL(s3URL string) (bucket, key string, err error) {
+	parsedURL, err := url.Parse(s3URL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return "", "", fmt.Errorf("failed to parse S3 URL: %w", err)
 	}
 
-	// Set a reasonable User-Agent header
-	req.Header.Set("User-Agent", "nginx-gateway-fabric/1.0")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch file from %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	return content, nil
-}
-
-// convertS3URLToHTTPS converts S3 URLs to HTTPS URLs for fetching.
-// Supports both standard S3 URLs (s3://bucket/key) and regional URLs (s3://bucket.region/key).
-func (f *DefaultFetcher) convertS3URLToHTTPS(url string) (string, error) {
-	if !strings.HasPrefix(url, "s3://") {
-		return url, nil
-	}
-
-	s3Path := strings.TrimPrefix(url, "s3://")
-
-	// Split into bucket and object key
-	parts := strings.SplitN(s3Path, "/", 2)
-	if len(parts) < 1 {
-		return "", fmt.Errorf("invalid S3 URL format: %s", url)
-	}
-
-	bucketInfo := parts[0]
-	var objectKey string
-	if len(parts) > 1 {
-		objectKey = parts[1]
-	}
-
-	if bucketInfo == "" {
-		return "", fmt.Errorf("S3 bucket name cannot be empty")
-	}
-
-	bucket, region := f.parseBucketAndRegion(bucketInfo)
-
+	bucket = parsedURL.Host
 	if bucket == "" {
-		return "", fmt.Errorf("S3 bucket name cannot be empty after parsing")
+		return "", "", fmt.Errorf("S3 bucket name cannot be empty")
 	}
 
-	var httpsURL string
-	if region != "" {
-		httpsURL = fmt.Sprintf("https://s3.%s.amazonaws.com/%s", region, bucket)
-	} else {
-		httpsURL = fmt.Sprintf("https://s3.amazonaws.com/%s", bucket)
+	key = strings.TrimPrefix(parsedURL.Path, "/")
+	if key == "" {
+		return "", "", fmt.Errorf("S3 object key cannot be empty")
 	}
 
-	if objectKey != "" {
-		httpsURL = fmt.Sprintf("%s/%s", httpsURL, objectKey)
+	// URL decode the key to handle encoded characters
+	key, err = url.QueryUnescape(key)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to decode S3 object key: %w", err)
 	}
 
-	return httpsURL, nil
+	return bucket, key, nil
 }
 
-// parseBucketAndRegion extracts bucket name and region from the bucket info part of an S3 URL.
-// Handles various formats:
-// - "my-bucket" -> ("my-bucket", "")
-// - "my-bucket.us-west-2" -> ("my-bucket", "us-west-2")
-// - "my-bucket.s3.us-west-2.amazonaws.com" -> ("my-bucket", "us-west-2").
-func (f *DefaultFetcher) parseBucketAndRegion(bucketInfo string) (bucket, region string) {
-	// Handle legacy S3 website/FQDN format: bucket.s3.region.amazonaws.com
-	if strings.Contains(bucketInfo, ".s3.") && strings.HasSuffix(bucketInfo, ".amazonaws.com") {
-		parts := strings.Split(bucketInfo, ".")
-		if len(parts) >= 4 && parts[1] == "s3" && parts[len(parts)-1] == "com" && parts[len(parts)-2] == "amazonaws" {
-			bucket = parts[0]
-			// Extract region (everything between s3 and amazonaws)
-			regionParts := parts[2 : len(parts)-2]
-			region = strings.Join(regionParts, ".")
-			return bucket, region
-		}
+// createBackoffConfig creates a backoff configuration for retries.
+func createBackoffConfig(
+	backoffType RetryBackoffType,
+	attempts int32,
+	maxDelay time.Duration,
+) wait.Backoff {
+	backoff := wait.Backoff{
+		Duration: defaultRetryInitialDuration,
+		Factor:   defaultRetryLinearFactor,
+		Jitter:   defaultRetryJitter,
+		Steps:    int(attempts + 1),
+		Cap:      maxDelay,
 	}
 
-	if strings.Contains(bucketInfo, ".") {
-		parts := strings.SplitN(bucketInfo, ".", 2)
-		bucket = parts[0]
-		potentialRegion := parts[1]
-
-		if f.isValidAWSRegion(potentialRegion) {
-			region = potentialRegion
-		} else {
-			bucket = bucketInfo
-			region = ""
-		}
-		return bucket, region
+	if backoffType == RetryBackoffExponential {
+		backoff.Factor = exponentialBackoffFactor
 	}
 
-	// Simple bucket name with no region
-	return bucketInfo, ""
-}
-
-// isValidAWSRegion performs basic validation to check if a string looks like an AWS region.
-func (f *DefaultFetcher) isValidAWSRegion(region string) bool {
-	if region == "" {
-		return false
-	}
-
-	regionPattern := `^[a-z]{2,}-[a-z]+-[0-9]+$|^[a-z]{2,}-[a-z]+-[a-z]+-[0-9]+$`
-	matched, _ := regexp.MatchString(regionPattern, region)
-	return matched
+	return backoff
 }

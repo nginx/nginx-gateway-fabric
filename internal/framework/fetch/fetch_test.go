@@ -1,396 +1,720 @@
 package fetch
 
 import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	. "github.com/onsi/gomega"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-func createSimpleServer(statusCode int, content string) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(statusCode)
-		_, _ = w.Write([]byte(content))
-	}))
+func TestGetRemoteFile(t *testing.T) {
+	fetcher, err := NewDefaultFetcher()
+	if err != nil {
+		t.Fatalf("NewDefaultFetcher() failed: %v", err)
+	}
+
+	fileContent := "test file content"
+	hasher := sha256.New()
+	hasher.Write([]byte(fileContent))
+	expectedChecksum := hex.EncodeToString(hasher.Sum(nil))
+
+	tests := []struct {
+		setupServer  func() *httptest.Server
+		setupFetcher func() Fetcher
+		validateFunc func(t *testing.T, data []byte, err error)
+		name         string
+		url          string
+		expectedErr  string
+		options      []Option
+		expectErr    bool
+	}{
+		// HTTP Checksum validation scenarios
+		{
+			name: "valid checksum with filename",
+			setupServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if strings.HasSuffix(r.URL.Path, ".sha256") {
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte(expectedChecksum + " filename.txt"))
+					} else {
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte(fileContent))
+					}
+				}))
+			},
+			url:       "/file.txt",
+			options:   []Option{WithChecksum()},
+			expectErr: false,
+		},
+		{
+			name: "checksum mismatch",
+			setupServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if strings.HasSuffix(r.URL.Path, ".sha256") {
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte("0000000000000000000000000000000000000000000000000000000000000000"))
+					} else {
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte(fileContent))
+					}
+				}))
+			},
+			url:       "/file.txt",
+			options:   []Option{WithChecksum()},
+			expectErr: true,
+		},
+		{
+			name: "empty checksum file",
+			setupServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if strings.HasSuffix(r.URL.Path, ".sha256") {
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte("   \n\t  "))
+					} else {
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte(fileContent))
+					}
+				}))
+			},
+			url:       "/file.txt",
+			options:   []Option{WithChecksum()},
+			expectErr: true,
+		},
+		// URL validation error cases
+		{
+			name:        "S3 missing bucket and key",
+			url:         "s3://",
+			options:     []Option{WithTimeout(1 * time.Second), WithRetryAttempts(0)},
+			expectErr:   true,
+			expectedErr: "S3 bucket name cannot be empty",
+		},
+		{
+			name:        "S3 missing key",
+			url:         "s3://bucket",
+			options:     []Option{WithTimeout(1 * time.Second), WithRetryAttempts(0)},
+			expectErr:   true,
+			expectedErr: "S3 object key cannot be empty",
+		},
+		{
+			name:        "S3 empty bucket with key",
+			url:         "s3:///key",
+			options:     []Option{WithTimeout(1 * time.Second), WithRetryAttempts(0)},
+			expectErr:   true,
+			expectedErr: "S3 bucket name cannot be empty",
+		},
+		{
+			name:        "FTP scheme",
+			url:         "ftp://example.com/file.txt",
+			options:     []Option{WithTimeout(1 * time.Second), WithRetryAttempts(0)},
+			expectErr:   true,
+			expectedErr: "unsupported URL scheme",
+		},
+		{
+			name:        "File scheme",
+			url:         "file:///local/path",
+			options:     []Option{WithTimeout(1 * time.Second), WithRetryAttempts(0)},
+			expectErr:   true,
+			expectedErr: "unsupported URL scheme",
+		},
+		{
+			name:        "Invalid URL",
+			url:         "invalid-url",
+			options:     []Option{WithTimeout(1 * time.Second), WithRetryAttempts(0)},
+			expectErr:   true,
+			expectedErr: "unsupported URL scheme",
+		},
+		{
+			name:        "Empty URL",
+			url:         "",
+			options:     []Option{WithTimeout(1 * time.Second), WithRetryAttempts(0)},
+			expectErr:   true,
+			expectedErr: "unsupported URL scheme",
+		},
+		{
+			name: "S3 client unavailable",
+			setupFetcher: func() Fetcher {
+				return &DefaultFetcher{
+					s3Client:   nil,
+					httpClient: &http.Client{},
+				}
+			},
+			url:         "s3://bucket/key",
+			options:     []Option{WithTimeout(1 * time.Second), WithRetryAttempts(0)},
+			expectErr:   true,
+			expectedErr: "S3 client not available",
+		},
+		// Options testing
+		{
+			name: "timeout option",
+			setupServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte("fast response"))
+				}))
+			},
+			url:       "/",
+			options:   []Option{WithTimeout(5 * time.Second)},
+			expectErr: false,
+		},
+		{
+			name: "multiple options",
+			setupServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte("success"))
+				}))
+			},
+			url: "/",
+			options: []Option{
+				WithRetryAttempts(1),
+				WithRetryBackoff(RetryBackoffExponential),
+				WithMaxRetryDelay(50 * time.Millisecond),
+			},
+			expectErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var testFetcher Fetcher = fetcher
+			if tt.setupFetcher != nil {
+				testFetcher = tt.setupFetcher()
+			}
+
+			testURL := tt.url
+			if tt.setupServer != nil {
+				server := tt.setupServer()
+				defer server.Close()
+				testURL = server.URL + tt.url
+			}
+
+			data, err := testFetcher.GetRemoteFile(testURL, tt.options...)
+
+			if tt.expectErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+				if tt.expectedErr != "" && !strings.Contains(err.Error(), tt.expectedErr) {
+					t.Errorf("Expected error containing %q, got: %v", tt.expectedErr, err)
+				}
+			} else if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			if tt.validateFunc != nil {
+				tt.validateFunc(t, data, err)
+			}
+		})
+	}
 }
 
-func createRetryServer(successAfterAttempts int, content string) (*httptest.Server, *int) {
-	attemptCount := 0
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		attemptCount++
-		if attemptCount < successAfterAttempts {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+func TestGetRemoteFileError(t *testing.T) {
+	fetcher, err := NewDefaultFetcher()
+	if err != nil {
+		t.Fatalf("NewDefaultFetcher() failed: %v", err)
+	}
+
+	tests := []struct {
+		setupServer   func() *httptest.Server
+		name          string
+		url           string
+		expectErrType string
+		options       []Option
+	}{
+		{
+			name: "HTTP error response",
+			setupServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusNotFound)
+				}))
+			},
+			options:       []Option{WithRetryAttempts(0)},
+			expectErrType: "HTTPError",
+		},
+		{
+			name:          "network connection error",
+			url:           "http://127.0.0.1:1",
+			options:       []Option{WithRetryAttempts(0), WithTimeout(10 * time.Millisecond)},
+			expectErrType: "HTTPError",
+		},
+		{
+			name: "timeout during request",
+			setupServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					time.Sleep(20 * time.Millisecond)
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte("delayed response"))
+				}))
+			},
+			options:       []Option{WithTimeout(10 * time.Millisecond), WithRetryAttempts(0)},
+			expectErrType: "HTTPError",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testURL := tt.url
+			if tt.setupServer != nil {
+				server := tt.setupServer()
+				defer server.Close()
+				testURL = server.URL
+			}
+
+			_, err := fetcher.GetRemoteFile(testURL, tt.options...)
+			if err == nil {
+				t.Error("Expected error, got nil")
+			}
+
+			if tt.expectErrType != "" {
+				switch tt.expectErrType {
+				case "HTTPError":
+					var httpErr *HTTPError
+					if !errors.As(err, &httpErr) {
+						t.Errorf("Expected HTTPError, got %T: %v", err, err)
+					}
+				default:
+					t.Errorf("Unknown expected error type: %s", tt.expectErrType)
+				}
+			}
+		})
+	}
+}
+
+func TestParseS3URL(t *testing.T) {
+	tests := []struct {
+		name      string
+		url       string
+		bucket    string
+		key       string
+		expectErr bool
+	}{
+		// Error cases specific to parsing logic (not covered in integration tests)
+		{
+			name:      "missing key with trailing slash",
+			url:       "s3://bucket/",
+			expectErr: true,
+		},
+		{
+			name:      "invalid URL encoding",
+			url:       "s3://bucket/invalid%gg",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bucket, key, err := parseS3URL(tt.url)
+
+			switch {
+			case tt.expectErr:
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			case err != nil:
+				t.Errorf("Unexpected error: %v", err)
+			default:
+				if bucket != tt.bucket {
+					t.Errorf("Expected bucket %q, got %q", tt.bucket, bucket)
+				}
+				if key != tt.key {
+					t.Errorf("Expected key %q, got %q", tt.key, key)
+				}
+			}
+		})
+	}
+}
+
+func TestErrorTypes(t *testing.T) {
+	tests := []struct {
+		err      error
+		unwraps  error
+		name     string
+		expected string
+	}{
+		{
+			name: "ChecksumMismatchError",
+			err: &ChecksumMismatchError{
+				Expected: "abc123",
+				Actual:   "def456",
+			},
+			expected: "checksum mismatch: expected abc123, got def456",
+		},
+		{
+			name: "S3Error",
+			err: &S3Error{
+				Bucket: "my-bucket",
+				Key:    "my-key",
+				Err:    errors.New("access denied"),
+			},
+			expected: "S3 error for s3://my-bucket/my-key: access denied",
+			unwraps:  errors.New("access denied"),
+		},
+		{
+			name: "HTTPError",
+			err: &HTTPError{
+				URL: "http://example.com",
+				Err: errors.New("connection refused"),
+			},
+			expected: "HTTP error for http://example.com: connection refused",
+			unwraps:  errors.New("connection refused"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.err.Error() != tt.expected {
+				t.Errorf("Expected error message %q, got %q", tt.expected, tt.err.Error())
+			}
+
+			if tt.unwraps != nil {
+				if unwrapper, ok := tt.err.(interface{ Unwrap() error }); ok {
+					if unwrapper.Unwrap().Error() != tt.unwraps.Error() {
+						t.Errorf("Expected unwrapped error %q, got %q", tt.unwraps.Error(), unwrapper.Unwrap().Error())
+					}
+				} else {
+					t.Error("Expected error to implement Unwrap()")
+				}
+			}
+		})
+	}
+}
+
+func TestGetRemoteFileRetry(t *testing.T) {
+	fetcher, err := NewDefaultFetcher()
+	if err != nil {
+		t.Fatalf("NewDefaultFetcher() failed: %v", err)
+	}
+
+	t.Run("retry with linear backoff", func(t *testing.T) {
+		var attemptCount atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			count := attemptCount.Add(1)
+			if count < 4 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("success"))
+		}))
+		defer server.Close()
+
+		data, err := fetcher.GetRemoteFile(server.URL,
+			WithRetryAttempts(3),
+			WithRetryBackoff(RetryBackoffLinear))
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
 		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(content))
-	})), &attemptCount
+		if string(data) != "success" {
+			t.Errorf("Expected 'success', got %q", string(data))
+		}
+		if attemptCount.Load() != 4 {
+			t.Errorf("Expected 4 attempts, got %d", attemptCount.Load())
+		}
+	})
+
+	t.Run("max retries exceeded", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		_, err := fetcher.GetRemoteFile(server.URL,
+			WithRetryAttempts(1),
+			WithTimeout(10*time.Millisecond))
+
+		if err == nil {
+			t.Error("Expected error, got nil")
+		}
+
+		var statusErr *HTTPStatusError
+		if !errors.As(err, &statusErr) {
+			t.Errorf("Expected HTTPStatusError, got %T: %v", err, err)
+		}
+	})
+
+	t.Run("no retries", func(t *testing.T) {
+		var attemptCount atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			attemptCount.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		_, err := fetcher.GetRemoteFile(server.URL, WithRetryAttempts(0))
+
+		if err == nil {
+			t.Error("Expected error, got nil")
+		}
+		if attemptCount.Load() != 1 {
+			t.Errorf("Expected 1 attempt, got %d", attemptCount.Load())
+		}
+	})
 }
 
-func createFileAndChecksumServer(fileContent, checksumContent string) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/file.tgz":
+func TestChecksumMismatch(t *testing.T) {
+	fetcher, err := NewDefaultFetcher()
+	if err != nil {
+		t.Fatalf("NewDefaultFetcher() failed: %v", err)
+	}
+
+	fileContent := "mismatch test"
+	invalidChecksum := "0000000000000000000000000000000000000000000000000000000000000000"
+
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(invalidChecksum))
+		} else {
+			attempts.Add(1)
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(fileContent))
-		case "/file.tgz.sha256":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(checksumContent))
-		default:
-			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
+	defer server.Close()
+
+	_, err = fetcher.GetRemoteFile(server.URL+"/file.txt",
+		WithChecksum(),
+		WithRetryAttempts(3))
+
+	if err == nil {
+		t.Error("Expected checksum mismatch error, got nil")
+	}
+	var checksumErr *ChecksumMismatchError
+	if !errors.As(err, &checksumErr) {
+		t.Errorf("Expected ChecksumMismatchError, got %T: %v", err, err)
+	}
+	if attempts.Load() != 1 {
+		t.Errorf("Expected 1 attempt (no retries on checksum mismatch), got %d", attempts.Load())
+	}
 }
 
-func TestDefaultFetcher_GetRemoteFile_BasicFunctionality(t *testing.T) {
-	t.Parallel()
+type mockS3Client struct {
+	objects map[string][]byte
+	errors  map[string]error
+	calls   []s3GetObjectCall
+}
 
-	tests := []struct {
-		name            string
-		content         string
-		expectedContent string
-		options         []Option
-	}{
+type s3GetObjectCall struct {
+	bucket string
+	key    string
+}
+
+func (m *mockS3Client) GetObject(
+	_ context.Context,
+	input *s3.GetObjectInput,
+	_ ...func(*s3.Options),
+) (*s3.GetObjectOutput, error) {
+	m.calls = append(m.calls, s3GetObjectCall{bucket: *input.Bucket, key: *input.Key})
+
+	key := *input.Bucket + "/" + *input.Key
+	if err, exists := m.errors[key]; exists {
+		return nil, err
+	}
+	if data, exists := m.objects[key]; exists {
+		return &s3.GetObjectOutput{
+			Body: io.NopCloser(bytes.NewReader(data)),
+		}, nil
+	}
+	return nil, fmt.Errorf("NoSuchKey: key not found")
+}
+
+func (m *mockS3Client) getCallCount() int {
+	return len(m.calls)
+}
+
+// TestGetRemoteFileS3 tests S3 scenarios.
+func TestGetRemoteFileS3(t *testing.T) {
+	type testCase struct {
+		expectErrType interface{}
+		mockObjects   map[string][]byte
+		mockErrors    map[string]error
+		validate      func(t *testing.T, data []byte, s3Client *mockS3Client, content []byte)
+		name          string
+		url           string
+		options       []Option
+		content       []byte
+		expectErr     bool
+	}
+
+	// Common content for tests
+	content1 := []byte("s3 test content")
+	hasher1 := sha256.New()
+	hasher1.Write(content1)
+	checksum1 := hex.EncodeToString(hasher1.Sum(nil))
+
+	content2 := []byte("relative checksum test")
+	hasher2 := sha256.New()
+	hasher2.Write(content2)
+	checksum2 := hex.EncodeToString(hasher2.Sum(nil))
+
+	tests := []testCase{
 		{
-			name:            "fetch file successfully with timeout",
-			content:         "test content",
-			options:         []Option{WithTimeout(30 * time.Second)},
-			expectedContent: "test content",
-		},
-		{
-			name:            "fetch with default options",
-			content:         "default config content",
-			options:         nil,
-			expectedContent: "default config content",
-		},
-		{
-			name:    "fetch with multiple options",
-			content: "combined options content",
-			options: []Option{
-				WithTimeout(60 * time.Second),
-				WithRetryAttempts(5),
-				WithRetryBackoff(RetryBackoffLinear),
-				WithMaxRetryDelay(2 * time.Second),
+			name:    "success",
+			url:     "s3://test-bucket/test-key.txt",
+			content: content1,
+			mockObjects: map[string][]byte{
+				"test-bucket/test-key.txt": content1,
 			},
-			expectedContent: "combined options content",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			server := createSimpleServer(http.StatusOK, test.content)
-			defer server.Close()
-
-			fetcher := &DefaultFetcher{}
-			data, err := fetcher.GetRemoteFile(server.URL, test.options...)
-
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(string(data)).To(Equal(test.expectedContent))
-		})
-	}
-}
-
-func TestDefaultFetcher_GetRemoteFile_RetryBehavior(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name                 string
-		successAfterAttempts int
-		retryAttempts        int32
-		expectError          bool
-		expectedAttemptCount int
-	}{
-		{
-			name:                 "succeeds after retries",
-			successAfterAttempts: 3,
-			retryAttempts:        3,
-			expectError:          false,
-			expectedAttemptCount: 3,
+			options: []Option{WithRetryAttempts(0)},
+			validate: func(t *testing.T, data []byte, s3Client *mockS3Client, content []byte) {
+				t.Helper()
+				if !bytes.Equal(data, content) {
+					t.Errorf("Expected %q, got %q", content, data)
+				}
+				if s3Client.getCallCount() != 1 {
+					t.Errorf("Expected 1 S3 call, got %d", s3Client.getCallCount())
+				}
+			},
 		},
 		{
-			name:                 "fails when retries exhausted",
-			successAfterAttempts: 10, // Never succeeds within retry limit
-			retryAttempts:        1,
-			expectError:          true,
+			name:    "checksum validation success",
+			url:     "s3://test-bucket/file.txt",
+			content: content1,
+			mockObjects: map[string][]byte{
+				"test-bucket/file.txt":        content1,
+				"test-bucket/file.txt.sha256": []byte(checksum1 + " file.txt"),
+			},
+			options: []Option{WithChecksum(), WithRetryAttempts(0)},
+			validate: func(t *testing.T, data []byte, s3Client *mockS3Client, content []byte) {
+				t.Helper()
+				if !bytes.Equal(data, content) {
+					t.Errorf("Expected %q, got %q", content, data)
+				}
+				if s3Client.getCallCount() != 2 {
+					t.Errorf("Expected 2 S3 calls, got %d", s3Client.getCallCount())
+				}
+			},
+		},
+		{
+			name:    "checksum mismatch",
+			url:     "s3://test-bucket/file.txt",
+			content: content1,
+			mockObjects: map[string][]byte{
+				"test-bucket/file.txt":        content1,
+				"test-bucket/file.txt.sha256": []byte("badchecksum"),
+			},
+			options:       []Option{WithChecksum(), WithRetryAttempts(0)},
+			expectErr:     true,
+			expectErrType: &ChecksumMismatchError{},
+		},
+		{
+			name:      "S3 access error",
+			url:       "s3://test-bucket/error-key",
+			options:   []Option{WithRetryAttempts(0)},
+			expectErr: true,
+			mockErrors: map[string]error{
+				"test-bucket/error-key": fmt.Errorf("access denied"),
+			},
+			expectErrType: &S3Error{},
+		},
+		{
+			name:    "checksum file error",
+			url:     "s3://test-bucket/file.txt",
+			options: []Option{WithChecksum(), WithRetryAttempts(0)},
+			content: content1,
+			mockObjects: map[string][]byte{
+				"test-bucket/file.txt": content1,
+			},
+			mockErrors: map[string]error{
+				"test-bucket/file.txt.sha256": fmt.Errorf("checksum file not found"),
+			},
+			expectErr:     true,
+			expectErrType: &S3Error{},
+		},
+		{
+			name:    "full S3 URL checksum location",
+			url:     "s3://test-bucket/file.txt",
+			content: content1,
+			mockObjects: map[string][]byte{
+				"test-bucket/file.txt":          content1,
+				"checksum-bucket/custom.sha256": []byte(checksum1),
+			},
+			options: []Option{WithChecksum("s3://checksum-bucket/custom.sha256"), WithRetryAttempts(0)},
+			validate: func(t *testing.T, data []byte, s3Client *mockS3Client, content []byte) {
+				t.Helper()
+				if !bytes.Equal(data, content) {
+					t.Errorf("Expected %q, got %q", content, data)
+				}
+				if s3Client.getCallCount() != 2 {
+					t.Errorf("Expected 2 S3 calls, got %d", s3Client.getCallCount())
+				}
+			},
+		},
+		{
+			name:    "relative checksum location",
+			url:     "s3://test-bucket/file.txt",
+			content: content2,
+			mockObjects: map[string][]byte{
+				"test-bucket/file.txt":               content2,
+				"test-bucket/custom-checksum.sha256": []byte(checksum2),
+			},
+			options: []Option{WithChecksum("custom-checksum.sha256"), WithRetryAttempts(0)},
+			validate: func(t *testing.T, data []byte, _ *mockS3Client, content []byte) {
+				t.Helper()
+				if !bytes.Equal(data, content) {
+					t.Errorf("Expected %q, got %q", content, data)
+				}
+			},
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeS3Client := &mockS3Client{
+				objects: tt.mockObjects,
+				errors:  tt.mockErrors,
+			}
 
-			server, attemptCount := createRetryServer(test.successAfterAttempts, "success after retries")
-			defer server.Close()
+			fetcher := NewDefaultFetcherWithS3Client(fakeS3Client)
 
-			fetcher := &DefaultFetcher{}
-			data, err := fetcher.GetRemoteFile(server.URL,
-				WithTimeout(30*time.Second),
-				WithRetryAttempts(test.retryAttempts),
-				WithRetryBackoff(RetryBackoffLinear),
-				WithMaxRetryDelay(1*time.Second),
-			)
+			data, err := fetcher.GetRemoteFile(tt.url, tt.options...)
 
-			if test.expectError {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(SatisfyAny(
-					ContainSubstring("failed to fetch file"),
-					ContainSubstring("HTTP request failed with status 500"),
-				))
-			} else {
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(string(data)).To(Equal("success after retries"))
-				g.Expect(*attemptCount).To(Equal(test.expectedAttemptCount))
+			if tt.expectErr {
+				assertErrorType(t, err, tt.expectErrType)
+			} else if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if tt.validate != nil {
+				tt.validate(t, data, fakeS3Client, tt.content)
 			}
 		})
 	}
 }
 
-func TestDefaultFetcher_GetRemoteFile_ChecksumValidation(t *testing.T) {
-	t.Parallel()
+func assertErrorType(t *testing.T, err error, expectedType interface{}) {
+	t.Helper()
 
-	tests := []struct {
-		name                     string
-		fileContent              string
-		checksumContent          string
-		expectedErrorSubstring   string
-		expectedFileAttempts     int
-		expectedChecksumAttempts int
-		useDefaultLocation       bool
-		checksumFailsInitially   bool
-		expectError              bool
-	}{
-		{
-			name:            "succeeds with valid checksum",
-			fileContent:     "test content for checksum",
-			checksumContent: "c8ce4e97a404b12b1d8f0e245f04ff607be1048b16d973c2f23bab86655c808b",
-			expectError:     false,
-		},
-		{
-			name:               "succeeds with default checksum location",
-			fileContent:        "test content for default checksum",
-			checksumContent:    "fc16e31aacc276c77df3779ee5a289a584093bf3d758c20f09aa1ec892503f26  file.tgz",
-			useDefaultLocation: true,
-			expectError:        false,
-		},
-		{
-			name:                   "fails with checksum mismatch",
-			fileContent:            "test content",
-			checksumContent:        "abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234",
-			expectError:            true,
-			expectedErrorSubstring: "checksum mismatch",
-		},
-		{
-			name:                   "fails when checksum fetch returns 404",
-			fileContent:            "test content",
-			checksumContent:        "", // Will return 404
-			expectError:            true,
-			expectedErrorSubstring: "failed to fetch checksum",
-		},
-		{
-			name:                     "retries when checksum fetch initially fails",
-			fileContent:              "test content for retry checksum",
-			checksumContent:          "c33ef80a01e70b7803b30ea6db632abe82fd7f6fb8f5e8ca0800eff63b96f90c  testfile.txt",
-			checksumFailsInitially:   true,
-			expectError:              false,
-			expectedFileAttempts:     2,
-			expectedChecksumAttempts: 2,
-		},
+	if err == nil {
+		t.Fatalf("Expected error of type %T, got nil", expectedType)
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			fetcher := &DefaultFetcher{}
-
-			if test.useDefaultLocation {
-				server := createFileAndChecksumServer(test.fileContent, test.checksumContent)
-				defer server.Close()
-
-				data, err := fetcher.GetRemoteFile(server.URL+"/file.tgz",
-					WithTimeout(30*time.Second),
-					WithChecksum(),
-					WithRetryAttempts(1),
-					WithMaxRetryDelay(100*time.Millisecond),
-				)
-
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(string(data)).To(Equal(test.fileContent))
-				return
-			}
-
-			if test.expectedErrorSubstring == "failed to fetch checksum" {
-				fileServer := createSimpleServer(http.StatusOK, test.fileContent)
-				defer fileServer.Close()
-
-				checksumServer := createSimpleServer(http.StatusNotFound, "")
-				defer checksumServer.Close()
-
-				_, err := fetcher.GetRemoteFile(fileServer.URL,
-					WithTimeout(5*time.Second),
-					WithChecksum(checksumServer.URL),
-					WithRetryAttempts(1),
-				)
-
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(test.expectedErrorSubstring))
-				return
-			}
-
-			if test.checksumFailsInitially {
-				fileAttemptCount := 0
-				fileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					fileAttemptCount++
-					w.WriteHeader(http.StatusOK)
-					_, _ = w.Write([]byte(test.fileContent))
-				}))
-				defer fileServer.Close()
-
-				checksumAttemptCount := 0
-				checksumServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					checksumAttemptCount++
-					if checksumAttemptCount == 1 {
-						w.WriteHeader(http.StatusInternalServerError)
-						return
-					}
-					w.WriteHeader(http.StatusOK)
-					_, _ = w.Write([]byte(test.checksumContent))
-				}))
-				defer checksumServer.Close()
-
-				data, err := fetcher.GetRemoteFile(fileServer.URL,
-					WithTimeout(30*time.Second),
-					WithChecksum(checksumServer.URL),
-					WithRetryAttempts(3),
-					WithMaxRetryDelay(1*time.Second),
-				)
-
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(string(data)).To(Equal(test.fileContent))
-				g.Expect(fileAttemptCount).To(BeNumerically(">=", test.expectedFileAttempts))
-				g.Expect(checksumAttemptCount).To(BeNumerically(">=", test.expectedChecksumAttempts))
-				return
-			}
-
-			// Regular checksum validation test
-			fileServer := createSimpleServer(http.StatusOK, test.fileContent)
-			defer fileServer.Close()
-
-			checksumServer := createSimpleServer(http.StatusOK, test.checksumContent)
-			defer checksumServer.Close()
-
-			data, err := fetcher.GetRemoteFile(fileServer.URL,
-				WithTimeout(5*time.Second),
-				WithChecksum(checksumServer.URL),
-				WithRetryAttempts(1),
-			)
-
-			if test.expectError {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(test.expectedErrorSubstring))
-			} else {
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(string(data)).To(Equal(test.fileContent))
-			}
-		})
+	switch expectedType.(type) {
+	case *ChecksumMismatchError:
+		var target *ChecksumMismatchError
+		if !errors.As(err, &target) {
+			t.Errorf("Expected ChecksumMismatchError, got %T", err)
+		}
+	case *S3Error:
+		var target *S3Error
+		if !errors.As(err, &target) {
+			t.Errorf("Expected S3Error, got %T", err)
+		}
+	default:
+		if expectedType != nil {
+			t.Fatalf("unhandled expected error type: %T", expectedType)
+		}
 	}
-}
-
-func TestDefaultFetcher_GetRemoteFile_S3URLHandling(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name                   string
-		inputURL               string
-		expectedErrorSubstring string
-		expectConversionError  bool
-	}{
-		{
-			name:                  "standard S3 URL converts but fails with network error",
-			inputURL:              "s3://test-bucket/path/to/file.tgz",
-			expectConversionError: false,
-		},
-		{
-			name:                  "regional S3 URL converts but fails with network error",
-			inputURL:              "s3://my-bucket.us-west-2/config/policy.tgz",
-			expectConversionError: false,
-		},
-		{
-			name:                  "legacy S3 FQDN format converts but fails with network error",
-			inputURL:              "s3://my-bucket.s3.us-west-2.amazonaws.com/path/file.tgz",
-			expectConversionError: false,
-		},
-		{
-			name:                  "legacy S3 FQDN format with multi-part region converts but fails with network error",
-			inputURL:              "s3://my-bucket.s3.ap-southeast-1.amazonaws.com/config/policy.tgz",
-			expectConversionError: false,
-		},
-		{
-			name:                   "malformed S3 URL fails with conversion error",
-			inputURL:               "s3://",
-			expectConversionError:  true,
-			expectedErrorSubstring: "failed to convert S3 URL",
-		},
-		{
-			name:                   "S3 URL with empty bucket fails with conversion error",
-			inputURL:               "s3:///path/to/file",
-			expectConversionError:  true,
-			expectedErrorSubstring: "failed to convert S3 URL",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			fetcher := &DefaultFetcher{}
-			_, err := fetcher.GetRemoteFile(test.inputURL,
-				WithTimeout(1*time.Second),
-				WithRetryAttempts(0),
-			)
-
-			g.Expect(err).To(HaveOccurred())
-
-			if test.expectConversionError {
-				g.Expect(err.Error()).To(ContainSubstring(test.expectedErrorSubstring))
-			} else {
-				// For valid S3 URLs, should not fail on conversion
-				g.Expect(err.Error()).ToNot(ContainSubstring("failed to convert S3 URL"))
-			}
-		})
-	}
-}
-
-func TestChecksumMismatchError(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	err := &ChecksumMismatchError{
-		Expected: "abc123",
-		Actual:   "def456",
-	}
-
-	g.Expect(err.Error()).To(Equal("checksum mismatch: expected abc123, got def456"))
-}
-
-func TestChecksumFetchError(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	innerErr := http.ErrNotSupported
-	err := &ChecksumFetchError{
-		URL: "https://example.com/checksum",
-		Err: innerErr,
-	}
-
-	g.Expect(err.Error()).To(ContainSubstring("failed to fetch checksum from https://example.com/checksum"))
-	g.Expect(err.Unwrap()).To(Equal(innerErr))
 }
