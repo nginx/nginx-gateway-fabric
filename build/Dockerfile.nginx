@@ -7,7 +7,7 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.p
 FROM nginx:1.28.0-alpine-otel
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.0.2
+ARG NGINX_AGENT_VERSION=v3.0.3
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
