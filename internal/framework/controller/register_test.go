@@ -142,7 +142,7 @@ func TestRegister(t *testing.T) {
 					test.fakes.mgr,
 					eventCh,
 					controller.WithNamespacedNameFilter(nsNameFilter),
-					controller.WithK8sPredicate(predicate.ServicePortsChangedPredicate{}),
+					controller.WithK8sPredicate(predicate.ServiceChangedPredicate{}),
 					controller.WithFieldIndices(fieldIndexes),
 					controller.WithNewReconciler(newReconciler),
 					controller.WithOnlyMetadata(),

@@ -8,9 +8,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 )
 
-func TestServicePortsChangedPredicate_Update(t *testing.T) {
+func TestServiceChangedPredicate_Update(t *testing.T) {
 	t.Parallel()
 	testcases := []struct {
 		objectOld client.Object
@@ -221,9 +223,145 @@ func TestServicePortsChangedPredicate_Update(t *testing.T) {
 			},
 			expUpdate: false,
 		},
+		{
+			msg: "appProtocol changed",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{
+							AppProtocol: helpers.GetPointer("oldAppProtocol"),
+						},
+					},
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{
+							AppProtocol: helpers.GetPointer("newAppProtocol"),
+						},
+					},
+				},
+			},
+			expUpdate: true,
+		},
+		{
+			msg: "appProtocol stayed the same",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{
+							AppProtocol: helpers.GetPointer("sameAppProtocol"),
+						},
+					},
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{
+							AppProtocol: helpers.GetPointer("sameAppProtocol"),
+						},
+					},
+				},
+			},
+			expUpdate: false,
+		},
+		{
+			msg: "multiple appProtocols stayed the same",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{
+							Port:        80,
+							TargetPort:  intstr.FromInt(80),
+							AppProtocol: helpers.GetPointer("sameAppProtocol80"),
+						},
+						{
+							Port:        81,
+							TargetPort:  intstr.FromInt(81),
+							AppProtocol: helpers.GetPointer("sameAppProtocol81"),
+						},
+						{
+							Port:        82,
+							TargetPort:  intstr.FromInt(82),
+							AppProtocol: helpers.GetPointer("sameAppProtocol82"),
+						},
+					},
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{
+							Port:        80,
+							TargetPort:  intstr.FromInt(80),
+							AppProtocol: helpers.GetPointer("sameAppProtocol80"),
+						},
+						{
+							Port:        81,
+							TargetPort:  intstr.FromInt(81),
+							AppProtocol: helpers.GetPointer("sameAppProtocol81"),
+						},
+						{
+							Port:        82,
+							TargetPort:  intstr.FromInt(82),
+							AppProtocol: helpers.GetPointer("sameAppProtocol82"),
+						},
+					},
+				},
+			},
+			expUpdate: false,
+		},
+		{
+			msg: "multiple appProtocols with one changing",
+			objectOld: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{
+							Port:        80,
+							TargetPort:  intstr.FromInt(80),
+							AppProtocol: helpers.GetPointer("sameAppProtocol80"),
+						},
+						{
+							Port:        81,
+							TargetPort:  intstr.FromInt(81),
+							AppProtocol: helpers.GetPointer("sameAppProtocol81"),
+						},
+						{
+							Port:        82,
+							TargetPort:  intstr.FromInt(82),
+							AppProtocol: helpers.GetPointer("sameAppProtocol82"),
+						},
+					},
+				},
+			},
+			objectNew: &v1.Service{
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{
+							Port:        80,
+							TargetPort:  intstr.FromInt(80),
+							AppProtocol: helpers.GetPointer("sameAppProtocol80"),
+						},
+						{
+							Port:        81,
+							TargetPort:  intstr.FromInt(81),
+							AppProtocol: helpers.GetPointer("sameAppProtocol81"),
+						},
+						{
+							Port:        82,
+							TargetPort:  intstr.FromInt(82),
+							AppProtocol: helpers.GetPointer("differentAppProtocol"),
+						},
+					},
+				},
+			},
+			expUpdate: true,
+		},
 	}
 
-	p := ServicePortsChangedPredicate{}
+	p := ServiceChangedPredicate{}
 
 	for _, tc := range testcases {
 		t.Run(tc.msg, func(t *testing.T) {
@@ -243,7 +381,7 @@ func TestServicePortsChangedPredicate(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	p := ServicePortsChangedPredicate{}
+	p := ServiceChangedPredicate{}
 
 	g.Expect(p.Delete(event.DeleteEvent{Object: &v1.Service{}})).To(BeTrue())
 	g.Expect(p.Create(event.CreateEvent{Object: &v1.Service{}})).To(BeTrue())

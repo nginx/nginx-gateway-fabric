@@ -423,6 +423,17 @@ func NewRouteBackendRefUnsupportedValue(msg string) Condition {
 	}
 }
 
+// NewRouteBackendRefUnsupportedProtocol returns a Condition that indicates that the Route has a backendRef with
+// an unsupported protocol.
+func NewRouteBackendRefUnsupportedProtocol(msg string) Condition {
+	return Condition{
+		Type:    string(v1.RouteConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.RouteReasonUnsupportedProtocol),
+		Message: msg,
+	}
+}
+
 // NewRouteInvalidGateway returns a Condition that indicates that the Route is not Accepted because the Gateway it
 // references is invalid.
 func NewRouteInvalidGateway() Condition {
