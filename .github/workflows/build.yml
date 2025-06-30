@@ -148,7 +148,7 @@ jobs:
           cache-to: type=gha,scope=${{ inputs.image }},mode=max
           pull: true
           no-cache: ${{ github.event_name != 'pull_request' }}
-          sbom: ${{ inputs.image != 'plus-waf' }}
+          sbom: true
           provenance: mode=max
           build-args: |
             NJS_DIR=internal/controller/nginx/modules/src
@@ -161,9 +161,23 @@ jobs:
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', secrets.NGINX_KEY) || '' }}
 
       - name: Inspect SBOM and output manifest
-        if: ${{ inputs.image != 'plus-waf' }}
         run: |
+          if [[ "${{ inputs.image }}" == "plus-waf" ]]; then
+          # For plus-waf, use syft directly
+          echo "Generating SBOM for plus-waf using syft..."
+
+          # Install syft if not available
+          if ! command -v syft >/dev/null 2>&1; then
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          fi
+
+          # Generate SBOM using syft directly for plus-waf (known to work with NAP WAF)
+          syft localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} -o spdx-json > sbom-${{ inputs.image }}.json
+          echo "Generated SBOM using syft for plus-waf"
+          else
+          # For other images, use the standard Docker buildx approach
           docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > sbom-${{ inputs.image }}.json
+          fi
           docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --raw
 
       - name: Scan SBOM
@@ -174,7 +188,6 @@ jobs:
           only-fixed: true
           add-cpes-if-none: true
           fail-build: false
-        if: inputs.image != 'plus-waf'
 
       - name: Upload scan result to GitHub Security tab
         uses: github/codeql-action/upload-sarif@ce28f5bb42b7a9f2c824e633a3f6ee835bab6858 # v3.29.0
@@ -182,4 +195,4 @@ jobs:
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: build-${{ inputs.image }}
-        if: always() && inputs.image != 'plus-waf'
+        if: always() && steps.scan.conclusion == 'success'
