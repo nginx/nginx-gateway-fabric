@@ -98,6 +98,28 @@
     "nginx": {
       "description": "The nginx section contains the configuration for all NGINX data plane deployments\ninstalled by the NGINX Gateway Fabric control plane.",
       "properties": {
+        "autoscaling": {
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "Enable or disable Horizontal Pod Autoscaler",
+              "required": [],
+              "title": "enabled",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "autoscaling",
+          "type": "object"
+        },
+        "autoscalingTemplate": {
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "autoscalingTemplate",
+          "type": "array"
+        },
         "config": {
           "description": "The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways\nmanaged by this instance of NGINX Gateway Fabric.",
           "properties": {
@@ -325,6 +347,7 @@
           "type": "boolean"
         },
         "image": {
+          "description": "Custom or additional autoscaling metrics\nref: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-custom-metrics\n- type: Pods\n  pods:\n    metric:\n      name: nginx_gateway_fabric_nginx_process_requests_total\n    target:\n      type: AverageValue\n      averageValue: 10000m",
           "properties": {
             "pullPolicy": {
               "default": "Always",
@@ -539,6 +562,28 @@
           "required": [],
           "title": "affinity",
           "type": "object"
+        },
+        "autoscaling": {
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "Enable or disable Horizontal Pod Autoscaler",
+              "required": [],
+              "title": "enabled",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "autoscaling",
+          "type": "object"
+        },
+        "autoscalingTemplate": {
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "autoscalingTemplate",
+          "type": "array"
         },
         "config": {
           "description": "The dynamic configuration for the control plane that is contained in the NginxGateway resource.",
