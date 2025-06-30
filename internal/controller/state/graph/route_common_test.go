@@ -394,38 +394,6 @@ func TestBindRouteToListeners(t *testing.T) {
 		return normalHTTPRoute
 	}
 
-	normalHTTPRouteWithH2CBackendRef := &L7Route{
-		RouteType: RouteTypeHTTP,
-		Source:    hr,
-		Spec: L7RouteSpec{
-			Hostnames: hr.Spec.Hostnames,
-			Rules: []RouteRule{
-				{
-					BackendRefs: []BackendRef{
-						{
-							Valid: true,
-							ServicePort: v1.ServicePort{
-								AppProtocol: helpers.GetPointer(AppProtocolTypeH2C),
-							},
-						},
-					},
-				},
-			},
-		},
-		Valid:      true,
-		Attachable: true,
-		ParentRefs: []ParentRef{
-			{
-				Idx:         0,
-				Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
-				SectionName: hr.Spec.ParentRefs[0].SectionName,
-			},
-		},
-	}
-
-	invalidBackendRefH2c := *normalHTTPRouteWithH2CBackendRef
-	invalidBackendRefH2c.Spec.Rules[0].BackendRefs[0].Valid = false
-
 	getLastNormalHTTPRoute := func() *L7Route {
 		return normalHTTPRoute
 	}
@@ -603,7 +571,6 @@ func TestBindRouteToListeners(t *testing.T) {
 	tests := []struct {
 		route                    *L7Route
 		gateway                  *Gateway
-		expectedModifiedRoute    *L7Route
 		name                     string
 		expectedGatewayListeners []*Listener
 		expectedSectionNameRefs  []ParentRef
@@ -642,90 +609,6 @@ func TestBindRouteToListeners(t *testing.T) {
 				}),
 			},
 			name: "normal case",
-		},
-		{
-			route: normalHTTPRouteWithH2CBackendRef,
-			gateway: &Gateway{
-				Source: gw,
-				Valid:  true,
-				Listeners: []*Listener{
-					createListener("listener-80-1"),
-				},
-				EffectiveNginxProxy: &EffectiveNginxProxy{
-					DisableHTTP2: helpers.GetPointer(false),
-				},
-			},
-			expectedSectionNameRefs: []ParentRef{
-				{
-					Idx:         0,
-					Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
-					SectionName: hr.Spec.ParentRefs[0].SectionName,
-					Attachment: &ParentRefAttachmentStatus{
-						Attached: true,
-						AcceptedHostnames: map[string][]string{
-							CreateGatewayListenerKey(
-								client.ObjectKeyFromObject(gw),
-								"listener-80-1",
-							): {"foo.example.com"},
-						},
-					},
-				},
-			},
-			expectedGatewayListeners: []*Listener{
-				createModifiedListener("listener-80-1", func(l *Listener) {
-					l.Routes = map[RouteKey]*L7Route{
-						CreateRouteKey(hr): normalHTTPRouteWithH2CBackendRef,
-					}
-				}),
-			},
-			name: "httpRoute with h2c service port protocol in backend and h2c is enabled",
-		},
-		{
-			route: normalHTTPRouteWithH2CBackendRef,
-			gateway: &Gateway{
-				Source: gw,
-				Valid:  true,
-				Listeners: []*Listener{
-					createListener("listener-80-1"),
-				},
-				EffectiveNginxProxy: &EffectiveNginxProxy{
-					DisableHTTP2: helpers.GetPointer(true),
-				},
-			},
-			expectedSectionNameRefs: []ParentRef{
-				{
-					Idx:         0,
-					Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
-					SectionName: hr.Spec.ParentRefs[0].SectionName,
-					Attachment: &ParentRefAttachmentStatus{
-						Attached: true,
-						AcceptedHostnames: map[string][]string{
-							CreateGatewayListenerKey(
-								client.ObjectKeyFromObject(gw),
-								"listener-80-1",
-							): {"foo.example.com"},
-						},
-					},
-				},
-			},
-			expectedGatewayListeners: []*Listener{
-				createModifiedListener("listener-80-1", func(l *Listener) {
-					route := *normalHTTPRouteWithH2CBackendRef
-					route.Conditions = []conditions.Condition{
-						conditions.NewRouteBackendRefUnsupportedProtocol(
-							"HTTP2 is disabled - cannot support appProtocol h2c on route type http"),
-					}
-					l.Routes = map[RouteKey]*L7Route{
-						CreateRouteKey(hr): &route,
-					}
-				}),
-			},
-			expectedConditions: []conditions.Condition{
-				conditions.NewRouteBackendRefUnsupportedProtocol(
-					"HTTP2 is disabled - cannot support appProtocol h2c on route type http"),
-			},
-			expectedModifiedRoute: &invalidBackendRefH2c,
-			name:                  "httpRoute with h2c service port protocol in backend and h2c is disabled",
 		},
 		{
 			route: routeWithMissingSectionName,
@@ -1515,12 +1398,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			g.Expect(test.route.ParentRefs).To(Equal(test.expectedSectionNameRefs))
 			g.Expect(helpers.Diff(test.gateway.Listeners, test.expectedGatewayListeners)).To(BeEmpty())
 			g.Expect(helpers.Diff(test.route.Conditions, test.expectedConditions)).To(BeEmpty())
-
-			// in situations where bindRouteToListeners modifies the route spec, for instance marking a backendRef
-			// as invalid
-			if test.expectedModifiedRoute != nil {
-				g.Expect(helpers.Diff(test.route.Spec, test.expectedModifiedRoute.Spec)).To(BeEmpty())
-			}
 		})
 	}
 }

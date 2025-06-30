@@ -766,13 +766,11 @@ func bindL7RouteToListeners(
 			continue
 		}
 
-		for ruleIdx, rule := range route.Spec.Rules {
-			for backendRefIdx, backendRef := range rule.BackendRefs {
+		for _, rule := range route.Spec.Rules {
+			for _, backendRef := range rule.BackendRefs {
 				if cond, ok := backendRef.InvalidForGateways[gwNsName]; ok {
 					attachment.FailedConditions = append(attachment.FailedConditions, cond)
 				}
-
-				checkAppProtocolH2CConditional(backendRef, gw.EffectiveNginxProxy, route, ruleIdx, backendRefIdx)
 			}
 		}
 
@@ -794,29 +792,6 @@ func bindL7RouteToListeners(
 		}
 
 		attachment.Attached = true
-	}
-}
-
-func checkAppProtocolH2CConditional(
-	backendRef BackendRef,
-	npCfg *EffectiveNginxProxy,
-	route *L7Route,
-	ruleIdx,
-	backendRefIdx int,
-) {
-	// For all backendRefs referring to a Service with appProtocol h2c, we need to also check if http2
-	// is enabled. Don't need to check for RouteTypeGRPC since there are checks before this which fail the
-	// route from connecting to the Gateway.
-	if backendRef.ServicePort.AppProtocol != nil &&
-		*backendRef.ServicePort.AppProtocol == AppProtocolTypeH2C &&
-		route.RouteType == RouteTypeHTTP &&
-		isHTTP2Disabled(npCfg) {
-		route.Spec.Rules[ruleIdx].BackendRefs[backendRefIdx].Valid = false
-		route.Conditions = append(route.Conditions, conditions.NewRouteBackendRefUnsupportedProtocol(
-			fmt.Errorf("HTTP2 is disabled - cannot support appProtocol h2c on route type %s",
-				route.RouteType,
-			).Error(),
-		))
 	}
 }
 
