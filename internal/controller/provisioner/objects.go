@@ -117,7 +117,8 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	)
 
 	serviceAccount := &corev1.ServiceAccount{
-		ObjectMeta: objectMeta,
+		ObjectMeta:                   objectMeta,
+		AutomountServiceAccountToken: helpers.GetPointer(false),
 	}
 
 	var openshiftObjs []client.Object
@@ -608,6 +609,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			Annotations: podAnnotations,
 		},
 		Spec: corev1.PodSpec{
+			AutomountServiceAccountToken: helpers.GetPointer(true),
 			Containers: []corev1.Container{
 				{
 					Name:            "nginx",
