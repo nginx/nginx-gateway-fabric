@@ -280,6 +280,9 @@ func BuildGraph(
 		gws,
 	)
 
+	// add status conditions to each targetRef based on the policies that affect them.
+	addPolicyAffectedStatusToTargetRefs(processedPolicies, routes, gws)
+
 	setPlusSecretContent(state.Secrets, plusSecrets)
 
 	g := &Graph{

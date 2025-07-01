@@ -105,3 +105,43 @@ func TestConvertConditions(t *testing.T) {
 	result := ConvertConditions(conds, generation, time)
 	g.Expect(result).Should(Equal(expected))
 }
+
+func TestHasMatchingCondition(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		condition Condition
+		name      string
+		conds     []Condition
+		expected  bool
+	}{
+		{
+			name:      "no conditions in the list",
+			conds:     nil,
+			condition: NewClientSettingsPolicyAffected(),
+			expected:  false,
+		},
+		{
+			name:      "condition matches existing condition",
+			conds:     []Condition{NewClientSettingsPolicyAffected()},
+			condition: NewClientSettingsPolicyAffected(),
+			expected:  true,
+		},
+		{
+			name:      "condition does not match existing condition",
+			conds:     []Condition{NewClientSettingsPolicyAffected()},
+			condition: NewObservabilityPolicyAffected(),
+			expected:  false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := HasMatchingCondition(test.conds, test.condition)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}

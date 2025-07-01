@@ -119,6 +119,15 @@ func validateBackendRefTLSRoute(
 		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
 	}
 
+	if svcPort.AppProtocol != nil {
+		err = validateRouteBackendRefAppProtocol(RouteTypeTLS, *svcPort.AppProtocol, nil)
+		if err != nil {
+			backendRef.Valid = false
+
+			return backendRef, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(err.Error())}
+		}
+	}
+
 	var conds []conditions.Condition
 	for _, parentRef := range parentRefs {
 		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {

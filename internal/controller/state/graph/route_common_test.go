@@ -571,8 +571,8 @@ func TestBindRouteToListeners(t *testing.T) {
 	tests := []struct {
 		route                    *L7Route
 		gateway                  *Gateway
-		expectedGatewayListeners []*Listener
 		name                     string
+		expectedGatewayListeners []*Listener
 		expectedSectionNameRefs  []ParentRef
 		expectedConditions       []conditions.Condition
 	}{

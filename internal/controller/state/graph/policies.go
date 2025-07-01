@@ -448,3 +448,60 @@ func refGroupKind(group v1.Group, kind v1.Kind) string {
 
 	return fmt.Sprintf("%s/%s", group, kind)
 }
+
+// addPolicyAffectedStatusToTargetRefs adds the policyAffected status to the target references
+// of ClientSettingsPolicies and ObservabilityPolicies.
+func addPolicyAffectedStatusToTargetRefs(
+	processedPolicies map[PolicyKey]*Policy,
+	routes map[RouteKey]*L7Route,
+	gws map[types.NamespacedName]*Gateway,
+) {
+	for policyKey, policy := range processedPolicies {
+		for _, ref := range policy.TargetRefs {
+			switch ref.Kind {
+			case kinds.Gateway:
+				if !gatewayExists(ref.Nsname, gws) {
+					continue
+				}
+				gw := gws[ref.Nsname]
+				if gw == nil {
+					continue
+				}
+
+				// set the policy status on the Gateway.
+				policyKind := policyKey.GVK.Kind
+				addStatusToTargetRefs(policyKind, &gw.Conditions)
+			case kinds.HTTPRoute, kinds.GRPCRoute:
+				routeKey := routeKeyForKind(ref.Kind, ref.Nsname)
+				l7route, exists := routes[routeKey]
+				if !exists {
+					continue
+				}
+
+				// set the policy status on L7 routes.
+				policyKind := policyKey.GVK.Kind
+				addStatusToTargetRefs(policyKind, &l7route.Conditions)
+			default:
+				continue
+			}
+		}
+	}
+}
+
+func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condition) {
+	if conditionsList == nil {
+		return
+	}
+	switch policyKind {
+	case kinds.ObservabilityPolicy:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewObservabilityPolicyAffected()) {
+			return
+		}
+		*conditionsList = append(*conditionsList, conditions.NewObservabilityPolicyAffected())
+	case kinds.ClientSettingsPolicy:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewClientSettingsPolicyAffected()) {
+			return
+		}
+		*conditionsList = append(*conditionsList, conditions.NewClientSettingsPolicyAffected())
+	}
+}

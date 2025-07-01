@@ -765,6 +765,9 @@ func TestBuildGraph(t *testing.T) {
 			Rules:     []RouteRule{createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeHTTP)},
 		},
 		Policies: []*Policy{processedRoutePolicy},
+		Conditions: []conditions.Condition{
+			conditions.NewClientSettingsPolicyAffected(),
+		},
 	}
 
 	routeTR := &L4Route{
@@ -1080,7 +1083,10 @@ func TestBuildGraph(t *testing.T) {
 							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
 						},
 					},
-					Conditions: []conditions.Condition{conditions.NewGatewayResolvedRefs()},
+					Conditions: []conditions.Condition{
+						conditions.NewGatewayResolvedRefs(),
+						conditions.NewClientSettingsPolicyAffected(),
+					},
 					DeploymentName: types.NamespacedName{
 						Namespace: "test",
 						Name:      "gateway-1-my-class",

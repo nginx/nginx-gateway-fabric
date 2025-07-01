@@ -1544,6 +1544,14 @@ func createTestRef(kind v1.Kind, group v1.Group, name string) v1alpha2.LocalPoli
 	}
 }
 
+func createTestPolicyTargetRef(kind v1.Kind, nsname types.NamespacedName) PolicyTargetRef {
+	return PolicyTargetRef{
+		Kind:   kind,
+		Group:  v1.GroupName,
+		Nsname: nsname,
+	}
+}
+
 func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 	routeMatches := make([]v1.HTTPRouteMatch, 0, len(paths))
 
@@ -1588,4 +1596,371 @@ func getGatewayParentRef(gwNsName types.NamespacedName) v1.ParentReference {
 		Namespace: (*v1.Namespace)(&gwNsName.Namespace),
 		Name:      v1.ObjectName(gwNsName.Name),
 	}
+}
+
+func createGatewayMap(gwNsNames ...types.NamespacedName) map[types.NamespacedName]*Gateway {
+	gatewayMap := make(map[types.NamespacedName]*Gateway, len(gwNsNames))
+	for _, gwNsName := range gwNsNames {
+		gatewayMap[gwNsName] = &Gateway{
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      gwNsName.Name,
+					Namespace: gwNsName.Namespace,
+				},
+			},
+			Valid: true,
+		}
+	}
+
+	return gatewayMap
+}
+
+func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
+	t.Parallel()
+
+	cspGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "ClientSettingsPolicy"}
+	opGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "ObservabilityPolicy"}
+
+	gw1Ref := createTestRef(kinds.Gateway, v1.GroupName, "gw1")
+	gw1TargetRef := createTestPolicyTargetRef(
+		kinds.Gateway,
+		types.NamespacedName{Namespace: testNs, Name: "gw1"},
+	)
+	gw2Ref := createTestRef(kinds.Gateway, v1.GroupName, "gw2")
+	gw2TargetRef := createTestPolicyTargetRef(
+		kinds.Gateway,
+		types.NamespacedName{Namespace: testNs, Name: "gw2"},
+	)
+	gw3Ref := createTestRef(kinds.Gateway, v1.GroupName, "gw3")
+	gw3TargetRef := createTestPolicyTargetRef(
+		kinds.Gateway,
+		types.NamespacedName{Namespace: testNs, Name: "gw3"},
+	)
+
+	hr1Ref := createTestRef(kinds.HTTPRoute, v1.GroupName, "hr1")
+	hr1TargetRef := createTestPolicyTargetRef(
+		kinds.HTTPRoute,
+		types.NamespacedName{Namespace: testNs, Name: "hr1"},
+	)
+	hr2Ref := createTestRef(kinds.HTTPRoute, v1.GroupName, "hr2")
+	hr2TargetRef := createTestPolicyTargetRef(
+		kinds.HTTPRoute,
+		types.NamespacedName{Namespace: testNs, Name: "hr2"},
+	)
+	hr3Ref := createTestRef(kinds.HTTPRoute, v1.GroupName, "hr3")
+	hr3TargetRef := createTestPolicyTargetRef(
+		kinds.HTTPRoute,
+		types.NamespacedName{Namespace: testNs, Name: "hr3"},
+	)
+
+	gr1Ref := createTestRef(kinds.GRPCRoute, v1.GroupName, "gr1")
+	gr1TargetRef := createTestPolicyTargetRef(
+		kinds.GRPCRoute,
+		types.NamespacedName{Namespace: testNs, Name: "gr1"},
+	)
+	gr2Ref := createTestRef(kinds.GRPCRoute, v1.GroupName, "gr2")
+	gr2TargetRef := createTestPolicyTargetRef(
+		kinds.GRPCRoute,
+		types.NamespacedName{Namespace: testNs, Name: "gr2"},
+	)
+
+	invalidRef := createTestRef(kinds.HTTPRoute, v1.GroupName, "invalid")
+	invalidTargetRef := createTestPolicyTargetRef(
+		"invalidKind",
+		types.NamespacedName{Namespace: testNs, Name: "invalid"},
+	)
+
+	tests := []struct {
+		policies           map[PolicyKey]*Policy
+		gws                map[types.NamespacedName]*Gateway
+		routes             map[RouteKey]*L7Route
+		expectedConditions map[types.NamespacedName][]conditions.Condition
+		name               string
+		missingKeys        bool
+	}{
+		{
+			name:     "no policies",
+			policies: nil,
+			gws:      nil,
+			routes:   nil,
+		},
+		{
+			name: "csp policy with gateway target ref",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp1"): {
+					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
+					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+				},
+			},
+			gws:    createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw1"}),
+			routes: nil,
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "gw1"}: {
+					conditions.NewClientSettingsPolicyAffected(),
+				},
+			},
+		},
+		{
+			name: "gateway attached to csp and op policy",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp1"): {
+					Source:     createTestPolicy(cspGVK, "csp1", gw2Ref),
+					TargetRefs: []PolicyTargetRef{gw2TargetRef},
+				},
+				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
+					Source:     createTestPolicy(opGVK, "observabilityPolicy1", gw2Ref),
+					TargetRefs: []PolicyTargetRef{gw2TargetRef},
+				},
+			},
+			gws:    createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw2"}),
+			routes: nil,
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "gw2"}: {
+					conditions.NewClientSettingsPolicyAffected(),
+					conditions.NewObservabilityPolicyAffected(),
+				},
+			},
+		},
+		{
+			name: "policies with l7 routes target ref",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
+					Source:     createTestPolicy(opGVK, "observabilityPolicy1", hr1Ref),
+					TargetRefs: []PolicyTargetRef{hr1TargetRef},
+				},
+				createTestPolicyKey(cspGVK, "csp1"): {
+					Source:     createTestPolicy(cspGVK, "csp1", gr1Ref),
+					TargetRefs: []PolicyTargetRef{gr1TargetRef},
+				},
+			},
+			routes: map[RouteKey]*L7Route{
+				{RouteType: RouteTypeHTTP, NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr1"}}: {
+					Source: &v1.HTTPRoute{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "hr1",
+							Namespace: testNs,
+						},
+					},
+				},
+				{RouteType: RouteTypeGRPC, NamespacedName: types.NamespacedName{Namespace: testNs, Name: "gr1"}}: {
+					Source: &v1.GRPCRoute{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "gr1",
+							Namespace: testNs,
+						},
+					},
+				},
+			},
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "hr1"}: {
+					conditions.NewObservabilityPolicyAffected(),
+				},
+				{Namespace: testNs, Name: "gr1"}: {
+					conditions.NewClientSettingsPolicyAffected(),
+				},
+			},
+		},
+		{
+			name: "policies with multiple target refs of different kinds",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp1"): {
+					Source:     createTestPolicy(cspGVK, "csp1", gw3Ref, hr2Ref),
+					TargetRefs: []PolicyTargetRef{gw3TargetRef, hr2TargetRef},
+				},
+				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
+					Source:     createTestPolicy(opGVK, "observabilityPolicy1", hr2Ref, gr2Ref),
+					TargetRefs: []PolicyTargetRef{hr2TargetRef, gr2TargetRef},
+				},
+				createTestPolicyKey(opGVK, "observabilityPolicy2"): {
+					Source:     createTestPolicy(opGVK, "observabilityPolicy2", gw3Ref, gr2Ref),
+					TargetRefs: []PolicyTargetRef{gw3TargetRef, gr2TargetRef},
+				},
+			},
+			gws: createGatewayMap(
+				types.NamespacedName{Namespace: testNs, Name: "gw3"},
+			),
+			routes: map[RouteKey]*L7Route{
+				{RouteType: RouteTypeHTTP, NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr2"}}: {
+					Source: &v1.HTTPRoute{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "hr2",
+							Namespace: testNs,
+						},
+					},
+				},
+				{RouteType: RouteTypeGRPC, NamespacedName: types.NamespacedName{Namespace: testNs, Name: "gr2"}}: {
+					Source: &v1.GRPCRoute{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "gr2",
+							Namespace: testNs,
+						},
+					},
+				},
+			},
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "gw3"}: {
+					conditions.NewClientSettingsPolicyAffected(),
+					conditions.NewObservabilityPolicyAffected(),
+				},
+				{Namespace: testNs, Name: "hr2"}: {
+					conditions.NewObservabilityPolicyAffected(),
+					conditions.NewClientSettingsPolicyAffected(),
+				},
+				{Namespace: testNs, Name: "gr2"}: {
+					conditions.NewObservabilityPolicyAffected(),
+				},
+			},
+		},
+		{
+			name: "multiple policies with same target ref, only one condition should be added",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp1"): {
+					Source:     createTestPolicy(cspGVK, "csp1", hr3Ref),
+					TargetRefs: []PolicyTargetRef{hr3TargetRef},
+				},
+				createTestPolicyKey(cspGVK, "csp2"): {
+					Source:     createTestPolicy(cspGVK, "csp2", hr3Ref),
+					TargetRefs: []PolicyTargetRef{hr3TargetRef},
+				},
+			},
+			routes: map[RouteKey]*L7Route{
+				{RouteType: RouteTypeHTTP, NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr3"}}: {
+					Source: &v1.HTTPRoute{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "hr3",
+							Namespace: testNs,
+						},
+					},
+				},
+			},
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "hr3"}: {
+					conditions.NewClientSettingsPolicyAffected(),
+				},
+			},
+		},
+		{
+			name: "no condition added for invalid target ref kind",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp1"): {
+					Source:     createTestPolicy(cspGVK, "csp1", invalidRef),
+					TargetRefs: []PolicyTargetRef{invalidTargetRef},
+				},
+			},
+			routes: map[RouteKey]*L7Route{
+				{RouteType: RouteTypeHTTP, NamespacedName: types.NamespacedName{Namespace: testNs, Name: "invalid"}}: {
+					Source: &v1.HTTPRoute{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "invalid",
+							Namespace: testNs,
+						},
+					},
+				},
+			},
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "invalid"}: {},
+			},
+		},
+		{
+			name: "no condition added when target ref gateway is not present in the graph",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp1"): {
+					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
+					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+				},
+			},
+			gws: createGatewayMap(
+				types.NamespacedName{Namespace: testNs, Name: "gw2"},
+			),
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "gw1"}: {},
+			},
+			missingKeys: true,
+		},
+		{
+			name: "no condition added when target ref gateway is nil",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp1"): {
+					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
+					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+				},
+			},
+			gws: map[types.NamespacedName]*Gateway{
+				{Namespace: testNs, Name: "gw1"}: nil,
+			},
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "gw1"}: {},
+			},
+			missingKeys: true,
+		},
+		{
+			name: "no condition added when target ref route is not present in the graph",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
+					Source:     createTestPolicy(opGVK, "observabilityPolicy1", hr1Ref),
+					TargetRefs: []PolicyTargetRef{hr1TargetRef},
+				},
+			},
+			routes: map[RouteKey]*L7Route{
+				{RouteType: RouteTypeHTTP, NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr3"}}: {
+					Source: &v1.HTTPRoute{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "hr3",
+							Namespace: testNs,
+						},
+					},
+				},
+			},
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "hr1"}: {},
+			},
+			missingKeys: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			addPolicyAffectedStatusToTargetRefs(test.policies, test.routes, test.gws)
+
+			for _, pols := range test.policies {
+				for _, targetRefs := range pols.TargetRefs {
+					switch targetRefs.Kind {
+					case kinds.Gateway:
+						if !test.missingKeys {
+							g.Expect(test.gws).To(HaveKey(targetRefs.Nsname))
+							gateway := test.gws[targetRefs.Nsname]
+							g.Expect(gateway.Conditions).To(ContainElements(test.expectedConditions[targetRefs.Nsname]))
+						} else {
+							g.Expect(test.expectedConditions[types.NamespacedName{Namespace: testNs, Name: "gw1"}]).To(BeEmpty())
+						}
+
+					case kinds.HTTPRoute, kinds.GRPCRoute:
+						routeKey := routeKeyForKind(targetRefs.Kind, targetRefs.Nsname)
+						if !test.missingKeys {
+							g.Expect(test.routes).To(HaveKey(routeKey))
+							route := test.routes[routeKeyForKind(targetRefs.Kind, targetRefs.Nsname)]
+							g.Expect(route.Conditions).To(ContainElements(test.expectedConditions[targetRefs.Nsname]))
+						} else {
+							g.Expect(test.expectedConditions[types.NamespacedName{Namespace: testNs, Name: "hr1"}]).To(BeEmpty())
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestAddStatusToTargetRefs(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	policyKind := kinds.ObservabilityPolicy
+
+	g.Expect(func() {
+		addStatusToTargetRefs(policyKind, nil)
+	}).ToNot(Panic())
 }

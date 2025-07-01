@@ -72,6 +72,8 @@ const (
 	RouteTypeHTTP RouteType = "http"
 	// RouteTypeGRPC indicates that the RouteType of the L7Route is gRPC.
 	RouteTypeGRPC RouteType = "grpc"
+	// RouteTypeTLS indicates that the RouteType of the L4Route is TLS.
+	RouteTypeTLS RouteType = "tls"
 )
 
 // L4RouteKey is the unique identifier for a L4Route.

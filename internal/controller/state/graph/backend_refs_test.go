@@ -390,18 +390,19 @@ func TestAddBackendRefsToRules(t *testing.T) {
 	}
 	createRoute := func(
 		name string,
+		routeType RouteType,
 		kind gatewayv1.Kind,
 		refsPerBackend int,
 		serviceNames ...string,
 	) *L7Route {
-		hr := &L7Route{
+		route := &L7Route{
 			Source: &gatewayv1.HTTPRoute{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "test",
 					Name:      name,
 				},
 			},
-			RouteType:  RouteTypeHTTP,
+			RouteType:  routeType,
 			ParentRefs: sectionNameRefs,
 			Valid:      true,
 		}
@@ -420,7 +421,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			}
 		}
 
-		hr.Spec.Rules = make([]RouteRule, len(serviceNames))
+		route.Spec.Rules = make([]RouteRule, len(serviceNames))
 
 		for idx, svcName := range serviceNames {
 			refs := []RouteBackendRef{
@@ -433,7 +434,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 				panic("invalid refsPerBackend")
 			}
 
-			hr.Spec.Rules[idx] = RouteRule{
+			route.Spec.Rules[idx] = RouteRule{
 				RouteBackendRefs: refs,
 				ValidMatches:     true,
 				Filters: RouteRuleFilters{
@@ -442,7 +443,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 				},
 			}
 		}
-		return hr
+		return route
 	}
 
 	modRoute := func(route *L7Route, mod func(*L7Route) *L7Route) *L7Route {
@@ -467,6 +468,24 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 		}
 	}
+
+	getSvcWithAppProtocol := func(name, appProtocol string) *v1.Service {
+		return &v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      name,
+			},
+			Spec: v1.ServiceSpec{
+				Ports: []v1.ServicePort{
+					{
+						Port:        80,
+						AppProtocol: &appProtocol,
+					},
+				},
+			},
+		}
+	}
+
 	svc1 := getSvc("svc1")
 	svc1NsName := types.NamespacedName{
 		Namespace: "test",
@@ -479,9 +498,37 @@ func TestAddBackendRefsToRules(t *testing.T) {
 		Name:      "svc2",
 	}
 
+	svcH2c := getSvcWithAppProtocol("svcH2c", AppProtocolTypeH2C)
+	svcH2cNsName := types.NamespacedName{
+		Namespace: "test",
+		Name:      "svcH2c",
+	}
+
+	svcWS := getSvcWithAppProtocol("svcWS", AppProtocolTypeWS)
+	svcWSNsName := types.NamespacedName{
+		Namespace: "test",
+		Name:      "svcWS",
+	}
+
+	svcWSS := getSvcWithAppProtocol("svcWSS", AppProtocolTypeWSS)
+	svcWSSNsName := types.NamespacedName{
+		Namespace: "test",
+		Name:      "svcWSS",
+	}
+
+	svcGRPC := getSvcWithAppProtocol("svcGRPC", "grpc")
+	svcGRPCNsName := types.NamespacedName{
+		Namespace: "test",
+		Name:      "svcGRPC",
+	}
+
 	services := map[types.NamespacedName]*v1.Service{
-		{Namespace: "test", Name: "svc1"}: svc1,
-		{Namespace: "test", Name: "svc2"}: svc2,
+		{Namespace: "test", Name: "svc1"}:    svc1,
+		{Namespace: "test", Name: "svc2"}:    svc2,
+		{Namespace: "test", Name: "svcH2c"}:  svcH2c,
+		{Namespace: "test", Name: "svcWS"}:   svcWS,
+		{Namespace: "test", Name: "svcWSS"}:  svcWSS,
+		{Namespace: "test", Name: "svcGRPC"}: svcGRPC,
 	}
 	emptyPolicies := map[types.NamespacedName]*BackendTLSPolicy{}
 
@@ -519,8 +566,9 @@ func TestAddBackendRefsToRules(t *testing.T) {
 	}
 
 	policiesMatching := map[types.NamespacedName]*BackendTLSPolicy{
-		{Namespace: "test", Name: "btp1"}: getPolicy("btp1", "svc1", "test"),
-		{Namespace: "test", Name: "btp2"}: getPolicy("btp2", "svc2", "test"),
+		{Namespace: "test", Name: "btp1"}:   getPolicy("btp1", "svc1", "test"),
+		{Namespace: "test", Name: "btp2"}:   getPolicy("btp2", "svc2", "test"),
+		{Namespace: "test", Name: "btpWSS"}: getPolicy("btpWSS", "svcWSS", "test"),
 	}
 	policiesNotMatching := map[types.NamespacedName]*BackendTLSPolicy{
 		{Namespace: "test", Name: "btp1"}: getPolicy("btp1", "svc1", "test1"),
@@ -576,6 +624,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 		Message: "Policy is accepted",
 	},
 	)
+	btpWSS := getBtp("btpWSS", "svcWSS", "test")
 
 	tests := []struct {
 		route               *L7Route
@@ -585,7 +634,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 		expectedConditions  []conditions.Condition
 	}{
 		{
-			route: createRoute("hr1", "Service", 1, "svc1"),
+			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svc1"),
 			expectedBackendRefs: []BackendRef{
 				{
 					SvcNsName:          svc1NsName,
@@ -600,7 +649,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			name:               "normal case with one rule with one backend",
 		},
 		{
-			route: createRoute("hr2", "Service", 2, "svc1"),
+			route: createRoute("hr2", RouteTypeHTTP, "Service", 2, "svc1"),
 			expectedBackendRefs: []BackendRef{
 				{
 					SvcNsName:          svc1NsName,
@@ -622,7 +671,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			name:               "normal case with one rule with two backends",
 		},
 		{
-			route: createRoute("hr2", "Service", 2, "svc1"),
+			route: createRoute("hr2", RouteTypeHTTP, "Service", 2, "svc1"),
 			expectedBackendRefs: []BackendRef{
 				{
 					SvcNsName:          svc1NsName,
@@ -646,7 +695,164 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			name:               "normal case with one rule with two backends and matching policies",
 		},
 		{
-			route: modRoute(createRoute("hr1", "Service", 1, "svc1"), func(route *L7Route) *L7Route {
+			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcH2c"),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName:          svcH2cNsName,
+					ServicePort:        svcH2c.Spec.Ports[0],
+					Valid:              false,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedProtocol(
+					"route type http does not support service port appProtocol kubernetes.io/h2c;" +
+						" nginx does not support proxying to upstreams with http2 or h2c",
+				),
+			},
+			policies: emptyPolicies,
+			name:     "invalid backendRef with service port appProtocol h2c and route type http",
+		},
+		{
+			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcWS"),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName:          svcWSNsName,
+					ServicePort:        svcWS.Spec.Ports[0],
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+			expectedConditions: nil,
+			policies:           emptyPolicies,
+			name:               "valid backendRef with service port appProtocol ws and route type http",
+		},
+		{
+			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcWSS"),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName:          svcWSSNsName,
+					ServicePort:        svcWSS.Spec.Ports[0],
+					Valid:              true,
+					Weight:             1,
+					BackendTLSPolicy:   btpWSS,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+			expectedConditions: nil,
+			policies:           policiesMatching,
+			name: "valid backendRef with service port appProtocol wss," +
+				" route type http, and corresponding BackendTLSPolicy",
+		},
+		{
+			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcWSS"),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName:          svcWSSNsName,
+					ServicePort:        svcWSS.Spec.Ports[0],
+					Valid:              false,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedProtocol(
+					"route type http does not support service port appProtocol kubernetes.io/wss;" +
+						" missing corresponding BackendTLSPolicy",
+				),
+			},
+			policies: emptyPolicies,
+			name:     "invalid backendRef with service port appProtocol wss, route type http, but missing BackendTLSPolicy",
+		},
+		{
+			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcH2c"),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName:          svcH2cNsName,
+					ServicePort:        svcH2c.Spec.Ports[0],
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+			expectedConditions: nil,
+			policies:           emptyPolicies,
+			name:               "valid backendRef with service port appProtocol h2c and route type grpc",
+		},
+		{
+			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcWS"),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName:          svcWSNsName,
+					ServicePort:        svcWS.Spec.Ports[0],
+					Valid:              false,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedProtocol(
+					"route type grpc does not support service port appProtocol kubernetes.io/ws",
+				),
+			},
+			policies: emptyPolicies,
+			name:     "invalid backendRef with service port appProtocol ws and route type grpc",
+		},
+		{
+			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcWSS"),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName:          svcWSSNsName,
+					ServicePort:        svcWSS.Spec.Ports[0],
+					Valid:              false,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedProtocol(
+					"route type grpc does not support service port appProtocol kubernetes.io/wss",
+				),
+			},
+			policies: emptyPolicies,
+			name:     "invalid backendRef with service port appProtocol wss and route type grpc",
+		},
+		{
+			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcGRPC"),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName:          svcGRPCNsName,
+					ServicePort:        svcGRPC.Spec.Ports[0],
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+			expectedConditions: nil,
+			policies:           emptyPolicies,
+			name: "valid backendRef with non-Kubernetes Standard Application Protocol" +
+				" service port appProtocol and route type http",
+		},
+		{
+			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcGRPC"),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName:          svcGRPCNsName,
+					ServicePort:        svcGRPC.Spec.Ports[0],
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+			expectedConditions: nil,
+			policies:           emptyPolicies,
+			name: "valid backendRef with non-Kubernetes Standard Application Protocol" +
+				" service port appProtocol and route type grpc",
+		},
+		{
+			route: modRoute(createRoute("hr1", RouteTypeHTTP, "Service", 1, "svc1"), func(route *L7Route) *L7Route {
 				route.Valid = false
 				return route
 			}),
@@ -656,7 +862,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			name:                "invalid route",
 		},
 		{
-			route: modRoute(createRoute("hr1", "Service", 1, "svc1"), func(route *L7Route) *L7Route {
+			route: modRoute(createRoute("hr1", RouteTypeHTTP, "Service", 1, "svc1"), func(route *L7Route) *L7Route {
 				route.Spec.Rules[0].ValidMatches = false
 				return route
 			}),
@@ -666,7 +872,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			name:                "invalid matches",
 		},
 		{
-			route: modRoute(createRoute("hr1", "Service", 1, "svc1"), func(route *L7Route) *L7Route {
+			route: modRoute(createRoute("hr1", RouteTypeHTTP, "Service", 1, "svc1"), func(route *L7Route) *L7Route {
 				route.Spec.Rules[0].Filters = RouteRuleFilters{Valid: false}
 				return route
 			}),
@@ -676,7 +882,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			name:                "invalid filters",
 		},
 		{
-			route: createRoute("hr3", "NotService", 1, "svc1"),
+			route: createRoute("hr3", RouteTypeHTTP, "NotService", 1, "svc1"),
 			expectedBackendRefs: []BackendRef{
 				{
 					Weight:             1,
@@ -692,7 +898,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			name:     "invalid backendRef",
 		},
 		{
-			route: modRoute(createRoute("hr2", "Service", 2, "svc1"), func(route *L7Route) *L7Route {
+			route: modRoute(createRoute("hr2", RouteTypeHTTP, "Service", 2, "svc1"), func(route *L7Route) *L7Route {
 				route.Spec.Rules[0].RouteBackendRefs[1].Name = "svc2"
 				return route
 			}),
@@ -723,7 +929,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			name:     "invalid backendRef - backend TLS policies do not match for all backends",
 		},
 		{
-			route: modRoute(createRoute("hr4", "Service", 1, "svc1"), func(route *L7Route) *L7Route {
+			route: modRoute(createRoute("hr4", RouteTypeHTTP, "Service", 1, "svc1"), func(route *L7Route) *L7Route {
 				route.Spec.Rules[0].RouteBackendRefs = nil
 				return route
 			}),

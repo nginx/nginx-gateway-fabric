@@ -17,6 +17,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 )
 
+const (
+	AppProtocolTypeH2C string = "kubernetes.io/h2c"
+	AppProtocolTypeWS  string = "kubernetes.io/ws"
+	AppProtocolTypeWSS string = "kubernetes.io/wss"
+)
+
 // BackendRef is an internal representation of a backendRef in an HTTP/GRPC/TLSRoute.
 type BackendRef struct {
 	// BackendTLSPolicy is the BackendTLSPolicy of the Service which is referenced by the backendRef.
@@ -198,6 +204,23 @@ func createBackendRef(
 		}
 
 		return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(err.Error()))
+	}
+
+	if svcPort.AppProtocol != nil {
+		err = validateRouteBackendRefAppProtocol(route.RouteType, *svcPort.AppProtocol, backendTLSPolicy)
+		if err != nil {
+			backendRef := BackendRef{
+				SvcNsName:          svcNsName,
+				BackendTLSPolicy:   backendTLSPolicy,
+				ServicePort:        svcPort,
+				Weight:             weight,
+				Valid:              false,
+				IsMirrorBackend:    ref.MirrorBackendIdx != nil,
+				InvalidForGateways: invalidForGateways,
+			}
+
+			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedProtocol(err.Error()))
+		}
 	}
 
 	backendRef := BackendRef{
@@ -412,6 +435,56 @@ func validateBackendRef(
 	}
 
 	return true, conditions.Condition{}
+}
+
+// validateRouteBackendRefAppProtocol checks if a given RouteType supports sending traffic to a service AppProtocol.
+// Returns nil if true or AppProtocol is not a Kubernetes Standard Application Protocol.
+func validateRouteBackendRefAppProtocol(
+	routeType RouteType,
+	appProtocol string,
+	backendTLSPolicy *BackendTLSPolicy,
+) error {
+	err := fmt.Errorf(
+		"route type %s does not support service port appProtocol %s",
+		routeType,
+		appProtocol,
+	)
+
+	// Currently we only support recognition of the Kubernetes Standard Application Protocols defined in KEP-3726.
+	switch appProtocol {
+	case AppProtocolTypeH2C:
+		if routeType == RouteTypeGRPC {
+			return nil
+		}
+
+		if routeType == RouteTypeHTTP {
+			return fmt.Errorf("%w; nginx does not support proxying to upstreams with http2 or h2c", err)
+		}
+
+		return err
+	case AppProtocolTypeWS:
+		if routeType == RouteTypeHTTP {
+			return nil
+		}
+
+		return err
+	case AppProtocolTypeWSS:
+		if routeType == RouteTypeHTTP {
+			if backendTLSPolicy != nil {
+				return nil
+			}
+
+			return fmt.Errorf("%w; missing corresponding BackendTLSPolicy", err)
+		}
+
+		if routeType == RouteTypeTLS {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
 }
 
 func validateWeight(weight int32) error {

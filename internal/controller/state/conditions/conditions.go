@@ -107,6 +107,18 @@ const (
 	// has an overlapping hostname:port/path combination with another Route.
 	PolicyReasonTargetConflict v1alpha2.PolicyConditionReason = "TargetConflict"
 
+	// ClientSettingsPolicyAffected is used with the "PolicyAffected" condition when a
+	// ClientSettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	ClientSettingsPolicyAffected v1alpha2.PolicyConditionType = "ClientSettingsPolicyAffected"
+
+	// ObservabilityPolicyAffected is used with the "PolicyAffected" condition when an
+	// ObservabilityPolicy is applied to a HTTPRoute, or GRPCRoute.
+	ObservabilityPolicyAffected v1alpha2.PolicyConditionType = "ObservabilityPolicyAffected"
+
+	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
+	// ObservabilityPolicy or ClientSettingsPolicy is applied to Gateways or Routes.
+	PolicyAffectedReason v1alpha2.PolicyConditionReason = "PolicyAffected"
+
 	// GatewayResolvedRefs condition indicates whether the controller was able to resolve the
 	// parametersRef on the Gateway.
 	GatewayResolvedRefs v1.GatewayConditionType = "ResolvedRefs"
@@ -183,6 +195,19 @@ func ConvertConditions(
 	}
 
 	return apiConds
+}
+
+// HasMatchingCondition checks if the given condition matches any of the existing conditions.
+func HasMatchingCondition(existingConditions []Condition, cond Condition) bool {
+	for _, existing := range existingConditions {
+		if existing.Type == cond.Type &&
+			existing.Status == cond.Status &&
+			existing.Reason == cond.Reason &&
+			existing.Message == cond.Message {
+			return true
+		}
+	}
+	return false
 }
 
 // NewDefaultGatewayClassConditions returns Conditions that indicate that the GatewayClass is accepted and that the
@@ -394,6 +419,17 @@ func NewRouteBackendRefUnsupportedValue(msg string) Condition {
 		Type:    string(v1.RouteConditionResolvedRefs),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonBackendRefUnsupportedValue),
+		Message: msg,
+	}
+}
+
+// NewRouteBackendRefUnsupportedProtocol returns a Condition that indicates that the Route has a backendRef with
+// an unsupported protocol.
+func NewRouteBackendRefUnsupportedProtocol(msg string) Condition {
+	return Condition{
+		Type:    string(v1.RouteConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.RouteReasonUnsupportedProtocol),
 		Message: msg,
 	}
 }
@@ -938,5 +974,27 @@ func NewSnippetsFilterAccepted() Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(ngfAPI.SnippetsFilterConditionReasonAccepted),
 		Message: "SnippetsFilter is accepted",
+	}
+}
+
+// NewObservabilityPolicyAffected returns a Condition that indicates that an ObservabilityPolicy
+// is applied to the resource.
+func NewObservabilityPolicyAffected() Condition {
+	return Condition{
+		Type:    string(ObservabilityPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "ObservabilityPolicy is applied to the resource",
+	}
+}
+
+// NewClientSettingsPolicyAffected returns a Condition that indicates that a ClientSettingsPolicy
+// is applied to the resource.
+func NewClientSettingsPolicyAffected() Condition {
+	return Condition{
+		Type:    string(ClientSettingsPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "ClientSettingsPolicy is applied to the resource",
 	}
 }
