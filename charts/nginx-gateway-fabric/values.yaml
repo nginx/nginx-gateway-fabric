@@ -5,8 +5,6 @@ clusterDomain: cluster.local
 
 # -- The nginxGateway section contains configuration for the NGINX Gateway Fabric control plane deployment.
 nginxGateway:
-  # FIXME(lucacome): https://github.com/nginx/nginx-gateway-fabric/issues/2490
-
   # @schema
   # const: deployment
   # @schema
