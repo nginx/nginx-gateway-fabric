@@ -33,9 +33,10 @@ const (
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
 
-	defaultNginxImagePath     = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
-	defaultNginxPlusImagePath = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
-	defaultImagePullPolicy    = corev1.PullIfNotPresent
+	defaultNginxImagePath        = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
+	defaultNginxPlusImagePath    = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
+	defaultNginxPlusWafImagePath = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-nap-waf"
+	defaultImagePullPolicy       = corev1.PullIfNotPresent
 
 	// WAF container defaults.
 	defaultWAFEnforcerImagePath  = "private-registry.nginx.com/nap/waf-enforcer"
@@ -986,6 +987,10 @@ func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (str
 
 	if p.cfg.Plus {
 		image = defaultNginxPlusImagePath
+	}
+
+	if graph.WAFEnabledForNginxProxy(nProxyCfg) {
+		image = defaultNginxPlusWafImagePath
 	}
 
 	getImageAndPullPolicy := func(container ngfAPIv1alpha2.ContainerSpec) (string, string, corev1.PullPolicy) {
