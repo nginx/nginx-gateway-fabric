@@ -13,6 +13,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
@@ -1581,4 +1582,201 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 			g.Expect(conds).To(BeEquivalentTo(test.expConds))
 		})
 	}
+}
+
+func TestGetReferencedSnippetsFilters(t *testing.T) {
+	t.Parallel()
+
+	gw := &Gateway{
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "gateway-ns",
+				Name:      "test-gateway",
+			},
+		},
+	}
+
+	sf1 := &SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app1",
+				Name:      "app1-logging",
+			},
+		},
+		Valid: true,
+	}
+
+	sf2 := &SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app2",
+				Name:      "app2-logging",
+			},
+		},
+		Valid: true,
+	}
+
+	sf3Invalid := &SnippetsFilter{
+		Source: &ngfAPIv1alpha1.SnippetsFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app3",
+				Name:      "invalid-filter",
+			},
+		},
+		Valid: false,
+	}
+
+	routeAttachedToGateway := &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app1",
+				Name:      "attached-route",
+			},
+		},
+		Valid: true,
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{
+					NamespacedName: types.NamespacedName{
+						Namespace: "gateway-ns",
+						Name:      "test-gateway",
+					},
+				},
+			},
+		},
+		Spec: L7RouteSpec{
+			Rules: []RouteRule{
+				{
+					Filters: RouteRuleFilters{
+						Valid: true,
+						Filters: []Filter{
+							{
+								FilterType: FilterExtensionRef,
+								ResolvedExtensionRef: &ExtensionRefFilter{
+									SnippetsFilter: sf1,
+									Valid:          true,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	routeNotAttachedToGateway := &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app2",
+				Name:      "not-attached-route",
+			},
+		},
+		Valid: true,
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{
+					NamespacedName: types.NamespacedName{
+						Namespace: "other-gateway-ns",
+						Name:      "other-gateway",
+					},
+				},
+			},
+		},
+		Spec: L7RouteSpec{
+			Rules: []RouteRule{
+				{
+					Filters: RouteRuleFilters{
+						Valid: true,
+						Filters: []Filter{
+							{
+								FilterType: FilterExtensionRef,
+								ResolvedExtensionRef: &ExtensionRefFilter{
+									SnippetsFilter: sf2,
+									Valid:          true,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	routeWithInvalidFilter := &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app3",
+				Name:      "route-with-invalid-filter",
+			},
+		},
+		Valid: true,
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{
+					NamespacedName: types.NamespacedName{
+						Namespace: "gateway-ns",
+						Name:      "test-gateway",
+					},
+				},
+			},
+		},
+		Spec: L7RouteSpec{
+			Rules: []RouteRule{
+				{
+					Filters: RouteRuleFilters{
+						Valid: true,
+						Filters: []Filter{
+							{
+								FilterType: FilterExtensionRef,
+								ResolvedExtensionRef: &ExtensionRefFilter{
+									SnippetsFilter: sf3Invalid,
+									Valid:          false,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	routes := map[RouteKey]*L7Route{
+		{
+			NamespacedName: types.NamespacedName{Namespace: "app1", Name: "attached-route"},
+			RouteType:      RouteTypeHTTP,
+		}: routeAttachedToGateway,
+		{
+			NamespacedName: types.NamespacedName{Namespace: "app2", Name: "not-attached-route"},
+			RouteType:      RouteTypeHTTP,
+		}: routeNotAttachedToGateway,
+		{
+			NamespacedName: types.NamespacedName{Namespace: "app3", Name: "route-with-invalid-filter"},
+			RouteType:      RouteTypeHTTP,
+		}: routeWithInvalidFilter,
+	}
+
+	allSnippetsFilters := map[types.NamespacedName]*SnippetsFilter{
+		{Namespace: "app1", Name: "app1-logging"}:   sf1,
+		{Namespace: "app2", Name: "app2-logging"}:   sf2,
+		{Namespace: "app3", Name: "invalid-filter"}: sf3Invalid,
+	}
+
+	g := NewWithT(t)
+
+	result := gw.GetReferencedSnippetsFilters(routes, allSnippetsFilters)
+
+	// Should only include sf1 (valid filter from route attached to this gateway)
+	expectedResult := map[types.NamespacedName]*SnippetsFilter{
+		{Namespace: "app1", Name: "app1-logging"}: sf1,
+	}
+
+	g.Expect(result).To(Equal(expectedResult))
+
+	// Test with no routes
+	emptyResult := gw.GetReferencedSnippetsFilters(map[RouteKey]*L7Route{}, allSnippetsFilters)
+	g.Expect(emptyResult).To(BeEmpty())
+
+	// Test with routes but no snippets filters
+	emptyFilterResult := gw.GetReferencedSnippetsFilters(routes, map[types.NamespacedName]*SnippetsFilter{})
+	g.Expect(emptyFilterResult).To(BeEmpty())
 }
