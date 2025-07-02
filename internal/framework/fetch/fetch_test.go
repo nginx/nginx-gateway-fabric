@@ -15,6 +15,8 @@ import (
 )
 
 func TestGetRemoteFile(t *testing.T) {
+	t.Parallel()
+
 	fileContent := "test file content"
 	hasher := sha256.New()
 	hasher.Write([]byte(fileContent))
@@ -226,6 +228,7 @@ func TestGetRemoteFile(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			var serverURL string
@@ -248,6 +251,7 @@ func TestGetRemoteFile(t *testing.T) {
 }
 
 func TestErrorTypes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		err      error
 		unwraps  error
@@ -274,6 +278,7 @@ func TestErrorTypes(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
+			t.Parallel()
 			g.Expect(tc.err.Error()).To(Equal(tc.expected))
 
 			if tc.unwraps != nil {
