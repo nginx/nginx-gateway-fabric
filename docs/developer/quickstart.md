@@ -201,7 +201,7 @@ This will build the docker images `nginx-gateway-fabric:<your-user>` and `nginx-
      If the only change is the image repository and tag, you can update the `kustomization.yaml` file in `deploy/` with the desired values and deployment mainifest and run the following commands:
 
      ```shell
-      kubectl apply -f deploy/crds.yaml
+      kubectl apply --server-side -f deploy/crds.yaml
       kubectl kustomize deploy | kubectl apply -f -
      ```
 

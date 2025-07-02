@@ -126,7 +126,7 @@ generate-crds: ## Generate CRDs and Go types using kubebuilder
 
 .PHONY: install-crds
 install-crds: ## Install CRDs
-	kubectl kustomize $(SELF_DIR)config/crd | kubectl apply -f -
+	kubectl kustomize $(SELF_DIR)config/crd | kubectl apply --server-side -f -
 
 .PHONY: install-gateway-crds
 install-gateway-crds: ## Install Gateway API CRDs
