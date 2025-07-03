@@ -2462,31 +2462,17 @@ func TestBuildConfiguration(t *testing.T) {
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
-				conf.MainSnippets = []Snippet{
-					{
-						Name: createSnippetName(
-							ngfAPIv1alpha1.NginxContextMain,
-							client.ObjectKeyFromObject(sf1.Source),
-						),
-						Contents: "main snippet",
-					},
-				}
-				conf.BaseHTTPConfig.Snippets = []Snippet{
-					{
-						Name: createSnippetName(
-							ngfAPIv1alpha1.NginxContextHTTP,
-							client.ObjectKeyFromObject(sf1.Source),
-						),
-						Contents: "http snippet",
-					},
-				}
+				// With proper scoping, no snippets should be included since no routes
+				// attached to this gateway reference the SnippetsFilters
+				conf.MainSnippets = nil            // nil - no snippets should be included
+				conf.BaseHTTPConfig.Snippets = nil // nil - no snippets should be included
 				conf.HTTPServers = []VirtualServer{}
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
 
 				return conf
 			}),
-			msg: "SnippetsFilters with main and http snippet",
+			msg: "SnippetsFilters scoped per gateway - no routes reference SnippetsFilters",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
@@ -4488,7 +4474,10 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 		t.Run(tc.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			baseConfig := buildBaseHTTPConfig(tc.g, tc.g.Gateways[types.NamespacedName{}])
+			baseConfig := buildBaseHTTPConfig(
+				tc.g.Gateways[types.NamespacedName{}],
+				make(map[types.NamespacedName]*graph.SnippetsFilter),
+			)
 			g.Expect(baseConfig.RewriteClientIPSettings).To(Equal(tc.expRewriteIPSettings))
 		})
 	}
