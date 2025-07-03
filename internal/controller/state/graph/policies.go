@@ -3,16 +3,21 @@ package graph
 import (
 	"fmt"
 	"sort"
+	"strconv"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
 	ngfsort "github.com/nginx/nginx-gateway-fabric/internal/controller/sort"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/fetch"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 )
 
@@ -61,12 +66,22 @@ type PolicyKey struct {
 	GVK schema.GroupVersionKind
 }
 
+type WAFBundleKey string
+
+type WAFBundleData []byte
+
 const (
 	gatewayGroupKind = v1.GroupName + "/" + kinds.Gateway
 	hrGroupKind      = v1.GroupName + "/" + kinds.HTTPRoute
 	grpcGroupKind    = v1.GroupName + "/" + kinds.GRPCRoute
 	serviceGroupKind = "core" + "/" + kinds.Service
 )
+
+var wafPolicyGVK = schema.GroupVersionKind{
+	Group:   ngfAPIv1alpha1.SchemeGroupVersion.Group,
+	Version: ngfAPIv1alpha1.SchemeGroupVersion.Version,
+	Kind:    kinds.WAFPolicy,
+}
 
 // attachPolicies attaches the graph's processed policies to the resources they target. It modifies the graph in place.
 func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName string) {
@@ -78,7 +93,7 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 		for _, ref := range policy.TargetRefs {
 			switch ref.Kind {
 			case kinds.Gateway:
-				attachPolicyToGateway(policy, ref, g.Gateways, ctlrName)
+				attachPolicyToGateway(policy, ref, g.Gateways, ctlrName, validator)
 			case kinds.HTTPRoute, kinds.GRPCRoute:
 				route, exists := g.Routes[routeKeyForKind(ref.Kind, ref.Nsname)]
 				if !exists {
@@ -163,12 +178,12 @@ func attachPolicyToRoute(policy *Policy, route *L7Route, validator validation.Po
 		return
 	}
 
-	// as of now, ObservabilityPolicy is the only policy that needs this check, and it only attaches to Routes
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Gateway != nil && parentRef.Gateway.EffectiveNginxProxy != nil {
 			gw := parentRef.Gateway
 			globalSettings := &policies.GlobalSettings{
 				TelemetryEnabled: telemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+				WAFEnabled:       WAFEnabledForNginxProxy(gw.EffectiveNginxProxy),
 			}
 
 			if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
@@ -191,6 +206,7 @@ func attachPolicyToGateway(
 	ref PolicyTargetRef,
 	gateways map[types.NamespacedName]*Gateway,
 	ctlrName string,
+	validator validation.PolicyValidator,
 ) {
 	if ngfPolicyAncestorsFull(policy, ctlrName) {
 		// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
@@ -217,6 +233,17 @@ func attachPolicyToGateway(
 		return
 	}
 
+	globalSettings := &policies.GlobalSettings{
+		TelemetryEnabled: telemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+		WAFEnabled:       WAFEnabledForNginxProxy(gw.EffectiveNginxProxy),
+	}
+
+	if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
+		ancestor.Conditions = conds
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
 	policy.Ancestors = append(policy.Ancestors, ancestor)
 	gw.Policies = append(gw.Policies, policy)
 }
@@ -227,9 +254,9 @@ func processPolicies(
 	routes map[RouteKey]*L7Route,
 	services map[types.NamespacedName]*ReferencedService,
 	gws map[types.NamespacedName]*Gateway,
-) map[PolicyKey]*Policy {
+) (map[PolicyKey]*Policy, map[WAFBundleKey]*WAFBundleData) {
 	if len(pols) == 0 || len(gws) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	processedPolicies := make(map[PolicyKey]*Policy)
@@ -291,7 +318,9 @@ func processPolicies(
 
 	markConflictedPolicies(processedPolicies, validator)
 
-	return processedPolicies
+	refPolicyBundles := fetchWAFPolicyBundleData(processedPolicies)
+
+	return processedPolicies, refPolicyBundles
 }
 
 func checkTargetRoutesForOverlap(
@@ -447,4 +476,169 @@ func refGroupKind(group v1.Group, kind v1.Kind) string {
 	}
 
 	return fmt.Sprintf("%s/%s", group, kind)
+}
+
+func fetchWAFPolicyBundleData(
+	processedPolicies map[PolicyKey]*Policy,
+	fetcherFactory ...func(...fetch.Option) fetch.Fetcher, // Optional for testing
+) map[WAFBundleKey]*WAFBundleData {
+	// Use provided factory or default to real fetcher
+	createFetcher := func(opts ...fetch.Option) fetch.Fetcher {
+		return fetch.NewDefaultFetcher(opts...)
+	}
+	if len(fetcherFactory) > 0 {
+		createFetcher = fetcherFactory[0]
+	}
+
+	refPolicyBundles := make(map[WAFBundleKey]*WAFBundleData)
+
+	for policyKey, policy := range processedPolicies {
+		if policyKey.GVK != wafPolicyGVK {
+			continue
+		}
+
+		if !policy.Valid {
+			continue
+		}
+
+		wafPolicy, ok := policy.Source.(*ngfAPIv1alpha1.WAFPolicy)
+		if !ok {
+			continue
+		}
+
+		if wafPolicy.Spec.PolicySource != nil && wafPolicy.Spec.PolicySource.FileLocation != "" {
+			fetcher := createFetcher(buildFetchOptions(wafPolicy.Spec.PolicySource)...)
+			if !fetchAndStoreBundle(wafPolicy.Spec.PolicySource.FileLocation, policy, refPolicyBundles, fetcher) {
+				continue // Policy was marked invalid, skip security logs
+			}
+		}
+
+		for _, secLog := range wafPolicy.Spec.SecurityLogs {
+			if secLog.LogProfileBundle == nil || secLog.LogProfileBundle.FileLocation == "" {
+				continue
+			}
+
+			fetcher := createFetcher(buildFetchOptions(secLog.LogProfileBundle)...)
+			if !fetchAndStoreBundle(secLog.LogProfileBundle.FileLocation, policy, refPolicyBundles, fetcher) {
+				break // Policy was marked invalid, skip other security logs
+			}
+		}
+	}
+
+	if len(refPolicyBundles) == 0 {
+		return nil
+	}
+
+	return refPolicyBundles
+}
+
+// fetchAndStoreBundle fetches a bundle using the configuration specified in WAFPolicySource.
+// Returns true if successful, false if there was an error (policy will be marked invalid).
+func fetchAndStoreBundle(
+	fileLocation string,
+	policy *Policy,
+	bundles map[WAFBundleKey]*WAFBundleData,
+	fetcher fetch.Fetcher,
+) bool {
+	data, err := fetcher.GetRemoteFile(fileLocation)
+	if err != nil {
+		policy.Valid = false
+		// FIXME(ciarams87): Add appropriate condition when available.
+		policy.Conditions = append(policy.Conditions, conditions.NewPolicyInvalid("Error fetching policy: "+err.Error()))
+		return false
+	}
+
+	bundleData := WAFBundleData(data)
+	bundleKey := WAFBundleKey(helpers.ToSafeFileName(fileLocation))
+	bundles[bundleKey] = &bundleData
+
+	return true
+}
+
+// buildFetchOptions builds fetch options from WAFPolicySource configuration.
+func buildFetchOptions(policySource *ngfAPIv1alpha1.WAFPolicySource) []fetch.Option {
+	var options []fetch.Option
+
+	options = addTimeoutOption(options, policySource)
+	options = addValidationOptions(options, policySource)
+	options = addRetryOptions(options, policySource)
+
+	return options
+}
+
+// addTimeoutOption adds timeout configuration to fetch options.
+func addTimeoutOption(options []fetch.Option, policySource *ngfAPIv1alpha1.WAFPolicySource) []fetch.Option {
+	if policySource.Timeout != nil {
+		if timeout, err := parseDurationString(string(*policySource.Timeout)); err == nil {
+			options = append(options, fetch.WithTimeout(timeout))
+		}
+	}
+	return options
+}
+
+// addValidationOptions adds validation configuration to fetch options.
+func addValidationOptions(options []fetch.Option, policySource *ngfAPIv1alpha1.WAFPolicySource) []fetch.Option {
+	if policySource.Validation != nil && len(policySource.Validation.Methods) > 0 {
+		for _, method := range policySource.Validation.Methods {
+			if string(method) == "checksum" {
+				options = addChecksumOption(options, policySource)
+			}
+		}
+	}
+	return options
+}
+
+// addChecksumOption adds checksum validation configuration to fetch options.
+func addChecksumOption(options []fetch.Option, policySource *ngfAPIv1alpha1.WAFPolicySource) []fetch.Option {
+	if policySource.Polling != nil && policySource.Polling.ChecksumLocation != nil {
+		checksumLocation := *policySource.Polling.ChecksumLocation
+		options = append(options, fetch.WithChecksum(checksumLocation))
+	} else {
+		options = append(options, fetch.WithChecksum())
+	}
+	return options
+}
+
+// addRetryOptions adds retry configuration to fetch options.
+func addRetryOptions(options []fetch.Option, policySource *ngfAPIv1alpha1.WAFPolicySource) []fetch.Option {
+	if policySource.Retry == nil {
+		return options
+	}
+
+	if policySource.Retry.Attempts != nil {
+		options = append(options, fetch.WithRetryAttempts(*policySource.Retry.Attempts))
+	}
+
+	if policySource.Retry.Backoff != nil {
+		switch string(*policySource.Retry.Backoff) {
+		case "exponential":
+			options = append(options, fetch.WithRetryBackoff(fetch.RetryBackoffExponential))
+		case "linear":
+			options = append(options, fetch.WithRetryBackoff(fetch.RetryBackoffLinear))
+		}
+	}
+
+	if policySource.Retry.MaxDelay != nil {
+		if maxDelay, err := parseDurationString(string(*policySource.Retry.MaxDelay)); err == nil {
+			options = append(options, fetch.WithMaxRetryDelay(maxDelay))
+		}
+	}
+
+	return options
+}
+
+// parseDurationString parses a custom duration string that may not have a suffix.
+// If no suffix is provided, assumes seconds.
+func parseDurationString(durationStr string) (time.Duration, error) {
+	if durationStr == "" {
+		return 0, nil
+	}
+
+	// If the string is just a number, assume seconds
+	if num, err := strconv.Atoi(durationStr); err == nil {
+		return time.Duration(num) * time.Second, nil
+	}
+
+	// Try to parse as a standard Go duration
+	return time.ParseDuration(durationStr)
 }
