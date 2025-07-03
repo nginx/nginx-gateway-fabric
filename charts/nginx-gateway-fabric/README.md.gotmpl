@@ -137,7 +137,7 @@ Helm does not upgrade the NGINX Gateway Fabric CRDs during a release upgrade. Be
 must [pull the chart](#pulling-the-chart) from GitHub and run the following command to upgrade the CRDs:
 
 ```shell
-kubectl apply -f crds/
+kubectl apply --server-side -f crds/
 ```
 
 The following warning is expected and can be ignored:
