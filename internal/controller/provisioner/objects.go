@@ -774,6 +774,9 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			spec.Spec.Tolerations = podSpec.Tolerations
 			spec.Spec.Volumes = append(spec.Spec.Volumes, podSpec.Volumes...)
 			spec.Spec.TopologySpreadConstraints = podSpec.TopologySpreadConstraints
+			if podSpec.SecurityContext != nil {
+				spec.Spec.SecurityContext = podSpec.SecurityContext
+			}
 		}
 
 		if containerSpec != nil {
@@ -790,6 +793,14 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			}
 			spec.Spec.Containers[0] = container
 		}
+
+		// Insert extra containers if specified
+		if nProxyCfg.Kubernetes.Deployment != nil {
+			spec.Spec.Containers = append(spec.Spec.Containers, nProxyCfg.Kubernetes.Deployment.ExtraContainers...)
+		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
+			spec.Spec.Containers = append(spec.Spec.Containers, nProxyCfg.Kubernetes.DaemonSet.ExtraContainers...)
+		}
+
 	}
 
 	for name := range dockerSecretNames {
