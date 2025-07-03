@@ -48,6 +48,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/upstreamsettings"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/waf"
 	ngxvalidation "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/validation"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state"
@@ -326,6 +327,10 @@ func createPolicyManager(
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
 			Validator: upstreamsettings.NewValidator(validator),
 		},
+		{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
+			Validator: waf.NewValidator(validator),
+		},
 	}
 
 	return policies.NewManager(mustExtractGVK, cfgs...)
@@ -503,6 +508,12 @@ func registerControllers(
 		},
 		{
 			objectType: &ngfAPIv1alpha1.UpstreamSettingsPolicy{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
+		{
+			objectType: &ngfAPIv1alpha1.WAFPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -745,6 +756,7 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 		&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 		&ngfAPIv1alpha2.ObservabilityPolicyList{},
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+		&ngfAPIv1alpha1.WAFPolicyList{},
 		partialObjectMetadataList,
 	}
 

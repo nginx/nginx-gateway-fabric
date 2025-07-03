@@ -37,6 +37,8 @@ type Configuration struct {
 	Upstreams []Upstream
 	// DeploymentContext contains metadata about NGF and the cluster.
 	DeploymentContext DeploymentContext
+	// WAF holds the WAF configuration.
+	WAF WAFConfig
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
@@ -54,8 +56,6 @@ type Configuration struct {
 	NginxPlus NginxPlus
 	// BaseHTTPConfig holds the configuration options at the http context.
 	BaseHTTPConfig BaseHTTPConfig
-	// WAF holds the WAF configuration.
-	WAF WAFConfig
 }
 
 // SSLKeyPairID is a unique identifier for a SSLKeyPair.
@@ -68,6 +68,13 @@ type CertBundleID string
 
 // CertBundle is a Certificate bundle.
 type CertBundle []byte
+
+// WAFBundleID is a unique identifier for a WAF bundle.
+// The ID is safe to use as a file name.
+type WAFBundleID string
+
+// WAFBundle is a WAF bundle.
+type WAFBundle []byte
 
 // SSLKeyPair is an SSL private/public key pair.
 type SSLKeyPair struct {
@@ -449,8 +456,10 @@ type DeploymentContext struct {
 }
 
 // WAFConfig holds the WAF configuration for the dataplane.
-// It is used to determine whether WAF is enabled and to load the WAF module.
+// It is used to determine whether WAF is enabled and to load the WAF module, as well as storing the WAFBundles.
 type WAFConfig struct {
+	// WAFBundles are the WAF Policy Bundles to be stored in the app_protect bundles directory.
+	WAFBundles map[WAFBundleID]WAFBundle
 	// Enabled indicates whether WAF is enabled.
 	Enabled bool
 }

@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -11,11 +12,14 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/fetch"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/fetch/fetchfakes"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 )
@@ -157,7 +161,8 @@ func TestAttachPolicies(t *testing.T) {
 						Namespace: testNs,
 					},
 				},
-				Valid: true,
+				Valid:               true,
+				EffectiveNginxProxy: &EffectiveNginxProxy{},
 			},
 			{Namespace: testNs, Name: "gateway1"}: {
 				Source: &v1.Gateway{
@@ -166,7 +171,8 @@ func TestAttachPolicies(t *testing.T) {
 						Namespace: testNs,
 					},
 				},
-				Valid: true,
+				Valid:               true,
+				EffectiveNginxProxy: &EffectiveNginxProxy{},
 			},
 		}
 	}
@@ -241,7 +247,7 @@ func TestAttachPolicies(t *testing.T) {
 				NGFPolicies:        test.ngfPolicies,
 			}
 
-			graph.attachPolicies(nil, "nginx-gateway")
+			graph.attachPolicies(&policiesfakes.FakeValidator{}, "nginx-gateway")
 			for _, expect := range test.expects {
 				expect(g, graph)
 			}
@@ -526,13 +532,53 @@ func TestAttachPolicyToGateway(t *testing.T) {
 						Namespace: name.Namespace,
 					},
 				},
-				Valid: valid,
+				Valid:               valid,
+				EffectiveNginxProxy: &EffectiveNginxProxy{},
 			}
 		}
 		return gws
 	}
 
+	newGatewayMapWithNginxProxy := func(
+		valid bool,
+		nsname []types.NamespacedName,
+		effectiveNginxProxy *EffectiveNginxProxy,
+	) map[types.NamespacedName]*Gateway {
+		gws := make(map[types.NamespacedName]*Gateway)
+		for _, name := range nsname {
+			gws[name] = &Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name.Name,
+						Namespace: name.Namespace,
+					},
+				},
+				Valid:               valid,
+				EffectiveNginxProxy: effectiveNginxProxy,
+			}
+		}
+		return gws
+	}
+
+	validatorError := &policiesfakes.FakeValidator{
+		ValidateGlobalSettingsStub: func(_ policies.Policy, gs *policies.GlobalSettings) []conditions.Condition {
+			if !gs.TelemetryEnabled {
+				return []conditions.Condition{
+					conditions.NewPolicyNotAcceptedNginxProxyNotSet(conditions.PolicyMessageTelemetryNotEnabled),
+				}
+			}
+			return nil
+		},
+	}
+
+	validatorNoError := &policiesfakes.FakeValidator{
+		ValidateGlobalSettingsStub: func(_ policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
+			return nil
+		},
+	}
+
 	tests := []struct {
+		validator    validation.PolicyValidator
 		policy       *Policy
 		gws          map[types.NamespacedName]*Gateway
 		name         string
@@ -556,6 +602,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 				{Ancestor: getGatewayParentRef(gatewayNsName)},
 			},
 			expAttached: true,
+			validator:   validatorNoError,
 		},
 		{
 			name: "attached with existing ancestor",
@@ -578,6 +625,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 				{Ancestor: getGatewayParentRef(gatewayNsName)},
 			},
 			expAttached: true,
+			validator:   validatorNoError,
 		},
 		{
 			name: "not attached; gateway is not found",
@@ -599,6 +647,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 				},
 			},
 			expAttached: false,
+			validator:   validatorNoError,
 		},
 		{
 			name: "not attached; invalid gateway",
@@ -620,6 +669,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 				},
 			},
 			expAttached: false,
+			validator:   validatorNoError,
 		},
 		{
 			name: "not attached; max ancestors",
@@ -636,6 +686,56 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			gws:          newGatewayMap(true, []types.NamespacedName{gatewayNsName}),
 			expAncestors: nil,
 			expAttached:  false,
+			validator:    validatorNoError,
+		},
+		{
+			name: "not attached; global settings validation fails",
+			policy: &Policy{
+				Source: &policiesfakes.FakePolicy{},
+				TargetRefs: []PolicyTargetRef{
+					{
+						Nsname: gatewayNsName,
+						Kind:   "Gateway",
+					},
+				},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
+			},
+			gws: newGatewayMapWithNginxProxy(true, []types.NamespacedName{gatewayNsName}, &EffectiveNginxProxy{}),
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: getGatewayParentRef(gatewayNsName),
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyNotAcceptedNginxProxyNotSet(conditions.PolicyMessageTelemetryNotEnabled),
+					},
+				},
+			},
+			expAttached: false,
+			validator:   validatorError,
+		},
+		{
+			name: "attached; global settings validation passes",
+			policy: &Policy{
+				Source: &policiesfakes.FakePolicy{},
+				TargetRefs: []PolicyTargetRef{
+					{
+						Nsname: gatewayNsName,
+						Kind:   "Gateway",
+					},
+				},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
+			},
+			gws: newGatewayMapWithNginxProxy(true, []types.NamespacedName{gatewayNsName}, &EffectiveNginxProxy{
+				Telemetry: &ngfAPIv1alpha2.Telemetry{
+					Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+						Endpoint: helpers.GetPointer("test-endpoint"),
+					},
+				},
+			}),
+			expAncestors: []PolicyAncestor{
+				{Ancestor: getGatewayParentRef(gatewayNsName)},
+			},
+			expAttached: true,
+			validator:   validatorError,
 		},
 	}
 
@@ -644,7 +744,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			attachPolicyToGateway(test.policy, test.policy.TargetRefs[0], test.gws, "nginx-gateway")
+			attachPolicyToGateway(test.policy, test.policy.TargetRefs[0], test.gws, "nginx-gateway", test.validator)
 
 			if test.expAttached {
 				for _, gw := range test.gws {
@@ -1112,7 +1212,7 @@ func TestProcessPolicies(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed := processPolicies(test.policies, test.validator, routes, services, gateways)
+			processed, _ := processPolicies(test.policies, test.validator, routes, services, gateways)
 			g.Expect(processed).To(BeEquivalentTo(test.expProcessedPolicies))
 		})
 	}
@@ -1275,7 +1375,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed := processPolicies(test.policies, test.validator, test.routes, nil, gateways)
+			processed, _ := processPolicies(test.policies, test.validator, test.routes, nil, gateways)
 			g.Expect(processed).To(HaveLen(len(test.policies)))
 
 			for _, pol := range processed {
@@ -1587,5 +1687,352 @@ func getGatewayParentRef(gwNsName types.NamespacedName) v1.ParentReference {
 		Kind:      helpers.GetPointer[v1.Kind]("Gateway"),
 		Namespace: (*v1.Namespace)(&gwNsName.Namespace),
 		Name:      v1.ObjectName(gwNsName.Name),
+	}
+}
+
+func TestFetchPolicyBundleData(t *testing.T) {
+	t.Parallel()
+
+	wafPolicyGVK := schema.GroupVersionKind{
+		Group:   ngfAPIv1alpha1.SchemeGroupVersion.Group,
+		Version: ngfAPIv1alpha1.SchemeGroupVersion.Version,
+		Kind:    kinds.WAFPolicy,
+	}
+
+	nonWAFPolicyGVK := schema.GroupVersionKind{
+		Group:   ngfAPIv1alpha1.SchemeGroupVersion.Group,
+		Version: ngfAPIv1alpha1.SchemeGroupVersion.Version,
+		Kind:    kinds.ObservabilityPolicy,
+	}
+
+	createWAFPolicy := func(
+		name string,
+		policySource *ngfAPIv1alpha1.WAFPolicySource,
+		securityLogs []ngfAPIv1alpha1.WAFSecurityLog,
+	) *ngfAPIv1alpha1.WAFPolicy {
+		return &ngfAPIv1alpha1.WAFPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: testNs,
+			},
+			Spec: ngfAPIv1alpha1.WAFPolicySpec{
+				TargetRef: v1alpha2.LocalPolicyTargetReference{
+					Group: "gateway.networking.k8s.io",
+					Kind:  "Gateway",
+					Name:  "test-gateway",
+				},
+				PolicySource: policySource,
+				SecurityLogs: securityLogs,
+			},
+		}
+	}
+
+	tests := []struct {
+		processedPolicies   map[PolicyKey]*Policy
+		name                string
+		expectedBundleKeys  []string
+		expectedBundleCount int
+	}{
+		{
+			name:                "no policies",
+			processedPolicies:   map[PolicyKey]*Policy{},
+			expectedBundleCount: 0,
+		},
+		{
+			name: "non-WAF policy",
+			processedPolicies: map[PolicyKey]*Policy{
+				{
+					NsName: types.NamespacedName{Namespace: testNs, Name: "obs-policy"},
+					GVK:    nonWAFPolicyGVK,
+				}: {
+					Source: &ngfAPIv1alpha2.ObservabilityPolicy{},
+					Valid:  true,
+				},
+			},
+			expectedBundleCount: 0,
+		},
+		{
+			name: "invalid WAF policy",
+			processedPolicies: map[PolicyKey]*Policy{
+				{
+					NsName: types.NamespacedName{Namespace: testNs, Name: "invalid-waf"},
+					GVK:    wafPolicyGVK,
+				}: {
+					Source: createWAFPolicy("invalid-waf", &ngfAPIv1alpha1.WAFPolicySource{
+						FileLocation: "http://example.com/policy.tgz",
+					}, nil),
+					Valid: false,
+				},
+			},
+			expectedBundleCount: 0,
+		},
+		{
+			name: "WAF policy with PolicySource only",
+			processedPolicies: map[PolicyKey]*Policy{
+				{
+					NsName: types.NamespacedName{Namespace: testNs, Name: "waf-policy"},
+					GVK:    wafPolicyGVK,
+				}: {
+					Source: createWAFPolicy("waf-policy", &ngfAPIv1alpha1.WAFPolicySource{
+						FileLocation: "http://example.com/policy.tgz",
+					}, nil),
+					Valid: true,
+				},
+			},
+			expectedBundleCount: 1,
+		},
+		{
+			name: "WAF policy with SecurityLogs only",
+			processedPolicies: map[PolicyKey]*Policy{
+				{
+					NsName: types.NamespacedName{Namespace: testNs, Name: "waf-logs"},
+					GVK:    wafPolicyGVK,
+				}: {
+					Source: createWAFPolicy("waf-logs", nil, []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							LogProfileBundle: &ngfAPIv1alpha1.WAFPolicySource{
+								FileLocation: "http://example.com/log-profile.tgz",
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					}),
+					Valid: true,
+				},
+			},
+			expectedBundleCount: 1,
+		},
+		{
+			name: "WAF policy with both PolicySource and SecurityLogs",
+			processedPolicies: map[PolicyKey]*Policy{
+				{
+					NsName: types.NamespacedName{Namespace: testNs, Name: "waf-full"},
+					GVK:    wafPolicyGVK,
+				}: {
+					Source: createWAFPolicy("waf-full", &ngfAPIv1alpha1.WAFPolicySource{
+						FileLocation: "http://example.com/policy.tgz",
+					}, []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							LogProfileBundle: &ngfAPIv1alpha1.WAFPolicySource{
+								FileLocation: "http://example.com/log-profile.tgz",
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+						{
+							LogProfile: func() *ngfAPIv1alpha1.LogProfile {
+								lp := ngfAPIv1alpha1.LogProfileDefault
+								return &lp
+							}(),
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					}),
+					Valid: true,
+				},
+			},
+			expectedBundleCount: 2, // policy bundle + 1 log profile bundle
+		},
+		{
+			name: "WAF policy with multiple SecurityLog bundles",
+			processedPolicies: map[PolicyKey]*Policy{
+				{
+					NsName: types.NamespacedName{Namespace: testNs, Name: "waf-multi-logs"},
+					GVK:    wafPolicyGVK,
+				}: {
+					Source: createWAFPolicy("waf-multi-logs", nil, []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							LogProfileBundle: &ngfAPIv1alpha1.WAFPolicySource{
+								FileLocation: "http://example.com/log-profile.tgz",
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+						{
+							LogProfileBundle: &ngfAPIv1alpha1.WAFPolicySource{
+								FileLocation: "http://example.com/another-log.tgz",
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					}),
+					Valid: true,
+				},
+			},
+			expectedBundleCount: 2,
+		},
+		{
+			name: "WAF policy with unreachable URL",
+			processedPolicies: map[PolicyKey]*Policy{
+				{
+					NsName: types.NamespacedName{Namespace: testNs, Name: "waf-unreachable"},
+					GVK:    wafPolicyGVK,
+				}: {
+					Source: createWAFPolicy("waf-unreachable", &ngfAPIv1alpha1.WAFPolicySource{
+						FileLocation: "http://unreachable.example.com/policy.tgz",
+					}, []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							LogProfileBundle: &ngfAPIv1alpha1.WAFPolicySource{
+								FileLocation: "http://unreachable.example.com/log.tgz",
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					}),
+					Valid: true,
+				},
+			},
+			expectedBundleCount: 0, // Both should fail to fetch
+		},
+		{
+			name: "WAF policy with PolicySource success but SecurityLog failure",
+			processedPolicies: map[PolicyKey]*Policy{
+				{
+					NsName: types.NamespacedName{Namespace: testNs, Name: "waf-mixed-fail"},
+					GVK:    wafPolicyGVK,
+				}: {
+					Source: createWAFPolicy("waf-mixed-fail", &ngfAPIv1alpha1.WAFPolicySource{
+						FileLocation: "http://example.com/policy.tgz",
+					}, []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							LogProfileBundle: &ngfAPIv1alpha1.WAFPolicySource{
+								FileLocation: "http://unreachable.example.com/log.tgz",
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					}),
+					Valid: true,
+				},
+			},
+			expectedBundleCount: 1, // Policy bundle fetched successfully, even though security log fails
+		},
+		{
+			name: "WAF policy with PolicySource failure but SecurityLog success",
+			processedPolicies: map[PolicyKey]*Policy{
+				{
+					NsName: types.NamespacedName{Namespace: testNs, Name: "waf-policy-fail"},
+					GVK:    wafPolicyGVK,
+				}: {
+					Source: createWAFPolicy("waf-policy-fail", &ngfAPIv1alpha1.WAFPolicySource{
+						FileLocation: "http://unreachable.example.com/policy.tgz",
+					}, []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							LogProfileBundle: &ngfAPIv1alpha1.WAFPolicySource{
+								FileLocation: "http://example.com/log-profile.tgz",
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					}),
+					Valid: true,
+				},
+			},
+			expectedBundleCount: 0, // Policy fails early, no bundles fetched
+		},
+		{
+			name: "WAF policy with empty FileLocation",
+			processedPolicies: map[PolicyKey]*Policy{
+				{
+					NsName: types.NamespacedName{Namespace: testNs, Name: "waf-empty"},
+					GVK:    wafPolicyGVK,
+				}: {
+					Source: createWAFPolicy("waf-empty", &ngfAPIv1alpha1.WAFPolicySource{
+						FileLocation: "",
+					}, []ngfAPIv1alpha1.WAFSecurityLog{
+						{
+							LogProfileBundle: &ngfAPIv1alpha1.WAFPolicySource{
+								FileLocation: "",
+							},
+							Destination: ngfAPIv1alpha1.SecurityLogDestination{
+								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
+							},
+						},
+					}),
+					Valid: true,
+				},
+			},
+			expectedBundleCount: 0,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			// Create fake fetcher factory
+			fakeFetcher := &fetchfakes.FakeFetcher{}
+			fakeFetcher.GetRemoteFileStub = func(url string) ([]byte, error) {
+				switch url {
+				case "http://example.com/policy.tgz":
+					return []byte("policy bundle data"), nil
+				case "http://example.com/log-profile.tgz":
+					return []byte("log profile bundle data"), nil
+				case "http://example.com/another-log.tgz":
+					return []byte("another log bundle data"), nil
+				case "http://unreachable.example.com/policy.tgz", "http://unreachable.example.com/log.tgz":
+					return nil, fmt.Errorf("network error")
+				case "":
+					return nil, fmt.Errorf("URL cannot be empty")
+				default:
+					return nil, fmt.Errorf("unexpected URL: %s", url)
+				}
+			}
+
+			fetcherFactory := func(_ []fetch.Option) fetch.Fetcher {
+				return fakeFetcher
+			}
+
+			result := fetchPolicyBundleDataWithFetcherFactory(test.processedPolicies, fetcherFactory)
+
+			if test.expectedBundleCount == 0 {
+				g.Expect(result).To(BeNil())
+			} else {
+				g.Expect(result).ToNot(BeNil())
+				g.Expect(result).To(HaveLen(test.expectedBundleCount))
+
+				// Verify that bundles contain expected data
+				for _, bundleData := range result {
+					g.Expect(bundleData).ToNot(BeNil())
+					g.Expect(*bundleData).ToNot(BeEmpty())
+				}
+			}
+
+			// Special verification for fetch error test cases
+			switch test.name {
+			case "WAF policy with unreachable URL":
+				// Policy should be marked as invalid due to fetch errors
+				for _, policy := range test.processedPolicies {
+					g.Expect(policy.Valid).To(BeFalse())
+					g.Expect(policy.Conditions).To(HaveLen(1))
+					g.Expect(policy.Conditions[0].Reason).To(Equal("Invalid"))
+					g.Expect(policy.Conditions[0].Message).To(Equal("Error fetching policy: network error"))
+				}
+			case "WAF policy with PolicySource success but SecurityLog failure":
+				// Policy should be marked as invalid due to security log fetch error
+				for _, policy := range test.processedPolicies {
+					g.Expect(policy.Valid).To(BeFalse())
+					g.Expect(policy.Conditions).To(HaveLen(1))
+					g.Expect(policy.Conditions[0].Reason).To(Equal("Invalid"))
+					g.Expect(policy.Conditions[0].Message).To(Equal("Error fetching policy: network error"))
+				}
+			case "WAF policy with PolicySource failure but SecurityLog success":
+				// Policy should be marked as invalid due to policy source fetch error
+				for _, policy := range test.processedPolicies {
+					g.Expect(policy.Valid).To(BeFalse())
+					g.Expect(policy.Conditions).To(HaveLen(1))
+					g.Expect(policy.Conditions[0].Reason).To(Equal("Invalid"))
+					g.Expect(policy.Conditions[0].Message).To(Equal("Error fetching policy: network error"))
+				}
+			}
+		})
 	}
 }

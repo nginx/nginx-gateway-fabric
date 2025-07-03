@@ -79,7 +79,7 @@ func BuildConfiguration(
 		NginxPlus:        nginxPlus,
 		MainSnippets:     buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
-		WAF:              WAFConfig{Enabled: graph.WAFEnabledForNginxProxy(gateway.EffectiveNginxProxy)},
+		WAF:              buildWAF(g, gateway),
 	}
 
 	return config
@@ -1142,4 +1142,14 @@ func GetDefaultConfiguration(g *graph.Graph, gateway *graph.Gateway) Configurati
 		NginxPlus:        NginxPlus{},
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
 	}
+}
+
+func buildWAF(g *graph.Graph, gateway *graph.Gateway) WAFConfig {
+	wb := convertWAFBundles(g.ReferencedWAFBundles)
+
+	wc := WAFConfig{
+		Enabled:    graph.WAFEnabledForNginxProxy(gateway.EffectiveNginxProxy),
+		WAFBundles: wb,
+	}
+	return wc
 }
