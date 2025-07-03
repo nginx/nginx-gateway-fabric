@@ -1,0 +1,57 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: gateway-protection-policy
+spec:
+  # Policy attachment - targets Gateway for inherited protection
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: secure-gateway
+
+  policySource:
+    fileLocation: "http://waf-policy-server.nginx-gateway/policies/policy-v1.tgz"
+    validation:
+      methods: ["checksum"]
+
+    retry:
+      attempts: 5
+      backoff: "exponential"
+      maxDelay: "10m"
+    
+    timeout: "60s"
+
+  securityLogs:
+  - name: "stderr-all-logging"
+    logProfile: "log_all"
+    destination:
+      type: "stderr"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: WAFPolicy
+metadata:
+  name: httproute-protection-policy
+spec:
+  # Policy attachment - targets Gateway for inherited protection
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: admin
+
+  policySource:
+    fileLocation: "http://waf-policy-server.nginx-gateway/policies/strict-policy-v1.tgz"
+    validation:
+      methods: ["checksum"]
+
+    retry:
+      attempts: 5
+      backoff: "exponential"
+      maxDelay: "10m"
+    
+    timeout: "60s"
+
+  securityLogs:
+  - name: "stderr-all-logging"
+    logProfile: "log_all"
+    destination:
+      type: "stderr"

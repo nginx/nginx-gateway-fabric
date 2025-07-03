@@ -1,0 +1,113 @@
+# Simple file server for manual policy upload testing
+
+# # Get pod name (for easier copying)
+# POD_NAME=$(kubectl get pod -l app=waf-policy-server -n nginx-gateway -o jsonpath='{.items[0].metadata.name}')
+
+# # Copy your policy files
+# kubectl cp compiled_policy.tgz nginx-gateway/$POD_NAME:/usr/share/nginx/html/policies/policy-v1.tgz
+# kubectl cp compiled_policy.tgz.sha256 nginx-gateway/$POD_NAME:/usr/share/nginx/html/policies/policy-v1.tgz.sha256
+# kubectl cp strict_policy.tgz nginx-gateway/$POD_NAME:/usr/share/nginx/html/policies/strict-policy-v1.tgz
+# kubectl cp strict_policy.tgz.sha256 nginx-gateway/$POD_NAME:/usr/share/nginx/html/policies/strict-policy-v1.tgz.sha256
+
+# # Test it works
+# kubectl exec -n nginx-gateway $POD_NAME -- ls -la /usr/share/nginx/html/policies/
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waf-policy-server
+  namespace: nginx-gateway
+  labels:
+    app: waf-policy-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: waf-policy-server
+  template:
+    metadata:
+      labels:
+        app: waf-policy-server
+    spec:
+      containers:
+      - name: file-server
+        image: nginx:1.28-alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: policies-volume
+          mountPath: /usr/share/nginx/html/policies
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+          readOnly: true
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        readinessProbe:
+          httpGet:
+            path: /policies/
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: policies-volume
+        emptyDir:
+          sizeLimit: "1Gi"  # Plenty of space for large policy files
+      - name: nginx-config
+        configMap:
+          name: file-server-nginx-config
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: file-server-nginx-config
+  namespace: nginx-gateway
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name _;
+        
+        location /policies/ {
+            alias /usr/share/nginx/html/policies/;
+            autoindex on;
+            autoindex_exact_size off;
+            autoindex_localtime on;
+            
+            # Add CORS headers for testing
+            add_header Access-Control-Allow-Origin *;
+            add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
+        }
+        
+        location /health {
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+        
+        location / {
+            return 301 /policies/;
+        }
+    }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: waf-policy-server
+  namespace: nginx-gateway
+  labels:
+    app: waf-policy-server
+spec:
+  selector:
+    app: waf-policy-server
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+  type: ClusterIP
