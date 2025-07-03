@@ -296,6 +296,9 @@ sha256sum compiled-policy.tgz > compiled-policy.tgz.sha256
 aws s3 cp compiled-policy.tgz s3://company-policies/prod-policy.tgz
 aws s3 cp compiled-policy.tgz.sha256 s3://company-policies/prod-policy.tgz.sha256
 
+# Note: In WAFPolicy, reference S3 objects using HTTPS URLs:
+# fileLocation: "https://company-policies.s3.amazonaws.com/prod-policy.tgz"
+
 # No Kubernetes resource changes needed - NGF automatically detects the update
 echo "Policy updated. NGF will detect changes within polling interval."
 ```
@@ -427,6 +430,8 @@ spec:
 
 ### WAFPolicy Custom Resource with Policy Attachment
 
+**Note**: When referencing S3 objects, use HTTPS URLs (e.g., `https://bucket.s3.amazonaws.com/path/file.tgz`) rather than S3 protocol URLs (`s3://bucket/path/file.tgz`).
+
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
 kind: WAFPolicy
@@ -442,7 +447,7 @@ spec:
     namespace: applications
 
   policySource:
-    fileLocation: "s3://ngf-waf-policies/production/gateway-policy-v1.2.3.tgz"
+    fileLocation: "https://ngf-waf-policies.s3.amazonaws.com/production/gateway-policy-v1.2.3.tgz"
     authSecret:
       name: "policy-store-credentials"
     validation:
@@ -456,7 +461,7 @@ spec:
       interval: "5m"        # Check every 5 minutes
       # Optional: explicit checksum location
       # If not specified, defaults to <fileLocation>.sha256
-      checksumLocation: "s3://ngf-waf-policies/production/gateway-policy-v1.2.3.tgz"
+      checksumLocation: "https://ngf-waf-policies.s3.amazonaws.com/production/gateway-policy-v1.2.3.tgz.sha256"
 
     # Retry configuration for policy fetch failures
     retryPolicy:
@@ -480,7 +485,7 @@ spec:
     # Custom logging profile bundle (similar to policy bundle)
     # logProfile and logProfileBundle are mutually exclusive per security log configuration entry
     logProfileBundle:
-      fileLocation: "s3://ngf-waf-policies/logging/custom-log-profile.tgz"
+      fileLocation: "https://ngf-waf-policies.s3.amazonaws.com/logging/custom-log-profile.tgz"
       authSecret:
         name: "policy-store-credentials"
       validation:
@@ -527,7 +532,7 @@ spec:
 
   # Stricter policy for admin endpoints
   policySource:
-    fileLocation: "s3://ngf-waf-policies/production/admin-strict-policy-v1.0.0.tgz"
+    fileLocation: "https://ngf-waf-policies.s3.amazonaws.com/production/admin-strict-policy-v1.0.0.tgz"
     authSecret:
       name: "policy-store-credentials"
     polling:
@@ -664,7 +669,7 @@ metadata:
 # NGF service account in nginx-gateway namespace provides IRSA authentication
 spec:
   policySource:
-    fileLocation: "s3://company-waf-policies/policy.tgz"
+    fileLocation: "https://company-waf-policies.s3.amazonaws.com/policy.tgz"
     # No authSecret needed - uses IRSA automatically
 ```
 
@@ -1009,7 +1014,7 @@ spec:
     namespace: applications
 
   policySource:
-    fileLocation: "s3://company-waf-policies/production/base-policy.tgz"
+    fileLocation: "https://company-waf-policies.s3.amazonaws.com/production/base-policy.tgz"
     # Secret referenced for fallback - NGF will use IRSA if available, secret if not
     authSecret:
       name: "policy-store-credentials"
@@ -1020,7 +1025,7 @@ spec:
       interval: "5m"
       # Optional explicit checksum location
       # If not specified, defaults to base-policy.tgz.sha256
-      checksumLocation: "s3://company-waf-policies/production/base-policy.tgz.sha256"
+      checksumLocation: "https://company-waf-policies.s3.amazonaws.com/production/base-policy.tgz.sha256"
 
   securityLogs:
   - name: "gateway-logging"
@@ -1044,7 +1049,7 @@ spec:
     namespace: applications
 
   policySource:
-    fileLocation: "s3://company-waf-policies/production/admin-strict-policy.tgz"
+    fileLocation: "https://company-waf-policies.s3.amazonaws.com/production/admin-strict-policy.tgz"
     polling:
       enabled: true
 
