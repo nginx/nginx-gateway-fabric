@@ -9,3 +9,4 @@ COPY --link go.sum /go/src/github.com/nginx/nginx-gateway-fabric/tests/
 RUN go mod download
 
 COPY --link conformance /go/src/github.com/nginx/nginx-gateway-fabric/tests/conformance
+COPY --link scripts /go/src/github.com/nginx/nginx-gateway-fabric/tests/scripts

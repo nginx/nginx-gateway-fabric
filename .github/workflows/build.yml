@@ -27,7 +27,7 @@ jobs:
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
       packages: write # for docker/build-push-action to push to GHCR
       id-token: write # for docker/login to login to NGINX registry
-    runs-on: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') && 'kic-plus' || 'ubuntu-24.04' }}
+    runs-on: 'ubuntu-24.04'
     services:
       registry:
         image: registry:3
@@ -55,47 +55,47 @@ jobs:
         with:
           platforms: arm64
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        if: ${{ github.event_name != 'pull_request' && ! contains(inputs.image, 'plus') }}
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+    #   - name: Login to GitHub Container Registry
+    #     uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+    #     if: ${{ github.event_name != 'pull_request' && ! contains(inputs.image, 'plus') }}
+    #     with:
+    #       registry: ghcr.io
+    #       username: ${{ github.repository_owner }}
+    #       password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get Id Token
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        id: idtoken
-        with:
-          script: |
-            let id_token = await core.getIDToken()
-            core.setOutput('id_token', id_token)
-        if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus')}}
+    #   - name: Get Id Token
+    #     uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+    #     id: idtoken
+    #     with:
+    #       script: |
+    #         let id_token = await core.getIDToken()
+    #         core.setOutput('id_token', id_token)
+    #     if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus')}}
 
-      - name: Login to NGINX Registry
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: docker-mgmt.nginx.com
-          username: ${{ steps.idtoken.outputs.id_token }}
-          password: ${{ github.actor }}
-        if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
+    #   - name: Login to NGINX Registry
+    #     uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+    #     with:
+    #       registry: docker-mgmt.nginx.com
+    #       username: ${{ steps.idtoken.outputs.id_token }}
+    #       password: ${{ github.actor }}
+    #     if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
 
-      - name: Authenticate to Google Cloud
-        id: auth
-        uses: google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193 # v2.1.10
-        with:
-          token_format: access_token
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-        if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
+    #   - name: Authenticate to Google Cloud
+    #     id: auth
+    #     uses: google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193 # v2.1.10
+    #     with:
+    #       token_format: access_token
+    #       workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
+    #       service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    #     if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
 
-      - name: Login to GAR
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: us-docker.pkg.dev
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
-        if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
+    #   - name: Login to GAR
+    #     uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+    #     with:
+    #       registry: us-docker.pkg.dev
+    #       username: oauth2accesstoken
+    #       password: ${{ steps.auth.outputs.access_token }}
+    #     if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
 
       - name: Docker meta
         id: meta
@@ -103,10 +103,6 @@ jobs:
         with:
           context: ${{ inputs.tag != '' && 'git' || 'workflow' }}
           images: |
-            name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric,enable=${{ inputs.image == 'ngf' && github.event_name != 'pull_request' }}
-            name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx,enable=${{ inputs.image == 'nginx' && github.event_name != 'pull_request' }}
-            name=docker-mgmt.nginx.com/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
-            name=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
           flavor: |
             latest=${{ (inputs.tag != '' && 'true') || 'auto' }}
@@ -145,7 +141,7 @@ jobs:
           cache-from: type=gha,scope=${{ inputs.image }}
           cache-to: type=gha,scope=${{ inputs.image }},mode=max
           pull: true
-          no-cache: ${{ github.event_name != 'pull_request' }}
+          no-cache: false
           sbom: true
           provenance: mode=max
           build-args: |
@@ -156,24 +152,24 @@ jobs:
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', secrets.NGINX_KEY) || '' }}
 
-      - name: Inspect SBOM and output manifest
-        run: |
-          docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > sbom-${{ inputs.image }}.json
-          docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --raw
+    #   - name: Inspect SBOM and output manifest
+    #     run: |
+    #       docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > sbom-${{ inputs.image }}.json
+    #       docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --raw
 
-      - name: Scan SBOM
-        id: scan
-        uses: anchore/scan-action@be7a22da4f22dde446c4c4c099887ff5b256526c # v6.3.0
-        with:
-          sbom: "sbom-${{ inputs.image }}.json"
-          only-fixed: true
-          add-cpes-if-none: true
-          fail-build: false
+    #   - name: Scan SBOM
+    #     id: scan
+    #     uses: anchore/scan-action@be7a22da4f22dde446c4c4c099887ff5b256526c # v6.3.0
+    #     with:
+    #       sbom: "sbom-${{ inputs.image }}.json"
+    #       only-fixed: true
+    #       add-cpes-if-none: true
+    #       fail-build: false
 
-      - name: Upload scan result to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@181d5eefc20863364f96762470ba6f862bdef56b # v3.29.2
-        continue-on-error: true
-        with:
-          sarif_file: ${{ steps.scan.outputs.sarif }}
-          category: build-${{ inputs.image }}
-        if: always()
+    #   - name: Upload scan result to GitHub Security tab
+    #     uses: github/codeql-action/upload-sarif@181d5eefc20863364f96762470ba6f862bdef56b # v3.29.2
+    #     continue-on-error: true
+    #     with:
+    #       sarif_file: ${{ steps.scan.outputs.sarif }}
+    #       category: build-${{ inputs.image }}
+    #     if: always()

@@ -51,10 +51,9 @@ run-conformance-tests: ## Run conformance tests
 	kubectl apply -f conformance/conformance-rbac.yaml
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
-		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
-						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
-								--report-output=output.txt; cat output.txt" | tee output.txt
+		--overrides='{ "spec": { "serviceAccountName": "conformance" } }' \
+		--restart=Never -- sh -c "chmod +x /go/src/github.com/nginx/nginx-gateway-fabric/tests/scripts/debug-conformance.sh && \
+		/go/src/github.com/nginx/nginx-gateway-fabric/tests/scripts/debug-conformance.sh $(GATEWAY_CLASS) '$(SUPPORTED_EXTENDED_FEATURES)' $(NGF_VERSION) '$(SKIP_TESTS)' '$(CONFORMANCE_PROFILES)'" | tee output.txt
 	./scripts/check-pod-exit-code.sh
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml
 	rm output.txt
