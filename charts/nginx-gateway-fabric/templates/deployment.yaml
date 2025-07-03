@@ -35,6 +35,7 @@ spec:
         {{- end }}
       {{- end }}
     spec:
+      automountServiceAccountToken: true
       containers:
       - args:
         - controller
