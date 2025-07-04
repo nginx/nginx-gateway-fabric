@@ -393,9 +393,9 @@ nginx:
     # -- The topology spread constraints for the NGINX data plane pod.
     # topologySpreadConstraints: []
 
-    # -- extraVolumes for the NGINX data plane pod. Use in conjunction with
-    # nginx.container.extraVolumeMounts mount additional volumes to the container.
-    # extraVolumes: []
+    # -- The volumes for the NGINX data plane pod. Use in conjunction with
+    # nginx.container.volumeMounts mount additional volumes to the container.
+    # volumes: []
 
   # -- The container configuration for the NGINX container. This is applied globally to all Gateways managed by this
   # instance of NGINX Gateway Fabric.
@@ -406,8 +406,8 @@ nginx:
     # -- The lifecycle of the NGINX container.
     # lifecycle: {}
 
-    # -- extraVolumeMounts are the additional volume mounts for the NGINX container.
-    # extraVolumeMounts: []
+    # -- volumeMounts are the additional volume mounts for the NGINX container.
+    # volumeMounts: []
 
   # -- The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this
   # instance of NGINX Gateway Fabric.
