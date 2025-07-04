@@ -430,13 +430,13 @@ nginx:
     #   containerPort: 80
 
     # -- The resource requirements of the NGINX container.
-    # resources: {}
+    resources: {}
 
     # -- The lifecycle of the NGINX container.
-    # lifecycle: {}
+    lifecycle: {}
 
     # -- extraVolumeMounts are the additional volume mounts for the NGINX container.
-    # extraVolumeMounts: []
+    extraVolumeMounts: []
 
   # -- The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this
   # instance of NGINX Gateway Fabric.

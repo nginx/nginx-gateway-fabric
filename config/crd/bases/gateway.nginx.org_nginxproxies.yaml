@@ -89,18 +89,17 @@ spec:
                                 on the host.
                               properties:
                                 containerPort:
-                                  description: |-
-                                    ContainerPort is the port on the nginx container to map to the HostPort.
-                                    kubebuilder:validation:Minimum=1
-                                    kubebuilder:validation:Maximum=65535
+                                  description: ContainerPort is the port on the nginx
+                                    container to map to the HostPort.
                                   format: int32
+                                  maximum: 65535
+                                  minimum: 1
                                   type: integer
                                 port:
-                                  description: |-
-                                    Port to expose on the host.
-                                    kubebuilder:validation:Minimum=1
-                                    kubebuilder:validation:Maximum=65535
+                                  description: Port to expose on the host.
                                   format: int32
+                                  maximum: 65535
+                                  minimum: 1
                                   type: integer
                               required:
                               - containerPort
@@ -3501,18 +3500,17 @@ spec:
                                 on the host.
                               properties:
                                 containerPort:
-                                  description: |-
-                                    ContainerPort is the port on the nginx container to map to the HostPort.
-                                    kubebuilder:validation:Minimum=1
-                                    kubebuilder:validation:Maximum=65535
+                                  description: ContainerPort is the port on the nginx
+                                    container to map to the HostPort.
                                   format: int32
+                                  maximum: 65535
+                                  minimum: 1
                                   type: integer
                                 port:
-                                  description: |-
-                                    Port to expose on the host.
-                                    kubebuilder:validation:Minimum=1
-                                    kubebuilder:validation:Maximum=65535
+                                  description: Port to expose on the host.
                                   format: int32
+                                  maximum: 65535
+                                  minimum: 1
                                   type: integer
                               required:
                               - containerPort
@@ -6937,18 +6935,17 @@ spec:
                             automatically if required. The default NodePort range enforced by Kubernetes is 30000-32767.
                           properties:
                             listenerPort:
-                              description: |-
-                                ListenerPort is the Gateway listener port that this NodePort maps to.
-                                kubebuilder:validation:Minimum=1
-                                kubebuilder:validation:Maximum=65535
+                              description: ListenerPort is the Gateway listener port
+                                that this NodePort maps to.
                               format: int32
+                              maximum: 65535
+                              minimum: 1
                               type: integer
                             port:
-                              description: |-
-                                Port is the NodePort to expose.
-                                kubebuilder:validation:Minimum=1
-                                kubebuilder:validation:Maximum=65535
+                              description: Port is the NodePort to expose.
                               format: int32
+                              maximum: 65535
+                              minimum: 1
                               type: integer
                           required:
                           - listenerPort
