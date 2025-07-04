@@ -3,6 +3,7 @@ package graph
 import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/config"
@@ -195,4 +196,71 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]con
 	}
 
 	return conds, valid
+}
+
+// GetReferencedSnippetsFilters returns all SnippetsFilters that are referenced by routes attached to this Gateway.
+func (g *Gateway) GetReferencedSnippetsFilters(
+	routes map[RouteKey]*L7Route,
+	allSnippetsFilters map[types.NamespacedName]*SnippetsFilter,
+) map[types.NamespacedName]*SnippetsFilter {
+	if len(routes) == 0 || len(allSnippetsFilters) == 0 {
+		return nil
+	}
+
+	gatewayNsName := client.ObjectKeyFromObject(g.Source)
+	referencedSnippetsFilters := make(map[types.NamespacedName]*SnippetsFilter)
+
+	for _, route := range routes {
+		if !route.Valid || !g.isRouteAttachedToGateway(route, gatewayNsName) {
+			continue
+		}
+
+		g.collectSnippetsFiltersFromRoute(route, allSnippetsFilters, referencedSnippetsFilters)
+	}
+
+	if len(referencedSnippetsFilters) == 0 {
+		return nil
+	}
+
+	return referencedSnippetsFilters
+}
+
+// isRouteAttachedToGateway checks if the given route is attached to this gateway.
+func (g *Gateway) isRouteAttachedToGateway(route *L7Route, gatewayNsName types.NamespacedName) bool {
+	for _, parentRef := range route.ParentRefs {
+		if parentRef.Gateway != nil && parentRef.Gateway.NamespacedName == gatewayNsName {
+			return true
+		}
+	}
+	return false
+}
+
+// collectSnippetsFiltersFromRoute extracts SnippetsFilters from a single route's rules.
+func (g *Gateway) collectSnippetsFiltersFromRoute(
+	route *L7Route,
+	allSnippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	referencedFilters map[types.NamespacedName]*SnippetsFilter,
+) {
+	for _, rule := range route.Spec.Rules {
+		if !rule.Filters.Valid {
+			continue
+		}
+
+		for _, filter := range rule.Filters.Filters {
+			if filter.FilterType != FilterExtensionRef ||
+				filter.ResolvedExtensionRef == nil ||
+				filter.ResolvedExtensionRef.SnippetsFilter == nil {
+				continue
+			}
+
+			sf := filter.ResolvedExtensionRef.SnippetsFilter
+			nsName := client.ObjectKeyFromObject(sf.Source)
+
+			// Only include if it exists in the cluster-wide map and is valid
+			// Using the cluster-wide version ensures consistency and avoids duplicates
+			if clusterSF, exists := allSnippetsFilters[nsName]; exists && clusterSF.Valid {
+				referencedFilters[nsName] = clusterSF
+			}
+		}
+	}
 }

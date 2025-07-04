@@ -1,4 +1,4 @@
-package types
+package types //nolint:revive // ignoring meaningless package name
 
 import "sigs.k8s.io/controller-runtime/pkg/client"
 

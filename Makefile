@@ -23,7 +23,7 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION = v2.1.6
+GOLANGCI_LINT_VERSION = v2.2.1
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.33.1
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
@@ -126,7 +126,7 @@ generate-crds: ## Generate CRDs and Go types using kubebuilder
 
 .PHONY: install-crds
 install-crds: ## Install CRDs
-	kubectl kustomize $(SELF_DIR)config/crd | kubectl apply -f -
+	kubectl kustomize $(SELF_DIR)config/crd | kubectl apply --server-side -f -
 
 .PHONY: install-gateway-crds
 install-gateway-crds: ## Install Gateway API CRDs

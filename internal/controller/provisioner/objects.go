@@ -117,7 +117,8 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	)
 
 	serviceAccount := &corev1.ServiceAccount{
-		ObjectMeta: objectMeta,
+		ObjectMeta:                   objectMeta,
+		AutomountServiceAccountToken: helpers.GetPointer(false),
 	}
 
 	var openshiftObjs []client.Object
@@ -608,6 +609,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			Annotations: podAnnotations,
 		},
 		Spec: corev1.PodSpec{
+			AutomountServiceAccountToken: helpers.GetPointer(true),
 			Containers: []corev1.Container{
 				{
 					Name:            "nginx",
@@ -615,8 +617,8 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 					ImagePullPolicy: pullPolicy,
 					Ports:           containerPorts,
 					SecurityContext: &corev1.SecurityContext{
+						AllowPrivilegeEscalation: helpers.GetPointer(false),
 						Capabilities: &corev1.Capabilities{
-							Add:  []corev1.Capability{"NET_BIND_SERVICE"},
 							Drop: []corev1.Capability{"ALL"},
 						},
 						ReadOnlyRootFilesystem: helpers.GetPointer(true),
@@ -689,6 +691,12 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			SecurityContext: &corev1.PodSecurityContext{
 				FSGroup:      helpers.GetPointer[int64](1001),
 				RunAsNonRoot: helpers.GetPointer(true),
+				Sysctls: []corev1.Sysctl{
+					{
+						Name:  "net.ipv4.ip_unprivileged_port_start",
+						Value: "0",
+					},
+				},
 			},
 			Volumes: []corev1.Volume{
 				{
