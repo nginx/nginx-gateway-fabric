@@ -788,6 +788,15 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 				container.Command = append(container.Command, "/agent/entrypoint.sh")
 				container.Args = append(container.Args, "debug")
 			}
+
+			for _, hostPort := range containerSpec.HostPorts {
+				for i, port := range container.Ports {
+					if hostPort.ContainerPort == port.ContainerPort {
+						container.Ports[i].HostPort = hostPort.Port
+					}
+				}
+			}
+
 			spec.Spec.Containers[0] = container
 		}
 	}

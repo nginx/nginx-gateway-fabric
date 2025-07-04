@@ -106,5 +106,7 @@ Filters out empty fields from a struct.
     {{- $result = merge $result (dict $key $value) }}
   {{- end }}
 {{- end }}
-{{- $result | toYaml }}
+{{- if $result -}}
+{{- $result | toYaml -}}
+{{- end -}}
 {{- end }}

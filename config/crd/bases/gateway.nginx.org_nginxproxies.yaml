@@ -81,6 +81,31 @@ spec:
                             description: Debug enables debugging for NGINX by using
                               the nginx-debug binary.
                             type: boolean
+                          hostPorts:
+                            description: HostPorts are the list of ports to expose
+                              on the host.
+                            items:
+                              description: HostPort exposes an nginx container port
+                                on the host.
+                              properties:
+                                containerPort:
+                                  description: ContainerPort is the port on the nginx
+                                    container to map to the HostPort.
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                                port:
+                                  description: Port to expose on the host.
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                              required:
+                              - containerPort
+                              - port
+                              type: object
+                            type: array
                           image:
                             description: Image is the NGINX image to use.
                             properties:
@@ -3467,6 +3492,31 @@ spec:
                             description: Debug enables debugging for NGINX by using
                               the nginx-debug binary.
                             type: boolean
+                          hostPorts:
+                            description: HostPorts are the list of ports to expose
+                              on the host.
+                            items:
+                              description: HostPort exposes an nginx container port
+                                on the host.
+                              properties:
+                                containerPort:
+                                  description: ContainerPort is the port on the nginx
+                                    container to map to the HostPort.
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                                port:
+                                  description: Port to expose on the host.
+                                  format: int32
+                                  maximum: 65535
+                                  minimum: 1
+                                  type: integer
+                              required:
+                              - containerPort
+                              - port
+                              type: object
+                            type: array
                           image:
                             description: Image is the NGINX image to use.
                             properties:
@@ -6885,18 +6935,17 @@ spec:
                             automatically if required. The default NodePort range enforced by Kubernetes is 30000-32767.
                           properties:
                             listenerPort:
-                              description: |-
-                                ListenerPort is the Gateway listener port that this NodePort maps to.
-                                kubebuilder:validation:Minimum=1
-                                kubebuilder:validation:Maximum=65535
+                              description: ListenerPort is the Gateway listener port
+                                that this NodePort maps to.
                               format: int32
+                              maximum: 65535
+                              minimum: 1
                               type: integer
                             port:
-                              description: |-
-                                Port is the NodePort to expose.
-                                kubebuilder:validation:Minimum=1
-                                kubebuilder:validation:Maximum=65535
+                              description: Port is the NodePort to expose.
                               format: int32
+                              maximum: 65535
+                              minimum: 1
                               type: integer
                           required:
                           - listenerPort
