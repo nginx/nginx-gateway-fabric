@@ -434,7 +434,7 @@ nginx:
     lifecycle: {}
 
     # -- volumeMounts are the additional volume mounts for the NGINX container.
-    # volumeMounts: []
+    volumeMounts: []
 
   # -- The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this
   # instance of NGINX Gateway Fabric.
