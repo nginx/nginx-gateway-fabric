@@ -222,6 +222,20 @@ jobs:
       id-token: write # for docker/login to login to NGINX registry
     secrets: inherit
 
+  build-plus-waf:
+    name: Build Plus WAF images
+    needs: [vars, binary]
+    uses: ./.github/workflows/build.yml
+    with:
+      image: plus-waf
+      platforms: "linux/amd64"
+    permissions:
+      contents: read # for docker/build-push-action to read repo content
+      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+      packages: write # for docker/build-push-action to push to GHCR
+      id-token: write # for docker/login to login to NGINX registry
+    secrets: inherit
+
   functional-tests:
     name: Functional tests
     needs: [vars, build-oss, build-plus]
