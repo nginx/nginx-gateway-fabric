@@ -44,7 +44,10 @@ func BuildConfiguration(
 		return config
 	}
 
-	baseHTTPConfig := buildBaseHTTPConfig(g, gateway)
+	// Get SnippetsFilters that are specifically referenced by routes attached to this gateway
+	gatewaySnippetsFilters := gateway.GetReferencedSnippetsFilters(g.Routes, g.SnippetsFilters)
+
+	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters)
 
 	httpServers, sslServers := buildServers(gateway)
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
@@ -77,7 +80,7 @@ func BuildConfiguration(
 		BaseHTTPConfig:   baseHTTPConfig,
 		Logging:          buildLogging(gateway),
 		NginxPlus:        nginxPlus,
-		MainSnippets:     buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
+		MainSnippets:     buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
 		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
 	}
 
@@ -963,12 +966,15 @@ func CreateRatioVarName(ratio int32) string {
 }
 
 // buildBaseHTTPConfig generates the base http context config that should be applied to all servers.
-func buildBaseHTTPConfig(g *graph.Graph, gateway *graph.Gateway) BaseHTTPConfig {
+func buildBaseHTTPConfig(
+	gateway *graph.Gateway,
+	gatewaySnippetsFilters map[types.NamespacedName]*graph.SnippetsFilter,
+) BaseHTTPConfig {
 	baseConfig := BaseHTTPConfig{
 		// HTTP2 should be enabled by default
 		HTTP2:    true,
 		IPFamily: Dual,
-		Snippets: buildSnippetsForContext(g.SnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
+		Snippets: buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
 	}
 
 	// safe to access EffectiveNginxProxy since we only call this function when the Gateway is not nil.
