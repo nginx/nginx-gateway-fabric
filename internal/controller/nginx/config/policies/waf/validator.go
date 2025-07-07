@@ -67,9 +67,7 @@ func (v *Validator) ValidateGlobalSettings(
 }
 
 // Conflicts returns false as we don't allow merging for WAFPolicies.
-func (v Validator) Conflicts(polA, polB policies.Policy) bool {
-	_ = helpers.MustCastObject[*ngfAPI.WAFPolicy](polA)
-	_ = helpers.MustCastObject[*ngfAPI.WAFPolicy](polB)
+func (v Validator) Conflicts(_, _ policies.Policy) bool {
 	return false
 }
 

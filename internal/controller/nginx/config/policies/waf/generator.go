@@ -10,6 +10,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 )
 
+const appProtectBundleFolder = "/etc/app_protect/bundles"
+
 var tmpl = template.Must(template.New("waf policy").Parse(wafTemplate))
 
 const wafTemplate = `
@@ -63,7 +65,7 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 		if wp.Spec.PolicySource != nil && wp.Spec.PolicySource.FileLocation != "" {
 			fileLocation := wp.Spec.PolicySource.FileLocation
 			bundleName := helpers.ToSafeFileName(fileLocation)
-			bundlePath := fmt.Sprintf("%s/%s.tgz", "/etc/app_protect/bundles", bundleName)
+			bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 			fields["BundlePath"] = bundlePath
 		}
 
@@ -79,7 +81,7 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 
 				if secLog.LogProfileBundle != nil && secLog.LogProfileBundle.FileLocation != "" {
 					bundleName := helpers.ToSafeFileName(secLog.LogProfileBundle.FileLocation)
-					bundlePath := fmt.Sprintf("%s/%s.tgz", "/etc/app_protect/bundles", bundleName)
+					bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 					logEntry["LogProfileBundlePath"] = bundlePath
 				}
 

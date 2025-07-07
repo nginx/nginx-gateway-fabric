@@ -493,11 +493,7 @@ func fetchWAFPolicyBundleData(
 	refPolicyBundles := make(map[WAFBundleKey]*WAFBundleData)
 
 	for policyKey, policy := range processedPolicies {
-		if policyKey.GVK != wafPolicyGVK {
-			continue
-		}
-
-		if !policy.Valid {
+		if policyKey.GVK != wafPolicyGVK || !policy.Valid {
 			continue
 		}
 

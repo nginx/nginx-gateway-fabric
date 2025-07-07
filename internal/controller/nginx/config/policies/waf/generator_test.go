@@ -1,6 +1,7 @@
 package waf_test
 
 import (
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -11,10 +12,16 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/waf"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 )
 
 func TestGenerate(t *testing.T) {
 	t.Parallel()
+
+	apDirBase := "app_protect_policy_file \"/etc/app_protect/bundles"
+	apFileDirective := fmt.Sprintf("%s/%s", apDirBase, helpers.ToSafeFileName("http://example.com/policy.tgz"))
+	apSecLogBase := "app_protect_security_log \"/etc/app_protect/bundles"
+	apSecLogDirective := fmt.Sprintf("%s/%s", apSecLogBase, helpers.ToSafeFileName("http://example.com/custom-log.tgz"))
 	tests := []struct {
 		name       string
 		policy     policies.Policy
@@ -35,7 +42,7 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				"app_protect_policy_file \"/etc/app_protect/bundles/",
+				apFileDirective,
 			},
 		},
 		{
@@ -64,7 +71,7 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				"app_protect_policy_file \"/etc/app_protect/bundles/",
+				apFileDirective,
 				"app_protect_security_log_enable on;",
 				"app_protect_security_log \"log_default\" stderr;",
 			},
@@ -94,7 +101,7 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"/etc/app_protect/bundles/",
+				apSecLogDirective,
 				"/var/log/nginx/security.log;",
 			},
 		},
@@ -165,7 +172,7 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				"app_protect_policy_file \"/etc/app_protect/bundles/",
+				apFileDirective,
 				"app_protect_security_log_enable on;",
 				"app_protect_security_log \"log_all\" stderr;",
 				"app_protect_security_log \"log_blocked\" /var/log/blocked.log;",
