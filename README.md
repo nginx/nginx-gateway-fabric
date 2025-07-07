@@ -47,7 +47,7 @@ to the correct versions:
 
 | Version        | Description                              | Installation Manifests                                                         | Documentation and Examples                                                                                                                                           |
 |----------------|------------------------------------------|--------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Latest release | For production use                       | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.0.1/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.0.2/examples).                        |
+| Latest release | For production use                       | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.0.2/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.0.2/examples).                        |
 | Edge           | For experimental use and latest features | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/main/deploy).   | [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/main/examples). |
 
 ### Versioning
