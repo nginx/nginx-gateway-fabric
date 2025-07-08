@@ -99,7 +99,7 @@ func nginxProxyValid(np *NginxProxy) bool {
 }
 
 func telemetryEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
-	if np.Telemetry == nil || np.Telemetry.Exporter == nil || np.Telemetry.Exporter.Endpoint == nil {
+	if np == nil || np.Telemetry == nil || np.Telemetry.Exporter == nil || np.Telemetry.Exporter.Endpoint == nil {
 		return false
 	}
 

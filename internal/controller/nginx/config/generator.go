@@ -16,6 +16,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/upstreamsettings"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/waf"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
 )
@@ -43,6 +44,9 @@ const (
 
 	// includesFolder is the folder where are all include files are stored.
 	includesFolder = configFolder + "/includes"
+
+	// appProtectBundleFolder is the folder where the NGINX App Protect WAF bundles are stored.
+	appProtectBundleFolder = "/etc/app_protect/bundles"
 
 	// httpConfigFile is the path to the configuration file with HTTP configuration.
 	httpConfigFile = httpFolder + "/http.conf"
@@ -119,9 +123,14 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 	policyGenerator := policies.NewCompositeGenerator(
 		clientsettings.NewGenerator(),
 		observability.NewGenerator(conf.Telemetry),
+		waf.NewGenerator(),
 	)
 
 	files = append(files, g.executeConfigTemplates(conf, policyGenerator)...)
+
+	for id, bundle := range conf.WAF.WAFBundles {
+		files = append(files, generateWAFBundle(id, bundle))
+	}
 
 	for id, bundle := range conf.CertBundles {
 		files = append(files, generateCertBundle(id, bundle))
@@ -244,4 +253,20 @@ func generateCertBundle(id dataplane.CertBundleID, cert []byte) agent.File {
 
 func generateCertBundleFileName(id dataplane.CertBundleID) string {
 	return filepath.Join(secretsFolder, string(id)+".crt")
+}
+
+func generateWAFBundle(id dataplane.WAFBundleID, bundle []byte) agent.File {
+	return agent.File{
+		Meta: &pb.FileMeta{
+			Name:        GenerateWAFBundleFileName(id),
+			Hash:        filesHelper.GenerateHash(bundle),
+			Permissions: file.RegularFileMode,
+			Size:        int64(len(bundle)),
+		},
+		Contents: bundle,
+	}
+}
+
+func GenerateWAFBundleFileName(id dataplane.WAFBundleID) string {
+	return filepath.Join(appProtectBundleFolder, string(id)+".tgz")
 }
