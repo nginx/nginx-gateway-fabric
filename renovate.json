@@ -9,5 +9,14 @@
       "/examples/.+\\.yaml$/",
       "/suite/.+\\.yaml$/"
     ]
-  }
+  },
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "nginx/agent",
+        "github.com/nginx/agent/v3"
+      ],
+      "groupName": "NGINX Agent"
+    }
+  ]
 }
