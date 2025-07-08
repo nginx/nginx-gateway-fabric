@@ -4,6 +4,37 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.0.2
+
+_July 8, 2025_
+
+Bug Fixes:
+
+- Fix crash when BackendRef filter is specified. [3508](https://github.com/nginx/nginx-gateway-fabric/pull/3508)
+- Fix index out of bounds error when building status. [3513](https://github.com/nginx/nginx-gateway-fabric/pull/3513)
+- Disable automountServiceAccountToken on ServiceAccount, and instead enable on the Pods directly. [3573](https://github.com/nginx/nginx-gateway-fabric/pull/3573)
+- Fix port binding with reduced privileges. [3574](https://github.com/nginx/nginx-gateway-fabric/pull/3574)
+- Fixed an issue where SnippetsFilters were being included in NGINX configuration for all gateways regardless of whether routes attached to those specific gateways actually referenced the filters. [3586](https://github.com/nginx/nginx-gateway-fabric/pull/3586)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.0.2.
+- Removes Extra keyword from volumeMounts and Volumes for the data plane. [3588](https://github.com/nginx/nginx-gateway-fabric/pull/3588). Thanks to [vazkarvishal](https://github.com/vazkarvishal).
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.28.0`
+- NGINX Plus version: `R34`
+- NGINX Agent version: `v3.0.1`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.0.2`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.0.2`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.0.2`
+
 ## Release 2.0.1
 
 _June 11, 2025_

@@ -25,8 +25,7 @@ considering contributing!
 
 To ask a question, use [Github Discussions](https://github.com/nginx/nginx-gateway-fabric/discussions).
 
-[NGINX Community Slack](https://community.nginx.org/joinslack) has a dedicated channel for this
-project -- `#nginx-gateway-fabric`.
+[NGINX Community Forum](https://community.nginx.org/c/projects/nginx-gateway-fabric/25).
 
 Reserve GitHub issues for feature requests and bugs rather than general questions.
 
