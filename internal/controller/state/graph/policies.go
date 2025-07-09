@@ -532,6 +532,11 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 			return
 		}
 		*conditionsList = append(*conditionsList, conditions.NewClientSettingsPolicyAffected())
+	case kinds.WAFPolicy:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewWAFPolicyAffected()) {
+			return
+		}
+		*conditionsList = append(*conditionsList, conditions.NewWAFPolicyAffected())
 	}
 }
 
@@ -562,7 +567,8 @@ func fetchWAFPolicyBundleData(
 		if wafPolicy.Spec.PolicySource != nil && wafPolicy.Spec.PolicySource.FileLocation != "" {
 			fetcher := createFetcher(buildFetchOptions(wafPolicy.Spec.PolicySource)...)
 			if !fetchAndStoreBundle(wafPolicy.Spec.PolicySource.FileLocation, policy, refPolicyBundles, fetcher) {
-				continue // Policy was marked invalid, skip security logs
+				policy.Conditions = append(policy.Conditions, conditions.NewPolicySourceInvalid())
+				continue
 			}
 		}
 
@@ -573,7 +579,8 @@ func fetchWAFPolicyBundleData(
 
 			fetcher := createFetcher(buildFetchOptions(secLog.LogProfileBundle)...)
 			if !fetchAndStoreBundle(secLog.LogProfileBundle.FileLocation, policy, refPolicyBundles, fetcher) {
-				break // Policy was marked invalid, skip other security logs
+				policy.Conditions = append(policy.Conditions, conditions.NewPolicySourceInvalid())
+				break
 			}
 		}
 	}
@@ -596,8 +603,7 @@ func fetchAndStoreBundle(
 	data, err := fetcher.GetRemoteFile(fileLocation)
 	if err != nil {
 		policy.Valid = false
-		// FIXME(ciarams87): Add appropriate condition when available.
-		policy.Conditions = append(policy.Conditions, conditions.NewPolicyInvalid("Error fetching policy: "+err.Error()))
+		policy.Conditions = append(policy.Conditions, conditions.NewPolicyFetchError(err.Error()))
 		return false
 	}
 

@@ -1720,6 +1720,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 
 	cspGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "ClientSettingsPolicy"}
 	opGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "ObservabilityPolicy"}
+	wafPolicyGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "WAFPolicy"}
 
 	gw1Ref := createTestRef(kinds.Gateway, v1.GroupName, "gw1")
 	gw1TargetRef := createTestPolicyTargetRef(
@@ -1801,7 +1802,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 			},
 		},
 		{
-			name: "gateway attached to csp and op policy",
+			name: "gateway attached to csp, op and waf policy",
 			policies: map[PolicyKey]*Policy{
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw2Ref),
@@ -1811,6 +1812,10 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", gw2Ref),
 					TargetRefs: []PolicyTargetRef{gw2TargetRef},
 				},
+				createTestPolicyKey(wafPolicyGVK, "wafPolicy1"): {
+					Source:     createTestPolicy(wafPolicyGVK, "wafPolicy1", gw2Ref),
+					TargetRefs: []PolicyTargetRef{gw2TargetRef},
+				},
 			},
 			gws:    createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw2"}),
 			routes: nil,
@@ -1818,6 +1823,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				{Namespace: testNs, Name: "gw2"}: {
 					conditions.NewClientSettingsPolicyAffected(),
 					conditions.NewObservabilityPolicyAffected(),
+					conditions.NewWAFPolicyAffected(),
 				},
 			},
 		},
@@ -1875,6 +1881,10 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy2", gw3Ref, gr2Ref),
 					TargetRefs: []PolicyTargetRef{gw3TargetRef, gr2TargetRef},
 				},
+				createTestPolicyKey(wafPolicyGVK, "wafPolicy1"): {
+					Source:     createTestPolicy(wafPolicyGVK, "wafPolicy1", gw3Ref, hr2Ref),
+					TargetRefs: []PolicyTargetRef{gw3TargetRef, hr2TargetRef},
+				},
 			},
 			gws: createGatewayMap(
 				types.NamespacedName{Namespace: testNs, Name: "gw3"},
@@ -1901,10 +1911,12 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				{Namespace: testNs, Name: "gw3"}: {
 					conditions.NewClientSettingsPolicyAffected(),
 					conditions.NewObservabilityPolicyAffected(),
+					conditions.NewWAFPolicyAffected(),
 				},
 				{Namespace: testNs, Name: "hr2"}: {
 					conditions.NewObservabilityPolicyAffected(),
 					conditions.NewClientSettingsPolicyAffected(),
+					conditions.NewWAFPolicyAffected(),
 				},
 				{Namespace: testNs, Name: "gr2"}: {
 					conditions.NewObservabilityPolicyAffected(),
@@ -2103,6 +2115,7 @@ func TestFetchPolicyBundleData(t *testing.T) {
 		expectedPolicyState   map[string]bool
 		expectFetchConditions map[string]bool
 		name                  string
+		expectedConds         []conditions.Condition
 		expectedBundleCount   int
 	}{
 		{
@@ -2149,6 +2162,9 @@ func TestFetchPolicyBundleData(t *testing.T) {
 			},
 			expectFetchConditions: map[string]bool{
 				"invalid-waf": false,
+			},
+			expectedConds: []conditions.Condition{
+				conditions.NewPolicySourceInvalid(),
 			},
 		},
 		{
@@ -2304,6 +2320,9 @@ func TestFetchPolicyBundleData(t *testing.T) {
 			expectFetchConditions: map[string]bool{
 				"waf-fail": true,
 			},
+			expectedConds: []conditions.Condition{
+				conditions.NewPolicySourceInvalid(),
+			},
 		},
 		{
 			name: "WAF policy with PolicySource success but SecurityLog failure",
@@ -2337,6 +2356,10 @@ func TestFetchPolicyBundleData(t *testing.T) {
 			},
 			expectFetchConditions: map[string]bool{
 				"waf-mixed": true,
+			},
+			expectedConds: []conditions.Condition{
+				conditions.NewPolicySourceInvalid(),
+				conditions.NewPolicyFetchError("network error"),
 			},
 		},
 		{
@@ -2377,6 +2400,10 @@ func TestFetchPolicyBundleData(t *testing.T) {
 			},
 			expectFetchConditions: map[string]bool{
 				"waf-multi": true,
+			},
+			expectedConds: []conditions.Condition{
+				conditions.NewPolicySourceInvalid(),
+				conditions.NewPolicyFetchError("network error"),
 			},
 		},
 	}
@@ -2429,8 +2456,16 @@ func TestFetchPolicyBundleData(t *testing.T) {
 						if expectFetchConditions, exists := test.expectFetchConditions[policyName]; exists && expectFetchConditions {
 							g.Expect(policy.Conditions).ToNot(BeEmpty(),
 								fmt.Sprintf("Policy %s should have fetch error conditions", policyName))
-							g.Expect(policy.Conditions[0].Reason).To(Equal("Invalid"))
-							g.Expect(policy.Conditions[0].Message).To(ContainSubstring("Error fetching policy:"))
+
+							if len(policy.Conditions) > 1 {
+								g.Expect(policy.Conditions[0].Reason).To(Equal("FetchError"))
+								g.Expect(policy.Conditions[0].Message).To(ContainSubstring("Failed to fetch the policy bundle due to:"))
+								g.Expect(policy.Conditions[1].Reason).To(Equal("SourceInvalid"))
+								g.Expect(policy.Conditions[1].Message).To(ContainSubstring("policy source is invalid or incomplete."))
+							} else {
+								g.Expect(policy.Conditions[0].Reason).To(Equal("SourceInvalid"))
+								g.Expect(policy.Conditions[0].Message).To(ContainSubstring("policy source is invalid or incomplete."))
+							}
 						}
 						break
 					}

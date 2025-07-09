@@ -10,25 +10,8 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 )
 
+// Conditions and Reasons for Route resources.
 const (
-	// GatewayClassReasonGatewayClassConflict indicates there are multiple GatewayClass resources
-	// that reference this controller, and we ignored the resource in question and picked the
-	// GatewayClass that is referenced in the command-line argument.
-	// This reason is used with GatewayClassConditionAccepted (false).
-	GatewayClassReasonGatewayClassConflict v1.GatewayClassConditionReason = "GatewayClassConflict"
-
-	// GatewayClassMessageGatewayClassConflict is a message that describes GatewayClassReasonGatewayClassConflict.
-	GatewayClassMessageGatewayClassConflict = "The resource is ignored due to a conflicting GatewayClass resource"
-
-	// ListenerReasonUnsupportedValue is used with the "Accepted" condition when a value of a field in a Listener
-	// is invalid or not supported.
-	ListenerReasonUnsupportedValue v1.ListenerConditionReason = "UnsupportedValue"
-
-	// ListenerMessageFailedNginxReload is a message used with ListenerConditionProgrammed (false)
-	// when nginx fails to reload.
-	ListenerMessageFailedNginxReload = "The Listener is not programmed due to a failure to " +
-		"reload nginx with the configuration"
-
 	// RouteReasonBackendRefUnsupportedValue is used with the "ResolvedRefs" condition when one of the
 	// Route rules has a backendRef with an unsupported value.
 	RouteReasonBackendRefUnsupportedValue v1.RouteConditionReason = "UnsupportedValue"
@@ -61,6 +44,48 @@ const (
 	// invalid. Used with ResolvedRefs (false).
 	RouteReasonInvalidFilter v1.RouteConditionReason = "InvalidFilter"
 
+	// RouteMessageFailedNginxReload is a message used with RouteReasonGatewayNotProgrammed
+	// when nginx fails to reload.
+	RouteMessageFailedNginxReload = GatewayMessageFailedNginxReload + ". NGINX may still be configured " +
+		"for this Route. However, future updates to this resource will not be configured until the Gateway " +
+		"is programmed again"
+)
+
+// Conditions and Reasons for GatewayClass, Gateway and Listener resources.
+const (
+	// GatewayClassReasonGatewayClassConflict indicates there are multiple GatewayClass resources
+	// that reference this controller, and we ignored the resource in question and picked the
+	// GatewayClass that is referenced in the command-line argument.
+	// This reason is used with GatewayClassConditionAccepted (false).
+	GatewayClassReasonGatewayClassConflict v1.GatewayClassConditionReason = "GatewayClassConflict"
+
+	// GatewayClassMessageGatewayClassConflict is a message that describes GatewayClassReasonGatewayClassConflict.
+	GatewayClassMessageGatewayClassConflict = "The resource is ignored due to a conflicting GatewayClass resource"
+
+	// ListenerReasonUnsupportedValue is used with the "Accepted" condition when a value of a field in a Listener
+	// is invalid or not supported.
+	ListenerReasonUnsupportedValue v1.ListenerConditionReason = "UnsupportedValue"
+
+	// ListenerMessageFailedNginxReload is a message used with ListenerConditionProgrammed (false)
+	// when nginx fails to reload.
+	ListenerMessageFailedNginxReload = "The Listener is not programmed due to a failure to " +
+		"reload nginx with the configuration"
+
+	// GatewayResolvedRefs condition indicates whether the controller was able to resolve the
+	// parametersRef on the Gateway.
+	GatewayResolvedRefs v1.GatewayConditionType = "ResolvedRefs"
+
+	// GatewayReasonResolvedRefs is used with the "GatewayResolvedRefs" condition when the condition is true.
+	GatewayReasonResolvedRefs v1.GatewayConditionReason = "ResolvedRefs"
+
+	// GatewayReasonParamsRefNotFound is used with the "GatewayResolvedRefs" condition when the
+	// parametersRef resource does not exist.
+	GatewayReasonParamsRefNotFound v1.GatewayConditionReason = "ParametersRefNotFound"
+
+	// GatewayReasonParamsRefInvalid is used with the "GatewayResolvedRefs" condition when the
+	// parametersRef resource is invalid.
+	GatewayReasonParamsRefInvalid v1.GatewayConditionReason = "ParametersRefInvalid"
+
 	// GatewayReasonUnsupportedValue is used with GatewayConditionAccepted (false) when a value of a field in a Gateway
 	// is invalid or not supported.
 	GatewayReasonUnsupportedValue v1.GatewayConditionReason = "UnsupportedValue"
@@ -69,12 +94,6 @@ const (
 	// when nginx fails to reload.
 	GatewayMessageFailedNginxReload = "The Gateway is not programmed due to a failure to " +
 		"reload nginx with the configuration"
-
-	// RouteMessageFailedNginxReload is a message used with RouteReasonGatewayNotProgrammed
-	// when nginx fails to reload.
-	RouteMessageFailedNginxReload = GatewayMessageFailedNginxReload + ". NGINX may still be configured " +
-		"for this Route. However, future updates to this resource will not be configured until the Gateway " +
-		"is programmed again"
 
 	// GatewayClassResolvedRefs condition indicates whether the controller was able to resolve the
 	// parametersRef on the GatewayClass.
@@ -90,7 +109,10 @@ const (
 	// GatewayClassReasonParamsRefInvalid is used with the "GatewayClassResolvedRefs" condition when the
 	// parametersRef resource is invalid.
 	GatewayClassReasonParamsRefInvalid v1.GatewayClassConditionReason = "ParametersRefInvalid"
+)
 
+// Conditions and Reasons for Policy resources.
+const (
 	// PolicyReasonNginxProxyConfigNotSet is used with the "PolicyAccepted" condition when the
 	// NginxProxy resource is missing or invalid.
 	PolicyReasonNginxProxyConfigNotSet v1alpha2.PolicyConditionReason = "NginxProxyConfigNotSet"
@@ -107,6 +129,18 @@ const (
 	// has an overlapping hostname:port/path combination with another Route.
 	PolicyReasonTargetConflict v1alpha2.PolicyConditionReason = "TargetConflict"
 
+	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
+	// ObservabilityPolicy or ClientSettingsPolicy is applied to Gateways or Routes.
+	PolicyAffectedReason v1alpha2.PolicyConditionReason = "PolicyAffected"
+
+	// PolicySourceInvalid is used with the "PolicySourceInvalid" condition when a
+	// source of a WAFPolicy is invalid or incomplete.
+	PolicySourceInvalid v1alpha2.PolicyConditionReason = "SourceInvalid"
+
+	// PolicyFetchError is used with the "PolicyFetchError" condition when a
+	// WAFPolicy or LogProfileBundle cannot be fetched from the specified file location.
+	PolicyFetchError v1alpha2.PolicyConditionReason = "FetchError"
+
 	// ClientSettingsPolicyAffected is used with the "PolicyAffected" condition when a
 	// ClientSettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
 	ClientSettingsPolicyAffected v1alpha2.PolicyConditionType = "ClientSettingsPolicyAffected"
@@ -115,24 +149,9 @@ const (
 	// ObservabilityPolicy is applied to a HTTPRoute, or GRPCRoute.
 	ObservabilityPolicyAffected v1alpha2.PolicyConditionType = "ObservabilityPolicyAffected"
 
-	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
-	// ObservabilityPolicy or ClientSettingsPolicy is applied to Gateways or Routes.
-	PolicyAffectedReason v1alpha2.PolicyConditionReason = "PolicyAffected"
-
-	// GatewayResolvedRefs condition indicates whether the controller was able to resolve the
-	// parametersRef on the Gateway.
-	GatewayResolvedRefs v1.GatewayConditionType = "ResolvedRefs"
-
-	// GatewayReasonResolvedRefs is used with the "GatewayResolvedRefs" condition when the condition is true.
-	GatewayReasonResolvedRefs v1.GatewayConditionReason = "ResolvedRefs"
-
-	// GatewayReasonParamsRefNotFound is used with the "GatewayResolvedRefs" condition when the
-	// parametersRef resource does not exist.
-	GatewayReasonParamsRefNotFound v1.GatewayConditionReason = "ParametersRefNotFound"
-
-	// GatewayReasonParamsRefInvalid is used with the "GatewayResolvedRefs" condition when the
-	// parametersRef resource is invalid.
-	GatewayReasonParamsRefInvalid v1.GatewayConditionReason = "ParametersRefInvalid"
+	// WAFPolicyAffected is used with the "PolicyAffected" condition when an
+	// WAFPolicyAffected is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	WAFPolicyAffected v1alpha2.PolicyConditionType = "WAFPolicyAffected"
 )
 
 // Condition defines a condition to be reported in the status of resources.
@@ -996,5 +1015,36 @@ func NewClientSettingsPolicyAffected() Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
 		Message: "ClientSettingsPolicy is applied to the resource",
+	}
+}
+
+// NewWAFPolicyAffected returns a Condition that indicates that a WAFPolicy
+// is applied to the resource.
+func NewWAFPolicyAffected() Condition {
+	return Condition{
+		Type:    string(WAFPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "WAFPolicy is applied to the resource",
+	}
+}
+
+// NewPolicySourceInvalid returns a Condition that indicates that the WAF policy source is invalid or incomplete.
+func NewPolicySourceInvalid() Condition {
+	return Condition{
+		Type:    string(PolicySourceInvalid),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicySourceInvalid),
+		Message: "The policy source is invalid or incomplete.",
+	}
+}
+
+// NewPolicyFetchError returns a Condition that indicates that there was an error fetching the WAF policy bundle.
+func NewPolicyFetchError(msg string) Condition {
+	return Condition{
+		Type:    string(PolicyFetchError),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyFetchError),
+		Message: "Failed to fetch the policy bundle due to: " + msg,
 	}
 }
