@@ -1014,3 +1014,47 @@ func TestSetIPFamily(t *testing.T) {
 	g.Expect(svc.Spec.IPFamilyPolicy).To(Equal(helpers.GetPointer(corev1.IPFamilyPolicySingleStack)))
 	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv6Protocol}))
 }
+
+func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace:   "default",
+				ServiceName: "test-service",
+			},
+		},
+	}
+	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
+
+	// Test with default worker connections (nil NginxProxy config)
+	configMaps := provisioner.buildNginxConfigMaps(objectMeta, nil, "test-bootstrap", "test-agent", false, false)
+	g.Expect(configMaps).To(HaveLen(2))
+
+	bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(bootstrapCM.Data["main.conf"]).To(ContainSubstring("worker_connections 1024;"))
+
+	// Test with default worker connections (empty NginxProxy config)
+	nProxyCfgEmpty := &graph.EffectiveNginxProxy{}
+	configMaps = provisioner.buildNginxConfigMaps(objectMeta, nProxyCfgEmpty, "test-bootstrap", "test-agent", false, false)
+	g.Expect(configMaps).To(HaveLen(2))
+
+	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(bootstrapCM.Data["main.conf"]).To(ContainSubstring("worker_connections 1024;"))
+
+	// Test with custom worker connections
+	nProxyCfg := &graph.EffectiveNginxProxy{
+		WorkerConnections: helpers.GetPointer(int32(2048)),
+	}
+
+	configMaps = provisioner.buildNginxConfigMaps(objectMeta, nProxyCfg, "test-bootstrap", "test-agent", false, false)
+	g.Expect(configMaps).To(HaveLen(2))
+
+	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(bootstrapCM.Data["main.conf"]).To(ContainSubstring("worker_connections 2048;"))
+}

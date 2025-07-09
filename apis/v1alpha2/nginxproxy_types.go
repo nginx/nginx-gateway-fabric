@@ -76,6 +76,13 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	Kubernetes *KubernetesSpec `json:"kubernetes,omitempty"`
+	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
+	// Default is 1024.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	WorkerConnections *int32 `json:"workerConnections,omitempty"`
 }
 
 // Telemetry specifies the OpenTelemetry configuration.

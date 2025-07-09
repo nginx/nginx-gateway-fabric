@@ -54,6 +54,8 @@ type Configuration struct {
 	NginxPlus NginxPlus
 	// BaseHTTPConfig holds the configuration options at the http context.
 	BaseHTTPConfig BaseHTTPConfig
+	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
+	WorkerConnections int32
 }
 
 // SSLKeyPairID is a unique identifier for a SSLKeyPair.
