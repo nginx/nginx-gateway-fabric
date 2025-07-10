@@ -133,13 +133,17 @@ const (
 	// ObservabilityPolicy or ClientSettingsPolicy is applied to Gateways or Routes.
 	PolicyAffectedReason v1alpha2.PolicyConditionReason = "PolicyAffected"
 
-	// PolicySourceInvalid is used with the "PolicySourceInvalid" condition when a
-	// source of a WAFPolicy is invalid or incomplete.
-	PolicySourceInvalid v1alpha2.PolicyConditionReason = "SourceInvalid"
-
-	// PolicyFetchError is used with the "PolicyFetchError" condition when a
+	// WAFPolicyFetchError is used with the "WAFPolicyFetchError" condition when a
 	// WAFPolicy or LogProfileBundle cannot be fetched from the specified file location.
-	PolicyFetchError v1alpha2.PolicyConditionReason = "FetchError"
+	WAFPolicyFetchError v1alpha2.PolicyConditionReason = "FetchError"
+
+	// WAFPolicyMessageSourceInvalid is a message used with the "PolicyInvalid" condition
+	// when the WAF policy source is invalid or incomplete.
+	WAFPolicyMessageSourceInvalid = "The WAF policy source is invalid or incomplete."
+
+	// WAFSecurityLogMessageSourceInvalid is a message used with the "PolicyInvalid" condition
+	// when the WAFSecurityLog source is invalid or incomplete.
+	WAFSecurityLogMessageSourceInvalid = "The WAFSecurityLog source is invalid or incomplete."
 
 	// ClientSettingsPolicyAffected is used with the "PolicyAffected" condition when a
 	// ClientSettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
@@ -1029,22 +1033,12 @@ func NewWAFPolicyAffected() Condition {
 	}
 }
 
-// NewPolicySourceInvalid returns a Condition that indicates that the WAF policy source is invalid or incomplete.
-func NewPolicySourceInvalid() Condition {
+// NewWAFPolicyFetchError returns a Condition that indicates that there was an error fetching the WAF policy bundle.
+func NewWAFPolicyFetchError(msg string) Condition {
 	return Condition{
-		Type:    string(PolicySourceInvalid),
+		Type:    string(WAFPolicyFetchError),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicySourceInvalid),
-		Message: "The policy source is invalid or incomplete.",
-	}
-}
-
-// NewPolicyFetchError returns a Condition that indicates that there was an error fetching the WAF policy bundle.
-func NewPolicyFetchError(msg string) Condition {
-	return Condition{
-		Type:    string(PolicyFetchError),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyFetchError),
+		Reason:  string(WAFPolicyFetchError),
 		Message: "Failed to fetch the policy bundle due to: " + msg,
 	}
 }

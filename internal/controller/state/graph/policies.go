@@ -567,7 +567,9 @@ func fetchWAFPolicyBundleData(
 		if wafPolicy.Spec.PolicySource != nil && wafPolicy.Spec.PolicySource.FileLocation != "" {
 			fetcher := createFetcher(buildFetchOptions(wafPolicy.Spec.PolicySource)...)
 			if !fetchAndStoreBundle(wafPolicy.Spec.PolicySource.FileLocation, policy, refPolicyBundles, fetcher) {
-				policy.Conditions = append(policy.Conditions, conditions.NewPolicySourceInvalid())
+				policy.Conditions = append(policy.Conditions,
+					conditions.NewPolicyInvalid(conditions.WAFPolicyMessageSourceInvalid),
+				)
 				continue
 			}
 		}
@@ -579,7 +581,9 @@ func fetchWAFPolicyBundleData(
 
 			fetcher := createFetcher(buildFetchOptions(secLog.LogProfileBundle)...)
 			if !fetchAndStoreBundle(secLog.LogProfileBundle.FileLocation, policy, refPolicyBundles, fetcher) {
-				policy.Conditions = append(policy.Conditions, conditions.NewPolicySourceInvalid())
+				policy.Conditions = append(policy.Conditions,
+					conditions.NewPolicyInvalid(conditions.WAFSecurityLogMessageSourceInvalid),
+				)
 				break
 			}
 		}
@@ -603,7 +607,7 @@ func fetchAndStoreBundle(
 	data, err := fetcher.GetRemoteFile(fileLocation)
 	if err != nil {
 		policy.Valid = false
-		policy.Conditions = append(policy.Conditions, conditions.NewPolicyFetchError(err.Error()))
+		policy.Conditions = append(policy.Conditions, conditions.NewWAFPolicyFetchError(err.Error()))
 		return false
 	}
 

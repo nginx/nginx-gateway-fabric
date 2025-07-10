@@ -2164,7 +2164,7 @@ func TestFetchPolicyBundleData(t *testing.T) {
 				"invalid-waf": false,
 			},
 			expectedConds: []conditions.Condition{
-				conditions.NewPolicySourceInvalid(),
+				conditions.NewPolicyInvalid("The WAF policy source is invalid or incomplete."),
 			},
 		},
 		{
@@ -2321,7 +2321,7 @@ func TestFetchPolicyBundleData(t *testing.T) {
 				"waf-fail": true,
 			},
 			expectedConds: []conditions.Condition{
-				conditions.NewPolicySourceInvalid(),
+				conditions.NewPolicyInvalid("The policy source is invalid or incomplete."),
 			},
 		},
 		{
@@ -2358,8 +2358,8 @@ func TestFetchPolicyBundleData(t *testing.T) {
 				"waf-mixed": true,
 			},
 			expectedConds: []conditions.Condition{
-				conditions.NewPolicySourceInvalid(),
-				conditions.NewPolicyFetchError("network error"),
+				conditions.NewPolicyInvalid("WAFSecurityLog source is invalid or incomplete."),
+				conditions.NewWAFPolicyFetchError("network error"),
 			},
 		},
 		{
@@ -2402,8 +2402,8 @@ func TestFetchPolicyBundleData(t *testing.T) {
 				"waf-multi": true,
 			},
 			expectedConds: []conditions.Condition{
-				conditions.NewPolicySourceInvalid(),
-				conditions.NewPolicyFetchError("network error"),
+				conditions.NewPolicyInvalid("WAFSecurityLog source is invalid or incomplete."),
+				conditions.NewWAFPolicyFetchError("network error"),
 			},
 		},
 	}
@@ -2460,11 +2460,11 @@ func TestFetchPolicyBundleData(t *testing.T) {
 							if len(policy.Conditions) > 1 {
 								g.Expect(policy.Conditions[0].Reason).To(Equal("FetchError"))
 								g.Expect(policy.Conditions[0].Message).To(ContainSubstring("Failed to fetch the policy bundle due to:"))
-								g.Expect(policy.Conditions[1].Reason).To(Equal("SourceInvalid"))
-								g.Expect(policy.Conditions[1].Message).To(ContainSubstring("policy source is invalid or incomplete."))
+								g.Expect(policy.Conditions[1].Reason).To(Equal("Invalid"))
+								g.Expect(policy.Conditions[1].Message).To(ContainSubstring("source is invalid or incomplete."))
 							} else {
-								g.Expect(policy.Conditions[0].Reason).To(Equal("SourceInvalid"))
-								g.Expect(policy.Conditions[0].Message).To(ContainSubstring("policy source is invalid or incomplete."))
+								g.Expect(policy.Conditions[0].Reason).To(Equal("Invalid"))
+								g.Expect(policy.Conditions[0].Message).To(ContainSubstring("source is invalid or incomplete."))
 							}
 						}
 						break
