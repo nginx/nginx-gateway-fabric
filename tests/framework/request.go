@@ -56,12 +56,13 @@ func makeRequest(
 ) (*http.Response, error) {
 	dialer := &net.Dialer{}
 
-	transport, ok := http.DefaultTransport.(*http.Transport)
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
 		return nil, errors.New("transport is not of type *http.Transport")
 	}
 
-	transport.DialContext = func(
+	customTransport := baseTransport.Clone()
+	customTransport.DialContext = func(
 		ctx context.Context,
 		network,
 		addr string,
