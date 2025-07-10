@@ -9,7 +9,11 @@ var (
 )
 
 const mainTemplateText = `
-error_log stderr {{ .ErrorLevel }};`
+error_log stderr {{ .ErrorLevel }};
+
+events {
+  worker_connections {{ .WorkerConnections }};
+}`
 
 const mgmtTemplateText = `mgmt {
     {{- if .UsageEndpoint }}

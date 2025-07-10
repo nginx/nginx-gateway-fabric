@@ -7772,6 +7772,14 @@ spec:
                     - key
                     x-kubernetes-list-type: map
                 type: object
+              workerConnections:
+                description: |-
+                  WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
+                  Default is 1024.
+                format: int32
+                maximum: 65535
+                minimum: 1
+                type: integer
             type: object
         required:
         - spec

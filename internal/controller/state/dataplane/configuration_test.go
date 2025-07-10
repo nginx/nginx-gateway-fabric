@@ -4895,3 +4895,44 @@ func TestBuildNginxPlus(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildWorkerConnections(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		gw                   *graph.Gateway
+		msg                  string
+		expWorkerConnections int32
+	}{
+		{
+			msg:                  "NginxProxy is nil",
+			gw:                   &graph.Gateway{},
+			expWorkerConnections: DefaultWorkerConnections,
+		},
+		{
+			msg: "NginxProxy doesn't specify worker connections",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+			},
+			expWorkerConnections: DefaultWorkerConnections,
+		},
+		{
+			msg: "NginxProxy specifies worker connections",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WorkerConnections: helpers.GetPointer(int32(2048)),
+				},
+			},
+			expWorkerConnections: 2048,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildWorkerConnections(tc.gw)).To(Equal(tc.expWorkerConnections))
+		})
+	}
+}
