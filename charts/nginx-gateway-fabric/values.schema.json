@@ -305,6 +305,13 @@
               },
               "required": [],
               "type": "object"
+            },
+            "workerConnections": {
+              "description": "The number of worker connections for NGINX. Default is 1024.",
+              "maximum": 65535,
+              "minimum": 1,
+              "required": [],
+              "type": "integer"
             }
           },
           "required": [],
