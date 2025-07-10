@@ -18,8 +18,6 @@ RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk
 
 RUN apk add --no-cache bash \
     && mkdir -p /usr/lib/nginx/modules \
-    # Update packages for CVE-2025-32414 and CVE-2025-32415
-    && apk --no-cache upgrade libxml2 \
     # forward request and error logs to docker log collector
     && ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log
