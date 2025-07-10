@@ -160,20 +160,15 @@ jobs:
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}
             ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', secrets.NGINX_KEY) || '' }}
 
+      - name: Download Syft
+        uses: anchore/sbom-action/download-syft@cee1b8e05ae5b2593a75e197229729eabaa9f8ec # v0.20.2
+        if: ${{ inputs.image == 'plus-waf' }}
+
       - name: Inspect SBOM and output manifest
         run: |
           if [[ "${{ inputs.image }}" == "plus-waf" ]]; then
           # For plus-waf, use syft directly
-          echo "Generating SBOM for plus-waf using syft..."
-
-          # Install syft if not available
-          if ! command -v syft >/dev/null 2>&1; then
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-          fi
-
-          # Generate SBOM using syft directly for plus-waf (known to work with NAP WAF)
           syft localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} -o spdx-json > sbom-${{ inputs.image }}.json
-          echo "Generated SBOM using syft for plus-waf"
           else
           # For other images, use the standard Docker buildx approach
           docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > sbom-${{ inputs.image }}.json
