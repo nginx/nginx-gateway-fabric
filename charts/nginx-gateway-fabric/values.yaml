@@ -371,6 +371,11 @@ nginx:
   #                 - IPAddress
   #             value:
   #               type: string
+  #   workerConnections:
+  #     type: integer
+  #     minimum: 1
+  #     maximum: 65535
+  #     description: The number of worker connections for NGINX. Default is 1024.
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.

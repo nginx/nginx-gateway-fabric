@@ -22,9 +22,10 @@ import (
 )
 
 const (
-	wildcardHostname     = "~^"
-	alpineSSLRootCAPath  = "/etc/ssl/cert.pem"
-	defaultErrorLogLevel = "info"
+	wildcardHostname         = "~^"
+	alpineSSLRootCAPath      = "/etc/ssl/cert.pem"
+	defaultErrorLogLevel     = "info"
+	DefaultWorkerConnections = int32(1024)
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -76,12 +77,13 @@ func BuildConfiguration(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
 		),
-		Telemetry:        buildTelemetry(g, gateway),
-		BaseHTTPConfig:   baseHTTPConfig,
-		Logging:          buildLogging(gateway),
-		NginxPlus:        nginxPlus,
-		MainSnippets:     buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
-		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
+		Telemetry:         buildTelemetry(g, gateway),
+		BaseHTTPConfig:    baseHTTPConfig,
+		Logging:           buildLogging(gateway),
+		NginxPlus:         nginxPlus,
+		MainSnippets:      buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
+		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
+		WorkerConnections: buildWorkerConnections(gateway),
 	}
 
 	return config
@@ -1105,6 +1107,19 @@ func buildLogging(gateway *graph.Gateway) Logging {
 	return logSettings
 }
 
+func buildWorkerConnections(gateway *graph.Gateway) int32 {
+	if gateway == nil || gateway.EffectiveNginxProxy == nil {
+		return DefaultWorkerConnections
+	}
+
+	ngfProxy := gateway.EffectiveNginxProxy
+	if ngfProxy.WorkerConnections != nil {
+		return *ngfProxy.WorkerConnections
+	}
+
+	return DefaultWorkerConnections
+}
+
 func buildAuxiliarySecrets(
 	secrets map[types.NamespacedName][]graph.PlusSecretFile,
 ) map[graph.SecretFileType][]byte {
@@ -1143,8 +1158,9 @@ func buildNginxPlus(gateway *graph.Gateway) NginxPlus {
 
 func GetDefaultConfiguration(g *graph.Graph, gateway *graph.Gateway) Configuration {
 	return Configuration{
-		Logging:          buildLogging(gateway),
-		NginxPlus:        NginxPlus{},
-		AuxiliarySecrets: buildAuxiliarySecrets(g.PlusSecrets),
+		Logging:           buildLogging(gateway),
+		NginxPlus:         NginxPlus{},
+		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
+		WorkerConnections: buildWorkerConnections(gateway),
 	}
 }

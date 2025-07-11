@@ -20,6 +20,7 @@ import (
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
@@ -317,8 +318,14 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		logLevel = string(*nProxyCfg.Logging.ErrorLevel)
 	}
 
+	workerConnections := dataplane.DefaultWorkerConnections
+	if nProxyCfg != nil && nProxyCfg.WorkerConnections != nil {
+		workerConnections = *nProxyCfg.WorkerConnections
+	}
+
 	mainFields := map[string]interface{}{
-		"ErrorLevel": logLevel,
+		"ErrorLevel":        logLevel,
+		"WorkerConnections": workerConnections,
 	}
 
 	bootstrapCM := &corev1.ConfigMap{
