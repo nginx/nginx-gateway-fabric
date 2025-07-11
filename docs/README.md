@@ -9,3 +9,4 @@ _Please note: You can find the user documentation for NGINX Gateway Fabric in th
 - [Developer](developer/): Docs for developers of the project. Contains guides relating to processes and workflows.
 - [Proposals](proposals/): Enhancement proposals for new features.
 - [API](api/): The files for generating API documentation, used in the Makefile
+- [Reference](reference/): Reference documentation for NGINX Gateway Fabric components and configurations.
