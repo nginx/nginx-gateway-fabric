@@ -23,7 +23,6 @@ import (
 
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/gateway-api/conformance"
-	conf_v1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/tests"
 	"sigs.k8s.io/gateway-api/conformance/utils/flags"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
@@ -41,16 +40,12 @@ func TestConformance(t *testing.T) {
 		*flags.ConformanceProfiles, *flags.SkipTests,
 	)
 
+	*flags.ImplementationOrganization = "nginx"
+	*flags.ImplementationProject = "nginx-gateway-fabric"
+	*flags.ImplementationURL = "https://github.com/nginx/nginx-gateway-fabric"
+	*flags.ImplementationContact = "https://github.com/nginx/nginx-gateway-fabric/discussions/new/choose"
+
 	opts := conformance.DefaultOptions(t)
-	opts.Implementation = conf_v1.Implementation{
-		Organization: "nginx",
-		Project:      "nginx-gateway-fabric",
-		URL:          "https://github.com/nginx/nginx-gateway-fabric",
-		Version:      *flags.ImplementationVersion,
-		Contact: []string{
-			"https://github.com/nginx/nginx-gateway-fabric/discussions/new/choose",
-		},
-	}
 
 	testSuite, err := suite.NewConformanceTestSuite(opts)
 	g.Expect(err).To(Not(HaveOccurred()))
