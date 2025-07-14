@@ -7,7 +7,6 @@ import (
 )
 
 func TestClientSettingsPoliciesTargetRef(t *testing.T) {
-
 	allowedKinds := map[string]bool{
 		"Gateway":   true,
 		"HTTPRoute": true,
@@ -46,7 +45,6 @@ func testInvalidTargetRefs(t *testing.T, allowedKinds map[string]bool) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			if _, ok := allowedKinds[string(tt.targetRef.Kind)]; !ok {
 				gotError := "TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute'"
 
@@ -94,7 +92,6 @@ func testValidTargetRefs(t *testing.T, allowedKinds map[string]bool) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			if _, ok := allowedKinds[string(tt.targetRef.Kind)]; !ok {
 				gotError := "TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute'"
 
