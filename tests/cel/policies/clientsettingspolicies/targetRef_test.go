@@ -6,15 +6,15 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-func TestClientSettingsPoliciesTargetRef(t *testing.T) {
+func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 	allowedKinds := map[string]bool{
 		"Gateway":   true,
 		"HTTPRoute": true,
 		"GRPCRoute": true,
 	}
 
-	testValidTargetRefs(t, allowedKinds)
-	testInvalidTargetRefs(t, allowedKinds)
+	testValidTargetRefKind(t, allowedKinds)
+	testInvalidTargetRefKind(t, allowedKinds)
 }
 
 func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
@@ -22,7 +22,7 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 	testInvalidTargetRefGroup(t)
 }
 
-func testValidTargetRefs(t *testing.T, allowedKinds map[string]bool) {
+func testValidTargetRefKind(t *testing.T, allowedKinds map[string]bool) {
 	t.Helper()
 
 	tests := []struct {
@@ -69,7 +69,7 @@ func testValidTargetRefs(t *testing.T, allowedKinds map[string]bool) {
 	}
 }
 
-func testInvalidTargetRefs(t *testing.T, allowedKinds map[string]bool) {
+func testInvalidTargetRefKind(t *testing.T, allowedKinds map[string]bool) {
 	t.Helper()
 
 	tests := []struct {
