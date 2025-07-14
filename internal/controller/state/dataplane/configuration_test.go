@@ -31,6 +31,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 )
 
+var defaultBaseHTTPConfig = BaseHTTPConfig{
+	NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+	HTTP2:                   true,
+	IPFamily:                Dual,
+}
+
 func getNormalBackendRef() graph.BackendRef {
 	return graph.BackendRef{
 		SvcNsName:   types.NamespacedName{Name: "foo", Namespace: "test"},
@@ -42,7 +48,7 @@ func getNormalBackendRef() graph.BackendRef {
 
 func getExpectedConfiguration() Configuration {
 	return Configuration{
-		BaseHTTPConfig: BaseHTTPConfig{HTTP2: true, IPFamily: Dual},
+		BaseHTTPConfig: defaultBaseHTTPConfig,
 		HTTPServers: []VirtualServer{
 			{
 				IsDefault: true,
@@ -2227,7 +2233,11 @@ func TestBuildConfiguration(t *testing.T) {
 					Ratios:         []Ratio{},
 					SpanAttributes: []SpanAttribute{},
 				}
-				conf.BaseHTTPConfig = BaseHTTPConfig{HTTP2: false, IPFamily: Dual}
+				conf.BaseHTTPConfig = BaseHTTPConfig{
+					HTTP2:                   false,
+					IPFamily:                Dual,
+					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+				}
 				return conf
 			}),
 			msg: "EffectiveNginxProxy with tracing config and http2 disabled",
@@ -2350,7 +2360,11 @@ func TestBuildConfiguration(t *testing.T) {
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
-				conf.BaseHTTPConfig = BaseHTTPConfig{HTTP2: true, IPFamily: IPv4}
+				conf.BaseHTTPConfig = BaseHTTPConfig{
+					HTTP2:                   true,
+					IPFamily:                IPv4,
+					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+				}
 				return conf
 			}),
 			msg: "GatewayClass has NginxProxy with IPv4 IPFamily and no routes",
@@ -2375,7 +2389,11 @@ func TestBuildConfiguration(t *testing.T) {
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
-				conf.BaseHTTPConfig = BaseHTTPConfig{HTTP2: true, IPFamily: IPv6}
+				conf.BaseHTTPConfig = BaseHTTPConfig{
+					HTTP2:                   true,
+					IPFamily:                IPv6,
+					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+				}
 				return conf
 			}),
 			msg: "GatewayClass has NginxProxy with IPv6 IPFamily and no routes",
@@ -2419,6 +2437,7 @@ func TestBuildConfiguration(t *testing.T) {
 						TrustedAddresses: []string{"1.1.1.1/32"},
 						Mode:             RewriteIPModeProxyProtocol,
 					},
+					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 				}
 				return conf
 			}),
@@ -4938,6 +4957,69 @@ func TestBuildWorkerConnections(t *testing.T) {
 			g := NewWithT(t)
 
 			g.Expect(buildWorkerConnections(tc.gw)).To(Equal(tc.expWorkerConnections))
+		})
+	}
+}
+
+func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
+	t.Parallel()
+	test := []struct {
+		msg      string
+		gateway  *graph.Gateway
+		expected BaseHTTPConfig
+	}{
+		{
+			msg: "nginx proxy config is nil",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+			},
+			expected: defaultBaseHTTPConfig,
+		},
+		{
+			msg: "kubernetes spec is nil",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{},
+				},
+			},
+			expected: defaultBaseHTTPConfig,
+		},
+		{
+			msg: "readiness probe spec is nil",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						ReadinessProbe: nil,
+					},
+				},
+			},
+			expected: defaultBaseHTTPConfig,
+		},
+		{
+			msg: "readiness probe is configured",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+							Port: helpers.GetPointer(int32(7020)),
+						},
+					},
+				},
+			},
+			expected: BaseHTTPConfig{
+				NginxReadinessProbePort: int32(7020),
+				IPFamily:                Dual,
+				HTTP2:                   true,
+			},
+		},
+	}
+
+	for _, tc := range test {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildBaseHTTPConfig(tc.gateway, nil)).To(Equal(tc.expected))
 		})
 	}
 }

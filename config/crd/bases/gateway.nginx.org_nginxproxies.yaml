@@ -6894,6 +6894,48 @@ spec:
                         format: int32
                         type: integer
                     type: object
+                  readinessProbe:
+                    description: ReadinessProbe is the configuration for the NGINX
+                      Readiness probe.
+                    properties:
+                      initialDelaySeconds:
+                        default: 3
+                        description: |-
+                          InitialDelaySeconds is the number of seconds after the container has
+                          started before the readiness probe is initiated.
+                          If not specified, the default is 3 seconds.
+                        format: int32
+                        maximum: 3600
+                        minimum: 0
+                        type: integer
+                      periodSeconds:
+                        default: 10
+                        description: |-
+                          PeriodSeconds is the number of seconds between consecutive readiness probes.
+                          If not specified, the default is 10 seconds.
+                        format: int32
+                        maximum: 3600
+                        minimum: 1
+                        type: integer
+                      port:
+                        default: 8081
+                        description: |-
+                          Port is the port on which the readiness endpoint is exposed.
+                          If not specified, the default port is 8081.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      timeoutSeconds:
+                        default: 1
+                        description: |-
+                          TimeoutSeconds is the number of seconds after which the readiness probe times out.
+                          If not specified, the default is 1 second.
+                        format: int32
+                        maximum: 3600
+                        minimum: 1
+                        type: integer
+                    type: object
                   service:
                     description: Service is the configuration for the NGINX Service.
                     properties:

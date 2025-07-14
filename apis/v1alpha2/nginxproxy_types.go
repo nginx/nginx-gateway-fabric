@@ -386,6 +386,49 @@ type KubernetesSpec struct {
 	//
 	// +optional
 	Service *ServiceSpec `json:"service,omitempty"`
+
+	// ReadinessProbe is the configuration for the NGINX Readiness probe.
+	//
+	// +optional
+	ReadinessProbe *ReadinessProbeSpec `json:"readinessProbe,omitempty"`
+}
+
+// ReadinessProbeSpec defines the configuration for the NGINX readiness probe.
+type ReadinessProbeSpec struct {
+	// Port is the port on which the readiness endpoint is exposed.
+	// If not specified, the default port is 8081.
+	//
+	// +optional
+	// +kubebuilder:default:=8081
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port *int32 `json:"port,omitempty"`
+
+	// InitialDelaySeconds is the number of seconds after the container has
+	// started before the readiness probe is initiated.
+	// If not specified, the default is 3 seconds.
+	// +optional
+	// +kubebuilder:default:=3
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=3600
+	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
+
+	// PeriodSeconds is the number of seconds between consecutive readiness probes.
+	// If not specified, the default is 10 seconds.
+	// +optional
+	// +kubebuilder:default:=10
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=3600
+	PeriodSeconds *int32 `json:"periodSeconds,omitempty"`
+
+	// TimeoutSeconds is the number of seconds after which the readiness probe times out.
+	// If not specified, the default is 1 second.
+	//
+	// +optional
+	// +kubebuilder:default:=1
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=3600
+	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 }
 
 // Deployment is the configuration for the NGINX Deployment.

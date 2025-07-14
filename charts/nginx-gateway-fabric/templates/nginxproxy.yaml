@@ -58,3 +58,8 @@ spec:
       {{- end }}
       {{- end }}
     {{- end }}
+    readinessProbe:
+      port: {{ .Values.nginx.readinessProbe.port | default 8081 }}
+      initialDelaySeconds: {{ .Values.nginx.readinessProbe.initialDelaySeconds | default 3 }}
+      periodSeconds: {{ .Values.nginx.readinessProbe.periodSeconds | default 10 }}
+      timeoutSeconds: {{ .Values.nginx.readinessProbe.timeoutSeconds | default 1 }}

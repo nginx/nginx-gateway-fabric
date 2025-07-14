@@ -416,6 +416,11 @@ spec:
           repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
           tag: edge
       replicas: 1
+    readinessProbe:
+      initialDelaySeconds: 3
+      periodSeconds: 10
+      port: 8081
+      timeoutSeconds: 1
     service:
       externalTrafficPolicy: Local
       type: NodePort

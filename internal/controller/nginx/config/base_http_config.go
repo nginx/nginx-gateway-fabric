@@ -11,16 +11,18 @@ import (
 var baseHTTPTemplate = gotemplate.Must(gotemplate.New("baseHttp").Parse(baseHTTPTemplateText))
 
 type httpConfig struct {
-	Includes []shared.Include
-	HTTP2    bool
+	Includes                []shared.Include
+	HTTP2                   bool
+	NginxReadinessProbePort int32
 }
 
 func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
 	includes := createIncludesFromSnippets(conf.BaseHTTPConfig.Snippets)
 
 	hc := httpConfig{
-		HTTP2:    conf.BaseHTTPConfig.HTTP2,
-		Includes: includes,
+		HTTP2:                   conf.BaseHTTPConfig.HTTP2,
+		Includes:                includes,
+		NginxReadinessProbePort: conf.BaseHTTPConfig.NginxReadinessProbePort,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)

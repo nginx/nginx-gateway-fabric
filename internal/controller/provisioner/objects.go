@@ -37,6 +37,10 @@ const (
 	defaultNginxImagePath     = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
 	defaultNginxPlusImagePath = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
 	defaultImagePullPolicy    = corev1.PullIfNotPresent
+
+	defaultInitialDelaySeconds = int32(3)
+	defaultPeriodSeconds       = int32(10)
+	defaultTimeoutSeconds      = int32(1)
 )
 
 var emptyDirVolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
@@ -623,6 +627,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 					Image:           image,
 					ImagePullPolicy: pullPolicy,
 					Ports:           containerPorts,
+					ReadinessProbe:  p.buildReadinessProbe(nProxyCfg),
 					SecurityContext: &corev1.SecurityContext{
 						AllowPrivilegeEscalation: helpers.GetPointer(false),
 						Capabilities: &corev1.Capabilities{
@@ -1036,4 +1041,40 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 	}
 
 	return objects
+}
+
+// buildReadinessProbe creates a readiness probe configuration for the NGINX container.
+func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxProxy) *corev1.Probe {
+	port := dataplane.DefaultNginxReadinessProbePort
+	initialDelaySeconds := defaultInitialDelaySeconds
+	timeoutSeconds := defaultTimeoutSeconds
+	periodSeconds := defaultPeriodSeconds
+
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.ReadinessProbe != nil {
+		readinessProbeSpec := nProxyCfg.Kubernetes.ReadinessProbe
+		if readinessProbeSpec.Port != nil {
+			port = *readinessProbeSpec.Port
+		}
+		if readinessProbeSpec.InitialDelaySeconds != nil {
+			initialDelaySeconds = *readinessProbeSpec.InitialDelaySeconds
+		}
+		if readinessProbeSpec.PeriodSeconds != nil {
+			periodSeconds = *readinessProbeSpec.PeriodSeconds
+		}
+		if readinessProbeSpec.TimeoutSeconds != nil {
+			timeoutSeconds = *readinessProbeSpec.TimeoutSeconds
+		}
+	}
+
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/readyz",
+				Port: intstr.FromInt32(port),
+			},
+		},
+		InitialDelaySeconds: initialDelaySeconds,
+		TimeoutSeconds:      timeoutSeconds,
+		PeriodSeconds:       periodSeconds,
+	}
 }

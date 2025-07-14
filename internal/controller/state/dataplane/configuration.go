@@ -22,10 +22,11 @@ import (
 )
 
 const (
-	wildcardHostname         = "~^"
-	alpineSSLRootCAPath      = "/etc/ssl/cert.pem"
-	defaultErrorLogLevel     = "info"
-	DefaultWorkerConnections = int32(1024)
+	wildcardHostname               = "~^"
+	alpineSSLRootCAPath            = "/etc/ssl/cert.pem"
+	defaultErrorLogLevel           = "info"
+	DefaultWorkerConnections       = int32(1024)
+	DefaultNginxReadinessProbePort = int32(8081)
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -974,9 +975,10 @@ func buildBaseHTTPConfig(
 ) BaseHTTPConfig {
 	baseConfig := BaseHTTPConfig{
 		// HTTP2 should be enabled by default
-		HTTP2:    true,
-		IPFamily: Dual,
-		Snippets: buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
+		HTTP2:                   true,
+		IPFamily:                Dual,
+		Snippets:                buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
+		NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 	}
 
 	// safe to access EffectiveNginxProxy since we only call this function when the Gateway is not nil.
@@ -998,28 +1000,39 @@ func buildBaseHTTPConfig(
 		}
 	}
 
-	if np.RewriteClientIP != nil {
-		if np.RewriteClientIP.Mode != nil {
-			switch *np.RewriteClientIP.Mode {
-			case ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol:
-				baseConfig.RewriteClientIPSettings.Mode = RewriteIPModeProxyProtocol
-			case ngfAPIv1alpha2.RewriteClientIPModeXForwardedFor:
-				baseConfig.RewriteClientIPSettings.Mode = RewriteIPModeXForwardedFor
-			}
-		}
+	baseConfig.RewriteClientIPSettings = buildRewriteClientIPConfig(np.RewriteClientIP)
 
-		if len(np.RewriteClientIP.TrustedAddresses) > 0 {
-			baseConfig.RewriteClientIPSettings.TrustedAddresses = convertAddresses(
-				np.RewriteClientIP.TrustedAddresses,
-			)
-		}
-
-		if np.RewriteClientIP.SetIPRecursively != nil {
-			baseConfig.RewriteClientIPSettings.IPRecursive = *np.RewriteClientIP.SetIPRecursively
-		}
+	if np.Kubernetes != nil && np.Kubernetes.ReadinessProbe != nil && np.Kubernetes.ReadinessProbe.Port != nil {
+		baseConfig.NginxReadinessProbePort = *np.Kubernetes.ReadinessProbe.Port
 	}
 
 	return baseConfig
+}
+
+func buildRewriteClientIPConfig(rewriteClientIPConfig *ngfAPIv1alpha2.RewriteClientIP) RewriteClientIPSettings {
+	var rewriteClientIPSettings RewriteClientIPSettings
+	if rewriteClientIPConfig != nil {
+		if rewriteClientIPConfig.Mode != nil {
+			switch *rewriteClientIPConfig.Mode {
+			case ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol:
+				rewriteClientIPSettings.Mode = RewriteIPModeProxyProtocol
+			case ngfAPIv1alpha2.RewriteClientIPModeXForwardedFor:
+				rewriteClientIPSettings.Mode = RewriteIPModeXForwardedFor
+			}
+		}
+
+		if len(rewriteClientIPConfig.TrustedAddresses) > 0 {
+			rewriteClientIPSettings.TrustedAddresses = convertAddresses(
+				rewriteClientIPConfig.TrustedAddresses,
+			)
+		}
+
+		if rewriteClientIPConfig.SetIPRecursively != nil {
+			rewriteClientIPSettings.IPRecursive = *rewriteClientIPConfig.SetIPRecursively
+		}
+	}
+
+	return rewriteClientIPSettings
 }
 
 func createSnippetName(nc ngfAPIv1alpha1.NginxContext, nsname types.NamespacedName) string {
