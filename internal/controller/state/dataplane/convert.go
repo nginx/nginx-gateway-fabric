@@ -95,6 +95,10 @@ func convertHTTPRequestMirrorFilter(
 		result.Percent = helpers.GetPointer(float64(100))
 	}
 
+	if *result.Percent > 100.0 {
+		result.Percent = helpers.GetPointer(100.0)
+	}
+
 	return result
 }
 

@@ -225,21 +225,22 @@ type rewriteConfig struct {
 }
 
 // extractMirrorTargetsWithPercentages extracts mirror targets and their percentages from path rules.
-func extractMirrorTargetsWithPercentages(pathRules []dataplane.PathRule) map[string]float64 {
-	mirrorTargets := make(map[string]float64)
+func extractMirrorTargetsWithPercentages(pathRules []dataplane.PathRule) map[string]*float64 {
+	mirrorTargets := make(map[string]*float64)
 
 	for _, rule := range pathRules {
 		for _, matchRule := range rule.MatchRules {
 			for _, mirrorFilter := range matchRule.Filters.RequestMirrors {
 				if mirrorFilter.Target != nil {
 					if mirrorFilter.Percent == nil {
-						mirrorTargets[*mirrorFilter.Target] = 100.0
+						mirrorTargets[*mirrorFilter.Target] = helpers.GetPointer(100.0)
 						continue
 					}
 
-					percentage := *mirrorFilter.Percent
+					percentage := mirrorFilter.Percent
 
-					if _, exists := mirrorTargets[*mirrorFilter.Target]; !exists || percentage > mirrorTargets[*mirrorFilter.Target] {
+					if _, exists := mirrorTargets[*mirrorFilter.Target]; !exists ||
+						*percentage > *mirrorTargets[*mirrorFilter.Target] {
 						mirrorTargets[*mirrorFilter.Target] = percentage // set a higher percentage if it exists
 					}
 				}
@@ -278,12 +279,7 @@ func createLocations(
 			grpcServer = true
 		}
 
-		mirrorPercentage, exists := mirrorPathToPercentage[rule.Path]
-		if !exists {
-			// need a way to differentiate between no mirror filter and a mirror filter with 0 percent set, and
-			// I don't want to pass an extra boolean around.
-			mirrorPercentage = -1
-		}
+		mirrorPercentage := mirrorPathToPercentage[rule.Path]
 
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
 		for i := range extLocations {
@@ -464,7 +460,7 @@ func updateLocation(
 	path string,
 	grpc bool,
 	keepAliveCheck keepAliveChecker,
-	mirrorPercentage float64,
+	mirrorPercentage *float64,
 ) http.Location {
 	if filters.InvalidFilter != nil {
 		location.Return = &http.Return{Code: http.StatusInternalServerError}
@@ -533,7 +529,7 @@ func updateLocationMirrorFilters(
 	location http.Location,
 	mirrorFilters []*dataplane.HTTPRequestMirrorFilter,
 	path string,
-	mirrorPercentage float64,
+	mirrorPercentage *float64,
 ) http.Location {
 	for _, filter := range mirrorFilters {
 		if filter.Target != nil {
@@ -547,9 +543,9 @@ func updateLocationMirrorFilters(
 
 	// if the mirrorPercentage is 100.0 or negative (we set it to negative when there is no mirror filter because 0.0
 	// is valid), the split clients variable is not generated, and we want to let all the traffic get mirrored.
-	if mirrorPercentage != 100.0 && mirrorPercentage >= 0.0 {
+	if mirrorPercentage != nil && *mirrorPercentage != 100.0 {
 		location.MirrorSplitClientsVariableName = convertSplitClientVariableName(
-			fmt.Sprintf("%s_%.2f", path, mirrorPercentage),
+			fmt.Sprintf("%s_%.2f", path, *mirrorPercentage),
 		)
 	}
 
@@ -599,7 +595,7 @@ func updateLocations(
 	path string,
 	grpc bool,
 	keepAliveCheck keepAliveChecker,
-	mirrorPercentage float64,
+	mirrorPercentage *float64,
 ) []http.Location {
 	updatedLocations := make([]http.Location, len(buildLocations))
 
@@ -1070,12 +1066,12 @@ func getConnectionHeader(keepAliveCheck keepAliveChecker, backends []dataplane.B
 
 // deduplicateStrings removes duplicate strings from a slice while preserving order.
 func deduplicateStrings(content []string) []string {
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	result := make([]string, 0, len(content))
 
 	for _, str := range content {
-		if !seen[str] {
-			seen[str] = true
+		if _, exists := seen[str]; !exists {
+			seen[str] = struct{}{}
 			result = append(result, str)
 		}
 	}

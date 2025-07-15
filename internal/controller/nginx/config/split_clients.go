@@ -42,15 +42,15 @@ func createRequestMirrorSplitClients(servers []dataplane.VirtualServer) []http.S
 		mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
 		for _, pathRule := range server.PathRules {
-			mirrorPercentage, exists := mirrorPathToPercentage[pathRule.Path]
+			mirrorPercentage := mirrorPathToPercentage[pathRule.Path]
 
-			if mirrorPercentage != 100 && exists {
+			if mirrorPercentage != nil && *mirrorPercentage != 100 {
 				splitClient := http.SplitClient{
-					// this has to be something unique and able to be accessed from the server side
-					VariableName: convertSplitClientVariableName(fmt.Sprintf("%s_%.2f", pathRule.Path, mirrorPercentage)),
+					// this has to be something unique and able to be accessed from the server block
+					VariableName: convertSplitClientVariableName(fmt.Sprintf("%s_%.2f", pathRule.Path, *mirrorPercentage)),
 					Distributions: []http.SplitClientDistribution{
 						{
-							Percent: fmt.Sprintf("%.2f", mirrorPercentage),
+							Percent: fmt.Sprintf("%.2f", *mirrorPercentage),
 							Value:   pathRule.Path,
 						},
 						{
@@ -79,12 +79,12 @@ func convertSplitClientVariableName(name string) string {
 }
 
 func removeDuplicateSplitClients(splitClients []http.SplitClient) []http.SplitClient {
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	result := make([]http.SplitClient, 0, len(splitClients))
 
 	for _, client := range splitClients {
-		if !seen[client.VariableName] {
-			seen[client.VariableName] = true
+		if _, exists := seen[client.VariableName]; !exists {
+			seen[client.VariableName] = struct{}{}
 			result = append(result, client)
 		}
 	}
