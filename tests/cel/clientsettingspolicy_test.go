@@ -3,14 +3,24 @@ package cel
 import (
 	"testing"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
-	allowedKinds := map[string]bool{
-		"Gateway":   true,
-		"HTTPRoute": true,
-		"GRPCRoute": true,
+	allowedKinds := map[gatewayv1alpha2.LocalPolicyTargetReference]bool{
+		{
+			Kind:  "Gateway",
+			Group: "gateway.networking.k8s.io",
+		}: true,
+		{
+			Kind:  "HTTPRoute",
+			Group: "gateway.networking.k8s.io",
+		}: true,
+		{
+			Kind:  "GRPCRoute",
+			Group: "gateway.networking.k8s.io",
+		}: true,
 	}
 
 	testValidTargetRefKind(t, allowedKinds)
@@ -18,11 +28,19 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 }
 
 func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
-	testValidTargetRefGroup(t)
-	testInvalidTargetRefGroup(t)
+	// Test valid and invalid TargetRef Group
+
+	allowedGroups := map[gatewayv1alpha2.LocalPolicyTargetReference]bool{
+		{
+			Group: "gateway.networking.k8s.io",
+		}: true,
+	}
+
+	testValidTargetRefGroup(t, allowedGroups)
+	testInvalidTargetRefGroup(t, allowedGroups)
 }
 
-func testValidTargetRefKind(t *testing.T, allowedKinds map[string]bool) {
+func testValidTargetRefKind(t *testing.T, allowedKinds map[gatewayv1alpha2.LocalPolicyTargetReference]bool) {
 	t.Helper()
 
 	tests := []struct {
@@ -58,7 +76,14 @@ func testValidTargetRefKind(t *testing.T, allowedKinds map[string]bool) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, ok := allowedKinds[string(tt.targetRef.Kind)]; !ok {
+			// Create a ClientSettingsPolicy with the targetRef from the test case.
+			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					TargetRef: tt.targetRef,
+				},
+			}
+
+			if _, ok := allowedKinds[clientSettingsPolicy.Spec.TargetRef]; !ok {
 				gotError := "TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute'"
 
 				if tt.wantErrors == gotError {
@@ -69,7 +94,7 @@ func testValidTargetRefKind(t *testing.T, allowedKinds map[string]bool) {
 	}
 }
 
-func testInvalidTargetRefKind(t *testing.T, allowedKinds map[string]bool) {
+func testInvalidTargetRefKind(t *testing.T, allowedKinds map[gatewayv1alpha2.LocalPolicyTargetReference]bool) {
 	t.Helper()
 
 	tests := []struct {
@@ -97,7 +122,14 @@ func testInvalidTargetRefKind(t *testing.T, allowedKinds map[string]bool) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, ok := allowedKinds[string(tt.targetRef.Kind)]; !ok {
+			// Create a ClientSettingsPolicy with the targetRef from the test case.
+			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					TargetRef: tt.targetRef,
+				},
+			}
+
+			if _, ok := allowedKinds[clientSettingsPolicy.Spec.TargetRef]; !ok {
 				gotError := "TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute'"
 
 				if tt.wantErrors != gotError {
@@ -108,7 +140,7 @@ func testInvalidTargetRefKind(t *testing.T, allowedKinds map[string]bool) {
 	}
 }
 
-func testValidTargetRefGroup(t *testing.T) {
+func testValidTargetRefGroup(t *testing.T, allowedGroups map[gatewayv1alpha2.LocalPolicyTargetReference]bool) {
 	t.Helper()
 
 	tests := []struct {
@@ -127,7 +159,14 @@ func testValidTargetRefGroup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.targetRefGroup.Group != "gateway.networking.k8s.io" {
+			// Create a ClientSettingsPolicy with the targetRef from the test case.
+			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					TargetRef: tt.targetRefGroup,
+				},
+			}
+
+			if _, ok := allowedGroups[clientSettingsPolicy.Spec.TargetRef]; !ok {
 				gotError := "TargetRef Group must be gateway.networking.k8s.io"
 
 				if tt.wantErrors == gotError {
@@ -138,7 +177,7 @@ func testValidTargetRefGroup(t *testing.T) {
 	}
 }
 
-func testInvalidTargetRefGroup(t *testing.T) {
+func testInvalidTargetRefGroup(t *testing.T, allowedGroups map[gatewayv1alpha2.LocalPolicyTargetReference]bool) {
 	t.Helper()
 
 	tests := []struct {
@@ -164,13 +203,22 @@ func testInvalidTargetRefGroup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.targetRefGroup.Group != "gateway.networking.k8s.io" {
-				gotError := "TargetRef Group must be gateway.networking.k8s.io"
-
-				if tt.wantErrors != gotError {
-					t.Errorf("Test %s failed: got error %q, want %q", tt.name, gotError, tt.wantErrors)
+			t.Run(tt.name, func(t *testing.T) {
+				// Create a ClientSettingsPolicy with the targetRef from the test case.
+				clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
+					Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+						TargetRef: tt.targetRefGroup,
+					},
 				}
-			}
+
+				if _, ok := allowedGroups[clientSettingsPolicy.Spec.TargetRef]; !ok {
+					gotError := "TargetRef Group must be gateway.networking.k8s.io"
+
+					if tt.wantErrors != gotError {
+						t.Errorf("Test %s failed: got error %q, want %q", tt.name, gotError, tt.wantErrors)
+					}
+				}
+			})
 		})
 	}
 }
