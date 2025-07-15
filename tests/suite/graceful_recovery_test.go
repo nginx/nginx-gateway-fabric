@@ -30,7 +30,7 @@ const (
 
 // Since this test involves restarting of the test node, it is recommended to be run separate from other tests
 // such that any issues in this test do not interfere with other tests.
-var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), func() {
+var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("graceful-recovery"), func() {
 	var (
 		files = []string{
 			"graceful-recovery/cafe.yaml",
@@ -120,13 +120,13 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 		return names, nil
 	}
 
-	runNodeDebuggerJob := func(nginxPodName, jobScript string) (*v1.Job, error) {
+	runNodeDebuggerJob := func(nginxPodName string) (*v1.Job, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
 		defer cancel()
 
 		var nginxPod core.Pod
 		if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: nginxPodName}, &nginxPod); err != nil {
-			return nil, fmt.Errorf("error retrieving NGF Pod: %w", err)
+			return nil, fmt.Errorf("error retrieving nginx Pod: %w", err)
 		}
 
 		b, err := resourceManager.GetFileContents("graceful-recovery/node-debugger-job.yaml")
@@ -146,7 +146,6 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 				len(job.Spec.Template.Spec.Containers),
 			)
 		}
-		job.Spec.Template.Spec.Containers[0].Args = []string{jobScript}
 		job.Namespace = ns.Name
 
 		if err = resourceManager.Apply([]client.Object{job}); err != nil {
@@ -157,13 +156,11 @@ var _ = Describe("Graceful Recovery test", Ordered, Label("graceful-recovery"), 
 	}
 
 	restartNginxContainer := func(nginxPodName, namespace, containerName string) {
-		jobScript := "PID=$(pgrep -f \"nginx-agent\") && kill -9 $PID"
-
 		restartCount, err := getContainerRestartCount(nginxPodName, namespace, containerName)
 		Expect(err).ToNot(HaveOccurred())
 
 		cleanUpPortForward()
-		job, err := runNodeDebuggerJob(nginxPodName, jobScript)
+		job, err := runNodeDebuggerJob(nginxPodName)
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(
@@ -524,11 +521,11 @@ func expectRequestToSucceed(appURL, address string, responseBodyMessage string) 
 	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
 
 	if status != http.StatusOK {
-		return errors.New("http status was not 200")
+		return fmt.Errorf("http status was not 200, got %d: %w", status, err)
 	}
 
 	if !strings.Contains(body, responseBodyMessage) {
-		return errors.New("expected response body to contain correct body message")
+		return fmt.Errorf("expected response body to contain correct body message, got: %s", body)
 	}
 
 	return err

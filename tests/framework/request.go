@@ -25,7 +25,6 @@ func Get(
 	if err != nil {
 		return 0, "", err
 	}
-
 	defer resp.Body.Close()
 
 	body := new(bytes.Buffer)
