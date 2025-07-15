@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
@@ -17,23 +18,37 @@ func RouteName(routeName, service, namespace string, idx int) string {
 	return fmt.Sprintf("%s-%s-%s/%s-%d", prefix, routeName, namespace, service, idx)
 }
 
-// BackendPath builds the path for the internal mirror location, using the BackendRef.
-func PathWithBackendRef(idx int, backendRef v1.BackendObjectReference) *string {
+// PathWithBackendRef builds the path for the internal mirror location, using the BackendRef.
+func PathWithBackendRef(idx int, backendRef v1.BackendObjectReference, routeNsName types.NamespacedName) *string {
 	svcName := string(backendRef.Name)
 	if backendRef.Namespace == nil {
-		return BackendPath(idx, nil, svcName)
+		return BackendPath(idx, nil, svcName, routeNsName)
 	}
-	return BackendPath(idx, (*string)(backendRef.Namespace), svcName)
+	return BackendPath(idx, (*string)(backendRef.Namespace), svcName, routeNsName)
 }
 
 // BackendPath builds the path for the internal mirror location.
-func BackendPath(idx int, namespace *string, service string) *string {
+func BackendPath(idx int, namespace *string, service string, routeNsName types.NamespacedName) *string {
 	var mirrorPath string
 
 	if namespace != nil {
-		mirrorPath = fmt.Sprintf("%s-%s/%s-%d", http.InternalMirrorRoutePathPrefix, *namespace, service, idx)
+		mirrorPath = fmt.Sprintf(
+			"%s-%s/%s-%s/%s-%d",
+			http.InternalMirrorRoutePathPrefix,
+			*namespace,
+			service,
+			routeNsName.Namespace,
+			routeNsName.Name,
+			idx,
+		)
 	} else {
-		mirrorPath = fmt.Sprintf("%s-%s-%d", http.InternalMirrorRoutePathPrefix, service, idx)
+		mirrorPath = fmt.Sprintf("%s-%s-%s/%s-%d",
+			http.InternalMirrorRoutePathPrefix,
+			service,
+			routeNsName.Namespace,
+			routeNsName.Name,
+			idx,
+		)
 	}
 
 	return &mirrorPath

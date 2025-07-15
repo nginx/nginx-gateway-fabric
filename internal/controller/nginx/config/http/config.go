@@ -33,18 +33,19 @@ const (
 
 // Location holds all configuration for an HTTP location.
 type Location struct {
-	Path            string
-	ProxyPass       string
-	HTTPMatchKey    string
-	Type            LocationType
-	ProxySetHeaders []Header
-	ProxySSLVerify  *ProxySSLVerify
-	Return          *Return
-	ResponseHeaders ResponseHeaders
-	Rewrites        []string
-	MirrorPaths     []string
-	Includes        []shared.Include
-	GRPC            bool
+	Path                           string
+	ProxyPass                      string
+	HTTPMatchKey                   string
+	MirrorSplitClientsVariableName string
+	Type                           LocationType
+	ProxySetHeaders                []Header
+	ProxySSLVerify                 *ProxySSLVerify
+	Return                         *Return
+	ResponseHeaders                ResponseHeaders
+	Rewrites                       []string
+	MirrorPaths                    []string
+	Includes                       []shared.Include
+	GRPC                           bool
 }
 
 // Header defines an HTTP header to be passed to the proxied server.

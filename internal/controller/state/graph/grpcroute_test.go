@@ -1164,7 +1164,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 							{
 								Method: &v1.GRPCMethodMatch{
 									Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
-									Service: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+									Service: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/gr-0"),
 								},
 							},
 						},
@@ -1210,7 +1210,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 						{
 							Path: &v1.HTTPPathMatch{
 								Type:  helpers.GetPointer(v1.PathMatchExact),
-								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/gr-0"),
 							},
 							Headers: []v1.HTTPHeaderMatch{},
 						},

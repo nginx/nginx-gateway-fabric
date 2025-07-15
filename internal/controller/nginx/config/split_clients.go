@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"math"
+	"strings"
 	gotemplate "text/template"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
@@ -13,7 +14,7 @@ import (
 var splitClientsTemplate = gotemplate.Must(gotemplate.New("split_clients").Parse(splitClientsTemplateText))
 
 func executeSplitClients(conf dataplane.Configuration) []executeResult {
-	splitClients := createSplitClients(conf.BackendGroups)
+	splitClients := collectAllSplitClients(conf)
 
 	result := executeResult{
 		dest: httpConfigFile,
@@ -23,7 +24,75 @@ func executeSplitClients(conf dataplane.Configuration) []executeResult {
 	return []executeResult{result}
 }
 
-func createSplitClients(backendGroups []dataplane.BackendGroup) []http.SplitClient {
+func collectAllSplitClients(conf dataplane.Configuration) []http.SplitClient {
+	var splitClients []http.SplitClient
+
+	splitClients = append(splitClients, createBackendGroupSplitClients(conf.BackendGroups)...)
+	splitClients = append(splitClients, createRequestMirrorSplitClients(conf.HTTPServers)...)
+	splitClients = append(splitClients, createRequestMirrorSplitClients(conf.SSLServers)...)
+	splitClients = removeDuplicateSplitClients(splitClients)
+
+	return splitClients
+}
+
+func createRequestMirrorSplitClients(servers []dataplane.VirtualServer) []http.SplitClient {
+	var splitClients []http.SplitClient
+
+	for _, server := range servers {
+		mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
+
+		for _, pathRule := range server.PathRules {
+			mirrorPercentage, exists := mirrorPathToPercentage[pathRule.Path]
+
+			if mirrorPercentage != 100 && exists {
+				splitClient := http.SplitClient{
+					// this has to be something unique and able to be accessed from the server side
+					VariableName: convertSplitClientVariableName(fmt.Sprintf("%s_%.2f", pathRule.Path, mirrorPercentage)),
+					Distributions: []http.SplitClientDistribution{
+						{
+							Percent: fmt.Sprintf("%.2f", mirrorPercentage),
+							Value:   pathRule.Path,
+						},
+						{
+							Percent: "*",
+							Value:   "\"\"",
+						},
+					},
+				}
+
+				splitClients = append(splitClients, splitClient)
+			}
+		}
+	}
+
+	return splitClients
+}
+
+// convertSplitClientVariableName converts a name to a safe variable name for split clients. This includes
+// replacing hypens, slashes, and dots with underscores.
+func convertSplitClientVariableName(name string) string {
+	safeName := convertStringToSafeVariableName(name)
+	safeName = strings.ReplaceAll(safeName, "/", "_")
+	safeName = strings.ReplaceAll(safeName, ".", "_")
+
+	return safeName
+}
+
+func removeDuplicateSplitClients(splitClients []http.SplitClient) []http.SplitClient {
+	seen := make(map[string]bool)
+	result := make([]http.SplitClient, 0, len(splitClients))
+
+	for _, client := range splitClients {
+		if !seen[client.VariableName] {
+			seen[client.VariableName] = true
+			result = append(result, client)
+		}
+	}
+
+	return result
+}
+
+func createBackendGroupSplitClients(backendGroups []dataplane.BackendGroup) []http.SplitClient {
 	numSplits := 0
 	for _, group := range backendGroups {
 		if backendGroupNeedsSplit(group) {
@@ -38,7 +107,7 @@ func createSplitClients(backendGroups []dataplane.BackendGroup) []http.SplitClie
 	splitClients := make([]http.SplitClient, 0, numSplits)
 
 	for _, group := range backendGroups {
-		distributions := createSplitClientDistributions(group)
+		distributions := createBackendGroupSplitClientDistributions(group)
 		if distributions == nil {
 			continue
 		}
@@ -52,7 +121,7 @@ func createSplitClients(backendGroups []dataplane.BackendGroup) []http.SplitClie
 	return splitClients
 }
 
-func createSplitClientDistributions(group dataplane.BackendGroup) []http.SplitClientDistribution {
+func createBackendGroupSplitClientDistributions(group dataplane.BackendGroup) []http.SplitClientDistribution {
 	if !backendGroupNeedsSplit(group) {
 		return nil
 	}

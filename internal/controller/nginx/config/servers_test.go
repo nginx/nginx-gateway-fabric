@@ -62,7 +62,35 @@ func TestExecuteServers(t *testing.T) {
 											},
 										},
 									},
+									RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+										{
+											Name:      helpers.GetPointer("mirror-filter"),
+											Namespace: helpers.GetPointer("test-ns"),
+											Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-0"),
+											Percent:   helpers.GetPointer(float64(50)),
+										},
+									},
 								},
+								Match: dataplane.Match{},
+								BackendGroup: dataplane.BackendGroup{
+									Source:  types.NamespacedName{Namespace: "test", Name: "route1"},
+									RuleIdx: 0,
+									Backends: []dataplane.Backend{
+										{
+											UpstreamName: "test_foo_443",
+											Valid:        true,
+											Weight:       1,
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						Path:     http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-0",
+						PathType: dataplane.PathTypeExact,
+						MatchRules: []dataplane.MatchRule{
+							{
 								Match: dataplane.Match{},
 								BackendGroup: dataplane.BackendGroup{
 									Source:  types.NamespacedName{Namespace: "test", Name: "route1"},
@@ -133,18 +161,21 @@ func TestExecuteServers(t *testing.T) {
 	}
 
 	expSubStrings := map[string]int{
-		"listen 8080 default_server;":                              1,
-		"listen 8080;":                                             2,
-		"listen 8443 ssl;":                                         2,
-		"listen 8443 ssl default_server;":                          1,
-		"server_name example.com;":                                 2,
-		"server_name cafe.example.com;":                            2,
-		"ssl_certificate /etc/nginx/secrets/test-keypair.pem;":     2,
-		"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;": 2,
-		"proxy_ssl_server_name on;":                                1,
-		"status_zone":                                              0,
-		"include /etc/nginx/includes/location-snippet.conf":        1,
-		"include /etc/nginx/includes/server-snippet.conf":          1,
+		"listen 8080 default_server;":                                       1,
+		"listen 8080;":                                                      2,
+		"listen 8443 ssl;":                                                  2,
+		"listen 8443 ssl default_server;":                                   1,
+		"server_name example.com;":                                          2,
+		"server_name cafe.example.com;":                                     2,
+		"ssl_certificate /etc/nginx/secrets/test-keypair.pem;":              2,
+		"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;":          2,
+		"proxy_ssl_server_name on;":                                         1,
+		"status_zone":                                                       0,
+		"include /etc/nginx/includes/location-snippet.conf":                 1,
+		"include /etc/nginx/includes/server-snippet.conf":                   1,
+		"mirror /_ngf-internal-mirror-my-backend-test/route1-0;":            1,
+		"if ($__ngf_internal_mirror_my_backend_test_route1_0_50_00 = \"\")": 1,
+		"return 204": 1,
 	}
 
 	type assertion func(g *WithT, data string)
@@ -874,7 +905,7 @@ func TestCreateServers(t *testing.T) {
 							{
 								Name:      helpers.GetPointer("mirror-filter"),
 								Namespace: helpers.GetPointer("test-ns"),
-								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend"),
+								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-0"),
 							},
 						},
 					},
@@ -883,7 +914,139 @@ func TestCreateServers(t *testing.T) {
 			},
 		},
 		{
-			Path:     http.InternalMirrorRoutePathPrefix + "-my-backend",
+			Path:     http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-0",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     "/mirror-filter-percentage-defined",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{},
+					Filters: dataplane.HTTPFilters{
+						RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+							{
+								Name:      helpers.GetPointer("mirror-filter-percentage-defined"),
+								Namespace: helpers.GetPointer("test-ns"),
+								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-1"),
+								Percent:   helpers.GetPointer(float64(50)),
+							},
+						},
+					},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-1",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     "/mirror-filter-100-percent",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{},
+					Filters: dataplane.HTTPFilters{
+						RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+							{
+								Name:      helpers.GetPointer("mirror-filter-100-percent"),
+								Namespace: helpers.GetPointer("test-ns"),
+								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-2"),
+								Percent:   helpers.GetPointer(float64(100)),
+							},
+						},
+					},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-2",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     "/mirror-filter-0-percent",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{},
+					Filters: dataplane.HTTPFilters{
+						RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+							{
+								Name:      helpers.GetPointer("mirror-filter-0-percent"),
+								Namespace: helpers.GetPointer("test-ns"),
+								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-3"),
+								Percent:   helpers.GetPointer(float64(0)),
+							},
+						},
+					},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-3",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     "/mirror-filter-duplicate-targets",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{},
+					Filters: dataplane.HTTPFilters{
+						RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+							{
+								Name:      helpers.GetPointer("mirror-filter-duplicate-targets-0-percent"),
+								Namespace: helpers.GetPointer("test-ns"),
+								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-4"),
+								Percent:   helpers.GetPointer(float64(0)),
+							},
+							{
+								Name:      helpers.GetPointer("mirror-filter-duplicate-targets-25-percent"),
+								Namespace: helpers.GetPointer("test-ns"),
+								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-4"),
+								Percent:   helpers.GetPointer(float64(25)),
+							},
+							{
+								Name:      helpers.GetPointer("mirror-filter-duplicate-targets-50-percent"),
+								Namespace: helpers.GetPointer("test-ns"),
+								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-4"),
+								Percent:   helpers.GetPointer(float64(50)),
+							},
+						},
+					},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-4",
 			PathType: dataplane.PathTypeExact,
 			MatchRules: []dataplane.MatchRule{
 				{
@@ -903,7 +1066,7 @@ func TestCreateServers(t *testing.T) {
 							{
 								Name:      helpers.GetPointer("grpc-mirror-filter"),
 								Namespace: helpers.GetPointer("test-ns"),
-								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-grpc-backend"),
+								Target:    helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-grpc-backend-test/route1-0"),
 							},
 						},
 					},
@@ -913,7 +1076,7 @@ func TestCreateServers(t *testing.T) {
 			GRPC: true,
 		},
 		{
-			Path:     http.InternalMirrorRoutePathPrefix + "-my-grpc-backend",
+			Path:     http.InternalMirrorRoutePathPrefix + "-my-grpc-backend-test/route1-0",
 			PathType: dataplane.PathTypeExact,
 			MatchRules: []dataplane.MatchRule{
 				{
@@ -1154,25 +1317,25 @@ func TestCreateServers(t *testing.T) {
 				RedirectPath: "/_ngf-internal-rule8-route0",
 			},
 		},
-		"1_14": {
+		"1_22": {
 			{
 				Headers:      []string{"filter:Exact:this"},
-				RedirectPath: "/_ngf-internal-rule14-route0",
+				RedirectPath: "/_ngf-internal-rule22-route0",
 			},
 		},
-		"1_16": {
+		"1_24": {
 			{
 				Method:       "GET",
-				RedirectPath: "/_ngf-internal-rule16-route0",
+				RedirectPath: "/_ngf-internal-rule24-route0",
 				Headers:      nil,
 				QueryParams:  nil,
 				Any:          false,
 			},
 		},
-		"1_21": {
+		"1_29": {
 			{
 				Method:       "GET",
-				RedirectPath: "/_ngf-internal-rule21-route0",
+				RedirectPath: "/_ngf-internal-rule29-route0",
 			},
 		},
 	}
@@ -1407,7 +1570,7 @@ func TestCreateServers(t *testing.T) {
 				Path:            "/mirror/",
 				ProxyPass:       "http://test_foo_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
-				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend"},
+				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-0"},
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
 			},
@@ -1415,28 +1578,91 @@ func TestCreateServers(t *testing.T) {
 				Path:            "= /mirror",
 				ProxyPass:       "http://test_foo_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
-				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend"},
+				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-0"},
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
 			},
 			{
-				Path:            "= /_ngf-internal-mirror-my-backend",
+				Path:            "= /_ngf-internal-mirror-my-backend-test/route1-0",
 				ProxyPass:       "http://test_foo_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
 				Type:            http.InternalLocationType,
 				Includes:        externalIncludes,
 			},
 			{
-				Path:            "= /grpc/mirror",
-				GRPC:            true,
-				ProxyPass:       "grpc://test_foo_80",
-				ProxySetHeaders: grpcBaseHeaders,
-				MirrorPaths:     []string{"/_ngf-internal-mirror-my-grpc-backend"},
+				Path:            "= /mirror-filter-percentage-defined",
+				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxySetHeaders: httpBaseHeaders,
+				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-1"},
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
 			},
 			{
-				Path:            "= /_ngf-internal-mirror-my-grpc-backend",
+				Path:                           "= /_ngf-internal-mirror-my-backend-test/route1-1",
+				ProxyPass:                      "http://test_foo_80$request_uri",
+				ProxySetHeaders:                httpBaseHeaders,
+				MirrorSplitClientsVariableName: "__ngf_internal_mirror_my_backend_test_route1_1_50_00",
+				Type:                           http.InternalLocationType,
+				Includes:                       externalIncludes,
+			},
+			{
+				Path:            "= /mirror-filter-100-percent",
+				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxySetHeaders: httpBaseHeaders,
+				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-2"},
+				Type:            http.ExternalLocationType,
+				Includes:        externalIncludes,
+			},
+			{
+				Path:            "= /_ngf-internal-mirror-my-backend-test/route1-2",
+				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxySetHeaders: httpBaseHeaders,
+				Type:            http.InternalLocationType,
+				Includes:        externalIncludes,
+			},
+			{
+				Path:            "= /mirror-filter-0-percent",
+				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxySetHeaders: httpBaseHeaders,
+				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-3"},
+				Type:            http.ExternalLocationType,
+				Includes:        externalIncludes,
+			},
+			{
+				Path:                           "= /_ngf-internal-mirror-my-backend-test/route1-3",
+				ProxyPass:                      "http://test_foo_80$request_uri",
+				ProxySetHeaders:                httpBaseHeaders,
+				MirrorSplitClientsVariableName: "__ngf_internal_mirror_my_backend_test_route1_3_0_00",
+				Type:                           http.InternalLocationType,
+				Includes:                       externalIncludes,
+			},
+			{
+				Path:            "= /mirror-filter-duplicate-targets",
+				ProxyPass:       "http://test_foo_80$request_uri",
+				ProxySetHeaders: httpBaseHeaders,
+				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-4"},
+				Type:            http.ExternalLocationType,
+				Includes:        externalIncludes,
+			},
+			{
+				Path:                           "= /_ngf-internal-mirror-my-backend-test/route1-4",
+				ProxyPass:                      "http://test_foo_80$request_uri",
+				ProxySetHeaders:                httpBaseHeaders,
+				MirrorSplitClientsVariableName: "__ngf_internal_mirror_my_backend_test_route1_4_50_00",
+				Type:                           http.InternalLocationType,
+				Includes:                       externalIncludes,
+			},
+			{
+				Path:            "= /grpc/mirror",
+				GRPC:            true,
+				ProxyPass:       "grpc://test_foo_80",
+				ProxySetHeaders: grpcBaseHeaders,
+				MirrorPaths:     []string{"/_ngf-internal-mirror-my-grpc-backend-test/route1-0"},
+				Type:            http.ExternalLocationType,
+				Includes:        externalIncludes,
+			},
+			{
+				Path:            "= /_ngf-internal-mirror-my-grpc-backend-test/route1-0",
 				GRPC:            true,
 				ProxyPass:       "grpc://test_foo_80",
 				Rewrites:        []string{"^ $request_uri break"},
@@ -1462,18 +1688,18 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:         "/invalid-filter-with-headers/",
-				HTTPMatchKey: ssl + "1_14",
+				HTTPMatchKey: ssl + "1_22",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
 			},
 			{
 				Path:         "= /invalid-filter-with-headers",
-				HTTPMatchKey: ssl + "1_14",
+				HTTPMatchKey: ssl + "1_22",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
 			},
 			{
-				Path: "/_ngf-internal-rule14-route0",
+				Path: "/_ngf-internal-rule22-route0",
 				Return: &http.Return{
 					Code: http.StatusInternalServerError,
 				},
@@ -1489,12 +1715,12 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:         "= /test",
-				HTTPMatchKey: ssl + "1_16",
+				HTTPMatchKey: ssl + "1_24",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
 			},
 			{
-				Path:            "/_ngf-internal-rule16-route0",
+				Path:            "/_ngf-internal-rule24-route0",
 				ProxyPass:       "http://test_foo_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
 				Type:            http.InternalLocationType,
@@ -1573,12 +1799,12 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path:         "= /include-header-match",
-				HTTPMatchKey: ssl + "1_21",
+				HTTPMatchKey: ssl + "1_29",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
 			},
 			{
-				Path:            "/_ngf-internal-rule21-route0",
+				Path:            "/_ngf-internal-rule29-route0",
 				ProxyPass:       "http://test_foo_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
 				Type:            http.InternalLocationType,
