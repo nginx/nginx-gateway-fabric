@@ -3,8 +3,9 @@ package cel
 import (
 	"testing"
 
-	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 )
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
