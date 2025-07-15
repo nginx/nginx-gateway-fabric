@@ -280,6 +280,8 @@ func createLocations(
 
 		mirrorPercentage, exists := mirrorPathToPercentage[rule.Path]
 		if !exists {
+			// need a way to differentiate between no mirror filter and a mirror filter with 0 percent set, and
+			// I don't want to pass an extra boolean around.
 			mirrorPercentage = -1
 		}
 

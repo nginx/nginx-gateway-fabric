@@ -215,7 +215,7 @@ type HTTPRequestMirrorFilter struct {
 	Name *string
 	// Namespace is the namespace of the service.
 	Namespace *string
-	// Target is the target of the mirror (path with hostname, service name and route NamespacedName).
+	// Target is the target of the mirror (path with hostname, service name, and route NamespacedName).
 	Target *string
 	// Percent is the percentage of requests to mirror.
 	Percent *float64
