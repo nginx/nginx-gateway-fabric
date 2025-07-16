@@ -135,9 +135,6 @@ type PathRule struct {
 	Policies []policies.Policy
 	// GRPC indicates if this is a gRPC rule
 	GRPC bool
-	// MirrorPercent is the percentage of requests to mirror for this PathRule. If this PathRule is not an internal
-	// mirrored rule, this field is nil.
-	MirrorPercent *float64
 }
 
 // InvalidHTTPFilter is a special filter for handling the case when configured filters are invalid.

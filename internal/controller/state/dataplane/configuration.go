@@ -462,20 +462,18 @@ type pathAndType struct {
 }
 
 type hostPathRules struct {
-	rulesPerHost             map[string]map[pathAndType]PathRule
-	listenersForHost         map[string]*graph.Listener
-	httpsListeners           []*graph.Listener
-	port                     int32
-	listenersExist           bool
-	mirrorTargetToPercentage map[string]*float64
+	rulesPerHost     map[string]map[pathAndType]PathRule
+	listenersForHost map[string]*graph.Listener
+	httpsListeners   []*graph.Listener
+	port             int32
+	listenersExist   bool
 }
 
 func newHostPathRules() *hostPathRules {
 	return &hostPathRules{
-		rulesPerHost:             make(map[string]map[pathAndType]PathRule),
-		listenersForHost:         make(map[string]*graph.Listener),
-		httpsListeners:           make([]*graph.Listener, 0),
-		mirrorTargetToPercentage: make(map[string]*float64),
+		rulesPerHost:     make(map[string]map[pathAndType]PathRule),
+		listenersForHost: make(map[string]*graph.Listener),
+		httpsListeners:   make([]*graph.Listener, 0),
 	}
 }
 
@@ -555,25 +553,6 @@ func (hpr *hostPathRules) upsertRoute(
 		pols := buildPolicies(gateway, route.Policies)
 
 		for _, h := range hostnames {
-
-			if filters.RequestMirrors != nil {
-				for _, m := range filters.RequestMirrors {
-					if m.Target != nil {
-						if m.Percent == nil {
-							hpr.mirrorTargetToPercentage[*m.Target] = helpers.GetPointer(100.0)
-							continue
-						}
-
-						percentage := m.Percent
-
-						if _, exists := hpr.mirrorTargetToPercentage[*m.Target]; !exists ||
-							*percentage > *hpr.mirrorTargetToPercentage[*m.Target] {
-							hpr.mirrorTargetToPercentage[*m.Target] = percentage // set a higher percentage if it exists
-						}
-					}
-				}
-			}
-
 			for _, m := range rule.Matches {
 				path := getPath(m.Path)
 
@@ -627,8 +606,6 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 
 		for _, r := range rules {
 			sortMatchRules(r.MatchRules)
-
-			r.MirrorPercent = hpr.mirrorTargetToPercentage[r.Path]
 
 			s.PathRules = append(s.PathRules, r)
 		}
