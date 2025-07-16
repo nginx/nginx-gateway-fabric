@@ -5015,7 +5015,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			expected: defaultBaseHTTPConfig,
 		},
 		{
-			msg: "readiness probe is configured",
+			msg: "readiness probe is configured for deployment kind",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
@@ -5031,6 +5031,27 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			},
 			expected: BaseHTTPConfig{
 				NginxReadinessProbePort: int32(7020),
+				IPFamily:                Dual,
+				HTTP2:                   true,
+			},
+		},
+		{
+			msg: "readiness probe is configured for daemonset kind",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+									Port: helpers.GetPointer(int32(8881)),
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: BaseHTTPConfig{
+				NginxReadinessProbePort: int32(8881),
 				IPFamily:                Dual,
 				HTTP2:                   true,
 			},

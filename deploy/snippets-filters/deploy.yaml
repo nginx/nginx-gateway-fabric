@@ -418,6 +418,7 @@ spec:
           pullPolicy: Always
           repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
           tag: edge
+        readinessProbe: {}
       replicas: 1
     service:
       externalTrafficPolicy: Local

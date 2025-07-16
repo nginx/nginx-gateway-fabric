@@ -418,6 +418,7 @@ spec:
           pullPolicy: Always
           repository: private-registry.nginx.com/nginx-gateway-fabric/nginx-plus
           tag: edge
+        readinessProbe: {}
       replicas: 1
     service:
       externalTrafficPolicy: Local

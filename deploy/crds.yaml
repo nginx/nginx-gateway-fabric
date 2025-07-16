@@ -659,12 +659,16 @@ spec:
                     description: DaemonSet is the configuration for the NGINX DaemonSet.
                     properties:
                       container:
-                        description: ContainerSpec defines container fields for the
-                          NGINX container.
+                        description: Container defines container fields for the NGINX
+                          container.
                         properties:
                           debug:
+                            description: Debug enables debugging for NGINX by using
+                              the nginx-debug binary.
                             type: boolean
                           hostPorts:
+                            description: HostPorts are the list of ports to expose
+                              on the host.
                             items:
                               description: HostPort exposes an nginx container port
                                 on the host.
@@ -944,8 +948,8 @@ spec:
                                 type: string
                             type: object
                           readinessProbe:
-                            description: ReadinessProbeSpec defines the configuration
-                              for the NGINX readiness probe.
+                            description: ReadinessProbe defines the readiness probe
+                              for the NGINX container.
                             properties:
                               exec:
                                 description: Exec specifies a command to execute in
@@ -1108,8 +1112,8 @@ spec:
                                 type: integer
                             type: object
                           resources:
-                            description: ResourceRequirements describes the compute
-                              resource requirements.
+                            description: Resources describes the compute resource
+                              requirements.
                             properties:
                               claims:
                                 description: |-
@@ -1169,6 +1173,8 @@ spec:
                                 type: object
                             type: object
                           volumeMounts:
+                            description: VolumeMounts describe the mounting of Volumes
+                              within a container.
                             items:
                               description: VolumeMount describes a mounting of a Volume
                                 within a container.
@@ -1233,7 +1239,7 @@ spec:
                             type: array
                         type: object
                       pod:
-                        description: PodSpec defines Pod-specific fields.
+                        description: Pod defines Pod-specific fields.
                         properties:
                           affinity:
                             description: Affinity is the pod's scheduling constraints.
@@ -4221,9 +4227,6 @@ spec:
                               type: object
                             type: array
                         type: object
-                    required:
-                    - container
-                    - pod
                     type: object
                   deployment:
                     description: |-
@@ -4231,12 +4234,16 @@ spec:
                       This is the default deployment option.
                     properties:
                       container:
-                        description: ContainerSpec defines container fields for the
-                          NGINX container.
+                        description: Container defines container fields for the NGINX
+                          container.
                         properties:
                           debug:
+                            description: Debug enables debugging for NGINX by using
+                              the nginx-debug binary.
                             type: boolean
                           hostPorts:
+                            description: HostPorts are the list of ports to expose
+                              on the host.
                             items:
                               description: HostPort exposes an nginx container port
                                 on the host.
@@ -4516,8 +4523,8 @@ spec:
                                 type: string
                             type: object
                           readinessProbe:
-                            description: ReadinessProbeSpec defines the configuration
-                              for the NGINX readiness probe.
+                            description: ReadinessProbe defines the readiness probe
+                              for the NGINX container.
                             properties:
                               exec:
                                 description: Exec specifies a command to execute in
@@ -4680,8 +4687,8 @@ spec:
                                 type: integer
                             type: object
                           resources:
-                            description: ResourceRequirements describes the compute
-                              resource requirements.
+                            description: Resources describes the compute resource
+                              requirements.
                             properties:
                               claims:
                                 description: |-
@@ -4741,6 +4748,8 @@ spec:
                                 type: object
                             type: object
                           volumeMounts:
+                            description: VolumeMounts describe the mounting of Volumes
+                              within a container.
                             items:
                               description: VolumeMount describes a mounting of a Volume
                                 within a container.
@@ -4805,7 +4814,7 @@ spec:
                             type: array
                         type: object
                       pod:
-                        description: PodSpec defines Pod-specific fields.
+                        description: Pod defines Pod-specific fields.
                         properties:
                           affinity:
                             description: Affinity is the pod's scheduling constraints.
@@ -7794,11 +7803,9 @@ spec:
                             type: array
                         type: object
                       replicas:
+                        description: Number of desired Pods.
                         format: int32
                         type: integer
-                    required:
-                    - container
-                    - pod
                     type: object
                   service:
                     description: Service is the configuration for the NGINX Service.
