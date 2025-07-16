@@ -158,6 +158,7 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 
 			// check that the health check server block is present
 			g.Expect(httpConfig).To(ContainSubstring("server {"))
+			g.Expect(httpConfig).To(ContainSubstring("access_log off;"))
 			g.Expect(httpConfig).To(ContainSubstring("location = /readyz {"))
 			g.Expect(httpConfig).To(ContainSubstring("return 200;"))
 		})

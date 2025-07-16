@@ -4989,7 +4989,26 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
-						ReadinessProbe: nil,
+						Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: nil,
+							},
+						},
+					},
+				},
+			},
+			expected: defaultBaseHTTPConfig,
+		},
+		{
+			msg: "readiness probe spec is empty",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{},
+							},
+						},
 					},
 				},
 			},
@@ -5000,8 +5019,12 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
-						ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
-							Port: helpers.GetPointer(int32(7020)),
+						Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+									Port: helpers.GetPointer(int32(7020)),
+								},
+							},
 						},
 					},
 				},

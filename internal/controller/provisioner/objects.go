@@ -37,10 +37,6 @@ const (
 	defaultNginxImagePath     = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
 	defaultNginxPlusImagePath = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
 	defaultImagePullPolicy    = corev1.PullIfNotPresent
-
-	defaultInitialDelaySeconds = int32(3)
-	defaultPeriodSeconds       = int32(10)
-	defaultTimeoutSeconds      = int32(1)
 )
 
 var emptyDirVolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
@@ -1045,36 +1041,41 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 
 // buildReadinessProbe creates a readiness probe configuration for the NGINX container.
 func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxProxy) *corev1.Probe {
-	port := dataplane.DefaultNginxReadinessProbePort
-	initialDelaySeconds := defaultInitialDelaySeconds
-	timeoutSeconds := defaultTimeoutSeconds
-	periodSeconds := defaultPeriodSeconds
-
-	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.ReadinessProbe != nil {
-		readinessProbeSpec := nProxyCfg.Kubernetes.ReadinessProbe
-		if readinessProbeSpec.Port != nil {
-			port = *readinessProbeSpec.Port
-		}
-		if readinessProbeSpec.InitialDelaySeconds != nil {
-			initialDelaySeconds = *readinessProbeSpec.InitialDelaySeconds
-		}
-		if readinessProbeSpec.PeriodSeconds != nil {
-			periodSeconds = *readinessProbeSpec.PeriodSeconds
-		}
-		if readinessProbeSpec.TimeoutSeconds != nil {
-			timeoutSeconds = *readinessProbeSpec.TimeoutSeconds
-		}
-	}
-
-	return &corev1.Probe{
+	probe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path: "/readyz",
-				Port: intstr.FromInt32(port),
+				Port: intstr.FromInt32(dataplane.DefaultNginxReadinessProbePort),
 			},
 		},
-		InitialDelaySeconds: initialDelaySeconds,
-		TimeoutSeconds:      timeoutSeconds,
-		PeriodSeconds:       periodSeconds,
 	}
+
+	var containerSpec *ngfAPIv1alpha2.ContainerSpec
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
+		if nProxyCfg.Kubernetes.Deployment != nil {
+			containerSpec = &nProxyCfg.Kubernetes.Deployment.Container
+		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
+			containerSpec = &nProxyCfg.Kubernetes.DaemonSet.Container
+		}
+	}
+
+	if containerSpec == nil || containerSpec.ReadinessProbe == nil {
+		return probe
+	}
+
+	if containerSpec.ReadinessProbe.Port != nil {
+		probe.HTTPGet.Port = intstr.FromInt32(*containerSpec.ReadinessProbe.Port)
+	}
+
+	probeSpec := containerSpec.ReadinessProbe.Probe
+	if probeSpec != nil {
+		probe.InitialDelaySeconds = probeSpec.InitialDelaySeconds
+		probe.TimeoutSeconds = probeSpec.TimeoutSeconds
+		probe.PeriodSeconds = probeSpec.PeriodSeconds
+		probe.SuccessThreshold = probeSpec.SuccessThreshold
+		probe.FailureThreshold = probeSpec.FailureThreshold
+		probe.TerminationGracePeriodSeconds = probeSpec.TerminationGracePeriodSeconds
+	}
+
+	return probe
 }

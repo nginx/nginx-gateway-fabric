@@ -386,80 +386,19 @@ type KubernetesSpec struct {
 	//
 	// +optional
 	Service *ServiceSpec `json:"service,omitempty"`
-
-	// ReadinessProbe is the configuration for the NGINX Readiness probe.
-	//
-	// +optional
-	ReadinessProbe *ReadinessProbeSpec `json:"readinessProbe,omitempty"`
-}
-
-// ReadinessProbeSpec defines the configuration for the NGINX readiness probe.
-type ReadinessProbeSpec struct {
-	// Port is the port on which the readiness endpoint is exposed.
-	// If not specified, the default port is 8081.
-	//
-	// +optional
-	// +kubebuilder:default:=8081
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	Port *int32 `json:"port,omitempty"`
-
-	// InitialDelaySeconds is the number of seconds after the container has
-	// started before the readiness probe is initiated.
-	// If not specified, the default is 3 seconds.
-	// +optional
-	// +kubebuilder:default:=3
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=3600
-	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
-
-	// PeriodSeconds is the number of seconds between consecutive readiness probes.
-	// If not specified, the default is 10 seconds.
-	// +optional
-	// +kubebuilder:default:=10
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=3600
-	PeriodSeconds *int32 `json:"periodSeconds,omitempty"`
-
-	// TimeoutSeconds is the number of seconds after which the readiness probe times out.
-	// If not specified, the default is 1 second.
-	//
-	// +optional
-	// +kubebuilder:default:=1
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=3600
-	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
 }
 
 // Deployment is the configuration for the NGINX Deployment.
 type DeploymentSpec struct {
-	// Number of desired Pods.
-	//
-	// +optional
-	Replicas *int32 `json:"replicas,omitempty"`
-
-	// Pod defines Pod-specific fields.
-	//
-	// +optional
-	Pod PodSpec `json:"pod"`
-
-	// Container defines container fields for the NGINX container.
-	//
-	// +optional
 	Container ContainerSpec `json:"container"`
+	Replicas  *int32        `json:"replicas,omitempty"`
+	Pod       PodSpec       `json:"pod"`
 }
 
 // DaemonSet is the configuration for the NGINX DaemonSet.
 type DaemonSetSpec struct {
-	// Pod defines Pod-specific fields.
-	//
-	// +optional
-	Pod PodSpec `json:"pod"`
-
-	// Container defines container fields for the NGINX container.
-	//
-	// +optional
 	Container ContainerSpec `json:"container"`
+	Pod       PodSpec       `json:"pod"`
 }
 
 // PodSpec defines Pod-specific fields.
@@ -507,37 +446,30 @@ type PodSpec struct {
 
 // ContainerSpec defines container fields for the NGINX container.
 type ContainerSpec struct {
-	// Debug enables debugging for NGINX by using the nginx-debug binary.
-	//
-	// +optional
-	Debug *bool `json:"debug,omitempty"`
+	Debug          *bool                        `json:"debug,omitempty"`
+	Image          *Image                       `json:"image,omitempty"`
+	Resources      *corev1.ResourceRequirements `json:"resources,omitempty"`
+	Lifecycle      *corev1.Lifecycle            `json:"lifecycle,omitempty"`
+	ReadinessProbe *ReadinessProbeSpec          `json:"readinessProbe,omitempty"`
+	HostPorts      []HostPort                   `json:"hostPorts,omitempty"`
+	VolumeMounts   []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
+}
 
-	// Image is the NGINX image to use.
+// ReadinessProbeSpec defines the configuration for the NGINX readiness probe.
+type ReadinessProbeSpec struct {
+	// Port is the port on which the readiness endpoint is exposed.
+	// If not specified, the default port is 8081.
 	//
 	// +optional
-	Image *Image `json:"image,omitempty"`
+	// +kubebuilder:default:=8081
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port *int32 `json:"port,omitempty"`
 
-	// Resources describes the compute resource requirements.
+	// Probe describes the Kubernetes Probe configuration.
 	//
 	// +optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// Lifecycle describes actions that the management system should take in response to container lifecycle
-	// events. For the PostStart and PreStop lifecycle handlers, management of the container blocks
-	// until the action is complete, unless the container process fails, in which case the handler is aborted.
-	//
-	// +optional
-	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
-
-	// HostPorts are the list of ports to expose on the host.
-	//
-	// +optional
-	HostPorts []HostPort `json:"hostPorts,omitempty"`
-
-	// VolumeMounts describe the mounting of Volumes within a container.
-	//
-	// +optional
-	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+	*corev1.Probe `json:",inline"`
 }
 
 // Image is the NGINX image to use.

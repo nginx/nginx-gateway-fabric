@@ -1002,8 +1002,16 @@ func buildBaseHTTPConfig(
 
 	baseConfig.RewriteClientIPSettings = buildRewriteClientIPConfig(np.RewriteClientIP)
 
-	if np.Kubernetes != nil && np.Kubernetes.ReadinessProbe != nil && np.Kubernetes.ReadinessProbe.Port != nil {
-		baseConfig.NginxReadinessProbePort = *np.Kubernetes.ReadinessProbe.Port
+	if np.Kubernetes != nil {
+		var containerSpec *ngfAPIv1alpha2.ContainerSpec
+		if np.Kubernetes.Deployment != nil {
+			containerSpec = &np.Kubernetes.Deployment.Container
+		} else if np.Kubernetes.DaemonSet != nil {
+			containerSpec = &np.Kubernetes.DaemonSet.Container
+		}
+		if containerSpec != nil && containerSpec.ReadinessProbe != nil && containerSpec.ReadinessProbe.Port != nil {
+			baseConfig.NginxReadinessProbePort = *containerSpec.ReadinessProbe.Port
+		}
 	}
 
 	return baseConfig
