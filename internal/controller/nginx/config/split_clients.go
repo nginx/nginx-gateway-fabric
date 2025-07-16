@@ -41,17 +41,15 @@ func createRequestMirrorSplitClients(servers []dataplane.VirtualServer) []http.S
 	for _, server := range servers {
 		mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
-		for _, pathRule := range server.PathRules {
-			mirrorPercentage := mirrorPathToPercentage[pathRule.Path]
-
-			if mirrorPercentage != nil && *mirrorPercentage != 100 {
+		for path, percentage := range mirrorPathToPercentage {
+			if percentage != nil && *percentage != 100 {
 				splitClient := http.SplitClient{
 					// this has to be something unique and able to be accessed from the server block
-					VariableName: convertSplitClientVariableName(fmt.Sprintf("%s_%.2f", pathRule.Path, *mirrorPercentage)),
+					VariableName: convertSplitClientVariableName(fmt.Sprintf("%s_%.2f", path, *percentage)),
 					Distributions: []http.SplitClientDistribution{
 						{
-							Percent: fmt.Sprintf("%.2f", *mirrorPercentage),
-							Value:   pathRule.Path,
+							Percent: fmt.Sprintf("%.2f", *percentage),
+							Value:   path,
 						},
 						{
 							Percent: "*",
