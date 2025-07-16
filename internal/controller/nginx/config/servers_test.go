@@ -105,6 +105,7 @@ func TestExecuteServers(t *testing.T) {
 								},
 							},
 						},
+						MirrorPercent: helpers.GetPointer(float64(50)),
 					},
 				},
 			},
@@ -952,6 +953,7 @@ func TestCreateServers(t *testing.T) {
 					BackendGroup: fooGroup,
 				},
 			},
+			MirrorPercent: helpers.GetPointer(float64(50)),
 		},
 		{
 			Path:     "/mirror-filter-100-percent",
@@ -982,6 +984,7 @@ func TestCreateServers(t *testing.T) {
 					BackendGroup: fooGroup,
 				},
 			},
+			MirrorPercent: helpers.GetPointer(float64(100)),
 		},
 		{
 			Path:     "/mirror-filter-0-percent",
@@ -1012,6 +1015,7 @@ func TestCreateServers(t *testing.T) {
 					BackendGroup: fooGroup,
 				},
 			},
+			MirrorPercent: helpers.GetPointer(float64(0)),
 		},
 		{
 			Path:     "/mirror-filter-duplicate-targets",
@@ -1054,6 +1058,7 @@ func TestCreateServers(t *testing.T) {
 					BackendGroup: fooGroup,
 				},
 			},
+			MirrorPercent: helpers.GetPointer(float64(50)),
 		},
 		{
 			Path:     "/grpc/mirror",
@@ -2646,8 +2651,8 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 
 	modifiedHTTPRequestRedirectFilter := func(
 		mod func(
-			filter *dataplane.HTTPRequestRedirectFilter,
-		) *dataplane.HTTPRequestRedirectFilter,
+		filter *dataplane.HTTPRequestRedirectFilter,
+	) *dataplane.HTTPRequestRedirectFilter,
 	) *dataplane.HTTPRequestRedirectFilter {
 		return mod(createBasicHTTPRequestRedirectFilter())
 	}

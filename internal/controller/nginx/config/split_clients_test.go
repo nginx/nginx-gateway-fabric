@@ -133,13 +133,16 @@ func TestExecuteSplitClients(t *testing.T) {
 								},
 							},
 							{
-								Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0",
+								Path:          http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0",
+								MirrorPercent: helpers.GetPointer(float64(25)),
 							},
 							{
-								Path: http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route1-0",
+								Path:          http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route1-0",
+								MirrorPercent: helpers.GetPointer(float64(50)),
 							},
 							{
-								Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-1",
+								Path:          http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-1",
+								MirrorPercent: helpers.GetPointer(float64(25)),
 							},
 							{
 								Path: "/mirror-edge-case-percentages",
@@ -175,13 +178,16 @@ func TestExecuteSplitClients(t *testing.T) {
 								},
 							},
 							{
-								Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route2-0",
+								Path:          http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route2-0",
+								MirrorPercent: helpers.GetPointer(float64(0)),
 							},
 							{
-								Path: http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route2-0",
+								Path:          http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route2-0",
+								MirrorPercent: helpers.GetPointer(float64(99.999)),
 							},
 							{
-								Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route2-1",
+								Path:          http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route2-1",
+								MirrorPercent: helpers.GetPointer(float64(0.001)),
 							},
 						},
 					},
@@ -241,7 +247,8 @@ func TestExecuteSplitClients(t *testing.T) {
 								},
 							},
 							{
-								Path: http.InternalMirrorRoutePathPrefix + "-my-same-backend-test/route1-0",
+								Path:          http.InternalMirrorRoutePathPrefix + "-my-same-backend-test/route1-0",
+								MirrorPercent: helpers.GetPointer(float64(50)),
 							},
 						},
 					},
@@ -297,7 +304,8 @@ func TestExecuteSplitClients(t *testing.T) {
 								},
 							},
 							{
-								Path: http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-0",
+								Path:          http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-0",
+								MirrorPercent: helpers.GetPointer(float64(25)),
 							},
 						},
 					},
@@ -321,7 +329,8 @@ func TestExecuteSplitClients(t *testing.T) {
 								},
 							},
 							{
-								Path: http.InternalMirrorRoutePathPrefix + "-my-ssl-backend-test/route1-0",
+								Path:          http.InternalMirrorRoutePathPrefix + "-my-ssl-backend-test/route1-0",
+								MirrorPercent: helpers.GetPointer(float64(50)),
 							},
 						},
 					},
@@ -410,13 +419,16 @@ func TestCreateRequestMirrorSplitClients(t *testing.T) {
 							},
 						},
 						{
-							Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0",
+							Path:          http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0",
+							MirrorPercent: helpers.GetPointer(float64(25)),
 						},
 						{
-							Path: http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route1-0",
+							Path:          http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route1-0",
+							MirrorPercent: helpers.GetPointer(float64(50)),
 						},
 						{
-							Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-1",
+							Path:          http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-1",
+							MirrorPercent: helpers.GetPointer(float64(25)),
 						},
 					},
 				},
@@ -438,7 +450,8 @@ func TestCreateRequestMirrorSplitClients(t *testing.T) {
 							},
 						},
 						{
-							Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0",
+							Path:          http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0",
+							MirrorPercent: helpers.GetPointer(float64(30)),
 						},
 					},
 				},

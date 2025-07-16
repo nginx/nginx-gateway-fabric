@@ -266,7 +266,7 @@ func createLocations(
 	var rootPathExists bool
 	var grpcServer bool
 
-	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
+	//mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
 	for pathRuleIdx, rule := range server.PathRules {
 		matches := make([]routeMatch, 0, len(rule.MatchRules))
@@ -279,7 +279,7 @@ func createLocations(
 			grpcServer = true
 		}
 
-		mirrorPercentage := mirrorPathToPercentage[rule.Path]
+		//mirrorPercentage := mirrorPathToPercentage[rule.Path]
 
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
 		for i := range extLocations {
@@ -298,7 +298,7 @@ func createLocations(
 					rule.Path,
 					rule.GRPC,
 					keepAliveCheck,
-					mirrorPercentage,
+					rule.MirrorPercent,
 				)
 			}
 
@@ -322,7 +322,7 @@ func createLocations(
 				rule.Path,
 				rule.GRPC,
 				keepAliveCheck,
-				mirrorPercentage,
+				rule.MirrorPercent,
 			)
 
 			internalLocations = append(internalLocations, intLocation)
