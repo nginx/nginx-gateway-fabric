@@ -291,12 +291,10 @@ func createLocations(
 		if !needsInternalLocations(rule) {
 			for _, r := range rule.MatchRules {
 				extLocations = updateLocations(
-					r.Filters,
-					extLocations,
 					r,
+					rule,
+					extLocations,
 					server.Port,
-					rule.Path,
-					rule.GRPC,
 					keepAliveCheck,
 					mirrorPercentage,
 				)
@@ -315,12 +313,10 @@ func createLocations(
 			)
 
 			intLocation = updateLocation(
-				r.Filters,
-				intLocation,
 				r,
+				rule,
+				intLocation,
 				server.Port,
-				rule.Path,
-				rule.GRPC,
 				keepAliveCheck,
 				mirrorPercentage,
 			)
@@ -453,15 +449,17 @@ func initializeInternalLocation(
 
 // updateLocation updates a location with any relevant configurations, like proxy_pass, filters, tls settings, etc.
 func updateLocation(
-	filters dataplane.HTTPFilters,
-	location http.Location,
 	matchRule dataplane.MatchRule,
+	pathRule dataplane.PathRule,
+	location http.Location,
 	listenerPort int32,
-	path string,
-	grpc bool,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
 ) http.Location {
+	filters := matchRule.Filters
+	path := pathRule.Path
+	grpc := pathRule.GRPC
+
 	if filters.InvalidFilter != nil {
 		location.Return = &http.Return{Code: http.StatusInternalServerError}
 		return location
@@ -588,12 +586,10 @@ func updateLocationProxySettings(
 // updateLocations updates the existing locations with any relevant configurations, like proxy_pass,
 // filters, tls settings, etc.
 func updateLocations(
-	filters dataplane.HTTPFilters,
-	buildLocations []http.Location,
 	matchRule dataplane.MatchRule,
+	pathRule dataplane.PathRule,
+	buildLocations []http.Location,
 	listenerPort int32,
-	path string,
-	grpc bool,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
 ) []http.Location {
@@ -601,12 +597,10 @@ func updateLocations(
 
 	for i, loc := range buildLocations {
 		updatedLocations[i] = updateLocation(
-			filters,
-			loc,
 			matchRule,
+			pathRule,
+			loc,
 			listenerPort,
-			path,
-			grpc,
 			keepAliveCheck,
 			mirrorPercentage,
 		)
