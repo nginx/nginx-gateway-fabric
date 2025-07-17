@@ -215,8 +215,10 @@ type HTTPRequestMirrorFilter struct {
 	Name *string
 	// Namespace is the namespace of the service.
 	Namespace *string
-	// Target is the target of the mirror (path with hostname and service name).
+	// Target is the target of the mirror (path with hostname, service name, and route NamespacedName).
 	Target *string
+	// Percent is the percentage of requests to mirror.
+	Percent *float64
 }
 
 // PathModifierType is the type of the PathModifier in a redirect or rewrite rule.

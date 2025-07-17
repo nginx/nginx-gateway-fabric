@@ -2177,8 +2177,9 @@ func TestBuildConfiguration(t *testing.T) {
 										Filters: HTTPFilters{
 											RequestMirrors: []*HTTPRequestMirrorFilter{
 												{
-													Name:   helpers.GetPointer("mirror-backend"),
-													Target: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+													Name:    helpers.GetPointer("mirror-backend"),
+													Target:  helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/hr-with-mirror-0"),
+													Percent: helpers.GetPointer(float64(100)),
 												},
 											},
 										},
@@ -2750,6 +2751,7 @@ func TestCreateFilters(t *testing.T) {
 				Kind:  helpers.GetPointer(v1.Kind("Service")),
 				Name:  v1.ObjectName("mirror-backend2"),
 			},
+			Percent: helpers.GetPointer(int32(50)),
 		},
 	}
 	requestHeaderModifiers1 := graph.Filter{
@@ -2807,12 +2809,14 @@ func TestCreateFilters(t *testing.T) {
 	}
 
 	expectedMirror1 := HTTPRequestMirrorFilter{
-		Name:   helpers.GetPointer("mirror-backend"),
-		Target: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+		Name:    helpers.GetPointer("mirror-backend"),
+		Target:  helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/route1-0"),
+		Percent: helpers.GetPointer(float64(100)),
 	}
 	expectedMirror2 := HTTPRequestMirrorFilter{
-		Name:   helpers.GetPointer("mirror-backend2"),
-		Target: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend2-0"),
+		Name:    helpers.GetPointer("mirror-backend2"),
+		Target:  helpers.GetPointer("/_ngf-internal-mirror-mirror-backend2-test/route1-0"),
+		Percent: helpers.GetPointer(float64(50)),
 	}
 
 	expectedHeaderModifier1 := HTTPHeaderFilter{
@@ -2975,7 +2979,8 @@ func TestCreateFilters(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := createHTTPFilters(test.filters, 0)
+			routeNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
+			result := createHTTPFilters(test.filters, 0, routeNsName)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})

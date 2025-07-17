@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
@@ -337,9 +338,82 @@ func TestConvertHTTPMirrorFilter(t *testing.T) {
 			expected: &HTTPRequestMirrorFilter{
 				Name:      helpers.GetPointer("backend"),
 				Namespace: nil,
-				Target:    helpers.GetPointer("/_ngf-internal-mirror-backend-0"),
+				Target:    helpers.GetPointer("/_ngf-internal-mirror-backend-test/route1-0"),
+				Percent:   helpers.GetPointer(float64(100)),
 			},
-			name: "missing namespace",
+			name: "missing backendRef namespace",
+		},
+		{
+			filter: &v1.HTTPRequestMirrorFilter{
+				BackendRef: v1.BackendObjectReference{
+					Name:      "backend",
+					Namespace: helpers.GetPointer[v1.Namespace]("namespace"),
+				},
+				Fraction: &v1.Fraction{
+					Numerator: 25,
+				},
+			},
+			expected: &HTTPRequestMirrorFilter{
+				Name:      helpers.GetPointer("backend"),
+				Namespace: helpers.GetPointer("namespace"),
+				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace/backend-test/route1-0"),
+				Percent:   helpers.GetPointer(float64(25)),
+			},
+			name: "fraction denominator not specified",
+		},
+		{
+			filter: &v1.HTTPRequestMirrorFilter{
+				BackendRef: v1.BackendObjectReference{
+					Name:      "backend",
+					Namespace: helpers.GetPointer[v1.Namespace]("namespace"),
+				},
+				Fraction: &v1.Fraction{
+					Numerator:   300,
+					Denominator: helpers.GetPointer(int32(1)),
+				},
+			},
+			expected: &HTTPRequestMirrorFilter{
+				Name:      helpers.GetPointer("backend"),
+				Namespace: helpers.GetPointer("namespace"),
+				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace/backend-test/route1-0"),
+				Percent:   helpers.GetPointer(float64(100)),
+			},
+			name: "fraction result over 100",
+		},
+		{
+			filter: &v1.HTTPRequestMirrorFilter{
+				BackendRef: v1.BackendObjectReference{
+					Name:      "backend",
+					Namespace: helpers.GetPointer[v1.Namespace]("namespace"),
+				},
+				Percent: helpers.GetPointer(int32(50)),
+			},
+			expected: &HTTPRequestMirrorFilter{
+				Name:      helpers.GetPointer("backend"),
+				Namespace: helpers.GetPointer("namespace"),
+				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace/backend-test/route1-0"),
+				Percent:   helpers.GetPointer(float64(50)),
+			},
+			name: "full with filter percent",
+		},
+		{
+			filter: &v1.HTTPRequestMirrorFilter{
+				BackendRef: v1.BackendObjectReference{
+					Name:      "backend",
+					Namespace: helpers.GetPointer[v1.Namespace]("namespace"),
+				},
+				Fraction: &v1.Fraction{
+					Numerator:   1,
+					Denominator: helpers.GetPointer(int32(2)),
+				},
+			},
+			expected: &HTTPRequestMirrorFilter{
+				Name:      helpers.GetPointer("backend"),
+				Namespace: helpers.GetPointer("namespace"),
+				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace/backend-test/route1-0"),
+				Percent:   helpers.GetPointer(float64(50)),
+			},
+			name: "full with filter fraction",
 		},
 		{
 			filter: &v1.HTTPRequestMirrorFilter{
@@ -351,9 +425,10 @@ func TestConvertHTTPMirrorFilter(t *testing.T) {
 			expected: &HTTPRequestMirrorFilter{
 				Name:      helpers.GetPointer("backend"),
 				Namespace: helpers.GetPointer("namespace"),
-				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace/backend-0"),
+				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace/backend-test/route1-0"),
+				Percent:   helpers.GetPointer(float64(100)),
 			},
-			name: "full",
+			name: "full with no filter percent or fraction specified",
 		},
 	}
 
@@ -361,7 +436,9 @@ func TestConvertHTTPMirrorFilter(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			result := convertHTTPRequestMirrorFilter(test.filter, 0)
+			routeNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
+
+			result := convertHTTPRequestMirrorFilter(test.filter, 0, routeNsName)
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -8,91 +9,338 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 )
 
 func TestExecuteSplitClients(t *testing.T) {
 	t.Parallel()
-	bg1 := dataplane.BackendGroup{
-		Source:  types.NamespacedName{Namespace: "test", Name: "hr"},
-		RuleIdx: 0,
-		Backends: []dataplane.Backend{
-			{UpstreamName: "test1", Valid: true, Weight: 1},
-			{UpstreamName: "test2", Valid: true, Weight: 1},
-		},
-	}
-
-	bg2 := dataplane.BackendGroup{
-		Source:  types.NamespacedName{Namespace: "test", Name: "no-split"},
-		RuleIdx: 1,
-		Backends: []dataplane.Backend{
-			{UpstreamName: "no-split", Valid: true, Weight: 1},
-		},
-	}
-
-	bg3 := dataplane.BackendGroup{
-		Source:  types.NamespacedName{Namespace: "test", Name: "hr"},
-		RuleIdx: 1,
-		Backends: []dataplane.Backend{
-			{UpstreamName: "test3", Valid: true, Weight: 1},
-			{UpstreamName: "test4", Valid: true, Weight: 1},
-		},
-	}
 
 	tests := []struct {
+		expStrings    map[string]int
 		msg           string
-		backendGroups []dataplane.BackendGroup
-		expStrings    []string
 		notExpStrings []string
+		configuration dataplane.Configuration
 	}{
 		{
 			msg: "non-zero weights",
-			backendGroups: []dataplane.BackendGroup{
-				bg1,
-				bg2,
-				bg3,
+			configuration: dataplane.Configuration{
+				BackendGroups: []dataplane.BackendGroup{
+					{
+						Source:  types.NamespacedName{Namespace: "test", Name: "hr"},
+						RuleIdx: 0,
+						Backends: []dataplane.Backend{
+							{UpstreamName: "test1", Valid: true, Weight: 1},
+							{UpstreamName: "test2", Valid: true, Weight: 1},
+						},
+					},
+					{
+						Source:  types.NamespacedName{Namespace: "test", Name: "no-split"},
+						RuleIdx: 1,
+						Backends: []dataplane.Backend{
+							{UpstreamName: "no-split", Valid: true, Weight: 1},
+						},
+					},
+					{
+						Source:  types.NamespacedName{Namespace: "test", Name: "hr"},
+						RuleIdx: 1,
+						Backends: []dataplane.Backend{
+							{UpstreamName: "test3", Valid: true, Weight: 1},
+							{UpstreamName: "test4", Valid: true, Weight: 1},
+						},
+					},
+				},
 			},
-			expStrings: []string{
-				"split_clients $request_id $group_test__hr_rule0",
-				"split_clients $request_id $group_test__hr_rule1",
-				"50.00% test1;",
-				"50.00% test2;",
-				"50.00% test3;",
-				"50.00% test4;",
+			expStrings: map[string]int{
+				"split_clients $request_id $group_test__hr_rule0": 1,
+				"split_clients $request_id $group_test__hr_rule1": 1,
+				"50.00% test1;": 1,
+				"50.00% test2;": 1,
+				"50.00% test3;": 1,
+				"50.00% test4;": 1,
 			},
 			notExpStrings: []string{"no-split", "#"},
 		},
 		{
 			msg: "zero weight",
-			backendGroups: []dataplane.BackendGroup{
-				{
-					Source:  types.NamespacedName{Namespace: "test", Name: "zero-percent"},
-					RuleIdx: 0,
-					Backends: []dataplane.Backend{
-						{UpstreamName: "non-zero", Valid: true, Weight: 1},
-						{UpstreamName: "zero", Valid: true, Weight: 0},
+			configuration: dataplane.Configuration{
+				BackendGroups: []dataplane.BackendGroup{
+					{
+						Source:  types.NamespacedName{Namespace: "test", Name: "zero-percent"},
+						RuleIdx: 0,
+						Backends: []dataplane.Backend{
+							{UpstreamName: "non-zero", Valid: true, Weight: 1},
+							{UpstreamName: "zero", Valid: true, Weight: 0},
+						},
 					},
 				},
 			},
-			expStrings: []string{
-				"split_clients $request_id $group_test__zero_percent_rule0",
-				"100.00% non-zero;",
-				"# 0.00% zero;",
+			expStrings: map[string]int{
+				"split_clients $request_id $group_test__zero_percent_rule0": 1,
+				"100.00% non-zero;": 1,
+				"# 0.00% zero;":     1,
 			},
 			notExpStrings: nil,
 		},
 		{
 			msg: "no split clients",
-			backendGroups: []dataplane.BackendGroup{
-				{
-					Source:  types.NamespacedName{Namespace: "test", Name: "single-backend-route"},
-					RuleIdx: 0,
-					Backends: []dataplane.Backend{
-						{UpstreamName: "single-backend", Valid: true, Weight: 1},
+			configuration: dataplane.Configuration{
+				BackendGroups: []dataplane.BackendGroup{
+					{
+						Source:  types.NamespacedName{Namespace: "test", Name: "single-backend-route"},
+						RuleIdx: 0,
+						Backends: []dataplane.Backend{
+							{UpstreamName: "single-backend", Valid: true, Weight: 1},
+						},
 					},
 				},
 			},
-			expStrings:    []string{},
+			expStrings:    map[string]int{},
 			notExpStrings: []string{"split_clients"},
+		},
+		{
+			msg: "HTTPServer mirror split clients",
+			configuration: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						PathRules: []dataplane.PathRule{
+							{
+								Path: "/mirror",
+								MatchRules: []dataplane.MatchRule{
+									{
+										Filters: dataplane.HTTPFilters{
+											RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0"),
+													Percent: helpers.GetPointer(float64(25)),
+												},
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route1-0"),
+													Percent: helpers.GetPointer(float64(50)),
+												},
+											},
+										},
+									},
+									{
+										Filters: dataplane.HTTPFilters{
+											RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-1"),
+													Percent: helpers.GetPointer(float64(25)),
+												},
+											},
+										},
+									},
+								},
+							},
+							{
+								Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0",
+							},
+							{
+								Path: http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route1-0",
+							},
+							{
+								Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-1",
+							},
+							{
+								Path: "/mirror-edge-case-percentages",
+								MatchRules: []dataplane.MatchRule{
+									{
+										Filters: dataplane.HTTPFilters{
+											RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route2-0"),
+													Percent: helpers.GetPointer(float64(0)),
+												},
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route2-0"),
+													Percent: helpers.GetPointer(float64(99.999)),
+												},
+											},
+										},
+									},
+									{
+										Filters: dataplane.HTTPFilters{
+											RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route2-1"),
+													Percent: helpers.GetPointer(float64(0.001)),
+												},
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route2-1"),
+													Percent: helpers.GetPointer(float64(100)),
+												},
+											},
+										},
+									},
+								},
+							},
+							{
+								Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route2-0",
+							},
+							{
+								Path: http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route2-0",
+							},
+							{
+								Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route2-1",
+							},
+						},
+					},
+				},
+			},
+			expStrings: map[string]int{
+				"split_clients $request_id $__ngf_internal_mirror_my_coffee_backend_test_route1_0_25_00": 1,
+				"25.00% /_ngf-internal-mirror-my-coffee-backend-test/route1-0":                           1,
+
+				"split_clients $request_id $__ngf_internal_mirror_my_tea_backend_test_route1_0_50_00": 1,
+				"50.00% /_ngf-internal-mirror-my-tea-backend-test/route1-0":                           1,
+
+				"split_clients $request_id $__ngf_internal_mirror_my_coffee_backend_test_route1_1_25_00": 1,
+				"25.00% /_ngf-internal-mirror-my-coffee-backend-test/route1-1":                           1,
+
+				"split_clients $request_id $__ngf_internal_mirror_my_coffee_backend_test_route2_0_0_00": 1,
+				"0.00% /_ngf-internal-mirror-my-coffee-backend-test/route2-0":                           1,
+
+				"split_clients $request_id $__ngf_internal_mirror_my_tea_backend_test_route2_0_100_00": 1,
+				"100.00% /_ngf-internal-mirror-my-tea-backend-test/route2-0":                           1,
+
+				"split_clients $request_id $__ngf_internal_mirror_my_coffee_backend_test_route2_1_0_00": 1,
+				"0.00% /_ngf-internal-mirror-my-coffee-backend-test/route2-1":                           1,
+				"* \"\"": 6,
+			},
+			notExpStrings: []string{
+				"split_clients $request_id $__ngf_internal_mirror_my_tea_backend_test_route2_1_100_00",
+			},
+		},
+		{
+			msg: "Duplicate split clients are not created",
+			configuration: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						PathRules: []dataplane.PathRule{
+							{
+								Path: "/mirror",
+								MatchRules: []dataplane.MatchRule{
+									{
+										Filters: dataplane.HTTPFilters{
+											RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-same-backend-test/route1-0"),
+													Percent: helpers.GetPointer(float64(25)),
+												},
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-same-backend-test/route1-0"),
+													Percent: helpers.GetPointer(float64(50)),
+												},
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-same-backend-test/route1-0"),
+													Percent: helpers.GetPointer(float64(50)),
+												},
+											},
+										},
+									},
+								},
+							},
+							{
+								Path: http.InternalMirrorRoutePathPrefix + "-my-same-backend-test/route1-0",
+							},
+						},
+					},
+				},
+			},
+			expStrings: map[string]int{
+				"split_clients $request_id $__ngf_internal_mirror_my_same_backend_test_route1_0_50_00": 1,
+				"50.00% /_ngf-internal-mirror-my-same-backend-test/route1-0":                           1,
+				"* \"\"": 1,
+			},
+			notExpStrings: []string{
+				"split_clients $request_id $__ngf_internal_mirror_my_coffee_backend_test_route1_0_25_00",
+				"25.00% /_ngf-internal-mirror-my-same-backend-test/route1-0",
+			},
+		},
+		{
+			msg: "BackendGroup and Server split clients",
+			configuration: dataplane.Configuration{
+				BackendGroups: []dataplane.BackendGroup{
+					{
+						Source:  types.NamespacedName{Namespace: "test", Name: "hr"},
+						RuleIdx: 0,
+						Backends: []dataplane.Backend{
+							{UpstreamName: "test1", Valid: true, Weight: 1},
+							{UpstreamName: "test2", Valid: true, Weight: 1},
+						},
+					},
+					{
+						Source:  types.NamespacedName{Namespace: "test", Name: "hr"},
+						RuleIdx: 1,
+						Backends: []dataplane.Backend{
+							{UpstreamName: "test3", Valid: true, Weight: 1},
+							{UpstreamName: "test4", Valid: true, Weight: 1},
+						},
+					},
+				},
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						PathRules: []dataplane.PathRule{
+							{
+								Path: "/mirror",
+								MatchRules: []dataplane.MatchRule{
+									{
+										Filters: dataplane.HTTPFilters{
+											RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-0"),
+													Percent: helpers.GetPointer(float64(25)),
+												},
+											},
+										},
+									},
+								},
+							},
+							{
+								Path: http.InternalMirrorRoutePathPrefix + "-my-backend-test/route1-0",
+							},
+						},
+					},
+				},
+				SSLServers: []dataplane.VirtualServer{
+					{
+						PathRules: []dataplane.PathRule{
+							{
+								Path: "/mirror-ssl",
+								MatchRules: []dataplane.MatchRule{
+									{
+										Filters: dataplane.HTTPFilters{
+											RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+												{
+													Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-ssl-backend-test/route1-0"),
+													Percent: helpers.GetPointer(float64(50)),
+												},
+											},
+										},
+									},
+								},
+							},
+							{
+								Path: http.InternalMirrorRoutePathPrefix + "-my-ssl-backend-test/route1-0",
+							},
+						},
+					},
+				},
+			},
+			expStrings: map[string]int{
+				"split_clients $request_id $group_test__hr_rule0": 1,
+				"split_clients $request_id $group_test__hr_rule1": 1,
+				"50.00% test1;": 1,
+				"50.00% test2;": 1,
+				"50.00% test3;": 1,
+				"50.00% test4;": 1,
+				"split_clients $request_id $__ngf_internal_mirror_my_backend_test_route1_0_25_00":     1,
+				"25.00% /_ngf-internal-mirror-my-backend-test/route1-0":                               1,
+				"split_clients $request_id $__ngf_internal_mirror_my_ssl_backend_test_route1_0_50_00": 1,
+				"50.00% /_ngf-internal-mirror-my-ssl-backend-test/route1-0":                           1,
+				"* \"\"": 2,
+			},
+			notExpStrings: nil,
 		},
 	}
 
@@ -100,13 +348,16 @@ func TestExecuteSplitClients(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			splitResults := executeSplitClients(dataplane.Configuration{BackendGroups: test.backendGroups})
+
+			splitResults := executeSplitClients(test.configuration)
+
 			g.Expect(splitResults).To(HaveLen(1))
-			sc := string(splitResults[0].data)
 			g.Expect(splitResults[0].dest).To(Equal(httpConfigFile))
 
-			for _, expSubString := range test.expStrings {
-				g.Expect(sc).To(ContainSubstring(expSubString))
+			sc := string(splitResults[0].data)
+
+			for expSubStr, expCount := range test.expStrings {
+				g.Expect(strings.Count(sc, expSubStr)).To(Equal(expCount))
 			}
 
 			for _, notExpString := range test.notExpStrings {
@@ -116,7 +367,187 @@ func TestExecuteSplitClients(t *testing.T) {
 	}
 }
 
-func TestCreateSplitClients(t *testing.T) {
+func TestCreateRequestMirrorSplitClients(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		msg             string
+		servers         []dataplane.VirtualServer
+		expSplitClients []http.SplitClient
+	}{
+		{
+			msg: "normal case",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							Path: "/mirror",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+											{
+												Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0"),
+												Percent: helpers.GetPointer(float64(25)),
+											},
+											{
+												Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route1-0"),
+												Percent: helpers.GetPointer(float64(50)),
+											},
+										},
+									},
+								},
+								{
+									Filters: dataplane.HTTPFilters{
+										RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+											{
+												Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-1"),
+												Percent: helpers.GetPointer(float64(25)),
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0",
+						},
+						{
+							Path: http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route1-0",
+						},
+						{
+							Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-1",
+						},
+					},
+				},
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							Path: "/mirror-different-server",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+											{
+												Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0"),
+												Percent: helpers.GetPointer(float64(30)),
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0",
+						},
+					},
+				},
+			},
+			expSplitClients: []http.SplitClient{
+				{
+					VariableName: "__ngf_internal_mirror_my_coffee_backend_test_route1_0_25_00",
+					Distributions: []http.SplitClientDistribution{
+						{
+							Percent: "25.00",
+							Value:   "/_ngf-internal-mirror-my-coffee-backend-test/route1-0",
+						},
+						{
+							Percent: "*",
+							Value:   "\"\"",
+						},
+					},
+				},
+				{
+					VariableName: "__ngf_internal_mirror_my_tea_backend_test_route1_0_50_00",
+					Distributions: []http.SplitClientDistribution{
+						{
+							Percent: "50.00",
+							Value:   "/_ngf-internal-mirror-my-tea-backend-test/route1-0",
+						},
+						{
+							Percent: "*",
+							Value:   "\"\"",
+						},
+					},
+				},
+				{
+					VariableName: "__ngf_internal_mirror_my_coffee_backend_test_route1_1_25_00",
+					Distributions: []http.SplitClientDistribution{
+						{
+							Percent: "25.00",
+							Value:   "/_ngf-internal-mirror-my-coffee-backend-test/route1-1",
+						},
+						{
+							Percent: "*",
+							Value:   "\"\"",
+						},
+					},
+				},
+				{
+					VariableName: "__ngf_internal_mirror_my_coffee_backend_test_route1_0_30_00",
+					Distributions: []http.SplitClientDistribution{
+						{
+							Percent: "30.00",
+							Value:   "/_ngf-internal-mirror-my-coffee-backend-test/route1-0",
+						},
+						{
+							Percent: "*",
+							Value:   "\"\"",
+						},
+					},
+				},
+			},
+		},
+		{
+			msg: "no split clients are needed",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							Path: "/mirror",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										RequestMirrors: []*dataplane.HTTPRequestMirrorFilter{
+											{
+												Target:  helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0"),
+												Percent: helpers.GetPointer(float64(100)),
+											},
+											{
+												Target: helpers.GetPointer(http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route1-0"),
+											},
+											{
+												Target: helpers.GetPointer("path-does-not-exist"),
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Path: http.InternalMirrorRoutePathPrefix + "-my-coffee-backend-test/route1-0",
+						},
+						{
+							Path: http.InternalMirrorRoutePathPrefix + "-my-tea-backend-test/route1-0",
+						},
+					},
+				},
+			},
+			expSplitClients: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			result := createRequestMirrorSplitClients(test.servers)
+			g.Expect(result).To(ContainElements(test.expSplitClients))
+		})
+	}
+}
+
+func TestBackendGroupCreateSplitClients(t *testing.T) {
 	t.Parallel()
 	hrNoSplit := types.NamespacedName{Namespace: "test", Name: "hr-no-split"}
 	hrOneSplit := types.NamespacedName{Namespace: "test", Name: "hr-one-split"}
@@ -246,13 +677,13 @@ func TestCreateSplitClients(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := createSplitClients(test.backendGroups)
+			result := createBackendGroupSplitClients(test.backendGroups)
 			g.Expect(result).To(Equal(test.expSplitClients))
 		})
 	}
 }
 
-func TestCreateSplitClientDistributions(t *testing.T) {
+func TestCreateBackendGroupSplitClientDistributions(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		msg              string
@@ -395,7 +826,7 @@ func TestCreateSplitClientDistributions(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := createSplitClientDistributions(dataplane.BackendGroup{Backends: test.backends})
+			result := createBackendGroupSplitClientDistributions(dataplane.BackendGroup{Backends: test.backends})
 			g.Expect(result).To(Equal(test.expDistributions))
 		})
 	}

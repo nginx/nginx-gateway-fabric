@@ -504,6 +504,8 @@ func (hpr *hostPathRules) upsertRoute(
 
 	var objectSrc *metav1.ObjectMeta
 
+	routeNsName := client.ObjectKeyFromObject(route.Source)
+
 	if GRPC {
 		objectSrc = &helpers.MustCastObject[*v1.GRPCRoute](route.Source).ObjectMeta
 	} else {
@@ -541,7 +543,7 @@ func (hpr *hostPathRules) upsertRoute(
 
 		var filters HTTPFilters
 		if rule.Filters.Valid {
-			filters = createHTTPFilters(rule.Filters.Filters, idx)
+			filters = createHTTPFilters(rule.Filters.Filters, idx, routeNsName)
 		} else {
 			filters = HTTPFilters{
 				InvalidFilter: &InvalidHTTPFilter{},
@@ -564,8 +566,6 @@ func (hpr *hostPathRules) upsertRoute(
 					hostRule.Path = path
 					hostRule.PathType = convertPathType(*m.Path.Type)
 				}
-
-				routeNsName := client.ObjectKeyFromObject(route.Source)
 
 				hostRule.GRPC = GRPC
 				hostRule.Policies = append(hostRule.Policies, pols...)
@@ -805,7 +805,7 @@ func getPath(path *v1.HTTPPathMatch) string {
 	return *path.Value
 }
 
-func createHTTPFilters(filters []graph.Filter, ruleIdx int) HTTPFilters {
+func createHTTPFilters(filters []graph.Filter, ruleIdx int, routeNsName types.NamespacedName) HTTPFilters {
 	var result HTTPFilters
 
 	for _, f := range filters {
@@ -823,7 +823,7 @@ func createHTTPFilters(filters []graph.Filter, ruleIdx int) HTTPFilters {
 		case graph.FilterRequestMirror:
 			result.RequestMirrors = append(
 				result.RequestMirrors,
-				convertHTTPRequestMirrorFilter(f.RequestMirror, ruleIdx),
+				convertHTTPRequestMirrorFilter(f.RequestMirror, ruleIdx, routeNsName),
 			)
 		case graph.FilterRequestHeaderModifier:
 			if result.RequestHeaderModifiers == nil {

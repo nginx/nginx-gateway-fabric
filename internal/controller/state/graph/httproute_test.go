@@ -1020,7 +1020,7 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 							{
 								Path: &gatewayv1.HTTPPathMatch{
 									Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-									Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+									Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/hr-0"),
 								},
 							},
 						},
@@ -1066,7 +1066,7 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 						{
 							Path: &gatewayv1.HTTPPathMatch{
 								Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/hr-0"),
 							},
 						},
 					},
