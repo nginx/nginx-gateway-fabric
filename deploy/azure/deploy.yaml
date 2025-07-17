@@ -417,7 +417,6 @@ spec:
           pullPolicy: Always
           repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
           tag: edge
-        readinessProbe: {}
       pod:
         nodeSelector:
           kubernetes.io/os: linux

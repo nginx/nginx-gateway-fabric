@@ -34,9 +34,10 @@ const (
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
 
-	defaultNginxImagePath     = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
-	defaultNginxPlusImagePath = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
-	defaultImagePullPolicy    = corev1.PullIfNotPresent
+	defaultNginxImagePath      = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
+	defaultNginxPlusImagePath  = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
+	defaultImagePullPolicy     = corev1.PullIfNotPresent
+	defaultInitialDelaySeconds = int32(3)
 )
 
 var emptyDirVolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
@@ -1048,6 +1049,7 @@ func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxPr
 				Port: intstr.FromInt32(dataplane.DefaultNginxReadinessProbePort),
 			},
 		},
+		InitialDelaySeconds: defaultInitialDelaySeconds,
 	}
 
 	var containerSpec *ngfAPIv1alpha2.ContainerSpec
@@ -1067,14 +1069,8 @@ func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxPr
 		probe.HTTPGet.Port = intstr.FromInt32(*containerSpec.ReadinessProbe.Port)
 	}
 
-	probeSpec := containerSpec.ReadinessProbe.Probe
-	if probeSpec != nil {
-		probe.InitialDelaySeconds = probeSpec.InitialDelaySeconds
-		probe.TimeoutSeconds = probeSpec.TimeoutSeconds
-		probe.PeriodSeconds = probeSpec.PeriodSeconds
-		probe.SuccessThreshold = probeSpec.SuccessThreshold
-		probe.FailureThreshold = probeSpec.FailureThreshold
-		probe.TerminationGracePeriodSeconds = probeSpec.TerminationGracePeriodSeconds
+	if containerSpec.ReadinessProbe.InitialDelaySeconds != nil {
+		probe.InitialDelaySeconds = *containerSpec.ReadinessProbe.InitialDelaySeconds
 	}
 
 	return probe

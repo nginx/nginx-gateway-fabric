@@ -508,15 +508,18 @@ type ReadinessProbeSpec struct {
 	// If not specified, the default port is 8081.
 	//
 	// +optional
-	// +kubebuilder:default:=8081
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	Port *int32 `json:"port,omitempty"`
 
-	// Probe describes the Kubernetes Probe configuration.
+	// InitialDelaySeconds is the number of seconds after the container has
+	// started before the readiness probe is initiated.
+	// If not specified, the default is 3 seconds.
 	//
 	// +optional
-	*corev1.Probe `json:",inline"`
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=3600
+	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
 }
 
 // Image is the NGINX image to use.

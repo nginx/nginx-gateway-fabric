@@ -300,15 +300,8 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 						},
 					},
 					ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
-						Port: helpers.GetPointer[int32](9091),
-						Probe: &corev1.Probe{
-							InitialDelaySeconds:           5,
-							PeriodSeconds:                 10,
-							TimeoutSeconds:                2,
-							SuccessThreshold:              1,
-							FailureThreshold:              3,
-							TerminationGracePeriodSeconds: helpers.GetPointer[int64](25),
-						},
+						Port:                helpers.GetPointer[int32](9091),
+						InitialDelaySeconds: helpers.GetPointer[int32](5),
 					},
 					HostPorts: []ngfAPIv1alpha2.HostPort{{ContainerPort: int32(8443), Port: int32(8443)}},
 				},
@@ -373,11 +366,6 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
 	g.Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(9091)))
 	g.Expect(container.ReadinessProbe.InitialDelaySeconds).To(Equal(int32(5)))
-	g.Expect(container.ReadinessProbe.PeriodSeconds).To(Equal(int32(10)))
-	g.Expect(container.ReadinessProbe.TimeoutSeconds).To(Equal(int32(2)))
-	g.Expect(container.ReadinessProbe.SuccessThreshold).To(Equal(int32(1)))
-	g.Expect(container.ReadinessProbe.FailureThreshold).To(Equal(int32(3)))
-	g.Expect(container.ReadinessProbe.TerminationGracePeriodSeconds).To(Equal(helpers.GetPointer[int64](25)))
 }
 
 func TestBuildNginxResourceObjects_Plus(t *testing.T) {
@@ -1092,6 +1080,7 @@ func TestBuildReadinessProbe(t *testing.T) {
 				Port: intstr.FromInt32(dataplane.DefaultNginxReadinessProbePort),
 			},
 		},
+		InitialDelaySeconds: 3,
 	}
 
 	provisioner := &NginxProvisioner{}
@@ -1149,13 +1138,14 @@ func TestBuildReadinessProbe(t *testing.T) {
 			expected: defaultProbe,
 		},
 		{
-			name: "port is set in readinessProbe, custom probe is returned",
+			name: "port & initialDelaySeconds is set in readinessProbe, custom probe is returned",
 			nProxyCfg: &graph.EffectiveNginxProxy{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
 						Container: ngfAPIv1alpha2.ContainerSpec{
 							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
-								Port: helpers.GetPointer[int32](9091),
+								Port:                helpers.GetPointer[int32](9091),
+								InitialDelaySeconds: helpers.GetPointer[int32](10),
 							},
 						},
 					},
@@ -1168,42 +1158,7 @@ func TestBuildReadinessProbe(t *testing.T) {
 						Port: intstr.FromInt32(9091),
 					},
 				},
-			},
-		},
-		{
-			name: "port and probe fields are set in readinessProbe, custom probe is returned",
-			nProxyCfg: &graph.EffectiveNginxProxy{
-				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
-					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
-						Container: ngfAPIv1alpha2.ContainerSpec{
-							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
-								Port: helpers.GetPointer[int32](7033),
-								Probe: &corev1.Probe{
-									InitialDelaySeconds:           5,
-									PeriodSeconds:                 10,
-									TimeoutSeconds:                2,
-									SuccessThreshold:              5,
-									FailureThreshold:              7,
-									TerminationGracePeriodSeconds: helpers.GetPointer[int64](25),
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: &corev1.Probe{
-				ProbeHandler: corev1.ProbeHandler{
-					HTTPGet: &corev1.HTTPGetAction{
-						Path: "/readyz",
-						Port: intstr.FromInt32(7033),
-					},
-				},
-				InitialDelaySeconds:           5,
-				PeriodSeconds:                 10,
-				TimeoutSeconds:                2,
-				SuccessThreshold:              5,
-				FailureThreshold:              7,
-				TerminationGracePeriodSeconds: helpers.GetPointer[int64](25),
+				InitialDelaySeconds: 10,
 			},
 		},
 	}
