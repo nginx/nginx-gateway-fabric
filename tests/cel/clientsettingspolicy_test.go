@@ -25,16 +25,12 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 }
 
 func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
-	// Test valid and invalid TargetRef Group
-
-	allowedGroups := map[gatewayv1alpha2.LocalPolicyTargetReference]bool{
-		{
-			Group: "gateway.networking.k8s.io",
-		}: true,
-	}
-
-	testValidTargetRefGroup(t, allowedGroups)
-	testInvalidTargetRefGroup(t, allowedGroups)
+	// Test valid TargetRef Group
+	// Valid group is: "gateway.networking.k8s.io"
+	testValidTargetRefGroup(t)
+	// Invalid groups should return an error
+	// Examples of invalid groups: "invalid.networking.k8s.io", "discovery.k8s.io/v1"
+	testInvalidTargetRefGroup(t)
 }
 
 func testValidTargetRefKind(t *testing.T) {
@@ -138,19 +134,22 @@ func testInvalidTargetRefKind(t *testing.T) {
 	}
 }
 
-func testValidTargetRefGroup(t *testing.T, allowedGroups map[gatewayv1alpha2.LocalPolicyTargetReference]bool) {
+func testValidTargetRefGroup(t *testing.T) {
 	t.Helper()
 
 	tests := []struct {
-		name           string
-		wantErrors     string
-		targetRefGroup gatewayv1alpha2.LocalPolicyTargetReference
+		name       string
+		wantErrors []string
+		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 	}{
 		{
-			name:       "Validate TargetRef group is gateway.networking.k8s.io",
-			wantErrors: "TargetRef Group must be gateway.networking.k8s.io",
-			targetRefGroup: gatewayv1alpha2.LocalPolicyTargetReference{
-				Group: "gateway.networking.k8s.io",
+			name:       "Validate gateway.networking.k8s.io TargetRef Group is allowed",
+			wantErrors: []string{"TargetRef Group must be gateway.networking.k8s.io."},
+			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+					Kind:  "Gateway",
+					Group: "gateway.networking.k8s.io",
+				},
 			},
 		},
 	}
@@ -159,64 +158,62 @@ func testValidTargetRefGroup(t *testing.T, allowedGroups map[gatewayv1alpha2.Loc
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a ClientSettingsPolicy with the targetRef from the test case.
 			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
 				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-					TargetRef: tt.targetRefGroup,
+					TargetRef: tt.policySpec.TargetRef,
 				},
 			}
-
-			if _, ok := allowedGroups[clientSettingsPolicy.Spec.TargetRef]; !ok {
-				gotError := "TargetRef Group must be gateway.networking.k8s.io"
-
-				if tt.wantErrors == gotError {
-					t.Errorf("Test %s failed: got error %q, want %q", tt.name, gotError, tt.wantErrors)
-				}
-			}
+			validateClientSettingsPolicy(t, clientSettingsPolicy, tt.wantErrors)
 		})
 	}
 }
 
-func testInvalidTargetRefGroup(t *testing.T, allowedGroups map[gatewayv1alpha2.LocalPolicyTargetReference]bool) {
+func testInvalidTargetRefGroup(t *testing.T) {
 	t.Helper()
 
 	tests := []struct {
-		name           string
-		wantErrors     string
-		targetRefGroup gatewayv1alpha2.LocalPolicyTargetReference
+		name       string
+		wantErrors []string
+		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 	}{
 		{
-			name:       "Validate TargetRef group is gateway.networking.k8s.io",
-			wantErrors: "TargetRef Group must be gateway.networking.k8s.io",
-			targetRefGroup: gatewayv1alpha2.LocalPolicyTargetReference{
-				Group: "invalid.networking.k8s.io",
+			name:       "Validate invalid.networking.k8s.io TargetRef Group is not allowed",
+			wantErrors: []string{"TargetRef Group must be gateway.networking.k8s.io."},
+			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+					Kind:  "Gateway",
+					Group: "invalid.networking.k8s.io",
+				},
 			},
 		},
 		{
-			name:       "Validate TargetRef is of an allowed kind",
-			wantErrors: "TargetRef Group must be gateway.networking.k8s.io",
-			targetRefGroup: gatewayv1alpha2.LocalPolicyTargetReference{
-				Group: "discovery.k8s.io/v1",
+			name:       "Validate discovery.k8s.io/v1 TargetRef Group is not allowed",
+			wantErrors: []string{"TargetRef Group must be gateway.networking.k8s.io."},
+			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+					Kind:  "Gateway",
+					Group: "discovery.k8s.io/v1",
+				},
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Run(tt.name, func(t *testing.T) {
-				// Create a ClientSettingsPolicy with the targetRef from the test case.
-				clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
-					Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-						TargetRef: tt.targetRefGroup,
-					},
-				}
-
-				if _, ok := allowedGroups[clientSettingsPolicy.Spec.TargetRef]; !ok {
-					gotError := "TargetRef Group must be gateway.networking.k8s.io"
-
-					if tt.wantErrors != gotError {
-						t.Errorf("Test %s failed: got error %q, want %q", tt.name, gotError, tt.wantErrors)
-					}
-				}
-			})
+			// Create a ClientSettingsPolicy with the targetRef from the test case.
+			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+					TargetRef: tt.policySpec.TargetRef,
+				},
+			}
+			validateClientSettingsPolicy(t, clientSettingsPolicy, tt.wantErrors)
 		})
 	}
 }
