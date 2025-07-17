@@ -541,8 +541,8 @@ func updateLocationMirrorFilters(
 		location.MirrorPaths = deduplicateStrings(location.MirrorPaths)
 	}
 
-	// if the mirrorPercentage is 100.0 or negative (we set it to negative when there is no mirror filter because 0.0
-	// is valid), the split clients variable is not generated, and we want to let all the traffic get mirrored.
+	// if mirrorPercentage is nil (no mirror filter configured) or 100.0, the split clients variable is not generated,
+	// and we let all traffic get mirrored.
 	if mirrorPercentage != nil && *mirrorPercentage != 100.0 {
 		location.MirrorSplitClientsVariableName = convertSplitClientVariableName(
 			fmt.Sprintf("%s_%.2f", path, *mirrorPercentage),
