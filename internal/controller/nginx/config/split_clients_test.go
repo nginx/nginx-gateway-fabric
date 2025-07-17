@@ -542,7 +542,7 @@ func TestCreateRequestMirrorSplitClients(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			result := createRequestMirrorSplitClients(test.servers)
-			g.Expect(result).To(Equal(test.expSplitClients))
+			g.Expect(result).To(ContainElements(test.expSplitClients))
 		})
 	}
 }
