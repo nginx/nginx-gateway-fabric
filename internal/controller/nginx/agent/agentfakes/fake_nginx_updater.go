@@ -99,10 +99,6 @@ func (fake *FakeNginxUpdater) UpdateUpstreamServersArgsForCall(i int) (*agent.De
 func (fake *FakeNginxUpdater) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.updateConfigMutex.RLock()
-	defer fake.updateConfigMutex.RUnlock()
-	fake.updateUpstreamServersMutex.RLock()
-	defer fake.updateUpstreamServersMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

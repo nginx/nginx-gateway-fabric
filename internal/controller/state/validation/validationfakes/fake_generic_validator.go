@@ -375,16 +375,6 @@ func (fake *FakeGenericValidator) ValidateServiceNameReturnsOnCall(i int, result
 func (fake *FakeGenericValidator) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.validateEndpointMutex.RLock()
-	defer fake.validateEndpointMutex.RUnlock()
-	fake.validateEscapedStringNoVarExpansionMutex.RLock()
-	defer fake.validateEscapedStringNoVarExpansionMutex.RUnlock()
-	fake.validateNginxDurationMutex.RLock()
-	defer fake.validateNginxDurationMutex.RUnlock()
-	fake.validateNginxSizeMutex.RLock()
-	defer fake.validateNginxSizeMutex.RUnlock()
-	fake.validateServiceNameMutex.RLock()
-	defer fake.validateServiceNameMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

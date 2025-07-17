@@ -202,14 +202,6 @@ func (fake *FakeConnectionsTracker) TrackArgsForCall(i int) (string, grpc.Connec
 func (fake *FakeConnectionsTracker) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.getConnectionMutex.RLock()
-	defer fake.getConnectionMutex.RUnlock()
-	fake.removeConnectionMutex.RLock()
-	defer fake.removeConnectionMutex.RUnlock()
-	fake.setInstanceIDMutex.RLock()
-	defer fake.setInstanceIDMutex.RUnlock()
-	fake.trackMutex.RLock()
-	defer fake.trackMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

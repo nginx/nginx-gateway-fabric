@@ -79,8 +79,6 @@ func (fake *FakeGraphGetter) GetLatestGraphReturnsOnCall(i int, result1 *graph.G
 func (fake *FakeGraphGetter) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.getLatestGraphMutex.RLock()
-	defer fake.getLatestGraphMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

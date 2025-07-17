@@ -187,12 +187,6 @@ func (fake *FakeBroadcaster) SubscribeReturnsOnCall(i int, result1 broadcast.Sub
 func (fake *FakeBroadcaster) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.cancelSubscriptionMutex.RLock()
-	defer fake.cancelSubscriptionMutex.RUnlock()
-	fake.sendMutex.RLock()
-	defer fake.sendMutex.RUnlock()
-	fake.subscribeMutex.RLock()
-	defer fake.subscribeMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

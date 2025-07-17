@@ -236,12 +236,6 @@ func (fake *FakeValidator) ValidateGlobalSettingsReturnsOnCall(i int, result1 []
 func (fake *FakeValidator) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.conflictsMutex.RLock()
-	defer fake.conflictsMutex.RUnlock()
-	fake.validateMutex.RLock()
-	defer fake.validateMutex.RUnlock()
-	fake.validateGlobalSettingsMutex.RLock()
-	defer fake.validateGlobalSettingsMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

@@ -85,8 +85,6 @@ func (fake *FakeLogLevelSetter) SetLevelReturnsOnCall(i int, result1 error) {
 func (fake *FakeLogLevelSetter) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.setLevelMutex.RLock()
-	defer fake.setLevelMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value
