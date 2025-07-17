@@ -37,9 +37,9 @@ func testValidTargetRefKind(t *testing.T) {
 	t.Helper()
 
 	tests := []struct {
+		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
 		wantErrors []string
-		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 	}{
 		{
 			name: "Validate TargetRef of kind Gateway is allowed",
@@ -91,9 +91,9 @@ func testInvalidTargetRefKind(t *testing.T) {
 	t.Helper()
 
 	tests := []struct {
+		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
 		wantErrors []string
-		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 	}{
 		{
 			name:       "Validate Invalid TargetRef Kind is not allowed",
@@ -138,9 +138,9 @@ func testValidTargetRefGroup(t *testing.T) {
 	t.Helper()
 
 	tests := []struct {
+		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
 		wantErrors []string
-		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 	}{
 		{
 			name:       "Validate gateway.networking.k8s.io TargetRef Group is allowed",
@@ -175,9 +175,9 @@ func testInvalidTargetRefGroup(t *testing.T) {
 	t.Helper()
 
 	tests := []struct {
+		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
 		wantErrors []string
-		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 	}{
 		{
 			name:       "Validate invalid.networking.k8s.io TargetRef Group is not allowed",
@@ -218,7 +218,10 @@ func testInvalidTargetRefGroup(t *testing.T) {
 	}
 }
 
-func validateClientSettingsPolicy(t *testing.T, clientSettingsPolicy *ngfAPIv1alpha1.ClientSettingsPolicy, wantErrors []string) {
+func validateClientSettingsPolicy(t *testing.T,
+	clientSettingsPolicy *ngfAPIv1alpha1.ClientSettingsPolicy,
+	wantErrors []string,
+) {
 	t.Helper()
 
 	// Register API types with the runtime scheme
@@ -232,12 +235,9 @@ func validateClientSettingsPolicy(t *testing.T, clientSettingsPolicy *ngfAPIv1al
 
 	err := k8sClient.Create(context.Background(), clientSettingsPolicy)
 	if err != nil {
-		t.Logf("Error creating ClientSettingsPolicy %q: %v", fmt.Sprintf("%v/%v", clientSettingsPolicy.Namespace, clientSettingsPolicy.Name), err)
+		t.Logf("Error creating ClientSettingsPolicy %q: %v",
+			fmt.Sprintf("%v/%v", clientSettingsPolicy.Namespace, clientSettingsPolicy.Name), err)
 	}
-
-	// if (len(wantErrors) != 0) != (err != nil) {
-	// 	t.Fatalf("Unexpected response while creating ClientSettingsPolicy %q; got err=\n%v\n;want error=%v", fmt.Sprintf("%v/%v", clientSettingsPolicy.Namespace, clientSettingsPolicy.Name), err, wantErrors)
-	// }
 
 	if err != nil {
 		for _, wantError := range wantErrors {
