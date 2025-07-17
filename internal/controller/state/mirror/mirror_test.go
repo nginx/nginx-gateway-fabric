@@ -29,7 +29,7 @@ func TestPathWithBackendRef(t *testing.T) {
 		idx         int
 	}{
 		{
-			name: "with namespace",
+			name: "with backendRef namespace",
 			idx:  1,
 			backendRef: v1.BackendObjectReference{
 				Name:      "service1",
@@ -39,7 +39,7 @@ func TestPathWithBackendRef(t *testing.T) {
 			expected:    helpers.GetPointer("/_ngf-internal-mirror-namespace1/service1-routeNs/routeName1-1"),
 		},
 		{
-			name: "without namespace",
+			name: "without backendRef namespace",
 			idx:  2,
 			backendRef: v1.BackendObjectReference{
 				Name: "service2",
@@ -72,7 +72,7 @@ func TestBackendPath(t *testing.T) {
 		idx         int
 	}{
 		{
-			name:        "With namespace",
+			name:        "With backendRef namespace",
 			idx:         1,
 			namespace:   helpers.GetPointer("namespace1"),
 			service:     "service1",
@@ -80,7 +80,7 @@ func TestBackendPath(t *testing.T) {
 			expected:    helpers.GetPointer("/_ngf-internal-mirror-namespace1/service1-routeNs/routeName1-1"),
 		},
 		{
-			name:        "Without namespace",
+			name:        "Without backendRef namespace",
 			idx:         2,
 			namespace:   nil,
 			service:     "service2",
