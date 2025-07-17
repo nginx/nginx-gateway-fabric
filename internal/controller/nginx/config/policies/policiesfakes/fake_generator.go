@@ -251,12 +251,6 @@ func (fake *FakeGenerator) GenerateForServerReturnsOnCall(i int, result1 policie
 func (fake *FakeGenerator) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.generateForInternalLocationMutex.RLock()
-	defer fake.generateForInternalLocationMutex.RUnlock()
-	fake.generateForLocationMutex.RLock()
-	defer fake.generateForLocationMutex.RUnlock()
-	fake.generateForServerMutex.RLock()
-	defer fake.generateForServerMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

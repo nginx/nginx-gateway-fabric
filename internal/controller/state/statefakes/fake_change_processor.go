@@ -221,14 +221,6 @@ func (fake *FakeChangeProcessor) ProcessReturnsOnCall(i int, result1 *graph.Grap
 func (fake *FakeChangeProcessor) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.captureDeleteChangeMutex.RLock()
-	defer fake.captureDeleteChangeMutex.RUnlock()
-	fake.captureUpsertChangeMutex.RLock()
-	defer fake.captureUpsertChangeMutex.RUnlock()
-	fake.getLatestGraphMutex.RLock()
-	defer fake.getLatestGraphMutex.RUnlock()
-	fake.processMutex.RLock()
-	defer fake.processMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value
