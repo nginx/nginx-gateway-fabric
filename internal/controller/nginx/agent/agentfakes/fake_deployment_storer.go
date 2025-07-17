@@ -202,12 +202,6 @@ func (fake *FakeDeploymentStorer) RemoveArgsForCall(i int) types.NamespacedName 
 func (fake *FakeDeploymentStorer) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.getMutex.RLock()
-	defer fake.getMutex.RUnlock()
-	fake.getOrStoreMutex.RLock()
-	defer fake.getOrStoreMutex.RUnlock()
-	fake.removeMutex.RLock()
-	defer fake.removeMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

@@ -93,8 +93,6 @@ func (fake *FakeProvisioner) RegisterGatewayReturnsOnCall(i int, result1 error) 
 func (fake *FakeProvisioner) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.registerGatewayMutex.RLock()
-	defer fake.registerGatewayMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value
