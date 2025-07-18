@@ -441,7 +441,7 @@ nginx:
     # -- volumeMounts are the additional volume mounts for the NGINX container.
     volumeMounts: []
 
-    ## Defines the settings for the data plane readiness probe. This probe returns Ready when the NGINX data plane is ready to serve traffic.
+    ## -- Defines the settings for the data plane readiness probe. This probe returns Ready when the NGINX data plane is ready to serve traffic.
     readinessProbe: {}
       # @schema
       # type: integer

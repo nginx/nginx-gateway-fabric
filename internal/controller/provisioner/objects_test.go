@@ -1071,7 +1071,6 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 
 func TestBuildReadinessProbe(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
 	defaultProbe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
@@ -1100,15 +1099,6 @@ func TestBuildReadinessProbe(t *testing.T) {
 			nProxyCfg: &graph.EffectiveNginxProxy{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 					Deployment: nil,
-				},
-			},
-			expected: defaultProbe,
-		},
-		{
-			name: "daemonSet is nil, default probe is returned",
-			nProxyCfg: &graph.EffectiveNginxProxy{
-				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
-					DaemonSet: nil,
 				},
 			},
 			expected: defaultProbe,
@@ -1166,6 +1156,7 @@ func TestBuildReadinessProbe(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			g := NewWithT(t)
 			probe := provisioner.buildReadinessProbe(tt.nProxyCfg)
 			g.Expect(probe).To(Equal(tt.expected))
 		})
