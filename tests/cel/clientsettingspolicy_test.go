@@ -16,25 +16,6 @@ import (
 )
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
-	// Test valid and invalid TargetRef Kind
-	// Valid kinds are: Gateway, HTTPRoute, GRPCRoute
-	testValidTargetRefKind(t)
-	// Invalid kinds should return an error
-	// Example of an invalid kind: "InvalidKind", "TCPRoute"
-	testInvalidTargetRefKind(t)
-}
-
-func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
-	// Test valid TargetRef Group
-	// Valid group is: "gateway.networking.k8s.io"
-	testValidTargetRefGroup(t)
-	// Invalid groups should return an error
-	// Examples of invalid groups: "invalid.networking.k8s.io", "discovery.k8s.io/v1"
-	testInvalidTargetRefGroup(t)
-}
-
-func testValidTargetRefKind(t *testing.T) {
-	t.Helper()
 
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
@@ -68,33 +49,6 @@ func testValidTargetRefKind(t *testing.T) {
 				},
 			},
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a ClientSettingsPolicy with the targetRef from the test case.
-			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-policy",
-					Namespace: "default",
-				},
-				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-					TargetRef: tt.policySpec.TargetRef,
-				},
-			}
-			validateClientSettingsPolicy(t, clientSettingsPolicy, tt.wantErrors)
-		})
-	}
-}
-
-func testInvalidTargetRefKind(t *testing.T) {
-	t.Helper()
-
-	tests := []struct {
-		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
-		name       string
-		wantErrors []string
-	}{
 		{
 			name:       "Validate Invalid TargetRef Kind is not allowed",
 			wantErrors: []string{"TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute'"},
@@ -134,8 +88,7 @@ func testInvalidTargetRefKind(t *testing.T) {
 	}
 }
 
-func testValidTargetRefGroup(t *testing.T) {
-	t.Helper()
+func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
@@ -143,8 +96,7 @@ func testValidTargetRefGroup(t *testing.T) {
 		wantErrors []string
 	}{
 		{
-			name:       "Validate gateway.networking.k8s.io TargetRef Group is allowed",
-			wantErrors: []string{"TargetRef Group must be gateway.networking.k8s.io."},
+			name: "Validate gateway.networking.k8s.io TargetRef Group is allowed",
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
 					Kind:  "Gateway",
@@ -152,33 +104,6 @@ func testValidTargetRefGroup(t *testing.T) {
 				},
 			},
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a ClientSettingsPolicy with the targetRef from the test case.
-			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-policy",
-					Namespace: "default",
-				},
-				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-					TargetRef: tt.policySpec.TargetRef,
-				},
-			}
-			validateClientSettingsPolicy(t, clientSettingsPolicy, tt.wantErrors)
-		})
-	}
-}
-
-func testInvalidTargetRefGroup(t *testing.T) {
-	t.Helper()
-
-	tests := []struct {
-		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
-		name       string
-		wantErrors []string
-	}{
 		{
 			name:       "Validate invalid.networking.k8s.io TargetRef Group is not allowed",
 			wantErrors: []string{"TargetRef Group must be gateway.networking.k8s.io."},
