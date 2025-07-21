@@ -1273,6 +1273,43 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	g.Expect(dep.Labels).To(HaveKeyWithValue("dep-patched", "true"))
 	g.Expect(dep.Spec.Replicas).To(Equal(helpers.GetPointer(int32(3))))
 
+	// Test that a later patch overrides a field set by an earlier patch
+	nProxyCfg = &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Service: &ngfAPIv1alpha2.ServiceSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"override-label":"first"}}}`),
+						},
+					},
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"override-label":"second"}}}`),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(objects).To(HaveLen(6))
+
+	// Find and validate service label override
+	svc = nil
+	for _, obj := range objects {
+		if s, ok := obj.(*corev1.Service); ok {
+			svc = s
+			break
+		}
+	}
+	g.Expect(svc).ToNot(BeNil())
+	g.Expect(svc.Labels).To(HaveKeyWithValue("override-label", "second"))
+
 	// Test successful daemonset patch
 	nProxyCfg = &graph.EffectiveNginxProxy{
 		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{

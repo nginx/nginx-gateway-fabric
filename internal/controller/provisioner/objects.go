@@ -180,11 +180,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	}
 	objects = append(objects, service, deployment)
 
-	if len(errs) > 0 {
-		return objects, errors.Join(errs...)
-	}
-
-	return objects, nil
+	return objects, errors.Join(errs...)
 }
 
 func (p *NginxProvisioner) buildNginxSecrets(
@@ -570,10 +566,8 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		}
 
 		// Apply DaemonSet patches
-		if nProxyCfg.Kubernetes.DaemonSet != nil {
-			if err := applyPatches(daemonSet, nProxyCfg.Kubernetes.DaemonSet.Patches); err != nil {
-				return daemonSet, fmt.Errorf("failed to apply daemonset patches: %w", err)
-			}
+		if err := applyPatches(daemonSet, nProxyCfg.Kubernetes.DaemonSet.Patches); err != nil {
+			return daemonSet, fmt.Errorf("failed to apply daemonset patches: %w", err)
 		}
 
 		return daemonSet, nil
@@ -592,17 +586,14 @@ func (p *NginxProvisioner) buildNginxDeployment(
 	var deploymentCfg ngfAPIv1alpha2.DeploymentSpec
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Deployment != nil {
 		deploymentCfg = *nProxyCfg.Kubernetes.Deployment
+		// Apply Deployment patches
+		if err := applyPatches(deployment, nProxyCfg.Kubernetes.Deployment.Patches); err != nil {
+			return deployment, fmt.Errorf("failed to apply deployment patches: %w", err)
+		}
 	}
 
 	if deploymentCfg.Replicas != nil {
 		deployment.Spec.Replicas = deploymentCfg.Replicas
-	}
-
-	// Apply Deployment patches
-	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Deployment != nil {
-		if err := applyPatches(deployment, nProxyCfg.Kubernetes.Deployment.Patches); err != nil {
-			return deployment, fmt.Errorf("failed to apply deployment patches: %w", err)
-		}
 	}
 
 	return deployment, nil

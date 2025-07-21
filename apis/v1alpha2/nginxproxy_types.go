@@ -401,6 +401,7 @@ type Patch struct {
 	// For StrategicMerge and Merge patches, this should be a JSON object.
 	// For JSONPatch patches, this should be a JSON array of patch operations.
 	//
+	// +optional
 	// +kubebuilder:validation:XPreserveUnknownFields
 	Value *apiextv1.JSON `json:"value"`
 }
