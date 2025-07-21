@@ -403,7 +403,7 @@ type Patch struct {
 	//
 	// +optional
 	// +kubebuilder:validation:XPreserveUnknownFields
-	Value *apiextv1.JSON `json:"value"`
+	Value *apiextv1.JSON `json:"value,omitempty"`
 }
 
 // PatchType specifies the type of patch.

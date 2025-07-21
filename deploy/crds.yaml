@@ -1118,8 +1118,6 @@ spec:
                                 For StrategicMerge and Merge patches, this should be a JSON object.
                                 For JSONPatch patches, this should be a JSON array of patch operations.
                               x-kubernetes-preserve-unknown-fields: true
-                          required:
-                          - value
                           type: object
                         type: array
                       pod:
@@ -4577,8 +4575,6 @@ spec:
                                 For StrategicMerge and Merge patches, this should be a JSON object.
                                 For JSONPatch patches, this should be a JSON array of patch operations.
                               x-kubernetes-preserve-unknown-fields: true
-                          required:
-                          - value
                           type: object
                         type: array
                       pod:
@@ -7655,8 +7651,6 @@ spec:
                                 For StrategicMerge and Merge patches, this should be a JSON object.
                                 For JSONPatch patches, this should be a JSON array of patch operations.
                               x-kubernetes-preserve-unknown-fields: true
-                          required:
-                          - value
                           type: object
                         type: array
                       type:
