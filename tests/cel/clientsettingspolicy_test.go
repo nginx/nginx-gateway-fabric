@@ -14,6 +14,25 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 )
 
+const (
+	GatewayKind   = "Gateway"
+	HTTPRouteKind = "HTTPRoute"
+	GRPCRouteKind = "GRPCRoute"
+	TCPRouteKind  = "TCPRoute"
+	InvalidKind   = "InvalidKind"
+)
+
+const (
+	GatewayGroup   = "gateway.networking.k8s.io"
+	InvalidGroup   = "invalid.networking.k8s.io"
+	DiscoveryGroup = "discovery.k8s.io/v1"
+)
+
+const (
+	ExpectedTargetRefKindError  = "TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute'"
+	ExpectedTargetRefGroupError = "TargetRef Group must be gateway.networking.k8s.io."
+)
+
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 
 	tests := []struct {
@@ -25,8 +44,8 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 			name: "Validate TargetRef of kind Gateway is allowed",
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  "Gateway",
-					Group: "gateway.networking.k8s.io",
+					Kind:  GatewayKind,
+					Group: GatewayGroup,
 				},
 			},
 		},
@@ -34,8 +53,8 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 			name: "Validate TargetRef of kind HTTPRoute is allowed",
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  "HTTPRoute",
-					Group: "gateway.networking.k8s.io",
+					Kind:  HTTPRouteKind,
+					Group: GatewayGroup,
 				},
 			},
 		},
@@ -43,28 +62,28 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 			name: "Validate TargetRef of kind GRPCRoute is allowed",
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  "GRPCRoute",
-					Group: "gateway.networking.k8s.io",
+					Kind:  GRPCRouteKind,
+					Group: GatewayGroup,
 				},
 			},
 		},
 		{
 			name:       "Validate Invalid TargetRef Kind is not allowed",
-			wantErrors: []string{"TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute'"},
+			wantErrors: []string{ExpectedTargetRefKindError},
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  "InvalidKind",
-					Group: "gateway.networking.k8s.io",
+					Kind:  InvalidKind,
+					Group: GatewayGroup,
 				},
 			},
 		},
 		{
 			name:       "Validate TCPRoute TargetRef Kind is not allowed",
-			wantErrors: []string{"TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute'"},
+			wantErrors: []string{ExpectedTargetRefKindError},
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  "TCPRoute",
-					Group: "gateway.networking.k8s.io",
+					Kind:  TCPRouteKind,
+					Group: GatewayGroup,
 				},
 			},
 		},
@@ -98,28 +117,28 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 			name: "Validate gateway.networking.k8s.io TargetRef Group is allowed",
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  "Gateway",
-					Group: "gateway.networking.k8s.io",
+					Kind:  GatewayKind,
+					Group: GatewayGroup,
 				},
 			},
 		},
 		{
 			name:       "Validate invalid.networking.k8s.io TargetRef Group is not allowed",
-			wantErrors: []string{"TargetRef Group must be gateway.networking.k8s.io."},
+			wantErrors: []string{ExpectedTargetRefGroupError},
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  "Gateway",
-					Group: "invalid.networking.k8s.io",
+					Kind:  GatewayKind,
+					Group: InvalidGroup,
 				},
 			},
 		},
 		{
 			name:       "Validate discovery.k8s.io/v1 TargetRef Group is not allowed",
-			wantErrors: []string{"TargetRef Group must be gateway.networking.k8s.io."},
+			wantErrors: []string{ExpectedTargetRefGroupError},
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  "Gateway",
-					Group: "discovery.k8s.io/v1",
+					Kind:  GatewayKind,
+					Group: DiscoveryGroup,
 				},
 			},
 		},
