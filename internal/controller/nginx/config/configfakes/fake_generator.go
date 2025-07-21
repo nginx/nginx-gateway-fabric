@@ -166,10 +166,6 @@ func (fake *FakeGenerator) GenerateDeploymentContextReturnsOnCall(i int, result1
 func (fake *FakeGenerator) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.generateMutex.RLock()
-	defer fake.generateMutex.RUnlock()
-	fake.generateDeploymentContextMutex.RLock()
-	defer fake.generateDeploymentContextMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

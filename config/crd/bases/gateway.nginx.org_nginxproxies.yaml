@@ -362,6 +362,28 @@ spec:
                                   StopSignal can only be set for Pods with a non-empty .spec.os.name
                                 type: string
                             type: object
+                          readinessProbe:
+                            description: ReadinessProbe defines the readiness probe
+                              for the NGINX container.
+                            properties:
+                              initialDelaySeconds:
+                                description: |-
+                                  InitialDelaySeconds is the number of seconds after the container has
+                                  started before the readiness probe is initiated.
+                                  If not specified, the default is 3 seconds.
+                                format: int32
+                                maximum: 3600
+                                minimum: 0
+                                type: integer
+                              port:
+                                description: |-
+                                  Port is the port on which the readiness endpoint is exposed.
+                                  If not specified, the default port is 8081.
+                                format: int32
+                                maximum: 65535
+                                minimum: 1
+                                type: integer
+                            type: object
                           resources:
                             description: Resources describes the compute resource
                               requirements.
@@ -3772,6 +3794,28 @@ spec:
                                   If not specified, the default is defined by the container runtime in use.
                                   StopSignal can only be set for Pods with a non-empty .spec.os.name
                                 type: string
+                            type: object
+                          readinessProbe:
+                            description: ReadinessProbe defines the readiness probe
+                              for the NGINX container.
+                            properties:
+                              initialDelaySeconds:
+                                description: |-
+                                  InitialDelaySeconds is the number of seconds after the container has
+                                  started before the readiness probe is initiated.
+                                  If not specified, the default is 3 seconds.
+                                format: int32
+                                maximum: 3600
+                                minimum: 0
+                                type: integer
+                              port:
+                                description: |-
+                                  Port is the port on which the readiness endpoint is exposed.
+                                  If not specified, the default port is 8081.
+                                format: int32
+                                maximum: 65535
+                                minimum: 1
+                                type: integer
                             type: object
                           resources:
                             description: Resources describes the compute resource

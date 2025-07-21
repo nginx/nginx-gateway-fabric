@@ -58,8 +58,6 @@ func (fake *FakeEventHandler) HandleEventBatchArgsForCall(i int) (context.Contex
 func (fake *FakeEventHandler) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.handleEventBatchMutex.RLock()
-	defer fake.handleEventBatchMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

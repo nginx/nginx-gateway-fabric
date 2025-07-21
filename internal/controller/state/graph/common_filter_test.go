@@ -10,6 +10,7 @@ import (
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation/validationfakes"
+	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
 )
 
@@ -38,24 +39,6 @@ func TestValidateFilter(t *testing.T) {
 			},
 			expectErrCount: 0,
 			name:           "valid HTTP rewrite filter",
-		},
-		{
-			filter: Filter{
-				RouteType:     RouteTypeHTTP,
-				FilterType:    FilterRequestMirror,
-				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{},
-			},
-			expectErrCount: 0,
-			name:           "valid HTTP mirror filter",
-		},
-		{
-			filter: Filter{
-				RouteType:     RouteTypeHTTP,
-				FilterType:    FilterRequestMirror,
-				RequestMirror: nil,
-			},
-			expectErrCount: 1,
-			name:           "invalid HTTP mirror filter",
 		},
 		{
 			filter: Filter{
@@ -98,15 +81,6 @@ func TestValidateFilter(t *testing.T) {
 		},
 		{
 			filter: Filter{
-				RouteType:     RouteTypeGRPC,
-				FilterType:    FilterRequestMirror,
-				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{},
-			},
-			expectErrCount: 0,
-			name:           "valid GRPC mirror filter",
-		},
-		{
-			filter: Filter{
 				RouteType:             RouteTypeGRPC,
 				FilterType:            FilterRequestHeaderModifier,
 				RequestHeaderModifier: &gatewayv1.HTTPHeaderFilter{},
@@ -143,6 +117,138 @@ func TestValidateFilter(t *testing.T) {
 			},
 			expectErrCount: 1,
 			name:           "unsupported GRPC filter type",
+		},
+	}
+
+	filterPath := field.NewPath("test")
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			g := NewWithT(t)
+			allErrs := validateFilter(&validationfakes.FakeHTTPFieldsValidator{}, test.filter, filterPath)
+			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
+		})
+	}
+}
+
+func TestValidateFilterMirror(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		filter         Filter
+		name           string
+		expectErrCount int
+	}{
+		{
+			filter: Filter{
+				RouteType:     RouteTypeHTTP,
+				FilterType:    FilterRequestMirror,
+				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{},
+			},
+			expectErrCount: 0,
+			name:           "valid HTTP mirror filter",
+		},
+		{
+			filter: Filter{
+				RouteType:  RouteTypeHTTP,
+				FilterType: FilterRequestMirror,
+				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{
+					Percent: helpers.GetPointer(int32(50)),
+				},
+			},
+			expectErrCount: 0,
+			name:           "valid HTTP mirror filter with percentage set",
+		},
+		{
+			filter: Filter{
+				RouteType:  RouteTypeHTTP,
+				FilterType: FilterRequestMirror,
+				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{
+					Fraction: &gatewayv1.Fraction{
+						Numerator:   1,
+						Denominator: helpers.GetPointer(int32(2)),
+					},
+				},
+			},
+			expectErrCount: 0,
+			name:           "valid HTTP mirror filter with fraction set",
+		},
+		{
+			filter: Filter{
+				RouteType:     RouteTypeHTTP,
+				FilterType:    FilterRequestMirror,
+				RequestMirror: nil,
+			},
+			expectErrCount: 1,
+			name:           "invalid nil HTTP mirror filter",
+		},
+		{
+			filter: Filter{
+				RouteType:  RouteTypeHTTP,
+				FilterType: FilterRequestMirror,
+				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{
+					Percent: helpers.GetPointer(int32(5)),
+					Fraction: &gatewayv1.Fraction{
+						Numerator:   1,
+						Denominator: helpers.GetPointer(int32(3)),
+					},
+				},
+			},
+			expectErrCount: 1,
+			name:           "invalid HTTP mirror filter both percent and fraction set",
+		},
+		{
+			filter: Filter{
+				RouteType:  RouteTypeHTTP,
+				FilterType: FilterRequestMirror,
+				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{
+					Fraction: &gatewayv1.Fraction{
+						Numerator:   1,
+						Denominator: helpers.GetPointer(int32(0)),
+					},
+				},
+			},
+			expectErrCount: 1,
+			name:           "invalid HTTP mirror filter, fraction denominator value must be greater than 0",
+		},
+		{
+			filter: Filter{
+				RouteType:  RouteTypeHTTP,
+				FilterType: FilterRequestMirror,
+				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{
+					Fraction: &gatewayv1.Fraction{
+						Numerator:   -1,
+						Denominator: helpers.GetPointer(int32(2)),
+					},
+				},
+			},
+			expectErrCount: 1,
+			name:           "invalid HTTP mirror filter, fraction numerator value must be greater than or equal to 0",
+		},
+		{
+			filter: Filter{
+				RouteType:  RouteTypeHTTP,
+				FilterType: FilterRequestMirror,
+				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{
+					Fraction: &gatewayv1.Fraction{
+						Numerator:   5,
+						Denominator: helpers.GetPointer(int32(2)),
+					},
+				},
+			},
+			expectErrCount: 1,
+			name:           "invalid HTTP mirror filter, fraction numerator value must be less than denominator",
+		},
+		{
+			filter: Filter{
+				RouteType:     RouteTypeGRPC,
+				FilterType:    FilterRequestMirror,
+				RequestMirror: &gatewayv1.HTTPRequestMirrorFilter{},
+			},
+			expectErrCount: 0,
+			name:           "valid GRPC mirror filter",
 		},
 	}
 

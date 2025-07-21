@@ -93,6 +93,12 @@ server {
         internal;
         {{ end }}
 
+        {{ if ne $l.MirrorSplitClientsVariableName "" -}}
+        if (${{ $l.MirrorSplitClientsVariableName }} = "") {
+            return 204;
+        }
+        {{- end }}
+
         {{- range $i := $l.Includes }}
         include {{ $i.Name }};
         {{- end -}}

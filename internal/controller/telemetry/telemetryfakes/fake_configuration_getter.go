@@ -79,8 +79,6 @@ func (fake *FakeConfigurationGetter) GetLatestConfigurationReturnsOnCall(i int, 
 func (fake *FakeConfigurationGetter) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.getLatestConfigurationMutex.RLock()
-	defer fake.getLatestConfigurationMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

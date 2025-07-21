@@ -18,6 +18,7 @@ import (
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
@@ -298,6 +299,10 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 							corev1.ResourceCPU: resource.Quantity{Format: "100m"},
 						},
 					},
+					ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+						Port:                helpers.GetPointer[int32](9091),
+						InitialDelaySeconds: helpers.GetPointer[int32](5),
+					},
 					HostPorts: []ngfAPIv1alpha2.HostPort{{ContainerPort: int32(8443), Port: int32(8443)}},
 				},
 			},
@@ -356,6 +361,11 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 		Name:          "port-8443",
 		HostPort:      8443,
 	}))
+
+	g.Expect(container.ReadinessProbe).ToNot(BeNil())
+	g.Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
+	g.Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(9091)))
+	g.Expect(container.ReadinessProbe.InitialDelaySeconds).To(Equal(int32(5)))
 }
 
 func TestBuildNginxResourceObjects_Plus(t *testing.T) {
@@ -1057,4 +1067,98 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(bootstrapCM.Data["main.conf"]).To(ContainSubstring("worker_connections 2048;"))
+}
+
+func TestBuildReadinessProbe(t *testing.T) {
+	t.Parallel()
+
+	defaultProbe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/readyz",
+				Port: intstr.FromInt32(dataplane.DefaultNginxReadinessProbePort),
+			},
+		},
+		InitialDelaySeconds: 3,
+	}
+
+	provisioner := &NginxProvisioner{}
+
+	tests := []struct {
+		nProxyCfg *graph.EffectiveNginxProxy
+		expected  *corev1.Probe
+		name      string
+	}{
+		{
+			name:      "nginx proxy config is nil, default probe is returned",
+			nProxyCfg: nil,
+			expected:  defaultProbe,
+		},
+		{
+			name: "deployment is nil, default probe is returned",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: nil,
+				},
+			},
+			expected: defaultProbe,
+		},
+		{
+			name: "container is nil, default probe is returned",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{},
+					},
+				},
+			},
+			expected: defaultProbe,
+		},
+		{
+			name: "readinessProbe is nil, default probe is returned",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: nil,
+						},
+					},
+				},
+			},
+			expected: defaultProbe,
+		},
+		{
+			name: "port & initialDelaySeconds is set in readinessProbe, custom probe is returned",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+								Port:                helpers.GetPointer[int32](9091),
+								InitialDelaySeconds: helpers.GetPointer[int32](10),
+							},
+						},
+					},
+				},
+			},
+			expected: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/readyz",
+						Port: intstr.FromInt32(9091),
+					},
+				},
+				InitialDelaySeconds: 10,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			probe := provisioner.buildReadinessProbe(tt.nProxyCfg)
+			g.Expect(probe).To(Equal(tt.expected))
+		})
+	}
 }

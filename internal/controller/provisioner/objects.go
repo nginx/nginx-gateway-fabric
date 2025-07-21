@@ -34,9 +34,10 @@ const (
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
 
-	defaultNginxImagePath     = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
-	defaultNginxPlusImagePath = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
-	defaultImagePullPolicy    = corev1.PullIfNotPresent
+	defaultNginxImagePath      = "ghcr.io/nginx/nginx-gateway-fabric/nginx"
+	defaultNginxPlusImagePath  = "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus"
+	defaultImagePullPolicy     = corev1.PullIfNotPresent
+	defaultInitialDelaySeconds = int32(3)
 )
 
 var emptyDirVolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
@@ -623,6 +624,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 					Image:           image,
 					ImagePullPolicy: pullPolicy,
 					Ports:           containerPorts,
+					ReadinessProbe:  p.buildReadinessProbe(nProxyCfg),
 					SecurityContext: &corev1.SecurityContext{
 						AllowPrivilegeEscalation: helpers.GetPointer(false),
 						Capabilities: &corev1.Capabilities{
@@ -1036,4 +1038,40 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 	}
 
 	return objects
+}
+
+// buildReadinessProbe creates a readiness probe configuration for the NGINX container.
+func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxProxy) *corev1.Probe {
+	probe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/readyz",
+				Port: intstr.FromInt32(dataplane.DefaultNginxReadinessProbePort),
+			},
+		},
+		InitialDelaySeconds: defaultInitialDelaySeconds,
+	}
+
+	var containerSpec *ngfAPIv1alpha2.ContainerSpec
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
+		if nProxyCfg.Kubernetes.Deployment != nil {
+			containerSpec = &nProxyCfg.Kubernetes.Deployment.Container
+		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
+			containerSpec = &nProxyCfg.Kubernetes.DaemonSet.Container
+		}
+	}
+
+	if containerSpec == nil || containerSpec.ReadinessProbe == nil {
+		return probe
+	}
+
+	if containerSpec.ReadinessProbe.Port != nil {
+		probe.HTTPGet.Port = intstr.FromInt32(*containerSpec.ReadinessProbe.Port)
+	}
+
+	if containerSpec.ReadinessProbe.InitialDelaySeconds != nil {
+		probe.InitialDelaySeconds = *containerSpec.ReadinessProbe.InitialDelaySeconds
+	}
+
+	return probe
 }

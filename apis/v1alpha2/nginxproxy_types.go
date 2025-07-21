@@ -390,6 +390,11 @@ type KubernetesSpec struct {
 
 // Deployment is the configuration for the NGINX Deployment.
 type DeploymentSpec struct {
+	// Container defines container fields for the NGINX container.
+	//
+	// +optional
+	Container ContainerSpec `json:"container"`
+
 	// Number of desired Pods.
 	//
 	// +optional
@@ -399,24 +404,19 @@ type DeploymentSpec struct {
 	//
 	// +optional
 	Pod PodSpec `json:"pod"`
-
-	// Container defines container fields for the NGINX container.
-	//
-	// +optional
-	Container ContainerSpec `json:"container"`
 }
 
 // DaemonSet is the configuration for the NGINX DaemonSet.
 type DaemonSetSpec struct {
-	// Pod defines Pod-specific fields.
-	//
-	// +optional
-	Pod PodSpec `json:"pod"`
-
 	// Container defines container fields for the NGINX container.
 	//
 	// +optional
 	Container ContainerSpec `json:"container"`
+
+	// Pod defines Pod-specific fields.
+	//
+	// +optional
+	Pod PodSpec `json:"pod"`
 }
 
 // PodSpec defines Pod-specific fields.
@@ -486,6 +486,11 @@ type ContainerSpec struct {
 	// +optional
 	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
 
+	// ReadinessProbe defines the readiness probe for the NGINX container.
+	//
+	// +optional
+	ReadinessProbe *ReadinessProbeSpec `json:"readinessProbe,omitempty"`
+
 	// HostPorts are the list of ports to expose on the host.
 	//
 	// +optional
@@ -495,6 +500,26 @@ type ContainerSpec struct {
 	//
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+}
+
+// ReadinessProbeSpec defines the configuration for the NGINX readiness probe.
+type ReadinessProbeSpec struct {
+	// Port is the port on which the readiness endpoint is exposed.
+	// If not specified, the default port is 8081.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port *int32 `json:"port,omitempty"`
+
+	// InitialDelaySeconds is the number of seconds after the container has
+	// started before the readiness probe is initiated.
+	// If not specified, the default is 3 seconds.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=3600
+	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
 }
 
 // Image is the NGINX image to use.

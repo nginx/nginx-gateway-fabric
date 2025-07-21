@@ -107,3 +107,60 @@ func TestExecuteBaseHttp_Snippets(t *testing.T) {
 	snippet2IncludeRes := string(res[2].data)
 	g.Expect(snippet2IncludeRes).To(ContainSubstring("contents2"))
 }
+
+func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
+	t.Parallel()
+
+	defaultConfig := dataplane.Configuration{
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{
+			NginxReadinessProbePort: dataplane.DefaultNginxReadinessProbePort,
+		},
+	}
+
+	customConfig := dataplane.Configuration{
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{
+			NginxReadinessProbePort: 9090,
+		},
+	}
+
+	tests := []struct {
+		name           string
+		expectedPort   string
+		expectedListen string
+		conf           dataplane.Configuration
+	}{
+		{
+			name:           "default nginx readiness probe port",
+			conf:           defaultConfig,
+			expectedPort:   "8081",
+			expectedListen: "listen 8081;",
+		},
+		{
+			name:           "custom nginx readiness probe 9090",
+			conf:           customConfig,
+			expectedPort:   "9090",
+			expectedListen: "listen 9090;",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf)
+			g.Expect(res).To(HaveLen(1))
+
+			httpConfig := string(res[0].data)
+
+			// check that the listen directive contains the expected port
+			g.Expect(httpConfig).To(ContainSubstring(test.expectedListen))
+
+			// check that the health check server block is present
+			g.Expect(httpConfig).To(ContainSubstring("server {"))
+			g.Expect(httpConfig).To(ContainSubstring("access_log off;"))
+			g.Expect(httpConfig).To(ContainSubstring("location = /readyz {"))
+			g.Expect(httpConfig).To(ContainSubstring("return 200;"))
+		})
+	}
+}

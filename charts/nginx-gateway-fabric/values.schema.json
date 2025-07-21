@@ -351,6 +351,12 @@
               "title": "lifecycle",
               "type": "object"
             },
+            "readinessProbe": {
+              "description": "# -- Defines the settings for the data plane readiness probe. This probe returns Ready when the NGINX data plane is ready to serve traffic.",
+              "required": [],
+              "title": "readinessProbe",
+              "type": "object"
+            },
             "resources": {
               "description": "The resource requirements of the NGINX container.",
               "required": [],

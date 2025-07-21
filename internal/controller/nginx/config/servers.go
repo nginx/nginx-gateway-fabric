@@ -224,6 +224,33 @@ type rewriteConfig struct {
 	MainRewrite string
 }
 
+// extractMirrorTargetsWithPercentages extracts mirror targets and their percentages from path rules.
+func extractMirrorTargetsWithPercentages(pathRules []dataplane.PathRule) map[string]*float64 {
+	mirrorTargets := make(map[string]*float64)
+
+	for _, rule := range pathRules {
+		for _, matchRule := range rule.MatchRules {
+			for _, mirrorFilter := range matchRule.Filters.RequestMirrors {
+				if mirrorFilter.Target != nil {
+					if mirrorFilter.Percent == nil {
+						mirrorTargets[*mirrorFilter.Target] = helpers.GetPointer(100.0)
+						continue
+					}
+
+					percentage := mirrorFilter.Percent
+
+					if _, exists := mirrorTargets[*mirrorFilter.Target]; !exists ||
+						*percentage > *mirrorTargets[*mirrorFilter.Target] {
+						mirrorTargets[*mirrorFilter.Target] = percentage // set a higher percentage if it exists
+					}
+				}
+			}
+		}
+	}
+
+	return mirrorTargets
+}
+
 type httpMatchPairs map[string][]routeMatch
 
 func createLocations(
@@ -239,6 +266,8 @@ func createLocations(
 	var rootPathExists bool
 	var grpcServer bool
 
+	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
+
 	for pathRuleIdx, rule := range server.PathRules {
 		matches := make([]routeMatch, 0, len(rule.MatchRules))
 
@@ -250,6 +279,8 @@ func createLocations(
 			grpcServer = true
 		}
 
+		mirrorPercentage := mirrorPathToPercentage[rule.Path]
+
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
 		for i := range extLocations {
 			extLocations[i].Includes = createIncludesFromPolicyGenerateResult(
@@ -260,13 +291,12 @@ func createLocations(
 		if !needsInternalLocations(rule) {
 			for _, r := range rule.MatchRules {
 				extLocations = updateLocations(
-					r.Filters,
-					extLocations,
 					r,
+					rule,
+					extLocations,
 					server.Port,
-					rule.Path,
-					rule.GRPC,
 					keepAliveCheck,
+					mirrorPercentage,
 				)
 			}
 
@@ -283,13 +313,12 @@ func createLocations(
 			)
 
 			intLocation = updateLocation(
-				r.Filters,
-				intLocation,
 				r,
+				rule,
+				intLocation,
 				server.Port,
-				rule.Path,
-				rule.GRPC,
 				keepAliveCheck,
+				mirrorPercentage,
 			)
 
 			internalLocations = append(internalLocations, intLocation)
@@ -420,19 +449,37 @@ func initializeInternalLocation(
 
 // updateLocation updates a location with any relevant configurations, like proxy_pass, filters, tls settings, etc.
 func updateLocation(
-	filters dataplane.HTTPFilters,
-	location http.Location,
 	matchRule dataplane.MatchRule,
+	pathRule dataplane.PathRule,
+	location http.Location,
 	listenerPort int32,
-	path string,
-	grpc bool,
 	keepAliveCheck keepAliveChecker,
+	mirrorPercentage *float64,
 ) http.Location {
+	filters := matchRule.Filters
+	path := pathRule.Path
+	grpc := pathRule.GRPC
+
 	if filters.InvalidFilter != nil {
 		location.Return = &http.Return{Code: http.StatusInternalServerError}
 		return location
 	}
 
+	location = updateLocationMirrorRoute(location, path, grpc)
+	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
+
+	if filters.RequestRedirect != nil {
+		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, path)
+	}
+
+	location = updateLocationRewriteFilter(location, filters.RequestURLRewrite, path)
+	location = updateLocationMirrorFilters(location, filters.RequestMirrors, path, mirrorPercentage)
+	location = updateLocationProxySettings(location, matchRule, grpc, keepAliveCheck)
+
+	return location
+}
+
+func updateLocationMirrorRoute(location http.Location, path string, grpc bool) http.Location {
 	if strings.HasPrefix(path, http.InternalMirrorRoutePathPrefix) {
 		location.Type = http.InternalLocationType
 		if grpc {
@@ -440,18 +487,30 @@ func updateLocation(
 		}
 	}
 
-	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
+	return location
+}
 
-	if filters.RequestRedirect != nil {
-		ret, rewrite := createReturnAndRewriteConfigForRedirectFilter(filters.RequestRedirect, listenerPort, path)
-		if rewrite.MainRewrite != "" {
-			location.Rewrites = append(location.Rewrites, rewrite.MainRewrite)
-		}
-		location.Return = ret
-		return location
+func updateLocationRedirectFilter(
+	location http.Location,
+	redirectFilter *dataplane.HTTPRequestRedirectFilter,
+	listenerPort int32,
+	path string,
+) http.Location {
+	ret, rewrite := createReturnAndRewriteConfigForRedirectFilter(redirectFilter, listenerPort, path)
+	if rewrite.MainRewrite != "" {
+		location.Rewrites = append(location.Rewrites, rewrite.MainRewrite)
 	}
+	location.Return = ret
 
-	rewrites := createRewritesValForRewriteFilter(filters.RequestURLRewrite, path)
+	return location
+}
+
+func updateLocationRewriteFilter(
+	location http.Location,
+	rewriteFilter *dataplane.HTTPURLRewriteFilter,
+	path string,
+) http.Location {
+	rewrites := createRewritesValForRewriteFilter(rewriteFilter, path)
 	if rewrites != nil {
 		if location.Type == http.InternalLocationType && rewrites.InternalRewrite != "" {
 			location.Rewrites = append(location.Rewrites, rewrites.InternalRewrite)
@@ -461,12 +520,42 @@ func updateLocation(
 		}
 	}
 
-	for _, filter := range filters.RequestMirrors {
+	return location
+}
+
+func updateLocationMirrorFilters(
+	location http.Location,
+	mirrorFilters []*dataplane.HTTPRequestMirrorFilter,
+	path string,
+	mirrorPercentage *float64,
+) http.Location {
+	for _, filter := range mirrorFilters {
 		if filter.Target != nil {
 			location.MirrorPaths = append(location.MirrorPaths, *filter.Target)
 		}
 	}
 
+	if location.MirrorPaths != nil {
+		location.MirrorPaths = deduplicateStrings(location.MirrorPaths)
+	}
+
+	// if mirrorPercentage is nil (no mirror filter configured) or 100.0, the split clients variable is not generated,
+	// and we let all traffic get mirrored.
+	if mirrorPercentage != nil && *mirrorPercentage != 100.0 {
+		location.MirrorSplitClientsVariableName = convertSplitClientVariableName(
+			fmt.Sprintf("%s_%.2f", path, *mirrorPercentage),
+		)
+	}
+
+	return location
+}
+
+func updateLocationProxySettings(
+	location http.Location,
+	matchRule dataplane.MatchRule,
+	grpc bool,
+	keepAliveCheck keepAliveChecker,
+) http.Location {
 	extraHeaders := make([]http.Header, 0, 3)
 	if grpc {
 		extraHeaders = append(extraHeaders, grpcAuthorityHeader)
@@ -497,18 +586,24 @@ func updateLocation(
 // updateLocations updates the existing locations with any relevant configurations, like proxy_pass,
 // filters, tls settings, etc.
 func updateLocations(
-	filters dataplane.HTTPFilters,
-	buildLocations []http.Location,
 	matchRule dataplane.MatchRule,
+	pathRule dataplane.PathRule,
+	buildLocations []http.Location,
 	listenerPort int32,
-	path string,
-	grpc bool,
 	keepAliveCheck keepAliveChecker,
+	mirrorPercentage *float64,
 ) []http.Location {
 	updatedLocations := make([]http.Location, len(buildLocations))
 
 	for i, loc := range buildLocations {
-		updatedLocations[i] = updateLocation(filters, loc, matchRule, listenerPort, path, grpc, keepAliveCheck)
+		updatedLocations[i] = updateLocation(
+			matchRule,
+			pathRule,
+			loc,
+			listenerPort,
+			keepAliveCheck,
+			mirrorPercentage,
+		)
 	}
 
 	return updatedLocations
@@ -961,4 +1056,19 @@ func getConnectionHeader(keepAliveCheck keepAliveChecker, backends []dataplane.B
 	}
 
 	return httpConnectionHeader
+}
+
+// deduplicateStrings removes duplicate strings from a slice while preserving order.
+func deduplicateStrings(content []string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(content))
+
+	for _, str := range content {
+		if _, exists := seen[str]; !exists {
+			seen[str] = struct{}{}
+			result = append(result, str)
+		}
+	}
+
+	return result
 }

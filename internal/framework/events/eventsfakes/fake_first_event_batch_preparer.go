@@ -93,8 +93,6 @@ func (fake *FakeFirstEventBatchPreparer) PrepareReturnsOnCall(i int, result1 eve
 func (fake *FakeFirstEventBatchPreparer) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.prepareMutex.RLock()
-	defer fake.prepareMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

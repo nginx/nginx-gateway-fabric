@@ -107,8 +107,6 @@ func (fake *FakeServiceResolver) ResolveReturnsOnCall(i int, result1 []resolver.
 func (fake *FakeServiceResolver) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.resolveMutex.RLock()
-	defer fake.resolveMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value
