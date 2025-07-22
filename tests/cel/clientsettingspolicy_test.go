@@ -30,8 +30,13 @@ const (
 )
 
 const (
-	ExpectedTargetRefKindError  = "TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute'"
-	ExpectedTargetRefGroupError = "TargetRef Group must be gateway.networking.k8s.io."
+	ExpectedTargetRefKindError  = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
+	ExpectedTargetRefGroupError = `TargetRef Group must be gateway.networking.k8s.io.`
+)
+
+const (
+	PolicyName      = "test-policy"
+	TargetRefFormat = "targetRef-name-%d"
 )
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
@@ -152,13 +157,15 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	// This should be set up by your test framework to connect to a real cluster
 	k8sClient := getKubernetesClient(t)
 
+	policySpec := tt.policySpec
+	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(fmt.Sprintf(TargetRefFormat, time.Now().UnixNano()))
+
 	clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: controllerruntime.ObjectMeta{
-			// Create a unique name and namespace for the policy to avoid conflicts
-			Name:      fmt.Sprintf("test-policy-%d", time.Now().UnixNano()),
+			Name:      PolicyName,
 			Namespace: "default",
 		},
-		Spec: tt.policySpec,
+		Spec: policySpec,
 	}
 
 	err := k8sClient.Create(context.Background(), clientSettingsPolicy)
