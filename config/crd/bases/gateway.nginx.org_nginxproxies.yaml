@@ -511,6 +511,30 @@ spec:
                               type: object
                             type: array
                         type: object
+                      patches:
+                        description: Patches are custom patches to apply to the NGINX
+                          DaemonSet.
+                        items:
+                          description: Patch defines a patch to apply to a Kubernetes
+                            object.
+                          properties:
+                            type:
+                              default: StrategicMerge
+                              description: Type is the type of patch. Defaults to
+                                StrategicMerge.
+                              enum:
+                              - StrategicMerge
+                              - Merge
+                              - JSONPatch
+                              type: string
+                            value:
+                              description: |-
+                                Value is the patch data as raw JSON.
+                                For StrategicMerge and Merge patches, this should be a JSON object.
+                                For JSONPatch patches, this should be a JSON array of patch operations.
+                              x-kubernetes-preserve-unknown-fields: true
+                          type: object
+                        type: array
                       pod:
                         description: Pod defines Pod-specific fields.
                         properties:
@@ -3944,6 +3968,30 @@ spec:
                               type: object
                             type: array
                         type: object
+                      patches:
+                        description: Patches are custom patches to apply to the NGINX
+                          Deployment.
+                        items:
+                          description: Patch defines a patch to apply to a Kubernetes
+                            object.
+                          properties:
+                            type:
+                              default: StrategicMerge
+                              description: Type is the type of patch. Defaults to
+                                StrategicMerge.
+                              enum:
+                              - StrategicMerge
+                              - Merge
+                              - JSONPatch
+                              type: string
+                            value:
+                              description: |-
+                                Value is the patch data as raw JSON.
+                                For StrategicMerge and Merge patches, this should be a JSON object.
+                                For JSONPatch patches, this should be a JSON array of patch operations.
+                              x-kubernetes-preserve-unknown-fields: true
+                          type: object
+                        type: array
                       pod:
                         description: Pod defines Pod-specific fields.
                         properties:
@@ -6994,6 +7042,30 @@ spec:
                           required:
                           - listenerPort
                           - port
+                          type: object
+                        type: array
+                      patches:
+                        description: Patches are custom patches to apply to the NGINX
+                          Service.
+                        items:
+                          description: Patch defines a patch to apply to a Kubernetes
+                            object.
+                          properties:
+                            type:
+                              default: StrategicMerge
+                              description: Type is the type of patch. Defaults to
+                                StrategicMerge.
+                              enum:
+                              - StrategicMerge
+                              - Merge
+                              - JSONPatch
+                              type: string
+                            value:
+                              description: |-
+                                Value is the patch data as raw JSON.
+                                For StrategicMerge and Merge patches, this should be a JSON object.
+                                For JSONPatch patches, this should be a JSON array of patch operations.
+                              x-kubernetes-preserve-unknown-fields: true
                           type: object
                         type: array
                       type:

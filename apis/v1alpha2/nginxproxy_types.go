@@ -2,6 +2,7 @@ package v1alpha2
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
@@ -388,6 +389,36 @@ type KubernetesSpec struct {
 	Service *ServiceSpec `json:"service,omitempty"`
 }
 
+// Patch defines a patch to apply to a Kubernetes object.
+type Patch struct {
+	// Type is the type of patch. Defaults to StrategicMerge.
+	//
+	// +optional
+	// +kubebuilder:default:=StrategicMerge
+	Type *PatchType `json:"type,omitempty"`
+
+	// Value is the patch data as raw JSON.
+	// For StrategicMerge and Merge patches, this should be a JSON object.
+	// For JSONPatch patches, this should be a JSON array of patch operations.
+	//
+	// +optional
+	// +kubebuilder:validation:XPreserveUnknownFields
+	Value *apiextv1.JSON `json:"value,omitempty"`
+}
+
+// PatchType specifies the type of patch.
+// +kubebuilder:validation:Enum=StrategicMerge;Merge;JSONPatch
+type PatchType string
+
+const (
+	// PatchTypeStrategicMerge uses strategic merge patch.
+	PatchTypeStrategicMerge PatchType = "StrategicMerge"
+	// PatchTypeMerge uses merge patch (RFC 7386).
+	PatchTypeMerge PatchType = "Merge"
+	// PatchTypeJSONPatch uses JSON patch (RFC 6902).
+	PatchTypeJSONPatch PatchType = "JSONPatch"
+)
+
 // Deployment is the configuration for the NGINX Deployment.
 type DeploymentSpec struct {
 	// Container defines container fields for the NGINX container.
@@ -404,6 +435,11 @@ type DeploymentSpec struct {
 	//
 	// +optional
 	Pod PodSpec `json:"pod"`
+
+	// Patches are custom patches to apply to the NGINX Deployment.
+	//
+	// +optional
+	Patches []Patch `json:"patches,omitempty"`
 }
 
 // DaemonSet is the configuration for the NGINX DaemonSet.
@@ -417,6 +453,11 @@ type DaemonSetSpec struct {
 	//
 	// +optional
 	Pod PodSpec `json:"pod"`
+
+	// Patches are custom patches to apply to the NGINX DaemonSet.
+	//
+	// +optional
+	Patches []Patch `json:"patches,omitempty"`
 }
 
 // PodSpec defines Pod-specific fields.
@@ -594,6 +635,11 @@ type ServiceSpec struct {
 	//
 	// +optional
 	NodePorts []NodePort `json:"nodePorts,omitempty"`
+
+	// Patches are custom patches to apply to the NGINX Service.
+	//
+	// +optional
+	Patches []Patch `json:"patches,omitempty"`
 }
 
 // ServiceType describes ingress method for the Service.
