@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
@@ -167,26 +169,65 @@ func validateClientSettingsPolicy(t *testing.T,
 ) {
 	t.Helper()
 
-	// Register API types with the runtime scheme
-	// This is necessary to create a fake client that can handle the custom resource.
-	scheme := runtime.NewScheme()
-	_ = ngfAPIv1alpha1.AddToScheme(scheme)
+	// Get Kubernetes client from test framework
+	// This should be set up by your test framework to connect to a real cluster
+	k8sClient := getKubernetesClient(t)
 
-	// Create a fake client with the scheme
-	// This is used to simulate interactions with the Kubernetes API.
-	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	// Make policy name unique to avoid conflicts
+	clientSettingsPolicy.Name = fmt.Sprintf("%s-%d", clientSettingsPolicy.Name, time.Now().UnixNano())
 
 	err := k8sClient.Create(context.Background(), clientSettingsPolicy)
-	if err != nil {
-		t.Logf("Error creating ClientSettingsPolicy %q: %v",
-			fmt.Sprintf("%v/%v", clientSettingsPolicy.Namespace, clientSettingsPolicy.Name), err)
+
+	// Clean up after test
+	defer func() {
+		_ = k8sClient.Delete(context.Background(), clientSettingsPolicy)
+	}()
+
+	// Check if we expected errors
+	if len(wantErrors) == 0 {
+		if err != nil {
+			t.Errorf("expected no error but got: %v", err)
+		}
+		return
 	}
 
-	if err != nil {
-		for _, wantError := range wantErrors {
-			if !strings.Contains(err.Error(), wantError) {
-				t.Errorf("missing expected error %q in %v", wantError, err)
-			}
+	// We expected errors - validation should have failed
+	if err == nil {
+		t.Errorf("expected validation error but policy was accepted")
+		return
+	}
+
+	// Check that we got the expected error messages
+	var missingErrors []string
+	for _, wantError := range wantErrors {
+		if !strings.Contains(err.Error(), wantError) {
+			missingErrors = append(missingErrors, wantError)
 		}
 	}
+	if len(missingErrors) != 0 {
+		t.Errorf("missing expected errors: %v, got: %v", missingErrors, err)
+	}
+}
+
+// getKubernetesClient returns a client connected to a real Kubernetes cluster
+func getKubernetesClient(t *testing.T) client.Client {
+	// Use controller-runtime to get cluster connection
+	k8sConfig, err := controllerruntime.GetConfig()
+	if err != nil {
+		t.Skipf("Cannot connect to Kubernetes cluster: %v", err)
+	}
+
+	// Set up scheme with NGF types
+	scheme := runtime.NewScheme()
+	if err := ngfAPIv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Failed to add NGF schema: %v", err)
+	}
+
+	// Create client
+	k8sClient, err := client.New(k8sConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		t.Skipf("Cannot create k8s client: %v", err)
+	}
+
+	return k8sClient
 }
