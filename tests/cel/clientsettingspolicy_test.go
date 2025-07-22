@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +35,6 @@ const (
 )
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
-
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
@@ -93,23 +91,12 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a ClientSettingsPolicy with the targetRef from the test case.
-			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-policy",
-					Namespace: "default",
-				},
-				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-					TargetRef: tt.policySpec.TargetRef,
-				},
-			}
-			validateClientSettingsPolicy(t, clientSettingsPolicy, tt.wantErrors)
+			validateClientSettingsPolicy(t, tt)
 		})
 	}
 }
 
 func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
-
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
@@ -148,24 +135,16 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a ClientSettingsPolicy with the targetRef from the test case.
-			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-policy",
-					Namespace: "default",
-				},
-				Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-					TargetRef: tt.policySpec.TargetRef,
-				},
-			}
-			validateClientSettingsPolicy(t, clientSettingsPolicy, tt.wantErrors)
+			validateClientSettingsPolicy(t, tt)
 		})
 	}
 }
 
-func validateClientSettingsPolicy(t *testing.T,
-	clientSettingsPolicy *ngfAPIv1alpha1.ClientSettingsPolicy,
-	wantErrors []string,
+func validateClientSettingsPolicy(t *testing.T, tt struct {
+	policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
+	name       string
+	wantErrors []string
+},
 ) {
 	t.Helper()
 
@@ -173,8 +152,14 @@ func validateClientSettingsPolicy(t *testing.T,
 	// This should be set up by your test framework to connect to a real cluster
 	k8sClient := getKubernetesClient(t)
 
-	// Make policy name unique to avoid conflicts
-	clientSettingsPolicy.Name = fmt.Sprintf("%s-%d", clientSettingsPolicy.Name, time.Now().UnixNano())
+	clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
+		ObjectMeta: controllerruntime.ObjectMeta{
+			// Create a unique name and namespace for the policy to avoid conflicts
+			Name:      fmt.Sprintf("test-policy-%d", time.Now().UnixNano()),
+			Namespace: "default",
+		},
+		Spec: tt.policySpec,
+	}
 
 	err := k8sClient.Create(context.Background(), clientSettingsPolicy)
 
@@ -184,7 +169,7 @@ func validateClientSettingsPolicy(t *testing.T,
 	}()
 
 	// Check if we expected errors
-	if len(wantErrors) == 0 {
+	if len(tt.wantErrors) == 0 {
 		if err != nil {
 			t.Errorf("expected no error but got: %v", err)
 		}
@@ -199,7 +184,7 @@ func validateClientSettingsPolicy(t *testing.T,
 
 	// Check that we got the expected error messages
 	var missingErrors []string
-	for _, wantError := range wantErrors {
+	for _, wantError := range tt.wantErrors {
 		if !strings.Contains(err.Error(), wantError) {
 			missingErrors = append(missingErrors, wantError)
 		}
@@ -209,8 +194,9 @@ func validateClientSettingsPolicy(t *testing.T,
 	}
 }
 
-// getKubernetesClient returns a client connected to a real Kubernetes cluster
+// getKubernetesClient returns a client connected to a real Kubernetes cluster.
 func getKubernetesClient(t *testing.T) client.Client {
+	t.Helper()
 	// Use controller-runtime to get cluster connection
 	k8sConfig, err := controllerruntime.GetConfig()
 	if err != nil {
