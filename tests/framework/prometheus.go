@@ -39,7 +39,9 @@ func InstallPrometheus(
 	rm ResourceManager,
 	cfg PrometheusConfig,
 ) (PrometheusInstance, error) {
-	output, err := exec.Command(
+	ctx := context.Background()
+	output, err := exec.CommandContext(
+		ctx,
 		"helm",
 		"repo",
 		"add",
@@ -50,7 +52,8 @@ func InstallPrometheus(
 		return PrometheusInstance{}, fmt.Errorf("failed to add Prometheus helm repo: %w; output: %s", err, string(output))
 	}
 
-	output, err = exec.Command(
+	output, err = exec.CommandContext(
+		ctx,
 		"helm",
 		"repo",
 		"update",
@@ -62,7 +65,8 @@ func InstallPrometheus(
 	scrapeInterval := fmt.Sprintf("%ds", int(cfg.ScrapeInterval.Seconds()))
 
 	//nolint:gosec
-	output, err = exec.Command(
+	output, err = exec.CommandContext(
+		ctx,
 		"helm",
 		"install",
 		prometheusReleaseName,
@@ -110,7 +114,8 @@ func InstallPrometheus(
 
 // UninstallPrometheus uninstalls Prometheus from the cluster.
 func UninstallPrometheus(rm ResourceManager) error {
-	output, err := exec.Command(
+	output, err := exec.CommandContext(
+		context.Background(),
 		"helm",
 		"uninstall",
 		prometheusReleaseName,
@@ -208,7 +213,7 @@ func (ins *PrometheusInstance) QueryWithCtx(ctx context.Context, query string) (
 	}
 
 	if len(warnings) > 0 {
-		slog.Info(
+		slog.InfoContext(context.Background(),
 			"Prometheus query returned warnings",
 			"query", query,
 			"warnings", warnings,
@@ -240,7 +245,7 @@ func (ins *PrometheusInstance) QueryRangeWithCtx(ctx context.Context,
 	}
 
 	if len(warnings) > 0 {
-		slog.Info(
+		slog.InfoContext(context.Background(),
 			"Prometheus range query returned warnings",
 			"query", query,
 			"range", promRange,

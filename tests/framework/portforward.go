@@ -2,6 +2,7 @@ package framework
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -49,9 +50,10 @@ func PortForward(config *rest.Config, namespace, podName string, ports []string,
 
 	go func() {
 		for {
+			ctx := context.Background()
 			if err := forward(); err != nil {
-				slog.Error("error forwarding ports", "error", err)
-				slog.Info("retrying port forward in 1s...")
+				slog.ErrorContext(ctx, "error forwarding ports", "error", err)
+				slog.InfoContext(ctx, "retrying port forward in 1s...")
 			}
 
 			select {

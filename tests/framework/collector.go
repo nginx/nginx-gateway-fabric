@@ -1,6 +1,7 @@
 package framework
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 
@@ -17,6 +18,7 @@ const (
 
 // InstallCollector installs the otel-collector.
 func InstallCollector() ([]byte, error) {
+	ctx := context.Background()
 	repoAddArgs := []string{
 		"repo",
 		"add",
@@ -24,11 +26,12 @@ func InstallCollector() ([]byte, error) {
 		"https://open-telemetry.github.io/opentelemetry-helm-charts",
 	}
 
-	if output, err := exec.Command("helm", repoAddArgs...).CombinedOutput(); err != nil {
+	if output, err := exec.CommandContext(ctx, "helm", repoAddArgs...).CombinedOutput(); err != nil {
 		return output, err
 	}
 
-	if output, err := exec.Command(
+	if output, err := exec.CommandContext(
+		ctx,
 		"helm",
 		"repo",
 		"update",
@@ -47,7 +50,7 @@ func InstallCollector() ([]byte, error) {
 		"--wait",
 	}
 
-	return exec.Command("helm", args...).CombinedOutput()
+	return exec.CommandContext(ctx, "helm", args...).CombinedOutput()
 }
 
 // UninstallCollector uninstalls the otel-collector.
@@ -57,7 +60,7 @@ func UninstallCollector(resourceManager ResourceManager) ([]byte, error) {
 		"--namespace", CollectorNamespace,
 	}
 
-	output, err := exec.Command("helm", args...).CombinedOutput()
+	output, err := exec.CommandContext(context.Background(), "helm", args...).CombinedOutput()
 	if err != nil {
 		return output, err
 	}
