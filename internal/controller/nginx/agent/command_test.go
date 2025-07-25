@@ -19,13 +19,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/broadcast"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/broadcast/broadcastfakes"
-	agentgrpc "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc"
-	grpcContext "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/context"
-	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/grpcfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/messenger/messengerfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/status"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
+	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
+	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
+	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/grpcfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/messenger/messengerfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
 type mockSubscribeServer struct {

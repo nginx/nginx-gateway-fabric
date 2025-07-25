@@ -3,7 +3,7 @@ package dataplane
 import (
 	"sort"
 
-	ngfsort "github.com/nginx/nginx-gateway-fabric/internal/controller/sort"
+	ngfsort "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/sort"
 )
 
 func sortMatchRules(matchRules []MatchRule) {

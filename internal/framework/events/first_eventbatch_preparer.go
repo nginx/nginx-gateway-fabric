@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/kubernetes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kubernetes"
 )
 
 //counterfeiter:generate . FirstEventBatchPreparer

@@ -1,7 +1,7 @@
 package policies
 
 import (
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 )
 
 // Generator defines an interface for a policy to implement its appropriate generator functions.

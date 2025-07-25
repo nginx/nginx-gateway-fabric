@@ -5,12 +5,12 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/clientsettings"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestGenerate(t *testing.T) {

@@ -13,10 +13,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestNewStore(t *testing.T) {

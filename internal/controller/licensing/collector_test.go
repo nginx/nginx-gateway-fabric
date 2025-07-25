@@ -9,9 +9,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/licensing"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 var _ = Describe("DeploymentContextCollector", func() {

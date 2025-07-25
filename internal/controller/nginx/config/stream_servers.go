@@ -4,10 +4,10 @@ import (
 	"fmt"
 	gotemplate "text/template"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/shared"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/stream"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 var streamServersTemplate = gotemplate.Must(gotemplate.New("streamServers").Parse(streamServersTemplateText))

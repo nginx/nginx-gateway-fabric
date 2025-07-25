@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/status"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
 type FakeGroupUpdater struct {

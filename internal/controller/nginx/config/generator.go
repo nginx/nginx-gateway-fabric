@@ -9,15 +9,15 @@ import (
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	filesHelper "github.com/nginx/agent/v3/pkg/files"
 
-	ngfConfig "github.com/nginx/nginx-gateway-fabric/internal/controller/config"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/clientsettings"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/observability"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/upstreamsettings"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
+	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
 
 //go:generate go tool counterfeiter -generate

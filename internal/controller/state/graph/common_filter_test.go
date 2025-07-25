@@ -8,10 +8,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation/validationfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func TestValidateFilter(t *testing.T) {

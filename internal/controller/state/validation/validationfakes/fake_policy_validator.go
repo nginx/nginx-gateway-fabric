@@ -4,9 +4,9 @@ package validationfakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 )
 
 type FakePolicyValidator struct {

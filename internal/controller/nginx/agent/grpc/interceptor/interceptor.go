@@ -18,8 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	grpcContext "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/context"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
+	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 )
 
 const (

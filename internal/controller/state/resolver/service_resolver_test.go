@@ -14,9 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/resolver"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func createSlice(

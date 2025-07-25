@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 )
 
 type flagTestCase struct {

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	v1 "github.com/nginx/agent/v3/api/grpc/mpi/v1"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/messenger"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/messenger"
 )
 
 type FakeMessenger struct {

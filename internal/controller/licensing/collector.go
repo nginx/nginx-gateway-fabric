@@ -7,8 +7,8 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/telemetry"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 )
 
 //go:generate go tool counterfeiter -generate

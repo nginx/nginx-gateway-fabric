@@ -7,8 +7,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 // Validator validates an NGF Policy.

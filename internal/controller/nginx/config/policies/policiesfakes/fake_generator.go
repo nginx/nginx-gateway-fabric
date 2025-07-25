@@ -4,8 +4,8 @@ package policiesfakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 )
 
 type FakeGenerator struct {

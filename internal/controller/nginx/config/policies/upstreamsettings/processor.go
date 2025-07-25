@@ -1,9 +1,9 @@
 package upstreamsettings
 
 import (
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 )
 
 // Processor processes UpstreamSettingsPolicies.
