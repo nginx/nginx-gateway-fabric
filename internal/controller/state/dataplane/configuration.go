@@ -991,6 +991,10 @@ func buildBaseHTTPConfig(
 		baseConfig.HTTP2 = false
 	}
 
+	if np.DisableSNIHostValidation != nil && *np.DisableSNIHostValidation {
+		baseConfig.DisableSNIHostValidation = true
+	}
+
 	if np.IPFamily != nil {
 		switch *np.IPFamily {
 		case ngfAPIv1alpha2.IPv4:

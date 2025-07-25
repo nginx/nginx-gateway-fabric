@@ -4024,3 +4024,41 @@ func TestGetIPFamily(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	sslServer := dataplane.VirtualServer{
+		Hostname: "example.com",
+		SSL: &dataplane.SSL{
+			KeyPairID: "test-keypair",
+		},
+		Port: 8443,
+	}
+	gen := GeneratorImpl{}
+
+	// Case 1: DisableSNIHostValidation = false (default)
+	confWithValidation := dataplane.Configuration{
+		SSLServers: []dataplane.VirtualServer{sslServer},
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{
+			DisableSNIHostValidation: false,
+		},
+	}
+	results := gen.executeServers(confWithValidation, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+	serverConf := string(results[0].data)
+	g.Expect(serverConf).To(ContainSubstring("if ($ssl_server_name != $host)"),
+		"Expected SNI host validation block to be present when DisableSNIHostValidation is false")
+
+	// Case 2: DisableSNIHostValidation = true
+	confWithoutValidation := dataplane.Configuration{
+		SSLServers: []dataplane.VirtualServer{sslServer},
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{
+			DisableSNIHostValidation: true,
+		},
+	}
+	results = gen.executeServers(confWithoutValidation, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+	serverConf = string(results[0].data)
+	g.Expect(serverConf).NotTo(ContainSubstring("if ($ssl_server_name != $host)"),
+		"Expected SNI host validation block to be absent when DisableSNIHostValidation is true")
+}

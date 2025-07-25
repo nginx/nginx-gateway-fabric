@@ -373,6 +373,11 @@ func (in *NginxProxySpec) DeepCopyInto(out *NginxProxySpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.DisableSNIHostValidation != nil {
+		in, out := &in.DisableSNIHostValidation, &out.DisableSNIHostValidation
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Kubernetes != nil {
 		in, out := &in.Kubernetes, &out.Kubernetes
 		*out = new(KubernetesSpec)

@@ -61,10 +61,11 @@ func (g GeneratorImpl) executeServers(
 	servers, httpMatchPairs := createServers(conf, generator, keepAliveCheck)
 
 	serverConfig := http.ServerConfig{
-		Servers:         servers,
-		IPFamily:        getIPFamily(conf.BaseHTTPConfig),
-		Plus:            g.plus,
-		RewriteClientIP: getRewriteClientIPSettings(conf.BaseHTTPConfig.RewriteClientIPSettings),
+		Servers:                  servers,
+		IPFamily:                 getIPFamily(conf.BaseHTTPConfig),
+		Plus:                     g.plus,
+		RewriteClientIP:          getRewriteClientIPSettings(conf.BaseHTTPConfig.RewriteClientIPSettings),
+		DisableSNIHostValidation: conf.BaseHTTPConfig.DisableSNIHostValidation,
 	}
 
 	serverResult := executeResult{
