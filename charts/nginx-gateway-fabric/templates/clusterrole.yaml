@@ -8,6 +8,9 @@ rules:
 - apiGroups:
   - ""
   - apps
+  {{- if or .Values.nginx.autoscaling.enabled .Values.nginxGateway.autoscaling.enabled }}
+  - autoscaling
+  {{- end }}
   resources:
   - secrets
   - configmaps
@@ -15,6 +18,9 @@ rules:
   - services
   - deployments
   - daemonsets
+  {{- if or .Values.nginx.autoscaling.enabled .Values.nginxGateway.autoscaling.enabled }}
+  - horizontalpodautoscalers
+  {{- end }}
   verbs:
   - create
   - update

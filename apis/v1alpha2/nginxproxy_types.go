@@ -1,6 +1,7 @@
 package v1alpha2
 
 import (
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -431,6 +432,11 @@ type DeploymentSpec struct {
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 
+	// Autoscaling defines the configuration for Horizontal Pod Autoscaling.
+	//
+	// +optional
+	Autoscaling HPASpec `json:"autoscaling"`
+
 	// Pod defines Pod-specific fields.
 	//
 	// +optional
@@ -458,6 +464,49 @@ type DaemonSetSpec struct {
 	//
 	// +optional
 	Patches []Patch `json:"patches,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:message="at least one metric must be specified when autoscaling is enabled",rule="!self.enabled || (has(self.targetCPUUtilizationPercentage) || has(self.targetMemoryUtilizationPercentage) || (has(self.autoscalingTemplate) && size(self.autoscalingTemplate) > 0))"
+// +kubebuilder:validation:XValidation:message="minReplicas must be less than or equal to maxReplicas",rule="self.minReplicas <= self.maxReplicas"
+// +kubebuilder:validation:XValidation:message="CPU utilization must be between 1 and 100",rule="!has(self.targetCPUUtilizationPercentage) || (self.targetCPUUtilizationPercentage >= 1 && self.targetCPUUtilizationPercentage <= 100)"
+// +kubebuilder:validation:XValidation:message="memory utilization must be between 1 and 100",rule="!has(self.targetMemoryUtilizationPercentage) || (self.targetMemoryUtilizationPercentage >= 1 && self.targetMemoryUtilizationPercentage <= 100)"
+//
+// HPASpec is the configuration for the Horizontal Pod Autoscaling.
+//
+//nolint:lll
+type HPASpec struct {
+	// Behavior configures the scaling behavior of the target
+	// in both Up and Down directions (scaleUp and scaleDown fields respectively).
+	// If not set, the default HPAScalingRules for scale up and scale down are used.
+	//
+	// +optional
+	Behavior *autoscalingv2.HorizontalPodAutoscalerBehavior `json:"behavior,omitempty"`
+
+	// AutoscalingTemplate configures the additional scaling option.
+	//
+	// +optional
+	AutoscalingTemplate *[]autoscalingv2.MetricSpec `json:"autoscalingTemplate,omitempty"`
+
+	// Target cpu utilization percentage of HPA.
+	//
+	// +optional
+	TargetCPUUtilizationPercentage *int32 `json:"targetCPUUtilizationPercentage,omitempty"`
+
+	// Target memory utilization percentage of HPA.
+	//
+	// +optional
+	TargetMemoryUtilizationPercentage *int32 `json:"targetMemoryUtilizationPercentage,omitempty"`
+
+	// Minimum number of replicas.
+	//
+	// +optional
+	MinReplicas *int32 `json:"minReplicas,omitempty"`
+
+	// Maximum number of replicas.
+	MaxReplicas int32 `json:"maxReplicas"`
+
+	// Enable or disable Horizontal Pod Autoscaler
+	Enabled bool `json:"enabled"`
 }
 
 // PodSpec defines Pod-specific fields.
