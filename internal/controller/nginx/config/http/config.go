@@ -127,8 +127,9 @@ type ProxySSLVerify struct {
 
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.
 type ServerConfig struct {
-	Servers         []Server
-	RewriteClientIP shared.RewriteClientIPSettings
-	IPFamily        shared.IPFamily
-	Plus            bool
+	Servers                  []Server
+	RewriteClientIP          shared.RewriteClientIPSettings
+	IPFamily                 shared.IPFamily
+	Plus                     bool
+	DisableSNIHostValidation bool
 }
