@@ -5,8 +5,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/provisioner"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 )
 
 type FakeProvisioner struct {

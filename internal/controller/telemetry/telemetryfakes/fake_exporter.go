@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/telemetry"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	telemetrya "github.com/nginx/telemetry-exporter/pkg/telemetry"
 )
 

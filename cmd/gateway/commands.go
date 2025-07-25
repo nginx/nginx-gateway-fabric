@@ -20,11 +20,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/config"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/licensing"
-	ngxConfig "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
+	ngxConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
 
 // These flags are shared by multiple commands.

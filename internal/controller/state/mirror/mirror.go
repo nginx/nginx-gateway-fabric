@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 )
 
 // RouteName builds the name for the internal mirror route, using the user route name,

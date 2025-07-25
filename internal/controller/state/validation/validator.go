@@ -3,8 +3,8 @@ package validation
 //go:generate go tool counterfeiter -generate
 
 import (
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 )
 
 // Validators include validators for API resources from the perspective of a data-plane.

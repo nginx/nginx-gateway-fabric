@@ -19,16 +19,16 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
-	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/policiesfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/resolver"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/resolver/resolverfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver/resolverfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 var defaultBaseHTTPConfig = BaseHTTPConfig{

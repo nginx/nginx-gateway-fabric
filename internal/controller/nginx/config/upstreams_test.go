@@ -6,15 +6,15 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/upstreamsettings"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/stream"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/types"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/resolver"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestExecuteUpstreams(t *testing.T) {

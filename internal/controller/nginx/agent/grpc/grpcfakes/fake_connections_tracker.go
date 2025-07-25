@@ -4,7 +4,7 @@ package grpcfakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
 )
 
 type FakeConnectionsTracker struct {

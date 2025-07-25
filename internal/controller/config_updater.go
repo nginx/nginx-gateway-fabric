@@ -11,8 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/tools/record"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 // updateControlPlane updates the control plane configuration with the given user spec.

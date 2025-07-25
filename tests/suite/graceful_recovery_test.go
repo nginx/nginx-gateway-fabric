@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	"github.com/nginx/nginx-gateway-fabric/tests/framework"
+	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
 const (

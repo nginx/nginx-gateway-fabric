@@ -16,8 +16,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/kubernetes/kubernetesfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kubernetes/kubernetesfakes"
 )
 
 var _ = Describe("FirstEventBatchPreparer", func() {

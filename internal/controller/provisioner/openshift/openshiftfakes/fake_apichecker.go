@@ -4,7 +4,7 @@ package openshiftfakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/provisioner/openshift"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift"
 	"k8s.io/client-go/rest"
 )
 

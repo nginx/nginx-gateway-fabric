@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 )
 
 type FakeEventHandler struct {

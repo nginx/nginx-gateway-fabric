@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
 
 type FakeOSFileManager struct {

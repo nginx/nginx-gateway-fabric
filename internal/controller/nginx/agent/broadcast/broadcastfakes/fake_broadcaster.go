@@ -4,7 +4,7 @@ package broadcastfakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/broadcast"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
 )
 
 type FakeBroadcaster struct {

@@ -12,8 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
-	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
 
 // UpdateRequest is a request to update the status of a resource.
