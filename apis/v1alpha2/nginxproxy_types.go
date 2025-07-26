@@ -73,6 +73,15 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
+	// DisableSNIHostValidation disables the validation that ensures the SNI hostname
+	// matches the Host header in HTTPS requests. When disabled, HTTPS connections can
+	// be reused for requests to different hostnames covered by the same certificate.
+	// This resolves HTTP/2 connection coalescing issues with wildcard certificates but
+	// introduces security risks as described in Gateway API GEP-3567.
+	// If not specified, defaults to false (validation enabled).
+	//
+	// +optional
+	DisableSNIHostValidation *bool `json:"disableSNIHostValidation,omitempty"`
 	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
 	//
 	// +optional

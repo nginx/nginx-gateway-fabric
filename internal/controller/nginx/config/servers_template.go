@@ -55,9 +55,11 @@ server {
     ssl_certificate {{ $s.SSL.Certificate }};
     ssl_certificate_key {{ $s.SSL.CertificateKey }};
 
+          {{- if not $.DisableSNIHostValidation }}
     if ($ssl_server_name != $host) {
         return 421;
     }
+          {{- end }}
         {{- else }}
           {{- if $.IPFamily.IPv4 }}
     listen {{ $s.Listen }}{{ $.RewriteClientIP.ProxyProtocol }};

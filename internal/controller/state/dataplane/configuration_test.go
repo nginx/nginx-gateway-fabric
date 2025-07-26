@@ -934,8 +934,9 @@ func TestBuildConfiguration(t *testing.T) {
 			},
 			ServiceName: helpers.GetPointer("my-svc"),
 		},
-		DisableHTTP2: helpers.GetPointer(true),
-		IPFamily:     helpers.GetPointer(ngfAPIv1alpha2.Dual),
+		DisableHTTP2:             helpers.GetPointer(true),
+		IPFamily:                 helpers.GetPointer(ngfAPIv1alpha2.Dual),
+		DisableSNIHostValidation: helpers.GetPointer(true),
 	}
 
 	nginxProxyIPv4 := &graph.EffectiveNginxProxy{
@@ -2234,9 +2235,10 @@ func TestBuildConfiguration(t *testing.T) {
 					SpanAttributes: []SpanAttribute{},
 				}
 				conf.BaseHTTPConfig = BaseHTTPConfig{
-					HTTP2:                   false,
-					IPFamily:                Dual,
-					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+					HTTP2:                    false,
+					IPFamily:                 Dual,
+					NginxReadinessProbePort:  DefaultNginxReadinessProbePort,
+					DisableSNIHostValidation: true,
 				}
 				return conf
 			}),
