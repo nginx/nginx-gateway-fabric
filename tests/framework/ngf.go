@@ -42,7 +42,12 @@ type InstallationConfig struct {
 func InstallGatewayAPI(apiVersion string) ([]byte, error) {
 	apiPath := fmt.Sprintf("%s/v%s/standard-install.yaml", gwInstallBasePath, apiVersion)
 
-	if output, err := exec.Command("kubectl", "apply", "-f", apiPath).CombinedOutput(); err != nil {
+	cmd := exec.CommandContext(
+		context.Background(),
+		"kubectl", "apply", "-f", apiPath,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
 		return output, err
 	}
 
@@ -53,7 +58,7 @@ func InstallGatewayAPI(apiVersion string) ([]byte, error) {
 func UninstallGatewayAPI(apiVersion string) ([]byte, error) {
 	apiPath := fmt.Sprintf("%s/v%s/standard-install.yaml", gwInstallBasePath, apiVersion)
 
-	output, err := exec.Command("kubectl", "delete", "-f", apiPath).CombinedOutput()
+	output, err := exec.CommandContext(context.Background(), "kubectl", "delete", "-f", apiPath).CombinedOutput()
 	if err != nil && !strings.Contains(string(output), "not found") {
 		return output, err
 	}
@@ -84,7 +89,7 @@ func InstallNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 
 	GinkgoWriter.Printf("Installing NGF with command: helm %v\n", strings.Join(fullArgs, " "))
 
-	return exec.Command("helm", fullArgs...).CombinedOutput()
+	return exec.CommandContext(context.Background(), "helm", fullArgs...).CombinedOutput()
 }
 
 // CreateLicenseSecret creates the NGINX Plus JWT secret.
@@ -127,7 +132,12 @@ func CreateLicenseSecret(k8sClient client.Client, namespace, filename string) er
 // UpgradeNGF upgrades NGF. CRD upgrades assume the chart is local.
 func UpgradeNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 	crdPath := filepath.Join(cfg.ChartPath, "crds") + "/"
-	if output, err := exec.Command("kubectl", "apply", "-f", crdPath).CombinedOutput(); err != nil {
+	cmd := exec.CommandContext(
+		context.Background(),
+		"kubectl", "apply", "-f", crdPath,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
 		return output, err
 	}
 
@@ -152,7 +162,7 @@ func UpgradeNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 
 	GinkgoWriter.Printf("Upgrading NGF with command: helm %v\n", strings.Join(fullArgs, " "))
 
-	return exec.Command("helm", fullArgs...).CombinedOutput()
+	return exec.CommandContext(context.Background(), "helm", fullArgs...).CombinedOutput()
 }
 
 // UninstallNGF uninstalls NGF.
@@ -161,7 +171,7 @@ func UninstallNGF(cfg InstallationConfig, k8sClient client.Client) ([]byte, erro
 		"uninstall", cfg.ReleaseName, "--namespace", cfg.Namespace,
 	}
 
-	output, err := exec.Command("helm", args...).CombinedOutput()
+	output, err := exec.CommandContext(context.Background(), "helm", args...).CombinedOutput()
 	if err != nil && !strings.Contains(string(output), "release: not found") {
 		return output, err
 	}

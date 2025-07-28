@@ -75,7 +75,8 @@ func NewServer(
 
 // Start is a runnable that starts the gRPC server for communicating with the nginx agent.
 func (g *Server) Start(ctx context.Context) error {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", g.port))
+	var lc net.ListenConfig
+	listener, err := lc.Listen(ctx, "tcp", fmt.Sprintf(":%d", g.port))
 	if err != nil {
 		return err
 	}

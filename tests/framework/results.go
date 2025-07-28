@@ -1,6 +1,7 @@
 package framework
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -77,7 +78,7 @@ func generatePNG(resultsDir, inputFilename, outputFilename, configFilename strin
 	gnuplotCfg := filepath.Join(filepath.Dir(pwd), "scripts", configFilename)
 
 	files := fmt.Sprintf("inputfile='%s';outputfile='%s'", inputFilename, outputFilename)
-	cmd := exec.Command("gnuplot", "-e", files, "-c", gnuplotCfg)
+	cmd := exec.CommandContext(context.Background(), "gnuplot", "-e", files, "-c", gnuplotCfg)
 	cmd.Dir = resultsDir
 
 	output, err := cmd.CombinedOutput()
