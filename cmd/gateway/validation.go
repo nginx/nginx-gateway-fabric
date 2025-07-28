@@ -157,6 +157,14 @@ func validatePort(port int) error {
 	return nil
 }
 
+// validateProtocolPort makes sure a given port is inside the valid port range for its usage. This also includes well known ports.
+func validateProtocolPort(port int) error {
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("port outside of valid port range [1 - 65535]: %v", port)
+	}
+	return nil
+}
+
 // ensureNoPortCollisions checks if the same port has been defined multiple times.
 func ensureNoPortCollisions(ports ...int) error {
 	seen := make(map[int]struct{})

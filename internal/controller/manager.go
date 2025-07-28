@@ -200,6 +200,20 @@ func StartManager(cfg config.Config) error {
 		return fmt.Errorf("cannot register grpc server: %w", err)
 	}
 
+	agentLabelCollector := telemetry.NewLabelCollectorConfigImpl(telemetry.LabelCollectorConfig{
+		K8sClientReader: mgr.GetAPIReader(),
+		Version:         cfg.GatewayPodConfig.Version,
+		PodNSName: types.NamespacedName{
+			Namespace: cfg.GatewayPodConfig.Namespace,
+			Name:      cfg.GatewayPodConfig.Name,
+		},
+	})
+
+	agentLabels, err := agentLabelCollector.Collect(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to collect agent labels: %w", err)
+	}
+
 	nginxProvisioner, provLoop, err := provisioner.NewNginxProvisioner(
 		ctx,
 		mgr,
@@ -215,6 +229,8 @@ func StartManager(cfg config.Config) error {
 			Plus:                   cfg.Plus,
 			NginxDockerSecretNames: cfg.NginxDockerSecretNames,
 			PlusUsageConfig:        &cfg.UsageReportConfig,
+			AgentLabels:            agentLabels,
+			NginxOneConsoleTelemetryConfig:   cfg.NginxOneConsoleTelemetryConfig,
 		},
 	)
 	if err != nil {

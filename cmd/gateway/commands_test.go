@@ -156,6 +156,10 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--usage-report-client-ssl-secret=client-secret",
 				"--snippets-filters",
 				"--nginx-scc=nginx-sscc-name",
+				"--nginx-one-console-dataplane-key-secret=dataplane-key-secret",
+				"--nginx-one-console-telemetry-endpoint-host=telemetry-endpoint-host",
+				"--nginx-one-console-telemetry-endpoint-port=443",
+				"--nginx-one-console-tls-skip-verify",
 			},
 			wantErr: false,
 		},
@@ -425,6 +429,65 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-scc" flag: invalid format: `,
+		},
+		{
+			name: "nginx-one-console-dataplane-key-secret is set to empty string",
+			args: []string{
+				"--nginx-one-console-dataplane-key-secret=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--nginx-one-console-dataplane-key-secret" flag: must be set`,
+		},
+		{
+			name: "nginx-one-console-dataplane-key-secret is invalid",
+			args: []string{
+				"--nginx-one-console-dataplane-key-secret=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-one-console-dataplane-key-secret" flag: invalid format: `,
+		},
+		{
+			name: "nginx-one-console-telemetry-endpoint-host is set to empty string",
+			args: []string{
+				"--nginx-one-console-telemetry-endpoint-host=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--nginx-one-console-telemetry-endpoint-host" flag: must be set`,
+		},
+		{
+			name: "nginx-one-console-telemetry-endpoint-host is invalid",
+			args: []string{
+				"--nginx-one-console-telemetry-endpoint-host=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-one-console-telemetry-endpoint-host" flag: invalid format: `,
+		},
+		{
+			name: "nginx-one-console-telemetry-endpoint-port is invalid type",
+			args: []string{
+				"--nginx-one-console-telemetry-endpoint-port=invalid", // not an int
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "invalid" for "--nginx-one-console-telemetry-endpoint-port" flag: failed to parse int value:` +
+				` strconv.ParseInt: parsing "invalid": invalid syntax`,
+		},
+		{
+			name: "nginx-one-console-telemetry-endpoint-port is outside of range",
+			args: []string{
+				"--nginx-one-console-telemetry-endpoint-port=65536", // outside of range
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "65536" for "--nginx-one-console-telemetry-endpoint-port" flag:` +
+				` port outside of valid port range [1 - 65535]: 65536`,
+		},
+		{
+			name: "nginx-one-console-tls-skip-verify is not a bool",
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--nginx-one-console-tls-skip-verify" flag: strconv.ParseBool:` +
+				` parsing "not-a-bool": invalid syntax`,
+			args: []string{
+				"--nginx-one-console-tls-skip-verify=not-a-bool",
+			},
+			wantErr: true,
 		},
 	}
 
@@ -753,18 +816,10 @@ func TestCreateGatewayPodConfig(t *testing.T) {
 		Name:         "my-pod",
 		UID:          "1234",
 		InstanceName: "my-pod-xyz",
-		Version:      "tag",
+		Version:      "0.0.0",
 		Image:        "my-pod-image:tag",
 	}
 	cfg, err := createGatewayPodConfig(version, "svc")
-	g.Expect(err).To(Not(HaveOccurred()))
-	g.Expect(cfg).To(Equal(expCfg))
-
-	// unset image tag and use provided version
-	g.Expect(os.Setenv("IMAGE_NAME", "my-pod-image")).To(Succeed())
-	expCfg.Version = version
-	expCfg.Image = "my-pod-image"
-	cfg, err = createGatewayPodConfig(version, "svc")
 	g.Expect(err).To(Not(HaveOccurred()))
 	g.Expect(cfg).To(Equal(expCfg))
 

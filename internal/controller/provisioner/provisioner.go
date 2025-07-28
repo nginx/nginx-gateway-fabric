@@ -28,6 +28,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 )
@@ -54,6 +55,9 @@ type Config struct {
 	EventRecorder          record.EventRecorder
 	Logger                 logr.Logger
 	NginxDockerSecretNames []string
+
+	NginxOneConsoleTelemetryConfig config.NginxOneConsoleTelemetryConfig
+	AgentLabels                    telemetry.AgentLabels
 
 	Plus bool
 }

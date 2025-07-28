@@ -6,7 +6,6 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -58,27 +57,31 @@ func createRootCommand() *cobra.Command {
 func createControllerCommand() *cobra.Command {
 	// flag names
 	const (
-		configFlag                     = "config"
-		serviceFlag                    = "service"
-		agentTLSSecretFlag             = "agent-tls-secret"
-		metricsDisableFlag             = "metrics-disable"
-		metricsSecureFlag              = "metrics-secure-serving"
-		metricsPortFlag                = "metrics-port"
-		healthDisableFlag              = "health-disable"
-		healthPortFlag                 = "health-port"
-		leaderElectionDisableFlag      = "leader-election-disable"
-		leaderElectionLockNameFlag     = "leader-election-lock-name"
-		productTelemetryDisableFlag    = "product-telemetry-disable"
-		gwAPIExperimentalFlag          = "gateway-api-experimental-features"
-		nginxDockerSecretFlag          = "nginx-docker-secret" //nolint:gosec // not credentials
-		usageReportSecretFlag          = "usage-report-secret"
-		usageReportEndpointFlag        = "usage-report-endpoint"
-		usageReportResolverFlag        = "usage-report-resolver"
-		usageReportSkipVerifyFlag      = "usage-report-skip-verify"
-		usageReportClientSSLSecretFlag = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
-		usageReportCASecretFlag        = "usage-report-ca-secret"         //nolint:gosec // not credentials
-		snippetsFiltersFlag            = "snippets-filters"
-		nginxSCCFlag                   = "nginx-scc"
+		configFlag                               = "config"
+		serviceFlag                              = "service"
+		agentTLSSecretFlag                       = "agent-tls-secret"
+		nginxOneConsoleDataplaneKeySecretFlag    = "nginx-one-console-dataplane-key-secret"
+		nginxOneConsoleTelemetryEndpointHostFlag = "nginx-one-console-telemetry-endpoint-host"
+		nginxOneConsoleTelemetryEndpointPortFlag = "nginx-one-console-telemetry-endpoint-port"
+		nginxOneConsoleTLSSkipVerifyFlag         = "nginx-one-console-tls-skip-verify"
+		metricsDisableFlag                       = "metrics-disable"
+		metricsSecureFlag                        = "metrics-secure-serving"
+		metricsPortFlag                          = "metrics-port"
+		healthDisableFlag                        = "health-disable"
+		healthPortFlag                           = "health-port"
+		leaderElectionDisableFlag                = "leader-election-disable"
+		leaderElectionLockNameFlag               = "leader-election-lock-name"
+		productTelemetryDisableFlag              = "product-telemetry-disable"
+		gwAPIExperimentalFlag                    = "gateway-api-experimental-features"
+		nginxDockerSecretFlag                    = "nginx-docker-secret" //nolint:gosec // not credentials
+		usageReportSecretFlag                    = "usage-report-secret"
+		usageReportEndpointFlag                  = "usage-report-endpoint"
+		usageReportResolverFlag                  = "usage-report-resolver"
+		usageReportSkipVerifyFlag                = "usage-report-skip-verify"
+		usageReportClientSSLSecretFlag           = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
+		usageReportCASecretFlag                  = "usage-report-ca-secret"         //nolint:gosec // not credentials
+		snippetsFiltersFlag                      = "snippets-filters"
+		nginxSCCFlag                             = "nginx-scc"
 	)
 
 	// flag values
@@ -101,7 +104,19 @@ func createControllerCommand() *cobra.Command {
 			validator: validateResourceName,
 			value:     agentTLSSecret,
 		}
-		nginxSCCName = stringValidatingValue{
+		nginxOneConsoleDataplaneKeySecretName = stringValidatingValue{
+			validator: validateResourceName,
+		}
+		nginxOneConsoleTelemetryEndpointHost = stringValidatingValue{
+			validator: validateResourceName,
+			value:     "product.connect.nginx.com",
+		}
+		nginxOneConsoleTelemetryEndpointPort = intValidatingValue{
+			validator: validateProtocolPort,
+			value:     443,
+		}
+		nginxOneConsoleTLSSkipVerify bool
+		nginxSCCName                 = stringValidatingValue{
 			validator: validateResourceName,
 		}
 		disableMetrics    bool
@@ -257,6 +272,12 @@ func createControllerCommand() *cobra.Command {
 				NginxDockerSecretNames: nginxDockerSecrets.values,
 				AgentTLSSecretName:     agentTLSSecretName.value,
 				NGINXSCCName:           nginxSCCName.value,
+				NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
+					DataplaneKeySecretName: nginxOneConsoleDataplaneKeySecretName.value,
+					EndpointHost:           nginxOneConsoleTelemetryEndpointHost.value,
+					EndpointPort:           nginxOneConsoleTelemetryEndpointPort.value,
+					EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
+				},
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -302,6 +323,32 @@ func createControllerCommand() *cobra.Command {
 		`The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely `+
 			`communicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the `+
 			`NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
+	)
+
+	cmd.Flags().Var(
+		&nginxOneConsoleDataplaneKeySecretName,
+		nginxOneConsoleDataplaneKeySecretFlag,
+		`The name of the Secret containing the NGINX One Console's dataplane key. Must exist in the same namespace that `+
+			`the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
+	)
+
+	cmd.Flags().Var(
+		&nginxOneConsoleTelemetryEndpointHost,
+		nginxOneConsoleTelemetryEndpointHostFlag,
+		`The host of the NGINX One Console's telemetry endpoint.`,
+	)
+
+	cmd.Flags().Var(
+		&nginxOneConsoleTelemetryEndpointPort,
+		nginxOneConsoleTelemetryEndpointPortFlag,
+		`The port of the NGINX One Console's telemetry endpoint.`,
+	)
+
+	cmd.Flags().BoolVar(
+		&nginxOneConsoleTLSSkipVerify,
+		nginxOneConsoleTLSSkipVerifyFlag,
+		false,
+		"Disable client verification of the NGINX One Console's telemetry endpoint server certificate.",
 	)
 
 	cmd.Flags().BoolVar(
@@ -741,19 +788,13 @@ func createGatewayPodConfig(version, svcName string) (config.GatewayPodConfig, e
 		return config.GatewayPodConfig{}, err
 	}
 
-	// use image tag version if set, otherwise fall back to binary version
-	ngfVersion := version
-	if imageParts := strings.Split(image, ":"); len(imageParts) == 2 {
-		ngfVersion = imageParts[1]
-	}
-
 	c := config.GatewayPodConfig{
 		ServiceName:  svcName,
 		Namespace:    ns,
 		Name:         name,
 		UID:          podUID,
 		InstanceName: instance,
-		Version:      ngfVersion,
+		Version:      version,
 		Image:        image,
 	}
 

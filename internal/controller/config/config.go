@@ -42,6 +42,8 @@ type Config struct {
 	MetricsConfig MetricsConfig
 	// HealthConfig specifies the health probe config.
 	HealthConfig HealthConfig
+	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
+	NginxOneConsoleTelemetryConfig NginxOneConsoleTelemetryConfig
 	// Plus indicates whether NGINX Plus is being used.
 	Plus bool
 	// ExperimentalFeatures indicates if experimental features are enabled.
@@ -133,4 +135,16 @@ type Flags struct {
 	// Values contains the value of the flag in string form.
 	// Each Value will be either true or false for boolean flags and default or user-defined for non-boolean flags.
 	Values []string
+}
+
+// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
+type NginxOneConsoleTelemetryConfig struct {
+	// DataplaneKeySecretName is the name of the Secret containing the dataplane key.
+	DataplaneKeySecretName string
+	// EndpointHost is the host of the telemetry endpoint.
+	EndpointHost string
+	// EndpointPort is the port of the telemetry endpoint.
+	EndpointPort int
+	// EndpointTLSSkipVerify specifies whether to skip TLS verification for the telemetry endpoint.
+	EndpointTLSSkipVerify bool
 }
