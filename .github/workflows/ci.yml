@@ -327,6 +327,11 @@ jobs:
           cache-dependency-path: |
             go.sum
             .github/.cache/buster-for-unit-tests
+      
+      - name: Deploy Kubernetes
+        id: k8s
+        run: |
+          kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ needs.vars.outputs.k8s_latest }}
 
       - name: Run Tests
         run: make -C tests test-cel-validation
