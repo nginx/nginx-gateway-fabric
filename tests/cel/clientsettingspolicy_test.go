@@ -3,10 +3,10 @@ package cel
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
+	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -188,16 +188,10 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 		t.Errorf("expected validation error but policy was accepted")
 		return
 	}
-
+	g := NewWithT(t)
 	// Check that we got the expected error messages
-	var missingErrors []string
 	for _, wantError := range tt.wantErrors {
-		if !strings.Contains(err.Error(), wantError) {
-			missingErrors = append(missingErrors, wantError)
-		}
-	}
-	if len(missingErrors) != 0 {
-		t.Errorf("missing expected errors: %v, got: %v", missingErrors, err)
+		g.Expect(err.Error()).To(ContainSubstring(wantError), "Expected error '%s' not found in: %s", wantError, err.Error())
 	}
 }
 
