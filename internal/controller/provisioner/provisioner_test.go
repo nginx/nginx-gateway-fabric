@@ -24,6 +24,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift/openshiftfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -183,6 +184,20 @@ func defaultNginxProvisioner(
 			},
 			NginxDockerSecretNames: []string{dockerTestSecretName},
 			AgentTLSSecretName:     agentTLSTestSecretName,
+			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
+				DataplaneKeySecretName: "dataplane-key",
+				EndpointHost:           "product.connect.nginx.com",
+				EndpointPort:           443,
+				EndpointTLSSkipVerify:  false,
+			},
+			AgentLabels: telemetry.AgentLabels{
+				ProductType:      "ngf",
+				ProductVersion:   "ngf-version",
+				ClusterID:        "my-cluster-id",
+				ControlName:      "my-control-plane-name",
+				ControlID:        "my-control-plane-id",
+				ControlNamespace: "my-control-plane-namespace",
+			},
 		},
 		leader: true,
 	}, fakeClient, deploymentStore
