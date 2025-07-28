@@ -338,16 +338,5 @@ jobs:
           kubectl kustomize config/crd | kubectl apply --server-side -f -
 
       - name: Run Tests
-        run: make -C tests test-cel-validation
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Upload Coverage Report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: cover-${{ github.run_id }}.html
-          path: ${{ github.workspace }}/cover.html
-        if: always()
+        run: make test-cel-validation
+        working-directory: ./tests
