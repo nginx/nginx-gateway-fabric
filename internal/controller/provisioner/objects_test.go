@@ -374,6 +374,13 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
 	g.Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(9091)))
 	g.Expect(container.ReadinessProbe.InitialDelaySeconds).To(Equal(int32(5)))
+
+	hpaObj := objects[6]
+	hpa, ok := hpaObj.(*autoscalingv2.HorizontalPodAutoscaler)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(hpa.Spec.MinReplicas).ToNot(BeNil())
+	g.Expect(*hpa.Spec.MinReplicas).To(Equal(int32(1)))
+	g.Expect(hpa.Spec.MaxReplicas).To(Equal(int32(5)))
 }
 
 func TestBuildNginxResourceObjects_Plus(t *testing.T) {

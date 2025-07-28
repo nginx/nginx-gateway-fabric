@@ -380,7 +380,7 @@
               "type": "object"
             },
             "resources": {
-              "description": "The resource requirements of the NGINX container. You should be set this value, If you want to use dataplane Autoscaling(HPA).",
+              "description": "The resource requirements of the NGINX container. You should set this value if you want to use dataplane Autoscaling(HPA).",
               "required": [],
               "title": "resources",
               "type": "object"
@@ -407,7 +407,7 @@
           "type": "boolean"
         },
         "image": {
-          "description": "Custom or additional autoscaling metrics\nref: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-custom-metrics\n- type: Pods\n  pods:\n    metric:\n      name: nginx_gateway_fabric_nginx_process_requests_total\n    target:\n      type: AverageValue\n      averageValue: 10000m",
+          "description": "Custom or additional autoscaling metrics\nref: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-custom-metrics\n- type: Pods\n  pods:\n    metric:\n      name: nginx_gateway_fabric_nginx_process_requests_total\n    target:\n      type: nginx_http_requests_total\n      averageValue: 400",
           "properties": {
             "pullPolicy": {
               "default": "Always",
@@ -478,7 +478,7 @@
         },
         "replicas": {
           "default": 1,
-          "description": "The number of replicas of the NGINX Deployment.",
+          "description": "The number of replicas of the NGINX Deployment. This value is ignored if autoscaling.enabled is true.",
           "required": [],
           "title": "replicas",
           "type": "integer"
@@ -897,7 +897,7 @@
         },
         "replicas": {
           "default": 1,
-          "description": "The number of replicas of the NGINX Gateway Fabric Deployment.",
+          "description": "The number of replicas of the NGINX Gateway Fabric Deployment. This value is ignored if autoscaling.enabled is true.",
           "required": [],
           "title": "replicas",
           "type": "integer"

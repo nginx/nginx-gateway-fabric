@@ -80,7 +80,7 @@ nginxGateway:
     # Secrets must exist in the same namespace as the helm release.
     imagePullSecrets: []
 
-  # -- The number of replicas of the NGINX Gateway Fabric Deployment.
+  # -- The number of replicas of the NGINX Gateway Fabric Deployment. This value is ignored if autoscaling.enabled is true.
   replicas: 1
 
   # The configuration for leader election.
@@ -184,10 +184,10 @@ nginxGateway:
   # - type: Pods
   #   pods:
   #     metric:
-  #       name: nginx_gateway_fabric_nginx_process_requests_total
+  #       name: container_memory_usage_bytes
   #     target:
   #       type: AverageValue
-  #       averageValue: 10000m
+  #       averageValue: "400Mi"
 
   metrics:
     # -- Enable exposing metrics in the Prometheus format.
@@ -226,7 +226,7 @@ nginx:
   # -- The kind of NGINX deployment.
   kind: deployment
 
-  # -- The number of replicas of the NGINX Deployment.
+  # -- The number of replicas of the NGINX Deployment. This value is ignored if autoscaling.enabled is true.
   replicas: 1
 
   autoscaling:
@@ -257,8 +257,8 @@ nginx:
   #     metric:
   #       name: nginx_gateway_fabric_nginx_process_requests_total
   #     target:
-  #       type: AverageValue
-  #       averageValue: 10000m
+  #       type: nginx_http_requests_total
+  #       averageValue: 400
   image:
     # -- The NGINX image to use.
     repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
@@ -494,7 +494,7 @@ nginx:
     # - port: 80
     #   containerPort: 80
 
-    # -- The resource requirements of the NGINX container. You should be set this value, If you want to use dataplane Autoscaling(HPA).
+    # -- The resource requirements of the NGINX container. You should set this value if you want to use dataplane Autoscaling(HPA).
     resources: {}
 
     # -- The lifecycle of the NGINX container.
