@@ -335,7 +335,7 @@ jobs:
 
       - name: Apply CustomResourceDefinition
         run: |
-          kubectl kustomize config/crd | kubectl apply -f -
+          kubectl kustomize config/crd | kubectl apply --server-side -f -
 
       - name: Run Tests
         run: make -C tests test-cel-validation
