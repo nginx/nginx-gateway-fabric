@@ -18,7 +18,9 @@ spec:
       {{- if .Values.nginx.autoscaling.enabled }}
       autoscaling:
         enabled: {{ .Values.nginx.autoscaling.enabled }}
+        {{- if .Values.nginx.autoscaling.minReplicas }}
         minReplicas: {{ .Values.nginx.autoscaling.minReplicas }}
+        {{- end }}
         maxReplicas: {{ .Values.nginx.autoscaling.maxReplicas }}
         {{- if .Values.nginx.autoscaling.targetCPUUtilizationPercentage }}
         targetCPUUtilizationPercentage: {{ .Values.nginx.autoscaling.targetCPUUtilizationPercentage }}

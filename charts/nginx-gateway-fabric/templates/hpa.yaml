@@ -17,7 +17,9 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: {{ include "nginx-gateway.fullname" . }}
+  {{- if .Values.nginxGateway.autoscaling.minReplicas }}
   minReplicas: {{ .Values.nginxGateway.autoscaling.minReplicas }}
+  {{- end }}
   maxReplicas: {{ .Values.nginxGateway.autoscaling.maxReplicas }}
   metrics:
   {{- with .Values.nginxGateway.autoscaling.targetMemoryUtilizationPercentage }}

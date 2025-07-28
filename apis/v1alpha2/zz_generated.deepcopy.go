@@ -129,13 +129,9 @@ func (in *HPASpec) DeepCopyInto(out *HPASpec) {
 	}
 	if in.AutoscalingTemplate != nil {
 		in, out := &in.AutoscalingTemplate, &out.AutoscalingTemplate
-		*out = new([]v2.MetricSpec)
-		if **in != nil {
-			in, out := *in, *out
-			*out = make([]v2.MetricSpec, len(*in))
-			for i := range *in {
-				(*in)[i].DeepCopyInto(&(*out)[i])
-			}
+		*out = make([]v2.MetricSpec, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 	if in.TargetCPUUtilizationPercentage != nil {

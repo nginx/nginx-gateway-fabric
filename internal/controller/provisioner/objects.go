@@ -1101,12 +1101,10 @@ func buildNginxDeploymentHPA(
 		})
 	}
 
-	if autoscalingTemplate != nil {
-		for _, additionalAutoscaling := range *autoscalingTemplate {
-			metric := buildAdditionalMetric(additionalAutoscaling)
-			if metric != nil {
-				metrics = append(metrics, *metric)
-			}
+	for _, additionalAutoscaling := range autoscalingTemplate {
+		metric := buildAdditionalMetric(additionalAutoscaling)
+		if metric != nil {
+			metrics = append(metrics, *metric)
 		}
 	}
 
@@ -1193,11 +1191,11 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 	// order to delete:
 	// deployment/daemonset
 	// service
+	// hpa
 	// role/binding (if openshift)
 	// serviceaccount
 	// configmaps
 	// secrets
-	// hpa
 
 	objectMeta := metav1.ObjectMeta{
 		Name:      deploymentNSName.Name,
@@ -1218,12 +1216,6 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 	}
 
 	objects := []client.Object{deployment, daemonSet, service, hpa}
-
-	// objects := []client.Object{deployment, daemonSet, service}
-
-	// // if hpa := p.buildHPA(objectMeta, nProxyCfg); hpa != nil {
-	// // 	objects = append(objects, hpa)
-	// // }
 
 	if p.isOpenshift {
 		role := &rbacv1.Role{
