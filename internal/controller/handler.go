@@ -208,7 +208,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			panic("expected deployment, got nil")
 		}
 
-		cfg := dataplane.BuildConfiguration(ctx, gr, gw, h.cfg.serviceResolver, h.cfg.plus)
+		cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus)
 		depCtx, getErr := h.getDeploymentContext(ctx)
 		if getErr != nil {
 			logger.Error(getErr, "error getting deployment context for usage reporting")

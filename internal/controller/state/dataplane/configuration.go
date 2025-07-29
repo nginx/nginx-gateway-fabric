@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/go-logr/logr"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,6 +33,7 @@ const (
 // BuildConfiguration builds the Configuration from the Graph.
 func BuildConfiguration(
 	ctx context.Context,
+	logger logr.Logger,
 	g *graph.Graph,
 	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
@@ -55,6 +57,7 @@ func BuildConfiguration(
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 	upstreams := buildUpstreams(
 		ctx,
+		logger,
 		gateway,
 		serviceResolver,
 		g.ReferencedServices,
@@ -71,9 +74,14 @@ func BuildConfiguration(
 		SSLServers:            sslServers,
 		TLSPassthroughServers: buildPassthroughServers(gateway),
 		Upstreams:             upstreams,
-		StreamUpstreams:       buildStreamUpstreams(ctx, gateway, serviceResolver, baseHTTPConfig.IPFamily),
-		BackendGroups:         backendGroups,
-		SSLKeyPairs:           buildSSLKeyPairs(g.ReferencedSecrets, gateway.Listeners),
+		StreamUpstreams: buildStreamUpstreams(
+			ctx,
+			logger,
+			gateway,
+			serviceResolver,
+			baseHTTPConfig.IPFamily),
+		BackendGroups: backendGroups,
+		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway.Listeners),
 		CertBundles: buildCertBundles(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
@@ -163,6 +171,7 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 // buildStreamUpstreams builds all stream upstreams.
 func buildStreamUpstreams(
 	ctx context.Context,
+	logger logr.Logger,
 	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
 	ipFamily IPFamilyType,
@@ -202,7 +211,13 @@ func buildStreamUpstreams(
 
 			allowedAddressType := getAllowedAddressType(ipFamily)
 
-			eps, err := serviceResolver.Resolve(ctx, br.SvcNsName, br.ServicePort, allowedAddressType)
+			eps, err := serviceResolver.Resolve(
+				ctx,
+				logger,
+				br.SvcNsName,
+				br.ServicePort,
+				allowedAddressType,
+			)
 			if err != nil {
 				errMsg = err.Error()
 			}
@@ -670,6 +685,7 @@ func (hpr *hostPathRules) maxServerCount() int {
 
 func buildUpstreams(
 	ctx context.Context,
+	logger logr.Logger,
 	gateway *graph.Gateway,
 	svcResolver resolver.ServiceResolver,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
@@ -701,6 +717,7 @@ func buildUpstreams(
 				for _, br := range rule.BackendRefs {
 					if upstream := buildUpstream(
 						ctx,
+						logger,
 						br,
 						gateway,
 						svcResolver,
@@ -735,6 +752,7 @@ func buildUpstreams(
 
 func buildUpstream(
 	ctx context.Context,
+	logger logr.Logger,
 	br graph.BackendRef,
 	gateway *graph.Gateway,
 	svcResolver resolver.ServiceResolver,
@@ -760,9 +778,10 @@ func buildUpstream(
 
 	var errMsg string
 
-	eps, err := svcResolver.Resolve(ctx, br.SvcNsName, br.ServicePort, allowedAddressType)
+	eps, err := svcResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
 	if err != nil {
 		errMsg = err.Error()
+		logger.Error(err, "failed to resolve endpoints", "service", br.SvcNsName)
 	}
 
 	var upstreamPolicies []policies.Policy

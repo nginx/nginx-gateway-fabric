@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
@@ -539,7 +540,7 @@ func TestCalculateReadyEndpoints(t *testing.T) {
 		},
 	}
 
-	result := calculateReadyEndpoints(slices)
+	result := calculateReadyEndpoints(logr.Discard(), slices)
 
 	g.Expect(result).To(Equal(4))
 }
@@ -605,7 +606,7 @@ func BenchmarkResolve(b *testing.B) {
 		Name:      "default-name",
 	}
 
-	initEndpointSet := func([]discoveryV1.EndpointSlice) map[Endpoint]struct{} {
+	initEndpointSet := func(logr.Logger, []discoveryV1.EndpointSlice) map[Endpoint]struct{} {
 		return make(map[Endpoint]struct{})
 	}
 
@@ -625,8 +626,15 @@ func bench(b *testing.B, svcNsName types.NamespacedName,
 	list discoveryV1.EndpointSliceList, initSet initEndpointSetFunc, n int,
 ) {
 	b.Helper()
-	for range b.N {
-		res, err := resolveEndpoints(svcNsName, v1.ServicePort{Port: 80}, list, initSet, dualAddressType)
+	for b.Loop() {
+		res, err := resolveEndpoints(
+			logr.Discard(),
+			svcNsName,
+			v1.ServicePort{Port: 80},
+			list,
+			initSet,
+			dualAddressType,
+		)
 		if len(res) != n {
 			b.Fatalf("expected %d endpoints, got %d", n, len(res))
 		}

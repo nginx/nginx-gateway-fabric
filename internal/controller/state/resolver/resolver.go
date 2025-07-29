@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,6 +23,7 @@ import (
 type ServiceResolver interface {
 	Resolve(
 		ctx context.Context,
+		logger logr.Logger,
 		svcNsName types.NamespacedName,
 		svcPort v1.ServicePort,
 		allowedAddressType []discoveryV1.AddressType,
@@ -52,6 +54,7 @@ func NewServiceResolverImpl(c client.Client) *ServiceResolverImpl {
 // Returns an error if the Service or ServicePort cannot be resolved.
 func (e *ServiceResolverImpl) Resolve(
 	ctx context.Context,
+	logger logr.Logger,
 	svcNsName types.NamespacedName,
 	svcPort v1.ServicePort,
 	allowedAddressType []discoveryV1.AddressType,
@@ -76,6 +79,7 @@ func (e *ServiceResolverImpl) Resolve(
 	}
 
 	return resolveEndpoints(
+		logger,
 		svcNsName,
 		svcPort,
 		endpointSliceList,
@@ -84,19 +88,23 @@ func (e *ServiceResolverImpl) Resolve(
 	)
 }
 
-type initEndpointSetFunc func([]discoveryV1.EndpointSlice) map[Endpoint]struct{}
+type initEndpointSetFunc func(logr.Logger, []discoveryV1.EndpointSlice) map[Endpoint]struct{}
 
-func initEndpointSetWithCalculatedSize(endpointSlices []discoveryV1.EndpointSlice) map[Endpoint]struct{} {
+func initEndpointSetWithCalculatedSize(
+	logger logr.Logger,
+	endpointSlices []discoveryV1.EndpointSlice,
+) map[Endpoint]struct{} {
 	// performance optimization to reduce the cost of growing the map. See the benchamarks for performance comparison.
-	return make(map[Endpoint]struct{}, calculateReadyEndpoints(endpointSlices))
+	return make(map[Endpoint]struct{}, calculateReadyEndpoints(logger, endpointSlices))
 }
 
-func calculateReadyEndpoints(endpointSlices []discoveryV1.EndpointSlice) int {
+func calculateReadyEndpoints(logger logr.Logger, endpointSlices []discoveryV1.EndpointSlice) int {
 	total := 0
 
 	for _, eps := range endpointSlices {
 		for _, endpoint := range eps.Endpoints {
 			if !endpointReady(endpoint) {
+				logger.V(1).Info("ignoring endpoint that is not ready", "endpoint", endpoint)
 				continue
 			}
 
@@ -108,6 +116,7 @@ func calculateReadyEndpoints(endpointSlices []discoveryV1.EndpointSlice) int {
 }
 
 func resolveEndpoints(
+	logger logr.Logger,
 	svcNsName types.NamespacedName,
 	svcPort v1.ServicePort,
 	endpointSliceList discoveryV1.EndpointSliceList,
@@ -122,12 +131,13 @@ func resolveEndpoints(
 
 	// Endpoints may be duplicated across multiple EndpointSlices.
 	// Using a set to prevent returning duplicate endpoints.
-	endpointSet := initEndpointsSet(filteredSlices)
+	endpointSet := initEndpointsSet(logger, filteredSlices)
 
 	for _, eps := range filteredSlices {
 		ipv6 := eps.AddressType == discoveryV1.AddressTypeIPv6
 		for _, endpoint := range eps.Endpoints {
 			if !endpointReady(endpoint) {
+				logger.V(1).Info("ignoring endpoint that is not ready", "endpoint", endpoint)
 				continue
 			}
 
