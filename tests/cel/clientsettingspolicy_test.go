@@ -185,16 +185,10 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 
 	// Check if we expected errors
 	if len(tt.wantErrors) == 0 {
-		if err != nil {
-			g.Expect(err).ToNot(HaveOccurred())
-		}
-		return
+		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	// We expected errors - validation should have failed
-	if err == nil {
-		g.Expect(err).To(HaveOccurred())
-	}
+	g.Expect(err).To(HaveOccurred())
 
 	// Check that we got the expected error messages
 	for _, wantError := range tt.wantErrors {
