@@ -7,7 +7,7 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
 func TestExecuteBaseHttp_HTTP2(t *testing.T) {

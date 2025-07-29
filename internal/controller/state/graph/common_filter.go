@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 )
 
 // RouteRuleFilters holds the Filters for a RouteRule.

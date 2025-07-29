@@ -1,6 +1,6 @@
 package stream
 
-import "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/shared"
+import "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 
 // Server holds all configuration for a stream server.
 type Server struct {

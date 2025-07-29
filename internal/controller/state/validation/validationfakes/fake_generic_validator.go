@@ -4,7 +4,7 @@ package validationfakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 )
 
 type FakeGenericValidator struct {

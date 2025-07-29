@@ -19,8 +19,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/filewatcher"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/interceptor"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/filewatcher"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/interceptor"
 )
 
 const (

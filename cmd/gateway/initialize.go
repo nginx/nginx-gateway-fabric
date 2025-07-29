@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-logr/logr"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/licensing"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/file"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
 
 const (

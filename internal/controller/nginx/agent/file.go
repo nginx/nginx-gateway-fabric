@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	agentgrpc "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc"
-	grpcContext "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/context"
+	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
+	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
 )
 
 const defaultChunkSize uint32 = 2097152 // 2MB

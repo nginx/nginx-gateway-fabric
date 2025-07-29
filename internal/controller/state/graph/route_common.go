@@ -13,10 +13,10 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	v1alpha "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	ngfSort "github.com/nginx/nginx-gateway-fabric/internal/controller/sort"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	ngfSort "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/sort"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 const wildcardHostname = "~^"

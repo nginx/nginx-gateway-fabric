@@ -11,11 +11,11 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/broadcast/broadcastfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/types"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/resolver"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/status"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
 func TestUpdateConfig(t *testing.T) {

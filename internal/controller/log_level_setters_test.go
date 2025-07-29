@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/controllerfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/controllerfakes"
 )
 
 func TestMultiLogLevelSetter_SetLevel(t *testing.T) {

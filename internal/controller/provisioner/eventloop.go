@@ -15,11 +15,11 @@ import (
 	k8spredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/config"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/predicate"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
-	ngftypes "github.com/nginx/nginx-gateway-fabric/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/predicate"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
 
 func newEventLoop(

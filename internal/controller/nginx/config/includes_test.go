@@ -5,10 +5,10 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/shared"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
 func TestCreateIncludeExecuteResultsFromServers(t *testing.T) {

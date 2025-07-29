@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/tests/framework"
+	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
 // Cluster node size must be greater than or equal to 4 for test to perform correctly.
