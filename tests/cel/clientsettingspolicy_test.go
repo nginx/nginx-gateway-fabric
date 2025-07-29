@@ -40,6 +40,7 @@ const (
 )
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
@@ -96,12 +97,14 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			validateClientSettingsPolicy(t, tt)
 		})
 	}
 }
 
 func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
@@ -140,6 +143,7 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			validateClientSettingsPolicy(t, tt)
 		})
 	}
