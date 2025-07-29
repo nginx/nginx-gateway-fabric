@@ -2,9 +2,9 @@ package cel
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"testing"
-	"time"
 
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -164,9 +164,11 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 
 	g.Expect(err).ToNot(HaveOccurred())
 
+	primeNum, err := rand.Prime(rand.Reader, 64)
+	g.Expect(err).ToNot(HaveOccurred())
 	policySpec := tt.policySpec
-	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(fmt.Sprintf(TargetRefFormat, time.Now().UnixNano()))
-	policyName := fmt.Sprintf(PolicyNameFormat, time.Now().UnixNano())
+	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(fmt.Sprintf(TargetRefFormat, primeNum))
+	policyName := fmt.Sprintf(PolicyNameFormat, primeNum)
 
 	clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: controllerruntime.ObjectMeta{
@@ -183,12 +185,14 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 		_ = k8sClient.Delete(context.Background(), clientSettingsPolicy)
 	}()
 
-	// Check if we expected errors
 	if len(tt.wantErrors) == 0 {
 		g.Expect(err).ToNot(HaveOccurred())
+	} else {
+		g.Expect(err).To(HaveOccurred())
+		for _, wantError := range tt.wantErrors {
+			g.Expect(err.Error()).To(ContainSubstring(wantError))
+		}
 	}
-
-	g.Expect(err).To(HaveOccurred())
 
 	// Check that we got the expected error messages
 	for _, wantError := range tt.wantErrors {
