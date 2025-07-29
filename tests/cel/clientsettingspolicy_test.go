@@ -210,9 +210,6 @@ func getKubernetesClient(t *testing.T) (k8sClient client.Client, err error) {
 	if err = ngfAPIv1alpha1.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
-
-	// Create client
-	k8sClient, err = client.New(k8sConfig, client.Options{Scheme: scheme})
-
-	return k8sClient, err
+	// Create a new client with the scheme and return it
+	return client.New(k8sConfig, client.Options{Scheme: scheme})
 }
