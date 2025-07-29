@@ -160,7 +160,9 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 
 	// Get Kubernetes client from test framework
 	// This should be set up by your test framework to connect to a real cluster
-	k8sClient := getKubernetesClient(t)
+	k8sClient, err := getKubernetesClient(t)
+
+	g.Expect(err).ToNot(HaveOccurred())
 
 	policySpec := tt.policySpec
 	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(fmt.Sprintf(TargetRefFormat, time.Now().UnixNano()))
@@ -174,7 +176,7 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 		Spec: policySpec,
 	}
 
-	err := k8sClient.Create(context.Background(), clientSettingsPolicy)
+	err = k8sClient.Create(context.Background(), clientSettingsPolicy)
 
 	// Clean up after test
 	defer func() {
@@ -192,7 +194,6 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	// We expected errors - validation should have failed
 	if err == nil {
 		g.Expect(err).To(HaveOccurred())
-		return
 	}
 
 	// Check that we got the expected error messages
@@ -202,25 +203,22 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 }
 
 // getKubernetesClient returns a client connected to a real Kubernetes cluster.
-func getKubernetesClient(t *testing.T) client.Client {
+func getKubernetesClient(t *testing.T) (k8sClient client.Client, err error) {
 	t.Helper()
 	// Use controller-runtime to get cluster connection
 	k8sConfig, err := controllerruntime.GetConfig()
 	if err != nil {
-		t.Skipf("Cannot connect to Kubernetes cluster: %v", err)
+		return nil, err
 	}
 
 	// Set up scheme with NGF types
 	scheme := runtime.NewScheme()
-	if err := ngfAPIv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add NGF schema: %v", err)
+	if err = ngfAPIv1alpha1.AddToScheme(scheme); err != nil {
+		return nil, err
 	}
 
 	// Create client
-	k8sClient, err := client.New(k8sConfig, client.Options{Scheme: scheme})
-	if err != nil {
-		t.Skipf("Cannot create k8s client: %v", err)
-	}
+	k8sClient, err = client.New(k8sConfig, client.Options{Scheme: scheme})
 
-	return k8sClient
+	return k8sClient, err
 }
