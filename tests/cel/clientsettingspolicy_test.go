@@ -35,8 +35,8 @@ const (
 )
 
 const (
-	PolicyName      = "test-policy"
-	TargetRefFormat = "targetRef-name-%d"
+	PolicyNameFormat = "test-policy-%d"
+	TargetRefFormat  = "targetRef-name-%d"
 )
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
@@ -156,6 +156,7 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 },
 ) {
 	t.Helper()
+	g := NewWithT(t)
 
 	// Get Kubernetes client from test framework
 	// This should be set up by your test framework to connect to a real cluster
@@ -163,10 +164,11 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 
 	policySpec := tt.policySpec
 	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(fmt.Sprintf(TargetRefFormat, time.Now().UnixNano()))
+	policyName := fmt.Sprintf(PolicyNameFormat, time.Now().UnixNano())
 
 	clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      PolicyName,
+			Name:      policyName,
 			Namespace: "default",
 		},
 		Spec: policySpec,
@@ -182,17 +184,17 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	// Check if we expected errors
 	if len(tt.wantErrors) == 0 {
 		if err != nil {
-			t.Errorf("expected no error but got: %v", err)
+			g.Expect(err).ToNot(HaveOccurred())
 		}
 		return
 	}
 
 	// We expected errors - validation should have failed
 	if err == nil {
-		t.Errorf("expected validation error but policy was accepted")
+		g.Expect(err).To(HaveOccurred())
 		return
 	}
-	g := NewWithT(t)
+
 	// Check that we got the expected error messages
 	for _, wantError := range tt.wantErrors {
 		g.Expect(err.Error()).To(ContainSubstring(wantError), "Expected error '%s' not found in: %s", wantError, err.Error())
