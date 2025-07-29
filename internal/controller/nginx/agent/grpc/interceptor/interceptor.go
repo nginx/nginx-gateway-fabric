@@ -16,6 +16,7 @@ import (
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
@@ -160,35 +161,25 @@ func (c ContextSetter) validateToken(ctx context.Context, gi *grpcContext.GrpcIn
 	var podList corev1.PodList
 	opts := &client.ListOptions{
 		FieldSelector: fields.SelectorFromSet(fields.Set{"status.podIP": gi.IPAddress}),
+		Namespace:     usernameItems[2],
+		LabelSelector: labels.Set(map[string]string{
+			controller.AppNameLabel: usernameItems[3],
+		}).AsSelector(),
 	}
 
 	if err := c.k8sClient.List(getCtx, &podList, opts); err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("error listing pods: %s", err.Error()))
 	}
 
-	if len(podList.Items) != 1 {
-		msg := fmt.Sprintf("expected one Pod to have IP address %s, found %d", gi.IPAddress, len(podList.Items))
-		return nil, status.Error(codes.Internal, msg)
+	runningCount := 0
+	for _, pod := range podList.Items {
+		if pod.Status.Phase == corev1.PodRunning {
+			runningCount++
+		}
 	}
 
-	podNS := podList.Items[0].GetNamespace()
-	if podNS != usernameItems[2] {
-		msg := fmt.Sprintf(
-			"token user namespace %q does not match namespace of requesting pod %q", usernameItems[2], podNS,
-		)
-		return nil, status.Error(codes.Unauthenticated, msg)
-	}
-
-	scName, ok := podList.Items[0].GetLabels()[controller.AppNameLabel]
-	if !ok {
-		msg := fmt.Sprintf("could not get app name from %q label; unable to authenticate token", controller.AppNameLabel)
-		return nil, status.Error(codes.Unauthenticated, msg)
-	}
-
-	if scName != usernameItems[3] {
-		msg := fmt.Sprintf(
-			"token user name %q does not match service account name of requesting pod %q", usernameItems[3], scName,
-		)
+	if runningCount != 1 {
+		msg := fmt.Sprintf("expected a single Running pod with IP address %q, but found %d", gi.IPAddress, runningCount)
 		return nil, status.Error(codes.Unauthenticated, msg)
 	}
 

@@ -17,7 +17,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 )
 
@@ -67,6 +69,7 @@ func (m *mockClient) List(_ context.Context, obj client.ObjectList, _ ...client.
 				Namespace: m.podNamespace,
 				Labels:    labels,
 			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
 		},
 	}
 
@@ -204,38 +207,6 @@ func TestInterceptor(t *testing.T) {
 			expErrCode:    codes.Unauthenticated,
 			expErrMsg:     "must be of the format",
 		},
-		{
-			name:          "mismatched namespace in username",
-			md:            validMetadata,
-			peer:          validPeerData,
-			username:      "system:serviceaccount:invalid:gateway-nginx",
-			appName:       "gateway-nginx",
-			podNamespace:  "default",
-			authenticated: true,
-			expErrCode:    codes.Unauthenticated,
-			expErrMsg:     "does not match namespace",
-		},
-		{
-			name:          "mismatched name in username",
-			md:            validMetadata,
-			peer:          validPeerData,
-			username:      "system:serviceaccount:default:invalid",
-			appName:       "gateway-nginx",
-			podNamespace:  "default",
-			authenticated: true,
-			expErrCode:    codes.Unauthenticated,
-			expErrMsg:     "does not match service account name",
-		},
-		{
-			name:          "missing app name label",
-			md:            validMetadata,
-			peer:          validPeerData,
-			username:      "system:serviceaccount:default:gateway-nginx",
-			podNamespace:  "default",
-			authenticated: true,
-			expErrCode:    codes.Unauthenticated,
-			expErrMsg:     "could not get app name",
-		},
 	}
 
 	streamHandler := func(_ any, _ grpc.ServerStream) error {
@@ -261,7 +232,7 @@ func TestInterceptor(t *testing.T) {
 			}
 			cs := NewContextSetter(mockK8sClient, "ngf-audience")
 
-			ctx := context.Background()
+			ctx := t.Context()
 			if test.md != nil {
 				peerCtx := context.Background()
 				if test.peer != nil {
@@ -286,6 +257,150 @@ func TestInterceptor(t *testing.T) {
 				g.Expect(err.Error()).To(ContainSubstring(test.expErrMsg))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
+			}
+		})
+	}
+}
+
+type patchClient struct {
+	client.Client
+}
+
+func (p *patchClient) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
+	tr, ok := obj.(*authv1.TokenReview)
+	if ok {
+		tr.Status.Authenticated = true
+		tr.Status.User.Username = "system:serviceaccount:default:gateway-nginx"
+	}
+	return nil
+}
+
+func TestValidateToken_PodListOptions(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		pod       *corev1.Pod
+		gi        *grpcContext.GrpcInfo
+		name      string
+		shouldErr bool
+	}{
+		{
+			name: "all match",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nginx-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						controller.AppNameLabel: "gateway-nginx",
+					},
+				},
+				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodRunning},
+			},
+			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "1.2.3.4"},
+			shouldErr: false,
+		},
+		{
+			name: "ip matches, namespace does not",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nginx-pod",
+					Namespace: "other-namespace",
+					Labels: map[string]string{
+						controller.AppNameLabel: "gateway-nginx",
+					},
+				},
+				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodRunning},
+			},
+			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "1.2.3.4"},
+			shouldErr: true,
+		},
+		{
+			name: "ip matches, label value does not match",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nginx-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						controller.AppNameLabel: "not-gateway-nginx",
+					},
+				},
+				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodRunning},
+			},
+			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "1.2.3.4"},
+			shouldErr: true,
+		},
+		{
+			name: "ip matches, label does not exist",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nginx-pod",
+					Namespace: "default",
+					Labels:    map[string]string{},
+				},
+				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodRunning},
+			},
+			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "1.2.3.4"},
+			shouldErr: true,
+		},
+		{
+			name: "ip does not match",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nginx-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						controller.AppNameLabel: "gateway-nginx",
+					},
+				},
+				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodRunning},
+			},
+			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "9.9.9.9"},
+			shouldErr: true,
+		},
+		{
+			name: "all match but pod not running",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nginx-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						controller.AppNameLabel: "gateway-nginx",
+					},
+				},
+				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodPending},
+			},
+			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "1.2.3.4"},
+			shouldErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			fakeClient := fake.NewClientBuilder().
+				WithObjects(tc.pod).
+				WithIndex(&corev1.Pod{}, "status.podIP", func(obj client.Object) []string {
+					pod, ok := obj.(*corev1.Pod)
+					g.Expect(ok).To(BeTrue())
+					if pod.Status.PodIP != "" {
+						return []string{pod.Status.PodIP}
+					}
+					return nil
+				}).
+				Build()
+
+			patchedClient := &patchClient{fakeClient}
+			csPatched := NewContextSetter(patchedClient, "ngf-audience")
+
+			resultCtx, err := csPatched.validateToken(t.Context(), tc.gi)
+			if tc.shouldErr {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring("expected a single Running pod"))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(resultCtx).ToNot(BeNil())
 			}
 		})
 	}
