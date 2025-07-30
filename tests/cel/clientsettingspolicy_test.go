@@ -155,7 +155,7 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	t.Helper()
 	g := NewWithT(t)
 
-	k8sClient, err := ngfHelpers.GetKubernetesClient()
+	k8sClient, err := GetKubernetesClient()
 
 	g.Expect(err).ToNot(HaveOccurred())
 
