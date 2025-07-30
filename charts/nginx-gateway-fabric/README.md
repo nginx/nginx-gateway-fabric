@@ -269,7 +269,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginx.container` | The container configuration for the NGINX container. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{"hostPorts":[],"lifecycle":{},"readinessProbe":{},"resources":{},"volumeMounts":[]}` |
 | `nginx.container.hostPorts` | A list of HostPorts to expose on the host. This configuration allows containers to bind to a specific port on the host node, enabling external network traffic to reach the container directly through the host's IP address and port. Use this option when you need to expose container ports on the host for direct access, such as for debugging, legacy integrations, or when NodePort/LoadBalancer services are not suitable. Note: Using hostPort may have security and scheduling implications, as it ties pods to specific nodes and ports. | list | `[]` |
 | `nginx.container.lifecycle` | The lifecycle of the NGINX container. | object | `{}` |
-| `nginx.container.resources` | The resource requirements of the NGINX container. You should be set this value, If you want to use dataplane Autoscaling(HPA). | object | `{}` |
+| `nginx.container.resources` | The resource requirements of the NGINX container. You should set this value if you want to use dataplane Autoscaling(HPA). | object | `{}` |
 | `nginx.container.volumeMounts` | volumeMounts are the additional volume mounts for the NGINX container. | list | `[]` |
 | `nginx.debug` | Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource. | bool | `false` |
 | `nginx.image.repository` | The NGINX image to use. | string | `"ghcr.io/nginx/nginx-gateway-fabric/nginx"` |

@@ -380,7 +380,7 @@
               "type": "object"
             },
             "resources": {
-              "description": "The resource requirements of the NGINX container. You should be set this value, If you want to use dataplane Autoscaling(HPA).",
+              "description": "The resource requirements of the NGINX container. You should set this value if you want to use dataplane Autoscaling(HPA).",
               "required": [],
               "title": "resources",
               "type": "object"
