@@ -41,7 +41,7 @@ const (
 	testTargetRefName = "test-targetRef"
 )
 
-// GetKubernetesClient returns a client connected to a real Kubernetes cluster.
+// getKubernetesClient returns a client connected to a real Kubernetes cluster.
 func getKubernetesClient(t *testing.T) (k8sClient client.Client, err error) {
 	t.Helper()
 	// Use controller-runtime to get cluster connection
@@ -62,7 +62,7 @@ func getKubernetesClient(t *testing.T) (k8sClient client.Client, err error) {
 	return client.New(k8sConfig, client.Options{Scheme: scheme})
 }
 
-// RandomPrimeNumber generates a random prime number of 64 bits.
+// randomPrimeNumber generates a random prime number of 64 bits.
 // It panics if it fails to generate a random prime number.
 func randomPrimeNumber() int64 {
 	primeNum, err := rand.Prime(rand.Reader, 64)
@@ -72,7 +72,7 @@ func randomPrimeNumber() int64 {
 	return primeNum.Int64()
 }
 
-// UniqueResourceName generates a unique resource name by appending a random prime number to the given name.
+// uniqueResourceName generates a unique resource name by appending a random prime number to the given name.
 func uniqueResourceName(name string) string {
 	return fmt.Sprintf("%s-%d", name, randomPrimeNumber())
 }
