@@ -12,30 +12,6 @@ import (
 	ngfHelpers "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-const (
-	GatewayKind   = "Gateway"
-	HTTPRouteKind = "HTTPRoute"
-	GRPCRouteKind = "GRPCRoute"
-	TCPRouteKind  = "TCPRoute"
-	InvalidKind   = "InvalidKind"
-)
-
-const (
-	GatewayGroup   = "gateway.networking.k8s.io"
-	InvalidGroup   = "invalid.networking.k8s.io"
-	DiscoveryGroup = "discovery.k8s.io/v1"
-)
-
-const (
-	ExpectedTargetRefKindError  = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
-	ExpectedTargetRefGroupError = `TargetRef Group must be gateway.networking.k8s.io.`
-)
-
-const (
-	PolicyName = "test-policy"
-	TargetRef  = "targetRef-name"
-)
-
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -155,7 +131,7 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	t.Helper()
 	g := NewWithT(t)
 
-	k8sClient, err := GetKubernetesClient()
+	k8sClient, err := GetKubernetesClient(t)
 
 	g.Expect(err).ToNot(HaveOccurred())
 
