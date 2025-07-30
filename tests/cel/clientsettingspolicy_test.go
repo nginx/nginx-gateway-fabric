@@ -9,7 +9,6 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
-	ngfHelpers "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
@@ -137,8 +136,8 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 
 	g.Expect(err).ToNot(HaveOccurred())
 	policySpec := tt.policySpec
-	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(ngfHelpers.UniqueResourceName(TargetRef))
-	policyName := ngfHelpers.UniqueResourceName(PolicyName)
+	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(UniqueResourceName(TargetRef))
+	policyName := UniqueResourceName(PolicyName)
 
 	clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: controllerruntime.ObjectMeta{

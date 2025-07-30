@@ -3,7 +3,6 @@ package helpers
 
 import (
 	"bytes"
-	"crypto/rand"
 	"fmt"
 	"text/template"
 
@@ -87,19 +86,4 @@ func MustExecuteTemplate(templ *template.Template, data interface{}) []byte {
 	}
 
 	return buf.Bytes()
-}
-
-// RandomPrimeNumber generates a random prime number of 64 bits.
-// It panics if it fails to generate a random prime number.
-func RandomPrimeNumber() int64 {
-	primeNum, err := rand.Prime(rand.Reader, 64)
-	if err != nil {
-		panic(fmt.Errorf("failed to generate random prime number: %w", err))
-	}
-	return primeNum.Int64()
-}
-
-// UniqueResourceName generates a unique resource name by appending a random prime number to the given name.
-func UniqueResourceName(name string) string {
-	return fmt.Sprintf("%s-%d", name, RandomPrimeNumber())
 }

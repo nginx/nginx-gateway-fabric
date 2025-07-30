@@ -109,22 +109,3 @@ func TestMustExecuteTemplatePanics(t *testing.T) {
 
 	g.Expect(execute).To(Panic())
 }
-
-func TestMustGenerateRandomPrimeNumer(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-	g.Expect(func() {
-		_ = helpers.RandomPrimeNumber()
-	}).ToNot(Panic())
-}
-
-func TestMustReturnUniqueResourceName(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	name := "test-resource"
-	uniqueName := helpers.UniqueResourceName(name)
-
-	g.Expect(uniqueName).To(HavePrefix(name))
-	g.Expect(len(uniqueName)).To(BeNumerically(">", len(name)))
-}
