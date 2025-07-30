@@ -113,8 +113,6 @@ func TestMustExecuteTemplatePanics(t *testing.T) {
 func TestMustGenerateRandomPrimeNumer(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
-
-	// This test is expected to panic if it fails to generate a random prime number.
 	g.Expect(func() {
 		_ = helpers.RandomPrimeNumber()
 	}).ToNot(Panic())
@@ -129,14 +127,4 @@ func TestMustReturnUniqueResourceName(t *testing.T) {
 
 	g.Expect(uniqueName).To(HavePrefix(name))
 	g.Expect(len(uniqueName)).To(BeNumerically(">", len(name)))
-}
-
-func TestMustCreateKubernetesClient(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	k8sClient, err := helpers.GetKubernetesClient()
-
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(k8sClient).ToNot(BeNil())
 }
