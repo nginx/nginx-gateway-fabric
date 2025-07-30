@@ -5,9 +5,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -157,9 +155,7 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	t.Helper()
 	g := NewWithT(t)
 
-	// Get Kubernetes client from test framework
-	// This should be set up by your test framework to connect to a real cluster
-	k8sClient, err := getKubernetesClient(t)
+	k8sClient, err := ngfHelpers.GetKubernetesClient()
 
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -196,22 +192,4 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	for _, wantError := range tt.wantErrors {
 		g.Expect(err.Error()).To(ContainSubstring(wantError), "Expected error '%s' not found in: %s", wantError, err.Error())
 	}
-}
-
-// getKubernetesClient returns a client connected to a real Kubernetes cluster.
-func getKubernetesClient(t *testing.T) (k8sClient client.Client, err error) {
-	t.Helper()
-	// Use controller-runtime to get cluster connection
-	k8sConfig, err := controllerruntime.GetConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	// Set up scheme with NGF types
-	scheme := runtime.NewScheme()
-	if err = ngfAPIv1alpha1.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	// Create a new client with the scheme and return it
-	return client.New(k8sConfig, client.Options{Scheme: scheme})
 }

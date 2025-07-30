@@ -1,6 +1,7 @@
 package helpers_test
 
 import (
+	"context"
 	"testing"
 	"text/template"
 
@@ -8,6 +9,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
+
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -130,4 +133,19 @@ func TestMustReturnUniqueResourceName(t *testing.T) {
 	g.Expect(uniqueName).To(HavePrefix(name))
 	g.Expect(uniqueName).To(HaveSuffix("-"))
 	g.Expect(len(uniqueName)).To(BeNumerically(">", len(name)))
+}
+
+func TestMustCreateKubernetesClient(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	k8sClient, err := helpers.GetKubernetesClient()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(k8sClient).ToNot(BeNil())
+
+	// Check that the client can be used to list namespaces
+	namespaces := &corev1.NamespaceList{}
+	err = k8sClient.List(context.Background(), namespaces)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(namespaces.Items).ToNot(BeEmpty())
 }
