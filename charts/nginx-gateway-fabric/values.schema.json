@@ -106,6 +106,11 @@
               "required": [],
               "type": "boolean"
             },
+            "disableSNIHostValidation": {
+              "description": "DisableSNIHostValidation disables the validation that ensures the SNI hostname matches the Host header in HTTPS requests. This resolves HTTP/2 connection coalescing issues with wildcard certificates but introduces security risks as described in Gateway API GEP-3567.",
+              "required": [],
+              "type": "boolean"
+            },
             "ipFamily": {
               "description": "IPFamily specifies the IP family to be used by the NGINX.",
               "enum": [

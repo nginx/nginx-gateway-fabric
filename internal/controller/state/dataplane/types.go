@@ -372,10 +372,12 @@ type BaseHTTPConfig struct {
 	Snippets []Snippet
 	// RewriteIPSettings defines configuration for rewriting the client IP to the original client's IP.
 	RewriteClientIPSettings RewriteClientIPSettings
-	// HTTP2 specifies whether http2 should be enabled for all servers.
-	HTTP2 bool
 	// NginxReadinessProbePort is the port on which the health check endpoint for NGINX is exposed.
 	NginxReadinessProbePort int32
+	// HTTP2 specifies whether http2 should be enabled for all servers.
+	HTTP2 bool
+	// DisableSNIHostValidation specifies if the SNI host validation should be disabled.
+	DisableSNIHostValidation bool
 }
 
 // Snippet is a snippet of configuration.
