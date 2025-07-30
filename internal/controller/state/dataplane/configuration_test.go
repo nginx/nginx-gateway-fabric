@@ -7,6 +7,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
@@ -714,6 +715,7 @@ func TestBuildConfiguration(t *testing.T) {
 
 	fakeResolver.ResolveStub = func(
 		_ context.Context,
+		_ logr.Logger,
 		nsName types.NamespacedName,
 		_ apiv1.ServicePort,
 		_ []discoveryV1.AddressType,
@@ -2535,7 +2537,8 @@ func TestBuildConfiguration(t *testing.T) {
 			g := NewWithT(t)
 
 			result := BuildConfiguration(
-				context.TODO(),
+				t.Context(),
+				logr.Discard(),
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
@@ -2650,7 +2653,8 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 			g := NewWithT(t)
 
 			result := BuildConfiguration(
-				context.TODO(),
+				t.Context(),
+				logr.Discard(),
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
@@ -3374,6 +3378,7 @@ func TestBuildUpstreams(t *testing.T) {
 	fakeResolver := &resolverfakes.FakeServiceResolver{}
 	fakeResolver.ResolveCalls(func(
 		_ context.Context,
+		_ logr.Logger,
 		svcNsName types.NamespacedName,
 		_ apiv1.ServicePort,
 		_ []discoveryV1.AddressType,
@@ -3406,7 +3411,14 @@ func TestBuildUpstreams(t *testing.T) {
 
 	g := NewWithT(t)
 
-	upstreams := buildUpstreams(context.TODO(), gateway, fakeResolver, referencedServices, Dual)
+	upstreams := buildUpstreams(
+		t.Context(),
+		logr.Discard(),
+		gateway,
+		fakeResolver,
+		referencedServices,
+		Dual,
+	)
 	g.Expect(upstreams).To(ConsistOf(expUpstreams))
 }
 
@@ -4359,6 +4371,7 @@ func TestBuildStreamUpstreams(t *testing.T) {
 
 	fakeResolver.ResolveStub = func(
 		_ context.Context,
+		_ logr.Logger,
 		nsName types.NamespacedName,
 		_ apiv1.ServicePort,
 		_ []discoveryV1.AddressType,
@@ -4369,7 +4382,7 @@ func TestBuildStreamUpstreams(t *testing.T) {
 		return fakeEndpoints, nil
 	}
 
-	streamUpstreams := buildStreamUpstreams(context.Background(), gateway, &fakeResolver, Dual)
+	streamUpstreams := buildStreamUpstreams(t.Context(), logr.Discard(), gateway, &fakeResolver, Dual)
 
 	expectedStreamUpstreams := []Upstream{
 		{

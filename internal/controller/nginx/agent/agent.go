@@ -90,6 +90,7 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 ) {
 	msg := deployment.SetFiles(files)
 	if msg == nil {
+		n.logger.V(1).Info("No changes to nginx configuration files, not sending to agent")
 		return
 	}
 
