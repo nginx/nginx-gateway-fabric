@@ -2,8 +2,6 @@ package cel
 
 import (
 	"context"
-	"crypto/rand"
-	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -13,6 +11,7 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfHelpers "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 const (
@@ -35,8 +34,8 @@ const (
 )
 
 const (
-	PolicyNameFormat = "test-policy-%d"
-	TargetRefFormat  = "targetRef-name-%d"
+	PolicyName = "test-policy"
+	TargetRef  = "targetRef-name"
 )
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
@@ -164,11 +163,10 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 
 	g.Expect(err).ToNot(HaveOccurred())
 
-	primeNum, err := rand.Prime(rand.Reader, 64)
 	g.Expect(err).ToNot(HaveOccurred())
 	policySpec := tt.policySpec
-	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(fmt.Sprintf(TargetRefFormat, primeNum))
-	policyName := fmt.Sprintf(PolicyNameFormat, primeNum)
+	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(ngfHelpers.UniqueResourceName(TargetRef))
+	policyName := ngfHelpers.UniqueResourceName(PolicyName)
 
 	clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: controllerruntime.ObjectMeta{
