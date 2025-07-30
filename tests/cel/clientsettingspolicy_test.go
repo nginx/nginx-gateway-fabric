@@ -22,8 +22,8 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 			name: "Validate TargetRef of kind Gateway is allowed",
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  GatewayKind,
-					Group: GatewayGroup,
+					Kind:  gatewayKind,
+					Group: gatewayGroup,
 				},
 			},
 		},
@@ -31,8 +31,8 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 			name: "Validate TargetRef of kind HTTPRoute is allowed",
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  HTTPRouteKind,
-					Group: GatewayGroup,
+					Kind:  httpRouteKind,
+					Group: gatewayGroup,
 				},
 			},
 		},
@@ -40,28 +40,28 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 			name: "Validate TargetRef of kind GRPCRoute is allowed",
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  GRPCRouteKind,
-					Group: GatewayGroup,
+					Kind:  grpcRouteKind,
+					Group: gatewayGroup,
 				},
 			},
 		},
 		{
 			name:       "Validate Invalid TargetRef Kind is not allowed",
-			wantErrors: []string{ExpectedTargetRefKindError},
+			wantErrors: []string{expectedTargetRefKindError},
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  InvalidKind,
-					Group: GatewayGroup,
+					Kind:  invalidKind,
+					Group: gatewayGroup,
 				},
 			},
 		},
 		{
 			name:       "Validate TCPRoute TargetRef Kind is not allowed",
-			wantErrors: []string{ExpectedTargetRefKindError},
+			wantErrors: []string{expectedTargetRefKindError},
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  TCPRouteKind,
-					Group: GatewayGroup,
+					Kind:  tcpRouteKind,
+					Group: gatewayGroup,
 				},
 			},
 		},
@@ -86,28 +86,28 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 			name: "Validate gateway.networking.k8s.io TargetRef Group is allowed",
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  GatewayKind,
-					Group: GatewayGroup,
+					Kind:  gatewayKind,
+					Group: gatewayGroup,
 				},
 			},
 		},
 		{
 			name:       "Validate invalid.networking.k8s.io TargetRef Group is not allowed",
-			wantErrors: []string{ExpectedTargetRefGroupError},
+			wantErrors: []string{expectedTargetRefGroupError},
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  GatewayKind,
-					Group: InvalidGroup,
+					Kind:  gatewayKind,
+					Group: invalidGroup,
 				},
 			},
 		},
 		{
 			name:       "Validate discovery.k8s.io/v1 TargetRef Group is not allowed",
-			wantErrors: []string{ExpectedTargetRefGroupError},
+			wantErrors: []string{expectedTargetRefGroupError},
 			policySpec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-					Kind:  GatewayKind,
-					Group: DiscoveryGroup,
+					Kind:  gatewayKind,
+					Group: discoveryGroup,
 				},
 			},
 		},
@@ -130,19 +130,19 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	t.Helper()
 	g := NewWithT(t)
 
-	k8sClient, err := GetKubernetesClient(t)
+	k8sClient, err := getKubernetesClient(t)
 
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(err).ToNot(HaveOccurred())
 	policySpec := tt.policySpec
-	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(UniqueResourceName(TargetRef))
-	policyName := UniqueResourceName(PolicyName)
+	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(UniqueResourceName(testTargetRefName))
+	policyName := UniqueResourceName(testPolicyName)
 
 	clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: controllerruntime.ObjectMeta{
 			Name:      policyName,
-			Namespace: "default",
+			Namespace: defaultNamespace,
 		},
 		Spec: policySpec,
 	}

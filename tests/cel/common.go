@@ -14,31 +14,35 @@ import (
 )
 
 const (
-	GatewayKind   = "Gateway"
-	HTTPRouteKind = "HTTPRoute"
-	GRPCRouteKind = "GRPCRoute"
-	TCPRouteKind  = "TCPRoute"
-	InvalidKind   = "InvalidKind"
+	gatewayKind   = "Gateway"
+	httpRouteKind = "HTTPRoute"
+	grpcRouteKind = "GRPCRoute"
+	tcpRouteKind  = "TCPRoute"
+	invalidKind   = "InvalidKind"
 )
 
 const (
-	GatewayGroup   = "gateway.networking.k8s.io"
-	InvalidGroup   = "invalid.networking.k8s.io"
-	DiscoveryGroup = "discovery.k8s.io/v1"
+	gatewayGroup   = "gateway.networking.k8s.io"
+	invalidGroup   = "invalid.networking.k8s.io"
+	discoveryGroup = "discovery.k8s.io/v1"
 )
 
 const (
-	ExpectedTargetRefKindError  = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
-	ExpectedTargetRefGroupError = `TargetRef Group must be gateway.networking.k8s.io.`
+	expectedTargetRefKindError  = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
+	expectedTargetRefGroupError = `TargetRef Group must be gateway.networking.k8s.io.`
 )
 
 const (
-	PolicyName = "test-policy"
-	TargetRef  = "targetRef-name"
+	defaultNamespace = "default"
+)
+
+const (
+	testPolicyName    = "test-policy"
+	testTargetRefName = "test-targetRef"
 )
 
 // GetKubernetesClient returns a client connected to a real Kubernetes cluster.
-func GetKubernetesClient(t *testing.T) (k8sClient client.Client, err error) {
+func getKubernetesClient(t *testing.T) (k8sClient client.Client, err error) {
 	t.Helper()
 	// Use controller-runtime to get cluster connection
 	k8sConfig, err := controllerruntime.GetConfig()

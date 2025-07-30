@@ -198,11 +198,3 @@ test-cel-validation:
 		echo "Running test: $(CEL_TEST_TARGET) in ./cel"; \
 		go test -v ./cel -run "$(CEL_TEST_TARGET)"; \
 	fi
-
-
-# Set up a kind cluster, install NGF CRDs, and run CEL validation tests
-.PHONY: setup-and-test-cel-validation
-setup-and-test-cel-validation:
-	kind create cluster --name $(CLUSTER_NAME) || true
-	kubectl kustomize ../config/crd | kubectl apply -f -
-	$(MAKE) test-cel-validation
