@@ -64,7 +64,7 @@ func getKubernetesClient(t *testing.T) (k8sClient client.Client, err error) {
 
 // RandomPrimeNumber generates a random prime number of 64 bits.
 // It panics if it fails to generate a random prime number.
-func RandomPrimeNumber() int64 {
+func randomPrimeNumber() int64 {
 	primeNum, err := rand.Prime(rand.Reader, 64)
 	if err != nil {
 		panic(fmt.Errorf("failed to generate random prime number: %w", err))
@@ -73,6 +73,6 @@ func RandomPrimeNumber() int64 {
 }
 
 // UniqueResourceName generates a unique resource name by appending a random prime number to the given name.
-func UniqueResourceName(name string) string {
-	return fmt.Sprintf("%s-%d", name, RandomPrimeNumber())
+func uniqueResourceName(name string) string {
+	return fmt.Sprintf("%s-%d", name, randomPrimeNumber())
 }

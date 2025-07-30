@@ -10,7 +10,7 @@ func TestMustGenerateRandomPrimeNumer(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 	g.Expect(func() {
-		_ = RandomPrimeNumber()
+		_ = randomPrimeNumber()
 	}).ToNot(Panic())
 }
 
@@ -19,7 +19,7 @@ func TestMustReturnUniqueResourceName(t *testing.T) {
 	g := NewWithT(t)
 
 	name := "test-resource"
-	uniqueName := UniqueResourceName(name)
+	uniqueName := uniqueResourceName(name)
 
 	g.Expect(uniqueName).To(HavePrefix(name))
 	g.Expect(len(uniqueName)).To(BeNumerically(">", len(name)))

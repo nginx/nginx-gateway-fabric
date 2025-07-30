@@ -136,8 +136,8 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 
 	g.Expect(err).ToNot(HaveOccurred())
 	policySpec := tt.policySpec
-	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(UniqueResourceName(testTargetRefName))
-	policyName := UniqueResourceName(testPolicyName)
+	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+	policyName := uniqueResourceName(testPolicyName)
 
 	clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: controllerruntime.ObjectMeta{
