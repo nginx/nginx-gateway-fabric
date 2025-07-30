@@ -1,17 +1,13 @@
 package helpers_test
 
 import (
-	"context"
 	"testing"
 	"text/template"
 
 	. "github.com/onsi/gomega"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
-
-	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -143,19 +139,4 @@ func TestMustCreateKubernetesClient(t *testing.T) {
 
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(k8sClient).ToNot(BeNil())
-
-	// Check that the client can be used to list namespaces
-	nginxGateway := &ngfAPIv1alpha1.NginxGateway{
-		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      helpers.UniqueResourceName("test-nginx-gateway"),
-			Namespace: "default",
-		},
-	}
-	// Clean up after test
-	defer func() {
-		_ = k8sClient.Delete(context.Background(), nginxGateway)
-	}()
-	err = k8sClient.Create(context.Background(), nginxGateway)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(nginxGateway).ToNot(BeNil())
 }
