@@ -443,7 +443,7 @@ func TestProtocolPort(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			err := validateProtocolPort(tc.port)
+			err := validateAnyPort(tc.port)
 			if !tc.expErr {
 				g.Expect(err).ToNot(HaveOccurred())
 			} else {

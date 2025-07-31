@@ -459,8 +459,9 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			args: []string{
 				"--nginx-one-console-telemetry-endpoint-host=!@#$",
 			},
-			wantErr:           true,
-			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-one-console-telemetry-endpoint-host" flag: invalid format: `,
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-one-console-telemetry-endpoint-host" ` +
+				`flag: invalid format: `,
 		},
 		{
 			name: "nginx-one-console-telemetry-endpoint-port is invalid type",
@@ -468,8 +469,8 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-console-telemetry-endpoint-port=invalid", // not an int
 			},
 			wantErr: true,
-			expectedErrPrefix: `invalid argument "invalid" for "--nginx-one-console-telemetry-endpoint-port" flag: failed to parse int value:` +
-				` strconv.ParseInt: parsing "invalid": invalid syntax`,
+			expectedErrPrefix: `invalid argument "invalid" for "--nginx-one-console-telemetry-endpoint-port" ` +
+				`flag: failed to parse int value: strconv.ParseInt: parsing "invalid": invalid syntax`,
 		},
 		{
 			name: "nginx-one-console-telemetry-endpoint-port is outside of range",
@@ -482,8 +483,8 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 		},
 		{
 			name: "nginx-one-console-tls-skip-verify is not a bool",
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--nginx-one-console-tls-skip-verify" flag: strconv.ParseBool:` +
-				` parsing "not-a-bool": invalid syntax`,
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--nginx-one-console-tls-skip-verify" flag:` +
+				`strconv.ParseBool: parsing "not-a-bool": invalid syntax`,
 			args: []string{
 				"--nginx-one-console-tls-skip-verify=not-a-bool",
 			},

@@ -74,7 +74,10 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 
 	var dataplaneKeySecretName string
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-		dataplaneKeySecretName = controller.CreateNginxResourceName(resourceName, p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName)
+		dataplaneKeySecretName = controller.CreateNginxResourceName(
+			resourceName,
+			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+		)
 	}
 
 	// map key is the new name, value is the original name

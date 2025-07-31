@@ -157,8 +157,9 @@ func validatePort(port int) error {
 	return nil
 }
 
-// validateProtocolPort makes sure a given port is inside the valid port range for its usage. This also includes well known ports.
-func validateProtocolPort(port int) error {
+// validateAnyPort makes sure a given port is inside the valid range for all ports.
+// This includes protected ports (1-1023) and unprivileged ports (1024-65535).
+func validateAnyPort(port int) error {
 	if port < 1 || port > 65535 {
 		return fmt.Errorf("port outside of valid port range [1 - 65535]: %v", port)
 	}
