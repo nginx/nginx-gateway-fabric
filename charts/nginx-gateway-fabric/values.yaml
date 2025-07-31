@@ -184,10 +184,10 @@ nginxGateway:
   # - type: Pods
   #   pods:
   #     metric:
-  #       name: http_requests
+  #       name: container_memory_usage_bytes
   #     target:
   #       type: AverageValue
-  #       averageValue: "100"
+  #       averageValue: "400Mi"
 
   metrics:
     # -- Enable exposing metrics in the Prometheus format.
@@ -257,8 +257,8 @@ nginx:
   #     metric:
   #       name: nginx_gateway_fabric_nginx_process_requests_total
   #     target:
-  #       type: AverageValue
-  #       averageValue: 10000m
+  #       type: nginx_http_requests_total
+  #       averageValue: 400
   image:
     # -- The NGINX image to use.
     repository: ghcr.io/nginx/nginx-gateway-fabric/nginx

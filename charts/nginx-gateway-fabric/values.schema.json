@@ -407,7 +407,7 @@
           "type": "boolean"
         },
         "image": {
-          "description": "Custom or additional autoscaling metrics\nref: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-custom-metrics\n- type: Pods\n  pods:\n    metric:\n      name: nginx_gateway_fabric_nginx_process_requests_total\n    target:\n      type: AverageValue\n      averageValue: 10000m",
+          "description": "Custom or additional autoscaling metrics\nref: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-custom-metrics\n- type: Pods\n  pods:\n    metric:\n      name: nginx_gateway_fabric_nginx_process_requests_total\n    target:\n      type: nginx_http_requests_total\n      averageValue: 400",
           "properties": {
             "pullPolicy": {
               "default": "Always",
