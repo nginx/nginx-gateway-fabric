@@ -222,6 +222,11 @@ nginx:
     # -- The Endpoint host that the NGINX One Console telemetry metrics will be sent to.
     endpointHost: "agent.connect.nginx.com"
 
+    # @schema
+    # type: integer
+    # minimum: 1
+    # maximum: 65535
+    # @schema
     # -- The endpoint port that the NGINX One Console telemetry metrics will be sent to.
     endpointPort: 443
 

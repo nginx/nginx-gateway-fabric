@@ -156,10 +156,10 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--usage-report-client-ssl-secret=client-secret",
 				"--snippets-filters",
 				"--nginx-scc=nginx-sscc-name",
-				"--nginx-one-console-dataplane-key-secret=dataplane-key-secret",
-				"--nginx-one-console-telemetry-endpoint-host=telemetry-endpoint-host",
-				"--nginx-one-console-telemetry-endpoint-port=443",
-				"--nginx-one-console-tls-skip-verify",
+				"--nginx-one-dataplane-key-secret=dataplane-key-secret",
+				"--nginx-one-telemetry-endpoint-host=telemetry-endpoint-host",
+				"--nginx-one-telemetry-endpoint-port=443",
+				"--nginx-one-tls-skip-verify",
 			},
 			wantErr: false,
 		},
@@ -431,62 +431,62 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-scc" flag: invalid format: `,
 		},
 		{
-			name: "nginx-one-console-dataplane-key-secret is set to empty string",
+			name: "nginx-one-dataplane-key-secret is set to empty string",
 			args: []string{
-				"--nginx-one-console-dataplane-key-secret=",
+				"--nginx-one-dataplane-key-secret=",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--nginx-one-console-dataplane-key-secret" flag: must be set`,
+			expectedErrPrefix: `invalid argument "" for "--nginx-one-dataplane-key-secret" flag: must be set`,
 		},
 		{
-			name: "nginx-one-console-dataplane-key-secret is invalid",
+			name: "nginx-one-dataplane-key-secret is invalid",
 			args: []string{
-				"--nginx-one-console-dataplane-key-secret=!@#$",
+				"--nginx-one-dataplane-key-secret=!@#$",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-one-console-dataplane-key-secret" flag: invalid format: `,
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-one-dataplane-key-secret" flag: invalid format: `,
 		},
 		{
-			name: "nginx-one-console-telemetry-endpoint-host is set to empty string",
+			name: "nginx-one-telemetry-endpoint-host is set to empty string",
 			args: []string{
-				"--nginx-one-console-telemetry-endpoint-host=",
+				"--nginx-one-telemetry-endpoint-host=",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--nginx-one-console-telemetry-endpoint-host" flag: must be set`,
+			expectedErrPrefix: `invalid argument "" for "--nginx-one-telemetry-endpoint-host" flag: must be set`,
 		},
 		{
-			name: "nginx-one-console-telemetry-endpoint-host is invalid",
+			name: "nginx-one-telemetry-endpoint-host is invalid",
 			args: []string{
-				"--nginx-one-console-telemetry-endpoint-host=!@#$",
+				"--nginx-one-telemetry-endpoint-host=!@#$",
 			},
 			wantErr: true,
-			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-one-console-telemetry-endpoint-host" ` +
+			expectedErrPrefix: `invalid argument "!@#$" for "--nginx-one-telemetry-endpoint-host" ` +
 				`flag: invalid format: `,
 		},
 		{
-			name: "nginx-one-console-telemetry-endpoint-port is invalid type",
+			name: "nginx-one-telemetry-endpoint-port is invalid type",
 			args: []string{
-				"--nginx-one-console-telemetry-endpoint-port=invalid", // not an int
+				"--nginx-one-telemetry-endpoint-port=invalid", // not an int
 			},
 			wantErr: true,
-			expectedErrPrefix: `invalid argument "invalid" for "--nginx-one-console-telemetry-endpoint-port" ` +
+			expectedErrPrefix: `invalid argument "invalid" for "--nginx-one-telemetry-endpoint-port" ` +
 				`flag: failed to parse int value: strconv.ParseInt: parsing "invalid": invalid syntax`,
 		},
 		{
-			name: "nginx-one-console-telemetry-endpoint-port is outside of range",
+			name: "nginx-one-telemetry-endpoint-port is outside of range",
 			args: []string{
-				"--nginx-one-console-telemetry-endpoint-port=65536", // outside of range
+				"--nginx-one-telemetry-endpoint-port=65536", // outside of range
 			},
 			wantErr: true,
-			expectedErrPrefix: `invalid argument "65536" for "--nginx-one-console-telemetry-endpoint-port" flag:` +
+			expectedErrPrefix: `invalid argument "65536" for "--nginx-one-telemetry-endpoint-port" flag:` +
 				` port outside of valid port range [1 - 65535]: 65536`,
 		},
 		{
-			name: "nginx-one-console-tls-skip-verify is not a bool",
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--nginx-one-console-tls-skip-verify" flag:` +
-				`strconv.ParseBool: parsing "not-a-bool": invalid syntax`,
+			name: "nginx-one-tls-skip-verify is not a bool",
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--nginx-one-tls-skip-verify" flag:` +
+				` strconv.ParseBool: parsing "not-a-bool": invalid syntax`,
 			args: []string{
-				"--nginx-one-console-tls-skip-verify=not-a-bool",
+				"--nginx-one-tls-skip-verify=not-a-bool",
 			},
 			wantErr: true,
 		},

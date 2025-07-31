@@ -465,6 +465,8 @@
             "endpointPort": {
               "default": 443,
               "description": "The endpoint port that the NGINX One Console telemetry metrics will be sent to.",
+              "maximum": 65535,
+              "minimum": 1,
               "required": [],
               "title": "endpointPort",
               "type": "integer"
