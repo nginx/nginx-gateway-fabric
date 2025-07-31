@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestMustGenerateRandomPrimeNumer(t *testing.T) {
+func TestMustGenerateRandomPrimeNumber(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 	g.Expect(func() {

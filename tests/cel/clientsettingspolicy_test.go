@@ -130,11 +130,6 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	t.Helper()
 	g := NewWithT(t)
 
-	k8sClient, err := getKubernetesClient(t)
-
-	g.Expect(err).ToNot(HaveOccurred())
-
-	g.Expect(err).ToNot(HaveOccurred())
 	policySpec := tt.policySpec
 	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
 	policyName := uniqueResourceName(testPolicyName)
@@ -146,6 +141,10 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 		},
 		Spec: policySpec,
 	}
+
+	k8sClient, err := getKubernetesClient(t)
+
+	g.Expect(err).ToNot(HaveOccurred())
 
 	err = k8sClient.Create(context.Background(), clientSettingsPolicy)
 
@@ -159,12 +158,7 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	} else {
 		g.Expect(err).To(HaveOccurred())
 		for _, wantError := range tt.wantErrors {
-			g.Expect(err.Error()).To(ContainSubstring(wantError))
+			g.Expect(err.Error()).To(ContainSubstring(wantError), "Expected error '%s' not found in: %s", wantError, err.Error())
 		}
-	}
-
-	// Check that we got the expected error messages
-	for _, wantError := range tt.wantErrors {
-		g.Expect(err.Error()).To(ContainSubstring(wantError), "Expected error '%s' not found in: %s", wantError, err.Error())
 	}
 }
