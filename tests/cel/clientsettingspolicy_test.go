@@ -6,6 +6,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -13,6 +14,9 @@ import (
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 	t.Parallel()
+	g := NewWithT(t)
+	k8sClient, err := getKubernetesClient(t)
+	g.Expect(err).ToNot(HaveOccurred())
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
@@ -70,13 +74,16 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			validateClientSettingsPolicy(t, tt)
+			validateClientSettingsPolicy(t, tt, g, k8sClient)
 		})
 	}
 }
 
 func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 	t.Parallel()
+	g := NewWithT(t)
+	k8sClient, err := getKubernetesClient(t)
+	g.Expect(err).ToNot(HaveOccurred())
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
@@ -116,7 +123,7 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			validateClientSettingsPolicy(t, tt)
+			validateClientSettingsPolicy(t, tt, g, k8sClient)
 		})
 	}
 }
@@ -125,10 +132,9 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 	policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 	name       string
 	wantErrors []string
-},
+}, g *WithT, k8sClient client.Client,
 ) {
 	t.Helper()
-	g := NewWithT(t)
 
 	policySpec := tt.policySpec
 	policySpec.TargetRef.Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
@@ -142,11 +148,7 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 		Spec: policySpec,
 	}
 
-	k8sClient, err := getKubernetesClient(t)
-
-	g.Expect(err).ToNot(HaveOccurred())
-
-	err = k8sClient.Create(context.Background(), clientSettingsPolicy)
+	err := k8sClient.Create(context.Background(), clientSettingsPolicy)
 
 	// Clean up after test
 	defer func() {
