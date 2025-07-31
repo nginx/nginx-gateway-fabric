@@ -57,31 +57,31 @@ func createRootCommand() *cobra.Command {
 func createControllerCommand() *cobra.Command {
 	// flag names
 	const (
-		configFlag                               = "config"
-		serviceFlag                              = "service"
-		agentTLSSecretFlag                       = "agent-tls-secret"
-		nginxOneConsoleDataplaneKeySecretFlag    = "nginx-one-console-dataplane-key-secret" //nolint:gosec // not credentials
-		nginxOneConsoleTelemetryEndpointHostFlag = "nginx-one-console-telemetry-endpoint-host"
-		nginxOneConsoleTelemetryEndpointPortFlag = "nginx-one-console-telemetry-endpoint-port"
-		nginxOneConsoleTLSSkipVerifyFlag         = "nginx-one-console-tls-skip-verify"
-		metricsDisableFlag                       = "metrics-disable"
-		metricsSecureFlag                        = "metrics-secure-serving"
-		metricsPortFlag                          = "metrics-port"
-		healthDisableFlag                        = "health-disable"
-		healthPortFlag                           = "health-port"
-		leaderElectionDisableFlag                = "leader-election-disable"
-		leaderElectionLockNameFlag               = "leader-election-lock-name"
-		productTelemetryDisableFlag              = "product-telemetry-disable"
-		gwAPIExperimentalFlag                    = "gateway-api-experimental-features"
-		nginxDockerSecretFlag                    = "nginx-docker-secret" //nolint:gosec // not credentials
-		usageReportSecretFlag                    = "usage-report-secret"
-		usageReportEndpointFlag                  = "usage-report-endpoint"
-		usageReportResolverFlag                  = "usage-report-resolver"
-		usageReportSkipVerifyFlag                = "usage-report-skip-verify"
-		usageReportClientSSLSecretFlag           = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
-		usageReportCASecretFlag                  = "usage-report-ca-secret"         //nolint:gosec // not credentials
-		snippetsFiltersFlag                      = "snippets-filters"
-		nginxSCCFlag                             = "nginx-scc"
+		configFlag                        = "config"
+		serviceFlag                       = "service"
+		agentTLSSecretFlag                = "agent-tls-secret"
+		nginxOneDataplaneKeySecretFlag    = "nginx-one-dataplane-key-secret" //nolint:gosec // not credentials
+		nginxOneTelemetryEndpointHostFlag = "nginx-one-telemetry-endpoint-host"
+		nginxOneTelemetryEndpointPortFlag = "nginx-one-telemetry-endpoint-port"
+		nginxOneTLSSkipVerifyFlag         = "nginx-one-tls-skip-verify"
+		metricsDisableFlag                = "metrics-disable"
+		metricsSecureFlag                 = "metrics-secure-serving"
+		metricsPortFlag                   = "metrics-port"
+		healthDisableFlag                 = "health-disable"
+		healthPortFlag                    = "health-port"
+		leaderElectionDisableFlag         = "leader-election-disable"
+		leaderElectionLockNameFlag        = "leader-election-lock-name"
+		productTelemetryDisableFlag       = "product-telemetry-disable"
+		gwAPIExperimentalFlag             = "gateway-api-experimental-features"
+		nginxDockerSecretFlag             = "nginx-docker-secret" //nolint:gosec // not credentials
+		usageReportSecretFlag             = "usage-report-secret"
+		usageReportEndpointFlag           = "usage-report-endpoint"
+		usageReportResolverFlag           = "usage-report-resolver"
+		usageReportSkipVerifyFlag         = "usage-report-skip-verify"
+		usageReportClientSSLSecretFlag    = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
+		usageReportCASecretFlag           = "usage-report-ca-secret"         //nolint:gosec // not credentials
+		snippetsFiltersFlag               = "snippets-filters"
+		nginxSCCFlag                      = "nginx-scc"
 	)
 
 	// flag values
@@ -327,26 +327,26 @@ func createControllerCommand() *cobra.Command {
 
 	cmd.Flags().Var(
 		&nginxOneConsoleDataplaneKeySecretName,
-		nginxOneConsoleDataplaneKeySecretFlag,
+		nginxOneDataplaneKeySecretFlag,
 		`The name of the Secret containing the NGINX One Console's dataplane key. Must exist in the same namespace that `+
 			`the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).`,
 	)
 
 	cmd.Flags().Var(
 		&nginxOneConsoleTelemetryEndpointHost,
-		nginxOneConsoleTelemetryEndpointHostFlag,
+		nginxOneTelemetryEndpointHostFlag,
 		`The host of the NGINX One Console's telemetry endpoint.`,
 	)
 
 	cmd.Flags().Var(
 		&nginxOneConsoleTelemetryEndpointPort,
-		nginxOneConsoleTelemetryEndpointPortFlag,
+		nginxOneTelemetryEndpointPortFlag,
 		`The port of the NGINX One Console's telemetry endpoint.`,
 	)
 
 	cmd.Flags().BoolVar(
 		&nginxOneConsoleTLSSkipVerify,
-		nginxOneConsoleTLSSkipVerifyFlag,
+		nginxOneTLSSkipVerifyFlag,
 		false,
 		"Disable client verification of the NGINX One Console's telemetry endpoint server certificate.",
 	)
