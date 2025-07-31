@@ -60,7 +60,7 @@ func createControllerCommand() *cobra.Command {
 		configFlag                               = "config"
 		serviceFlag                              = "service"
 		agentTLSSecretFlag                       = "agent-tls-secret"
-		nginxOneConsoleDataplaneKeySecretFlag    = "nginx-one-console-dataplane-key-secret"
+		nginxOneConsoleDataplaneKeySecretFlag    = "nginx-one-console-dataplane-key-secret" //nolint:gosec // not credentials
 		nginxOneConsoleTelemetryEndpointHostFlag = "nginx-one-console-telemetry-endpoint-host"
 		nginxOneConsoleTelemetryEndpointPortFlag = "nginx-one-console-telemetry-endpoint-port"
 		nginxOneConsoleTLSSkipVerifyFlag         = "nginx-one-console-tls-skip-verify"
@@ -109,10 +109,10 @@ func createControllerCommand() *cobra.Command {
 		}
 		nginxOneConsoleTelemetryEndpointHost = stringValidatingValue{
 			validator: validateResourceName,
-			value:     "product.connect.nginx.com",
+			value:     "agent.connect.nginx.com",
 		}
 		nginxOneConsoleTelemetryEndpointPort = intValidatingValue{
-			validator: validateProtocolPort,
+			validator: validateAnyPort,
 			value:     443,
 		}
 		nginxOneConsoleTLSSkipVerify bool

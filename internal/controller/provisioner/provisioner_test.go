@@ -186,7 +186,7 @@ func defaultNginxProvisioner(
 			AgentTLSSecretName:     agentTLSTestSecretName,
 			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
 				DataplaneKeySecretName: "dataplane-key",
-				EndpointHost:           "product.connect.nginx.com",
+				EndpointHost:           "agent.connect.nginx.com",
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,
 			},

@@ -450,28 +450,28 @@
           "properties": {
             "dataplaneKeySecretName": {
               "default": "",
-              "description": "Name of the secret which holds the dataplane key that is required to authenticate with the NGINX One Console.",
+              "description": "Name of the secret which holds the dataplane key that is required to authenticate with the NGINX One Console.\nSecret must exist in the same namespace that the NGINX Gateway Fabric control plane is running in\n(default namespace: nginx-gateway).",
               "required": [],
               "title": "dataplaneKeySecretName",
               "type": "string"
             },
             "endpointHost": {
-              "default": "product.connect.nginx.com",
-              "description": "The Endpoint host that the NGINX One Console telemetry metrics will be sent to. ",
+              "default": "agent.connect.nginx.com",
+              "description": "The Endpoint host that the NGINX One Console telemetry metrics will be sent to.",
               "required": [],
               "title": "endpointHost",
               "type": "string"
             },
             "endpointPort": {
               "default": 443,
-              "description": "The endpoint port that the  NGINX One Console telemetry metrics will be sent to.",
+              "description": "The endpoint port that the NGINX One Console telemetry metrics will be sent to.",
               "required": [],
               "title": "endpointPort",
               "type": "integer"
             },
             "tlsSkipVerify": {
               "default": false,
-              "description": "NGINX One Console configuration specifying tls skip verify.",
+              "description": "Skip TLS verification for NGINX One Console connections.",
               "required": [],
               "title": "tlsSkipVerify",
               "type": "boolean"
