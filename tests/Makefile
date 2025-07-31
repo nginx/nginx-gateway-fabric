@@ -17,6 +17,7 @@ STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC
 EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
 SKIP_TESTS =
+CEL_TEST_TARGET =
 
 # Check if ENABLE_EXPERIMENTAL is true
 ifeq ($(ENABLE_EXPERIMENTAL),true)
@@ -186,3 +187,14 @@ uninstall-ngf: ## Uninstall NGF on configured kind cluster
 	-make uninstall-gateway-crds
 	-kubectl delete namespace nginx-gateway
 	-kubectl kustomize ../config/crd | kubectl delete -f -
+
+# Run CEL validation integration tests against a real cluster
+.PHONY: test-cel-validation
+test-cel-validation:
+	@if [ -z "$(CEL_TEST_TARGET)" ]; then \
+		echo "Running all tests in ./cel"; \
+		go test -v ./cel; \
+	else \
+		echo "Running test: $(CEL_TEST_TARGET) in ./cel"; \
+		go test -v ./cel -run "$(CEL_TEST_TARGET)"; \
+	fi
