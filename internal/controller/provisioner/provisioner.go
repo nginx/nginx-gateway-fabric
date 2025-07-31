@@ -28,6 +28,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 )
@@ -43,19 +44,19 @@ type Provisioner interface {
 
 // Config is the configuration for the Provisioner.
 type Config struct {
-	GCName             string
-	AgentTLSSecretName string
-	NGINXSCCName       string
-
-	DeploymentStore        agent.DeploymentStorer
-	StatusQueue            *status.Queue
-	GatewayPodConfig       *config.GatewayPodConfig
-	PlusUsageConfig        *config.UsageReportConfig
-	EventRecorder          record.EventRecorder
-	Logger                 logr.Logger
-	NginxDockerSecretNames []string
-
-	Plus bool
+	DeploymentStore                agent.DeploymentStorer
+	EventRecorder                  record.EventRecorder
+	PlusUsageConfig                *config.UsageReportConfig
+	StatusQueue                    *status.Queue
+	GatewayPodConfig               *config.GatewayPodConfig
+	AgentLabels                    telemetry.AgentLabels
+	Logger                         logr.Logger
+	NGINXSCCName                   string
+	GCName                         string
+	AgentTLSSecretName             string
+	NginxDockerSecretNames         []string
+	NginxOneConsoleTelemetryConfig config.NginxOneConsoleTelemetryConfig
+	Plus                           bool
 }
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.

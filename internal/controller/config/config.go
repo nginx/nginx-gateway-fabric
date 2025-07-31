@@ -12,36 +12,38 @@ const DefaultNginxMetricsPort = int32(9113)
 type Config struct {
 	// AtomicLevel is an atomically changeable, dynamic logging level.
 	AtomicLevel zap.AtomicLevel
-	// UsageReportConfig specifies the NGINX Plus usage reporting configuration.
-	UsageReportConfig UsageReportConfig
-	// ImageSource is the source of the NGINX Gateway image.
-	ImageSource string
-	// Flags contains the NGF command-line flag names and values.
-	Flags Flags
 	// GatewayPodConfig contains information about this Pod.
 	GatewayPodConfig GatewayPodConfig
 	// Logger is the Zap Logger used by all components.
 	Logger logr.Logger
-	// GatewayCtlrName is the name of this controller.
-	GatewayCtlrName string
-	// ConfigName is the name of the NginxGateway resource for this controller.
-	ConfigName string
-	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
-	GatewayClassName string
-	// AgentTLSSecretName is the name of the TLS Secret used by NGINX Agent to communicate with the control plane.
-	AgentTLSSecretName string
 	// NGINXSCCName is the name of the SecurityContextConstraints for the NGINX Pods. Only applicable in OpenShift.
 	NGINXSCCName string
-	// NginxDockerSecretNames are the names of any Docker registry Secrets for the NGINX container.
-	NginxDockerSecretNames []string
+	// ConfigName is the name of the NginxGateway resource for this controller.
+	ConfigName string
+	// AgentTLSSecretName is the name of the TLS Secret used by NGINX Agent to communicate with the control plane.
+	AgentTLSSecretName string
+	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
+	GatewayClassName string
+	// ImageSource is the source of the NGINX Gateway image.
+	ImageSource string
+	// GatewayCtlrName is the name of this controller.
+	GatewayCtlrName string
+	// UsageReportConfig specifies the NGINX Plus usage reporting configuration.
+	UsageReportConfig UsageReportConfig
+	// Flags contains the NGF command-line flag names and values.
+	Flags Flags
 	// LeaderElection contains the configuration for leader election.
 	LeaderElection LeaderElectionConfig
+	// NginxDockerSecretNames are the names of any Docker registry Secrets for the NGINX container.
+	NginxDockerSecretNames []string
+	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
+	NginxOneConsoleTelemetryConfig NginxOneConsoleTelemetryConfig
 	// ProductTelemetryConfig contains the configuration for collecting product telemetry.
 	ProductTelemetryConfig ProductTelemetryConfig
-	// MetricsConfig specifies the metrics config.
-	MetricsConfig MetricsConfig
 	// HealthConfig specifies the health probe config.
 	HealthConfig HealthConfig
+	// MetricsConfig specifies the metrics config.
+	MetricsConfig MetricsConfig
 	// Plus indicates whether NGINX Plus is being used.
 	Plus bool
 	// ExperimentalFeatures indicates if experimental features are enabled.
@@ -133,4 +135,16 @@ type Flags struct {
 	// Values contains the value of the flag in string form.
 	// Each Value will be either true or false for boolean flags and default or user-defined for non-boolean flags.
 	Values []string
+}
+
+// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
+type NginxOneConsoleTelemetryConfig struct {
+	// DataplaneKeySecretName is the name of the Secret containing the dataplane key.
+	DataplaneKeySecretName string
+	// EndpointHost is the host of the telemetry endpoint.
+	EndpointHost string
+	// EndpointPort is the port of the telemetry endpoint.
+	EndpointPort int
+	// EndpointTLSSkipVerify specifies whether to skip TLS verification for the telemetry endpoint.
+	EndpointTLSSkipVerify bool
 }
