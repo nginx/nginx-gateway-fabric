@@ -40,7 +40,10 @@ func newEventLoop(
 	secretsToWatch := make([]string, 0, len(dockerSecrets)+5)
 	secretsToWatch = append(secretsToWatch, agentTLSSecret)
 	secretsToWatch = append(secretsToWatch, dockerSecrets...)
-	secretsToWatch = append(secretsToWatch, dataplaneKeySecret)
+
+	if dataplaneKeySecret != "" {
+		secretsToWatch = append(secretsToWatch, dataplaneKeySecret)
+	}
 
 	if usageConfig != nil {
 		if usageConfig.SecretName != "" {

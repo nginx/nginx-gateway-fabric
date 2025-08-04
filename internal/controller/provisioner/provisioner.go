@@ -106,13 +106,18 @@ func NewNginxProvisioner(
 		clientSSLSecretName = cfg.PlusUsageConfig.ClientSSLSecretName
 	}
 
+	var dataplaneKeySecretName string
+	if cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
+		dataplaneKeySecretName = cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName
+	}
+
 	store := newStore(
 		cfg.NginxDockerSecretNames,
 		cfg.AgentTLSSecretName,
 		jwtSecretName,
 		caSecretName,
 		clientSSLSecretName,
-		cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+		dataplaneKeySecretName,
 	)
 
 	selector := metav1.LabelSelector{
@@ -133,7 +138,7 @@ func NewNginxProvisioner(
 	agentLabelCollector := labelCollectorFactory(mgr, cfg)
 	agentLabels, err := agentLabelCollector.Collect(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to collect agent labels: %w", err)
+		cfg.Logger.Error(err, "failed to collect agent labels")
 	}
 	cfg.AgentLabels = agentLabels
 
@@ -160,7 +165,7 @@ func NewNginxProvisioner(
 		cfg.GatewayPodConfig.Namespace,
 		cfg.NginxDockerSecretNames,
 		cfg.AgentTLSSecretName,
-		cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+		dataplaneKeySecretName,
 		cfg.PlusUsageConfig,
 		isOpenshift,
 	)

@@ -124,12 +124,10 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 				}
 			case *corev1.Secret:
 				if h.provisioner.isUserSecret(e.NamespacedName.Name) {
-					fmt.Println("This should be a user secret")
 					if err := h.deprovisionSecretsForAllGateways(ctx, e.NamespacedName.Name); err != nil {
 						logger.Error(err, "error removing secrets")
 					}
 				} else {
-					fmt.Println("aparently we are reprovisioning")
 					if err := h.reprovisionResources(ctx, e); err != nil {
 						logger.Error(err, "error re-provisioning nginx resources")
 					}
