@@ -1190,6 +1190,21 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 		objects = append(objects, jwtSecret)
 	}
 
+	var dataplaneKeySecretName string
+	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
+		dataplaneKeySecretName = controller.CreateNginxResourceName(
+			deploymentNSName.Name,
+			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+		)
+		dataplaneKeySecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dataplaneKeySecretName,
+				Namespace: deploymentNSName.Namespace,
+			},
+		}
+		objects = append(objects, dataplaneKeySecret)
+	}
+
 	return objects
 }
 

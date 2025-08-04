@@ -160,6 +160,7 @@ func NewNginxProvisioner(
 		cfg.GatewayPodConfig.Namespace,
 		cfg.NginxDockerSecretNames,
 		cfg.AgentTLSSecretName,
+		cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
 		cfg.PlusUsageConfig,
 		isOpenshift,
 	)
@@ -440,6 +441,10 @@ func (p *NginxProvisioner) isUserSecret(name string) bool {
 	}
 
 	if slices.Contains(p.cfg.NginxDockerSecretNames, name) {
+		return true
+	}
+
+	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName == name {
 		return true
 	}
 
