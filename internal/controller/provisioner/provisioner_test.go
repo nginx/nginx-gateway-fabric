@@ -29,12 +29,13 @@ import (
 )
 
 const (
-	agentTLSTestSecretName = "agent-tls-secret"
-	jwtTestSecretName      = "jwt-secret"
-	caTestSecretName       = "ca-secret"
-	clientTestSecretName   = "client-secret"
-	dockerTestSecretName   = "docker-secret"
-	ngfNamespace           = "nginx-gateway"
+	agentTLSTestSecretName         = "agent-tls-secret"
+	jwtTestSecretName              = "jwt-secret"
+	caTestSecretName               = "ca-secret"
+	clientTestSecretName           = "client-secret"
+	dockerTestSecretName           = "docker-secret"
+	ngfNamespace                   = "nginx-gateway"
+	nginxOneDataplaneKeySecretName = "dataplane-key"
 )
 
 func createScheme() *runtime.Scheme {
@@ -164,6 +165,7 @@ func defaultNginxProvisioner(
 			jwtTestSecretName,
 			caTestSecretName,
 			clientTestSecretName,
+			nginxOneDataplaneKeySecretName,
 		),
 		k8sClient: fakeClient,
 		cfg: Config{

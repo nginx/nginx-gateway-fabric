@@ -112,6 +112,7 @@ func NewNginxProvisioner(
 		jwtSecretName,
 		caSecretName,
 		clientSSLSecretName,
+		cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
 	)
 
 	selector := metav1.LabelSelector{

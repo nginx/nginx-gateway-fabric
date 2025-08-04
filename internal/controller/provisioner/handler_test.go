@@ -23,7 +23,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "")
+	store := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "", "")
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
 
@@ -213,6 +213,7 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 		jwtTestSecretName,
 		caTestSecretName,
 		clientTestSecretName,
+		nginxOneDataplaneKeySecretName,
 	)
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()

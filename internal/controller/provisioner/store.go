@@ -31,6 +31,7 @@ type NginxResources struct {
 	PlusJWTSecret       metav1.ObjectMeta
 	PlusClientSSLSecret metav1.ObjectMeta
 	PlusCASecret        metav1.ObjectMeta
+	DataplaneKeySecret  metav1.ObjectMeta
 	DockerSecrets       []metav1.ObjectMeta
 }
 
@@ -50,6 +51,9 @@ type store struct {
 	caSecretName        string
 	clientSSLSecretName string
 
+	// NGINX One Dataplane key secret
+	dataplaneKeySecretName string
+
 	lock sync.RWMutex
 }
 
@@ -58,7 +62,8 @@ func newStore(
 	agentTLSSecretName,
 	jwtSecretName,
 	caSecretName,
-	clientSSLSecretName string,
+	clientSSLSecretName,
+	dataplaneKeySecretName string,
 ) *store {
 	dockerSecretNamesMap := make(map[string]struct{})
 	for _, name := range dockerSecretNames {
@@ -66,13 +71,14 @@ func newStore(
 	}
 
 	return &store{
-		gateways:            make(map[types.NamespacedName]*gatewayv1.Gateway),
-		nginxResources:      make(map[types.NamespacedName]*NginxResources),
-		dockerSecretNames:   dockerSecretNamesMap,
-		agentTLSSecretName:  agentTLSSecretName,
-		jwtSecretName:       jwtSecretName,
-		caSecretName:        caSecretName,
-		clientSSLSecretName: clientSSLSecretName,
+		gateways:               make(map[types.NamespacedName]*gatewayv1.Gateway),
+		nginxResources:         make(map[types.NamespacedName]*NginxResources),
+		dockerSecretNames:      dockerSecretNamesMap,
+		agentTLSSecretName:     agentTLSSecretName,
+		jwtSecretName:          jwtSecretName,
+		caSecretName:           caSecretName,
+		clientSSLSecretName:    clientSSLSecretName,
+		dataplaneKeySecretName: dataplaneKeySecretName,
 	}
 }
 
@@ -226,6 +232,10 @@ func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName 
 			s.nginxResources[gatewayNSName] = &NginxResources{
 				PlusClientSSLSecret: obj.ObjectMeta,
 			}
+		case hasSuffix(obj.GetName(), s.dataplaneKeySecretName):
+			s.nginxResources[gatewayNSName] = &NginxResources{
+				DataplaneKeySecret: obj.ObjectMeta,
+			}
 		}
 
 		for secret := range s.dockerSecretNames {
@@ -246,6 +256,8 @@ func (s *store) registerSecretInGatewayConfig(obj *corev1.Secret, gatewayNSName 
 			cfg.PlusCASecret = obj.ObjectMeta
 		case hasSuffix(obj.GetName(), s.clientSSLSecretName):
 			cfg.PlusClientSSLSecret = obj.ObjectMeta
+		case hasSuffix(obj.GetName(), s.dataplaneKeySecretName):
+			cfg.DataplaneKeySecret = obj.ObjectMeta
 		}
 
 		for secret := range s.dockerSecretNames {
@@ -357,6 +369,10 @@ func secretResourceMatches(resources *NginxResources, nsName types.NamespacedNam
 		return true
 	}
 
+	if resourceMatches(resources.DataplaneKeySecret, nsName) {
+		return true
+	}
+
 	return resourceMatches(resources.PlusCASecret, nsName)
 }
 
@@ -436,6 +452,9 @@ func getResourceVersionForSecret(resources *NginxResources, secret *corev1.Secre
 	}
 	if resources.PlusCASecret.GetName() == secret.GetName() {
 		return resources.PlusCASecret.GetResourceVersion()
+	}
+	if resources.DataplaneKeySecret.GetName() == secret.GetName() {
+		return resources.DataplaneKeySecret.GetResourceVersion()
 	}
 
 	return ""
