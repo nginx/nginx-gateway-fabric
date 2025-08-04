@@ -25,7 +25,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -409,7 +408,7 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		"Namespace":     p.cfg.GatewayPodConfig.Namespace,
 		"EnableMetrics": enableMetrics,
 		"MetricsPort":   metricsPort,
-		"AgentLabels":   telemetry.AgentLabelsToMap(p.cfg.AgentLabels),
+		"AgentLabels":   p.cfg.AgentLabels,
 	}
 
 	if logging != nil && logging.AgentLevel != nil {

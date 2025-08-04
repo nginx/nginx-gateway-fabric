@@ -24,7 +24,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift/openshiftfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -190,13 +189,13 @@ func defaultNginxProvisioner(
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,
 			},
-			AgentLabels: telemetry.AgentLabels{
-				ProductType:      "ngf",
-				ProductVersion:   "ngf-version",
-				ClusterID:        "my-cluster-id",
-				ControlName:      "my-control-plane-name",
-				ControlID:        "my-control-plane-id",
-				ControlNamespace: "my-control-plane-namespace",
+			AgentLabels: map[string]string{
+				"product-type":      "ngf",
+				"product-version":   "ngf-version",
+				"cluster-id":        "my-cluster-id",
+				"control-name":      "my-control-plane-name",
+				"control-id":        "my-control-plane-id",
+				"control-namespace": "my-control-plane-namespace",
 			},
 		},
 		leader: true,
@@ -205,8 +204,8 @@ func defaultNginxProvisioner(
 
 type fakeLabelCollector struct{}
 
-func (f *fakeLabelCollector) Collect(_ context.Context) (telemetry.AgentLabels, error) {
-	return telemetry.AgentLabels{ProductType: "fake"}, nil
+func (f *fakeLabelCollector) Collect(_ context.Context) (map[string]string, error) {
+	return map[string]string{"product-type": "fake"}, nil
 }
 
 func TestNewNginxProvisioner(t *testing.T) {

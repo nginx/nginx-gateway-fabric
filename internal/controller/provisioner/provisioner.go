@@ -49,7 +49,7 @@ type Config struct {
 	PlusUsageConfig                *config.UsageReportConfig
 	StatusQueue                    *status.Queue
 	GatewayPodConfig               *config.GatewayPodConfig
-	AgentLabels                    telemetry.AgentLabels
+	AgentLabels                    map[string]string
 	Logger                         logr.Logger
 	NGINXSCCName                   string
 	GCName                         string
@@ -90,7 +90,7 @@ func defaultLabelCollectorFactory(mgr manager.Manager, cfg Config) AgentLabelCol
 }
 
 type AgentLabelCollector interface {
-	Collect(ctx context.Context) (telemetry.AgentLabels, error)
+	Collect(ctx context.Context) (map[string]string, error)
 }
 
 // NewNginxProvisioner returns a new instance of a Provisioner that will deploy nginx resources.
