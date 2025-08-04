@@ -79,7 +79,7 @@ var apiChecker openshift.APIChecker = &openshift.APICheckerImpl{}
 var labelCollectorFactory func(mgr manager.Manager, cfg Config) AgentLabelCollector = defaultLabelCollectorFactory
 
 func defaultLabelCollectorFactory(mgr manager.Manager, cfg Config) AgentLabelCollector {
-	return telemetry.NewLabelCollectorConfigImpl(telemetry.LabelCollectorConfig{
+	return telemetry.NewLabelCollector(telemetry.LabelCollectorConfig{
 		K8sClientReader: mgr.GetAPIReader(),
 		Version:         cfg.GatewayPodConfig.Version,
 		PodNSName: types.NamespacedName{

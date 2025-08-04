@@ -18,7 +18,7 @@ type AgentLabels struct {
 	ControlNamespace string `json:"control-namespace"`
 }
 
-// LabelCollectorConfig holds configuration parameters for LabelCollectorImpl.
+// LabelCollectorConfig holds configuration parameters for LabelCollector.
 type LabelCollectorConfig struct {
 	// K8sClientReader is a Kubernetes API client Reader.
 	K8sClientReader client.Reader
@@ -28,21 +28,21 @@ type LabelCollectorConfig struct {
 	PodNSName types.NamespacedName
 }
 
-// LabelCollectorConfigImpl is an implementation of LabelCollectorConfig.
-type LabelCollectorConfigImpl struct {
+// LabelCollector is an implementation of AgentLabelCollector.
+type LabelCollector struct {
 	cfg LabelCollectorConfig
 }
 
-// NewLabelCollectorConfigImpl creates a new LabelCollectorConfigImpl for a telemetry Job.
-func NewLabelCollectorConfigImpl(
+// NewLabelCollector creates a new LabelCollector.
+func NewLabelCollector(
 	cfg LabelCollectorConfig,
-) *LabelCollectorConfigImpl {
-	return &LabelCollectorConfigImpl{
+) *LabelCollector {
+	return &LabelCollector{
 		cfg: cfg,
 	}
 }
 
-func (l *LabelCollectorConfigImpl) Collect(ctx context.Context) (AgentLabels, error) {
+func (l *LabelCollector) Collect(ctx context.Context) (AgentLabels, error) {
 	clusterID, err := collectClusterID(ctx, l.cfg.K8sClientReader)
 	if err != nil {
 		return AgentLabels{}, fmt.Errorf("failed to collect cluster information: %w", err)
