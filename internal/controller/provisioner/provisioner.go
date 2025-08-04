@@ -76,6 +76,23 @@ type NginxProvisioner struct {
 
 var apiChecker openshift.APIChecker = &openshift.APICheckerImpl{}
 
+var labelCollectorFactory func(mgr manager.Manager, cfg Config) AgentLabelCollector = defaultLabelCollectorFactory
+
+func defaultLabelCollectorFactory(mgr manager.Manager, cfg Config) AgentLabelCollector {
+	return telemetry.NewLabelCollectorConfigImpl(telemetry.LabelCollectorConfig{
+		K8sClientReader: mgr.GetAPIReader(),
+		Version:         cfg.GatewayPodConfig.Version,
+		PodNSName: types.NamespacedName{
+			Namespace: cfg.GatewayPodConfig.Namespace,
+			Name:      cfg.GatewayPodConfig.Name,
+		},
+	})
+}
+
+type AgentLabelCollector interface {
+	Collect(ctx context.Context) (telemetry.AgentLabels, error)
+}
+
 // NewNginxProvisioner returns a new instance of a Provisioner that will deploy nginx resources.
 func NewNginxProvisioner(
 	ctx context.Context,
@@ -111,6 +128,13 @@ func NewNginxProvisioner(
 	if err != nil {
 		cfg.Logger.Error(err, "could not determine if running in openshift, will not create Role/RoleBinding")
 	}
+
+	agentLabelCollector := labelCollectorFactory(mgr, cfg)
+	agentLabels, err := agentLabelCollector.Collect(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to collect agent labels: %w", err)
+	}
+	cfg.AgentLabels = agentLabels
 
 	provisioner := &NginxProvisioner{
 		k8sClient:                  mgr.GetClient(),

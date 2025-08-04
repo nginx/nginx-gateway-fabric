@@ -413,11 +413,11 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 	}
 
 	if logging != nil && logging.AgentLevel != nil {
-		agentFields["LogLevel"] = logging.AgentLevel
+		agentFields["LogLevel"] = *logging.AgentLevel
 	}
 
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-		agentFields["DataplaneKeySecretName"] = p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName
+		agentFields["NginxOneReporting"] = true
 		agentFields["EndpointHost"] = p.cfg.NginxOneConsoleTelemetryConfig.EndpointHost
 		agentFields["EndpointPort"] = strconv.Itoa(p.cfg.NginxOneConsoleTelemetryConfig.EndpointPort)
 		agentFields["EndpointTLSSkipVerify"] = p.cfg.NginxOneConsoleTelemetryConfig.EndpointTLSSkipVerify

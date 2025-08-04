@@ -66,13 +66,13 @@ labels:
     {{ $key }}: {{ $value }}
     {{- end }}
 
-{{- if .DataplaneKeySecretName }}
+{{- if .NginxOneReporting }}
 auxiliary_command:
-    server: 
+    server:
         host: {{ .EndpointHost }}
         port: {{ .EndpointPort }}
         type: grpc
-    auth: 
+    auth:
         tokenpath: /etc/nginx-agent/secrets/dataplane.key
     tls:
         skip_verify: {{ .EndpointTLSSkipVerify }}

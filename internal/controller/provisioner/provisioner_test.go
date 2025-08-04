@@ -203,6 +203,12 @@ func defaultNginxProvisioner(
 	}, fakeClient, deploymentStore
 }
 
+type fakeLabelCollector struct{}
+
+func (f *fakeLabelCollector) Collect(_ context.Context) (telemetry.AgentLabels, error) {
+	return telemetry.AgentLabels{ProductType: "fake"}, nil
+}
+
 func TestNewNginxProvisioner(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -219,6 +225,10 @@ func TestNewNginxProvisioner(t *testing.T) {
 	}
 
 	apiChecker = &openshiftfakes.FakeAPIChecker{}
+	labelCollectorFactory = func(_ manager.Manager, _ Config) AgentLabelCollector {
+		return &fakeLabelCollector{}
+	}
+
 	provisioner, eventLoop, err := NewNginxProvisioner(context.TODO(), mgr, cfg)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(provisioner).NotTo(BeNil())
