@@ -327,6 +327,22 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// Docker Secret again, already exists
 	resources = registerAndGetResources(dockerSecret)
 	g.Expect(resources.DockerSecrets).To(ContainElement(dockerSecretMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	// Dataplane Key Secret
+	dataplaneKeySecretMeta := metav1.ObjectMeta{
+		Name:      controller.CreateNginxResourceName(defaultMeta.Name, store.dataplaneKeySecretName),
+		Namespace: defaultMeta.Namespace,
+	}
+	dataplaneKeySecret := &corev1.Secret{ObjectMeta: dataplaneKeySecretMeta}
+	resources = registerAndGetResources(dataplaneKeySecret)
+	g.Expect(resources.DataplaneKeySecret).To(Equal(dataplaneKeySecretMeta))
+
+	// Dataplane Key Secret again, already exists
+	resources = registerAndGetResources(dataplaneKeySecret)
+	g.Expect(resources.DataplaneKeySecret).To(Equal(dataplaneKeySecretMeta))
 }
 
 func TestGatewayChanged(t *testing.T) {
@@ -500,6 +516,10 @@ func TestGatewayExistsForResource(t *testing.T) {
 				Namespace: "default",
 			},
 		},
+		DataplaneKeySecret: metav1.ObjectMeta{
+			Name:      "test-dataplane-key-secret",
+			Namespace: "default",
+		},
 	}
 
 	tests := []struct {
@@ -638,6 +658,16 @@ func TestGatewayExistsForResource(t *testing.T) {
 			expected: gateway,
 		},
 		{
+			name: "Dataplane Key Secret exists",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-dataplane-key-secret",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
 			name: "Resource does not exist",
 			object: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -732,6 +762,11 @@ func TestGetResourceVersionForObject(t *testing.T) {
 				Namespace:       "default",
 				ResourceVersion: "13",
 			},
+		},
+		DataplaneKeySecret: metav1.ObjectMeta{
+			Name:            "test-dataplane-key-secret",
+			Namespace:       "default",
+			ResourceVersion: "14",
 		},
 	}
 
@@ -869,6 +904,16 @@ func TestGetResourceVersionForObject(t *testing.T) {
 				},
 			},
 			expectedResult: "13",
+		},
+		{
+			name: "Dataplane Key Secret resource version",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-dataplane-key-secret",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "14",
 		},
 		{
 			name: "Non-existent resource",
