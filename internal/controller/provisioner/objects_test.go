@@ -785,6 +785,86 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 	g.Expect(roleBinding.GetLabels()).To(Equal(expLabels))
 }
 
+func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+	dataplaneKeySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "dataplane-key-secret",
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"dataplane.key": []byte("keydata")},
+	}
+	fakeClient := fake.NewFakeClient(agentTLSSecret, dataplaneKeySecret)
+
+	dataplaneKeySecretName := "dataplane-key-secret" //nolint:gosec // not credentials
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
+				DataplaneKeySecretName: dataplaneKeySecretName,
+				EndpointHost:           "my.endpoint.com",
+				EndpointPort:           443,
+				EndpointTLSSkipVerify:  false,
+			},
+		},
+		k8sClient: fakeClient,
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": "nginx",
+			},
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+	}
+
+	resourceName := "gw-nginx"
+	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, &graph.EffectiveNginxProxy{})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(objects).To(HaveLen(7)) // 2 secrets, 2 configmaps, serviceaccount, service, deployment
+
+	// Find the dataplane key secret
+	var found bool
+	for _, obj := range objects {
+		if s, ok := obj.(*corev1.Secret); ok {
+			if s.GetName() == controller.CreateNginxResourceName(resourceName, dataplaneKeySecretName) {
+				found = true
+				g.Expect(s.Data).To(HaveKey("dataplane.key"))
+				g.Expect(s.Data["dataplane.key"]).To(Equal([]byte("keydata")))
+			}
+		}
+	}
+	g.Expect(found).To(BeTrue())
+
+	// Check deployment mounts the secret
+	dep, ok := objects[6].(*appsv1.Deployment)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(dep).ToNot(BeNil())
+	container := dep.Spec.Template.Spec.Containers[0]
+	g.Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+		Name:      "agent-dataplane-key",
+		MountPath: "/etc/nginx-agent/secrets/dataplane.key",
+		SubPath:   "dataplane.key",
+	}))
+}
+
 func TestGetAndUpdateSecret_NotFound(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -989,6 +1069,50 @@ func TestBuildNginxResourceObjectsForDeletion_OpenShift(t *testing.T) {
 	validateMeta(roleBinding, deploymentNSName.Name)
 }
 
+func TestBuildNginxResourceObjectsForDeletion_DataplaneKeySecret(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	dataplaneKeySecretName := "dataplane-key-secret" //nolint:gosec // not credentials
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
+				DataplaneKeySecretName: dataplaneKeySecretName,
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+		},
+	}
+
+	deploymentNSName := types.NamespacedName{
+		Name:      "gw-nginx",
+		Namespace: "default",
+	}
+
+	objects := provisioner.buildNginxResourceObjectsForDeletion(deploymentNSName)
+
+	// Should include the dataplane key secret in the objects list
+	// Default: deployment, daemonset, service, serviceaccount, 2 configmaps, agentTLSSecret, dataplaneKeySecret
+	g.Expect(objects).To(HaveLen(8))
+
+	validateMeta := func(obj client.Object, name string) {
+		g.Expect(obj.GetName()).To(Equal(name))
+		g.Expect(obj.GetNamespace()).To(Equal(deploymentNSName.Namespace))
+	}
+
+	// Validate the dataplane key secret is present
+	found := false
+	for _, obj := range objects {
+		if s, ok := obj.(*corev1.Secret); ok {
+			if s.GetName() == controller.CreateNginxResourceName(deploymentNSName.Name, dataplaneKeySecretName) {
+				validateMeta(s, controller.CreateNginxResourceName(deploymentNSName.Name, dataplaneKeySecretName))
+				found = true
+			}
+		}
+	}
+	g.Expect(found).To(BeTrue())
+}
+
 func TestSetIPFamily(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -1068,6 +1192,46 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(bootstrapCM.Data["main.conf"]).To(ContainSubstring("worker_connections 2048;"))
+}
+
+func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace:   "default",
+				ServiceName: "test-service",
+			},
+			AgentLabels: map[string]string{
+				"key1": "val1",
+				"key2": "val2",
+			},
+			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
+				DataplaneKeySecretName: "dataplane-key-secret",
+				EndpointHost:           "console.example.com",
+				EndpointPort:           443,
+				EndpointTLSSkipVerify:  false,
+			},
+		},
+	}
+	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
+
+	nProxyCfgEmpty := &graph.EffectiveNginxProxy{}
+
+	configMaps := provisioner.buildNginxConfigMaps(objectMeta, nProxyCfgEmpty, "test-bootstrap", "test-agent", true, true)
+	g.Expect(configMaps).To(HaveLen(2))
+
+	agentCM, ok := configMaps[1].(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	data := agentCM.Data["nginx-agent.conf"]
+
+	g.Expect(data).To(ContainSubstring("key1: val1"))
+	g.Expect(data).To(ContainSubstring("key2: val2"))
+	g.Expect(data).To(ContainSubstring("host: console.example.com"))
+	g.Expect(data).To(ContainSubstring("port: 443"))
+	g.Expect(data).To(ContainSubstring("skip_verify: false"))
 }
 
 func TestBuildReadinessProbe(t *testing.T) {

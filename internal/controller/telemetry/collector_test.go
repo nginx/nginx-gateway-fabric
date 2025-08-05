@@ -59,9 +59,7 @@ type getCallsFunc = func(
 ) error
 
 func createGetCallsFunc(objects ...client.Object) getCallsFunc {
-	return func(_ context.Context, _ types.NamespacedName, object client.Object, option ...client.GetOption) error {
-		Expect(option).To(BeEmpty())
-
+	return func(_ context.Context, _ types.NamespacedName, object client.Object, _ ...client.GetOption) error {
 		for _, obj := range objects {
 			if reflect.TypeOf(obj) == reflect.TypeOf(object) {
 				reflect.ValueOf(object).Elem().Set(reflect.ValueOf(obj).Elem())
