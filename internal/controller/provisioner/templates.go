@@ -12,7 +12,7 @@ const mainTemplateText = `
 error_log stderr {{ .ErrorLevel }};
 
 events {
-  worker_connections {{ .WorkerConnections }};
+    worker_connections {{ .WorkerConnections }};
 }`
 
 const mgmtTemplateText = `mgmt {
