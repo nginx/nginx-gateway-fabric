@@ -111,7 +111,7 @@ spec:
           {{- if .Values.nginx.nginxOneConsole.endpointPort }}
         - --nginx-one-telemetry-endpoint-port={{ .Values.nginx.nginxOneConsole.endpointPort }}
           {{- end }}
-          {{- if .Values.nginx.nginxOneConsole.tlsSkipVerify }}
+          {{- if .Values.nginx.nginxOneConsole.skipVerify }}
         - --nginx-one-tls-skip-verify
           {{- end }}
         {{- end }}

@@ -37,8 +37,9 @@ const (
 		`The controller name must be of the form: DOMAIN/PATH. The controller's domain is '%s'`
 	plusFlag = "nginx-plus"
 
-	serverTLSSecret = "server-tls"
-	agentTLSSecret  = "agent-tls"
+	serverTLSSecret               = "server-tls"
+	agentTLSSecret                = "agent-tls"
+	nginxOneTelemetryEndpointHost = "agent.connect.nginx.com"
 )
 
 func createRootCommand() *cobra.Command {
@@ -109,7 +110,7 @@ func createControllerCommand() *cobra.Command {
 		}
 		nginxOneConsoleTelemetryEndpointHost = stringValidatingValue{
 			validator: validateResourceName,
-			value:     "agent.connect.nginx.com",
+			value:     nginxOneTelemetryEndpointHost,
 		}
 		nginxOneConsoleTelemetryEndpointPort = intValidatingValue{
 			validator: validateAnyPort,

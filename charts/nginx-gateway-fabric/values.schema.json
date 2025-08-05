@@ -471,11 +471,11 @@
               "title": "endpointPort",
               "type": "integer"
             },
-            "tlsSkipVerify": {
+            "skipVerify": {
               "default": false,
               "description": "Skip TLS verification for NGINX One Console connections.",
               "required": [],
-              "title": "tlsSkipVerify",
+              "title": "skipVerify",
               "type": "boolean"
             }
           },
