@@ -9,8 +9,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/events/eventsfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events/eventsfakes"
 )
 
 var _ = Describe("EventLoop", func() {

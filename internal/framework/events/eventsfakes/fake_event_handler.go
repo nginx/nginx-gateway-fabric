@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 )
 
 type FakeEventHandler struct {
@@ -58,8 +58,6 @@ func (fake *FakeEventHandler) HandleEventBatchArgsForCall(i int) (context.Contex
 func (fake *FakeEventHandler) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.handleEventBatchMutex.RLock()
-	defer fake.handleEventBatchMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

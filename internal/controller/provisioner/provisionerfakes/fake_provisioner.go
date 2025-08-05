@@ -5,8 +5,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/provisioner"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 )
 
 type FakeProvisioner struct {
@@ -93,8 +93,6 @@ func (fake *FakeProvisioner) RegisterGatewayReturnsOnCall(i int, result1 error) 
 func (fake *FakeProvisioner) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.registerGatewayMutex.RLock()
-	defer fake.registerGatewayMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

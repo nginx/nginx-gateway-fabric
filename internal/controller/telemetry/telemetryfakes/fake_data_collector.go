@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/telemetry"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 )
 
 type FakeDataCollector struct {
@@ -93,8 +93,6 @@ func (fake *FakeDataCollector) CollectReturnsOnCall(i int, result1 telemetry.Dat
 func (fake *FakeDataCollector) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.collectMutex.RLock()
-	defer fake.collectMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

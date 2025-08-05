@@ -24,6 +24,16 @@ map $request_uri $request_uri_path {
   "~^(?P<path>[^?]*)(\?.*)?$"  $path;
 }
 
+# NGINX health check server block.
+server {
+    listen {{ .NginxReadinessProbePort }};
+
+    location = /readyz {
+        access_log off;
+        return 200;
+    }
+}
+
 {{ range $i := .Includes -}}
 include {{ $i.Name }};
 {{ end -}}

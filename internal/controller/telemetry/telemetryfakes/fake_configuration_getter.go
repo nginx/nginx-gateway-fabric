@@ -4,8 +4,8 @@ package telemetryfakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/dataplane"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/telemetry"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 )
 
 type FakeConfigurationGetter struct {
@@ -79,8 +79,6 @@ func (fake *FakeConfigurationGetter) GetLatestConfigurationReturnsOnCall(i int, 
 func (fake *FakeConfigurationGetter) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.getLatestConfigurationMutex.RLock()
-	defer fake.getLatestConfigurationMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

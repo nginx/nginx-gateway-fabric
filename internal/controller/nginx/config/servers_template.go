@@ -55,9 +55,11 @@ server {
     ssl_certificate {{ $s.SSL.Certificate }};
     ssl_certificate_key {{ $s.SSL.CertificateKey }};
 
+          {{- if not $.DisableSNIHostValidation }}
     if ($ssl_server_name != $host) {
         return 421;
     }
+          {{- end }}
         {{- else }}
           {{- if $.IPFamily.IPv4 }}
     listen {{ $s.Listen }}{{ $.RewriteClientIP.ProxyProtocol }};
@@ -92,6 +94,12 @@ server {
         {{ if eq $l.Type "internal" -}}
         internal;
         {{ end }}
+
+        {{ if ne $l.MirrorSplitClientsVariableName "" -}}
+        if (${{ $l.MirrorSplitClientsVariableName }} = "") {
+            return 204;
+        }
+        {{- end }}
 
         {{- range $i := $l.Includes }}
         include {{ $i.Name }};

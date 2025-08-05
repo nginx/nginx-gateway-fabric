@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -202,12 +202,6 @@ func (fake *FakeDeploymentStorer) RemoveArgsForCall(i int) types.NamespacedName 
 func (fake *FakeDeploymentStorer) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.getMutex.RLock()
-	defer fake.getMutex.RUnlock()
-	fake.getOrStoreMutex.RLock()
-	defer fake.getOrStoreMutex.RUnlock()
-	fake.removeMutex.RLock()
-	defer fake.removeMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

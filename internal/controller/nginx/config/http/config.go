@@ -1,7 +1,7 @@
 package http
 
 import (
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/shared"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 )
 
 const (
@@ -33,18 +33,19 @@ const (
 
 // Location holds all configuration for an HTTP location.
 type Location struct {
-	Path            string
-	ProxyPass       string
-	HTTPMatchKey    string
-	Type            LocationType
-	ProxySetHeaders []Header
-	ProxySSLVerify  *ProxySSLVerify
-	Return          *Return
-	ResponseHeaders ResponseHeaders
-	Rewrites        []string
-	MirrorPaths     []string
-	Includes        []shared.Include
-	GRPC            bool
+	Path                           string
+	ProxyPass                      string
+	HTTPMatchKey                   string
+	MirrorSplitClientsVariableName string
+	Type                           LocationType
+	ProxySetHeaders                []Header
+	ProxySSLVerify                 *ProxySSLVerify
+	Return                         *Return
+	ResponseHeaders                ResponseHeaders
+	Rewrites                       []string
+	MirrorPaths                    []string
+	Includes                       []shared.Include
+	GRPC                           bool
 }
 
 // Header defines an HTTP header to be passed to the proxied server.
@@ -126,8 +127,9 @@ type ProxySSLVerify struct {
 
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.
 type ServerConfig struct {
-	Servers         []Server
-	RewriteClientIP shared.RewriteClientIPSettings
-	IPFamily        shared.IPFamily
-	Plus            bool
+	Servers                  []Server
+	RewriteClientIP          shared.RewriteClientIPSettings
+	IPFamily                 shared.IPFamily
+	Plus                     bool
+	DisableSNIHostValidation bool
 }

@@ -2,9 +2,10 @@ package v1alpha2
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
 // +genclient
@@ -72,6 +73,15 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
+	// DisableSNIHostValidation disables the validation that ensures the SNI hostname
+	// matches the Host header in HTTPS requests. When disabled, HTTPS connections can
+	// be reused for requests to different hostnames covered by the same certificate.
+	// This resolves HTTP/2 connection coalescing issues with wildcard certificates but
+	// introduces security risks as described in Gateway API GEP-3567.
+	// If not specified, defaults to false (validation enabled).
+	//
+	// +optional
+	DisableSNIHostValidation *bool `json:"disableSNIHostValidation,omitempty"`
 	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
 	//
 	// +optional
@@ -388,8 +398,43 @@ type KubernetesSpec struct {
 	Service *ServiceSpec `json:"service,omitempty"`
 }
 
+// Patch defines a patch to apply to a Kubernetes object.
+type Patch struct {
+	// Type is the type of patch. Defaults to StrategicMerge.
+	//
+	// +optional
+	// +kubebuilder:default:=StrategicMerge
+	Type *PatchType `json:"type,omitempty"`
+
+	// Value is the patch data as raw JSON.
+	// For StrategicMerge and Merge patches, this should be a JSON object.
+	// For JSONPatch patches, this should be a JSON array of patch operations.
+	//
+	// +optional
+	// +kubebuilder:validation:XPreserveUnknownFields
+	Value *apiextv1.JSON `json:"value,omitempty"`
+}
+
+// PatchType specifies the type of patch.
+// +kubebuilder:validation:Enum=StrategicMerge;Merge;JSONPatch
+type PatchType string
+
+const (
+	// PatchTypeStrategicMerge uses strategic merge patch.
+	PatchTypeStrategicMerge PatchType = "StrategicMerge"
+	// PatchTypeMerge uses merge patch (RFC 7386).
+	PatchTypeMerge PatchType = "Merge"
+	// PatchTypeJSONPatch uses JSON patch (RFC 6902).
+	PatchTypeJSONPatch PatchType = "JSONPatch"
+)
+
 // Deployment is the configuration for the NGINX Deployment.
 type DeploymentSpec struct {
+	// Container defines container fields for the NGINX container.
+	//
+	// +optional
+	Container ContainerSpec `json:"container"`
+
 	// Number of desired Pods.
 	//
 	// +optional
@@ -400,23 +445,28 @@ type DeploymentSpec struct {
 	// +optional
 	Pod PodSpec `json:"pod"`
 
-	// Container defines container fields for the NGINX container.
+	// Patches are custom patches to apply to the NGINX Deployment.
 	//
 	// +optional
-	Container ContainerSpec `json:"container"`
+	Patches []Patch `json:"patches,omitempty"`
 }
 
 // DaemonSet is the configuration for the NGINX DaemonSet.
 type DaemonSetSpec struct {
+	// Container defines container fields for the NGINX container.
+	//
+	// +optional
+	Container ContainerSpec `json:"container"`
+
 	// Pod defines Pod-specific fields.
 	//
 	// +optional
 	Pod PodSpec `json:"pod"`
 
-	// Container defines container fields for the NGINX container.
+	// Patches are custom patches to apply to the NGINX DaemonSet.
 	//
 	// +optional
-	Container ContainerSpec `json:"container"`
+	Patches []Patch `json:"patches,omitempty"`
 }
 
 // PodSpec defines Pod-specific fields.
@@ -486,6 +536,11 @@ type ContainerSpec struct {
 	// +optional
 	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
 
+	// ReadinessProbe defines the readiness probe for the NGINX container.
+	//
+	// +optional
+	ReadinessProbe *ReadinessProbeSpec `json:"readinessProbe,omitempty"`
+
 	// HostPorts are the list of ports to expose on the host.
 	//
 	// +optional
@@ -495,6 +550,26 @@ type ContainerSpec struct {
 	//
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+}
+
+// ReadinessProbeSpec defines the configuration for the NGINX readiness probe.
+type ReadinessProbeSpec struct {
+	// Port is the port on which the readiness endpoint is exposed.
+	// If not specified, the default port is 8081.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port *int32 `json:"port,omitempty"`
+
+	// InitialDelaySeconds is the number of seconds after the container has
+	// started before the readiness probe is initiated.
+	// If not specified, the default is 3 seconds.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=3600
+	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
 }
 
 // Image is the NGINX image to use.
@@ -569,6 +644,11 @@ type ServiceSpec struct {
 	//
 	// +optional
 	NodePorts []NodePort `json:"nodePorts,omitempty"`
+
+	// Patches are custom patches to apply to the NGINX Service.
+	//
+	// +optional
+	Patches []Patch `json:"patches,omitempty"`
 }
 
 // ServiceType describes ingress method for the Service.

@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/messenger"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/messenger"
 )
 
 type mockServer struct {

@@ -23,9 +23,9 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION = v2.2.1
+GOLANGCI_LINT_VERSION = v2.3.0
 # renovate: datasource=docker depName=kindest/node
-KIND_K8S_VERSION = v1.33.1
+KIND_K8S_VERSION = v1.33.2
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
 HELM_DOCS_VERSION = v1.14.2
 # renovate: datasource=github-tags depName=ahmetb/gen-crd-api-reference-docs
@@ -107,7 +107,7 @@ check-for-docker: ## Check if Docker is installed
 build: ## Build the binary
 ifeq (${TARGET},local)
 	@go version || (code=$$?; printf "\033[0;31mError\033[0m: unable to build locally\n"; exit $$code)
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -C $(SELF_DIR) -trimpath -a -ldflags "$(GO_LINKER_FLAGS)" $(ADDITIONAL_GO_BUILD_FLAGS) -o $(OUT_DIR)/gateway github.com/nginx/nginx-gateway-fabric/cmd/gateway
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -C $(SELF_DIR) -trimpath -a -ldflags "$(GO_LINKER_FLAGS)" $(ADDITIONAL_GO_BUILD_FLAGS) -o $(OUT_DIR)/gateway github.com/nginx/nginx-gateway-fabric/v2/cmd/gateway
 endif
 
 .PHONY: build-goreleaser
@@ -141,7 +141,7 @@ generate-manifests: ## Generate manifests using Helm.
 	./scripts/generate-manifests.sh
 
 generate-api-docs: ## Generate API docs
-	go run github.com/ahmetb/gen-crd-api-reference-docs@$(GEN_CRD_API_REFERENCE_DOCS_VERSION) -config docs/api/config.json -template-dir docs/api -out-file docs/api/content.md -api-dir "github.com/nginx/nginx-gateway-fabric/apis"
+	go run github.com/ahmetb/gen-crd-api-reference-docs@$(GEN_CRD_API_REFERENCE_DOCS_VERSION) -config docs/api/config.json -template-dir docs/api -out-file docs/api/content.md -api-dir "github.com/nginx/nginx-gateway-fabric/v2/apis"
 
 .PHONY: generate-helm-docs
 generate-helm-docs: ## Generate the Helm chart documentation

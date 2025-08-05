@@ -10,8 +10,8 @@ import (
 	filesHelper "github.com/nginx/agent/v3/pkg/files"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/broadcast"
-	agentgrpc "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
+	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
 )
 
 // ignoreFiles is a list of static or base files that live in the

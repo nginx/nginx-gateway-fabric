@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/kubernetes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -171,10 +171,6 @@ func (fake *FakeReader) ListReturnsOnCall(i int, result1 error) {
 func (fake *FakeReader) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.getMutex.RLock()
-	defer fake.getMutex.RUnlock()
-	fake.listMutex.RLock()
-	defer fake.listMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

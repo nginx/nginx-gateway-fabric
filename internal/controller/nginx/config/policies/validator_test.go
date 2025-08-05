@@ -6,9 +6,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	policies "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
-	policiesfakes "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/policiesfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
+	policies "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	policiesfakes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 )
 
 var _ = Describe("Policy CompositeValidator", func() {

@@ -25,7 +25,6 @@ func Get(
 	if err != nil {
 		return 0, "", err
 	}
-
 	defer resp.Body.Close()
 
 	body := new(bytes.Buffer)
@@ -61,7 +60,8 @@ func makeRequest(
 		return nil, errors.New("transport is not of type *http.Transport")
 	}
 
-	transport.DialContext = func(
+	customTransport := transport.Clone()
+	customTransport.DialContext = func(
 		ctx context.Context,
 		network,
 		addr string,
@@ -93,21 +93,13 @@ func makeRequest(
 
 	var resp *http.Response
 	if strings.HasPrefix(url, "https") {
-		transport, ok := http.DefaultTransport.(*http.Transport)
-		if !ok {
-			return nil, errors.New("transport is not of type *http.Transport")
-		}
-
-		customTransport := transport.Clone()
 		// similar to how in our examples with https requests we run our curl command
 		// we turn off verification of the certificate, we do the same here
 		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // for https test traffic
-		client := &http.Client{Transport: customTransport}
-		resp, err = client.Do(req)
-	} else {
-		resp, err = http.DefaultClient.Do(req)
 	}
 
+	client := &http.Client{Transport: customTransport}
+	resp, err = client.Do(req)
 	if err != nil {
 		return nil, err
 	}

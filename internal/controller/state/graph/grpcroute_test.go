@@ -10,12 +10,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/mirror"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation/validationfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func createGRPCMethodMatch(serviceName, methodName, methodType string) v1.GRPCRouteRule {
@@ -1164,7 +1164,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 							{
 								Method: &v1.GRPCMethodMatch{
 									Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
-									Service: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+									Service: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/gr-0"),
 								},
 							},
 						},
@@ -1210,7 +1210,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 						{
 							Path: &v1.HTTPPathMatch{
 								Type:  helpers.GetPointer(v1.PathMatchExact),
-								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/gr-0"),
 							},
 							Headers: []v1.HTTPHeaderMatch{},
 						},

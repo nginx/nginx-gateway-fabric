@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,11 +17,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/config"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestBuildNginxResourceObjects(t *testing.T) {
@@ -298,6 +300,10 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 							corev1.ResourceCPU: resource.Quantity{Format: "100m"},
 						},
 					},
+					ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+						Port:                helpers.GetPointer[int32](9091),
+						InitialDelaySeconds: helpers.GetPointer[int32](5),
+					},
 					HostPorts: []ngfAPIv1alpha2.HostPort{{ContainerPort: int32(8443), Port: int32(8443)}},
 				},
 			},
@@ -356,6 +362,11 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 		Name:          "port-8443",
 		HostPort:      8443,
 	}))
+
+	g.Expect(container.ReadinessProbe).ToNot(BeNil())
+	g.Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
+	g.Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(9091)))
+	g.Expect(container.ReadinessProbe.InitialDelaySeconds).To(Equal(int32(5)))
 }
 
 func TestBuildNginxResourceObjects_Plus(t *testing.T) {
@@ -1057,4 +1068,363 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(bootstrapCM.Data["main.conf"]).To(ContainSubstring("worker_connections 2048;"))
+}
+
+func TestBuildReadinessProbe(t *testing.T) {
+	t.Parallel()
+
+	defaultProbe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/readyz",
+				Port: intstr.FromInt32(dataplane.DefaultNginxReadinessProbePort),
+			},
+		},
+		InitialDelaySeconds: 3,
+	}
+
+	provisioner := &NginxProvisioner{}
+
+	tests := []struct {
+		nProxyCfg *graph.EffectiveNginxProxy
+		expected  *corev1.Probe
+		name      string
+	}{
+		{
+			name:      "nginx proxy config is nil, default probe is returned",
+			nProxyCfg: nil,
+			expected:  defaultProbe,
+		},
+		{
+			name: "deployment is nil, default probe is returned",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: nil,
+				},
+			},
+			expected: defaultProbe,
+		},
+		{
+			name: "container is nil, default probe is returned",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{},
+					},
+				},
+			},
+			expected: defaultProbe,
+		},
+		{
+			name: "readinessProbe is nil, default probe is returned",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: nil,
+						},
+					},
+				},
+			},
+			expected: defaultProbe,
+		},
+		{
+			name: "port & initialDelaySeconds is set in readinessProbe, custom probe is returned",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+								Port:                helpers.GetPointer[int32](9091),
+								InitialDelaySeconds: helpers.GetPointer[int32](10),
+							},
+						},
+					},
+				},
+			},
+			expected: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/readyz",
+						Port: intstr.FromInt32(9091),
+					},
+				},
+				InitialDelaySeconds: 10,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			probe := provisioner.buildReadinessProbe(tt.nProxyCfg)
+			g.Expect(probe).To(Equal(tt.expected))
+		})
+	}
+}
+
+func TestBuildNginxResourceObjects_Patches(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+	fakeClient := fake.NewFakeClient(agentTLSSecret)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+				Version:   "1.0.0",
+				Image:     "ngf-image",
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+		},
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": "nginx",
+			},
+		},
+		k8sClient: fakeClient,
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{
+				{Port: 80},
+			},
+		},
+	}
+
+	// Test successful patches with all three resource types and all patch types
+	nProxyCfg := &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Service: &ngfAPIv1alpha2.ServiceSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"svc-strategic":"true"}}}`),
+						},
+					},
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"svc-merge":"true"}}}`),
+						},
+					},
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeJSONPatch),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`[{"op": "add", "path": "/metadata/labels/svc-json", "value": "true"}]`),
+						},
+					},
+				},
+			},
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"dep-patched":"true"}},"spec":{"replicas":3}}`),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(objects).To(HaveLen(6))
+
+	// Find and validate service
+	var svc *corev1.Service
+	for _, obj := range objects {
+		if s, ok := obj.(*corev1.Service); ok {
+			svc = s
+			break
+		}
+	}
+	g.Expect(svc).ToNot(BeNil())
+	g.Expect(svc.Labels).To(HaveKeyWithValue("svc-strategic", "true"))
+	g.Expect(svc.Labels).To(HaveKeyWithValue("svc-merge", "true"))
+	g.Expect(svc.Labels).To(HaveKeyWithValue("svc-json", "true"))
+
+	// Find and validate deployment
+	var dep *appsv1.Deployment
+	for _, obj := range objects {
+		if d, ok := obj.(*appsv1.Deployment); ok {
+			dep = d
+			break
+		}
+	}
+	g.Expect(dep).ToNot(BeNil())
+	g.Expect(dep.Labels).To(HaveKeyWithValue("dep-patched", "true"))
+	g.Expect(dep.Spec.Replicas).To(Equal(helpers.GetPointer(int32(3))))
+
+	// Test that a later patch overrides a field set by an earlier patch
+	nProxyCfg = &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Service: &ngfAPIv1alpha2.ServiceSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"override-label":"first"}}}`),
+						},
+					},
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"override-label":"second"}}}`),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(objects).To(HaveLen(6))
+
+	// Find and validate service label override
+	svc = nil
+	for _, obj := range objects {
+		if s, ok := obj.(*corev1.Service); ok {
+			svc = s
+			break
+		}
+	}
+	g.Expect(svc).ToNot(BeNil())
+	g.Expect(svc.Labels).To(HaveKeyWithValue("override-label", "second"))
+
+	// Test successful daemonset patch
+	nProxyCfg = &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"ds-patched":"true"}}}`),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(objects).To(HaveLen(6))
+
+	// Find and validate daemonset
+	var ds *appsv1.DaemonSet
+	for _, obj := range objects {
+		if d, ok := obj.(*appsv1.DaemonSet); ok {
+			ds = d
+			break
+		}
+	}
+	g.Expect(ds).ToNot(BeNil())
+	g.Expect(ds.Labels).To(HaveKeyWithValue("ds-patched", "true"))
+
+	// Test error cases - invalid patches should return objects and errors
+	nProxyCfg = &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Service: &ngfAPIv1alpha2.ServiceSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"invalid json":`),
+						},
+					},
+				},
+			},
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeJSONPatch),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`[{"op": "invalid", "path": "/test"}]`),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("failed to apply service patches"))
+	g.Expect(err.Error()).To(ContainSubstring("failed to apply deployment patches"))
+	g.Expect(objects).To(HaveLen(6)) // Objects should still be returned
+
+	// Test unsupported patch type
+	nProxyCfg = &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Service: &ngfAPIv1alpha2.ServiceSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchType("unsupported")),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"test":"true"}}}`),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("unsupported patch type"))
+	g.Expect(objects).To(HaveLen(6))
+
+	// Test edge cases - nil values and empty patches should be ignored
+	nProxyCfg = &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Service: &ngfAPIv1alpha2.ServiceSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type:  helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: nil, // Should be ignored
+					},
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(""), // Should be ignored
+						},
+					},
+				},
+			},
+		},
+	}
+
+	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(objects).To(HaveLen(6))
+
+	// Find service and verify no patches were applied
+	for _, obj := range objects {
+		if s, ok := obj.(*corev1.Service); ok {
+			svc = s
+			break
+		}
+	}
+	g.Expect(svc).ToNot(BeNil())
+	g.Expect(svc.Labels).ToNot(HaveKey("patched")) // Should not have patch-related labels
 }

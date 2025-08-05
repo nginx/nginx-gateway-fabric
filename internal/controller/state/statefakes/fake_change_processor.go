@@ -4,9 +4,9 @@ package statefakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/types"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 	typesa "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -221,14 +221,6 @@ func (fake *FakeChangeProcessor) ProcessReturnsOnCall(i int, result1 *graph.Grap
 func (fake *FakeChangeProcessor) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.captureDeleteChangeMutex.RLock()
-	defer fake.captureDeleteChangeMutex.RUnlock()
-	fake.captureUpsertChangeMutex.RLock()
-	defer fake.captureUpsertChangeMutex.RUnlock()
-	fake.getLatestGraphMutex.RLock()
-	defer fake.getLatestGraphMutex.RUnlock()
-	fake.processMutex.RLock()
-	defer fake.processMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

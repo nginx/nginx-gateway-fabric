@@ -4,8 +4,8 @@ package policiesfakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 )
 
 type FakeGenerator struct {
@@ -251,12 +251,6 @@ func (fake *FakeGenerator) GenerateForServerReturnsOnCall(i int, result1 policie
 func (fake *FakeGenerator) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.generateForInternalLocationMutex.RLock()
-	defer fake.generateForInternalLocationMutex.RUnlock()
-	fake.generateForLocationMutex.RLock()
-	defer fake.generateForLocationMutex.RUnlock()
-	fake.generateForServerMutex.RLock()
-	defer fake.generateForServerMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

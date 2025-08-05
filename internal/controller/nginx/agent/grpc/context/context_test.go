@@ -6,7 +6,7 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	grpcContext "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/context"
+	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
 )
 
 func TestGrpcInfoInContext(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	v1 "github.com/nginx/agent/v3/api/grpc/mpi/v1"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/messenger"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/messenger"
 )
 
 type FakeMessenger struct {
@@ -254,14 +254,6 @@ func (fake *FakeMessenger) SendReturnsOnCall(i int, result1 error) {
 func (fake *FakeMessenger) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.errorsMutex.RLock()
-	defer fake.errorsMutex.RUnlock()
-	fake.messagesMutex.RLock()
-	defer fake.messagesMutex.RUnlock()
-	fake.runMutex.RLock()
-	defer fake.runMutex.RUnlock()
-	fake.sendMutex.RLock()
-	defer fake.sendMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

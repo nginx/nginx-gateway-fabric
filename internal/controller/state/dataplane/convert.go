@@ -3,13 +3,14 @@ package dataplane
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/mirror"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func convertMatch(m v1.HTTPRouteMatch) Match {
@@ -62,7 +63,11 @@ func convertHTTPURLRewriteFilter(filter *v1.HTTPURLRewriteFilter) *HTTPURLRewrit
 	}
 }
 
-func convertHTTPRequestMirrorFilter(filter *v1.HTTPRequestMirrorFilter, ruleIdx int) *HTTPRequestMirrorFilter {
+func convertHTTPRequestMirrorFilter(
+	filter *v1.HTTPRequestMirrorFilter,
+	ruleIdx int,
+	routeNsName types.NamespacedName,
+) *HTTPRequestMirrorFilter {
 	if filter.BackendRef.Name == "" {
 		return &HTTPRequestMirrorFilter{}
 	}
@@ -76,7 +81,23 @@ func convertHTTPRequestMirrorFilter(filter *v1.HTTPRequestMirrorFilter, ruleIdx 
 		result.Namespace = namespace
 	}
 
-	result.Target = mirror.BackendPath(ruleIdx, namespace, *result.Name)
+	result.Target = mirror.BackendPath(ruleIdx, namespace, *result.Name, routeNsName)
+	switch {
+	case filter.Percent != nil:
+		result.Percent = helpers.GetPointer(float64(*filter.Percent))
+	case filter.Fraction != nil:
+		denominator := int32(100)
+		if filter.Fraction.Denominator != nil {
+			denominator = *filter.Fraction.Denominator
+		}
+		result.Percent = helpers.GetPointer(float64(filter.Fraction.Numerator*100) / float64(denominator))
+	default:
+		result.Percent = helpers.GetPointer(float64(100))
+	}
+
+	if *result.Percent > 100.0 {
+		result.Percent = helpers.GetPointer(100.0)
+	}
 
 	return result
 }

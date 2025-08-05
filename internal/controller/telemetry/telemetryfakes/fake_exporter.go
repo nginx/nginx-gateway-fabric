@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/telemetry"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	telemetrya "github.com/nginx/telemetry-exporter/pkg/telemetry"
 )
 
@@ -91,8 +91,6 @@ func (fake *FakeExporter) ExportReturnsOnCall(i int, result1 error) {
 func (fake *FakeExporter) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.exportMutex.RLock()
-	defer fake.exportMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

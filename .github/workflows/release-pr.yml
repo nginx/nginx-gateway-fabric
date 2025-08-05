@@ -35,7 +35,7 @@ jobs:
 
       - name: Get Release Notes
         id: notes
-        uses: lucacome/draft-release@38def8b74645796e9743b53e0f187d4a8915ea3e # v1.2.3
+        uses: lucacome/draft-release@00f74370c044c322da6cb52acc707d62c7762c71 # v1.2.4
         with:
           config-path: .github/release-notes.yml
           dry-run: true

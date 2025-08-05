@@ -6,9 +6,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
 
 // PathType is the type of the path in a PathRule.
@@ -223,8 +223,10 @@ type HTTPRequestMirrorFilter struct {
 	Name *string
 	// Namespace is the namespace of the service.
 	Namespace *string
-	// Target is the target of the mirror (path with hostname and service name).
+	// Target is the target of the mirror (path with hostname, service name, and route NamespacedName).
 	Target *string
+	// Percent is the percentage of requests to mirror.
+	Percent *float64
 }
 
 // PathModifierType is the type of the PathModifier in a redirect or rewrite rule.
@@ -378,8 +380,12 @@ type BaseHTTPConfig struct {
 	Snippets []Snippet
 	// RewriteIPSettings defines configuration for rewriting the client IP to the original client's IP.
 	RewriteClientIPSettings RewriteClientIPSettings
+	// NginxReadinessProbePort is the port on which the health check endpoint for NGINX is exposed.
+	NginxReadinessProbePort int32
 	// HTTP2 specifies whether http2 should be enabled for all servers.
 	HTTP2 bool
+	// DisableSNIHostValidation specifies if the SNI host validation should be disabled.
+	DisableSNIHostValidation bool
 }
 
 // Snippet is a snippet of configuration.

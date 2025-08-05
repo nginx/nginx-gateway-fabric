@@ -251,6 +251,9 @@ nginx:
   #   disableHTTP2:
   #     description: DisableHTTP2 defines if http2 should be disabled for all servers.
   #     type: boolean
+  #   disableSNIHostValidation:
+  #     description: DisableSNIHostValidation disables the validation that ensures the SNI hostname matches the Host header in HTTPS requests. This resolves HTTP/2 connection coalescing issues with wildcard certificates but introduces security risks as described in Gateway API GEP-3567.
+  #     type: boolean
   #   ipFamily:
   #     description: IPFamily specifies the IP family to be used by the NGINX.
   #     type: string
@@ -440,6 +443,19 @@ nginx:
 
     # -- volumeMounts are the additional volume mounts for the NGINX container.
     volumeMounts: []
+
+    ## -- Defines the settings for the data plane readiness probe. This probe returns Ready when the NGINX data plane is ready to serve traffic.
+    readinessProbe: {}
+      # @schema
+      # type: integer
+      # minimum: 1
+      # maximum: 65535
+      # @schema
+      # -- Port in which the readiness endpoint is exposed.
+      # port: 8081
+
+      # -- The number of seconds after the Pod has started before the readiness probes are initiated.
+      # initialDelaySeconds: 3
 
   # -- The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this
   # instance of NGINX Gateway Fabric.

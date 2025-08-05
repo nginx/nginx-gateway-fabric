@@ -6,13 +6,14 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/http"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/mirror"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func buildGRPCRoute(
@@ -92,7 +93,12 @@ func buildGRPCMirrorRoutes(
 					Spec: v1.GRPCRouteSpec{
 						CommonRouteSpec: route.Spec.CommonRouteSpec,
 						Hostnames:       route.Spec.Hostnames,
-						Rules:           buildGRPCMirrorRouteRule(idx, route.Spec.Rules[idx].Filters, filter),
+						Rules: buildGRPCMirrorRouteRule(
+							idx,
+							route.Spec.Rules[idx].Filters,
+							filter,
+							client.ObjectKeyFromObject(l7route.Source),
+						),
 					},
 				}
 
@@ -115,6 +121,7 @@ func buildGRPCMirrorRouteRule(
 	ruleIdx int,
 	filters []v1.GRPCRouteFilter,
 	filter Filter,
+	routeNsName types.NamespacedName,
 ) []v1.GRPCRouteRule {
 	return []v1.GRPCRouteRule{
 		{
@@ -122,7 +129,7 @@ func buildGRPCMirrorRouteRule(
 				{
 					Method: &v1.GRPCMethodMatch{
 						Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
-						Service: mirror.PathWithBackendRef(ruleIdx, filter.RequestMirror.BackendRef),
+						Service: mirror.PathWithBackendRef(ruleIdx, filter.RequestMirror.BackendRef, routeNsName),
 					},
 				},
 			},

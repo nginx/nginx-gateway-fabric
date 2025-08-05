@@ -7,6 +7,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
@@ -19,17 +20,23 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
-	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha2"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/config/policies/policiesfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/resolver"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/resolver/resolverfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver/resolverfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
+
+var defaultBaseHTTPConfig = BaseHTTPConfig{
+	NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+	HTTP2:                   true,
+	IPFamily:                Dual,
+}
 
 func getNormalBackendRef() graph.BackendRef {
 	return graph.BackendRef{
@@ -42,7 +49,7 @@ func getNormalBackendRef() graph.BackendRef {
 
 func getExpectedConfiguration() Configuration {
 	return Configuration{
-		BaseHTTPConfig: BaseHTTPConfig{HTTP2: true, IPFamily: Dual},
+		BaseHTTPConfig: defaultBaseHTTPConfig,
 		HTTPServers: []VirtualServer{
 			{
 				IsDefault: true,
@@ -708,6 +715,7 @@ func TestBuildConfiguration(t *testing.T) {
 
 	fakeResolver.ResolveStub = func(
 		_ context.Context,
+		_ logr.Logger,
 		nsName types.NamespacedName,
 		_ apiv1.ServicePort,
 		_ []discoveryV1.AddressType,
@@ -928,8 +936,9 @@ func TestBuildConfiguration(t *testing.T) {
 			},
 			ServiceName: helpers.GetPointer("my-svc"),
 		},
-		DisableHTTP2: helpers.GetPointer(true),
-		IPFamily:     helpers.GetPointer(ngfAPIv1alpha2.Dual),
+		DisableHTTP2:             helpers.GetPointer(true),
+		IPFamily:                 helpers.GetPointer(ngfAPIv1alpha2.Dual),
+		DisableSNIHostValidation: helpers.GetPointer(true),
 	}
 
 	nginxProxyIPv4 := &graph.EffectiveNginxProxy{
@@ -2177,8 +2186,9 @@ func TestBuildConfiguration(t *testing.T) {
 										Filters: HTTPFilters{
 											RequestMirrors: []*HTTPRequestMirrorFilter{
 												{
-													Name:   helpers.GetPointer("mirror-backend"),
-													Target: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+													Name:    helpers.GetPointer("mirror-backend"),
+													Target:  helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/hr-with-mirror-0"),
+													Percent: helpers.GetPointer(float64(100)),
 												},
 											},
 										},
@@ -2226,7 +2236,12 @@ func TestBuildConfiguration(t *testing.T) {
 					Ratios:         []Ratio{},
 					SpanAttributes: []SpanAttribute{},
 				}
-				conf.BaseHTTPConfig = BaseHTTPConfig{HTTP2: false, IPFamily: Dual}
+				conf.BaseHTTPConfig = BaseHTTPConfig{
+					HTTP2:                    false,
+					IPFamily:                 Dual,
+					NginxReadinessProbePort:  DefaultNginxReadinessProbePort,
+					DisableSNIHostValidation: true,
+				}
 				return conf
 			}),
 			msg: "EffectiveNginxProxy with tracing config and http2 disabled",
@@ -2349,7 +2364,11 @@ func TestBuildConfiguration(t *testing.T) {
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
-				conf.BaseHTTPConfig = BaseHTTPConfig{HTTP2: true, IPFamily: IPv4}
+				conf.BaseHTTPConfig = BaseHTTPConfig{
+					HTTP2:                   true,
+					IPFamily:                IPv4,
+					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+				}
 				return conf
 			}),
 			msg: "GatewayClass has NginxProxy with IPv4 IPFamily and no routes",
@@ -2374,7 +2393,11 @@ func TestBuildConfiguration(t *testing.T) {
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
-				conf.BaseHTTPConfig = BaseHTTPConfig{HTTP2: true, IPFamily: IPv6}
+				conf.BaseHTTPConfig = BaseHTTPConfig{
+					HTTP2:                   true,
+					IPFamily:                IPv6,
+					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+				}
 				return conf
 			}),
 			msg: "GatewayClass has NginxProxy with IPv6 IPFamily and no routes",
@@ -2418,6 +2441,7 @@ func TestBuildConfiguration(t *testing.T) {
 						TrustedAddresses: []string{"1.1.1.1/32"},
 						Mode:             RewriteIPModeProxyProtocol,
 					},
+					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 				}
 				return conf
 			}),
@@ -2513,7 +2537,8 @@ func TestBuildConfiguration(t *testing.T) {
 			g := NewWithT(t)
 
 			result := BuildConfiguration(
-				context.TODO(),
+				t.Context(),
+				logr.Discard(),
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
@@ -2628,7 +2653,8 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 			g := NewWithT(t)
 
 			result := BuildConfiguration(
-				context.TODO(),
+				t.Context(),
+				logr.Discard(),
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
@@ -2750,6 +2776,7 @@ func TestCreateFilters(t *testing.T) {
 				Kind:  helpers.GetPointer(v1.Kind("Service")),
 				Name:  v1.ObjectName("mirror-backend2"),
 			},
+			Percent: helpers.GetPointer(int32(50)),
 		},
 	}
 	requestHeaderModifiers1 := graph.Filter{
@@ -2807,12 +2834,14 @@ func TestCreateFilters(t *testing.T) {
 	}
 
 	expectedMirror1 := HTTPRequestMirrorFilter{
-		Name:   helpers.GetPointer("mirror-backend"),
-		Target: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+		Name:    helpers.GetPointer("mirror-backend"),
+		Target:  helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/route1-0"),
+		Percent: helpers.GetPointer(float64(100)),
 	}
 	expectedMirror2 := HTTPRequestMirrorFilter{
-		Name:   helpers.GetPointer("mirror-backend2"),
-		Target: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend2-0"),
+		Name:    helpers.GetPointer("mirror-backend2"),
+		Target:  helpers.GetPointer("/_ngf-internal-mirror-mirror-backend2-test/route1-0"),
+		Percent: helpers.GetPointer(float64(50)),
 	}
 
 	expectedHeaderModifier1 := HTTPHeaderFilter{
@@ -2975,7 +3004,8 @@ func TestCreateFilters(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := createHTTPFilters(test.filters, 0)
+			routeNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
+			result := createHTTPFilters(test.filters, 0, routeNsName)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
@@ -3348,6 +3378,7 @@ func TestBuildUpstreams(t *testing.T) {
 	fakeResolver := &resolverfakes.FakeServiceResolver{}
 	fakeResolver.ResolveCalls(func(
 		_ context.Context,
+		_ logr.Logger,
 		svcNsName types.NamespacedName,
 		_ apiv1.ServicePort,
 		_ []discoveryV1.AddressType,
@@ -3380,7 +3411,14 @@ func TestBuildUpstreams(t *testing.T) {
 
 	g := NewWithT(t)
 
-	upstreams := buildUpstreams(context.TODO(), gateway, fakeResolver, referencedServices, Dual)
+	upstreams := buildUpstreams(
+		t.Context(),
+		logr.Discard(),
+		gateway,
+		fakeResolver,
+		referencedServices,
+		Dual,
+	)
 	g.Expect(upstreams).To(ConsistOf(expUpstreams))
 }
 
@@ -4333,6 +4371,7 @@ func TestBuildStreamUpstreams(t *testing.T) {
 
 	fakeResolver.ResolveStub = func(
 		_ context.Context,
+		_ logr.Logger,
 		nsName types.NamespacedName,
 		_ apiv1.ServicePort,
 		_ []discoveryV1.AddressType,
@@ -4343,7 +4382,7 @@ func TestBuildStreamUpstreams(t *testing.T) {
 		return fakeEndpoints, nil
 	}
 
-	streamUpstreams := buildStreamUpstreams(context.Background(), gateway, &fakeResolver, Dual)
+	streamUpstreams := buildStreamUpstreams(t.Context(), logr.Discard(), gateway, &fakeResolver, Dual)
 
 	expectedStreamUpstreams := []Upstream{
 		{
@@ -4933,6 +4972,113 @@ func TestBuildWorkerConnections(t *testing.T) {
 			g := NewWithT(t)
 
 			g.Expect(buildWorkerConnections(tc.gw)).To(Equal(tc.expWorkerConnections))
+		})
+	}
+}
+
+func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
+	t.Parallel()
+	test := []struct {
+		msg      string
+		gateway  *graph.Gateway
+		expected BaseHTTPConfig
+	}{
+		{
+			msg: "nginx proxy config is nil",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+			},
+			expected: defaultBaseHTTPConfig,
+		},
+		{
+			msg: "kubernetes spec is nil",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{},
+				},
+			},
+			expected: defaultBaseHTTPConfig,
+		},
+		{
+			msg: "readiness probe spec is nil",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: nil,
+							},
+						},
+					},
+				},
+			},
+			expected: defaultBaseHTTPConfig,
+		},
+		{
+			msg: "readiness probe spec is empty",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{},
+							},
+						},
+					},
+				},
+			},
+			expected: defaultBaseHTTPConfig,
+		},
+		{
+			msg: "readiness probe is configured for deployment kind",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+									Port: helpers.GetPointer(int32(7020)),
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: BaseHTTPConfig{
+				NginxReadinessProbePort: int32(7020),
+				IPFamily:                Dual,
+				HTTP2:                   true,
+			},
+		},
+		{
+			msg: "readiness probe is configured for daemonset kind",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+									Port: helpers.GetPointer(int32(8881)),
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: BaseHTTPConfig{
+				NginxReadinessProbePort: int32(8881),
+				IPFamily:                Dual,
+				HTTP2:                   true,
+			},
+		},
+	}
+
+	for _, tc := range test {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildBaseHTTPConfig(tc.gateway, nil)).To(Equal(tc.expected))
 		})
 	}
 }

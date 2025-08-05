@@ -115,10 +115,6 @@ func (fake *FakeObjectKind) SetGroupVersionKindArgsForCall(i int) schema.GroupVe
 func (fake *FakeObjectKind) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.groupVersionKindMutex.RLock()
-	defer fake.groupVersionKindMutex.RUnlock()
-	fake.setGroupVersionKindMutex.RLock()
-	defer fake.setGroupVersionKindMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

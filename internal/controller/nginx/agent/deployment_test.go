@@ -9,9 +9,9 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/broadcast"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/broadcast/broadcastfakes"
-	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/internal/controller/nginx/agent/grpc/grpcfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
+	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/grpcfakes"
 )
 
 func TestNewDeployment(t *testing.T) {

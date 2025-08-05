@@ -10,8 +10,8 @@ import (
 	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
 	. "github.com/onsi/gomega"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/telemetry"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/telemetry/telemetryfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry/telemetryfakes"
 )
 
 func TestCreateTelemetryJobWorker_Succeeds(t *testing.T) {

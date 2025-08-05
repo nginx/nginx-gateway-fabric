@@ -13,7 +13,7 @@ spec:
         - name: node-debugger-container
           image: ubuntu:24.04
           command: ["/bin/bash", "-c"]
-          args: ["to be replaced by the test"]
+          args: ["pkill -x \"nginx-agent\""]
           securityContext:
             privileged: true
           volumeMounts:

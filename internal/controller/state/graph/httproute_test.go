@@ -11,12 +11,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/mirror"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation/validationfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/kinds"
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 const (
@@ -1020,7 +1020,7 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 							{
 								Path: &gatewayv1.HTTPPathMatch{
 									Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-									Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+									Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/hr-0"),
 								},
 							},
 						},
@@ -1066,7 +1066,7 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 						{
 							Path: &gatewayv1.HTTPPathMatch{
 								Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-0"),
+								Value: helpers.GetPointer("/_ngf-internal-mirror-mirror-backend-test/hr-0"),
 							},
 						},
 					},

@@ -4,7 +4,7 @@ package openshiftfakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/provisioner/openshift"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift"
 	"k8s.io/client-go/rest"
 )
 
@@ -93,8 +93,6 @@ func (fake *FakeAPIChecker) IsOpenshiftReturnsOnCall(i int, result1 bool, result
 func (fake *FakeAPIChecker) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.isOpenshiftMutex.RLock()
-	defer fake.isOpenshiftMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

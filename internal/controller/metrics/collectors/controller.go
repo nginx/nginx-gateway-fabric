@@ -5,7 +5,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/metrics"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/metrics"
 )
 
 // ControllerCollector collects metrics for the NGF controller.

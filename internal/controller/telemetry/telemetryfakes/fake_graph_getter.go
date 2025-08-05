@@ -4,8 +4,8 @@ package telemetryfakes
 import (
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/graph"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/telemetry"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 )
 
 type FakeGraphGetter struct {
@@ -79,8 +79,6 @@ func (fake *FakeGraphGetter) GetLatestGraphReturnsOnCall(i int, result1 *graph.G
 func (fake *FakeGraphGetter) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.getLatestGraphMutex.RLock()
-	defer fake.getLatestGraphMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

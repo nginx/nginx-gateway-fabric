@@ -13,9 +13,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/status"
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/status/statusfakes"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/controllerfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status/statusfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/controllerfakes"
 )
 
 func TestNewRetryUpdateFunc(t *testing.T) {

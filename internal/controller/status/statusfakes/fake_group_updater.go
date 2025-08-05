@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/status"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
 type FakeGroupUpdater struct {
@@ -57,8 +57,6 @@ func (fake *FakeGroupUpdater) UpdateGroupArgsForCall(i int) (context.Context, st
 func (fake *FakeGroupUpdater) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.updateGroupMutex.RLock()
-	defer fake.updateGroupMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

@@ -3,6 +3,7 @@ package resolver_test
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -14,9 +15,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/resolver"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/controller/index"
-	"github.com/nginx/nginx-gateway-fabric/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func createSlice(
@@ -207,7 +208,13 @@ var _ = Describe("ServiceResolver", func() {
 				},
 			}
 
-			endpoints, err := serviceResolver.Resolve(context.TODO(), svcNsName, svcPort, dualAddressType)
+			endpoints, err := serviceResolver.Resolve(
+				context.TODO(),
+				logr.Discard(),
+				svcNsName,
+				svcPort,
+				dualAddressType,
+			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(endpoints).To(ConsistOf(expectedEndpoints))
 		})
@@ -218,7 +225,13 @@ var _ = Describe("ServiceResolver", func() {
 			Expect(fakeK8sClient.Delete(context.TODO(), dupeEndpointSlice)).To(Succeed())
 			Expect(fakeK8sClient.Delete(context.TODO(), sliceIPV6)).To(Succeed())
 
-			endpoints, err := serviceResolver.Resolve(context.TODO(), svcNsName, svcPort, dualAddressType)
+			endpoints, err := serviceResolver.Resolve(
+				context.TODO(),
+				logr.Discard(),
+				svcNsName,
+				svcPort,
+				dualAddressType,
+			)
 			Expect(err).To(HaveOccurred())
 			Expect(endpoints).To(BeNil())
 		})
@@ -226,19 +239,37 @@ var _ = Describe("ServiceResolver", func() {
 			// delete remaining endpoint slices
 			Expect(fakeK8sClient.Delete(context.TODO(), sliceNoMatchingPortName)).To(Succeed())
 
-			endpoints, err := serviceResolver.Resolve(context.TODO(), svcNsName, svcPort, dualAddressType)
+			endpoints, err := serviceResolver.Resolve(
+				context.TODO(),
+				logr.Discard(),
+				svcNsName,
+				svcPort,
+				dualAddressType,
+			)
 			Expect(err).To(HaveOccurred())
 			Expect(endpoints).To(BeNil())
 		})
 		It("panics if the service NamespacedName is empty", func() {
 			resolve := func() {
-				_, _ = serviceResolver.Resolve(context.TODO(), types.NamespacedName{}, svcPort, dualAddressType)
+				_, _ = serviceResolver.Resolve(
+					context.TODO(),
+					logr.Discard(),
+					types.NamespacedName{},
+					svcPort,
+					dualAddressType,
+				)
 			}
 			Expect(resolve).Should(Panic())
 		})
 		It("panics if the ServicePort is empty", func() {
 			resolve := func() {
-				_, _ = serviceResolver.Resolve(context.TODO(), types.NamespacedName{}, v1.ServicePort{}, dualAddressType)
+				_, _ = serviceResolver.Resolve(
+					context.TODO(),
+					logr.Discard(),
+					types.NamespacedName{},
+					v1.ServicePort{},
+					dualAddressType,
+				)
 			}
 			Expect(resolve).Should(Panic())
 		})

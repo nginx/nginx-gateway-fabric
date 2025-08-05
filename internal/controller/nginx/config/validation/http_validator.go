@@ -1,7 +1,7 @@
 package validation
 
 import (
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 )
 
 // HTTPValidator validates values that will propagate into the NGINX configuration http context.

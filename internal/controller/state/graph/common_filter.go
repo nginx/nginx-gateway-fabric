@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 )
 
 // RouteRuleFilters holds the Filters for a RouteRule.
@@ -228,6 +228,40 @@ func validateFilterMirror(mirror *v1.HTTPRequestMirrorFilter, filterPath *field.
 
 	if mirror == nil {
 		return field.ErrorList{field.Required(mirrorPath, "cannot be nil")}
+	}
+
+	if mirror.Percent != nil && mirror.Fraction != nil {
+		return field.ErrorList{field.Invalid(mirrorPath, mirror, "cannot set both percent and fraction")}
+	}
+
+	if mirror.Fraction != nil && mirror.Fraction.Denominator != nil {
+		if *mirror.Fraction.Denominator <= 0 {
+			return field.ErrorList{
+				field.Invalid(
+					mirrorPath.Child("fraction", "denominator"),
+					mirror.Fraction.Denominator,
+					"must be greater than 0",
+				),
+			}
+		}
+		if mirror.Fraction.Numerator < 0 {
+			return field.ErrorList{
+				field.Invalid(
+					mirrorPath.Child("fraction", "numerator"),
+					mirror.Fraction.Numerator,
+					"must be greater than or equal to 0",
+				),
+			}
+		}
+		if mirror.Fraction.Numerator > *mirror.Fraction.Denominator {
+			return field.ErrorList{
+				field.Invalid(
+					mirrorPath.Child("fraction", "numerator"),
+					mirror.Fraction.Numerator,
+					"must be less than or equal to denominator",
+				),
+			}
+		}
 	}
 
 	return nil
