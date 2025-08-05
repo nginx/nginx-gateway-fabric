@@ -25,6 +25,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift/openshiftfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/controllerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -557,4 +558,22 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 	ds := &appsv1.DaemonSet{}
 	g.Expect(fakeClient.Get(context.TODO(), key, ds)).To(Succeed())
 	g.Expect(ds.Spec.Template.GetAnnotations()).To(HaveKey(controller.RestartedAnnotation))
+}
+
+func TestDefaultLabelCollectorFactory(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	mgr := &controllerfakes.FakeManager{}
+
+	cfg := Config{
+		GatewayPodConfig: &config.GatewayPodConfig{
+			Namespace: "pod-namespace",
+			Name:      "pod-name",
+			Version:   "my-version",
+		},
+	}
+
+	collector := defaultLabelCollectorFactory(mgr, cfg)
+	g.Expect(collector).NotTo(BeNil())
 }
