@@ -781,8 +781,9 @@ func buildUpstream(
 	eps, err := svcResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
 	if err != nil {
 		errMsg = err.Error()
-		logger.Error(err, "failed to resolve endpoints", "service", br.SvcNsName)
+		logger.V(1).Info("failed to resolve endpoints, endpoints may not be ready", "error", errMsg, "service", br.SvcNsName)
 	}
+	logger.V(1).Info("successfully resolved endpoints", "service", br.SvcNsName)
 
 	var upstreamPolicies []policies.Policy
 	if graphSvc, exists := referencedServices[br.SvcNsName]; exists {
