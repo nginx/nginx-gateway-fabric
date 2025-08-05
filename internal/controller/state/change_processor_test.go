@@ -3776,7 +3776,7 @@ var _ = Describe("ChangeProcessor", func() {
 			},
 			Entry(
 				"an unsupported resource",
-				&v1alpha2.TCPRoute{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "tcp"}},
+				&apiv1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "pod"}},
 			),
 			Entry(
 				"nil resource",
@@ -3794,8 +3794,8 @@ var _ = Describe("ChangeProcessor", func() {
 			},
 			Entry(
 				"an unsupported resource",
-				&v1alpha2.TCPRoute{},
-				types.NamespacedName{Namespace: "test", Name: "tcp"},
+				&apiv1.Pod{},
+				types.NamespacedName{Namespace: "test", Name: "pod"},
 			),
 			Entry(
 				"nil resource type",
