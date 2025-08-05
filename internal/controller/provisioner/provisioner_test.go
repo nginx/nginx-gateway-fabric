@@ -224,6 +224,9 @@ func TestNewNginxProvisioner(t *testing.T) {
 			InstanceName: "test-instance",
 		},
 		Logger: logr.Discard(),
+		NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
+			DataplaneKeySecretName: "dataplane-key",
+		},
 	}
 
 	apiChecker = &openshiftfakes.FakeAPIChecker{}
@@ -243,6 +246,8 @@ func TestNewNginxProvisioner(t *testing.T) {
 		},
 	}
 	g.Expect(provisioner.baseLabelSelector).To(Equal(labelSelector))
+
+	g.Expect(provisioner.store.dataplaneKeySecretName).To(Equal("dataplane-key"))
 }
 
 func TestEnable(t *testing.T) {
