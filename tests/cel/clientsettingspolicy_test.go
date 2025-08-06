@@ -17,8 +17,10 @@ import (
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
+
 	k8sClient, err := getKubernetesClient(t)
 	g.Expect(err).ToNot(HaveOccurred())
+
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
@@ -84,8 +86,10 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
+
 	k8sClient, err := getKubernetesClient(t)
 	g.Expect(err).ToNot(HaveOccurred())
+
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
@@ -133,8 +137,10 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 func TestClientSettingsPoliciesKeepAliveTimeout(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
+
 	k8sClient, err := getKubernetesClient(t)
 	g.Expect(err).ToNot(HaveOccurred())
+
 	tests := []struct {
 		policySpec ngfAPIv1alpha1.ClientSettingsPolicySpec
 		name       string
