@@ -575,7 +575,6 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			gws: newGatewayMap(true, []types.NamespacedName{gatewayNsName}),
 			expAncestors: []PolicyAncestor{
 				{Ancestor: getGatewayParentRef(gatewayNsName)},
-				{Ancestor: getGatewayParentRef(gatewayNsName)},
 			},
 			expAttached: true,
 		},

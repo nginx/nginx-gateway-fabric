@@ -607,6 +607,7 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		CaCertRef: types.NamespacedName{Namespace: "test", Name: "configmap-1"},
 		Valid:     true,
+		Gateways:  []types.NamespacedName{gatewayNsName},
 	}
 
 	expHTTPSHR8Groups[0].Backends[0].VerifyTLS = &VerifyTLS{
@@ -661,6 +662,7 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		CaCertRef: types.NamespacedName{Namespace: "test", Name: "configmap-2"},
 		Valid:     true,
+		Gateways:  []types.NamespacedName{gatewayNsName},
 	}
 
 	expHTTPSHR9Groups[0].Backends[0].VerifyTLS = &VerifyTLS{
@@ -3569,6 +3571,9 @@ func TestHostnameMoreSpecific(t *testing.T) {
 
 func TestConvertBackendTLS(t *testing.T) {
 	t.Parallel()
+
+	testGateway := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
 	btpCaCertRefs := &graph.BackendTLSPolicy{
 		Source: &v1alpha3.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
@@ -3588,6 +3593,7 @@ func TestConvertBackendTLS(t *testing.T) {
 		},
 		Valid:     true,
 		CaCertRef: types.NamespacedName{Namespace: "test", Name: "ca-cert"},
+		Gateways:  []types.NamespacedName{testGateway},
 	}
 
 	btpWellKnownCerts := &graph.BackendTLSPolicy{
@@ -3598,7 +3604,8 @@ func TestConvertBackendTLS(t *testing.T) {
 				},
 			},
 		},
-		Valid: true,
+		Valid:    true,
+		Gateways: []types.NamespacedName{testGateway},
 	}
 
 	expectedWithCertPath := &VerifyTLS{
@@ -3615,23 +3622,33 @@ func TestConvertBackendTLS(t *testing.T) {
 
 	tests := []struct {
 		btp      *graph.BackendTLSPolicy
+		gwNsName types.NamespacedName
 		expected *VerifyTLS
 		msg      string
 	}{
 		{
 			btp:      nil,
+			gwNsName: testGateway,
 			expected: nil,
 			msg:      "nil backend tls policy",
 		},
 		{
 			btp:      btpCaCertRefs,
+			gwNsName: testGateway,
 			expected: expectedWithCertPath,
 			msg:      "normal case with cert path",
 		},
 		{
 			btp:      btpWellKnownCerts,
+			gwNsName: testGateway,
 			expected: expectedWithWellKnownCerts,
 			msg:      "normal case no cert path",
+		},
+		{
+			btp:      btpCaCertRefs,
+			gwNsName: types.NamespacedName{Namespace: "test", Name: "unsupported-gateway"},
+			expected: nil,
+			msg:      "gateway not supported by policy",
 		},
 	}
 
@@ -3639,7 +3656,7 @@ func TestConvertBackendTLS(t *testing.T) {
 		t.Run(tc.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			g.Expect(convertBackendTLS(tc.btp)).To(Equal(tc.expected))
+			g.Expect(convertBackendTLS(tc.btp, tc.gwNsName)).To(Equal(tc.expected))
 		})
 	}
 }

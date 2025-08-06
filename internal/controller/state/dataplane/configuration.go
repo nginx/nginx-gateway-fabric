@@ -390,7 +390,7 @@ func newBackendGroup(
 			UpstreamName: ref.ServicePortReference(),
 			Weight:       ref.Weight,
 			Valid:        valid,
-			VerifyTLS:    convertBackendTLS(ref.BackendTLSPolicy),
+			VerifyTLS:    convertBackendTLS(ref.BackendTLSPolicy, gatewayName),
 		})
 	}
 
@@ -401,10 +401,15 @@ func newBackendGroup(
 	}
 }
 
-func convertBackendTLS(btp *graph.BackendTLSPolicy) *VerifyTLS {
+func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedName) *VerifyTLS {
 	if btp == nil || !btp.Valid {
 		return nil
 	}
+
+	if !slices.Contains(btp.Gateways, gwNsName) {
+		return nil
+	}
+
 	verify := &VerifyTLS{}
 	if btp.CaCertRef.Name != "" {
 		verify.CertBundleID = generateCertBundleID(btp.CaCertRef)

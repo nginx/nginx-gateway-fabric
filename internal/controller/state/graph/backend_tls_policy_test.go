@@ -399,7 +399,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid case with too many ancestors",
+			name: "valid case with many ancestors (ancestor limit now handled during gateway assignment)",
 			tlsPolicy: &v1alpha3.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
@@ -416,7 +416,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 					Ancestors: ancestors,
 				},
 			},
-			ignored: true,
+			isValid: true,
 		},
 	}
 
@@ -660,7 +660,7 @@ func TestAddGatewaysForBackendTLSPolicies(t *testing.T) {
 		g := NewWithT(t)
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			addGatewaysForBackendTLSPolicies(test.backendTLSPolicies, test.services)
+			addGatewaysForBackendTLSPolicies(test.backendTLSPolicies, test.services, "nginx-gateway")
 			g.Expect(helpers.Diff(test.backendTLSPolicies, test.expected)).To(BeEmpty())
 		})
 	}
