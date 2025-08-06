@@ -10,6 +10,7 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
 func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
@@ -147,8 +148,10 @@ func validateClientSettingsPolicy(t *testing.T, tt struct {
 		},
 		Spec: policySpec,
 	}
-
-	err := k8sClient.Create(context.Background(), clientSettingsPolicy)
+	timeoutConfig := framework.DefaultTimeoutConfig()
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.KubernetesClientTimeout)
+	err := k8sClient.Create(ctx, clientSettingsPolicy)
+	defer cancel()
 
 	// Clean up after test
 	defer func() {
