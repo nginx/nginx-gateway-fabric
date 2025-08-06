@@ -23,7 +23,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "")
+	store := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "", "")
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
 
@@ -213,6 +213,7 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 		jwtTestSecretName,
 		caTestSecretName,
 		clientTestSecretName,
+		nginxOneDataplaneKeySecretName,
 	)
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
@@ -298,6 +299,14 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	}
 	g.Expect(fakeClient.Create(ctx, userDockerSecret)).To(Succeed())
 
+	userDataplaneKeySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nginxOneDataplaneKeySecretName,
+			Namespace: ngfNamespace,
+		},
+	}
+	g.Expect(fakeClient.Create(ctx, userDataplaneKeySecret)).To(Succeed())
+
 	upsertEvent := &events.UpsertEvent{Resource: gateway}
 	batch := events.EventBatch{upsertEvent}
 	handler.HandleEventBatch(ctx, logger, batch)
@@ -341,6 +350,7 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	verifySecret(caTestSecretName, userCASecret)
 	verifySecret(clientTestSecretName, userClientSSLSecret)
 	verifySecret(dockerTestSecretName, userDockerSecret)
+	verifySecret(nginxOneDataplaneKeySecretName, userDataplaneKeySecret)
 
 	// delete Gateway when provisioner is not leader
 	provisioner.leader = false

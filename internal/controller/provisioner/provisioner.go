@@ -28,6 +28,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 )
@@ -43,19 +44,19 @@ type Provisioner interface {
 
 // Config is the configuration for the Provisioner.
 type Config struct {
-	GCName             string
-	AgentTLSSecretName string
-	NGINXSCCName       string
-
-	DeploymentStore        agent.DeploymentStorer
-	StatusQueue            *status.Queue
-	GatewayPodConfig       *config.GatewayPodConfig
-	PlusUsageConfig        *config.UsageReportConfig
-	EventRecorder          record.EventRecorder
-	Logger                 logr.Logger
-	NginxDockerSecretNames []string
-
-	Plus bool
+	DeploymentStore                agent.DeploymentStorer
+	EventRecorder                  record.EventRecorder
+	PlusUsageConfig                *config.UsageReportConfig
+	StatusQueue                    *status.Queue
+	GatewayPodConfig               *config.GatewayPodConfig
+	AgentLabels                    map[string]string
+	Logger                         logr.Logger
+	NGINXSCCName                   string
+	GCName                         string
+	AgentTLSSecretName             string
+	NginxDockerSecretNames         []string
+	NginxOneConsoleTelemetryConfig config.NginxOneConsoleTelemetryConfig
+	Plus                           bool
 }
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.
@@ -75,6 +76,23 @@ type NginxProvisioner struct {
 
 var apiChecker openshift.APIChecker = &openshift.APICheckerImpl{}
 
+var labelCollectorFactory func(mgr manager.Manager, cfg Config) AgentLabelCollector = defaultLabelCollectorFactory
+
+func defaultLabelCollectorFactory(mgr manager.Manager, cfg Config) AgentLabelCollector {
+	return telemetry.NewLabelCollector(telemetry.LabelCollectorConfig{
+		K8sClientReader: mgr.GetAPIReader(),
+		Version:         cfg.GatewayPodConfig.Version,
+		PodNSName: types.NamespacedName{
+			Namespace: cfg.GatewayPodConfig.Namespace,
+			Name:      cfg.GatewayPodConfig.Name,
+		},
+	})
+}
+
+type AgentLabelCollector interface {
+	Collect(ctx context.Context) (map[string]string, error)
+}
+
 // NewNginxProvisioner returns a new instance of a Provisioner that will deploy nginx resources.
 func NewNginxProvisioner(
 	ctx context.Context,
@@ -88,12 +106,18 @@ func NewNginxProvisioner(
 		clientSSLSecretName = cfg.PlusUsageConfig.ClientSSLSecretName
 	}
 
+	var dataplaneKeySecretName string
+	if cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
+		dataplaneKeySecretName = cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName
+	}
+
 	store := newStore(
 		cfg.NginxDockerSecretNames,
 		cfg.AgentTLSSecretName,
 		jwtSecretName,
 		caSecretName,
 		clientSSLSecretName,
+		dataplaneKeySecretName,
 	)
 
 	selector := metav1.LabelSelector{
@@ -110,6 +134,13 @@ func NewNginxProvisioner(
 	if err != nil {
 		cfg.Logger.Error(err, "could not determine if running in openshift, will not create Role/RoleBinding")
 	}
+
+	agentLabelCollector := labelCollectorFactory(mgr, cfg)
+	agentLabels, err := agentLabelCollector.Collect(ctx)
+	if err != nil {
+		cfg.Logger.Error(err, "failed to collect agent labels")
+	}
+	cfg.AgentLabels = agentLabels
 
 	provisioner := &NginxProvisioner{
 		k8sClient:                  mgr.GetClient(),
@@ -134,6 +165,7 @@ func NewNginxProvisioner(
 		cfg.GatewayPodConfig.Namespace,
 		cfg.NginxDockerSecretNames,
 		cfg.AgentTLSSecretName,
+		dataplaneKeySecretName,
 		cfg.PlusUsageConfig,
 		isOpenshift,
 	)
@@ -414,6 +446,10 @@ func (p *NginxProvisioner) isUserSecret(name string) bool {
 	}
 
 	if slices.Contains(p.cfg.NginxDockerSecretNames, name) {
+		return true
+	}
+
+	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName == name {
 		return true
 	}
 

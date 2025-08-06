@@ -31,14 +31,19 @@ func newEventLoop(
 	ngfNamespace string,
 	dockerSecrets []string,
 	agentTLSSecret string,
+	dataplaneKeySecret string,
 	usageConfig *config.UsageReportConfig,
 	isOpenshift bool,
 ) (*events.EventLoop, error) {
 	nginxResourceLabelPredicate := predicate.NginxLabelPredicate(selector)
 
-	secretsToWatch := make([]string, 0, len(dockerSecrets)+4)
+	secretsToWatch := make([]string, 0, len(dockerSecrets)+5)
 	secretsToWatch = append(secretsToWatch, agentTLSSecret)
 	secretsToWatch = append(secretsToWatch, dockerSecrets...)
+
+	if dataplaneKeySecret != "" {
+		secretsToWatch = append(secretsToWatch, dataplaneKeySecret)
+	}
 
 	if usageConfig != nil {
 		if usageConfig.SecretName != "" {

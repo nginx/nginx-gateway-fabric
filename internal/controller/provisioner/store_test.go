@@ -23,7 +23,14 @@ func TestNewStore(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{"docker-secret"}, "agent-tls-secret", "jwt-secret", "ca-secret", "client-ssl-secret")
+	store := newStore(
+		[]string{"docker-secret"},
+		"agent-tls-secret",
+		"jwt-secret",
+		"ca-secret",
+		"client-ssl-secret",
+		"dataplane-key",
+	)
 
 	g.Expect(store).NotTo(BeNil())
 	g.Expect(store.dockerSecretNames).To(HaveKey("docker-secret"))
@@ -31,13 +38,14 @@ func TestNewStore(t *testing.T) {
 	g.Expect(store.jwtSecretName).To(Equal("jwt-secret"))
 	g.Expect(store.caSecretName).To(Equal("ca-secret"))
 	g.Expect(store.clientSSLSecretName).To(Equal("client-ssl-secret"))
+	g.Expect(store.dataplaneKeySecretName).To(Equal("dataplane-key"))
 }
 
 func TestUpdateGateway(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "", "")
+	store := newStore(nil, "", "", "", "", "")
 	gateway := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-gateway",
@@ -56,7 +64,7 @@ func TestDeleteGateway(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "", "")
+	store := newStore(nil, "", "", "", "", "")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 	store.gateways[nsName] = &gatewayv1.Gateway{}
 
@@ -70,7 +78,7 @@ func TestGetGateways(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "", "")
+	store := newStore(nil, "", "", "", "", "")
 	gateway1 := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-gateway-1",
@@ -101,7 +109,14 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{"docker-secret"}, "agent-tls-secret", "jwt-secret", "ca-secret", "client-ssl-secret")
+	store := newStore(
+		[]string{"docker-secret"},
+		"agent-tls-secret",
+		"jwt-secret",
+		"ca-secret",
+		"client-ssl-secret",
+		"dataplane-key",
+	)
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 
 	registerAndGetResources := func(obj any) *NginxResources {
@@ -312,6 +327,22 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// Docker Secret again, already exists
 	resources = registerAndGetResources(dockerSecret)
 	g.Expect(resources.DockerSecrets).To(ContainElement(dockerSecretMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	// Dataplane Key Secret
+	dataplaneKeySecretMeta := metav1.ObjectMeta{
+		Name:      controller.CreateNginxResourceName(defaultMeta.Name, store.dataplaneKeySecretName),
+		Namespace: defaultMeta.Namespace,
+	}
+	dataplaneKeySecret := &corev1.Secret{ObjectMeta: dataplaneKeySecretMeta}
+	resources = registerAndGetResources(dataplaneKeySecret)
+	g.Expect(resources.DataplaneKeySecret).To(Equal(dataplaneKeySecretMeta))
+
+	// Dataplane Key Secret again, already exists
+	resources = registerAndGetResources(dataplaneKeySecret)
+	g.Expect(resources.DataplaneKeySecret).To(Equal(dataplaneKeySecretMeta))
 }
 
 func TestGatewayChanged(t *testing.T) {
@@ -415,7 +446,7 @@ func TestDeleteResourcesForGateway(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "", "")
+	store := newStore(nil, "", "", "", "", "")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 	store.nginxResources[nsName] = &NginxResources{}
 
@@ -427,7 +458,7 @@ func TestDeleteResourcesForGateway(t *testing.T) {
 func TestGatewayExistsForResource(t *testing.T) {
 	t.Parallel()
 
-	store := newStore(nil, "", "", "", "")
+	store := newStore(nil, "", "", "", "", "")
 	gateway := &graph.Gateway{}
 	store.nginxResources[types.NamespacedName{Name: "test-gateway", Namespace: "default"}] = &NginxResources{
 		Gateway: gateway,
@@ -484,6 +515,10 @@ func TestGatewayExistsForResource(t *testing.T) {
 				Name:      "test-docker-secret",
 				Namespace: "default",
 			},
+		},
+		DataplaneKeySecret: metav1.ObjectMeta{
+			Name:      "test-dataplane-key-secret",
+			Namespace: "default",
 		},
 	}
 
@@ -623,6 +658,16 @@ func TestGatewayExistsForResource(t *testing.T) {
 			expected: gateway,
 		},
 		{
+			name: "Dataplane Key Secret exists",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-dataplane-key-secret",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
 			name: "Resource does not exist",
 			object: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -648,7 +693,7 @@ func TestGatewayExistsForResource(t *testing.T) {
 func TestGetResourceVersionForObject(t *testing.T) {
 	t.Parallel()
 
-	store := newStore(nil, "", "", "", "")
+	store := newStore(nil, "", "", "", "", "")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 	store.nginxResources[nsName] = &NginxResources{
 		Deployment: metav1.ObjectMeta{
@@ -717,6 +762,11 @@ func TestGetResourceVersionForObject(t *testing.T) {
 				Namespace:       "default",
 				ResourceVersion: "13",
 			},
+		},
+		DataplaneKeySecret: metav1.ObjectMeta{
+			Name:            "test-dataplane-key-secret",
+			Namespace:       "default",
+			ResourceVersion: "14",
 		},
 	}
 
@@ -854,6 +904,16 @@ func TestGetResourceVersionForObject(t *testing.T) {
 				},
 			},
 			expectedResult: "13",
+		},
+		{
+			name: "Dataplane Key Secret resource version",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-dataplane-key-secret",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "14",
 		},
 		{
 			name: "Non-existent resource",

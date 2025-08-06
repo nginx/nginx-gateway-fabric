@@ -35,6 +35,9 @@ type TimeoutConfig struct {
 
 	// TestForTrafficTimeout represents the maximum time for NGF to test for passing or failing traffic.
 	TestForTrafficTimeout time.Duration
+
+	// KubernetesClientTimeout represents the maximum time for Kubernetes client operations.
+	KubernetesClientTimeout time.Duration
 }
 
 // DefaultTimeoutConfig populates a TimeoutConfig with the default values.
@@ -51,5 +54,6 @@ func DefaultTimeoutConfig() TimeoutConfig {
 		GetLeaderLeaseTimeout:   60 * time.Second,
 		GetStatusTimeout:        60 * time.Second,
 		TestForTrafficTimeout:   60 * time.Second,
+		KubernetesClientTimeout: 10 * time.Second,
 	}
 }

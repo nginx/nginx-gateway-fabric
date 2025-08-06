@@ -212,6 +212,27 @@ nginx:
   # -- Is NGINX Plus image being used.
   plus: false
 
+  # -- Configuration for NGINX One Console.
+  nginxOneConsole:
+    # -- Name of the secret which holds the dataplane key that is required to authenticate with the NGINX One Console.
+    # Secret must exist in the same namespace that the NGINX Gateway Fabric control plane is running in
+    # (default namespace: nginx-gateway).
+    dataplaneKeySecretName: ""
+
+    # -- The Endpoint host that the NGINX One Console telemetry metrics will be sent to.
+    endpointHost: "agent.connect.nginx.com"
+
+    # @schema
+    # type: integer
+    # minimum: 1
+    # maximum: 65535
+    # @schema
+    # -- The endpoint port that the NGINX One Console telemetry metrics will be sent to.
+    endpointPort: 443
+
+    # -- Skip TLS verification for NGINX One Console connections.
+    skipVerify: false
+
   # -- The name of the secret containing docker registry credentials.
   # Secret must exist in the same namespace as the helm release. The control
   # plane will copy this secret into any namespace where NGINX is deployed.

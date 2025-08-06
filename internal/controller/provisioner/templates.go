@@ -12,7 +12,7 @@ const mainTemplateText = `
 error_log stderr {{ .ErrorLevel }};
 
 events {
-  worker_connections {{ .WorkerConnections }};
+    worker_connections {{ .WorkerConnections }};
 }`
 
 const mgmtTemplateText = `mgmt {
@@ -61,21 +61,32 @@ features:
 log:
     level: {{ .LogLevel }}
 {{- end }}
+labels:
+    {{- range $key, $value := .AgentLabels }}
+    {{ $key }}: {{ $value }}
+    {{- end }}
+
+{{- if .NginxOneReporting }}
+auxiliary_command:
+    server:
+        host: {{ .EndpointHost }}
+        port: {{ .EndpointPort }}
+        type: grpc
+    auth:
+        tokenpath: /etc/nginx-agent/secrets/dataplane.key
+    tls:
+        skip_verify: {{ .EndpointTLSSkipVerify }}
+{{- end }}
 {{- if .EnableMetrics }}
 collector:
-    receivers:
-        container_metrics:
-            collection_interval: 1m0s
-        host_metrics:
-            collection_interval: 1m0s
-            initial_delay: 1s
-            scrapers:
-                network: {}
-    processors:
-        batch: {}
     exporters:
         prometheus:
             server:
                 host: "0.0.0.0"
                 port: {{ .MetricsPort }}
+    pipelines:
+        metrics:
+            "ngf":
+                receivers: ["host_metrics", "nginx_metrics"]
+                exporters: ["prometheus"]
 {{- end }}`
