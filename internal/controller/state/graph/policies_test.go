@@ -1,9 +1,11 @@
 package graph
 
 import (
+	"bytes"
 	"slices"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -241,7 +243,7 @@ func TestAttachPolicies(t *testing.T) {
 				NGFPolicies:        test.ngfPolicies,
 			}
 
-			graph.attachPolicies(nil, "nginx-gateway")
+			graph.attachPolicies(nil, "nginx-gateway", logr.Discard())
 			for _, expect := range test.expects {
 				expect(g, graph)
 			}
@@ -498,7 +500,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			attachPolicyToRoute(test.policy, test.route, test.validator, "nginx-gateway")
+			attachPolicyToRoute(test.policy, test.route, test.validator, "nginx-gateway", logr.Discard())
 
 			if test.expAttached {
 				g.Expect(test.route.Policies).To(HaveLen(1))
@@ -643,7 +645,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			attachPolicyToGateway(test.policy, test.policy.TargetRefs[0], test.gws, "nginx-gateway")
+			attachPolicyToGateway(test.policy, test.policy.TargetRefs[0], test.gws, "nginx-gateway", logr.Discard())
 
 			if test.expAttached {
 				for _, gw := range test.gws {
@@ -830,7 +832,7 @@ func TestAttachPolicyToService(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			attachPolicyToService(test.policy, test.svc, test.gws, "ctlr")
+			attachPolicyToService(test.policy, test.svc, test.gws, "ctlr", logr.Discard())
 			if test.expAttached {
 				g.Expect(test.svc.Policies).To(HaveLen(1))
 			} else {
@@ -1962,4 +1964,359 @@ func TestAddStatusToTargetRefs(t *testing.T) {
 	g.Expect(func() {
 		addStatusToTargetRefs(policyKind, nil)
 	}).ToNot(Panic())
+}
+
+func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
+	t.Parallel()
+
+	createPolicyWithAncestors := func(ancestors []v1alpha2.PolicyAncestorStatus) *Policy {
+		fakePolicy := &policiesfakes.FakePolicy{
+			GetPolicyStatusStub: func() v1alpha2.PolicyStatus {
+				return v1alpha2.PolicyStatus{
+					Ancestors: ancestors,
+				}
+			},
+		}
+		return &Policy{
+			Source:    fakePolicy,
+			Ancestors: []PolicyAncestor{}, // Updated ancestors list (starts empty)
+		}
+	}
+
+	getAncestorRef := func(ctlrName, parentName string) v1alpha2.PolicyAncestorStatus {
+		return v1alpha2.PolicyAncestorStatus{
+			ControllerName: v1.GatewayController(ctlrName),
+			AncestorRef: v1.ParentReference{
+				Name:      v1.ObjectName(parentName),
+				Namespace: helpers.GetPointer(v1.Namespace("test")),
+				Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+				Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+			},
+		}
+	}
+
+	tests := []struct {
+		name                string
+		ctlrName            string
+		currentAncestors    []v1alpha2.PolicyAncestorStatus
+		updatedAncestorsLen int
+		expected            bool
+	}{
+		{
+			name:                "empty current ancestors, no updated ancestors",
+			currentAncestors:    []v1alpha2.PolicyAncestorStatus{},
+			updatedAncestorsLen: 0,
+			ctlrName:            "nginx-gateway",
+			expected:            false,
+		},
+		{
+			name: "less than 16 total (current + updated)",
+			currentAncestors: []v1alpha2.PolicyAncestorStatus{
+				getAncestorRef("other-controller", "gateway1"),
+				getAncestorRef("other-controller", "gateway2"),
+			},
+			updatedAncestorsLen: 2,
+			ctlrName:            "nginx-gateway",
+			expected:            false,
+		},
+		{
+			name: "exactly 16 non-NGF ancestors, no updated ancestors",
+			currentAncestors: func() []v1alpha2.PolicyAncestorStatus {
+				ancestors := make([]v1alpha2.PolicyAncestorStatus, 16)
+				for i := range 16 {
+					ancestors[i] = getAncestorRef("other-controller", "gateway")
+				}
+				return ancestors
+			}(),
+			updatedAncestorsLen: 1, // Trying to add 1 NGF ancestor
+			ctlrName:            "nginx-gateway",
+			expected:            true,
+		},
+		{
+			name: "15 non-NGF + 1 NGF ancestor, adding 1 more NGF ancestor",
+			currentAncestors: func() []v1alpha2.PolicyAncestorStatus {
+				ancestors := make([]v1alpha2.PolicyAncestorStatus, 16)
+				for i := range 15 {
+					ancestors[i] = getAncestorRef("other-controller", "gateway")
+				}
+				ancestors[15] = getAncestorRef("nginx-gateway", "our-gateway")
+				return ancestors
+			}(),
+			updatedAncestorsLen: 1,
+			ctlrName:            "nginx-gateway",
+			expected:            true, // Full because 15 non-NGF + 1 new NGF = 16 which is the limit
+		},
+		{
+			name: "10 non-NGF ancestors, trying to add 7 NGF ancestors (would exceed 16)",
+			currentAncestors: func() []v1alpha2.PolicyAncestorStatus {
+				ancestors := make([]v1alpha2.PolicyAncestorStatus, 10)
+				for i := range 10 {
+					ancestors[i] = getAncestorRef("other-controller", "gateway")
+				}
+				return ancestors
+			}(),
+			updatedAncestorsLen: 7,
+			ctlrName:            "nginx-gateway",
+			expected:            true,
+		},
+		{
+			name: "5 non-NGF + 5 NGF ancestors, trying to add 6 more NGF ancestors",
+			currentAncestors: func() []v1alpha2.PolicyAncestorStatus {
+				ancestors := make([]v1alpha2.PolicyAncestorStatus, 10)
+				for i := range 5 {
+					ancestors[i] = getAncestorRef("other-controller", "gateway")
+				}
+				for i := 5; i < 10; i++ {
+					ancestors[i] = getAncestorRef("nginx-gateway", "our-gateway")
+				}
+				return ancestors
+			}(),
+			updatedAncestorsLen: 6,
+			ctlrName:            "nginx-gateway",
+			expected:            false, // 5 non-NGF + 6 new NGF = 11 total (within limit)
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			policy := createPolicyWithAncestors(test.currentAncestors)
+			// Simulate the updated ancestors list
+			for range test.updatedAncestorsLen {
+				policy.Ancestors = append(policy.Ancestors, PolicyAncestor{
+					Ancestor: createParentReference(v1.GroupName, kinds.Gateway,
+						types.NamespacedName{Namespace: "test", Name: "new-gateway"}),
+				})
+			}
+
+			result := ngfPolicyAncestorsFull(policy, test.ctlrName)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
+	t.Parallel()
+
+	// Create a test logger that captures log output
+	var logBuf bytes.Buffer
+	testLogger := logr.New(&testNGFLogSink{buffer: &logBuf})
+
+	policyGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "TestPolicy"}
+
+	// Create a policy with 16 non-NGF ancestors (ancestor limit reached)
+	getAncestorRef := func(ctlrName, parentName string) v1alpha2.PolicyAncestorStatus {
+		return v1alpha2.PolicyAncestorStatus{
+			ControllerName: v1.GatewayController(ctlrName),
+			AncestorRef: v1.ParentReference{
+				Name:      v1.ObjectName(parentName),
+				Namespace: helpers.GetPointer(v1.Namespace("test")),
+				Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+				Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+			},
+		}
+	}
+
+	// Create 16 ancestors from different controllers to simulate full list
+	fullAncestors := make([]v1alpha2.PolicyAncestorStatus, 16)
+	for i := range 16 {
+		fullAncestors[i] = getAncestorRef("other-controller", "other-gateway")
+	}
+
+	policyWithFullAncestors := &policiesfakes.FakePolicy{
+		GetNameStub: func() string {
+			return "policy-full-ancestors"
+		},
+		GetNamespaceStub: func() string {
+			return "test"
+		},
+		GetPolicyStatusStub: func() v1alpha2.PolicyStatus {
+			return v1alpha2.PolicyStatus{
+				Ancestors: fullAncestors,
+			}
+		},
+		GetObjectKindStub: func() schema.ObjectKind {
+			return &policiesfakes.FakeObjectKind{
+				GroupVersionKindStub: func() schema.GroupVersionKind {
+					return policyGVK
+				},
+			}
+		},
+		GetTargetRefsStub: func() []v1alpha2.LocalPolicyTargetReference {
+			return []v1alpha2.LocalPolicyTargetReference{
+				{
+					Group: v1.GroupName,
+					Kind:  kinds.Gateway,
+					Name:  v1.ObjectName("gateway1"),
+				},
+			}
+		},
+	}
+
+	// Create a policy with fewer ancestors (normal case)
+	normalPolicy := &policiesfakes.FakePolicy{
+		GetNameStub: func() string {
+			return "policy-normal"
+		},
+		GetNamespaceStub: func() string {
+			return "test"
+		},
+		GetPolicyStatusStub: func() v1alpha2.PolicyStatus {
+			return v1alpha2.PolicyStatus{
+				Ancestors: []v1alpha2.PolicyAncestorStatus{}, // Empty ancestors list
+			}
+		},
+		GetObjectKindStub: func() schema.ObjectKind {
+			return &policiesfakes.FakeObjectKind{
+				GroupVersionKindStub: func() schema.GroupVersionKind {
+					return policyGVK
+				},
+			}
+		},
+		GetTargetRefsStub: func() []v1alpha2.LocalPolicyTargetReference {
+			return []v1alpha2.LocalPolicyTargetReference{
+				{
+					Group: v1.GroupName,
+					Kind:  kinds.Gateway,
+					Name:  v1.ObjectName("gateway2"),
+				},
+			}
+		},
+	}
+
+	// Create gateways
+	gateways := map[types.NamespacedName]*Gateway{
+		{Namespace: "test", Name: "gateway1"}: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gateway1", Namespace: "test"},
+			},
+			Conditions: []conditions.Condition{}, // Start with empty conditions
+		},
+		{Namespace: "test", Name: "gateway2"}: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gateway2", Namespace: "test"},
+			},
+			Conditions: []conditions.Condition{}, // Start with empty conditions
+		},
+	}
+
+	// Create test policies map
+	testPolicies := map[PolicyKey]policies.Policy{
+		{
+			NsName: types.NamespacedName{Namespace: "test", Name: "policy-full-ancestors"},
+			GVK:    policyGVK,
+		}: policyWithFullAncestors,
+		{
+			NsName: types.NamespacedName{Namespace: "test", Name: "policy-normal"},
+			GVK:    policyGVK,
+		}: normalPolicy,
+	}
+
+	// Create fake validator
+	validator := &policiesfakes.FakeValidator{
+		ValidateStub: func(_ policies.Policy) []conditions.Condition {
+			return nil
+		},
+		ConflictsStub: func(_, _ policies.Policy) bool {
+			return false
+		},
+	}
+
+	// Create empty routes and services for the test
+	routes := map[RouteKey]*L7Route{}
+	referencedServices := map[types.NamespacedName]*ReferencedService{}
+
+	g := NewWithT(t)
+
+	// Process policies which should trigger ancestor limit handling
+	processedPolicies := processPolicies(testPolicies, validator, routes, referencedServices, gateways)
+
+	// Create a graph and attach policies to trigger ancestor limit handling
+	graph := &Graph{
+		Gateways:    gateways,
+		NGFPolicies: processedPolicies,
+	}
+
+	// Call attachPolicies to trigger the ancestor limit logic
+	graph.attachPolicies(validator, "nginx-gateway", testLogger)
+
+	// Verify that the policy with full ancestors has no actual ancestors assigned
+	policyFullKey := PolicyKey{
+		NsName: types.NamespacedName{Namespace: "test", Name: "policy-full-ancestors"},
+		GVK:    policyGVK,
+	}
+	policyFull := graph.NGFPolicies[policyFullKey]
+	g.Expect(policyFull.Ancestors).To(BeEmpty(), "Policy with full ancestors should have no ancestors assigned")
+
+	// Verify that the normal policy gets its ancestor assigned
+	policyNormalKey := PolicyKey{NsName: types.NamespacedName{Namespace: "test", Name: "policy-normal"}, GVK: policyGVK}
+	policyNormal := graph.NGFPolicies[policyNormalKey]
+	g.Expect(policyNormal.Ancestors).To(HaveLen(1), "Normal policy should have ancestor assigned")
+
+	// Verify that gateway1 received the ancestor limit condition
+	gateway1 := gateways[types.NamespacedName{Namespace: "test", Name: "gateway1"}]
+	g.Expect(gateway1.Conditions).To(HaveLen(1), "Gateway should have received ancestor limit condition")
+
+	condition := gateway1.Conditions[0]
+	g.Expect(condition.Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+	g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+	g.Expect(condition.Reason).To(Equal(string(conditions.PolicyReasonAncestorLimitReached)))
+	g.Expect(condition.Message).To(ContainSubstring("ancestor status list has reached the maximum size of 16"))
+
+	// Verify that gateway2 did not receive any conditions (normal case)
+	gateway2 := gateways[types.NamespacedName{Namespace: "test", Name: "gateway2"}]
+	g.Expect(gateway2.Conditions).To(BeEmpty(), "Normal gateway should not have conditions")
+
+	// Verify logging occurred
+	logOutput := logBuf.String()
+	g.Expect(logOutput).To(ContainSubstring("Policy ancestor limit reached"))
+	g.Expect(logOutput).To(ContainSubstring("policy=test/policy-full-ancestors"))
+	g.Expect(logOutput).To(ContainSubstring("policyKind=TestPolicy"))
+	g.Expect(logOutput).To(ContainSubstring("ancestor=test/gateway1"))
+}
+
+// testNGFLogSink implements logr.LogSink for testing NGF policies.
+type testNGFLogSink struct {
+	buffer *bytes.Buffer
+}
+
+func (s *testNGFLogSink) Init(_ logr.RuntimeInfo) {}
+
+func (s *testNGFLogSink) Enabled(_ int) bool {
+	return true
+}
+
+func (s *testNGFLogSink) Info(_ int, msg string, keysAndValues ...interface{}) {
+	s.buffer.WriteString(msg)
+	for i := 0; i < len(keysAndValues); i += 2 {
+		if i+1 < len(keysAndValues) {
+			s.buffer.WriteString(" ")
+			if key, ok := keysAndValues[i].(string); ok {
+				s.buffer.WriteString(key)
+			}
+			s.buffer.WriteString("=")
+			if value, ok := keysAndValues[i+1].(string); ok {
+				s.buffer.WriteString(value)
+			}
+		}
+	}
+	s.buffer.WriteString("\n")
+}
+
+func (s *testNGFLogSink) Error(err error, msg string, _ ...interface{}) {
+	s.buffer.WriteString("ERROR: ")
+	s.buffer.WriteString(msg)
+	s.buffer.WriteString(" error=")
+	s.buffer.WriteString(err.Error())
+	s.buffer.WriteString("\n")
+}
+
+func (s *testNGFLogSink) WithValues(_ ...interface{}) logr.LogSink {
+	return s
+}
+
+func (s *testNGFLogSink) WithName(_ string) logr.LogSink {
+	return s
 }

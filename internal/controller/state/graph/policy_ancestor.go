@@ -13,16 +13,8 @@ import (
 
 const maxAncestors = 16
 
-// Package-level logger.
-var logger logr.Logger
-
-// SetLogger sets the logger for the graph package.
-func SetLogger(l logr.Logger) {
-	logger = l
-}
-
 // LogAncestorLimitReached logs when a policy ancestor limit is reached.
-func LogAncestorLimitReached(policyName, policyKind, ancestorName string) {
+func LogAncestorLimitReached(logger logr.Logger, policyName, policyKind, ancestorName string) {
 	logger.Info("Policy ancestor limit reached", "policy", policyName, "policyKind", policyKind, "ancestor", ancestorName)
 }
 

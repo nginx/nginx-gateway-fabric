@@ -202,8 +202,6 @@ func BuildGraph(
 	validators validation.Validators,
 	logger logr.Logger,
 ) *Graph {
-	// Set the logger for the graph package
-	SetLogger(logger)
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
 		// configured GatewayClass does not reference this controller
@@ -274,7 +272,7 @@ func BuildGraph(
 
 	referencedServices := buildReferencedServices(routes, l4routes, gws)
 
-	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName)
+	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
 	// policies must be processed last because they rely on the state of the other resources in the graph
 	processedPolicies := processPolicies(
@@ -307,7 +305,7 @@ func BuildGraph(
 		PlusSecrets:                plusSecrets,
 	}
 
-	g.attachPolicies(validators.PolicyValidator, controllerName)
+	g.attachPolicies(validators.PolicyValidator, controllerName, logger)
 
 	return g
 }

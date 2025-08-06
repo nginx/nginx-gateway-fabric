@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -70,7 +71,7 @@ const (
 )
 
 // attachPolicies attaches the graph's processed policies to the resources they target. It modifies the graph in place.
-func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName string) {
+func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName string, logger logr.Logger) {
 	if len(g.Gateways) == 0 {
 		return
 	}
@@ -79,21 +80,21 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 		for _, ref := range policy.TargetRefs {
 			switch ref.Kind {
 			case kinds.Gateway:
-				attachPolicyToGateway(policy, ref, g.Gateways, ctlrName)
+				attachPolicyToGateway(policy, ref, g.Gateways, ctlrName, logger)
 			case kinds.HTTPRoute, kinds.GRPCRoute:
 				route, exists := g.Routes[routeKeyForKind(ref.Kind, ref.Nsname)]
 				if !exists {
 					continue
 				}
 
-				attachPolicyToRoute(policy, route, validator, ctlrName)
+				attachPolicyToRoute(policy, route, validator, ctlrName, logger)
 			case kinds.Service:
 				svc, exists := g.ReferencedServices[ref.Nsname]
 				if !exists {
 					continue
 				}
 
-				attachPolicyToService(policy, svc, g.Gateways, ctlrName)
+				attachPolicyToService(policy, svc, g.Gateways, ctlrName, logger)
 			}
 		}
 	}
@@ -104,6 +105,7 @@ func attachPolicyToService(
 	svc *ReferencedService,
 	gws map[types.NamespacedName]*Gateway,
 	ctlrName string,
+	logger logr.Logger,
 ) {
 	var attachedToAnyGateway bool
 
@@ -132,7 +134,7 @@ func attachPolicyToService(
 			policyKind := getPolicyKind(policy.Source)
 
 			gw.Conditions = append(gw.Conditions, conditions.NewPolicyAncestorLimitReached(policyName))
-			LogAncestorLimitReached(policyName, policyKind, gwNsName.String())
+			LogAncestorLimitReached(logger, policyName, policyKind, gwNsName.String())
 
 			// Mark this gateway as invalid for the policy due to ancestor limits
 			policy.InvalidForGateways[gwNsName] = struct{}{}
@@ -161,7 +163,13 @@ func attachPolicyToService(
 	}
 }
 
-func attachPolicyToRoute(policy *Policy, route *L7Route, validator validation.PolicyValidator, ctlrName string) {
+func attachPolicyToRoute(
+	policy *Policy,
+	route *L7Route,
+	validator validation.PolicyValidator,
+	ctlrName string,
+	logger logr.Logger,
+) {
 	kind := v1.Kind(kinds.HTTPRoute)
 	if route.RouteType == RouteTypeGRPC {
 		kind = kinds.GRPCRoute
@@ -178,7 +186,7 @@ func attachPolicyToRoute(policy *Policy, route *L7Route, validator validation.Po
 		routeName := getAncestorName(ancestorRef)
 
 		route.Conditions = append(route.Conditions, conditions.NewPolicyAncestorLimitReached(policyName))
-		LogAncestorLimitReached(policyName, policyKind, routeName)
+		LogAncestorLimitReached(logger, policyName, policyKind, routeName)
 
 		return
 	}
@@ -227,6 +235,7 @@ func attachPolicyToGateway(
 	ref PolicyTargetRef,
 	gateways map[types.NamespacedName]*Gateway,
 	ctlrName string,
+	logger logr.Logger,
 ) {
 	ancestorRef := createParentReference(v1.GroupName, kinds.Gateway, ref.Nsname)
 	gw, exists := gateways[ref.Nsname]
@@ -255,7 +264,7 @@ func attachPolicyToGateway(
 			// Log in the controller log.
 			logger.Info("Gateway target not found and ancestors slice is full.", "policy", policyName, "ancestor", ancestorName)
 		}
-		LogAncestorLimitReached(policyName, policyKind, ancestorName)
+		LogAncestorLimitReached(logger, policyName, policyKind, ancestorName)
 
 		policy.InvalidForGateways[ref.Nsname] = struct{}{}
 		return

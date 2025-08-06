@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -185,6 +186,8 @@ func addGatewaysForBackendTLSPolicies(
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	services map[types.NamespacedName]*ReferencedService,
 	ctlrName string,
+	gateways map[types.NamespacedName]*Gateway,
+	logger logr.Logger,
 ) {
 	for _, backendTLSPolicy := range backendTLSPolicies {
 		potentialGateways := make(map[types.NamespacedName]struct{})
@@ -220,7 +223,15 @@ func addGatewaysForBackendTLSPolicies(
 			if isFull {
 				policyName := backendTLSPolicy.Source.Namespace + "/" + backendTLSPolicy.Source.Name
 				gatewayName := getAncestorName(proposedAncestor)
-				LogAncestorLimitReached(policyName, "BackendTLSPolicy", gatewayName)
+				gateway, ok := gateways[gatewayNsName]
+				if ok {
+					gateway.Conditions = append(gateway.Conditions, conditions.NewPolicyAncestorLimitReached(policyName))
+				} else {
+					// Not found in the graph, log the issue. I don't think this should happen.
+					logger.Info("Gateway not found in the graph", "policy", policyName, "ancestor", gatewayName)
+				}
+
+				LogAncestorLimitReached(logger, policyName, "BackendTLSPolicy", gatewayName)
 
 				continue
 			}
