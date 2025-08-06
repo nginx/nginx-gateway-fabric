@@ -28,8 +28,9 @@ const (
 )
 
 const (
-	expectedTargetRefKindError  = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
-	expectedTargetRefGroupError = `TargetRef Group must be gateway.networking.k8s.io.`
+	expectedTargetRefKindError       = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
+	expectedTargetRefGroupError      = `TargetRef Group must be gateway.networking.k8s.io.`
+	expectedHeaderWithoutServerError = `header can only be specified if server is specified`
 )
 
 const (
