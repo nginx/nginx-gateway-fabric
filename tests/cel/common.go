@@ -81,6 +81,7 @@ func uniqueResourceName(name string) string {
 	return fmt.Sprintf("%s-%d", name, randomPrimeNumber())
 }
 
+// validateCrd creates a k8s resource and validates it against the expected errors.
 func validateCrd(t *testing.T, wantErrors []string, g *WithT, crd client.Object, k8sClient client.Client) {
 	t.Helper()
 
