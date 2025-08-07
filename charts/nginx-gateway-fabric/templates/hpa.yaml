@@ -38,7 +38,7 @@ spec:
         type: Utilization
         averageUtilization: {{ . }}
   {{- end }}
-  {{- with .Values.autoscalingTemplate }}
+  {{- with .Values.nginxGateway.autoscalingTemplate }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
   {{- with .Values.nginxGateway.autoscaling.behavior }}
