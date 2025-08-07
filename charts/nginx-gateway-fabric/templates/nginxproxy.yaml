@@ -34,7 +34,7 @@ spec:
         {{- end }}
         {{- if .Values.nginx.autoscaling.templates }}
         templates:
-          {{- toYaml .Values.nginx.autoscaling.templates | nindent 8 }}
+          {{- toYaml .Values.nginx.autoscaling.templates | nindent 10 }}
         {{- end }}
       {{- end }}
       {{- if .Values.nginx.pod }}

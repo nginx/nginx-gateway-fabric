@@ -166,7 +166,7 @@ nginxGateway:
     # maxReplicas: 11
     # targetCPUUtilizationPercentage: 50
     # targetMemoryUtilizationPercentage: 50
-    # behavior: {}
+    # behavior:
       # scaleDown:
       #   stabilizationWindowSeconds: 300
       #   policies:
@@ -180,7 +180,7 @@ nginxGateway:
       #     value: 2
       #     periodSeconds: 60
     # Custom or additional autoscaling metrics. https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics
-    # templates: []
+    # templates:
     # - type: Pods
     #   pods:
     #     metric:
@@ -237,7 +237,7 @@ nginx:
     # maxReplicas: 11
     # targetCPUUtilizationPercentage: 50
     # targetMemoryUtilizationPercentage: 50
-    # behavior: {}
+    # behavior:
       # scaleDown:
       #   stabilizationWindowSeconds: 300
       #   policies:
@@ -251,7 +251,7 @@ nginx:
       #     value: 2
       #     periodSeconds: 60
     # Custom or additional autoscaling metrics. https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics
-    # templates: []
+    # templates:
     # - type: Pods
     #   pods:
     #     metric:

@@ -39,7 +39,7 @@ spec:
         averageUtilization: {{ . }}
   {{- end }}
   {{- with .Values.nginxGateway.autoscaling.templates }}
-  {{- toYaml . | nindent 2 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   {{- with .Values.nginxGateway.autoscaling.behavior }}
   behavior:
