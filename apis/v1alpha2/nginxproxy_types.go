@@ -436,6 +436,11 @@ type DeploymentSpec struct {
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 
+	// Autoscaling defines the configuration for Horizontal Pod Autoscaling.
+	//
+	// +optional
+	Autoscaling *HPASpec `json:"autoscaling,omitempty"`
+
 	// Pod defines Pod-specific fields.
 	//
 	// +optional
@@ -450,11 +455,6 @@ type DeploymentSpec struct {
 	//
 	// +optional
 	Patches []Patch `json:"patches,omitempty"`
-
-	// Autoscaling defines the configuration for Horizontal Pod Autoscaling.
-	//
-	// +optional
-	Autoscaling HPASpec `json:"autoscaling"`
 }
 
 // DaemonSet is the configuration for the NGINX DaemonSet.
