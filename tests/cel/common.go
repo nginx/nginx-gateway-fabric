@@ -1,16 +1,19 @@
 package cel
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"testing"
 
+	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
 const (
@@ -76,4 +79,27 @@ func randomPrimeNumber() int64 {
 // uniqueResourceName generates a unique resource name by appending a random prime number to the given name.
 func uniqueResourceName(name string) string {
 	return fmt.Sprintf("%s-%d", name, randomPrimeNumber())
+}
+
+func validateCrd(t *testing.T, wantErrors []string, g *WithT, crd client.Object, k8sClient client.Client) {
+	t.Helper()
+
+	timeoutConfig := framework.DefaultTimeoutConfig()
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.KubernetesClientTimeout)
+	err := k8sClient.Create(ctx, crd)
+	defer cancel()
+
+	// Clean up after test
+	defer func() {
+		_ = k8sClient.Delete(context.Background(), crd)
+	}()
+
+	if len(wantErrors) == 0 {
+		g.Expect(err).ToNot(HaveOccurred())
+	} else {
+		g.Expect(err).To(HaveOccurred())
+		for _, wantError := range wantErrors {
+			g.Expect(err.Error()).To(ContainSubstring(wantError), "Expected error '%s' not found in: %s", wantError, err.Error())
+		}
+	}
 }

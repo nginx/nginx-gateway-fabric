@@ -1,16 +1,13 @@
 package cel
 
 import (
-	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
 func TestNginxProxyKubernetes(t *testing.T) {
@@ -60,7 +57,17 @@ func TestNginxProxyKubernetes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			validateNginxProxy(t, tt, g, k8sClient)
+			policySpec := tt.policySpec
+			policyName := uniqueResourceName(testPolicyName)
+
+			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      policyName,
+					Namespace: defaultNamespace,
+				},
+				Spec: policySpec,
+			}
+			validateCrd(t, tt.wantErrors, g, nginxProxy, k8sClient)
 		})
 	}
 }
@@ -105,45 +112,17 @@ func TestNginxProxyRewriteClientIP(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			validateNginxProxy(t, tt, g, k8sClient)
+			policySpec := tt.policySpec
+			policyName := uniqueResourceName(testPolicyName)
+
+			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      policyName,
+					Namespace: defaultNamespace,
+				},
+				Spec: policySpec,
+			}
+			validateCrd(t, tt.wantErrors, g, nginxProxy, k8sClient)
 		})
-	}
-}
-
-func validateNginxProxy(t *testing.T, tt struct {
-	policySpec ngfAPIv1alpha2.NginxProxySpec
-	name       string
-	wantErrors []string
-}, g *WithT, k8sClient client.Client,
-) {
-	t.Helper()
-
-	policySpec := tt.policySpec
-	policyName := uniqueResourceName(testPolicyName)
-
-	nginxProxy := &ngfAPIv1alpha2.NginxProxy{
-		ObjectMeta: controllerruntime.ObjectMeta{
-			Name:      policyName,
-			Namespace: defaultNamespace,
-		},
-		Spec: policySpec,
-	}
-	timeoutConfig := framework.DefaultTimeoutConfig()
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.KubernetesClientTimeout)
-	err := k8sClient.Create(ctx, nginxProxy)
-	defer cancel()
-
-	// Clean up after test
-	defer func() {
-		_ = k8sClient.Delete(context.Background(), nginxProxy)
-	}()
-
-	if len(tt.wantErrors) == 0 {
-		g.Expect(err).ToNot(HaveOccurred())
-	} else {
-		g.Expect(err).To(HaveOccurred())
-		for _, wantError := range tt.wantErrors {
-			g.Expect(err.Error()).To(ContainSubstring(wantError), "Expected error '%s' not found in: %s", wantError, err.Error())
-		}
 	}
 }
