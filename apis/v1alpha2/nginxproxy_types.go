@@ -431,30 +431,30 @@ const (
 
 // Deployment is the configuration for the NGINX Deployment.
 type DeploymentSpec struct {
-	// Container defines container fields for the NGINX container.
-	//
-	// +optional
-	Container ContainerSpec `json:"container"`
-
 	// Number of desired Pods.
 	//
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
-
-	// Autoscaling defines the configuration for Horizontal Pod Autoscaling.
-	//
-	// +optional
-	Autoscaling HPASpec `json:"autoscaling"`
 
 	// Pod defines Pod-specific fields.
 	//
 	// +optional
 	Pod PodSpec `json:"pod"`
 
+	// Container defines container fields for the NGINX container.
+	//
+	// +optional
+	Container ContainerSpec `json:"container"`
+
 	// Patches are custom patches to apply to the NGINX Deployment.
 	//
 	// +optional
 	Patches []Patch `json:"patches,omitempty"`
+
+	// Autoscaling defines the configuration for Horizontal Pod Autoscaling.
+	//
+	// +optional
+	Autoscaling HPASpec `json:"autoscaling"`
 }
 
 // DaemonSet is the configuration for the NGINX DaemonSet.
@@ -489,11 +489,6 @@ type HPASpec struct {
 	// +optional
 	Behavior *autoscalingv2.HorizontalPodAutoscalerBehavior `json:"behavior,omitempty"`
 
-	// AutoscalingTemplate configures the additional scaling option.
-	//
-	// +optional
-	AutoscalingTemplate []autoscalingv2.MetricSpec `json:"autoscalingTemplate,omitempty"`
-
 	// Target cpu utilization percentage of HPA.
 	//
 	// +optional
@@ -514,11 +509,17 @@ type HPASpec struct {
 	// +kubebuilder:validation:Minimum=1
 	MinReplicas *int32 `json:"minReplicas,omitempty"`
 
+	// AutoscalingTemplate configures the additional scaling option.
+	//
+	// +optional
+	AutoscalingTemplate []autoscalingv2.MetricSpec `json:"autoscalingTemplate,omitempty"`
+
 	// Maximum number of replicas.
+	//
 	// +kubebuilder:validation:Minimum=1
 	MaxReplicas int32 `json:"maxReplicas"`
 
-	// Enable or disable Horizontal Pod Autoscaler
+	// Enable or disable Horizontal Pod Autoscaler.
 	Enabled bool `json:"enabled"`
 }
 

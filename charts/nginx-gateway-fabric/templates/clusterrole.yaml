@@ -8,7 +8,7 @@ rules:
 - apiGroups:
   - ""
   - apps
-  {{- if or .Values.nginx.autoscaling.enabled .Values.nginxGateway.autoscaling.enabled }}
+  {{- if .Values.nginx.autoscaling.enabled }}
   - autoscaling
   {{- end }}
   resources:
@@ -18,7 +18,7 @@ rules:
   - services
   - deployments
   - daemonsets
-  {{- if or .Values.nginx.autoscaling.enabled .Values.nginxGateway.autoscaling.enabled }}
+  {{- if .Values.nginx.autoscaling.enabled }}
   - horizontalpodautoscalers
   {{- end }}
   verbs:

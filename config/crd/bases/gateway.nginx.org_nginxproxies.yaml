@@ -4179,7 +4179,7 @@ spec:
                                 type: object
                             type: object
                           enabled:
-                            description: Enable or disable Horizontal Pod Autoscaler
+                            description: Enable or disable Horizontal Pod Autoscaler.
                             type: boolean
                           maxReplicas:
                             description: Maximum number of replicas.

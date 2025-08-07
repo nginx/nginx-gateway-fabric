@@ -383,6 +383,82 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(hpa.Spec.MaxReplicas).To(Equal(int32(5)))
 }
 
+func TestBuildNginxResourceObjects_DeploymentReplicasFromHPA(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Create a fake HPA with status.desiredReplicas set
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx",
+			Namespace: "default",
+		},
+		Status: autoscalingv2.HorizontalPodAutoscalerStatus{
+			DesiredReplicas: 7,
+		},
+	}
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+
+	fakeClient := fake.NewFakeClient(agentTLSSecret, hpa)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+				Version:   "1.0.0",
+				Image:     "ngf-image",
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+		},
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{"app": "nginx"},
+		},
+		k8sClient: fakeClient,
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
+	}
+
+	resourceName := "gw-nginx"
+	nProxyCfg := &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+				Replicas:    nil, // Should be overridden by HPA
+				Autoscaling: ngfAPIv1alpha2.HPASpec{Enabled: true},
+			},
+		},
+	}
+
+	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Find the deployment object
+	var deployment *appsv1.Deployment
+	for _, obj := range objects {
+		if d, ok := obj.(*appsv1.Deployment); ok {
+			deployment = d
+			break
+		}
+	}
+	g.Expect(deployment).ToNot(BeNil())
+	g.Expect(deployment.Spec.Replicas).ToNot(BeNil())
+	g.Expect(*deployment.Spec.Replicas).To(Equal(int32(7)))
+}
+
 func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -1121,8 +1197,8 @@ func TestBuildNginxResourceObjectsForDeletion_DataplaneKeySecret(t *testing.T) {
 	objects := provisioner.buildNginxResourceObjectsForDeletion(deploymentNSName)
 
 	// Should include the dataplane key secret in the objects list
-	// Default: deployment, daemonset, service, serviceaccount, 2 configmaps, agentTLSSecret, dataplaneKeySecret
-	g.Expect(objects).To(HaveLen(8))
+	// Default: deployment, daemonset, service, hpa, serviceaccount, 2 configmaps, agentTLSSecret, dataplaneKeySecret
+	g.Expect(objects).To(HaveLen(9))
 
 	validateMeta := func(obj client.Object, name string) {
 		g.Expect(obj.GetName()).To(Equal(name))

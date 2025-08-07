@@ -80,17 +80,6 @@ func newEventLoop(
 			},
 		},
 		{
-			objectType: &autoscalingv2.HorizontalPodAutoscaler{},
-			options: []controller.Option{
-				controller.WithK8sPredicate(
-					k8spredicate.And(
-						k8spredicate.GenerationChangedPredicate{},
-						nginxResourceLabelPredicate,
-					),
-				),
-			},
-		},
-		{
 			objectType: &appsv1.DaemonSet{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(
@@ -148,6 +137,16 @@ func newEventLoop(
 				),
 			},
 		},
+		{
+			objectType: &autoscalingv2.HorizontalPodAutoscaler{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(
+					k8spredicate.And(
+						nginxResourceLabelPredicate,
+					),
+				),
+			},
+		},
 	}
 
 	if isOpenshift {
@@ -201,6 +200,7 @@ func newEventLoop(
 		// to provision or deprovision any nginx resources.
 		&gatewayv1.GatewayList{},
 		&appsv1.DeploymentList{},
+		&appsv1.DaemonSetList{},
 		&autoscalingv2.HorizontalPodAutoscalerList{},
 		&corev1.ServiceList{},
 		&corev1.ServiceAccountList{},
