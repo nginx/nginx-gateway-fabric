@@ -65,6 +65,51 @@ func TestNginxProxyKubernetes(t *testing.T) {
 	}
 }
 
+func TestNginxProxyRewriteClientIP(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	k8sClient, err := getKubernetesClient(t)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	tests := []struct {
+		policySpec ngfAPIv1alpha2.NginxProxySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name:       "Validate NginxProxy is invalid when trustedAddresses is not set and mode is set",
+			wantErrors: []string{"if mode is set, trustedAddresses is a required field"},
+			policySpec: ngfAPIv1alpha2.NginxProxySpec{
+				RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
+					Mode: helpers.GetPointer[ngfAPIv1alpha2.RewriteClientIPModeType]("XForwardedFor"),
+				},
+			},
+		},
+		{
+			name: "Validate NginxProxy is valid when both mode and trustedAddresses are set",
+			policySpec: ngfAPIv1alpha2.NginxProxySpec{
+				RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
+					Mode: helpers.GetPointer[ngfAPIv1alpha2.RewriteClientIPModeType]("XForwardedFor"),
+					TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
+						{
+							Type:  ngfAPIv1alpha2.RewriteClientIPAddressType("CIDR"),
+							Value: "10.0.0.0/8",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			validateNginxProxy(t, tt, g, k8sClient)
+		})
+	}
+}
+
 func validateNginxProxy(t *testing.T, tt struct {
 	policySpec ngfAPIv1alpha2.NginxProxySpec
 	name       string
