@@ -202,7 +202,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 }
 
 func isAutoscalingEnabled(dep *ngfAPIv1alpha2.DeploymentSpec) bool {
-	return dep != nil && dep.Autoscaling != nil && dep.Autoscaling.Enabled
+	return dep != nil && dep.Autoscaling != nil && dep.Autoscaling.Enable
 }
 
 func (p *NginxProvisioner) buildHPA(
@@ -1143,7 +1143,7 @@ func buildNginxDeploymentHPA(
 	objectMeta metav1.ObjectMeta,
 	autoScaling *ngfAPIv1alpha2.HPASpec,
 ) *autoscalingv2.HorizontalPodAutoscaler {
-	if !autoScaling.Enabled {
+	if !autoScaling.Enable {
 		return nil
 	}
 	var metrics []autoscalingv2.MetricSpec

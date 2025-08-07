@@ -477,7 +477,7 @@ type DaemonSetSpec struct {
 
 // HPASpec is the configuration for the Horizontal Pod Autoscaling.
 //
-// +kubebuilder:validation:XValidation:message="at least one metric must be specified when autoscaling is enabled",rule="!self.enabled || (has(self.targetCPUUtilizationPercentage) || has(self.targetMemoryUtilizationPercentage) || (has(self.autoscalingTemplate) && size(self.autoscalingTemplate) > 0))"
+// +kubebuilder:validation:XValidation:message="at least one metric must be specified when autoscaling is enabled",rule="!self.enable || (has(self.targetCPUUtilizationPercentage) || has(self.targetMemoryUtilizationPercentage) || (has(self.autoscalingTemplate) && size(self.autoscalingTemplate) > 0))"
 // +kubebuilder:validation:XValidation:message="minReplicas must be less than or equal to maxReplicas",rule="self.minReplicas <= self.maxReplicas"
 //
 //nolint:lll
@@ -520,7 +520,7 @@ type HPASpec struct {
 	MaxReplicas int32 `json:"maxReplicas"`
 
 	// Enable or disable Horizontal Pod Autoscaler.
-	Enabled bool `json:"enabled"`
+	Enable bool `json:"enable"`
 }
 
 // PodSpec defines Pod-specific fields.

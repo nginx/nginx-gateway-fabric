@@ -288,7 +288,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
 				Replicas: helpers.GetPointer[int32](3),
 				Autoscaling: &ngfAPIv1alpha2.HPASpec{
-					Enabled:                           true,
+					Enable:                            true,
 					MinReplicas:                       helpers.GetPointer[int32](1),
 					MaxReplicas:                       5,
 					TargetMemoryUtilizationPercentage: helpers.GetPointer[int32](60),
@@ -438,7 +438,7 @@ func TestBuildNginxResourceObjects_DeploymentReplicasFromHPA(t *testing.T) {
 		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
 				Replicas:    nil, // Should be overridden by HPA
-				Autoscaling: &ngfAPIv1alpha2.HPASpec{Enabled: true},
+				Autoscaling: &ngfAPIv1alpha2.HPASpec{Enable: true},
 			},
 		},
 	}

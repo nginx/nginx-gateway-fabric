@@ -4763,7 +4763,7 @@ spec:
                                     x-kubernetes-int-or-string: true
                                 type: object
                             type: object
-                          enabled:
+                          enable:
                             description: Enable or disable Horizontal Pod Autoscaler.
                             type: boolean
                           maxReplicas:
@@ -4789,13 +4789,13 @@ spec:
                             minimum: 1
                             type: integer
                         required:
-                        - enabled
+                        - enable
                         - maxReplicas
                         type: object
                         x-kubernetes-validations:
                         - message: at least one metric must be specified when autoscaling
                             is enabled
-                          rule: '!self.enabled || (has(self.targetCPUUtilizationPercentage)
+                          rule: '!self.enable || (has(self.targetCPUUtilizationPercentage)
                             || has(self.targetMemoryUtilizationPercentage) || (has(self.autoscalingTemplate)
                             && size(self.autoscalingTemplate) > 0))'
                         - message: minReplicas must be less than or equal to maxReplicas
