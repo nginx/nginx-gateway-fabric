@@ -445,6 +445,44 @@
           "required": [],
           "title": "kind"
         },
+        "nginxOneConsole": {
+          "description": "Configuration for NGINX One Console.",
+          "properties": {
+            "dataplaneKeySecretName": {
+              "default": "",
+              "description": "Name of the secret which holds the dataplane key that is required to authenticate with the NGINX One Console.\nSecret must exist in the same namespace that the NGINX Gateway Fabric control plane is running in\n(default namespace: nginx-gateway).",
+              "required": [],
+              "title": "dataplaneKeySecretName",
+              "type": "string"
+            },
+            "endpointHost": {
+              "default": "agent.connect.nginx.com",
+              "description": "The Endpoint host that the NGINX One Console telemetry metrics will be sent to.",
+              "required": [],
+              "title": "endpointHost",
+              "type": "string"
+            },
+            "endpointPort": {
+              "default": 443,
+              "description": "The endpoint port that the NGINX One Console telemetry metrics will be sent to.",
+              "maximum": 65535,
+              "minimum": 1,
+              "required": [],
+              "title": "endpointPort",
+              "type": "integer"
+            },
+            "skipVerify": {
+              "default": false,
+              "description": "Skip TLS verification for NGINX One Console connections.",
+              "required": [],
+              "title": "skipVerify",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "nginxOneConsole",
+          "type": "object"
+        },
         "plus": {
           "default": false,
           "description": "Is NGINX Plus image being used.",

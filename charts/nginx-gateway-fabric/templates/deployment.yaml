@@ -103,6 +103,18 @@ spec:
         {{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
         - --nginx-scc={{ include "nginx-gateway.scc-name" . }}-nginx
         {{- end}}
+        {{- if .Values.nginx.nginxOneConsole.dataplaneKeySecretName }}
+        - --nginx-one-dataplane-key-secret={{ .Values.nginx.nginxOneConsole.dataplaneKeySecretName }}
+          {{- if .Values.nginx.nginxOneConsole.endpointHost }}
+        - --nginx-one-telemetry-endpoint-host={{ .Values.nginx.nginxOneConsole.endpointHost }}
+          {{- end }}
+          {{- if .Values.nginx.nginxOneConsole.endpointPort }}
+        - --nginx-one-telemetry-endpoint-port={{ .Values.nginx.nginxOneConsole.endpointPort }}
+          {{- end }}
+          {{- if .Values.nginx.nginxOneConsole.skipVerify }}
+        - --nginx-one-tls-skip-verify
+          {{- end }}
+        {{- end }}
         env:
         - name: POD_NAMESPACE
           valueFrom:

@@ -256,6 +256,8 @@ func (h *eventHandler) provisionResourceForAllGateways(
 
 // deprovisionSecretsForAllGateways cleans up any secrets that a user deleted that were duplicated
 // for all Gateways. For example, NGINX Plus secrets.
+//
+//nolint:gocyclo // will refactor at some point
 func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, secret string) error {
 	var allErrs []error
 
@@ -281,6 +283,10 @@ func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, sec
 			}
 		case strings.HasSuffix(resources.PlusClientSSLSecret.Name, secret):
 			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.PlusClientSSLSecret}); err != nil {
+				allErrs = append(allErrs, err)
+			}
+		case strings.HasSuffix(resources.DataplaneKeySecret.Name, secret):
+			if err := h.provisioner.deleteObject(ctx, &corev1.Secret{ObjectMeta: resources.DataplaneKeySecret}); err != nil {
 				allErrs = append(allErrs, err)
 			}
 		default:

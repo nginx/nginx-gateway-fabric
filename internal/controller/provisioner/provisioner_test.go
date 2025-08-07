@@ -25,16 +25,18 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift/openshiftfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/controllerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 const (
-	agentTLSTestSecretName = "agent-tls-secret"
-	jwtTestSecretName      = "jwt-secret"
-	caTestSecretName       = "ca-secret"
-	clientTestSecretName   = "client-secret"
-	dockerTestSecretName   = "docker-secret"
-	ngfNamespace           = "nginx-gateway"
+	agentTLSTestSecretName         = "agent-tls-secret"
+	jwtTestSecretName              = "jwt-secret"
+	caTestSecretName               = "ca-secret"
+	clientTestSecretName           = "client-secret"
+	dockerTestSecretName           = "docker-secret"
+	ngfNamespace                   = "nginx-gateway"
+	nginxOneDataplaneKeySecretName = "dataplane-key"
 )
 
 func createScheme() *runtime.Scheme {
@@ -164,6 +166,7 @@ func defaultNginxProvisioner(
 			jwtTestSecretName,
 			caTestSecretName,
 			clientTestSecretName,
+			nginxOneDataplaneKeySecretName,
 		),
 		k8sClient: fakeClient,
 		cfg: Config{
@@ -183,9 +186,29 @@ func defaultNginxProvisioner(
 			},
 			NginxDockerSecretNames: []string{dockerTestSecretName},
 			AgentTLSSecretName:     agentTLSTestSecretName,
+			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
+				DataplaneKeySecretName: "dataplane-key",
+				EndpointHost:           "agent.connect.nginx.com",
+				EndpointPort:           443,
+				EndpointTLSSkipVerify:  false,
+			},
+			AgentLabels: map[string]string{
+				"product-type":      "ngf",
+				"product-version":   "ngf-version",
+				"cluster-id":        "my-cluster-id",
+				"control-name":      "my-control-plane-name",
+				"control-id":        "my-control-plane-id",
+				"control-namespace": "my-control-plane-namespace",
+			},
 		},
 		leader: true,
 	}, fakeClient, deploymentStore
+}
+
+type fakeLabelCollector struct{}
+
+func (f *fakeLabelCollector) Collect(_ context.Context) (map[string]string, error) {
+	return map[string]string{"product-type": "fake"}, nil
 }
 
 func TestNewNginxProvisioner(t *testing.T) {
@@ -201,9 +224,16 @@ func TestNewNginxProvisioner(t *testing.T) {
 			InstanceName: "test-instance",
 		},
 		Logger: logr.Discard(),
+		NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
+			DataplaneKeySecretName: "dataplane-key",
+		},
 	}
 
 	apiChecker = &openshiftfakes.FakeAPIChecker{}
+	labelCollectorFactory = func(_ manager.Manager, _ Config) AgentLabelCollector {
+		return &fakeLabelCollector{}
+	}
+
 	provisioner, eventLoop, err := NewNginxProvisioner(context.TODO(), mgr, cfg)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(provisioner).NotTo(BeNil())
@@ -216,6 +246,8 @@ func TestNewNginxProvisioner(t *testing.T) {
 		},
 	}
 	g.Expect(provisioner.baseLabelSelector).To(Equal(labelSelector))
+
+	g.Expect(provisioner.store.dataplaneKeySecretName).To(Equal("dataplane-key"))
 }
 
 func TestEnable(t *testing.T) {
@@ -531,4 +563,22 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 	ds := &appsv1.DaemonSet{}
 	g.Expect(fakeClient.Get(context.TODO(), key, ds)).To(Succeed())
 	g.Expect(ds.Spec.Template.GetAnnotations()).To(HaveKey(controller.RestartedAnnotation))
+}
+
+func TestDefaultLabelCollectorFactory(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	mgr := &controllerfakes.FakeManager{}
+
+	cfg := Config{
+		GatewayPodConfig: &config.GatewayPodConfig{
+			Namespace: "pod-namespace",
+			Name:      "pod-name",
+			Version:   "my-version",
+		},
+	}
+
+	collector := defaultLabelCollectorFactory(mgr, cfg)
+	g.Expect(collector).NotTo(BeNil())
 }

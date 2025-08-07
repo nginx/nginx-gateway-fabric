@@ -71,6 +71,14 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		}
 	}
 
+	var dataplaneKeySecretName string
+	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
+		dataplaneKeySecretName = controller.CreateNginxResourceName(
+			resourceName,
+			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+		)
+	}
+
 	// map key is the new name, value is the original name
 	dockerSecretNames := make(map[string]string)
 	for _, name := range p.cfg.NginxDockerSecretNames {
@@ -112,6 +120,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		jwtSecretName,
 		caSecretName,
 		clientSSLSecretName,
+		dataplaneKeySecretName,
 	)
 	if err != nil {
 		errs = append(errs, err)
@@ -158,6 +167,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		jwtSecretName,
 		caSecretName,
 		clientSSLSecretName,
+		dataplaneKeySecretName,
 	)
 	if err != nil {
 		errs = append(errs, err)
@@ -190,6 +200,7 @@ func (p *NginxProvisioner) buildNginxSecrets(
 	jwtSecretName string,
 	caSecretName string,
 	clientSSLSecretName string,
+	dataplaneKeySecretName string,
 ) ([]client.Object, error) {
 	var secrets []client.Object
 	var errs []error
@@ -290,6 +301,24 @@ func (p *NginxProvisioner) buildNginxSecrets(
 		}
 	}
 
+	if dataplaneKeySecretName != "" {
+		newSecret, err := p.getAndUpdateSecret(
+			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+			metav1.ObjectMeta{
+				Name:        dataplaneKeySecretName,
+				Namespace:   objectMeta.Namespace,
+				Labels:      objectMeta.Labels,
+				Annotations: objectMeta.Annotations,
+			},
+			corev1.SecretTypeOpaque,
+		)
+		if err != nil {
+			errs = append(errs, err)
+		} else {
+			secrets = append(secrets, newSecret)
+		}
+	}
+
 	return secrets, errors.Join(errs...)
 }
 
@@ -379,10 +408,18 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		"Namespace":     p.cfg.GatewayPodConfig.Namespace,
 		"EnableMetrics": enableMetrics,
 		"MetricsPort":   metricsPort,
+		"AgentLabels":   p.cfg.AgentLabels,
 	}
 
 	if logging != nil && logging.AgentLevel != nil {
 		agentFields["LogLevel"] = *logging.AgentLevel
+	}
+
+	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
+		agentFields["NginxOneReporting"] = true
+		agentFields["EndpointHost"] = p.cfg.NginxOneConsoleTelemetryConfig.EndpointHost
+		agentFields["EndpointPort"] = strconv.Itoa(p.cfg.NginxOneConsoleTelemetryConfig.EndpointPort)
+		agentFields["EndpointTLSSkipVerify"] = p.cfg.NginxOneConsoleTelemetryConfig.EndpointTLSSkipVerify
 	}
 
 	agentCM := &corev1.ConfigMap{
@@ -540,6 +577,7 @@ func (p *NginxProvisioner) buildNginxDeployment(
 	jwtSecretName string,
 	caSecretName string,
 	clientSSLSecretName string,
+	dataplaneKeySecretName string,
 ) (client.Object, error) {
 	podTemplateSpec := p.buildNginxPodTemplateSpec(
 		objectMeta,
@@ -552,6 +590,7 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		jwtSecretName,
 		caSecretName,
 		clientSSLSecretName,
+		dataplaneKeySecretName,
 	)
 
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.DaemonSet != nil {
@@ -671,6 +710,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	jwtSecretName string,
 	caSecretName string,
 	clientSSLSecretName string,
+	dataplaneKeySecretName string,
 ) corev1.PodTemplateSpec {
 	containerPorts := make([]corev1.ContainerPort, 0, len(ports))
 	for port := range ports {
@@ -983,6 +1023,22 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		spec.Spec.Containers[0].VolumeMounts = volumeMounts
 	}
 
+	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
+		volumeMounts := spec.Spec.Containers[0].VolumeMounts
+
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "agent-dataplane-key",
+			MountPath: "/etc/nginx-agent/secrets/dataplane.key",
+			SubPath:   "dataplane.key",
+		})
+		spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
+			Name:         "agent-dataplane-key",
+			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: dataplaneKeySecretName}},
+		})
+
+		spec.Spec.Containers[0].VolumeMounts = volumeMounts
+	}
+
 	return spec
 }
 
@@ -1132,6 +1188,21 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 			},
 		}
 		objects = append(objects, jwtSecret)
+	}
+
+	var dataplaneKeySecretName string
+	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
+		dataplaneKeySecretName = controller.CreateNginxResourceName(
+			deploymentNSName.Name,
+			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+		)
+		dataplaneKeySecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dataplaneKeySecretName,
+				Namespace: deploymentNSName.Namespace,
+			},
+		}
+		objects = append(objects, dataplaneKeySecret)
 	}
 
 	return objects

@@ -414,6 +414,45 @@ func TestValidatePort(t *testing.T) {
 	}
 }
 
+func TestProtocolPort(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		port   int
+		expErr bool
+	}{
+		{
+			name:   "port under minimum allowed value",
+			port:   0,
+			expErr: true,
+		},
+		{
+			name:   "port over maximum allowed value",
+			port:   65536,
+			expErr: true,
+		},
+		{
+			name:   "valid port",
+			port:   443,
+			expErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			err := validateAnyPort(tc.port)
+			if !tc.expErr {
+				g.Expect(err).ToNot(HaveOccurred())
+			} else {
+				g.Expect(err).To(HaveOccurred())
+			}
+		})
+	}
+}
+
 func TestEnsureNoPortCollisions(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
