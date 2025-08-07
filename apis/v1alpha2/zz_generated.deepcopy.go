@@ -146,8 +146,8 @@ func (in *HPASpec) DeepCopyInto(out *HPASpec) {
 		*out = new(int32)
 		**out = **in
 	}
-	if in.AutoscalingTemplate != nil {
-		in, out := &in.AutoscalingTemplate, &out.AutoscalingTemplate
+	if in.Templates != nil {
+		in, out := &in.Templates, &out.Templates
 		*out = make([]v2.MetricSpec, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])

@@ -1117,28 +1117,6 @@ func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (str
 	return fmt.Sprintf("%s:%s", image, tag), pullPolicy
 }
 
-func getMetricTargetByType(target autoscalingv2.MetricTarget) autoscalingv2.MetricTarget {
-	switch target.Type {
-	case autoscalingv2.UtilizationMetricType:
-		return autoscalingv2.MetricTarget{
-			Type:               autoscalingv2.UtilizationMetricType,
-			AverageUtilization: target.AverageUtilization,
-		}
-	case autoscalingv2.AverageValueMetricType:
-		return autoscalingv2.MetricTarget{
-			Type:         autoscalingv2.AverageValueMetricType,
-			AverageValue: target.AverageValue,
-		}
-	case autoscalingv2.ValueMetricType:
-		return autoscalingv2.MetricTarget{
-			Type:  autoscalingv2.ValueMetricType,
-			Value: target.Value,
-		}
-	default:
-		return autoscalingv2.MetricTarget{}
-	}
-}
-
 func buildNginxDeploymentHPA(
 	objectMeta metav1.ObjectMeta,
 	autoScaling *ngfAPIv1alpha2.HPASpec,
@@ -1146,11 +1124,19 @@ func buildNginxDeploymentHPA(
 	if !autoScaling.Enable {
 		return nil
 	}
-	var metrics []autoscalingv2.MetricSpec
 
 	cpuUtil := autoScaling.TargetCPUUtilizationPercentage
 	memUtil := autoScaling.TargetMemoryUtilizationPercentage
-	autoscalingTemplate := autoScaling.AutoscalingTemplate
+
+	metricsLen := len(autoScaling.Templates)
+	if cpuUtil != nil {
+		metricsLen++
+	}
+	if memUtil != nil {
+		metricsLen++
+	}
+
+	metrics := make([]autoscalingv2.MetricSpec, 0, metricsLen)
 
 	if cpuUtil != nil {
 		metrics = append(metrics, autoscalingv2.MetricSpec{
@@ -1178,17 +1164,7 @@ func buildNginxDeploymentHPA(
 		})
 	}
 
-	for _, additionalAutoscaling := range autoscalingTemplate {
-		metric := buildAdditionalMetric(additionalAutoscaling)
-		if metric != nil {
-			metrics = append(metrics, *metric)
-		}
-	}
-
-	if len(metrics) == 0 {
-		// No metrics configured, skip HPA creation
-		return nil
-	}
+	metrics = append(metrics, autoScaling.Templates...)
 
 	return &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: objectMeta,
@@ -1203,61 +1179,6 @@ func buildNginxDeploymentHPA(
 			Metrics:     metrics,
 			Behavior:    autoScaling.Behavior,
 		},
-	}
-}
-
-func buildAdditionalMetric(additionalAutoscaling autoscalingv2.MetricSpec) *autoscalingv2.MetricSpec {
-	switch additionalAutoscaling.Type {
-	case autoscalingv2.ResourceMetricSourceType:
-		return &autoscalingv2.MetricSpec{
-			Type: additionalAutoscaling.Type,
-			Resource: &autoscalingv2.ResourceMetricSource{
-				Name:   additionalAutoscaling.Resource.Name,
-				Target: getMetricTargetByType(additionalAutoscaling.Resource.Target),
-			},
-		}
-	case autoscalingv2.PodsMetricSourceType:
-		return &autoscalingv2.MetricSpec{
-			Type: additionalAutoscaling.Type,
-			Pods: &autoscalingv2.PodsMetricSource{
-				Metric: additionalAutoscaling.Pods.Metric,
-				Target: getMetricTargetByType(additionalAutoscaling.Pods.Target),
-			},
-		}
-	case autoscalingv2.ContainerResourceMetricSourceType:
-		return &autoscalingv2.MetricSpec{
-			Type: additionalAutoscaling.Type,
-			ContainerResource: &autoscalingv2.ContainerResourceMetricSource{
-				Name:      additionalAutoscaling.ContainerResource.Name,
-				Target:    getMetricTargetByType(additionalAutoscaling.ContainerResource.Target),
-				Container: additionalAutoscaling.ContainerResource.Container,
-			},
-		}
-	case autoscalingv2.ObjectMetricSourceType:
-		return &autoscalingv2.MetricSpec{
-			Type: additionalAutoscaling.Type,
-			Object: &autoscalingv2.ObjectMetricSource{
-				DescribedObject: additionalAutoscaling.Object.DescribedObject,
-				Target:          getMetricTargetByType(additionalAutoscaling.Object.Target),
-				Metric: autoscalingv2.MetricIdentifier{
-					Name:     additionalAutoscaling.Object.Metric.Name,
-					Selector: additionalAutoscaling.Object.Metric.Selector,
-				},
-			},
-		}
-	case autoscalingv2.ExternalMetricSourceType:
-		return &autoscalingv2.MetricSpec{
-			Type: additionalAutoscaling.Type,
-			External: &autoscalingv2.ExternalMetricSource{
-				Metric: autoscalingv2.MetricIdentifier{
-					Name:     additionalAutoscaling.External.Metric.Name,
-					Selector: additionalAutoscaling.External.Metric.Selector,
-				},
-				Target: getMetricTargetByType(additionalAutoscaling.External.Target),
-			},
-		}
-	default:
-		return nil
 	}
 }
 
