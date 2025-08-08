@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -136,6 +137,16 @@ func newEventLoop(
 				),
 			},
 		},
+		{
+			objectType: &autoscalingv2.HorizontalPodAutoscaler{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(
+					k8spredicate.And(
+						nginxResourceLabelPredicate,
+					),
+				),
+			},
+		},
 	}
 
 	if isOpenshift {
@@ -189,6 +200,8 @@ func newEventLoop(
 		// to provision or deprovision any nginx resources.
 		&gatewayv1.GatewayList{},
 		&appsv1.DeploymentList{},
+		&appsv1.DaemonSetList{},
+		&autoscalingv2.HorizontalPodAutoscalerList{},
 		&corev1.ServiceList{},
 		&corev1.ServiceAccountList{},
 		&corev1.ConfigMapList{},

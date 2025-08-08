@@ -4,6 +4,7 @@ import (
 	"maps"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +17,8 @@ func objectSpecSetter(object client.Object) controllerutil.MutateFn {
 	switch obj := object.(type) {
 	case *appsv1.Deployment:
 		return deploymentSpecSetter(obj, obj.Spec, obj.ObjectMeta)
+	case *autoscalingv2.HorizontalPodAutoscaler:
+		return hpaSpecSetter(obj, obj.Spec, obj.ObjectMeta)
 	case *appsv1.DaemonSet:
 		return daemonSetSpecSetter(obj, obj.Spec, obj.ObjectMeta)
 	case *corev1.Service:
@@ -44,6 +47,19 @@ func deploymentSpecSetter(
 		deployment.Labels = objectMeta.Labels
 		deployment.Annotations = objectMeta.Annotations
 		deployment.Spec = spec
+		return nil
+	}
+}
+
+func hpaSpecSetter(
+	hpa *autoscalingv2.HorizontalPodAutoscaler,
+	spec autoscalingv2.HorizontalPodAutoscalerSpec,
+	objectMeta metav1.ObjectMeta,
+) controllerutil.MutateFn {
+	return func() error {
+		hpa.Labels = objectMeta.Labels
+		hpa.Annotations = objectMeta.Annotations
+		hpa.Spec = spec
 		return nil
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +21,7 @@ import (
 type NginxResources struct {
 	Gateway             *graph.Gateway
 	Deployment          metav1.ObjectMeta
+	HPA                 metav1.ObjectMeta
 	DaemonSet           metav1.ObjectMeta
 	Service             metav1.ObjectMeta
 	ServiceAccount      metav1.ObjectMeta
@@ -138,6 +140,14 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 			}
 		} else {
 			cfg.Deployment = obj.ObjectMeta
+		}
+	case *autoscalingv2.HorizontalPodAutoscaler:
+		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
+			s.nginxResources[gatewayNSName] = &NginxResources{
+				HPA: obj.ObjectMeta,
+			}
+		} else {
+			cfg.HPA = obj.ObjectMeta
 		}
 	case *appsv1.DaemonSet:
 		if cfg, ok := s.nginxResources[gatewayNSName]; !ok {
@@ -313,6 +323,10 @@ func (s *store) gatewayExistsForResource(object client.Object, nsName types.Name
 			if resourceMatches(resources.Deployment, nsName) {
 				return resources.Gateway
 			}
+		case *autoscalingv2.HorizontalPodAutoscaler:
+			if resourceMatches(resources.HPA, nsName) {
+				return resources.Gateway
+			}
 		case *appsv1.DaemonSet:
 			if resourceMatches(resources.DaemonSet, nsName) {
 				return resources.Gateway
@@ -394,6 +408,10 @@ func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, 
 	case *appsv1.Deployment:
 		if resources.Deployment.GetName() == obj.GetName() {
 			return resources.Deployment.GetResourceVersion()
+		}
+	case *autoscalingv2.HorizontalPodAutoscaler:
+		if resources.HPA.GetName() == obj.GetName() {
+			return resources.HPA.GetResourceVersion()
 		}
 	case *appsv1.DaemonSet:
 		if resources.DaemonSet.GetName() == obj.GetName() {

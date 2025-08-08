@@ -12,6 +12,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -487,6 +488,7 @@ func (p *NginxProvisioner) RegisterGateway(
 		}
 
 		// If NGINX deployment type switched between Deployment and DaemonSet, clean up the old one.
+		// If HPA was disabled, remove it.
 		nginxResources := p.store.getNginxResourcesForGateway(gatewayNSName)
 		if nginxResources != nil {
 			if needToDeleteDaemonSet(nginxResources) {
@@ -495,6 +497,12 @@ func (p *NginxProvisioner) RegisterGateway(
 				}
 			} else if needToDeleteDeployment(nginxResources) {
 				if err := p.deleteObject(ctx, &appsv1.Deployment{ObjectMeta: nginxResources.Deployment}); err != nil {
+					p.cfg.Logger.Error(err, "error deleting nginx resource")
+				}
+			}
+
+			if needToDeleteHPA(nginxResources) {
+				if err := p.deleteObject(ctx, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: nginxResources.HPA}); err != nil {
 					p.cfg.Logger.Error(err, "error deleting nginx resource")
 				}
 			}
@@ -533,6 +541,21 @@ func needToDeleteDaemonSet(cfg *NginxResources) bool {
 		} else if cfg.Gateway.EffectiveNginxProxy == nil ||
 			cfg.Gateway.EffectiveNginxProxy.Kubernetes == nil ||
 			cfg.Gateway.EffectiveNginxProxy.Kubernetes.DaemonSet == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+func needToDeleteHPA(cfg *NginxResources) bool {
+	if cfg.HPA.Name != "" && cfg.Gateway != nil {
+		if cfg.Gateway.EffectiveNginxProxy != nil &&
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes != nil &&
+			!isAutoscalingEnabled(cfg.Gateway.EffectiveNginxProxy.Kubernetes.Deployment) {
+			return true
+		} else if cfg.Gateway.EffectiveNginxProxy == nil ||
+			cfg.Gateway.EffectiveNginxProxy.Kubernetes == nil {
 			return true
 		}
 	}
