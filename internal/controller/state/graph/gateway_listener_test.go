@@ -865,6 +865,38 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 			},
 			expectedCondition: false,
 		},
+		{
+			name: "no overlap - HTTP and HTTPS listeners with same hostname and port",
+			gateway: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test-ns",
+				},
+				Spec: v1.GatewaySpec{
+					Listeners: []v1.Listener{
+						{
+							Name:     "listener1",
+							Port:     80,
+							Protocol: v1.HTTPProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
+						},
+						{
+							Name:     "listener2",
+							Port:     80,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret1"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedCondition: false,
+		},
 	}
 
 	for _, test := range tests {
