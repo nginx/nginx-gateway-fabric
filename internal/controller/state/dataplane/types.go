@@ -33,6 +33,10 @@ type Configuration struct {
 	SSLServers []VirtualServer
 	// TLSPassthroughServers hold all TLSPassthroughServers
 	TLSPassthroughServers []Layer4VirtualServer
+	// TCPServers holds all TCPServers
+	TCPServers []Layer4VirtualServer
+	// UDPServers holds all UDPServers
+	UDPServers []Layer4VirtualServer
 	// Upstreams holds all unique http Upstreams.
 	Upstreams []Upstream
 	// DeploymentContext contains metadata about NGF and the cluster.
@@ -42,6 +46,10 @@ type Configuration struct {
 	AuxiliarySecrets map[graph.SecretFileType][]byte
 	// StreamUpstreams holds all unique stream Upstreams
 	StreamUpstreams []Upstream
+	// TCPUpstreams holds all unique TCP Upstreams
+	TCPUpstreams []Upstream
+	// UDPUpstreams holds all unique UDP Upstreams
+	UDPUpstreams []Upstream
 	// BackendGroups holds all unique BackendGroups.
 	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
