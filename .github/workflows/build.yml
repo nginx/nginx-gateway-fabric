@@ -27,7 +27,7 @@ jobs:
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
       packages: write # for docker/build-push-action to push to GHCR
       id-token: write # for docker/login to login to NGINX registry
-    runs-on: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') && 'kic-plus' || 'ubuntu-24.04' }}
+    runs-on: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') && 'kic-plus' || (github.repository_owner == 'nginx' && (github.ref_type == 'tag' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-22.04-amd64') || 'ubuntu-24.04' }}
     services:
       registry:
         image: registry:3

@@ -17,6 +17,9 @@ defaults:
   run:
     shell: bash
 
+env:
+  GOPROXY: ${{ github.repository_owner == 'nginx' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.ref_type == 'tag') && format('https://{0}:{1}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-local-approved-dependency', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN) || github.repository_owner == 'nginx' && format('https://{0}:{1}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-dev', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN) || 'direct' }}
+
 concurrency:
   group: ${{ github.ref_name }}-ci
   cancel-in-progress: true
@@ -128,7 +131,7 @@ jobs:
 
   binary:
     name: Build Binary
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.repository_owner == 'nginx' && (github.ref_type == 'tag' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-22.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, unit-tests, njs-unit-tests]
     permissions:
       contents: write # for goreleaser/goreleaser-action and lucacome/draft-release to create/update releases
@@ -285,7 +288,7 @@ jobs:
 
   publish-helm:
     name: Package and Publish Helm Chart
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.repository_owner == 'nginx' && (github.ref_type == 'tag' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-22.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, helm-tests]
     if: ${{ github.event_name == 'push' && ! startsWith(github.ref, 'refs/heads/release-') }}
     permissions:
