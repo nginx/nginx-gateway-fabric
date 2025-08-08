@@ -1119,7 +1119,7 @@ func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (str
 
 func buildNginxDeploymentHPA(
 	objectMeta metav1.ObjectMeta,
-	autoScaling *ngfAPIv1alpha2.HPASpec,
+	autoScaling *ngfAPIv1alpha2.AutoscalingSpec,
 ) *autoscalingv2.HorizontalPodAutoscaler {
 	if !autoScaling.Enable {
 		return nil
@@ -1128,7 +1128,7 @@ func buildNginxDeploymentHPA(
 	cpuUtil := autoScaling.TargetCPUUtilizationPercentage
 	memUtil := autoScaling.TargetMemoryUtilizationPercentage
 
-	metricsLen := len(autoScaling.Templates)
+	metricsLen := len(autoScaling.Metrics)
 	if cpuUtil != nil {
 		metricsLen++
 	}
@@ -1164,7 +1164,7 @@ func buildNginxDeploymentHPA(
 		})
 	}
 
-	metrics = append(metrics, autoScaling.Templates...)
+	metrics = append(metrics, autoScaling.Metrics...)
 
 	return &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: objectMeta,

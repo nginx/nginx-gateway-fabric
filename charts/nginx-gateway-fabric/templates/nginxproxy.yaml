@@ -32,9 +32,9 @@ spec:
         behavior:
           {{- toYaml .Values.nginx.autoscaling.behavior | nindent 10 }}
         {{- end }}
-        {{- if .Values.nginx.autoscaling.templates }}
-        templates:
-          {{- toYaml .Values.nginx.autoscaling.templates | nindent 10 }}
+        {{- if .Values.nginx.autoscaling.metrics }}
+        metrics:
+          {{- toYaml .Values.nginx.autoscaling.metrics | nindent 10 }}
         {{- end }}
       {{- end }}
       {{- if .Values.nginx.pod }}

@@ -4294,25 +4294,8 @@ spec:
                             format: int32
                             minimum: 1
                             type: integer
-                          minReplicas:
-                            description: Minimum number of replicas.
-                            format: int32
-                            minimum: 1
-                            type: integer
-                          targetCPUUtilizationPercentage:
-                            description: Target cpu utilization percentage of HPA.
-                            format: int32
-                            maximum: 100
-                            minimum: 1
-                            type: integer
-                          targetMemoryUtilizationPercentage:
-                            description: Target memory utilization percentage of HPA.
-                            format: int32
-                            maximum: 100
-                            minimum: 1
-                            type: integer
-                          templates:
-                            description: Templates configures additional metrics options.
+                          metrics:
+                            description: Metrics configures additional metrics options.
                             items:
                               description: |-
                                 MetricSpec specifies how to scale based on a single metric
@@ -4787,6 +4770,23 @@ spec:
                               - type
                               type: object
                             type: array
+                          minReplicas:
+                            description: Minimum number of replicas.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          targetCPUUtilizationPercentage:
+                            description: Target cpu utilization percentage of HPA.
+                            format: int32
+                            maximum: 100
+                            minimum: 1
+                            type: integer
+                          targetMemoryUtilizationPercentage:
+                            description: Target memory utilization percentage of HPA.
+                            format: int32
+                            maximum: 100
+                            minimum: 1
+                            type: integer
                         required:
                         - enable
                         - maxReplicas

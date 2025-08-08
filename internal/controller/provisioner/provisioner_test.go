@@ -445,7 +445,7 @@ func TestRegisterGateway_CleansUpOldHPA(t *testing.T) {
 		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 				Deployment: &ngfAPIv1alpha2.DeploymentSpec{
-					Autoscaling: &ngfAPIv1alpha2.HPASpec{
+					Autoscaling: &ngfAPIv1alpha2.AutoscalingSpec{
 						Enable: false,
 					},
 				},

@@ -180,7 +180,7 @@ nginxGateway:
       #     value: 2
       #     periodSeconds: 60
     # Custom or additional autoscaling metrics. https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics
-    # templates:
+    # metrics:
     # - type: Pods
     #   pods:
     #     metric:
@@ -251,7 +251,7 @@ nginx:
       #     value: 2
       #     periodSeconds: 60
     # Custom or additional autoscaling metrics. https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics
-    # templates:
+    # metrics:
     # - type: Pods
     #   pods:
     #     metric:

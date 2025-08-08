@@ -439,7 +439,7 @@ type DeploymentSpec struct {
 	// Autoscaling defines the configuration for Horizontal Pod Autoscaling.
 	//
 	// +optional
-	Autoscaling *HPASpec `json:"autoscaling,omitempty"`
+	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
 
 	// Pod defines Pod-specific fields.
 	//
@@ -475,12 +475,12 @@ type DaemonSetSpec struct {
 	Patches []Patch `json:"patches,omitempty"`
 }
 
-// HPASpec is the configuration for the Horizontal Pod Autoscaling.
+// AutoscalingSpec is the configuration for the Horizontal Pod Autoscaling.
 //
 // +kubebuilder:validation:XValidation:message="minReplicas must be less than or equal to maxReplicas",rule="(!has(self.minReplicas)) || (self.minReplicas <= self.maxReplicas)"
 //
 //nolint:lll
-type HPASpec struct {
+type AutoscalingSpec struct {
 	// Behavior configures the scaling behavior of the target
 	// in both Up and Down directions (scaleUp and scaleDown fields respectively).
 	// If not set, the default HPAScalingRules for scale up and scale down are used.
@@ -508,10 +508,10 @@ type HPASpec struct {
 	// +kubebuilder:validation:Minimum=1
 	MinReplicas *int32 `json:"minReplicas,omitempty"`
 
-	// Templates configures additional metrics options.
+	// Metrics configures additional metrics options.
 	//
 	// +optional
-	Templates []autoscalingv2.MetricSpec `json:"templates,omitempty"`
+	Metrics []autoscalingv2.MetricSpec `json:"metrics,omitempty"`
 
 	// Maximum number of replicas.
 	//
