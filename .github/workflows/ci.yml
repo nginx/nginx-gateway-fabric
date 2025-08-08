@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - release-*
+      - chore/secure-build-pipeline
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+*"
   pull_request:
@@ -18,7 +19,7 @@ defaults:
     shell: bash
 
 env:
-  GOPROXY: ${{ github.repository_owner == 'nginx' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.ref_type == 'tag') && format('https://{0}:{1}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-local-approved-dependency', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN) || github.repository_owner == 'nginx' && format('https://{0}:{1}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-dev', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN) || 'direct' }}
+  GOPROXY: ${{ github.repository_owner == 'nginx' && ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/chore/secure-build-pipeline')) || github.ref_type == 'tag') && format('https://{0}:{1}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-local-approved-dependency', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN) || github.repository_owner == 'nginx' && format('https://{0}:{1}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-dev,direct', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN) || 'direct' }}
 
 concurrency:
   group: ${{ github.ref_name }}-ci
@@ -31,6 +32,9 @@ jobs:
   vars:
     name: Checks and variables
     runs-on: ubuntu-24.04
+    env:
+      # Use dev GOPROXY with fallback for CI checks (not production artifacts)
+      GOPROXY: ${{ github.repository_owner == 'nginx' && format('https://{0}:{1}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-dev,direct', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN) || 'direct' }}
     outputs:
       go_path: ${{ steps.vars.outputs.go_path }}
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
@@ -131,7 +135,7 @@ jobs:
 
   binary:
     name: Build Binary
-    runs-on: ${{ github.repository_owner == 'nginx' && (github.ref_type == 'tag' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    runs-on: ${{ github.repository_owner == 'nginx' && (github.ref_type == 'tag' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/chore/secure-build-pipeline'))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, unit-tests, njs-unit-tests]
     permissions:
       contents: write # for goreleaser/goreleaser-action and lucacome/draft-release to create/update releases
@@ -151,6 +155,12 @@ jobs:
             go.sum
             .github/.cache/buster-for-binary
 
+      - name: Set Go module cache
+        run: |
+          mkdir -p ${{ github.workspace }}/.gocache
+          echo "GOMODCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
+          echo "GOCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
+
       - name: Create/Update Draft
         uses: lucacome/draft-release@00f74370c044c322da6cb52acc707d62c7762c71 # v1.2.4
         with:
@@ -161,7 +171,7 @@ jobs:
           notes-header: |
             *Below is the auto-generated changelog, which includes all PRs that went into the release.
             For a shorter version that highlights only important changes, see [CHANGELOG.md](https://github.com/nginx/nginx-gateway-fabric/blob/{{version}}/CHANGELOG.md).*
-        if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
+        if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/chore/secure-build-pipeline' }}
 
       - name: Download Syft
         uses: anchore/sbom-action/download-syft@7b36ad622f042cab6f59a75c2ac24ccb256e9b45 # v0.20.4
@@ -175,14 +185,14 @@ jobs:
         uses: goreleaser/goreleaser-action@9c156ee8a17a598857849441385a2041ef570552 # v6.3.0
         with:
           version: v2.11.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          args: ${{ github.ref_type == 'tag' && 'release' || 'build --snapshot' }} --clean
+          args: ${{ github.ref_type == 'tag' && github.ref != 'refs/heads/chore/secure-build-pipeline' && 'release' || 'build --snapshot' }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
-          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-          AZURE_BUCKET_NAME: ${{ secrets.AZURE_BUCKET_NAME }}
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_COMMUNITY }}
+          AZURE_STORAGE_ACCOUNT: ${{ github.ref != 'refs/heads/chore/secure-build-pipeline' && secrets.AZURE_STORAGE_ACCOUNT || '' }}
+          AZURE_STORAGE_KEY: ${{ github.ref != 'refs/heads/chore/secure-build-pipeline' && secrets.AZURE_STORAGE_KEY || '' }}
+          AZURE_BUCKET_NAME: ${{ github.ref != 'refs/heads/chore/secure-build-pipeline' && secrets.AZURE_BUCKET_NAME || '' }}
+          SLACK_WEBHOOK: ${{ github.ref != 'refs/heads/chore/secure-build-pipeline' && secrets.SLACK_WEBHOOK_COMMUNITY || '' }}
           TELEMETRY_ENDPOINT: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release-') && 'oss-dev.edge.df.f5.com:443' || 'oss.edge.df.f5.com:443' }}
           TELEMETRY_ENDPOINT_INSECURE: "false"
 
@@ -288,9 +298,9 @@ jobs:
 
   publish-helm:
     name: Package and Publish Helm Chart
-    runs-on: ${{ github.repository_owner == 'nginx' && (github.ref_type == 'tag' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    runs-on: ${{ github.repository_owner == 'nginx' && (github.ref_type == 'tag' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/chore/secure-build-pipeline'))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, helm-tests]
-    if: ${{ github.event_name == 'push' && ! startsWith(github.ref, 'refs/heads/release-') }}
+    if: ${{ github.event_name == 'push' && ! startsWith(github.ref, 'refs/heads/release-') && github.ref != 'refs/heads/chore/secure-build-pipeline' }}
     permissions:
       contents: read
       packages: write # for helm to push to GHCR
