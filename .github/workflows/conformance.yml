@@ -20,6 +20,7 @@ defaults:
 env:
   PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
   ENABLE_EXPERIMENTAL: ${{ inputs.enable-experimental }}
+  GOPROXY: ${{ github.repository_owner == 'nginx' && format('https://{0}:{1}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-dev', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN) || 'direct' }}
 
 permissions:
   contents: read

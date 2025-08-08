@@ -11,6 +11,9 @@ defaults:
   run:
     shell: bash
 
+env:
+  GOPROXY: ${{ github.repository_owner == 'nginx' && format('https://{0}:{1}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-dev', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN) || 'direct' }}
+
 concurrency:
   group: ${{ github.ref_name }}-renovate
   cancel-in-progress: true
