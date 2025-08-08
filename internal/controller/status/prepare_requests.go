@@ -283,13 +283,11 @@ func prepareGatewayRequest(
 
 	validListenerCount := 0
 	for _, l := range gateway.Listeners {
-		var conds []conditions.Condition
+		conds := l.Conditions
 
 		if l.Valid {
-			conds = conditions.NewDefaultListenerConditions()
+			conds = append(conds, conditions.NewDefaultListenerConditions(conds)...)
 			validListenerCount++
-		} else {
-			conds = l.Conditions
 		}
 
 		if nginxReloadRes.Error != nil {
