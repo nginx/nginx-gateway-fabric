@@ -29,6 +29,11 @@ const (
 	ListenerMessageFailedNginxReload = "The Listener is not programmed due to a failure to " +
 		"reload nginx with the configuration"
 
+	// ListenerMessageOverlappingHostnames is a message used with the "OverlappingTLSConfig" condition when the
+	// condition is true due to overlapping hostnames.
+	ListenerMessageOverlappingHostnames = "Listener hostname overlaps with hostname(s) of other Listener(s) " +
+		"on the same port"
+
 	// RouteReasonBackendRefUnsupportedValue is used with the "ResolvedRefs" condition when one of the
 	// Route rules has a backendRef with an unsupported value.
 	RouteReasonBackendRefUnsupportedValue v1.RouteConditionReason = "UnsupportedValue"
@@ -501,13 +506,32 @@ func NewRouteResolvedRefsInvalidFilter(msg string) Condition {
 }
 
 // NewDefaultListenerConditions returns the default Conditions that must be present in the status of a Listener.
-func NewDefaultListenerConditions() []Condition {
-	return []Condition{
+// If existingConditions contains conflict-related conditions (like OverlappingTLSConfig or Conflicted),
+// the NoConflicts condition is excluded to avoid conflicting condition states.
+func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
+	defaultConds := []Condition{
 		NewListenerAccepted(),
 		NewListenerProgrammed(),
 		NewListenerResolvedRefs(),
-		NewListenerNoConflicts(),
 	}
+
+	// Only add NoConflicts condition if there are no existing conflict-related conditions
+	if !hasConflictConditions(existingConditions) {
+		defaultConds = append(defaultConds, NewListenerNoConflicts())
+	}
+
+	return defaultConds
+}
+
+// hasConflictConditions checks if the listener has any conflict-related conditions.
+func hasConflictConditions(conditions []Condition) bool {
+	for _, cond := range conditions {
+		if cond.Type == string(v1.ListenerConditionConflicted) ||
+			cond.Type == string(v1.ListenerConditionOverlappingTLSConfig) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewListenerAccepted returns a Condition that indicates that the Listener is accepted.
@@ -678,6 +702,17 @@ func NewListenerRefNotPermitted(msg string) []Condition {
 			Message: msg,
 		},
 		NewListenerNotProgrammedInvalid(msg),
+	}
+}
+
+// NewListenerOverlappingTLSConfig returns a Condition that indicates overlapping TLS configuration
+// between Listeners on the same port.
+func NewListenerOverlappingTLSConfig(reason v1.ListenerConditionReason, msg string) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionOverlappingTLSConfig),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(reason),
+		Message: msg,
 	}
 }
 

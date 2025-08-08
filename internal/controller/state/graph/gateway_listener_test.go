@@ -637,3 +637,311 @@ func TestValidateTLSFieldOnTLSListener(t *testing.T) {
 		})
 	}
 }
+
+func TestOverlappingTLSConfigCondition(t *testing.T) {
+	t.Parallel()
+
+	protectedPorts := ProtectedPorts{9113: "MetricsPort"}
+
+	tests := []struct {
+		gateway           *v1.Gateway
+		name              string
+		conditionReason   v1.ListenerConditionReason
+		expectedCondition bool
+	}{
+		{
+			name: "overlapping hostnames on same port",
+			gateway: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test-ns",
+				},
+				Spec: v1.GatewaySpec{
+					Listeners: []v1.Listener{
+						{
+							Name:     "listener1",
+							Port:     443,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("*.example.com"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret1"},
+								},
+							},
+						},
+						{
+							Name:     "listener2",
+							Port:     443,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret2"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedCondition: true,
+			conditionReason:   v1.ListenerReasonOverlappingHostnames,
+		},
+		{
+			name: "no overlap - different ports",
+			gateway: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test-ns",
+				},
+				Spec: v1.GatewaySpec{
+					Listeners: []v1.Listener{
+						{
+							Name:     "listener1",
+							Port:     443,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("*.example.com"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret1"},
+								},
+							},
+						},
+						{
+							Name:     "listener2",
+							Port:     8443,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret2"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedCondition: false,
+		},
+		{
+			name: "no overlap - different hostnames same port",
+			gateway: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test-ns",
+				},
+				Spec: v1.GatewaySpec{
+					Listeners: []v1.Listener{
+						{
+							Name:     "listener1",
+							Port:     443,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret1"},
+								},
+							},
+						},
+						{
+							Name:     "listener2",
+							Port:     443,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("cafe.example.org"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret2"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedCondition: false,
+		},
+		{
+			name: "overlap between HTTPS and TLS listeners",
+			gateway: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test-ns",
+				},
+				Spec: v1.GatewaySpec{
+					Listeners: []v1.Listener{
+						{
+							Name:     "listener1",
+							Port:     443,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("*.example.com"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret1"},
+								},
+							},
+						},
+						{
+							Name:     "listener2",
+							Port:     443,
+							Protocol: v1.TLSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModePassthrough),
+							},
+						},
+					},
+				},
+			},
+			expectedCondition: true,
+			conditionReason:   v1.ListenerReasonOverlappingHostnames,
+		},
+		{
+			name: "overlap with nil hostnames",
+			gateway: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test-ns",
+				},
+				Spec: v1.GatewaySpec{
+					Listeners: []v1.Listener{
+						{
+							Name:     "listener1",
+							Port:     443,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: nil, // nil hostname matches everything
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret1"},
+								},
+							},
+						},
+						{
+							Name:     "listener2",
+							Port:     443,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret2"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedCondition: true,
+			conditionReason:   v1.ListenerReasonOverlappingHostnames,
+		},
+		{
+			name: "no overlap - HTTP listener excluded",
+			gateway: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test-ns",
+				},
+				Spec: v1.GatewaySpec{
+					Listeners: []v1.Listener{
+						{
+							Name:     "listener1",
+							Port:     80,
+							Protocol: v1.HTTPProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("*.example.com"),
+						},
+						{
+							Name:     "listener2",
+							Port:     80,
+							Protocol: v1.HTTPProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
+						},
+					},
+				},
+			},
+			expectedCondition: false,
+		},
+		{
+			name: "no overlap - HTTP and HTTPS listeners with same hostname and port",
+			gateway: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test-ns",
+				},
+				Spec: v1.GatewaySpec{
+					Listeners: []v1.Listener{
+						{
+							Name:     "listener1",
+							Port:     80,
+							Protocol: v1.HTTPProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
+						},
+						{
+							Name:     "listener2",
+							Port:     80,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
+							TLS: &v1.GatewayTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModeTerminate),
+								CertificateRefs: []v1.SecretObjectReference{
+									{Name: "secret1"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedCondition: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			// Create mock resolvers
+			secretResolver := newSecretResolver(nil)
+			refGrantResolver := newReferenceGrantResolver(nil)
+
+			// Build listeners
+			listeners := buildListeners(test.gateway, secretResolver, refGrantResolver, protectedPorts)
+
+			if test.expectedCondition {
+				// Check that the expected listeners have the OverlappingTLSConfig condition
+				listenersWithCondition := 0
+				for _, listener := range listeners {
+					found := false
+					for _, cond := range listener.Conditions {
+						if cond.Type == string(v1.ListenerConditionOverlappingTLSConfig) {
+							g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+							g.Expect(cond.Reason).To(Equal(string(test.conditionReason)))
+							found = true
+							break
+						}
+					}
+					if found {
+						listenersWithCondition++
+					}
+				}
+				// At least 2 listeners should have the condition when there's overlap
+				g.Expect(listenersWithCondition).To(
+					BeNumerically(">=", 2),
+					"at least 2 listeners should have OverlappingTLSConfig condition",
+				)
+			} else {
+				// No listener should have the OverlappingTLSConfig condition
+				for i, listener := range listeners {
+					for _, cond := range listener.Conditions {
+						g.Expect(cond.Type).ToNot(Equal(string(v1.ListenerConditionOverlappingTLSConfig)),
+							"listener %d should not have OverlappingTLSConfig condition", i)
+					}
+				}
+			}
+		})
+	}
+}

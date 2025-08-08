@@ -89,6 +89,7 @@ func newListenerConfiguratorFactory(
 	protectedPorts ProtectedPorts,
 ) *listenerConfiguratorFactory {
 	sharedPortConflictResolver := createPortConflictResolver()
+	sharedOverlappingTLSConfigResolver := createOverlappingTLSConfigResolver()
 
 	return &listenerConfiguratorFactory{
 		unsupportedProtocol: &listenerConfigurator{
@@ -123,6 +124,7 @@ func newListenerConfiguratorFactory(
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
+				sharedOverlappingTLSConfigResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, secretResolver, refGrantResolver),
@@ -137,6 +139,7 @@ func newListenerConfiguratorFactory(
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
+				sharedOverlappingTLSConfigResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{},
 		},
@@ -590,4 +593,39 @@ func haveOverlap(hostname1, hostname2 *v1.Hostname) bool {
 		return true
 	}
 	return matchesWildcard(h1, h2)
+}
+
+func createOverlappingTLSConfigResolver() listenerConflictResolver {
+	listenersByPort := make(map[v1.PortNumber][]*Listener)
+
+	return func(l *Listener) {
+		port := l.Source.Port
+
+		// Only check TLS-enabled listeners (HTTPS/TLS)
+		if l.Source.Protocol != v1.HTTPSProtocolType && l.Source.Protocol != v1.TLSProtocolType {
+			return
+		}
+
+		// Check for overlaps with existing listeners on this port
+		for _, existingListener := range listenersByPort[port] {
+			// Only check against other TLS-enabled listeners
+			if existingListener.Source.Protocol != v1.HTTPSProtocolType &&
+				existingListener.Source.Protocol != v1.TLSProtocolType {
+				continue
+			}
+
+			// Check for hostname overlap
+			if haveOverlap(l.Source.Hostname, existingListener.Source.Hostname) {
+				// Set condition on both listeners
+				cond := conditions.NewListenerOverlappingTLSConfig(
+					v1.ListenerReasonOverlappingHostnames,
+					conditions.ListenerMessageOverlappingHostnames,
+				)
+				l.Conditions = append(l.Conditions, cond)
+				existingListener.Conditions = append(existingListener.Conditions, cond)
+			}
+		}
+
+		listenersByPort[port] = append(listenersByPort[port], l)
+	}
 }

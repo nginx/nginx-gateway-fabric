@@ -1250,7 +1250,13 @@ func TestBuildGateway(t *testing.T) {
 							Attachable:  true,
 							Routes:      map[RouteKey]*L7Route{},
 							L4Routes:    map[L4RouteKey]*L4Route{},
-							Conditions:  conditions.NewListenerHostnameConflict(conflict443HostnameMsg),
+							Conditions: append(
+								conditions.NewListenerHostnameConflict(conflict443HostnameMsg),
+								conditions.NewListenerOverlappingTLSConfig(
+									v1.ListenerReasonOverlappingHostnames,
+									"Listener hostname overlaps with hostname(s) of other Listener(s) on the same port",
+								),
+							),
 							SupportedKinds: []v1.RouteGroupKind{
 								{Kind: kinds.TLSRoute, Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 							},
@@ -1264,7 +1270,13 @@ func TestBuildGateway(t *testing.T) {
 							ResolvedSecret: helpers.GetPointer(client.ObjectKeyFromObject(secretSameNs)),
 							Routes:         map[RouteKey]*L7Route{},
 							L4Routes:       map[L4RouteKey]*L4Route{},
-							Conditions:     conditions.NewListenerHostnameConflict(conflict443HostnameMsg),
+							Conditions: append(
+								conditions.NewListenerHostnameConflict(conflict443HostnameMsg),
+								conditions.NewListenerOverlappingTLSConfig(
+									v1.ListenerReasonOverlappingHostnames,
+									"Listener hostname overlaps with hostname(s) of other Listener(s) on the same port",
+								),
+							),
 							SupportedKinds: supportedKindsForListeners,
 						},
 					},
