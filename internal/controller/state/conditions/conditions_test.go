@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 func TestDeduplicateConditions(t *testing.T) {
@@ -144,4 +145,17 @@ func TestHasMatchingCondition(t *testing.T) {
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
+}
+
+func TestNewPolicyAncestorLimitReached(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	policyName := "test-policy"
+	condition := NewPolicyAncestorLimitReached(policyName)
+
+	g.Expect(condition.Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+	g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+	g.Expect(condition.Reason).To(Equal(string(PolicyReasonAncestorLimitReached)))
+	g.Expect(condition.Message).To(Equal(PolicyMessageAncestorLimitReached))
 }

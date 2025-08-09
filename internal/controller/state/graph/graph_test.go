@@ -3,6 +3,7 @@ package graph
 import (
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
 	v1 "k8s.io/api/core/v1"
@@ -1309,6 +1310,7 @@ func TestBuildGraph(t *testing.T) {
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
 					PolicyValidator:     fakePolicyValidator,
 				},
+				logr.Discard(),
 			)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())

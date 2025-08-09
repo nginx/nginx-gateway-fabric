@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -18,7 +19,8 @@ type BackendTLSPolicy struct {
 	Source *v1alpha3.BackendTLSPolicy
 	// CaCertRef is the name of the ConfigMap that contains the CA certificate.
 	CaCertRef types.NamespacedName
-	// Gateways are the names of the Gateways that are being checked for this BackendTLSPolicy.
+	// Gateways are the names of the Gateways for which this BackendTLSPolicy is effectively applied.
+	// Only contains gateways where the policy can be applied (not limited by ancestor status).
 	Gateways []types.NamespacedName
 	// Conditions include Conditions for the BackendTLSPolicy.
 	Conditions []conditions.Condition
@@ -68,16 +70,13 @@ func validateBackendTLSPolicy(
 	backendTLSPolicy *v1alpha3.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
 	secretResolver *secretResolver,
-	ctlrName string,
+	_ string,
 ) (valid, ignored bool, conds []conditions.Condition) {
 	valid = true
 	ignored = false
 
-	// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
-	if backendTLSPolicyAncestorsFull(backendTLSPolicy.Status.Ancestors, ctlrName) {
-		valid = false
-		ignored = true
-	}
+	// Note: Ancestor limit checking moved to addGatewaysForBackendTLSPolicies for per-gateway effectiveness tracking
+	// The policy may be partially effective (work for some gateways but not others due to ancestor limits)
 
 	if err := validateBackendTLSHostname(backendTLSPolicy); err != nil {
 		valid = false
@@ -186,10 +185,14 @@ func validateBackendTLSWellKnownCACerts(btp *v1alpha3.BackendTLSPolicy) error {
 func addGatewaysForBackendTLSPolicies(
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	services map[types.NamespacedName]*ReferencedService,
+	ctlrName string,
+	gateways map[types.NamespacedName]*Gateway,
+	logger logr.Logger,
 ) {
 	for _, backendTLSPolicy := range backendTLSPolicies {
-		gateways := make(map[types.NamespacedName]struct{})
+		potentialGateways := make(map[types.NamespacedName]struct{})
 
+		// First, collect all potential gateways for this policy
 		for _, refs := range backendTLSPolicy.Source.Spec.TargetRefs {
 			if refs.Kind != kinds.Service {
 				continue
@@ -201,13 +204,40 @@ func addGatewaysForBackendTLSPolicies(
 				}
 
 				for gateway := range referencedServices.GatewayNsNames {
-					gateways[gateway] = struct{}{}
+					potentialGateways[gateway] = struct{}{}
 				}
 			}
 		}
 
-		for gateway := range gateways {
-			backendTLSPolicy.Gateways = append(backendTLSPolicy.Gateways, gateway)
+		// Now check each potential gateway against ancestor limits
+		for gatewayNsName := range potentialGateways {
+			// Create a proposed ancestor reference for this gateway
+			proposedAncestor := createParentReference(v1.GroupName, kinds.Gateway, gatewayNsName)
+
+			// Check ancestor limit for BackendTLS policy
+			isFull := backendTLSPolicyAncestorsFull(
+				backendTLSPolicy.Source.Status.Ancestors,
+				ctlrName,
+			)
+
+			if isFull {
+				policyName := backendTLSPolicy.Source.Namespace + "/" + backendTLSPolicy.Source.Name
+				gatewayName := getAncestorName(proposedAncestor)
+				gateway, ok := gateways[gatewayNsName]
+				if ok {
+					gateway.Conditions = append(gateway.Conditions, conditions.NewPolicyAncestorLimitReached(policyName))
+				} else {
+					// Not found in the graph, log the issue. I don't think this should happen.
+					logger.Info("Gateway not found in the graph", "policy", policyName, "ancestor", gatewayName)
+				}
+
+				LogAncestorLimitReached(logger, policyName, "BackendTLSPolicy", gatewayName)
+
+				continue
+			}
+
+			// Gateway can be effectively used by this policy
+			backendTLSPolicy.Gateways = append(backendTLSPolicy.Gateways, gatewayNsName)
 		}
 	}
 }

@@ -3,6 +3,7 @@ package graph
 import (
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
 	v1 "k8s.io/api/core/v1"
@@ -398,6 +399,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
 					PolicyValidator:     fakePolicyValidator,
 				},
+				logr.Discard(),
 			)
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
@@ -886,6 +888,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
 					PolicyValidator:     fakePolicyValidator,
 				},
+				logr.Discard(),
 			)
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
