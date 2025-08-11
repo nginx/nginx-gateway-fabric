@@ -194,7 +194,7 @@ var _ = Describe("Collector", Ordered, func() {
 			PodNSName:                 podNSName,
 			ImageSource:               "local",
 			Flags:                     flags,
-			NginxOneConsoleSecretName: "nginx-one-console-secret",
+			NginxOneConsoleConnection: true,
 		})
 
 		baseGetCalls = createGetCallsFunc(ngfPod, ngfReplicaSet, kubeNamespace)

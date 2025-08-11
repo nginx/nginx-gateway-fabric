@@ -291,7 +291,7 @@ func StartManager(cfg config.Config) error {
 			},
 			ImageSource:               cfg.ImageSource,
 			Flags:                     cfg.Flags,
-			NginxOneConsoleSecretName: cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+			NginxOneConsoleConnection: cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "",
 		})
 
 		job, err := createTelemetryJob(cfg, dataCollector, healthChecker.getReadyCh())
