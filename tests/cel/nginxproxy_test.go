@@ -50,11 +50,11 @@ func TestNginxProxyKubernetes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := tt.spec
-			policyName := uniqueResourceName(testResourceName)
+			resourceName := uniqueResourceName(testResourceName)
 
 			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
 				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      policyName,
+					Name:      resourceName,
 					Namespace: defaultNamespace,
 				},
 				Spec: spec,
@@ -102,11 +102,11 @@ func TestNginxProxyRewriteClientIP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := tt.spec
-			policyName := uniqueResourceName(testResourceName)
+			resourceName := uniqueResourceName(testResourceName)
 
 			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
 				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      policyName,
+					Name:      resourceName,
 					Namespace: defaultNamespace,
 				},
 				Spec: spec,
@@ -170,11 +170,11 @@ func TestNginxProxyAutoscaling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := tt.spec
-			policyName := uniqueResourceName(testResourceName)
+			resourceName := uniqueResourceName(testResourceName)
 
 			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
 				ObjectMeta: controllerruntime.ObjectMeta{
-					Name:      policyName,
+					Name:      resourceName,
 					Namespace: defaultNamespace,
 				},
 				Spec: spec,
