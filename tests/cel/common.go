@@ -44,29 +44,30 @@ const (
 )
 
 const (
-	testPolicyName    = "test-policy"
+	testResourceName  = "test-policy"
 	testTargetRefName = "test-targetRef"
 )
 
 // getKubernetesClient returns a client connected to a real Kubernetes cluster.
-func getKubernetesClient(t *testing.T) (k8sClient client.Client, err error) {
+func getKubernetesClient(t *testing.T) (k8sClient client.Client) {
 	t.Helper()
+	g := NewWithT(t)
 	// Use controller-runtime to get cluster connection
 	k8sConfig, err := controllerruntime.GetConfig()
-	if err != nil {
-		return nil, err
-	}
+	g.Expect(err).ToNot(HaveOccurred())
 
 	// Set up scheme with NGF types
 	scheme := runtime.NewScheme()
-	if err = ngfAPIv1alpha1.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	if err = ngfAPIv1alpha2.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	// Create a new client with the scheme and return it
-	return client.New(k8sConfig, client.Options{Scheme: scheme})
+	err = ngfAPIv1alpha1.AddToScheme(scheme)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = ngfAPIv1alpha2.AddToScheme(scheme)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	k8sClient, err = client.New(k8sConfig, client.Options{Scheme: scheme})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	return k8sClient
 }
 
 // randomPrimeNumber generates a random prime number of 64 bits.
@@ -85,9 +86,9 @@ func uniqueResourceName(name string) string {
 }
 
 // validateCrd creates a k8s resource and validates it against the expected errors.
-func validateCrd(t *testing.T, wantErrors []string, g *WithT, crd client.Object, k8sClient client.Client) {
+func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient client.Client) {
 	t.Helper()
-
+	g := NewWithT(t)
 	timeoutConfig := framework.DefaultTimeoutConfig()
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.KubernetesClientTimeout)
 	err := k8sClient.Create(ctx, crd)

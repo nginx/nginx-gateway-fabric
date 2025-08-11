@@ -3,7 +3,6 @@ package cel
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -12,10 +11,7 @@ import (
 
 func TestNginxProxyKubernetes(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
-
-	k8sClient, err := getKubernetesClient(t)
-	g.Expect(err).ToNot(HaveOccurred())
+	k8sClient := getKubernetesClient(t)
 
 	tests := []struct {
 		spec       ngfAPIv1alpha2.NginxProxySpec
@@ -54,7 +50,7 @@ func TestNginxProxyKubernetes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := tt.spec
-			policyName := uniqueResourceName(testPolicyName)
+			policyName := uniqueResourceName(testResourceName)
 
 			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
 				ObjectMeta: controllerruntime.ObjectMeta{
@@ -63,17 +59,14 @@ func TestNginxProxyKubernetes(t *testing.T) {
 				},
 				Spec: spec,
 			}
-			validateCrd(t, tt.wantErrors, g, nginxProxy, k8sClient)
+			validateCrd(t, tt.wantErrors, nginxProxy, k8sClient)
 		})
 	}
 }
 
 func TestNginxProxyRewriteClientIP(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
-
-	k8sClient, err := getKubernetesClient(t)
-	g.Expect(err).ToNot(HaveOccurred())
+	k8sClient := getKubernetesClient(t)
 
 	tests := []struct {
 		spec       ngfAPIv1alpha2.NginxProxySpec
@@ -109,7 +102,7 @@ func TestNginxProxyRewriteClientIP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := tt.spec
-			policyName := uniqueResourceName(testPolicyName)
+			policyName := uniqueResourceName(testResourceName)
 
 			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
 				ObjectMeta: controllerruntime.ObjectMeta{
@@ -118,17 +111,14 @@ func TestNginxProxyRewriteClientIP(t *testing.T) {
 				},
 				Spec: spec,
 			}
-			validateCrd(t, tt.wantErrors, g, nginxProxy, k8sClient)
+			validateCrd(t, tt.wantErrors, nginxProxy, k8sClient)
 		})
 	}
 }
 
 func TestNginxProxyAutoscaling(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
-
-	k8sClient, err := getKubernetesClient(t)
-	g.Expect(err).ToNot(HaveOccurred())
+	k8sClient := getKubernetesClient(t)
 
 	tests := []struct {
 		spec       ngfAPIv1alpha2.NginxProxySpec
@@ -180,7 +170,7 @@ func TestNginxProxyAutoscaling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := tt.spec
-			policyName := uniqueResourceName(testPolicyName)
+			policyName := uniqueResourceName(testResourceName)
 
 			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
 				ObjectMeta: controllerruntime.ObjectMeta{
@@ -189,7 +179,7 @@ func TestNginxProxyAutoscaling(t *testing.T) {
 				},
 				Spec: spec,
 			}
-			validateCrd(t, tt.wantErrors, g, nginxProxy, k8sClient)
+			validateCrd(t, tt.wantErrors, nginxProxy, k8sClient)
 		})
 	}
 }
