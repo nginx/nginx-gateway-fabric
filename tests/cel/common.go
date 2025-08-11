@@ -44,7 +44,7 @@ const (
 )
 
 const (
-	testResourceName  = "test-policy"
+	testResourceName  = "test-resource"
 	testTargetRefName = "test-targetRef"
 )
 
