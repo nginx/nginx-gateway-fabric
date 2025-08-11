@@ -30,10 +30,15 @@ const (
 	discoveryGroup = "discovery.k8s.io/v1"
 )
 
+// ClientSettingsPolicy validation errors.
 const (
-	expectedTargetRefKindError              = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
-	expectedTargetRefGroupError             = `TargetRef Group must be gateway.networking.k8s.io.`
-	expectedHeaderWithoutServerError        = `header can only be specified if server is specified`
+	expectedTargetRefKindError       = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
+	expectedTargetRefGroupError      = `TargetRef Group must be gateway.networking.k8s.io.`
+	expectedHeaderWithoutServerError = `header can only be specified if server is specified`
+)
+
+// NginxProxy validation errors.
+const (
 	expectedOneOfDeploymentOrDaemonSetError = `only one of deployment or daemonSet can be set`
 	expectedIfModeSetTrustedAddressesError  = `if mode is set, trustedAddresses is a required field`
 	expectedMinReplicasLessThanOrEqualError = `minReplicas must be less than or equal to maxReplicas`
