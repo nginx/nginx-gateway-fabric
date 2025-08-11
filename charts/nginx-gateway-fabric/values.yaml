@@ -80,7 +80,7 @@ nginxGateway:
     # Secrets must exist in the same namespace as the helm release.
     imagePullSecrets: []
 
-  # -- The number of replicas of the NGINX Gateway Fabric Deployment.
+  # -- The number of replicas of the NGINX Gateway Fabric Deployment. This value is ignored if autoscaling.enable is true.
   replicas: 1
 
   # The configuration for leader election.
@@ -157,6 +157,38 @@ nginxGateway:
   # -- The topology spread constraints for the NGINX Gateway Fabric control plane pod.
   topologySpreadConstraints: []
 
+  # -- Autoscaling configuration for the NGINX Gateway Fabric control plane.
+  autoscaling:
+    # -- Enable or disable Horizontal Pod Autoscaler for the control plane.
+    enable: false
+    # annotations: {}
+    # minReplicas: 1
+    # maxReplicas: 11
+    # targetCPUUtilizationPercentage: 50
+    # targetMemoryUtilizationPercentage: 50
+    # behavior:
+      # scaleDown:
+      #   stabilizationWindowSeconds: 300
+      #   policies:
+      #   - type: Pods
+      #     value: 1
+      #     periodSeconds: 180
+      # scaleUp:
+      #   stabilizationWindowSeconds: 300
+      #   policies:
+      #   - type: Pods
+      #     value: 2
+      #     periodSeconds: 60
+    # Custom or additional autoscaling metrics. https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics
+    # metrics:
+    # - type: Pods
+    #   pods:
+    #     metric:
+    #       name: container_memory_usage_bytes
+    #     target:
+    #       type: AverageValue
+    #       averageValue: "400Mi"
+
   metrics:
     # -- Enable exposing metrics in the Prometheus format.
     enable: true
@@ -194,9 +226,39 @@ nginx:
   # -- The kind of NGINX deployment.
   kind: deployment
 
-  # -- The number of replicas of the NGINX Deployment.
+  # -- The number of replicas of the NGINX Deployment. This value is ignored if autoscaling.enable is true.
   replicas: 1
 
+  # -- Autoscaling configuration for the NGINX data plane.
+  autoscaling:
+    # -- Enable or disable Horizontal Pod Autoscaler for the NGINX data plane.
+    enable: false
+    # minReplicas: 1
+    # maxReplicas: 11
+    # targetCPUUtilizationPercentage: 50
+    # targetMemoryUtilizationPercentage: 50
+    # behavior:
+      # scaleDown:
+      #   stabilizationWindowSeconds: 300
+      #   policies:
+      #   - type: Pods
+      #     value: 1
+      #     periodSeconds: 180
+      # scaleUp:
+      #   stabilizationWindowSeconds: 300
+      #   policies:
+      #   - type: Pods
+      #     value: 2
+      #     periodSeconds: 60
+    # Custom or additional autoscaling metrics. https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-on-custom-metrics
+    # metrics:
+    # - type: Pods
+    #   pods:
+    #     metric:
+    #       name: nginx_gateway_fabric_nginx_process_requests_total
+    #     target:
+    #       type: AverageValue
+    #       averageValue: 400
   image:
     # -- The NGINX image to use.
     repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
@@ -456,7 +518,7 @@ nginx:
     # - port: 80
     #   containerPort: 80
 
-    # -- The resource requirements of the NGINX container.
+    # -- The resource requirements of the NGINX container. You should set this value if you want to use dataplane Autoscaling(HPA).
     resources: {}
 
     # -- The lifecycle of the NGINX container.

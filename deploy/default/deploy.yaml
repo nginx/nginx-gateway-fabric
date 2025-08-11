@@ -55,6 +55,7 @@ rules:
 - apiGroups:
   - ""
   - apps
+  - autoscaling
   resources:
   - secrets
   - configmaps
@@ -62,6 +63,7 @@ rules:
   - services
   - deployments
   - daemonsets
+  - horizontalpodautoscalers
   verbs:
   - create
   - update

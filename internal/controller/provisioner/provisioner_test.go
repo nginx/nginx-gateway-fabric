@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,6 +46,7 @@ func createScheme() *runtime.Scheme {
 	utilruntime.Must(gatewayv1.Install(scheme))
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(autoscalingv2.AddToScheme(scheme))
 
 	return scheme
 }
@@ -418,6 +420,54 @@ func TestRegisterGateway_CleansUpOldDeploymentOrDaemonSet(t *testing.T) {
 	// Deployment should exist
 	err = fakeClient.Get(t.Context(), types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, &appsv1.Deployment{})
 	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestRegisterGateway_CleansUpOldHPA(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Setup: Gateway previously referenced an HPA, but now does not
+	// Previous state: HPA exists and is tracked
+	oldHPA := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx",
+			Namespace: "default",
+		},
+	}
+	gateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Valid: true,
+		EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+			Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+					Autoscaling: &ngfAPIv1alpha2.AutoscalingSpec{
+						Enable: false,
+					},
+				},
+			},
+		},
+	}
+
+	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, oldHPA)
+	provisioner.store.nginxResources[types.NamespacedName{Name: "gw", Namespace: "default"}] = &NginxResources{
+		HPA: oldHPA.ObjectMeta,
+	}
+
+	// Simulate update: EffectiveNginxProxy no longer references HPA
+	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
+
+	// HPA should be deleted
+	hpaErr := fakeClient.Get(
+		t.Context(),
+		types.NamespacedName{Name: "gw-nginx", Namespace: "default"},
+		&autoscalingv2.HorizontalPodAutoscaler{},
+	)
+	g.Expect(hpaErr).To(HaveOccurred())
 }
 
 func TestNonLeaderProvisioner(t *testing.T) {

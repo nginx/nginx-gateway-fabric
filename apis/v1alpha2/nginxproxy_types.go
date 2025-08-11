@@ -1,6 +1,7 @@
 package v1alpha2
 
 import (
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -430,20 +431,25 @@ const (
 
 // Deployment is the configuration for the NGINX Deployment.
 type DeploymentSpec struct {
-	// Container defines container fields for the NGINX container.
-	//
-	// +optional
-	Container ContainerSpec `json:"container"`
-
 	// Number of desired Pods.
 	//
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 
+	// Autoscaling defines the configuration for Horizontal Pod Autoscaling.
+	//
+	// +optional
+	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
+
 	// Pod defines Pod-specific fields.
 	//
 	// +optional
 	Pod PodSpec `json:"pod"`
+
+	// Container defines container fields for the NGINX container.
+	//
+	// +optional
+	Container ContainerSpec `json:"container"`
 
 	// Patches are custom patches to apply to the NGINX Deployment.
 	//
@@ -467,6 +473,53 @@ type DaemonSetSpec struct {
 	//
 	// +optional
 	Patches []Patch `json:"patches,omitempty"`
+}
+
+// AutoscalingSpec is the configuration for the Horizontal Pod Autoscaling.
+//
+// +kubebuilder:validation:XValidation:message="minReplicas must be less than or equal to maxReplicas",rule="(!has(self.minReplicas)) || (self.minReplicas <= self.maxReplicas)"
+//
+//nolint:lll
+type AutoscalingSpec struct {
+	// Behavior configures the scaling behavior of the target
+	// in both Up and Down directions (scaleUp and scaleDown fields respectively).
+	// If not set, the default HPAScalingRules for scale up and scale down are used.
+	//
+	// +optional
+	Behavior *autoscalingv2.HorizontalPodAutoscalerBehavior `json:"behavior,omitempty"`
+
+	// Target cpu utilization percentage of HPA.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	TargetCPUUtilizationPercentage *int32 `json:"targetCPUUtilizationPercentage,omitempty"`
+
+	// Target memory utilization percentage of HPA.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	TargetMemoryUtilizationPercentage *int32 `json:"targetMemoryUtilizationPercentage,omitempty"`
+
+	// Minimum number of replicas.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MinReplicas *int32 `json:"minReplicas,omitempty"`
+
+	// Metrics configures additional metrics options.
+	//
+	// +optional
+	Metrics []autoscalingv2.MetricSpec `json:"metrics,omitempty"`
+
+	// Maximum number of replicas.
+	//
+	// +kubebuilder:validation:Minimum=1
+	MaxReplicas int32 `json:"maxReplicas"`
+
+	// Enable or disable Horizontal Pod Autoscaler.
+	Enable bool `json:"enable"`
 }
 
 // PodSpec defines Pod-specific fields.

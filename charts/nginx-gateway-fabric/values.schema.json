@@ -98,6 +98,21 @@
     "nginx": {
       "description": "The nginx section contains the configuration for all NGINX data plane deployments\ninstalled by the NGINX Gateway Fabric control plane.",
       "properties": {
+        "autoscaling": {
+          "description": "Autoscaling configuration for the NGINX data plane.",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable or disable Horizontal Pod Autoscaler for the NGINX data plane.",
+              "required": [],
+              "title": "enable",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "autoscaling",
+          "type": "object"
+        },
         "config": {
           "description": "The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways\nmanaged by this instance of NGINX Gateway Fabric.",
           "properties": {
@@ -363,7 +378,7 @@
               "type": "object"
             },
             "resources": {
-              "description": "The resource requirements of the NGINX container.",
+              "description": "The resource requirements of the NGINX container. You should set this value if you want to use dataplane Autoscaling(HPA).",
               "required": [],
               "title": "resources",
               "type": "object"
@@ -498,7 +513,7 @@
         },
         "replicas": {
           "default": 1,
-          "description": "The number of replicas of the NGINX Deployment.",
+          "description": "The number of replicas of the NGINX Deployment. This value is ignored if autoscaling.enable is true.",
           "required": [],
           "title": "replicas",
           "type": "integer"
@@ -641,6 +656,21 @@
           "description": "The affinity of the NGINX Gateway Fabric control plane pod.",
           "required": [],
           "title": "affinity",
+          "type": "object"
+        },
+        "autoscaling": {
+          "description": "Autoscaling configuration for the NGINX Gateway Fabric control plane.",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable or disable Horizontal Pod Autoscaler for the control plane.",
+              "required": [],
+              "title": "enable",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "autoscaling",
           "type": "object"
         },
         "config": {
@@ -895,7 +925,7 @@
         },
         "replicas": {
           "default": 1,
-          "description": "The number of replicas of the NGINX Gateway Fabric Deployment.",
+          "description": "The number of replicas of the NGINX Gateway Fabric Deployment. This value is ignored if autoscaling.enable is true.",
           "required": [],
           "title": "replicas",
           "type": "integer"

@@ -6,6 +6,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -191,6 +192,24 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// ServiceAccount again, already exists
 	resources = registerAndGetResources(svcAcct)
 	g.Expect(resources.ServiceAccount).To(Equal(defaultMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	// HPA
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: defaultMeta}
+	resources = registerAndGetResources(hpa)
+	g.Expect(resources.HPA).To(Equal(defaultMeta))
+
+	// HPA again, already exists
+	resources = registerAndGetResources(hpa)
+	g.Expect(resources.HPA).To(Equal(defaultMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
+	resources = registerAndGetResources(svc)
+	g.Expect(resources.Service).To(Equal(defaultMeta))
 
 	// clear out resources before next test
 	store.deleteResourcesForGateway(nsName)
@@ -478,6 +497,10 @@ func TestGatewayExistsForResource(t *testing.T) {
 			Name:      "test-serviceaccount",
 			Namespace: "default",
 		},
+		HPA: metav1.ObjectMeta{
+			Name:      "test-hpa",
+			Namespace: "default",
+		},
 		Role: metav1.ObjectMeta{
 			Name:      "test-role",
 			Namespace: "default",
@@ -562,6 +585,16 @@ func TestGatewayExistsForResource(t *testing.T) {
 			object: &corev1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-serviceaccount",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
+			name: "HPA exists",
+			object: &autoscalingv2.HorizontalPodAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-hpa",
 					Namespace: "default",
 				},
 			},
@@ -716,57 +749,62 @@ func TestGetResourceVersionForObject(t *testing.T) {
 			Namespace:       "default",
 			ResourceVersion: "4",
 		},
+		HPA: metav1.ObjectMeta{
+			Name:            "test-hpa",
+			Namespace:       "default",
+			ResourceVersion: "5",
+		},
 		Role: metav1.ObjectMeta{
 			Name:            "test-role",
 			Namespace:       "default",
-			ResourceVersion: "5",
+			ResourceVersion: "6",
 		},
 		RoleBinding: metav1.ObjectMeta{
 			Name:            "test-rolebinding",
 			Namespace:       "default",
-			ResourceVersion: "6",
+			ResourceVersion: "7",
 		},
 		BootstrapConfigMap: metav1.ObjectMeta{
 			Name:            "test-bootstrap-configmap",
 			Namespace:       "default",
-			ResourceVersion: "7",
+			ResourceVersion: "8",
 		},
 		AgentConfigMap: metav1.ObjectMeta{
 			Name:            "test-agent-configmap",
 			Namespace:       "default",
-			ResourceVersion: "8",
+			ResourceVersion: "9",
 		},
 		AgentTLSSecret: metav1.ObjectMeta{
 			Name:            "test-agent-tls-secret",
 			Namespace:       "default",
-			ResourceVersion: "9",
+			ResourceVersion: "10",
 		},
 		PlusJWTSecret: metav1.ObjectMeta{
 			Name:            "test-jwt-secret",
 			Namespace:       "default",
-			ResourceVersion: "10",
+			ResourceVersion: "11",
 		},
 		PlusCASecret: metav1.ObjectMeta{
 			Name:            "test-ca-secret",
 			Namespace:       "default",
-			ResourceVersion: "11",
+			ResourceVersion: "12",
 		},
 		PlusClientSSLSecret: metav1.ObjectMeta{
 			Name:            "test-client-ssl-secret",
 			Namespace:       "default",
-			ResourceVersion: "12",
+			ResourceVersion: "13",
 		},
 		DockerSecrets: []metav1.ObjectMeta{
 			{
 				Name:            "test-docker-secret",
 				Namespace:       "default",
-				ResourceVersion: "13",
+				ResourceVersion: "14",
 			},
 		},
 		DataplaneKeySecret: metav1.ObjectMeta{
 			Name:            "test-dataplane-key-secret",
 			Namespace:       "default",
-			ResourceVersion: "14",
+			ResourceVersion: "15",
 		},
 	}
 
@@ -816,6 +854,16 @@ func TestGetResourceVersionForObject(t *testing.T) {
 			expectedResult: "4",
 		},
 		{
+			name: "HPA resource version",
+			object: &autoscalingv2.HorizontalPodAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-hpa",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "5",
+		},
+		{
 			name: "Role resource version",
 			object: &rbacv1.Role{
 				ObjectMeta: metav1.ObjectMeta{
@@ -823,7 +871,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "5",
+			expectedResult: "6",
 		},
 		{
 			name: "RoleBinding resource version",
@@ -833,7 +881,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "6",
+			expectedResult: "7",
 		},
 		{
 			name: "Bootstrap ConfigMap resource version",
@@ -843,7 +891,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "7",
+			expectedResult: "8",
 		},
 		{
 			name: "Agent ConfigMap resource version",
@@ -853,7 +901,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "8",
+			expectedResult: "9",
 		},
 		{
 			name: "Agent TLS Secret resource version",
@@ -863,7 +911,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "9",
+			expectedResult: "10",
 		},
 		{
 			name: "JWT Secret resource version",
@@ -873,7 +921,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "10",
+			expectedResult: "11",
 		},
 		{
 			name: "CA Secret resource version",
@@ -883,7 +931,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "11",
+			expectedResult: "12",
 		},
 		{
 			name: "Client SSL Secret resource version",
@@ -893,7 +941,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "12",
+			expectedResult: "13",
 		},
 		{
 			name: "Docker Secret resource version",
@@ -903,7 +951,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "13",
+			expectedResult: "14",
 		},
 		{
 			name: "Dataplane Key Secret resource version",
@@ -913,7 +961,7 @@ func TestGetResourceVersionForObject(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedResult: "14",
+			expectedResult: "15",
 		},
 		{
 			name: "Non-existent resource",
