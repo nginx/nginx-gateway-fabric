@@ -24,13 +24,11 @@ func TestNginxProxyKubernetes(t *testing.T) {
 	}{
 		{
 			name:       "Validate NginxProxy with both Deployment and DaemonSet is invalid",
-			wantErrors: []string{"only one of deployment or daemonSet can be set"},
+			wantErrors: []string{expectedOneOfDeploymentOrDaemonSetError},
 			policySpec: ngfAPIv1alpha2.NginxProxySpec{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
-					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
-						Replicas: helpers.GetPointer[int32](3),
-					},
-					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{},
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{},
+					DaemonSet:  &ngfAPIv1alpha2.DaemonSetSpec{},
 				},
 			},
 		},
@@ -38,9 +36,7 @@ func TestNginxProxyKubernetes(t *testing.T) {
 			name: "Validate NginxProxy with Deployment only is valid",
 			policySpec: ngfAPIv1alpha2.NginxProxySpec{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
-					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
-						Replicas: helpers.GetPointer[int32](3),
-					},
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{},
 				},
 			},
 		},
@@ -86,7 +82,7 @@ func TestNginxProxyRewriteClientIP(t *testing.T) {
 	}{
 		{
 			name:       "Validate NginxProxy is invalid when trustedAddresses is not set and mode is set",
-			wantErrors: []string{"if mode is set, trustedAddresses is a required field"},
+			wantErrors: []string{expectedIfModeSetTrustedAddressesError},
 			policySpec: ngfAPIv1alpha2.NginxProxySpec{
 				RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
 					Mode: helpers.GetPointer[ngfAPIv1alpha2.RewriteClientIPModeType]("XForwardedFor"),
