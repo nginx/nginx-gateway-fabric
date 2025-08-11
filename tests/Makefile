@@ -18,7 +18,6 @@ EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
 SKIP_TESTS =
 CEL_TEST_TARGET =
-BRANCH = ?= main
 
 # Check if ENABLE_EXPERIMENTAL is true
 ifeq ($(ENABLE_EXPERIMENTAL),true)
@@ -173,7 +172,7 @@ HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.typ
 # it overrides the target in the main Makefile when the GW_API_VERSION is set to main
 ifeq ($(GW_API_VERSION),main)
 install-gateway-crds:
-	kubectl kustomize "https://github.com/kubernetes-sigs/gateway-api/config/crd/$(if $(filter true,$(ENABLE_EXPERIMENTAL)),experimental,)?timeout=120&ref=$(BRANCH)" | kubectl apply -f -
+	kubectl kustomize "https://github.com/kubernetes-sigs/gateway-api/config/crd/$(if $(filter true,$(ENABLE_EXPERIMENTAL)),experimental,)?timeout=120&ref=main" | kubectl apply -f -
 endif
 
 .PHONY: install-ngf-local-no-build
