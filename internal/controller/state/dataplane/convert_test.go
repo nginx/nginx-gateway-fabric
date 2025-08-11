@@ -397,7 +397,25 @@ func TestConvertHTTPMirrorFilter(t *testing.T) {
 				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace/backend-test/route1-0"),
 				Percent:   helpers.GetPointer(float64(100)),
 			},
-			name: "numerator equals denominator",
+			name: "100% mirroring if numerator equals denominator",
+		},
+		{
+			filter: &v1.HTTPRequestMirrorFilter{
+				BackendRef: v1.BackendObjectReference{
+					Name:      "backend",
+					Namespace: helpers.GetPointer[v1.Namespace]("namespace"),
+				},
+				Fraction: &v1.Fraction{
+					Denominator: helpers.GetPointer(int32(2)),
+				},
+			},
+			expected: &HTTPRequestMirrorFilter{
+				Name:      helpers.GetPointer("backend"),
+				Namespace: helpers.GetPointer("namespace"),
+				Target:    helpers.GetPointer("/_ngf-internal-mirror-namespace/backend-test/route1-0"),
+				Percent:   helpers.GetPointer(float64(0)),
+			},
+			name: "0% mirroring if numerator is not specified",
 		},
 		{
 			filter: &v1.HTTPRequestMirrorFilter{
