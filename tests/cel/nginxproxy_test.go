@@ -18,14 +18,14 @@ func TestNginxProxyKubernetes(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	tests := []struct {
-		policySpec ngfAPIv1alpha2.NginxProxySpec
+		spec       ngfAPIv1alpha2.NginxProxySpec
 		name       string
 		wantErrors []string
 	}{
 		{
 			name:       "Validate NginxProxy with both Deployment and DaemonSet is invalid",
 			wantErrors: []string{expectedOneOfDeploymentOrDaemonSetError},
-			policySpec: ngfAPIv1alpha2.NginxProxySpec{
+			spec: ngfAPIv1alpha2.NginxProxySpec{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 					Deployment: &ngfAPIv1alpha2.DeploymentSpec{},
 					DaemonSet:  &ngfAPIv1alpha2.DaemonSetSpec{},
@@ -34,7 +34,7 @@ func TestNginxProxyKubernetes(t *testing.T) {
 		},
 		{
 			name: "Validate NginxProxy with Deployment only is valid",
-			policySpec: ngfAPIv1alpha2.NginxProxySpec{
+			spec: ngfAPIv1alpha2.NginxProxySpec{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 					Deployment: &ngfAPIv1alpha2.DeploymentSpec{},
 				},
@@ -42,7 +42,7 @@ func TestNginxProxyKubernetes(t *testing.T) {
 		},
 		{
 			name: "Validate NginxProxy with DaemonSet only is valid",
-			policySpec: ngfAPIv1alpha2.NginxProxySpec{
+			spec: ngfAPIv1alpha2.NginxProxySpec{
 				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{},
 				},
@@ -53,7 +53,7 @@ func TestNginxProxyKubernetes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			policySpec := tt.policySpec
+			spec := tt.spec
 			policyName := uniqueResourceName(testPolicyName)
 
 			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
@@ -61,7 +61,7 @@ func TestNginxProxyKubernetes(t *testing.T) {
 					Name:      policyName,
 					Namespace: defaultNamespace,
 				},
-				Spec: policySpec,
+				Spec: spec,
 			}
 			validateCrd(t, tt.wantErrors, g, nginxProxy, k8sClient)
 		})
@@ -76,14 +76,14 @@ func TestNginxProxyRewriteClientIP(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	tests := []struct {
-		policySpec ngfAPIv1alpha2.NginxProxySpec
+		spec       ngfAPIv1alpha2.NginxProxySpec
 		name       string
 		wantErrors []string
 	}{
 		{
 			name:       "Validate NginxProxy is invalid when trustedAddresses is not set and mode is set",
 			wantErrors: []string{expectedIfModeSetTrustedAddressesError},
-			policySpec: ngfAPIv1alpha2.NginxProxySpec{
+			spec: ngfAPIv1alpha2.NginxProxySpec{
 				RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
 					Mode: helpers.GetPointer[ngfAPIv1alpha2.RewriteClientIPModeType]("XForwardedFor"),
 				},
@@ -91,7 +91,7 @@ func TestNginxProxyRewriteClientIP(t *testing.T) {
 		},
 		{
 			name: "Validate NginxProxy is valid when both mode and trustedAddresses are set",
-			policySpec: ngfAPIv1alpha2.NginxProxySpec{
+			spec: ngfAPIv1alpha2.NginxProxySpec{
 				RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
 					Mode: helpers.GetPointer[ngfAPIv1alpha2.RewriteClientIPModeType]("XForwardedFor"),
 					TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
@@ -108,7 +108,7 @@ func TestNginxProxyRewriteClientIP(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			policySpec := tt.policySpec
+			spec := tt.spec
 			policyName := uniqueResourceName(testPolicyName)
 
 			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
@@ -116,7 +116,78 @@ func TestNginxProxyRewriteClientIP(t *testing.T) {
 					Name:      policyName,
 					Namespace: defaultNamespace,
 				},
-				Spec: policySpec,
+				Spec: spec,
+			}
+			validateCrd(t, tt.wantErrors, g, nginxProxy, k8sClient)
+		})
+	}
+}
+
+func TestNginxProxyAutoscaling(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	k8sClient, err := getKubernetesClient(t)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	tests := []struct {
+		spec       ngfAPIv1alpha2.NginxProxySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name:       "Validate NginxProxy is invalid when MinReplicas not less than, or equal to MaxReplicas",
+			wantErrors: []string{expectedMinReplicasLessThanOrEqualError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Autoscaling: &ngfAPIv1alpha2.AutoscalingSpec{
+							MinReplicas: helpers.GetPointer[int32](10),
+							MaxReplicas: 5,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Validate NginxProxy is valid when MinReplicas is less than MaxReplicas",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Autoscaling: &ngfAPIv1alpha2.AutoscalingSpec{
+							MinReplicas: helpers.GetPointer[int32](1),
+							MaxReplicas: 5,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Validate NginxProxy is valid when MinReplicas is equal to MaxReplicas",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Autoscaling: &ngfAPIv1alpha2.AutoscalingSpec{
+							MinReplicas: helpers.GetPointer[int32](5),
+							MaxReplicas: 5,
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := tt.spec
+			policyName := uniqueResourceName(testPolicyName)
+
+			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      policyName,
+					Namespace: defaultNamespace,
+				},
+				Spec: spec,
 			}
 			validateCrd(t, tt.wantErrors, g, nginxProxy, k8sClient)
 		})

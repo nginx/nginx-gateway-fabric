@@ -36,6 +36,7 @@ const (
 	expectedHeaderWithoutServerError        = `header can only be specified if server is specified`
 	expectedOneOfDeploymentOrDaemonSetError = `only one of deployment or daemonSet can be set`
 	expectedIfModeSetTrustedAddressesError  = `if mode is set, trustedAddresses is a required field`
+	expectedMinReplicasLessThanOrEqualError = `minReplicas must be less than or equal to maxReplicas`
 )
 
 const (
