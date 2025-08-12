@@ -192,7 +192,6 @@ uninstall-ngf: ## Uninstall NGF on configured kind cluster
 .PHONY: test-cel-validation
 test-cel-validation:
 	-make install-crds || true;
-	-make install-gateway-crds || true;
 	@if [ -z "$(CEL_TEST_TARGET)" ]; then \
 		echo "Running all tests in ./cel"; \
 		go test -v ./cel; \

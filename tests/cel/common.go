@@ -100,15 +100,14 @@ func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient
 	defer cancel()
 	err := k8sClient.Create(ctx, crd)
 
-	// Clean up after test
-	defer func() {
-		deleteErr = k8sClient.Delete(ctx, crd)
-	}()
-	g.Expect(deleteErr).ToNot(HaveOccurred())
-
 	// Check for expected errors
 	if len(wantErrors) == 0 {
 		g.Expect(err).ToNot(HaveOccurred())
+		// Clean up after test
+		defer func() {
+			deleteErr = k8sClient.Delete(ctx, crd)
+			g.Expect(deleteErr).ToNot(HaveOccurred())
+		}()
 	} else {
 		g.Expect(err).To(HaveOccurred())
 		for _, wantError := range wantErrors {
