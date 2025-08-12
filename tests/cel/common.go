@@ -63,11 +63,8 @@ func getKubernetesClient(t *testing.T) (k8sClient client.Client) {
 
 	// Set up scheme with NGF types
 	scheme := runtime.NewScheme()
-	err = ngfAPIv1alpha1.AddToScheme(scheme)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	err = ngfAPIv1alpha2.AddToScheme(scheme)
-	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(ngfAPIv1alpha1.AddToScheme(scheme)).To(Succeed())
+	g.Expect(ngfAPIv1alpha2.AddToScheme(scheme)).To(Succeed())
 
 	k8sClient, err = client.New(k8sConfig, client.Options{Scheme: scheme})
 	g.Expect(err).ToNot(HaveOccurred())
@@ -96,8 +93,8 @@ func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient
 	g := NewWithT(t)
 	timeoutConfig := framework.DefaultTimeoutConfig()
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.KubernetesClientTimeout)
-	err := k8sClient.Create(ctx, crd)
 	defer cancel()
+	err := k8sClient.Create(ctx, crd)
 
 	// Clean up after test
 	defer func() {

@@ -165,6 +165,19 @@ func TestNginxProxyAutoscaling(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Validate NginxProxy is valid when MinReplicas is nil",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Autoscaling: &ngfAPIv1alpha2.AutoscalingSpec{
+							MinReplicas: nil,
+							MaxReplicas: 5,
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
