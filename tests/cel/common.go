@@ -91,6 +91,9 @@ func uniqueResourceName(name string) string {
 func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient client.Client) {
 	t.Helper()
 	g := NewWithT(t)
+
+	// Create the resource in the cluster
+	// Use a context with a timeout to avoid hanging tests
 	var deleteErr error
 	timeoutConfig := framework.DefaultTimeoutConfig()
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.KubernetesClientTimeout)
