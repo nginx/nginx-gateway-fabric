@@ -91,6 +91,7 @@ func uniqueResourceName(name string) string {
 func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient client.Client) {
 	t.Helper()
 	g := NewWithT(t)
+	var deleteErr error
 	timeoutConfig := framework.DefaultTimeoutConfig()
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.KubernetesClientTimeout)
 	defer cancel()
@@ -98,9 +99,9 @@ func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient
 
 	// Clean up after test
 	defer func() {
-		_ = k8sClient.Delete(context.Background(), crd)
+		deleteErr = k8sClient.Delete(ctx, crd)
 	}()
-
+	g.Expect(deleteErr).ToNot(HaveOccurred())
 	if len(wantErrors) == 0 {
 		g.Expect(err).ToNot(HaveOccurred())
 	} else {
