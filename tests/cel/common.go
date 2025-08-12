@@ -102,6 +102,8 @@ func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient
 		deleteErr = k8sClient.Delete(ctx, crd)
 	}()
 	g.Expect(deleteErr).ToNot(HaveOccurred())
+
+	// Check for expected errors
 	if len(wantErrors) == 0 {
 		g.Expect(err).ToNot(HaveOccurred())
 	} else {
