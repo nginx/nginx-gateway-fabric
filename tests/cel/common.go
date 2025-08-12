@@ -92,9 +92,6 @@ func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient
 	t.Helper()
 	g := NewWithT(t)
 
-	// Create the resource in the cluster
-	// Use a context with a timeout to avoid hanging tests
-	var deleteErr error
 	timeoutConfig := framework.DefaultTimeoutConfig()
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.KubernetesClientTimeout)
 	defer cancel()
@@ -104,10 +101,7 @@ func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient
 	if len(wantErrors) == 0 {
 		g.Expect(err).ToNot(HaveOccurred())
 		// Clean up after test
-		defer func() {
-			deleteErr = k8sClient.Delete(ctx, crd)
-			g.Expect(deleteErr).ToNot(HaveOccurred())
-		}()
+		g.Expect(k8sClient.Delete(ctx, crd)).To(Succeed())
 	} else {
 		g.Expect(err).To(HaveOccurred())
 		for _, wantError := range wantErrors {
