@@ -46,7 +46,7 @@ func DefaultTimeoutConfig() TimeoutConfig {
 		CreateTimeout:           60 * time.Second,
 		UpdateTimeout:           60 * time.Second,
 		DeleteTimeout:           10 * time.Second,
-		DeleteNamespaceTimeout:  90 * time.Second,
+		DeleteNamespaceTimeout:  150 * time.Second,
 		GetTimeout:              10 * time.Second,
 		ManifestFetchTimeout:    10 * time.Second,
 		RequestTimeout:          10 * time.Second,
