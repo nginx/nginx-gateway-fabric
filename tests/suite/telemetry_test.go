@@ -95,6 +95,7 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 				"GatewayAttachedNpCount: Int(0)",
 				"NginxPodCount: Int(0)",
 				"ControlPlanePodCount: Int(1)",
+				"NginxOneConnectionEnabled: Bool(false)",
 			},
 		)
 	})

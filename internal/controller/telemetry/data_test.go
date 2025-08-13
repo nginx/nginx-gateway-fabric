@@ -46,6 +46,7 @@ func TestDataAttributes(t *testing.T) {
 		SnippetsFiltersDirectivesCount: []int64{3, 2, 1},
 		NginxPodCount:                  3,
 		ControlPlanePodCount:           3,
+		NginxOneConnectionEnabled:      true,
 	}
 
 	expected := []attribute.KeyValue{
@@ -84,6 +85,7 @@ func TestDataAttributes(t *testing.T) {
 		attribute.Int64("GatewayAttachedNpCount", 15),
 		attribute.Int64("NginxPodCount", 3),
 		attribute.Int64("ControlPlanePodCount", 3),
+		attribute.Bool("NginxOneConnectionEnabled", true),
 	}
 
 	result := data.Attributes()
@@ -129,6 +131,7 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.Int64("GatewayAttachedNpCount", 0),
 		attribute.Int64("NginxPodCount", 0),
 		attribute.Int64("ControlPlanePodCount", 0),
+		attribute.Bool("NginxOneConnectionEnabled", false),
 	}
 
 	result := data.Attributes()
