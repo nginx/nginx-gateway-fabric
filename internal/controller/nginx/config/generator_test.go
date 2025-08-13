@@ -147,7 +147,7 @@ func TestGenerate(t *testing.T) {
 
 	files := generator.Generate(conf)
 
-	g.Expect(files).To(HaveLen(17))
+	g.Expect(files).To(HaveLen(18))
 	arrange := func(i, j int) bool {
 		return files[i].Meta.Name < files[j].Meta.Name
 	}
@@ -158,6 +158,7 @@ func TestGenerate(t *testing.T) {
 		/etc/nginx/conf.d/http.conf
 		/etc/nginx/conf.d/matches.json
 		/etc/nginx/conf.d/plus-api.conf
+		/etc/nginx/events-includes/events.conf
 		/etc/nginx/includes/http_snippet1.conf
 		/etc/nginx/includes/http_snippet2.conf
 		/etc/nginx/includes/main_snippet1.conf
@@ -211,28 +212,32 @@ func TestGenerate(t *testing.T) {
 	g.Expect(httpCfg).To(ContainSubstring("deny all;"))
 	g.Expect(httpCfg).To(ContainSubstring("location = /dashboard.html {}"))
 
+	// events config file
+	g.Expect(files[3].Meta.Name).To(Equal("/etc/nginx/events-includes/events.conf"))
+	g.Expect(string(files[3].Contents)).To(ContainSubstring("worker_connections"))
+
 	// snippet include files
 	// content is not checked in this test.
-	g.Expect(files[3].Meta.Name).To(Equal("/etc/nginx/includes/http_snippet1.conf"))
-	g.Expect(files[4].Meta.Name).To(Equal("/etc/nginx/includes/http_snippet2.conf"))
-	g.Expect(files[5].Meta.Name).To(Equal("/etc/nginx/includes/main_snippet1.conf"))
-	g.Expect(files[6].Meta.Name).To(Equal("/etc/nginx/includes/main_snippet2.conf"))
+	g.Expect(files[4].Meta.Name).To(Equal("/etc/nginx/includes/http_snippet1.conf"))
+	g.Expect(files[5].Meta.Name).To(Equal("/etc/nginx/includes/http_snippet2.conf"))
+	g.Expect(files[6].Meta.Name).To(Equal("/etc/nginx/includes/main_snippet1.conf"))
+	g.Expect(files[7].Meta.Name).To(Equal("/etc/nginx/includes/main_snippet2.conf"))
 
-	g.Expect(files[7].Meta.Name).To(Equal("/etc/nginx/main-includes/deployment_ctx.json"))
-	deploymentCtx := string(files[7].Contents)
+	g.Expect(files[8].Meta.Name).To(Equal("/etc/nginx/main-includes/deployment_ctx.json"))
+	deploymentCtx := string(files[8].Contents)
 	g.Expect(deploymentCtx).To(ContainSubstring("\"integration\":\"ngf\""))
 	g.Expect(deploymentCtx).To(ContainSubstring("\"cluster_id\":\"test-uid\""))
 	g.Expect(deploymentCtx).To(ContainSubstring("\"installation_id\":\"test-uid-replicaSet\""))
 	g.Expect(deploymentCtx).To(ContainSubstring("\"cluster_node_count\":1"))
 
-	g.Expect(files[8].Meta.Name).To(Equal("/etc/nginx/main-includes/main.conf"))
-	mainConfStr := string(files[8].Contents)
+	g.Expect(files[9].Meta.Name).To(Equal("/etc/nginx/main-includes/main.conf"))
+	mainConfStr := string(files[9].Contents)
 	g.Expect(mainConfStr).To(ContainSubstring("load_module modules/ngx_otel_module.so;"))
 	g.Expect(mainConfStr).To(ContainSubstring("include /etc/nginx/includes/main_snippet1.conf;"))
 	g.Expect(mainConfStr).To(ContainSubstring("include /etc/nginx/includes/main_snippet2.conf;"))
 
-	g.Expect(files[9].Meta.Name).To(Equal("/etc/nginx/main-includes/mgmt.conf"))
-	mgmtConf := string(files[9].Contents)
+	g.Expect(files[10].Meta.Name).To(Equal("/etc/nginx/main-includes/mgmt.conf"))
+	mgmtConf := string(files[10].Contents)
 	g.Expect(mgmtConf).To(ContainSubstring("usage_report endpoint=test-endpoint"))
 	g.Expect(mgmtConf).To(ContainSubstring("license_token /etc/nginx/secrets/license.jwt"))
 	g.Expect(mgmtConf).To(ContainSubstring("deployment_context /etc/nginx/main-includes/deployment_ctx.json"))
@@ -240,23 +245,23 @@ func TestGenerate(t *testing.T) {
 	g.Expect(mgmtConf).To(ContainSubstring("ssl_certificate /etc/nginx/secrets/mgmt-tls.crt"))
 	g.Expect(mgmtConf).To(ContainSubstring("ssl_certificate_key /etc/nginx/secrets/mgmt-tls.key"))
 
-	g.Expect(files[10].Meta.Name).To(Equal("/etc/nginx/secrets/license.jwt"))
-	g.Expect(string(files[10].Contents)).To(Equal("license"))
+	g.Expect(files[11].Meta.Name).To(Equal("/etc/nginx/secrets/license.jwt"))
+	g.Expect(string(files[11].Contents)).To(Equal("license"))
 
-	g.Expect(files[11].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-ca.crt"))
-	g.Expect(string(files[11].Contents)).To(Equal("ca"))
+	g.Expect(files[12].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-ca.crt"))
+	g.Expect(string(files[12].Contents)).To(Equal("ca"))
 
-	g.Expect(files[12].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-tls.crt"))
-	g.Expect(string(files[12].Contents)).To(Equal("cert"))
+	g.Expect(files[13].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-tls.crt"))
+	g.Expect(string(files[13].Contents)).To(Equal("cert"))
 
-	g.Expect(files[13].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-tls.key"))
-	g.Expect(string(files[13].Contents)).To(Equal("key"))
+	g.Expect(files[14].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-tls.key"))
+	g.Expect(string(files[14].Contents)).To(Equal("key"))
 
-	g.Expect(files[14].Meta.Name).To(Equal("/etc/nginx/secrets/test-certbundle.crt"))
-	certBundle := string(files[14].Contents)
+	g.Expect(files[15].Meta.Name).To(Equal("/etc/nginx/secrets/test-certbundle.crt"))
+	certBundle := string(files[15].Contents)
 	g.Expect(certBundle).To(Equal("test-cert"))
 
-	g.Expect(files[15]).To(Equal(agent.File{
+	g.Expect(files[16]).To(Equal(agent.File{
 		Meta: &pb.FileMeta{
 			Name:        "/etc/nginx/secrets/test-keypair.pem",
 			Hash:        filesHelper.GenerateHash([]byte("test-cert\ntest-key")),
@@ -266,9 +271,9 @@ func TestGenerate(t *testing.T) {
 		Contents: []byte("test-cert\ntest-key"),
 	}))
 
-	g.Expect(files[16].Meta.Name).To(Equal("/etc/nginx/stream-conf.d/stream.conf"))
-	g.Expect(files[16].Meta.Permissions).To(Equal(file.RegularFileMode))
-	streamCfg := string(files[16].Contents)
+	g.Expect(files[17].Meta.Name).To(Equal("/etc/nginx/stream-conf.d/stream.conf"))
+	g.Expect(files[17].Meta.Permissions).To(Equal(file.RegularFileMode))
+	streamCfg := string(files[17].Contents)
 	g.Expect(streamCfg).To(ContainSubstring("listen unix:/var/run/nginx/app.example.com-443.sock"))
 	g.Expect(streamCfg).To(ContainSubstring("listen 443"))
 	g.Expect(streamCfg).To(ContainSubstring("app.example.com unix:/var/run/nginx/app.example.com-443.sock"))

@@ -396,6 +396,11 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		"WorkerConnections": workerConnections,
 	}
 
+	// Create events ConfigMap data using template
+	eventsFields := map[string]interface{}{
+		"WorkerConnections": workerConnections,
+	}
+
 	bootstrapCM := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ngxIncludesConfigMapName,
@@ -404,7 +409,8 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 			Annotations: objectMeta.Annotations,
 		},
 		Data: map[string]string{
-			"main.conf": string(helpers.MustExecuteTemplate(mainTemplate, mainFields)),
+			"main.conf":   string(helpers.MustExecuteTemplate(mainTemplate, mainFields)),
+			"events.conf": string(helpers.MustExecuteTemplate(eventsTemplate, eventsFields)),
 		},
 	}
 
@@ -417,23 +423,6 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		}
 
 		bootstrapCM.Data["mgmt.conf"] = string(helpers.MustExecuteTemplate(mgmtTemplate, mgmtFields))
-	}
-
-	// Create events ConfigMap with worker_connections using template
-	eventsFields := map[string]interface{}{
-		"WorkerConnections": workerConnections,
-	}
-
-	eventsCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        p.cfg.GatewayPodConfig.Name + "-events",
-			Namespace:   objectMeta.Namespace,
-			Labels:      objectMeta.Labels,
-			Annotations: objectMeta.Annotations,
-		},
-		Data: map[string]string{
-			"events.conf": string(helpers.MustExecuteTemplate(eventsTemplate, eventsFields)),
-		},
 	}
 
 	metricsPort := config.DefaultNginxMetricsPort
@@ -474,7 +463,7 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		},
 	}
 
-	return []client.Object{bootstrapCM, agentCM, eventsCM}
+	return []client.Object{bootstrapCM, agentCM}
 }
 
 func (p *NginxProvisioner) buildOpenshiftObjects(objectMeta metav1.ObjectMeta) []client.Object {
@@ -863,7 +852,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 						"--destination", "/etc/nginx-agent",
 						"--source", "/includes/main.conf",
 						"--destination", "/etc/nginx/main-includes",
-						"--source", "/events/events.conf",
+						"--source", "/includes/events.conf",
 						"--destination", "/etc/nginx/events-includes",
 					},
 					Env: []corev1.EnvVar{
@@ -880,7 +869,6 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 						{MountPath: "/agent", Name: "nginx-agent-config"},
 						{MountPath: "/etc/nginx-agent", Name: "nginx-agent"},
 						{MountPath: "/includes", Name: "nginx-includes-bootstrap"},
-						{MountPath: "/events", Name: "nginx-events-bootstrap"},
 						{MountPath: "/etc/nginx/main-includes", Name: "nginx-main-includes"},
 						{MountPath: "/etc/nginx/events-includes", Name: "nginx-events-includes"},
 					},
@@ -960,16 +948,6 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 						ConfigMap: &corev1.ConfigMapVolumeSource{
 							LocalObjectReference: corev1.LocalObjectReference{
 								Name: ngxIncludesConfigMapName,
-							},
-						},
-					},
-				},
-				{
-					Name: "nginx-events-bootstrap",
-					VolumeSource: corev1.VolumeSource{
-						ConfigMap: &corev1.ConfigMapVolumeSource{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: p.cfg.GatewayPodConfig.Name + "-events",
 							},
 						},
 					},
