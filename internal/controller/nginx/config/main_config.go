@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	mainConfigTemplate = gotemplate.Must(gotemplate.New("main").Parse(mainConfigTemplateText))
-	mgmtConfigTemplate = gotemplate.Must(gotemplate.New("mgmt").Parse(mgmtConfigTemplateText))
+	mainConfigTemplate   = gotemplate.Must(gotemplate.New("main").Parse(mainConfigTemplateText))
+	mgmtConfigTemplate   = gotemplate.Must(gotemplate.New("mgmt").Parse(mgmtConfigTemplateText))
+	eventsConfigTemplate = gotemplate.Must(gotemplate.New("events").Parse(eventsConfigTemplateText))
 )
 
 type mainConfig struct {
@@ -40,6 +41,17 @@ func executeMainConfig(conf dataplane.Configuration) []executeResult {
 	results = append(results, createIncludeExecuteResults(includes)...)
 
 	return results
+}
+
+func executeEventsConfig(conf dataplane.Configuration) []executeResult {
+	eventsData := helpers.MustExecuteTemplate(eventsConfigTemplate, conf)
+
+	return []executeResult{
+		{
+			dest: eventsIncludesConfigFile,
+			data: eventsData,
+		},
+	}
 }
 
 type mgmtConf struct {

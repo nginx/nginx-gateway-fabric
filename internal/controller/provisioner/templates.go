@@ -3,17 +3,17 @@ package provisioner
 import gotemplate "text/template"
 
 var (
-	mainTemplate  = gotemplate.Must(gotemplate.New("main").Parse(mainTemplateText))
-	mgmtTemplate  = gotemplate.Must(gotemplate.New("mgmt").Parse(mgmtTemplateText))
-	agentTemplate = gotemplate.Must(gotemplate.New("agent").Parse(agentTemplateText))
+	mainTemplate   = gotemplate.Must(gotemplate.New("main").Parse(mainTemplateText))
+	mgmtTemplate   = gotemplate.Must(gotemplate.New("mgmt").Parse(mgmtTemplateText))
+	agentTemplate  = gotemplate.Must(gotemplate.New("agent").Parse(agentTemplateText))
+	eventsTemplate = gotemplate.Must(gotemplate.New("events").Parse(eventsTemplateText))
 )
 
 const mainTemplateText = `
-error_log stderr {{ .ErrorLevel }};
+error_log stderr {{ .ErrorLevel }};`
 
-events {
-    worker_connections {{ .WorkerConnections }};
-}`
+const eventsTemplateText = `
+worker_connections {{ .WorkerConnections }};`
 
 const mgmtTemplateText = `mgmt {
     {{- if .UsageEndpoint }}
