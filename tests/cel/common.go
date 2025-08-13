@@ -101,6 +101,7 @@ func validateCrd(t *testing.T, wantErrors []string, crd client.Object, k8sClient
 	if len(wantErrors) == 0 {
 		g.Expect(err).ToNot(HaveOccurred())
 		// Clean up after test
+		// Resources only need to be deleted if they were created successfully
 		g.Expect(k8sClient.Delete(ctx, crd)).To(Succeed())
 	} else {
 		g.Expect(err).To(HaveOccurred())
