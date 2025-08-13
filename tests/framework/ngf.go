@@ -134,7 +134,7 @@ func UpgradeNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 	crdPath := filepath.Join(cfg.ChartPath, "crds") + "/"
 	cmd := exec.CommandContext(
 		context.Background(),
-		"kubectl", "apply", "--server-side", "-f", crdPath,
+		"kubectl", "apply", "--server-side", "--force-conflicts", "-f", crdPath,
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
