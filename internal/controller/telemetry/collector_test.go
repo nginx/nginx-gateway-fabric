@@ -176,6 +176,7 @@ var _ = Describe("Collector", Ordered, func() {
 			FlagValues:                     flags.Values,
 			SnippetsFiltersDirectives:      []string{},
 			SnippetsFiltersDirectivesCount: []int64{},
+			NginxOneConnectionEnabled:      true,
 		}
 
 		k8sClientReader = &kubernetesfakes.FakeReader{}
@@ -186,13 +187,14 @@ var _ = Describe("Collector", Ordered, func() {
 		fakeConfigurationGetter.GetLatestConfigurationReturns(nil)
 
 		dataCollector = telemetry.NewDataCollectorImpl(telemetry.DataCollectorConfig{
-			K8sClientReader:     k8sClientReader,
-			GraphGetter:         fakeGraphGetter,
-			ConfigurationGetter: fakeConfigurationGetter,
-			Version:             version,
-			PodNSName:           podNSName,
-			ImageSource:         "local",
-			Flags:               flags,
+			K8sClientReader:           k8sClientReader,
+			GraphGetter:               fakeGraphGetter,
+			ConfigurationGetter:       fakeConfigurationGetter,
+			Version:                   version,
+			PodNSName:                 podNSName,
+			ImageSource:               "local",
+			Flags:                     flags,
+			NginxOneConsoleConnection: true,
 		})
 
 		baseGetCalls = createGetCallsFunc(ngfPod, ngfReplicaSet, kubeNamespace)
@@ -516,6 +518,7 @@ var _ = Describe("Collector", Ordered, func() {
 				// empty + one gateway using daemonset
 				expData.NginxPodCount = int64(8)
 				expData.ControlPlanePodCount = int64(2)
+				expData.NginxOneConnectionEnabled = true
 
 				data, err := dataCollector.Collect(ctx)
 				Expect(err).ToNot(HaveOccurred())

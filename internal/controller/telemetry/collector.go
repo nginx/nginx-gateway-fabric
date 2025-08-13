@@ -64,6 +64,8 @@ type Data struct {
 	NginxPodCount int64
 	// ControlPlanePodCount is the total number of NGF control plane Pods.
 	ControlPlanePodCount int64
+	// NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled.
+	NginxOneConnectionEnabled bool
 }
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.
@@ -113,14 +115,16 @@ type DataCollectorConfig struct {
 	GraphGetter GraphGetter
 	// ConfigurationGetter allows us to get the Configuration.
 	ConfigurationGetter ConfigurationGetter
-	// Version is the NGF version.
-	Version string
 	// PodNSName is the NamespacedName of the NGF Pod.
 	PodNSName types.NamespacedName
+	// Version is the NGF version.
+	Version string
 	// ImageSource is the source of the NGF image.
 	ImageSource string
 	// Flags contains the command-line NGF flag keys and values.
 	Flags config.Flags
+	// NginxOneConsoleConnection is a boolean that indicates whether the connection to the Nginx One Console is enabled.
+	NginxOneConsoleConnection bool
 }
 
 // DataCollectorImpl is am implementation of DataCollector.
@@ -189,6 +193,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		SnippetsFiltersDirectivesCount: snippetsFiltersDirectivesCount,
 		NginxPodCount:                  nginxPodCount,
 		ControlPlanePodCount:           int64(replicaCount),
+		NginxOneConnectionEnabled:      c.cfg.NginxOneConsoleConnection,
 	}
 
 	return data, nil
