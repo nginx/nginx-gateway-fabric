@@ -396,6 +396,11 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		"WorkerConnections": workerConnections,
 	}
 
+	// Create events ConfigMap data using template
+	eventsFields := map[string]interface{}{
+		"WorkerConnections": workerConnections,
+	}
+
 	bootstrapCM := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ngxIncludesConfigMapName,
@@ -404,7 +409,8 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 			Annotations: objectMeta.Annotations,
 		},
 		Data: map[string]string{
-			"main.conf": string(helpers.MustExecuteTemplate(mainTemplate, mainFields)),
+			"main.conf":   string(helpers.MustExecuteTemplate(mainTemplate, mainFields)),
+			"events.conf": string(helpers.MustExecuteTemplate(eventsTemplate, eventsFields)),
 		},
 	}
 
@@ -826,6 +832,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 						{MountPath: "/etc/nginx/conf.d", Name: "nginx-conf"},
 						{MountPath: "/etc/nginx/stream-conf.d", Name: "nginx-stream-conf"},
 						{MountPath: "/etc/nginx/main-includes", Name: "nginx-main-includes"},
+						{MountPath: "/etc/nginx/events-includes", Name: "nginx-events-includes"},
 						{MountPath: "/etc/nginx/secrets", Name: "nginx-secrets"},
 						{MountPath: "/var/run/nginx", Name: "nginx-run"},
 						{MountPath: "/var/cache/nginx", Name: "nginx-cache"},
@@ -845,6 +852,8 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 						"--destination", "/etc/nginx-agent",
 						"--source", "/includes/main.conf",
 						"--destination", "/etc/nginx/main-includes",
+						"--source", "/includes/events.conf",
+						"--destination", "/etc/nginx/events-includes",
 					},
 					Env: []corev1.EnvVar{
 						{
@@ -861,6 +870,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 						{MountPath: "/etc/nginx-agent", Name: "nginx-agent"},
 						{MountPath: "/includes", Name: "nginx-includes-bootstrap"},
 						{MountPath: "/etc/nginx/main-includes", Name: "nginx-main-includes"},
+						{MountPath: "/etc/nginx/events-includes", Name: "nginx-events-includes"},
 					},
 					SecurityContext: &corev1.SecurityContext{
 						Capabilities: &corev1.Capabilities{
@@ -927,6 +937,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 				{Name: "nginx-conf", VolumeSource: emptyDirVolumeSource},
 				{Name: "nginx-stream-conf", VolumeSource: emptyDirVolumeSource},
 				{Name: "nginx-main-includes", VolumeSource: emptyDirVolumeSource},
+				{Name: "nginx-events-includes", VolumeSource: emptyDirVolumeSource},
 				{Name: "nginx-secrets", VolumeSource: emptyDirVolumeSource},
 				{Name: "nginx-run", VolumeSource: emptyDirVolumeSource},
 				{Name: "nginx-cache", VolumeSource: emptyDirVolumeSource},

@@ -1275,7 +1275,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 
 	bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data["main.conf"]).To(ContainSubstring("worker_connections 1024;"))
+	g.Expect(bootstrapCM.Data["events.conf"]).To(ContainSubstring("worker_connections 1024;"))
 
 	// Test with default worker connections (empty NginxProxy config)
 	nProxyCfgEmpty := &graph.EffectiveNginxProxy{}
@@ -1284,7 +1284,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 
 	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data["main.conf"]).To(ContainSubstring("worker_connections 1024;"))
+	g.Expect(bootstrapCM.Data["events.conf"]).To(ContainSubstring("worker_connections 1024;"))
 
 	// Test with custom worker connections
 	nProxyCfg := &graph.EffectiveNginxProxy{
@@ -1296,7 +1296,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 
 	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data["main.conf"]).To(ContainSubstring("worker_connections 2048;"))
+	g.Expect(bootstrapCM.Data["events.conf"]).To(ContainSubstring("worker_connections 2048;"))
 }
 
 func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
