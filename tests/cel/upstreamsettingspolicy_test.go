@@ -1,17 +1,3 @@
-// Package cel contains CEL validation tests for NGINX Gateway Fabric CRDs.
-// This file contains comprehensive tests for UpstreamSettingsPolicy CEL validation rules.
-//
-// The tests validate the following CEL expressions defined in UpstreamSettingsPolicySpec.TargetRefs:
-//
-// 1. Kind validation: "self.all(t, t.kind=='Service')"
-//   - Ensures all TargetRefs have Kind "Service"
-//
-// 2. Group validation: "self.exists(t, t.group==”) || self.exists(t, t.group=='core')"
-//   - Ensures at least one TargetRef has group "" (empty) OR "core"
-//   - Note: This rule allows mixed groups if at least one is valid
-//
-// 3. Name uniqueness: "self.all(p1, self.exists_one(p2, p1.name == p2.name))"
-//   - Ensures all TargetRef names are unique within the policy
 package cel
 
 import (
