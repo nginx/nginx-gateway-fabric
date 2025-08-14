@@ -7,6 +7,7 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
@@ -215,6 +216,69 @@ func TestObservabilityPoliciesTargetRefKindAndNameCombo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := tt.spec
+
+			observabilityPolicy := &ngfAPIv1alpha2.ObservabilityPolicy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      uniqueResourceName(testResourceName),
+					Namespace: defaultNamespace,
+				},
+				Spec: spec,
+			}
+			validateCrd(t, tt.wantErrors, observabilityPolicy, k8sClient)
+		})
+	}
+}
+
+func TestObservabilityPoliciesTracing(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		spec       ngfAPIv1alpha2.ObservabilityPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "Validate ObservabilityPolicy is applied when ratio is set and strategy is TraceStrategyRatio",
+			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+					{
+						Kind:  httpRouteKind,
+						Group: gatewayGroup,
+					},
+				},
+				Tracing: &ngfAPIv1alpha2.Tracing{
+					Strategy: ngfAPIv1alpha2.TraceStrategyRatio,
+					Ratio:    helpers.GetPointer[int32](50),
+				},
+			},
+		},
+		{
+			name:       "Validate ObservabilityPolicy is invalid when ratio is set and strategy is not TraceStrategyRatio",
+			wantErrors: []string{expectedStrategyMustBeOfTypeRatio},
+			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+					{
+						Kind:  httpRouteKind,
+						Group: gatewayGroup,
+					},
+				},
+				Tracing: &ngfAPIv1alpha2.Tracing{
+					Strategy: ngfAPIv1alpha2.TraceStrategyParent,
+					Ratio:    helpers.GetPointer[int32](50),
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := tt.spec
+
+			for i := range spec.TargetRefs {
+				spec.TargetRefs[i].Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+			}
 
 			observabilityPolicy := &ngfAPIv1alpha2.ObservabilityPolicy{
 				ObjectMeta: controllerruntime.ObjectMeta{

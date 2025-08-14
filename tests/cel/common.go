@@ -44,9 +44,11 @@ const (
 	expectedMinReplicasLessThanOrEqualError = `minReplicas must be less than or equal to maxReplicas`
 )
 
+// ObservabilityPolicy validation errors.
 const (
 	expectedTargetRefMustBeHTTPRouteOrGrpcRouteError = `TargetRef Kind must be: HTTPRoute or GRPCRoute`
 	expectedTargetRefKindAndNameComboMustBeUnique    = `TargetRef Kind and Name combination must be unique`
+	expectedStrategyMustBeOfTypeRatio                = `ratio can only be specified if strategy is of type ratio`
 )
 
 const (
