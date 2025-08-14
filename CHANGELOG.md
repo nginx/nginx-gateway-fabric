@@ -24,7 +24,7 @@ FEATURES:
 
 BUG FIXES:
 
-- Fix an issue where nginx Pod couldn't connect to control plane if multiple Pods shared the nginx Pod's IP address. [3673](https://github.com/nginx/nginx-gateway-fabric/pull/3673)
+- Fix an issue where nginx Pod couldn't connect to control plane if multiple Pods shared the NGINX Pod's IP address. [3673](https://github.com/nginx/nginx-gateway-fabric/pull/3673)
 
 DOCUMENTATION:
 
