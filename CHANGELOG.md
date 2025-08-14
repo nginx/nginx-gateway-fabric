@@ -4,6 +4,57 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.1.0
+
+_August 14, 2025_
+
+FEATURES:
+
+- Add policyAffected status for policy target refs. [3535](https://github.com/nginx/nginx-gateway-fabric/pull/3535)
+- Add support for appProtocol on BackendRefs which point to a Kubernetes Service with a specified appProtocol on the target Service Port. [3511](https://github.com/nginx/nginx-gateway-fabric/pull/3511)
+- Support configurable hostPorts in NGINX container. [3321](https://github.com/nginx/nginx-gateway-fabric/pull/3321)
+- Add support for configuring NGINX `worker_connections` directive. [3611](https://github.com/nginx/nginx-gateway-fabric/pull/3611)
+- Add support for percentage based request mirroring. [3627](https://github.com/nginx/nginx-gateway-fabric/pull/3627)
+- NGINX Pod now has a configurable readiness probe. [3629](https://github.com/nginx/nginx-gateway-fabric/pull/3629)
+- Add the ability to patch the dataplane Service, Deployment, and DaemonSet resources through NginxProxy. [3630](https://github.com/nginx/nginx-gateway-fabric/pull/3630)
+- Add disableSNIHostValidation field to NginxProxy CRD to resolve HTTP/2 connection reuse issues with wildcard certificates, with documented security trade-offs. [3659](https://github.com/nginx/nginx-gateway-fabric/pull/3659)
+- Enable connection to NGINX One Console. [3676](https://github.com/nginx/nginx-gateway-fabric/pull/3676)
+- Add HorizontalPodAutoscaling support for both control plane and data plane deployments. [3702](https://github.com/nginx/nginx-gateway-fabric/pull/3702). Thanks to [nowjean](https://github.com/nowjean).
+- Set the OverlappingTLSConfig condition on Listeners with overlapping TLS hostnames. [3709](https://github.com/nginx/nginx-gateway-fabric/pull/3709)
+
+BUG FIXES:
+
+- Fix an issue where the NGINX Pod couldn't connect to control plane if multiple Pods shared the NGINX Pod's IP address. [3673](https://github.com/nginx/nginx-gateway-fabric/pull/3673)
+
+DOCUMENTATION:
+
+- Add simplified architecture diagrams for traffic flow and config changes. [3557](https://github.com/nginx/nginx-gateway-fabric/pull/3557)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.1.0.
+- Allow users to specify nginxGateway.name to configure names of deployments. [3528](https://github.com/nginx/nginx-gateway-fabric/pull/3528)
+- Fix Helm Schema for data plane volume mounts. [3588](https://github.com/nginx/nginx-gateway-fabric/pull/3588). Thanks to [vazkarvishal](https://github.com/vazkarvishal).
+- Update Helm Chart README to recommend using server-side apply when applying NGF CRDs. [3589](https://github.com/nginx/nginx-gateway-fabric/pull/3589)
+
+UPGRADE:
+
+- **Important:** Upgrading from v2.0.x to 2.1 requires the NGINX Gateway Fabric control plane to be uninstalled and then reinstalled to avoid any downtime to user traffic. CRDs do not need to be removed. The NGINX data plane deployment is not affected by this process, and traffic should still flow uninterrupted. For more information on how to do so, view our guide on [Upgrading NGINX Gateway Fabric](https://docs.nginx.com/nginx-gateway-fabric/install/upgrade-version/)
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.29.0`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.2.0`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.1.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.1.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.1.0`
+
 ## Release 2.0.2
 
 _July 8, 2025_

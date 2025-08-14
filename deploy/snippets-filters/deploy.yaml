@@ -10,7 +10,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway
   namespace: nginx-gateway
 ---
@@ -20,7 +20,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway-cert-generator
   namespace: nginx-gateway
 ---
@@ -30,7 +30,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway-cert-generator
   namespace: nginx-gateway
 rules:
@@ -49,7 +49,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway
 rules:
 - apiGroups:
@@ -184,7 +184,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway-cert-generator
   namespace: nginx-gateway
 roleRef:
@@ -202,7 +202,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -219,7 +219,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway
   namespace: nginx-gateway
 spec:
@@ -239,7 +239,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway
   namespace: nginx-gateway
 spec:
@@ -288,9 +288,9 @@ spec:
             fieldRef:
               fieldPath: metadata.labels['app.kubernetes.io/instance']
         - name: IMAGE_NAME
-          value: ghcr.io/nginx/nginx-gateway-fabric:edge
-        image: ghcr.io/nginx/nginx-gateway-fabric:edge
-        imagePullPolicy: Always
+          value: ghcr.io/nginx/nginx-gateway-fabric:2.1.0
+        image: ghcr.io/nginx/nginx-gateway-fabric:2.1.0
+        imagePullPolicy: IfNotPresent
         name: nginx-gateway
         ports:
         - containerPort: 8443
@@ -334,7 +334,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway-cert-generator
   namespace: nginx-gateway
 spec:
@@ -354,8 +354,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: ghcr.io/nginx/nginx-gateway-fabric:edge
-        imagePullPolicy: Always
+        image: ghcr.io/nginx/nginx-gateway-fabric:2.1.0
+        imagePullPolicy: IfNotPresent
         name: cert-generator
         securityContext:
           allowPrivilegeEscalation: false
@@ -380,7 +380,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx
 spec:
   controllerName: gateway.nginx.org/nginx-gateway-controller
@@ -396,7 +396,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway-config
   namespace: nginx-gateway
 spec:
@@ -409,7 +409,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: nginx-gateway
     app.kubernetes.io/name: nginx-gateway
-    app.kubernetes.io/version: edge
+    app.kubernetes.io/version: 2.1.0
   name: nginx-gateway-proxy-config
   namespace: nginx-gateway
 spec:
@@ -417,9 +417,9 @@ spec:
     deployment:
       container:
         image:
-          pullPolicy: Always
+          pullPolicy: IfNotPresent
           repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
-          tag: edge
+          tag: 2.1.0
       replicas: 1
     service:
       externalTrafficPolicy: Local
