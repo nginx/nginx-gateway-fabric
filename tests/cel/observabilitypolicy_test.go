@@ -66,7 +66,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 			},
 		},
 		{
-			name:       "Validate TargetRef of kind Gateway is allowed",
+			name:       "Validate TargetRef of kind Gateway is not allowed",
 			wantErrors: []string{expectedTargetRefMustBeHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
 				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
@@ -192,8 +192,7 @@ func TestObservabilityPoliciesTargetRefKindAndNameCombo(t *testing.T) {
 		wantErrors []string
 	}{
 		{
-			// This test is not throwing an error like we expect it to...
-			name:       "Validate TargetRef Kind and Name combination is unique",
+			name:       "Validate resource is invalid when TargetRef Kind and Name combination is not unique",
 			wantErrors: []string{expectedTargetRefKindAndNameComboMustBeUnique},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
 				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
@@ -205,6 +204,40 @@ func TestObservabilityPoliciesTargetRefKindAndNameCombo(t *testing.T) {
 					{
 						Kind:  httpRouteKind,
 						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Group: gatewayGroup,
+					},
+				},
+			},
+		},
+		{
+			name: "Validate resource is valid when TargetRef Kind and Name combination is unique using different kinds",
+			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+					{
+						Kind:  httpRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Group: gatewayGroup,
+					},
+				},
+			},
+		},
+		{
+			name: "Validate resource is valid when TargetRef Kind and Name combination is unique using different names",
+			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+					{
+						Kind:  httpRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 						Group: gatewayGroup,
 					},
 				},
