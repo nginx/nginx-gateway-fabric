@@ -7,13 +7,14 @@ load_module modules/ngx_otel_module.so;
 
 error_log stderr {{ .Conf.Logging.ErrorLevel }};
 
-events {
-  worker_connections {{ .Conf.WorkerConnections }};
-}
 
 {{ range $i := .Includes -}}
 include {{ $i.Name }};
 {{ end -}}
+`
+
+const eventsConfigTemplateText = `
+worker_connections {{ .WorkerConnections }};
 `
 
 const mgmtConfigTemplateText = `

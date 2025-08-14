@@ -38,6 +38,9 @@ const (
 	// For example, these files include load_module directives and snippets that target the main context.
 	mainIncludesFolder = configFolder + "/main-includes"
 
+	// eventsIncludesFolder is the folder where NGINX events context configuration files are stored.
+	eventsIncludesFolder = configFolder + "/events-includes"
+
 	// secretsFolder is the folder where secrets (like TLS certs/keys) are stored.
 	secretsFolder = configFolder + "/secrets"
 
@@ -55,6 +58,9 @@ const (
 
 	// mainIncludesConfigFile is the path to the file containing NGINX configuration in the main context.
 	mainIncludesConfigFile = mainIncludesFolder + "/main.conf"
+
+	// eventsIncludesConfigFile is the path to the file containing NGINX events configuration.
+	eventsIncludesConfigFile = eventsIncludesFolder + "/events.conf"
 
 	// mgmtIncludesFile is the path to the file containing the NGINX Plus mgmt config.
 	mgmtIncludesFile = mainIncludesFolder + "/mgmt.conf"
@@ -196,6 +202,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 ) []executeFunc {
 	return []executeFunc{
 		executeMainConfig,
+		executeEventsConfig,
 		executeBaseHTTPConfig,
 		g.newExecuteServersFunc(generator, keepAliveCheck),
 		newExecuteUpstreamsFunc(upstreams),
