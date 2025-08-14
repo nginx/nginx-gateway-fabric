@@ -289,8 +289,9 @@ func StartManager(cfg config.Config) error {
 				Namespace: cfg.GatewayPodConfig.Namespace,
 				Name:      cfg.GatewayPodConfig.Name,
 			},
-			ImageSource: cfg.ImageSource,
-			Flags:       cfg.Flags,
+			ImageSource:               cfg.ImageSource,
+			Flags:                     cfg.Flags,
+			NginxOneConsoleConnection: cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "",
 		})
 
 		job, err := createTelemetryJob(cfg, dataCollector, healthChecker.getReadyCh())

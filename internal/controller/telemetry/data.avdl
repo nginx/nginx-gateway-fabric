@@ -111,5 +111,8 @@ attached at the Gateway level. */
 		/** ControlPlanePodCount is the total number of NGF control plane Pods. */
 		long? ControlPlanePodCount = null;
 		
+		/** NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled. */
+		boolean? NginxOneConnectionEnabled = null;
+		
 	}
 }
