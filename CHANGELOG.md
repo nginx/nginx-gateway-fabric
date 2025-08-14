@@ -6,7 +6,7 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.1.0
 
-August 14, 2025_
+_August 14, 2025_
 
 FEATURES:
 
@@ -14,13 +14,13 @@ FEATURES:
 - Add support for appProtocol on BackendRefs which point to a Kubernetes Service with a specified appProtocol on the target Service Port. [3511](https://github.com/nginx/nginx-gateway-fabric/pull/3511)
 - Support configurable hostPorts in NGINX container. [3321](https://github.com/nginx/nginx-gateway-fabric/pull/3321)
 - Add support for configuring NGINX `worker_connections` directive. [3611](https://github.com/nginx/nginx-gateway-fabric/pull/3611)
-- Add support for percentage based request mirroring.[3627](https://github.com/nginx/nginx-gateway-fabric/pull/3627)
+- Add support for percentage based request mirroring. [3627](https://github.com/nginx/nginx-gateway-fabric/pull/3627)
 - Readiness probe settings for NGINX are now configurable in the `NginxProxy` spec. [3629](https://github.com/nginx/nginx-gateway-fabric/pull/3629)
 - Add the ability to patch the dataplane Service, Deployment, and DaemonSet resources through NginxProxy. [3630](https://github.com/nginx/nginx-gateway-fabric/pull/3630)
 - Add disableSNIHostValidation field to NginxProxy CRD to resolve HTTP/2 connection reuse issues with wildcard certificates, with documented security trade-offs. [3659](https://github.com/nginx/nginx-gateway-fabric/pull/3659)
 - Enable connection to NGINX One Console. [3676](https://github.com/nginx/nginx-gateway-fabric/pull/3676)
 - Add HorizontalPodAutoscaling support for both control plane and data plane deployments. [3702](https://github.com/nginx/nginx-gateway-fabric/pull/3702)
-- Implemented logic to detect overlapping TLS hostnames between Listeners on the same port, and set the OverlappingTLSConfig condition with the reason OverlappingHostnames on all affected Listeners [3709](https://github.com/nginx/nginx-gateway-fabric/pull/3709)
+- Implemented logic to detect overlapping TLS hostnames between Listeners on the same port, and set the OverlappingTLSConfig condition with the reason OverlappingHostnames on all affected Listeners. [3709](https://github.com/nginx/nginx-gateway-fabric/pull/3709)
 
 BUG FIXES:
 
