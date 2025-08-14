@@ -33,7 +33,7 @@ const (
 // ClientSettingsPolicy validation errors.
 const (
 	expectedTargetRefKindError       = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
-	expectedTargetRefGroupError      = `TargetRef Group must be gateway.networking.k8s.io.`
+	expectedTargetRefGroupError      = `TargetRef Group must be gateway.networking.k8s.io`
 	expectedHeaderWithoutServerError = `header can only be specified if server is specified`
 )
 
@@ -42,6 +42,10 @@ const (
 	expectedOneOfDeploymentOrDaemonSetError = `only one of deployment or daemonSet can be set`
 	expectedIfModeSetTrustedAddressesError  = `if mode is set, trustedAddresses is a required field`
 	expectedMinReplicasLessThanOrEqualError = `minReplicas must be less than or equal to maxReplicas`
+)
+
+const (
+	expectedTargetRefMustBeHTTPRouteOrGrpcRouteError = `TargetRef Kind must be: HTTPRoute or GRPCRoute`
 )
 
 const (
