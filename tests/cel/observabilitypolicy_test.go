@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"fmt"
 	"testing"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -238,6 +239,57 @@ func TestObservabilityPoliciesTargetRefKindAndNameCombo(t *testing.T) {
 					{
 						Kind:  grpcRouteKind,
 						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
+						Group: gatewayGroup,
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate three TargetRefs with one duplicate name are not allowed",
+			wantErrors: []string{expectedTargetRefKindAndNameComboMustBeUnique},
+			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+					{
+						Kind:  httpRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Group: gatewayGroup,
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate multiple duplicate TargetRefs are not allowed",
+			wantErrors: []string{expectedTargetRefKindAndNameComboMustBeUnique},
+			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
+				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+					{
+						Kind:  grpcRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(fmt.Sprintf("duplicate-group-1-%s", testTargetRefName)),
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(fmt.Sprintf("duplicate-group-1-%s", testTargetRefName)),
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(fmt.Sprintf("duplicate-group-2-%s", testTargetRefName)),
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
+						Name:  gatewayv1alpha2.ObjectName(fmt.Sprintf("duplicate-group-2-%s", testTargetRefName)),
 						Group: gatewayGroup,
 					},
 				},
