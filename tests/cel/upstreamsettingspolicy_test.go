@@ -9,19 +9,6 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
-// UpstreamSettingsPolicy validation errors.
-const (
-	expectedTargetRefKindServiceError = `TargetRefs Kind must be: Service`
-	expectedTargetRefGroupCoreError   = `TargetRefs Group must be core`
-	expectedTargetRefNameUniqueError  = `TargetRef Name must be unique`
-)
-
-const (
-	serviceKind = "Service"
-	coreGroup   = "core"
-	emptyGroup  = ""
-)
-
 func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
@@ -38,7 +25,6 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -50,12 +36,10 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -68,7 +52,6 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 					{
 						Kind:  gatewayKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -81,7 +64,6 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 					{
 						Kind:  httpRouteKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -94,7 +76,6 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 					{
 						Kind:  invalidKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -107,12 +88,10 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 					{
 						Kind:  gatewayKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -122,6 +101,11 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
+			for i := range tt.spec.TargetRefs {
+				tt.spec.TargetRefs[i].Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+			}
+
 			upstreamSettingsPolicy := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      uniqueResourceName(testResourceName),
@@ -150,7 +134,6 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -162,7 +145,6 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: emptyGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -174,12 +156,10 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 					{
 						Kind:  serviceKind,
 						Group: emptyGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -192,7 +172,6 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: gatewayGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -205,7 +184,6 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: invalidGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -217,12 +195,10 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 					{
 						Kind:  serviceKind,
 						Group: gatewayGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -235,12 +211,10 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: gatewayGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 					{
 						Kind:  serviceKind,
 						Group: invalidGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -250,6 +224,11 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
+			for i := range tt.spec.TargetRefs {
+				tt.spec.TargetRefs[i].Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+			}
+
 			upstreamSettingsPolicy := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      uniqueResourceName(testResourceName),
@@ -278,7 +257,6 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -290,17 +268,14 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 					{
 						Kind:  serviceKind,
 						Group: emptyGroup,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
 					},
 				},
 			},
@@ -379,6 +354,13 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
+			for i := range tt.spec.TargetRefs {
+				if tt.spec.TargetRefs[i].Name == "" {
+					tt.spec.TargetRefs[i].Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+				}
+			}
+
 			upstreamSettingsPolicy := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      uniqueResourceName(testResourceName),

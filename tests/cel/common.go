@@ -22,12 +22,15 @@ const (
 	grpcRouteKind = "GRPCRoute"
 	tcpRouteKind  = "TCPRoute"
 	invalidKind   = "InvalidKind"
+	serviceKind   = "Service"
 )
 
 const (
 	gatewayGroup   = "gateway.networking.k8s.io"
 	invalidGroup   = "invalid.networking.k8s.io"
 	discoveryGroup = "discovery.k8s.io/v1"
+	coreGroup      = "core"
+	emptyGroup     = ""
 )
 
 // ClientSettingsPolicy validation errors.
@@ -42,6 +45,13 @@ const (
 	expectedOneOfDeploymentOrDaemonSetError = `only one of deployment or daemonSet can be set`
 	expectedIfModeSetTrustedAddressesError  = `if mode is set, trustedAddresses is a required field`
 	expectedMinReplicasLessThanOrEqualError = `minReplicas must be less than or equal to maxReplicas`
+)
+
+// UpstreamSettingsPolicy validation errors.
+const (
+	expectedTargetRefKindServiceError = `TargetRefs Kind must be: Service`
+	expectedTargetRefGroupCoreError   = `TargetRefs Group must be core`
+	expectedTargetRefNameUniqueError  = `TargetRef Name must be unique`
 )
 
 const (
