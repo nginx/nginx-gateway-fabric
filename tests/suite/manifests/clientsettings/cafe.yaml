@@ -17,6 +17,10 @@ spec:
         image: nginxdemos/nginx-hello:plain-text
         ports:
         - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
 ---
 apiVersion: v1
 kind: Service
@@ -50,6 +54,10 @@ spec:
         image: nginxdemos/nginx-hello:plain-text
         ports:
         - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
 ---
 apiVersion: v1
 kind: Service
@@ -83,6 +91,10 @@ spec:
         image: nginxdemos/nginx-hello:plain-text
         ports:
         - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
 ---
 apiVersion: v1
 kind: Service

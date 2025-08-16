@@ -29,11 +29,16 @@ spec:
       containers:
       - name: grpc-infra-backend-v1
         image: ghcr.io/nginx/kic-test-grpc-server:0.2.5
+        ports:
+        - containerPort: 50051
         env:
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        readinessProbe:
+          tcpSocket:
+            port: 50051
         resources:
           requests:
             cpu: 10m
@@ -69,11 +74,16 @@ spec:
       containers:
       - name: grpc-infra-backend-v2
         image: ghcr.io/nginx/kic-test-grpc-server:edge
+        ports:
+        - containerPort: 50051
         env:
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        readinessProbe:
+          tcpSocket:
+            port: 50051
         resources:
           requests:
             cpu: 10m
