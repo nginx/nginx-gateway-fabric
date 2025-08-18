@@ -1,8 +1,10 @@
 package graph
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,6 +13,7 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -77,7 +80,7 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, nil, "test", test.gateways)
+			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, nil, test.gateways)
 
 			g.Expect(processed).To(Equal(test.expected))
 		})
@@ -399,7 +402,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid case with too many ancestors",
+			name: "valid case with many ancestors",
 			tlsPolicy: &v1alpha3.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
@@ -416,7 +419,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 					Ancestors: ancestors,
 				},
 			},
-			ignored: true,
+			isValid: true,
 		},
 	}
 
@@ -474,7 +477,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			valid, ignored, conds := validateBackendTLSPolicy(test.tlsPolicy, configMapResolver, secretMapResolver, "test")
+			valid, ignored, conds := validateBackendTLSPolicy(test.tlsPolicy, configMapResolver, secretMapResolver)
 
 			if !test.isValid && !test.ignored {
 				g.Expect(conds).To(HaveLen(1))
@@ -660,8 +663,148 @@ func TestAddGatewaysForBackendTLSPolicies(t *testing.T) {
 		g := NewWithT(t)
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			addGatewaysForBackendTLSPolicies(test.backendTLSPolicies, test.services)
+			addGatewaysForBackendTLSPolicies(test.backendTLSPolicies, test.services, "nginx-gateway", nil, logr.Discard())
 			g.Expect(helpers.Diff(test.backendTLSPolicies, test.expected)).To(BeEmpty())
 		})
 	}
+}
+
+func TestAddGatewaysForBackendTLSPoliciesAncestorLimit(t *testing.T) {
+	t.Parallel()
+
+	// Create a test logger that captures log output
+	var logBuf bytes.Buffer
+	testLogger := logr.New(&testNGFLogSink{buffer: &logBuf})
+
+	// Helper function to create ancestor references
+	getAncestorRef := func(ctlrName, parentName string) v1alpha2.PolicyAncestorStatus {
+		return v1alpha2.PolicyAncestorStatus{
+			ControllerName: gatewayv1.GatewayController(ctlrName),
+			AncestorRef: gatewayv1.ParentReference{
+				Name:      gatewayv1.ObjectName(parentName),
+				Namespace: helpers.GetPointer(gatewayv1.Namespace("test")),
+				Group:     helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName),
+				Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.Gateway),
+			},
+		}
+	}
+
+	// Create 16 ancestors from different controllers to simulate full list
+	fullAncestors := make([]v1alpha2.PolicyAncestorStatus, 16)
+	for i := range 16 {
+		fullAncestors[i] = getAncestorRef("other-controller", "other-gateway")
+	}
+
+	btpWithFullAncestors := &BackendTLSPolicy{
+		Source: &v1alpha3.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "btp-full-ancestors",
+				Namespace: "test",
+			},
+			Spec: v1alpha3.BackendTLSPolicySpec{
+				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "service1",
+						},
+					},
+				},
+			},
+			Status: v1alpha2.PolicyStatus{
+				Ancestors: fullAncestors,
+			},
+		},
+	}
+
+	btpNormal := &BackendTLSPolicy{
+		Source: &v1alpha3.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "btp-normal",
+				Namespace: "test",
+			},
+			Spec: v1alpha3.BackendTLSPolicySpec{
+				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "service2",
+						},
+					},
+				},
+			},
+			Status: v1alpha2.PolicyStatus{
+				Ancestors: []v1alpha2.PolicyAncestorStatus{}, // Empty ancestors list
+			},
+		},
+	}
+
+	services := map[types.NamespacedName]*ReferencedService{
+		{Namespace: "test", Name: "service1"}: {
+			GatewayNsNames: map[types.NamespacedName]struct{}{
+				{Namespace: "test", Name: "gateway1"}: {},
+			},
+		},
+		{Namespace: "test", Name: "service2"}: {
+			GatewayNsNames: map[types.NamespacedName]struct{}{
+				{Namespace: "test", Name: "gateway2"}: {},
+			},
+		},
+	}
+
+	// Create gateways - one will receive ancestor limit condition
+	gateways := map[types.NamespacedName]*Gateway{
+		{Namespace: "test", Name: "gateway1"}: {
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gateway1", Namespace: "test"},
+			},
+			Conditions: []conditions.Condition{}, // Start with empty conditions
+		},
+		{Namespace: "test", Name: "gateway2"}: {
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gateway2", Namespace: "test"},
+			},
+			Conditions: []conditions.Condition{}, // Start with empty conditions
+		},
+	}
+
+	backendTLSPolicies := map[types.NamespacedName]*BackendTLSPolicy{
+		{Namespace: "test", Name: "btp-full-ancestors"}: btpWithFullAncestors,
+		{Namespace: "test", Name: "btp-normal"}:         btpNormal,
+	}
+
+	g := NewWithT(t)
+
+	// Execute the function
+	addGatewaysForBackendTLSPolicies(backendTLSPolicies, services, "nginx-gateway", gateways, testLogger)
+
+	// Verify that the policy with full ancestors doesn't get any gateways assigned
+	g.Expect(btpWithFullAncestors.Gateways).To(BeEmpty(), "Policy with full ancestors should not get gateways assigned")
+
+	// Verify that the normal policy gets its gateway assigned
+	g.Expect(btpNormal.Gateways).To(HaveLen(1))
+	g.Expect(btpNormal.Gateways[0]).To(Equal(types.NamespacedName{Namespace: "test", Name: "gateway2"}))
+
+	// Verify that gateway1 received the ancestor limit condition
+	gateway1 := gateways[types.NamespacedName{Namespace: "test", Name: "gateway1"}]
+	g.Expect(gateway1.Conditions).To(HaveLen(1), "Gateway should have received ancestor limit condition")
+
+	condition := gateway1.Conditions[0]
+	g.Expect(condition.Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+	g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+	g.Expect(condition.Reason).To(Equal(string(conditions.PolicyReasonAncestorLimitReached)))
+	g.Expect(condition.Message).To(ContainSubstring("ancestor status list has reached the maximum size"))
+
+	// Verify that gateway2 did not receive any conditions (normal case)
+	gateway2 := gateways[types.NamespacedName{Namespace: "test", Name: "gateway2"}]
+	g.Expect(gateway2.Conditions).To(BeEmpty(), "Normal gateway should not have conditions")
+
+	// Verify logging function works - test the logging function directly
+	logAncestorLimitReached(testLogger, "test/btp-full-ancestors", "BackendTLSPolicy", "test/gateway1")
+	logOutput := logBuf.String()
+
+	g.Expect(logOutput).To(ContainSubstring("Policy ancestor limit reached for test/btp-full-ancestors"))
+	g.Expect(logOutput).To(ContainSubstring("test/btp-full-ancestors"))
+	g.Expect(logOutput).To(ContainSubstring("policyKind=BackendTLSPolicy"))
+	g.Expect(logOutput).To(ContainSubstring("ancestor=test/gateway1"))
 }

@@ -3,7 +3,9 @@ package graph
 import (
 	"fmt"
 	"slices"
+	"strings"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -18,7 +20,8 @@ type BackendTLSPolicy struct {
 	Source *v1alpha3.BackendTLSPolicy
 	// CaCertRef is the name of the ConfigMap that contains the CA certificate.
 	CaCertRef types.NamespacedName
-	// Gateways are the names of the Gateways that are being checked for this BackendTLSPolicy.
+	// Gateways are the names of the Gateways for which this BackendTLSPolicy is effectively applied.
+	// Only contains gateways where the policy can be applied (not limited by ancestor status).
 	Gateways []types.NamespacedName
 	// Conditions include Conditions for the BackendTLSPolicy.
 	Conditions []conditions.Condition
@@ -34,7 +37,6 @@ func processBackendTLSPolicies(
 	backendTLSPolicies map[types.NamespacedName]*v1alpha3.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
 	secretResolver *secretResolver,
-	ctlrName string,
 	gateways map[types.NamespacedName]*Gateway,
 ) map[types.NamespacedName]*BackendTLSPolicy {
 	if len(backendTLSPolicies) == 0 || len(gateways) == 0 {
@@ -45,7 +47,7 @@ func processBackendTLSPolicies(
 	for nsname, backendTLSPolicy := range backendTLSPolicies {
 		var caCertRef types.NamespacedName
 
-		valid, ignored, conds := validateBackendTLSPolicy(backendTLSPolicy, configMapResolver, secretResolver, ctlrName)
+		valid, ignored, conds := validateBackendTLSPolicy(backendTLSPolicy, configMapResolver, secretResolver)
 
 		if valid && !ignored && backendTLSPolicy.Spec.Validation.CACertificateRefs != nil {
 			caCertRef = types.NamespacedName{
@@ -68,16 +70,9 @@ func validateBackendTLSPolicy(
 	backendTLSPolicy *v1alpha3.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
 	secretResolver *secretResolver,
-	ctlrName string,
 ) (valid, ignored bool, conds []conditions.Condition) {
 	valid = true
 	ignored = false
-
-	// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
-	if backendTLSPolicyAncestorsFull(backendTLSPolicy.Status.Ancestors, ctlrName) {
-		valid = false
-		ignored = true
-	}
 
 	if err := validateBackendTLSHostname(backendTLSPolicy); err != nil {
 		valid = false
@@ -183,31 +178,148 @@ func validateBackendTLSWellKnownCACerts(btp *v1alpha3.BackendTLSPolicy) error {
 	return nil
 }
 
+// countNonNGFAncestors counts the number of non-NGF ancestors in policy status.
+func countNonNGFAncestors(policy *v1alpha3.BackendTLSPolicy, ctlrName string) int {
+	nonNGFCount := 0
+	for _, ancestor := range policy.Status.Ancestors {
+		if string(ancestor.ControllerName) != ctlrName {
+			nonNGFCount++
+		}
+	}
+	return nonNGFCount
+}
+
+// addPolicyAncestorLimitCondition adds or updates a PolicyAncestorLimitReached condition.
+func addPolicyAncestorLimitCondition(
+	conds []conditions.Condition,
+	policyName string,
+	policyType string,
+) []conditions.Condition {
+	for i, condition := range conds {
+		if condition.Reason == string(conditions.PolicyReasonAncestorLimitReached) {
+			if !strings.Contains(condition.Message, policyName) {
+				conds[i].Message = fmt.Sprintf("%s, %s %s", condition.Message, policyType, policyName)
+			}
+			return conds
+		}
+	}
+
+	newCondition := conditions.NewPolicyAncestorLimitReached(policyType, policyName)
+	return append(conds, newCondition)
+}
+
+// collectOrderedGateways collects gateways in spec order (services) then creation time order (gateways within service).
+func collectOrderedGateways(
+	policy *v1alpha3.BackendTLSPolicy,
+	services map[types.NamespacedName]*ReferencedService,
+	gateways map[types.NamespacedName]*Gateway,
+	existingNGFGatewayAncestors map[types.NamespacedName]struct{},
+) []types.NamespacedName {
+	seenGateways := make(map[types.NamespacedName]struct{})
+	existingGateways := make([]types.NamespacedName, 0)
+	newGateways := make([]types.NamespacedName, 0)
+
+	// Process services in spec order to maintain deterministic gateway ordering
+	for _, refs := range policy.Spec.TargetRefs {
+		if refs.Kind != kinds.Service {
+			continue
+		}
+
+		svcNsName := types.NamespacedName{
+			Namespace: policy.Namespace,
+			Name:      string(refs.Name),
+		}
+
+		referencedService, exists := services[svcNsName]
+		if !exists {
+			continue
+		}
+
+		// Add to ordered lists, categorizing existing vs new, skipping duplicates
+		for gateway := range referencedService.GatewayNsNames {
+			if _, seen := seenGateways[gateway]; seen {
+				continue
+			}
+			seenGateways[gateway] = struct{}{}
+			if _, exists := existingNGFGatewayAncestors[gateway]; exists {
+				existingGateways = append(existingGateways, gateway)
+			} else {
+				newGateways = append(newGateways, gateway)
+			}
+		}
+	}
+
+	sortGatewaysByCreationTime(existingGateways, gateways)
+	sortGatewaysByCreationTime(newGateways, gateways)
+
+	return append(existingGateways, newGateways...)
+}
+
+func extractExistingNGFGatewayAncestors(
+	backendTLSPolicy *v1alpha3.BackendTLSPolicy,
+	ctlrName string,
+) map[types.NamespacedName]struct{} {
+	existingNGFGatewayAncestors := make(map[types.NamespacedName]struct{})
+
+	for _, ancestor := range backendTLSPolicy.Status.Ancestors {
+		if string(ancestor.ControllerName) != ctlrName {
+			continue
+		}
+
+		if ancestor.AncestorRef.Kind != nil && *ancestor.AncestorRef.Kind == v1.Kind(kinds.Gateway) &&
+			ancestor.AncestorRef.Namespace != nil {
+			gatewayNsName := types.NamespacedName{
+				Namespace: string(*ancestor.AncestorRef.Namespace),
+				Name:      string(ancestor.AncestorRef.Name),
+			}
+			existingNGFGatewayAncestors[gatewayNsName] = struct{}{}
+		}
+	}
+
+	return existingNGFGatewayAncestors
+}
+
 func addGatewaysForBackendTLSPolicies(
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	services map[types.NamespacedName]*ReferencedService,
+	ctlrName string,
+	gateways map[types.NamespacedName]*Gateway,
+	logger logr.Logger,
 ) {
 	for _, backendTLSPolicy := range backendTLSPolicies {
-		gateways := make(map[types.NamespacedName]struct{})
+		existingNGFGatewayAncestors := extractExistingNGFGatewayAncestors(backendTLSPolicy.Source, ctlrName)
+		orderedGateways := collectOrderedGateways(
+			backendTLSPolicy.Source,
+			services,
+			gateways,
+			existingNGFGatewayAncestors,
+		)
 
-		for _, refs := range backendTLSPolicy.Source.Spec.TargetRefs {
-			if refs.Kind != kinds.Service {
+		ancestorCount := countNonNGFAncestors(backendTLSPolicy.Source, ctlrName)
+
+		// Process each gateway, respecting ancestor limits
+		for _, gatewayNsName := range orderedGateways {
+			// Check if adding this gateway would exceed the ancestor limit
+			if ancestorCount >= maxAncestors {
+				policyName := backendTLSPolicy.Source.Namespace + "/" + backendTLSPolicy.Source.Name
+				proposedAncestor := createParentReference(v1.GroupName, kinds.Gateway, gatewayNsName)
+				gatewayName := getAncestorName(proposedAncestor)
+
+				if gateway, ok := gateways[gatewayNsName]; ok {
+					gateway.Conditions = addPolicyAncestorLimitCondition(gateway.Conditions, policyName, kinds.BackendTLSPolicy)
+				} else {
+					// This should never happen, but we'll log it if it does
+					logger.Error(fmt.Errorf("gateway not found in the graph"),
+						"Gateway not found in the graph", "policy", policyName, "ancestor", gatewayName)
+				}
+
+				logAncestorLimitReached(logger, policyName, "BackendTLSPolicy", gatewayName)
 				continue
 			}
 
-			for svcNsName, referencedServices := range services {
-				if svcNsName.Name != string(refs.Name) {
-					continue
-				}
+			ancestorCount++
 
-				for gateway := range referencedServices.GatewayNsNames {
-					gateways[gateway] = struct{}{}
-				}
-			}
-		}
-
-		for gateway := range gateways {
-			backendTLSPolicy.Gateways = append(backendTLSPolicy.Gateways, gateway)
+			backendTLSPolicy.Gateways = append(backendTLSPolicy.Gateways, gatewayNsName)
 		}
 	}
 }

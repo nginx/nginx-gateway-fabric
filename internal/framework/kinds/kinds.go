@@ -21,6 +21,8 @@ const (
 	GRPCRoute = "GRPCRoute"
 	// TLSRoute is the TLSRoute kind.
 	TLSRoute = "TLSRoute"
+	// BackendTLSPolicy is the BackendTLSPolicy kind.
+	BackendTLSPolicy = "BackendTLSPolicy"
 )
 
 // Core API Kinds.

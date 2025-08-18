@@ -3,6 +3,7 @@ package graph
 import (
 	"fmt"
 
+	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -198,6 +199,7 @@ func BuildGraph(
 	gcName string,
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	validators validation.Validators,
+	logger logr.Logger,
 ) *Graph {
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
@@ -236,7 +238,6 @@ func BuildGraph(
 		state.BackendTLSPolicies,
 		configMapResolver,
 		secretResolver,
-		controllerName,
 		gws,
 	)
 
@@ -269,7 +270,7 @@ func BuildGraph(
 
 	referencedServices := buildReferencedServices(routes, l4routes, gws)
 
-	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices)
+	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
 	// policies must be processed last because they rely on the state of the other resources in the graph
 	processedPolicies := processPolicies(
@@ -302,7 +303,7 @@ func BuildGraph(
 		PlusSecrets:                plusSecrets,
 	}
 
-	g.attachPolicies(validators.PolicyValidator, controllerName)
+	g.attachPolicies(validators.PolicyValidator, controllerName, logger)
 
 	return g
 }

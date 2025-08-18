@@ -23,7 +23,7 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION = v2.3.1
+GOLANGCI_LINT_VERSION = v2.4.0
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.33.2
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
