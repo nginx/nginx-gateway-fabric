@@ -90,7 +90,7 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 						Group: coreGroup,
 					},
 					{
-						Kind:  gatewayKind,
+						Kind:  grpcRouteKind,
 						Group: coreGroup,
 					},
 				},
