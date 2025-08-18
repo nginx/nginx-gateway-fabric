@@ -138,6 +138,15 @@ const (
 	// GatewayReasonParamsRefInvalid is used with the "GatewayResolvedRefs" condition when the
 	// parametersRef resource is invalid.
 	GatewayReasonParamsRefInvalid v1.GatewayConditionReason = "ParametersRefInvalid"
+
+	// PolicyReasonAncestorLimitReached is used with the "PolicyAccepted" condition when a policy
+	// cannot be applied because the ancestor status list has reached the maximum size of 16.
+	PolicyReasonAncestorLimitReached v1alpha2.PolicyConditionReason = "AncestorLimitReached"
+
+	// PolicyMessageAncestorLimitReached is a message used with PolicyReasonAncestorLimitReached
+	// when a policy cannot be applied due to the ancestor limit being reached.
+	PolicyMessageAncestorLimitReached = "Policies cannot be applied because the ancestor status list " +
+		"has reached the maximum size. The following policies have been ignored:"
 )
 
 // Condition defines a condition to be reported in the status of resources.
@@ -965,6 +974,17 @@ func NewPolicyTargetNotFound(msg string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1alpha2.PolicyReasonTargetNotFound),
 		Message: msg,
+	}
+}
+
+// NewPolicyAncestorLimitReached returns a Condition that indicates that the Policy is not accepted because
+// the ancestor status list has reached the maximum size of 16.
+func NewPolicyAncestorLimitReached(policyType string, policyName string) Condition {
+	return Condition{
+		Type:    string(v1alpha2.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonAncestorLimitReached),
+		Message: fmt.Sprintf("%s %s %s", PolicyMessageAncestorLimitReached, policyType, policyName),
 	}
 }
 

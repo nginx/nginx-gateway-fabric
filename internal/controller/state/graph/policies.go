@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,6 +23,7 @@ type Policy struct {
 	Source policies.Policy
 	// InvalidForGateways is a map of Gateways for which this Policy is invalid for. Certain NginxProxy
 	// configurations may result in a policy not being valid for some Gateways, but not others.
+	// This includes gateways that cannot accept the policy due to ancestor status limits.
 	InvalidForGateways map[types.NamespacedName]struct{}
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
@@ -69,7 +71,52 @@ const (
 )
 
 // attachPolicies attaches the graph's processed policies to the resources they target. It modifies the graph in place.
-func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName string) {
+// extractExistingNGFGatewayAncestorsForPolicy extracts existing NGF gateway ancestors from policy status.
+func extractExistingNGFGatewayAncestorsForPolicy(policy *Policy, ctlrName string) map[types.NamespacedName]struct{} {
+	existingNGFGatewayAncestors := make(map[types.NamespacedName]struct{})
+
+	for _, ancestor := range policy.Source.GetPolicyStatus().Ancestors {
+		if string(ancestor.ControllerName) != ctlrName {
+			continue
+		}
+
+		if ancestor.AncestorRef.Kind != nil && *ancestor.AncestorRef.Kind == v1.Kind(kinds.Gateway) &&
+			ancestor.AncestorRef.Namespace != nil {
+			gatewayNsName := types.NamespacedName{
+				Namespace: string(*ancestor.AncestorRef.Namespace),
+				Name:      string(ancestor.AncestorRef.Name),
+			}
+			existingNGFGatewayAncestors[gatewayNsName] = struct{}{}
+		}
+	}
+
+	return existingNGFGatewayAncestors
+}
+
+// collectOrderedGatewaysForService collects gateways for a service with existing gateway prioritization.
+func collectOrderedGatewaysForService(
+	svc *ReferencedService,
+	gateways map[types.NamespacedName]*Gateway,
+	existingNGFGatewayAncestors map[types.NamespacedName]struct{},
+) []types.NamespacedName {
+	existingGateways := make([]types.NamespacedName, 0, len(svc.GatewayNsNames))
+	newGateways := make([]types.NamespacedName, 0, len(svc.GatewayNsNames))
+
+	for gwNsName := range svc.GatewayNsNames {
+		if _, exists := existingNGFGatewayAncestors[gwNsName]; exists {
+			existingGateways = append(existingGateways, gwNsName)
+		} else {
+			newGateways = append(newGateways, gwNsName)
+		}
+	}
+
+	sortGatewaysByCreationTime(existingGateways, gateways)
+	sortGatewaysByCreationTime(newGateways, gateways)
+
+	return append(existingGateways, newGateways...)
+}
+
+func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName string, logger logr.Logger) {
 	if len(g.Gateways) == 0 {
 		return
 	}
@@ -78,21 +125,21 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 		for _, ref := range policy.TargetRefs {
 			switch ref.Kind {
 			case kinds.Gateway:
-				attachPolicyToGateway(policy, ref, g.Gateways, ctlrName)
+				attachPolicyToGateway(policy, ref, g.Gateways, ctlrName, logger)
 			case kinds.HTTPRoute, kinds.GRPCRoute:
 				route, exists := g.Routes[routeKeyForKind(ref.Kind, ref.Nsname)]
 				if !exists {
 					continue
 				}
 
-				attachPolicyToRoute(policy, route, validator, ctlrName)
+				attachPolicyToRoute(policy, route, validator, ctlrName, logger)
 			case kinds.Service:
 				svc, exists := g.ReferencedServices[ref.Nsname]
 				if !exists {
 					continue
 				}
 
-				attachPolicyToService(policy, svc, g.Gateways, ctlrName)
+				attachPolicyToService(policy, svc, g.Gateways, ctlrName, logger)
 			}
 		}
 	}
@@ -103,58 +150,107 @@ func attachPolicyToService(
 	svc *ReferencedService,
 	gws map[types.NamespacedName]*Gateway,
 	ctlrName string,
+	logger logr.Logger,
 ) {
-	if ngfPolicyAncestorsFull(policy, ctlrName) {
-		return
-	}
+	var attachedToAnyGateway bool
 
-	var validForAGateway bool
-	for gwNsName, gw := range gws {
-		if _, belongsToGw := svc.GatewayNsNames[gwNsName]; !belongsToGw {
+	// Extract existing NGF gateway ancestors from policy status
+	existingNGFGatewayAncestors := extractExistingNGFGatewayAncestorsForPolicy(policy, ctlrName)
+
+	// Collect and order gateways with existing gateway prioritization
+	orderedGateways := collectOrderedGatewaysForService(svc, gws, existingNGFGatewayAncestors)
+
+	for _, gwNsName := range orderedGateways {
+		gw := gws[gwNsName]
+
+		if gw == nil || gw.Source == nil {
 			continue
 		}
 
+		ancestorRef := createParentReference(v1.GroupName, kinds.Gateway, client.ObjectKeyFromObject(gw.Source))
 		ancestor := PolicyAncestor{
-			Ancestor: createParentReference(v1.GroupName, kinds.Gateway, client.ObjectKeyFromObject(gw.Source)),
+			Ancestor: ancestorRef,
+		}
+
+		if _, ok := policy.InvalidForGateways[gwNsName]; ok {
+			continue
+		}
+
+		if ancestorsContainsAncestorRef(policy.Ancestors, ancestor.Ancestor) {
+			// Ancestor already exists, but we should still consider this gateway as attached
+			attachedToAnyGateway = true
+			continue
+		}
+
+		// Check if this is an existing gateway from policy status
+		_, isExistingGateway := existingNGFGatewayAncestors[gwNsName]
+
+		if isExistingGateway {
+			// Existing gateway from policy status - mark as attached but don't add to ancestors
+			attachedToAnyGateway = true
+			continue
+		}
+
+		if ngfPolicyAncestorsFull(policy, ctlrName) {
+			policyName := getPolicyName(policy.Source)
+			policyKind := getPolicyKind(policy.Source)
+
+			gw.Conditions = addPolicyAncestorLimitCondition(gw.Conditions, policyName, policyKind)
+			logAncestorLimitReached(logger, policyName, policyKind, gwNsName.String())
+
+			// Mark this gateway as invalid for the policy due to ancestor limits
+			policy.InvalidForGateways[gwNsName] = struct{}{}
+			continue
 		}
 
 		if !gw.Valid {
 			policy.InvalidForGateways[gwNsName] = struct{}{}
 			ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("Parent Gateway is invalid")}
-			if ancestorsContainsAncestorRef(policy.Ancestors, ancestor.Ancestor) {
-				continue
-			}
-
 			policy.Ancestors = append(policy.Ancestors, ancestor)
 			continue
 		}
 
-		if !ancestorsContainsAncestorRef(policy.Ancestors, ancestor.Ancestor) {
-			policy.Ancestors = append(policy.Ancestors, ancestor)
-		}
-		validForAGateway = true
+		// Gateway is valid, add ancestor and mark as attached
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		attachedToAnyGateway = true
 	}
 
-	if validForAGateway {
+	// Attach policy to service if effective for at least one gateway
+	if attachedToAnyGateway {
 		svc.Policies = append(svc.Policies, policy)
 	}
 }
 
-func attachPolicyToRoute(policy *Policy, route *L7Route, validator validation.PolicyValidator, ctlrName string) {
-	if ngfPolicyAncestorsFull(policy, ctlrName) {
-		// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
-		return
-	}
-
+func attachPolicyToRoute(
+	policy *Policy,
+	route *L7Route,
+	validator validation.PolicyValidator,
+	ctlrName string,
+	logger logr.Logger,
+) {
 	kind := v1.Kind(kinds.HTTPRoute)
 	if route.RouteType == RouteTypeGRPC {
 		kind = kinds.GRPCRoute
 	}
 
 	routeNsName := types.NamespacedName{Namespace: route.Source.GetNamespace(), Name: route.Source.GetName()}
+	ancestorRef := createParentReference(v1.GroupName, kind, routeNsName)
+
+	// Check ancestor limit
+	isFull := ngfPolicyAncestorsFull(policy, ctlrName)
+	if isFull {
+		policyName := getPolicyName(policy.Source)
+		policyKind := getPolicyKind(policy.Source)
+		routeName := getAncestorName(ancestorRef)
+
+		route.Conditions = addPolicyAncestorLimitCondition(route.Conditions, policyName, policyKind)
+		logAncestorLimitReached(logger, policyName, policyKind, routeName)
+
+		return
+	}
 
 	ancestor := PolicyAncestor{
-		Ancestor: createParentReference(v1.GroupName, kind, routeNsName),
+		Ancestor: ancestorRef,
 	}
 
 	if !route.Valid || !route.Attachable || len(route.ParentRefs) == 0 {
@@ -162,6 +258,9 @@ func attachPolicyToRoute(policy *Policy, route *L7Route, validator validation.Po
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}
+
+	// Track which gateways the policy is effective for
+	var effectiveGateways []types.NamespacedName
 
 	// as of now, ObservabilityPolicy is the only policy that needs this check, and it only attaches to Routes
 	for _, parentRef := range route.ParentRefs {
@@ -174,16 +273,19 @@ func attachPolicyToRoute(policy *Policy, route *L7Route, validator validation.Po
 			if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
 				policy.InvalidForGateways[gw.NamespacedName] = struct{}{}
 				ancestor.Conditions = append(ancestor.Conditions, conds...)
+			} else {
+				// Policy is effective for this gateway (not adding to InvalidForGateways)
+				effectiveGateways = append(effectiveGateways, gw.NamespacedName)
 			}
 		}
 	}
 
 	policy.Ancestors = append(policy.Ancestors, ancestor)
-	if len(policy.InvalidForGateways) == len(route.ParentRefs) {
-		return
-	}
 
-	route.Policies = append(route.Policies, policy)
+	// Only attach policy to route if it's effective for at least one gateway
+	if len(effectiveGateways) > 0 || len(policy.InvalidForGateways) < len(route.ParentRefs) {
+		route.Policies = append(route.Policies, policy)
+	}
 }
 
 func attachPolicyToGateway(
@@ -191,17 +293,44 @@ func attachPolicyToGateway(
 	ref PolicyTargetRef,
 	gateways map[types.NamespacedName]*Gateway,
 	ctlrName string,
+	logger logr.Logger,
 ) {
-	if ngfPolicyAncestorsFull(policy, ctlrName) {
-		// FIXME (kate-osborn): https://github.com/nginx/nginx-gateway-fabric/issues/1987
+	ancestorRef := createParentReference(v1.GroupName, kinds.Gateway, ref.Nsname)
+	gw, exists := gateways[ref.Nsname]
+
+	if _, ok := policy.InvalidForGateways[ref.Nsname]; ok {
+		return
+	}
+
+	if ancestorsContainsAncestorRef(policy.Ancestors, ancestorRef) {
+		// Ancestor already exists, but still attach policy to gateway if it's valid
+		if exists && gw != nil && gw.Valid && gw.Source != nil {
+			gw.Policies = append(gw.Policies, policy)
+		}
+		return
+	}
+	isFull := ngfPolicyAncestorsFull(policy, ctlrName)
+	if isFull {
+		ancestorName := getAncestorName(ancestorRef)
+		policyName := getPolicyName(policy.Source)
+		policyKind := getPolicyKind(policy.Source)
+
+		if exists {
+			gw.Conditions = addPolicyAncestorLimitCondition(gw.Conditions, policyName, policyKind)
+		} else {
+			// Situation where gateway target is not found and the ancestors slice is full so I cannot add the condition.
+			// Log in the controller log.
+			logger.Info("Gateway target not found and ancestors slice is full.", "policy", policyName, "ancestor", ancestorName)
+		}
+		logAncestorLimitReached(logger, policyName, policyKind, ancestorName)
+
+		policy.InvalidForGateways[ref.Nsname] = struct{}{}
 		return
 	}
 
 	ancestor := PolicyAncestor{
-		Ancestor: createParentReference(v1.GroupName, kinds.Gateway, ref.Nsname),
+		Ancestor: ancestorRef,
 	}
-
-	gw, exists := gateways[ref.Nsname]
 
 	if !exists || (gw != nil && gw.Source == nil) {
 		policy.InvalidForGateways[ref.Nsname] = struct{}{}
@@ -216,6 +345,8 @@ func attachPolicyToGateway(
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}
+
+	// Policy is effective for this gateway (not adding to InvalidForGateways)
 
 	policy.Ancestors = append(policy.Ancestors, ancestor)
 	gw.Policies = append(gw.Policies, policy)

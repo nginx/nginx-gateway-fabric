@@ -1,34 +1,21 @@
 package graph
 
 import (
+	"sort"
+
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 const maxAncestors = 16
 
-// backendTLSPolicyAncestorsFull returns whether or not an ancestor list is full. A list is not full when:
-// - the number of current ancestors is less than the maximum allowed
-// - an entry for an NGF managed resource already exists in the ancestor list. This means that we are overwriting
-// that status entry with the current status entry, since there is only one ancestor (Gateway) for this policy.
-func backendTLSPolicyAncestorsFull(
-	ancestors []v1alpha2.PolicyAncestorStatus,
-	ctlrName string,
-) bool {
-	if len(ancestors) < maxAncestors {
-		return false
-	}
-
-	for _, ancestor := range ancestors {
-		if string(ancestor.ControllerName) == ctlrName {
-			return false
-		}
-	}
-
-	return true
+// logAncestorLimitReached logs when a policy ancestor limit is reached.
+func logAncestorLimitReached(logger logr.Logger, policyName, policyKind, ancestorName string) {
+	logger.Info("Policy ancestor limit reached for "+policyName, "policyKind", policyKind, "ancestor", ancestorName)
 }
 
 // ngfPolicyAncestorsFull returns whether or not an ancestor list is full. A list is full when
@@ -94,4 +81,54 @@ func parentRefEqual(ref1, ref2 v1.ParentReference) bool {
 	}
 
 	return true
+}
+
+// getAncestorName returns namespace/name format if namespace is specified, otherwise just name.
+func getAncestorName(ancestorRef v1.ParentReference) string {
+	ancestorName := string(ancestorRef.Name)
+	if ancestorRef.Namespace != nil {
+		ancestorName = string(*ancestorRef.Namespace) + "/" + ancestorName
+	}
+	return ancestorName
+}
+
+// getPolicyName returns a human-readable name for a policy in namespace/name format.
+func getPolicyName(policy policies.Policy) string {
+	return policy.GetNamespace() + "/" + policy.GetName()
+}
+
+// getPolicyKind returns the policy kind or "Policy" if GetObjectKind() returns nil.
+func getPolicyKind(policy policies.Policy) string {
+	policyKind := "Policy"
+	if objKind := policy.GetObjectKind(); objKind != nil {
+		policyKind = objKind.GroupVersionKind().Kind
+	}
+	return policyKind
+}
+
+// compareNamespacedNames compares two NamespacedName objects lexicographically.
+func compareNamespacedNames(a, b types.NamespacedName) bool {
+	if a.Namespace == b.Namespace {
+		return a.Name < b.Name
+	}
+	return a.Namespace < b.Namespace
+}
+
+// sortGatewaysByCreationTime sorts gateways by creation timestamp, falling back to namespace/name for determinism.
+func sortGatewaysByCreationTime(gatewayNames []types.NamespacedName, gateways map[types.NamespacedName]*Gateway) {
+	sort.SliceStable(gatewayNames, func(i, j int) bool {
+		gi := gateways[gatewayNames[i]]
+		gj := gateways[gatewayNames[j]]
+
+		if gi == nil || gj == nil {
+			return compareNamespacedNames(gatewayNames[i], gatewayNames[j])
+		}
+
+		cti := gi.Source.CreationTimestamp.Time
+		ctj := gj.Source.CreationTimestamp.Time
+		if cti.Equal(ctj) {
+			return compareNamespacedNames(gatewayNames[i], gatewayNames[j])
+		}
+		return cti.Before(ctj)
+	})
 }

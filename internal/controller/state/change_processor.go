@@ -268,6 +268,7 @@ func (c *ChangeProcessorImpl) Process() *graph.Graph {
 		c.cfg.GatewayClassName,
 		c.cfg.PlusSecrets,
 		c.cfg.Validators,
+		c.cfg.Logger,
 	)
 
 	return c.latestGraph
