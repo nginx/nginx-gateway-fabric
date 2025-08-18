@@ -96,7 +96,11 @@ func (g GeneratorImpl) createStreamUpstream(up dataplane.Upstream) stream.Upstre
 	zoneSize := ossZoneSizeStream
 	if g.plus {
 		zoneSize = plusZoneSizeStream
-		stateFile = fmt.Sprintf("%s/%s.conf", stateDir, up.Name)
+		// Only set state file if the upstream doesn't have resolve servers
+		// Upstreams with resolve servers can't be managed via NGINX Plus API
+		if !upstreamHasResolveServers(up) {
+			stateFile = fmt.Sprintf("%s/%s.conf", stateDir, up.Name)
+		}
 	}
 
 	upstreamServers := make([]stream.UpstreamServer, len(up.Endpoints))
@@ -107,6 +111,7 @@ func (g GeneratorImpl) createStreamUpstream(up dataplane.Upstream) stream.Upstre
 		}
 		upstreamServers[idx] = stream.UpstreamServer{
 			Address: fmt.Sprintf(format, ep.Address, ep.Port),
+			Resolve: ep.Resolve,
 		}
 	}
 
@@ -144,7 +149,11 @@ func (g GeneratorImpl) createUpstream(
 	zoneSize := ossZoneSize
 	if g.plus {
 		zoneSize = plusZoneSize
-		stateFile = fmt.Sprintf("%s/%s.conf", stateDir, up.Name)
+		// Only set state file if the upstream doesn't have resolve servers
+		// Upstreams with resolve servers can't be managed via NGINX Plus API
+		if !upstreamHasResolveServers(up) {
+			stateFile = fmt.Sprintf("%s/%s.conf", stateDir, up.Name)
+		}
 	}
 
 	if upstreamPolicySettings.ZoneSize != "" {
@@ -172,6 +181,7 @@ func (g GeneratorImpl) createUpstream(
 		}
 		upstreamServers[idx] = http.UpstreamServer{
 			Address: fmt.Sprintf(format, ep.Address, ep.Port),
+			Resolve: ep.Resolve,
 		}
 	}
 
@@ -194,4 +204,14 @@ func createInvalidBackendRefUpstream() http.Upstream {
 			},
 		},
 	}
+}
+
+// upstreamHasResolveServers checks if an upstream contains servers that require DNS resolution.
+func upstreamHasResolveServers(upstream dataplane.Upstream) bool {
+	for _, endpoint := range upstream.Endpoints {
+		if endpoint.Resolve {
+			return true
+		}
+	}
+	return false
 }

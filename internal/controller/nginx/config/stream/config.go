@@ -1,6 +1,9 @@
 package stream
 
-import "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
+import (
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+)
 
 // Server holds all configuration for a stream server.
 type Server struct {
@@ -24,11 +27,13 @@ type Upstream struct {
 // UpstreamServer holds all configuration for a stream upstream server.
 type UpstreamServer struct {
 	Address string
+	Resolve bool
 }
 
 // ServerConfig holds configuration for a stream server and IP family to be used by NGINX.
 type ServerConfig struct {
-	Servers  []Server
-	IPFamily shared.IPFamily
-	Plus     bool
+	DNSResolver *dataplane.DNSResolverConfig
+	Servers     []Server
+	IPFamily    shared.IPFamily
+	Plus        bool
 }

@@ -121,6 +121,10 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 	var applied bool
 	actions := make([]*pb.NGINXPlusAction, 0, len(conf.Upstreams)+len(conf.StreamUpstreams))
 	for _, upstream := range conf.Upstreams {
+		// Skip upstreams that have resolve servers to avoid "UpstreamServerImmutable" errors
+		if upstreamHasResolveServers(upstream) {
+			continue
+		}
 		action := &pb.NGINXPlusAction{
 			Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{
 				UpdateHttpUpstreamServers: buildHTTPUpstreamServers(upstream),
@@ -130,6 +134,10 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 	}
 
 	for _, upstream := range conf.StreamUpstreams {
+		// Skip upstreams that have resolve servers to avoid "UpstreamServerImmutable" errors
+		if upstreamHasResolveServers(upstream) {
+			continue
+		}
 		action := &pb.NGINXPlusAction{
 			Action: &pb.NGINXPlusAction_UpdateStreamServers{
 				UpdateStreamServers: buildStreamUpstreamServers(upstream),
@@ -241,6 +249,16 @@ func (n *NginxUpdaterImpl) sendRequest(
 	}
 
 	return applied, nil
+}
+
+// upstreamHasResolveServers checks if an upstream contains servers that require DNS resolution.
+func upstreamHasResolveServers(upstream dataplane.Upstream) bool {
+	for _, endpoint := range upstream.Endpoints {
+		if endpoint.Resolve {
+			return true
+		}
+	}
+	return false
 }
 
 func getPortAndIPFormat(ep resolver.Endpoint) (string, string) {

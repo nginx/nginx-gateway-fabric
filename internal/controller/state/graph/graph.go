@@ -268,7 +268,7 @@ func BuildGraph(
 
 	referencedNamespaces := buildReferencedNamespaces(state.Namespaces, gws)
 
-	referencedServices := buildReferencedServices(routes, l4routes, gws)
+	referencedServices := buildReferencedServices(routes, l4routes, gws, state.Services)
 
 	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 

@@ -527,6 +527,67 @@ func TestCreateUpstream(t *testing.T) {
 			},
 			msg: "upstreamSettingsPolicy with only keep alive settings",
 		},
+		{
+			stateUpstream: dataplane.Upstream{
+				Name: "external-name-service",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "example.com",
+						Port:    80,
+						Resolve: true,
+					},
+				},
+			},
+			expectedUpstream: http.Upstream{
+				Name:     "external-name-service",
+				ZoneSize: ossZoneSize,
+				Servers: []http.UpstreamServer{
+					{
+						Address: "example.com:80",
+						Resolve: true,
+					},
+				},
+			},
+			msg: "ExternalName service with DNS name",
+		},
+		{
+			stateUpstream: dataplane.Upstream{
+				Name: "mixed-endpoints",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "10.0.0.1",
+						Port:    80,
+					},
+					{
+						Address: "example.com",
+						Port:    443,
+						Resolve: true,
+					},
+					{
+						Address: "fd00:10:244:1::7",
+						Port:    80,
+						IPv6:    true,
+					},
+				},
+			},
+			expectedUpstream: http.Upstream{
+				Name:     "mixed-endpoints",
+				ZoneSize: ossZoneSize,
+				Servers: []http.UpstreamServer{
+					{
+						Address: "10.0.0.1:80",
+					},
+					{
+						Address: "example.com:443",
+						Resolve: true,
+					},
+					{
+						Address: "[fd00:10:244:1::7]:80",
+					},
+				},
+			},
+			msg: "mixed IP addresses and DNS names",
+		},
 	}
 
 	for _, test := range tests {
@@ -723,43 +784,118 @@ func TestCreateStreamUpstreams(t *testing.T) {
 func TestCreateStreamUpstream(t *testing.T) {
 	t.Parallel()
 	gen := GeneratorImpl{}
-	up := dataplane.Upstream{
-		Name: "multiple-endpoints",
-		Endpoints: []resolver.Endpoint{
-			{
-				Address: "10.0.0.1",
-				Port:    80,
+
+	tests := []struct {
+		msg              string
+		stateUpstream    dataplane.Upstream
+		expectedUpstream stream.Upstream
+	}{
+		{
+			stateUpstream: dataplane.Upstream{
+				Name: "multiple-endpoints",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "10.0.0.1",
+						Port:    80,
+					},
+					{
+						Address: "10.0.0.2",
+						Port:    80,
+					},
+					{
+						Address: "10.0.0.3",
+						Port:    80,
+					},
+				},
 			},
-			{
-				Address: "10.0.0.2",
-				Port:    80,
+			expectedUpstream: stream.Upstream{
+				Name:     "multiple-endpoints",
+				ZoneSize: ossZoneSize,
+				Servers: []stream.UpstreamServer{
+					{
+						Address: "10.0.0.1:80",
+					},
+					{
+						Address: "10.0.0.2:80",
+					},
+					{
+						Address: "10.0.0.3:80",
+					},
+				},
 			},
-			{
-				Address: "10.0.0.3",
-				Port:    80,
+			msg: "multiple IP endpoints",
+		},
+		{
+			stateUpstream: dataplane.Upstream{
+				Name: "external-name-service",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "backend.example.com",
+						Port:    443,
+						Resolve: true,
+					},
+				},
 			},
+			expectedUpstream: stream.Upstream{
+				Name:     "external-name-service",
+				ZoneSize: ossZoneSize,
+				Servers: []stream.UpstreamServer{
+					{
+						Address: "backend.example.com:443",
+						Resolve: true,
+					},
+				},
+			},
+			msg: "ExternalName service with DNS name",
+		},
+		{
+			stateUpstream: dataplane.Upstream{
+				Name: "mixed-endpoints",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "192.168.1.10",
+						Port:    8080,
+					},
+					{
+						Address: "api.example.com",
+						Port:    443,
+						Resolve: true,
+					},
+					{
+						Address: "2001:db8::1",
+						Port:    9000,
+						IPv6:    true,
+					},
+				},
+			},
+			expectedUpstream: stream.Upstream{
+				Name:     "mixed-endpoints",
+				ZoneSize: ossZoneSize,
+				Servers: []stream.UpstreamServer{
+					{
+						Address: "192.168.1.10:8080",
+					},
+					{
+						Address: "api.example.com:443",
+						Resolve: true,
+					},
+					{
+						Address: "[2001:db8::1]:9000",
+					},
+				},
+			},
+			msg: "mixed IP addresses and DNS names",
 		},
 	}
 
-	expectedUpstream := stream.Upstream{
-		Name:     "multiple-endpoints",
-		ZoneSize: ossZoneSize,
-		Servers: []stream.UpstreamServer{
-			{
-				Address: "10.0.0.1:80",
-			},
-			{
-				Address: "10.0.0.2:80",
-			},
-			{
-				Address: "10.0.0.3:80",
-			},
-		},
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			result := gen.createStreamUpstream(test.stateUpstream)
+			g.Expect(result).To(Equal(test.expectedUpstream))
+		})
 	}
-
-	g := NewWithT(t)
-	result := gen.createStreamUpstream(up)
-	g.Expect(result).To(Equal(expectedUpstream))
 }
 
 func TestCreateStreamUpstreamPlus(t *testing.T) {

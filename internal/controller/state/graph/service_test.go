@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -162,11 +163,13 @@ func TestBuildReferencedServices(t *testing.T) {
 		l4Routes map[L4RouteKey]*L4Route
 		exp      map[types.NamespacedName]*ReferencedService
 		gws      map[types.NamespacedName]*Gateway
+		services map[types.NamespacedName]*corev1.Service
 		name     string
 	}{
 		{
-			name: "normal routes",
-			gws:  gw,
+			name:     "normal routes",
+			gws:      gw,
+			services: map[types.NamespacedName]*corev1.Service{},
 			l7Routes: map[RouteKey]*L7Route{
 				{NamespacedName: types.NamespacedName{Name: "normal-route"}}: normalRoute,
 			},
@@ -179,18 +182,23 @@ func TestBuildReferencedServices(t *testing.T) {
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 				{Namespace: "tlsroute-ns", Name: "service"}: {
 					GatewayNsNames: map[types.NamespacedName]struct{}{
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 			},
 		},
 		{
-			name: "l7 route with two services in one Rule", // l4 routes don't support multiple services right now
-			gws:  gw,
+			name:     "l7 route with two services in one Rule", // l4 routes don't support multiple services right now
+			gws:      gw,
+			services: map[types.NamespacedName]*corev1.Service{},
 			l7Routes: map[RouteKey]*L7Route{
 				{NamespacedName: types.NamespacedName{Name: "two-svc-one-rule"}}: validRouteTwoServicesOneRule,
 			},
@@ -200,18 +208,23 @@ func TestBuildReferencedServices(t *testing.T) {
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 				{Namespace: "service-ns2", Name: "service2"}: {
 					GatewayNsNames: map[types.NamespacedName]struct{}{
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 			},
 		},
 		{
-			name: "route with one service per rule", // l4 routes don't support multiple rules right now
-			gws:  gw,
+			name:     "route with one service per rule", // l4 routes don't support multiple rules right now
+			gws:      gw,
+			services: map[types.NamespacedName]*corev1.Service{},
 			l7Routes: map[RouteKey]*L7Route{
 				{NamespacedName: types.NamespacedName{Name: "one-svc-per-rule"}}: validRouteTwoServicesTwoRules,
 			},
@@ -221,18 +234,23 @@ func TestBuildReferencedServices(t *testing.T) {
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 				{Namespace: "service-ns2", Name: "service2"}: {
 					GatewayNsNames: map[types.NamespacedName]struct{}{
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 			},
 		},
 		{
-			name: "multiple valid routes with same services",
-			gws:  gw,
+			name:     "multiple valid routes with same services",
+			gws:      gw,
+			services: map[types.NamespacedName]*corev1.Service{},
 			l7Routes: map[RouteKey]*L7Route{
 				{NamespacedName: types.NamespacedName{Name: "one-svc-per-rule"}}: validRouteTwoServicesTwoRules,
 				{NamespacedName: types.NamespacedName{Name: "two-svc-one-rule"}}: validRouteTwoServicesOneRule,
@@ -248,30 +266,39 @@ func TestBuildReferencedServices(t *testing.T) {
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 				{Namespace: "service-ns2", Name: "service2"}: {
 					GatewayNsNames: map[types.NamespacedName]struct{}{
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 				{Namespace: "tlsroute-ns", Name: "service"}: {
 					GatewayNsNames: map[types.NamespacedName]struct{}{
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 				{Namespace: "tlsroute-ns", Name: "service2"}: {
 					GatewayNsNames: map[types.NamespacedName]struct{}{
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 			},
 		},
 		{
-			name: "invalid routes",
-			gws:  gw,
+			name:     "invalid routes",
+			gws:      gw,
+			services: map[types.NamespacedName]*corev1.Service{},
 			l7Routes: map[RouteKey]*L7Route{
 				{NamespacedName: types.NamespacedName{Name: "invalid-route"}}: invalidRoute,
 			},
@@ -281,8 +308,9 @@ func TestBuildReferencedServices(t *testing.T) {
 			exp: nil,
 		},
 		{
-			name: "combination of valid and invalid routes",
-			gws:  gw,
+			name:     "combination of valid and invalid routes",
+			gws:      gw,
+			services: map[types.NamespacedName]*corev1.Service{},
 			l7Routes: map[RouteKey]*L7Route{
 				{NamespacedName: types.NamespacedName{Name: "normal-route"}}:  normalRoute,
 				{NamespacedName: types.NamespacedName{Name: "invalid-route"}}: invalidRoute,
@@ -297,18 +325,23 @@ func TestBuildReferencedServices(t *testing.T) {
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 				{Namespace: "tlsroute-ns", Name: "service"}: {
 					GatewayNsNames: map[types.NamespacedName]struct{}{
 						{Namespace: "test", Name: "gwNsname"}:  {},
 						{Namespace: "test", Name: "gw2Nsname"}: {},
 					},
+					IsExternalName: false,
+					ExternalName:   "",
 				},
 			},
 		},
 		{
-			name: "valid route no service nsname",
-			gws:  gw,
+			name:     "valid route no service nsname",
+			gws:      gw,
+			services: map[types.NamespacedName]*corev1.Service{},
 			l7Routes: map[RouteKey]*L7Route{
 				{NamespacedName: types.NamespacedName{Name: "no-service-nsname"}}: validRouteNoServiceNsName,
 			},
@@ -322,6 +355,7 @@ func TestBuildReferencedServices(t *testing.T) {
 			gws: map[types.NamespacedName]*Gateway{
 				gwNsName: nil,
 			},
+			services: map[types.NamespacedName]*corev1.Service{},
 			l7Routes: map[RouteKey]*L7Route{
 				{NamespacedName: types.NamespacedName{Name: "no-service-nsname"}}: validRouteNoServiceNsName,
 			},
@@ -330,6 +364,55 @@ func TestBuildReferencedServices(t *testing.T) {
 			},
 			exp: nil,
 		},
+		{
+			name: "external name services",
+			gws:  gw,
+			services: map[types.NamespacedName]*corev1.Service{
+				{Namespace: "banana-ns", Name: "service"}: {
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "banana-ns",
+						Name:      "service",
+					},
+					Spec: corev1.ServiceSpec{
+						Type:         corev1.ServiceTypeExternalName,
+						ExternalName: "api.example.com",
+					},
+				},
+				{Namespace: "tlsroute-ns", Name: "service"}: {
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "tlsroute-ns",
+						Name:      "service",
+					},
+					Spec: corev1.ServiceSpec{
+						Type: corev1.ServiceTypeClusterIP,
+					},
+				},
+			},
+			l7Routes: map[RouteKey]*L7Route{
+				{NamespacedName: types.NamespacedName{Name: "normal-route"}}: normalRoute,
+			},
+			l4Routes: map[L4RouteKey]*L4Route{
+				{NamespacedName: types.NamespacedName{Name: "normal-l4-route"}}: normalL4Route,
+			},
+			exp: map[types.NamespacedName]*ReferencedService{
+				{Namespace: "banana-ns", Name: "service"}: {
+					GatewayNsNames: map[types.NamespacedName]struct{}{
+						{Namespace: "test", Name: "gwNsname"}:  {},
+						{Namespace: "test", Name: "gw2Nsname"}: {},
+					},
+					IsExternalName: true,
+					ExternalName:   "api.example.com",
+				},
+				{Namespace: "tlsroute-ns", Name: "service"}: {
+					GatewayNsNames: map[types.NamespacedName]struct{}{
+						{Namespace: "test", Name: "gwNsname"}:  {},
+						{Namespace: "test", Name: "gw2Nsname"}: {},
+					},
+					IsExternalName: false,
+					ExternalName:   "",
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -337,7 +420,7 @@ func TestBuildReferencedServices(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			g.Expect(buildReferencedServices(test.l7Routes, test.l4Routes, test.gws)).To(Equal(test.exp))
+			g.Expect(buildReferencedServices(test.l7Routes, test.l4Routes, test.gws, test.services)).To(Equal(test.exp))
 		})
 	}
 }

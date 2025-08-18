@@ -462,6 +462,40 @@ nginx:
   #     minimum: 1
   #     maximum: 65535
   #     description: The number of worker connections for NGINX. Default is 1024.
+  #   dnsResolver:
+  #     type: object
+  #     description: DNSResolver specifies the DNS resolver configuration for external name resolution. This enables support for routing to ExternalName Services.
+  #     properties:
+  #       addresses:
+  #         type: array
+  #         description: List of DNS server addresses. Each address specifies a type and value.
+  #         items:
+  #           type: object
+  #           properties:
+  #             type:
+  #               type: string
+  #               enum:
+  #                 - IPAddress
+  #                 - Hostname
+  #               description: Type specifies the type of address.
+  #             value:
+  #               type: string
+  #               description: Value specifies the address value.
+  #           required:
+  #             - type
+  #             - value
+  #         minItems: 1
+  #       timeout:
+  #         type: string
+  #         description: Timeout specifies the timeout for name resolution. Default is 30s.
+  #         pattern: ^\d+[smhd]?$
+  #       cacheTTL:
+  #         type: string
+  #         description: CacheTTL specifies how long to cache DNS responses. Default is 30s.
+  #         pattern: ^\d+[smhd]?$
+  #       ipv6:
+  #         type: boolean
+  #         description: IPv6 enables IPv6 lookups. Default is true.
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.

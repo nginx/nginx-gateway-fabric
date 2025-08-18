@@ -94,6 +94,11 @@ type NginxProxySpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	WorkerConnections *int32 `json:"workerConnections,omitempty"`
+	// DNSResolver specifies the DNS resolver configuration for external name resolution.
+	// This enables support for routing to ExternalName Services.
+	//
+	// +optional
+	DNSResolver *DNSResolver `json:"dnsResolver,omitempty"`
 }
 
 // Telemetry specifies the OpenTelemetry configuration.
@@ -354,6 +359,59 @@ type NginxPlus struct {
 	// +optional
 	AllowedAddresses []NginxPlusAllowAddress `json:"allowedAddresses,omitempty"`
 }
+
+// DNSResolver specifies the DNS resolver configuration for NGINX.
+// This enables dynamic DNS resolution for ExternalName Services.
+// Corresponds to the NGINX resolver directive: https://nginx.org/en/docs/http/ngx_http_core_module.html#resolver
+type DNSResolver struct {
+	// Timeout specifies the timeout for name resolution.
+	// Default: 30s.
+	//
+	// +optional
+	Timeout *v1alpha1.Duration `json:"timeout,omitempty"`
+
+	// CacheTTL specifies how long to cache DNS responses.
+	// Default: 30s.
+	//
+	// +optional
+	CacheTTL *v1alpha1.Duration `json:"cacheTTL,omitempty"`
+
+	// IPv6 enables IPv6 lookups.
+	// Default: true.
+	//
+	// +optional
+	IPv6 *bool `json:"ipv6,omitempty"`
+
+	// Addresses specifies the list of DNS server addresses.
+	// Each address can be an IP address or hostname.
+	// Example: [{"type": "IPAddress", "value": "8.8.8.8"}, {"type": "Hostname", "value": "dns.google"}]
+	//
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	// +listType=set
+	Addresses []DNSResolverAddress `json:"addresses"`
+}
+
+// DNSResolverAddress specifies the address type and value for a DNS resolver address.
+type DNSResolverAddress struct {
+	// Type specifies the type of address.
+	Type DNSResolverAddressType `json:"type"`
+
+	// Value specifies the address value.
+	Value string `json:"value"`
+}
+
+// DNSResolverAddressType specifies the type of DNS resolver address.
+// +kubebuilder:validation:Enum=IPAddress;Hostname
+type DNSResolverAddressType string
+
+const (
+	// DNSResolverIPAddressType specifies that the address is an IP address.
+	DNSResolverIPAddressType DNSResolverAddressType = "IPAddress"
+
+	// DNSResolverHostnameType specifies that the address is a hostname.
+	DNSResolverHostnameType DNSResolverAddressType = "Hostname"
+)
 
 // NginxPlusAllowAddress specifies the address type and value for an NginxPlus allow address.
 type NginxPlusAllowAddress struct {
