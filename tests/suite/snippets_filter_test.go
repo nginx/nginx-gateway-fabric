@@ -64,6 +64,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(snippetsFilter, namespace)).To(Succeed())
+			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 		})
 
 		AfterAll(func() {
