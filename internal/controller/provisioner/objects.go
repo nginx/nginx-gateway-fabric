@@ -152,13 +152,28 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports[int32(listener.Port)] = struct{}{}
 	}
 
-	service, err := buildNginxService(objectMeta, nProxyCfg, ports, selectorLabels)
+	// Create separate copies of objectMeta for service and deployment to avoid shared map references
+	serviceObjectMeta := metav1.ObjectMeta{
+		Name:        objectMeta.Name,
+		Namespace:   objectMeta.Namespace,
+		Labels:      maps.Clone(objectMeta.Labels),
+		Annotations: maps.Clone(objectMeta.Annotations),
+	}
+
+	deploymentObjectMeta := metav1.ObjectMeta{
+		Name:        objectMeta.Name,
+		Namespace:   objectMeta.Namespace,
+		Labels:      maps.Clone(objectMeta.Labels),
+		Annotations: maps.Clone(objectMeta.Annotations),
+	}
+
+	service, err := buildNginxService(serviceObjectMeta, nProxyCfg, ports, selectorLabels)
 	if err != nil {
 		errs = append(errs, err)
 	}
 
 	deployment, err := p.buildNginxDeployment(
-		objectMeta,
+		deploymentObjectMeta,
 		nProxyCfg,
 		ngxIncludesConfigMapName,
 		ngxAgentConfigMapName,
