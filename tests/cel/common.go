@@ -61,6 +61,11 @@ const (
 	expectedTargetRefNameUniqueError  = `TargetRef Name must be unique`
 )
 
+// SnippetsFilter validation errors.
+const (
+	expectedSnippetsFilterContextError = `Only one snippet allowed per context`
+)
+
 const (
 	defaultNamespace = "default"
 )
