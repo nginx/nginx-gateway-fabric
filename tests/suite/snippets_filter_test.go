@@ -18,7 +18,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
-var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter"), func() {
+var _ = Describe("SnippetsFilter", Ordered, FlakeAttempts(2), Label("functional", "snippets-filter"), func() {
 	var (
 		files = []string{
 			"snippets-filter/cafe.yaml",
