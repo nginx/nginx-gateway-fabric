@@ -117,17 +117,32 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 		},
 	}
 
-	customConfig := dataplane.Configuration{
+	customPortConfig := dataplane.Configuration{
 		BaseHTTPConfig: dataplane.BaseHTTPConfig{
 			NginxReadinessProbePort: 9090,
 		},
 	}
 
+	customIPv4Config := dataplane.Configuration{
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{
+			NginxReadinessProbePort: dataplane.DefaultNginxReadinessProbePort,
+			IPFamily:                dataplane.IPv4,
+		},
+	}
+
+	customIPv6Config := dataplane.Configuration{
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{
+			NginxReadinessProbePort: dataplane.DefaultNginxReadinessProbePort,
+			IPFamily:                dataplane.IPv6,
+		},
+	}
+
 	tests := []struct {
-		name           string
-		expectedPort   string
-		expectedListen string
-		conf           dataplane.Configuration
+		name             string
+		expectedPort     string
+		expectedListen   string
+		expectedNoListen string
+		conf             dataplane.Configuration
 	}{
 		{
 			name:           "default nginx readiness probe port",
@@ -136,10 +151,36 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 			expectedListen: "listen 8081;",
 		},
 		{
+			name:           "default nginx readiness probe port on ipv6",
+			conf:           defaultConfig,
+			expectedPort:   "8081",
+			expectedListen: "listen [::]:8081;",
+		},
+		{
 			name:           "custom nginx readiness probe 9090",
-			conf:           customConfig,
+			conf:           customPortConfig,
 			expectedPort:   "9090",
 			expectedListen: "listen 9090;",
+		},
+		{
+			name:           "custom nginx readiness probe 9090 on ipv6",
+			conf:           customPortConfig,
+			expectedPort:   "9090",
+			expectedListen: "listen [::]:9090;",
+		},
+		{
+			name:             "custom ipv4 nginx readiness probe does not have ipv6 listen",
+			conf:             customIPv4Config,
+			expectedPort:     "8081",
+			expectedListen:   "listen 8081;",
+			expectedNoListen: "listen [::]:8081;",
+		},
+		{
+			name:             "custom ipv6 nginx readiness probe does not have ipv4 listen",
+			conf:             customIPv6Config,
+			expectedPort:     "8081",
+			expectedListen:   "listen [::]:8081;",
+			expectedNoListen: "listen 8081;",
 		},
 	}
 
@@ -155,6 +196,11 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 
 			// check that the listen directive contains the expected port
 			g.Expect(httpConfig).To(ContainSubstring(test.expectedListen))
+
+			// check that an additional listen directive is NOT set
+			if test.expectedNoListen != "" {
+				g.Expect(httpConfig).ToNot(ContainSubstring(test.expectedNoListen))
+			}
 
 			// check that the health check server block is present
 			g.Expect(httpConfig).To(ContainSubstring("server {"))

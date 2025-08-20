@@ -26,7 +26,12 @@ map $request_uri $request_uri_path {
 
 # NGINX health check server block.
 server {
+		{{- if $.IPFamily.IPv4 }}
     listen {{ .NginxReadinessProbePort }};
+		{{- end }}
+		{{- if $.IPFamily.IPv6 }}
+    listen [::]:{{ .NginxReadinessProbePort }};
+		{{- end }}
 
     location = /readyz {
         access_log off;
