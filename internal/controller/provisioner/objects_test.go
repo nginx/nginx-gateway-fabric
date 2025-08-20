@@ -1696,4 +1696,62 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	}
 	g.Expect(svc).ToNot(BeNil())
 	g.Expect(svc.Labels).ToNot(HaveKey("patched")) // Should not have patch-related labels
+
+	// Test that Service patches don't affect Deployment labels and vice versa (cross-contamination)
+	nProxyCfg = &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Service: &ngfAPIv1alpha2.ServiceSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"service-only":"true"}}}`),
+						},
+					},
+				},
+			},
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+				Patches: []ngfAPIv1alpha2.Patch{
+					{
+						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
+						Value: &apiextv1.JSON{
+							Raw: []byte(`{"metadata":{"labels":{"deployment-only":"true"}}}`),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	objects, err = provisioner.buildNginxResourceObjects("gw-nginx", gateway, nProxyCfg)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(objects).To(HaveLen(6))
+
+	// Find and validate service - should only have service-specific labels
+	svc = nil
+	for _, obj := range objects {
+		if s, ok := obj.(*corev1.Service); ok {
+			svc = s
+			break
+		}
+	}
+	g.Expect(svc).ToNot(BeNil())
+	g.Expect(svc.Labels).To(HaveKeyWithValue("service-only", "true"))
+	g.Expect(svc.Labels).ToNot(HaveKey("deployment-only"))
+
+	// Find and validate deployment - should only have deployment-specific labels
+	dep = nil
+	for _, obj := range objects {
+		if d, ok := obj.(*appsv1.Deployment); ok {
+			dep = d
+			break
+		}
+	}
+	g.Expect(dep).ToNot(BeNil())
+	g.Expect(dep.Labels).To(HaveKeyWithValue("deployment-only", "true"))
+	g.Expect(dep.Labels).ToNot(HaveKey("service-only"))
+
+	// Both should still have the common base labels
+	g.Expect(svc.Labels).To(HaveKeyWithValue("app", "nginx"))
+	g.Expect(dep.Labels).To(HaveKeyWithValue("app", "nginx"))
 }
