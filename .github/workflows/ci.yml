@@ -19,9 +19,11 @@ on:
       release_version:
         required: false
         type: string
+        default: ''
       dry_run:
         required: false
         type: boolean
+        default: false
 
 defaults:
   run:
@@ -219,8 +221,8 @@ jobs:
     with:
       image: ${{ matrix.image }}
       platforms: ${{ matrix.platforms }}
-      tag: ${{ inputs.release_version }}
-      dry_run: ${{ inputs.dry_run }}
+      tag: ${{ inputs.release_version || '' }}
+      dry_run: ${{ inputs.dry_run || false}}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -235,8 +237,8 @@ jobs:
     with:
       image: plus
       platforms: "linux/arm64, linux/amd64"
-      tag: ${{ inputs.release_version }}
-      dry_run: ${{ inputs.dry_run }}
+      tag: ${{ inputs.release_version || '' }}
+      dry_run: ${{ inputs.dry_run || false }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
