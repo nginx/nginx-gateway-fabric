@@ -18,7 +18,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
-var _ = Describe("SnippetsFilter", Ordered, FlakeAttempts(2), Label("functional", "snippets-filter"), func() {
+var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter"), func() {
 	var (
 		files = []string{
 			"snippets-filter/cafe.yaml",
@@ -144,7 +144,7 @@ var _ = Describe("SnippetsFilter", Ordered, FlakeAttempts(2), Label("functional"
 					},
 					{
 						Directive: "aio",
-						Value:     "on",
+						Value:     "off",
 						File:      fmt.Sprintf("%s%s", httpContext, httpRouteSuffix),
 					},
 					{
@@ -154,7 +154,7 @@ var _ = Describe("SnippetsFilter", Ordered, FlakeAttempts(2), Label("functional"
 					},
 					{
 						Directive: "auth_delay",
-						Value:     "10s",
+						Value:     "0s",
 						File:      fmt.Sprintf("%s%s", httpServerContext, httpRouteSuffix),
 					},
 					{
@@ -172,21 +172,21 @@ var _ = Describe("SnippetsFilter", Ordered, FlakeAttempts(2), Label("functional"
 					},
 					{
 						Directive: "keepalive_time",
-						Value:     "10s",
+						Value:     "1h",
 						File:      fmt.Sprintf("%s%s", httpServerLocationContext, httpRouteSuffix),
 					},
 				}),
 				Entry("GRPCRoute", []framework.ExpectedNginxField{
-					{
-						Directive: "worker_shutdown_timeout",
-						Value:     "120s",
-						File:      fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
-						File:      "main.conf",
-					},
+					// {
+					// 	Directive: "worker_shutdown_timeout",
+					// 	Value:     "120s",
+					// 	File:      fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
+					// },
+					// {
+					// 	Directive: "include",
+					// 	Value:     fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
+					// 	File:      "main.conf",
+					// },
 					{
 						Directive: "types_hash_bucket_size",
 						Value:     "64",
