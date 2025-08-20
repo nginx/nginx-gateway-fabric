@@ -7,6 +7,12 @@ on:
         description: 'Release version (e.g., v2.0.3)'
         required: true
         type: string
+      dry_run:
+        description: 'If true, does a dry run of the production workflow'
+        required: false
+        type: boolean
+
+run-name: ${{ inputs.dry_run && '[DRY RUN] ' || '' }}Release ${{ inputs.version }} by @${{ github.actor }}
 
 defaults:
   run:
@@ -24,8 +30,6 @@ jobs:
         run: |
           echo "Validating release from: ${GITHUB_REF}"
 
-          # Extract branch version
-          BRANCH_VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/heads/release-||')
           INPUT_VERSION="${{ github.event.inputs.version }}"
 
           # Validate version format
@@ -49,14 +53,20 @@ jobs:
           git config user.name "NGF Release Bot"
           git config user.email "integrations@nginx.com"
 
-          if git rev-parse "refs/tags/${VERSION}" >/dev/null 2>&1; then
-          echo "❌ Tag ${VERSION} already exists"
-          exit 1
-          fi
+          if git rev-parse --verify "refs/tags/${VERSION}" >/dev/null 2>&1; then
+          echo "Tag ${VERSION} already exists - skipping tag creation"
+          else
+          echo "Creating annotated tag ${VERSION}"
+          git tag -a "${VERSION}" -m "Release ${VERSION}"
 
-          git tag "${VERSION}"
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+          echo "DRY RUN: Would push tag ${VERSION}"
+          git push --dry-run origin "${VERSION}"
+          else
           git push origin "${VERSION}"
-          echo "✅ Created and pushed tag: ${VERSION}"
+          echo "Created and pushed tag: ${VERSION}"
+          fi
+          fi
 
   production-build:
     needs: create-tag-and-release
@@ -64,6 +74,7 @@ jobs:
     with:
       is_production_release: true
       release_version: ${{ github.event.inputs.version }}
+      dry_run: ${{ github.event.inputs.dry_run }}
     secrets: inherit
     permissions:
       contents: write

@@ -19,6 +19,9 @@ on:
       release_version:
         required: false
         type: string
+      dry_run:
+        required: false
+        type: boolean
 
 defaults:
   run:
@@ -168,7 +171,7 @@ jobs:
         with:
           minor-label: "enhancement"
           major-label: "change"
-          publish: ${{ inputs.is_production_release }}
+          publish: ${{ inputs.is_production_release && !inputs.dry_run }}
           collapse-after: 20
           notes-header: |
             *Below is the auto-generated changelog, which includes all PRs that went into the release.
@@ -176,18 +179,18 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
 
       - name: Download Syft
-        uses: anchore/sbom-action/download-syft@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
         if: ${{ inputs.is_production_release }}
+        uses: anchore/sbom-action/download-syft@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
         if: ${{ inputs.is_production_release }}
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
 
       - name: Build binary
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
           version: v2.11.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          args: ${{ inputs.is_production_release && 'release' || 'build --snapshot' }} --clean
+          args: ${{ (inputs.is_production_release && !inputs.dry_run) && 'release' || 'build --snapshot' }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
@@ -217,6 +220,7 @@ jobs:
       image: ${{ matrix.image }}
       platforms: ${{ matrix.platforms }}
       tag: ${{ inputs.release_version }}
+      dry_run: ${{ inputs.dry_run }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -232,6 +236,7 @@ jobs:
       image: plus
       platforms: "linux/arm64, linux/amd64"
       tag: ${{ inputs.release_version }}
+      dry_run: ${{ inputs.dry_run }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -277,7 +282,7 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       enable-experimental: ${{ matrix.enable-experimental }}
-      production-release: ${{ inputs.is_production_release }}
+      production-release: ${{ inputs.is_production_release && !inputs.dry_run }}
     secrets: inherit
     permissions:
       contents: write
@@ -327,6 +332,7 @@ jobs:
           echo "path=$(basename -- $(echo $output | cut -d: -f2))" >> $GITHUB_OUTPUT
 
       - name: Push to GitHub Container Registry
+        if: ${{ !inputs.dry_run }}
         run: |
           helm push ${{ steps.package.outputs.path }} oci://ghcr.io/nginx/charts
 
