@@ -22,12 +22,15 @@ const (
 	grpcRouteKind = "GRPCRoute"
 	tcpRouteKind  = "TCPRoute"
 	invalidKind   = "InvalidKind"
+	serviceKind   = "Service"
 )
 
 const (
 	gatewayGroup   = "gateway.networking.k8s.io"
 	invalidGroup   = "invalid.networking.k8s.io"
 	discoveryGroup = "discovery.k8s.io/v1"
+	coreGroup      = "core"
+	emptyGroup     = ""
 )
 
 // ClientSettingsPolicy validation errors.
@@ -49,6 +52,12 @@ const (
 	expectedTargetRefMustBeHTTPRouteOrGrpcRouteError = `TargetRef Kind must be: HTTPRoute or GRPCRoute`
 	expectedTargetRefKindAndNameComboMustBeUnique    = `TargetRef Kind and Name combination must be unique`
 	expectedStrategyMustBeOfTypeRatio                = `ratio can only be specified if strategy is of type ratio`
+
+// UpstreamSettingsPolicy validation errors.
+const (
+	expectedTargetRefKindServiceError = `TargetRefs Kind must be: Service`
+	expectedTargetRefGroupCoreError   = `TargetRefs Group must be core`
+	expectedTargetRefNameUniqueError  = `TargetRef Name must be unique`
 )
 
 const (
