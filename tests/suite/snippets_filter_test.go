@@ -177,16 +177,16 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 					},
 				}),
 				Entry("GRPCRoute", []framework.ExpectedNginxField{
-					// {
-					// 	Directive: "worker_shutdown_timeout",
-					// 	Value:     "120s",
-					// 	File:      fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
-					// },
-					// {
-					// 	Directive: "include",
-					// 	Value:     fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
-					// 	File:      "main.conf",
-					// },
+					{
+						Directive: "worker_shutdown_timeout",
+						Value:     "120s",
+						File:      fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
+					},
+					{
+						Directive: "include",
+						Value:     fmt.Sprintf("%s%s", mainContext, grpcRouteSuffix),
+						File:      "main.conf",
+					},
 					{
 						Directive: "types_hash_bucket_size",
 						Value:     "64",

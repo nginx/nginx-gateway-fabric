@@ -19,8 +19,8 @@ metadata:
   name: grpc-all-contexts
 spec:
   snippets:
-    # - context: main
-    #   value: worker_shutdown_timeout 120s;
+    - context: main
+      value: worker_shutdown_timeout 120s;
     - context: http
       value: types_hash_bucket_size 64;
     - context: http.server
