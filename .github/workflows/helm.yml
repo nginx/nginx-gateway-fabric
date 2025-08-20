@@ -44,7 +44,6 @@ jobs:
             type=edge
             type=schedule
             type=ref,event=pr
-            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
 
       - name: NGINX Docker meta
         id: nginx-meta
@@ -57,7 +56,6 @@ jobs:
             type=edge
             type=schedule
             type=ref,event=pr
-            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
 
       - name: Build NGF Docker Image
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0

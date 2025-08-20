@@ -1,0 +1,72 @@
+name: Production Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v2.0.3)'
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: write
+
+jobs:
+  create-tag-and-release:
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/heads/release-')
+    steps:
+      - name: Validate Release Branch and Version
+        run: |
+          echo "Validating release from: ${GITHUB_REF}"
+
+          # Extract branch version
+          BRANCH_VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/heads/release-||')
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+
+          # Validate version format
+          if [[ ! "${INPUT_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid version format: ${INPUT_VERSION}"
+          echo "Expected format: v1.2.3"
+          exit 1
+          fi
+
+          echo "✅ Valid release branch: ${GITHUB_REF}"
+          echo "✅ Valid version format: ${INPUT_VERSION}"
+
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+
+      - name: Create Release Tag
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          git config user.name "NGF Release Bot"
+          git config user.email "integrations@nginx.com"
+
+          if git rev-parse "refs/tags/${VERSION}" >/dev/null 2>&1; then
+          echo "❌ Tag ${VERSION} already exists"
+          exit 1
+          fi
+
+          git tag "${VERSION}"
+          git push origin "${VERSION}"
+          echo "✅ Created and pushed tag: ${VERSION}"
+
+  production-build:
+    needs: create-tag-and-release
+    uses: ./.github/workflows/ci.yml
+    with:
+      is_production_release: true
+      release_version: ${{ github.event.inputs.version }}
+    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      security-events: write
