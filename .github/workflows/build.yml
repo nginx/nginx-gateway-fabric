@@ -27,7 +27,7 @@ jobs:
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
       packages: write # for docker/build-push-action to push to GHCR
       id-token: write # for docker/login to login to NGINX registry
-    runs-on: ${{ github.repository_owner == 'nginx' && (github.ref_type == 'tag' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.tag != '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     services:
       registry:
         image: registry:3
@@ -115,7 +115,7 @@ jobs:
             type=edge
             type=schedule
             type=ref,event=pr
-            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
+            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.tag == '' }}
             type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
           labels: |
             org.opencontainers.image.documentation=https://docs.nginx.com/nginx-gateway-fabric

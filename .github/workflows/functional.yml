@@ -16,7 +16,7 @@ defaults:
 
 env:
   PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
-  GOPROXY: ${{ github.repository_owner == 'nginx' && format('https://{0}:{1}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-dev', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN) || 'direct' }}
+  GOPROXY: ${{ github.repository_owner == 'nginx' && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_DEV_ENDPOINT) || 'direct' }}
 
 permissions:
   contents: read
@@ -56,7 +56,6 @@ jobs:
             type=schedule
             type=edge
             type=ref,event=pr
-            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
 
       - name: NGINX Docker meta
         id: nginx-meta
@@ -69,7 +68,6 @@ jobs:
             type=edge
             type=schedule
             type=ref,event=pr
-            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
 
       - name: Build binary
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
