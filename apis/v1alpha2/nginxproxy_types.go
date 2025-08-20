@@ -374,11 +374,11 @@ type DNSResolver struct {
 	// +optional
 	CacheTTL *v1alpha1.Duration `json:"cacheTTL,omitempty"`
 
-	// DisableIPv6 disables DisableIPv6 lookups.
+	// DisableIPv6 disables IPv6 lookups.
 	// If not specified, or set to false, IPv6 lookups will be enabled.
 	//
 	// +optional
-	DisableIPv6 *bool `json:"ipv6,omitempty"`
+	DisableIPv6 *bool `json:"disableIPv6,omitempty"`
 
 	// Addresses specifies the list of DNS server addresses.
 	// Each address can be an IP address or hostname.

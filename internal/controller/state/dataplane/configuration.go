@@ -1258,20 +1258,14 @@ func buildDNSResolverConfig(dnsResolver *ngfAPIv1alpha2.DNSResolver) *DNSResolve
 
 	if dnsResolver.Timeout != nil {
 		config.Timeout = string(*dnsResolver.Timeout)
-	} else {
-		config.Timeout = "30s"
 	}
 
 	if dnsResolver.CacheTTL != nil {
 		config.Valid = string(*dnsResolver.CacheTTL)
-	} else {
-		config.Valid = "30s"
 	}
 
 	if dnsResolver.DisableIPv6 != nil {
 		config.DisableIPv6 = *dnsResolver.DisableIPv6
-	} else {
-		config.DisableIPv6 = true
 	}
 
 	return config

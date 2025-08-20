@@ -39,4 +39,4 @@ spec:
       value: "1.1.1.1"
     timeout: "30s"
     cacheTTL: "60s"
-    ipv6: true
+    disableIPv6: false
