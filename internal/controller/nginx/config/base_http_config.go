@@ -12,8 +12,9 @@ var baseHTTPTemplate = gotemplate.Must(gotemplate.New("baseHttp").Parse(baseHTTP
 
 type httpConfig struct {
 	Includes                []shared.Include
-	HTTP2                   bool
 	NginxReadinessProbePort int32
+	IPFamily                shared.IPFamily
+	HTTP2                   bool
 }
 
 func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
@@ -23,6 +24,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
 		HTTP2:                   conf.BaseHTTPConfig.HTTP2,
 		Includes:                includes,
 		NginxReadinessProbePort: conf.BaseHTTPConfig.NginxReadinessProbePort,
+		IPFamily:                getIPFamily(conf.BaseHTTPConfig),
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
