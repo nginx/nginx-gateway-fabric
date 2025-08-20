@@ -365,22 +365,20 @@ type NginxPlus struct {
 // Corresponds to the NGINX resolver directive: https://nginx.org/en/docs/http/ngx_http_core_module.html#resolver
 type DNSResolver struct {
 	// Timeout specifies the timeout for name resolution.
-	// Default: 30s.
 	//
 	// +optional
 	Timeout *v1alpha1.Duration `json:"timeout,omitempty"`
 
 	// CacheTTL specifies how long to cache DNS responses.
-	// Default: 30s.
 	//
 	// +optional
 	CacheTTL *v1alpha1.Duration `json:"cacheTTL,omitempty"`
 
-	// IPv6 enables IPv6 lookups.
-	// Default: true.
+	// DisableIPv6 disables DisableIPv6 lookups.
+	// If not specified, or set to false, IPv6 lookups will be enabled.
 	//
 	// +optional
-	IPv6 *bool `json:"ipv6,omitempty"`
+	DisableIPv6 *bool `json:"ipv6,omitempty"`
 
 	// Addresses specifies the list of DNS server addresses.
 	// Each address can be an IP address or hostname.
@@ -388,7 +386,6 @@ type DNSResolver struct {
 	//
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=16
-	// +listType=set
 	Addresses []DNSResolverAddress `json:"addresses"`
 }
 
@@ -398,6 +395,11 @@ type DNSResolverAddress struct {
 	Type DNSResolverAddressType `json:"type"`
 
 	// Value specifies the address value.
+	// When Type is "IPAddress", this must be a valid IPv4 or IPv6 address.
+	// When Type is "Hostname", this must be a valid hostname.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	Value string `json:"value"`
 }
 

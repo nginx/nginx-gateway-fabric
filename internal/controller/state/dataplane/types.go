@@ -416,8 +416,8 @@ type DNSResolverConfig struct {
 	Valid string
 	// Addresses specifies the list of DNS server addresses.
 	Addresses []string
-	// IPv6 specifies whether to enable IPv6 lookups.
-	IPv6 bool
+	// DisableIPv6 specifies whether to disable DisableIPv6 lookups.
+	DisableIPv6 bool
 }
 
 // RewriteIPModeType specifies the mode for rewriting the client IP.

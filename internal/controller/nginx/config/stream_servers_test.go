@@ -424,10 +424,10 @@ func TestExecuteStreamServersWithResolver(t *testing.T) {
 			conf: dataplane.Configuration{
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
-						Addresses: []string{"8.8.8.8", "8.8.4.4"},
-						Timeout:   "10s",
-						Valid:     "60s",
-						IPv6:      false,
+						Addresses:   []string{"8.8.8.8", "8.8.4.4"},
+						Timeout:     "10s",
+						Valid:       "60s",
+						DisableIPv6: true,
 					},
 				},
 			},
@@ -462,10 +462,10 @@ server {
 			conf: dataplane.Configuration{
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
-						Addresses: []string{"2001:4860:4860::8888"},
-						Timeout:   "5s",
-						Valid:     "30s",
-						IPv6:      true,
+						Addresses:   []string{"2001:4860:4860::8888"},
+						Timeout:     "5s",
+						Valid:       "30s",
+						DisableIPv6: false,
 					},
 				},
 			},

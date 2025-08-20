@@ -5170,16 +5170,16 @@ func TestBuildDNSResolverConfig(t *testing.T) {
 		{
 			name: "DNS resolver with all options",
 			dnsResolver: &ngfAPIv1alpha2.DNSResolver{
-				Addresses: addr,
-				Timeout:   helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
-				CacheTTL:  helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
-				IPv6:      helpers.GetPointer(false),
+				Addresses:   addr,
+				Timeout:     helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
+				CacheTTL:    helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
+				DisableIPv6: helpers.GetPointer(false),
 			},
 			expected: &DNSResolverConfig{
-				Addresses: []string{"8.8.8.8", "dns.google"},
-				Timeout:   "10s",
-				Valid:     "60s",
-				IPv6:      false,
+				Addresses:   []string{"8.8.8.8", "dns.google"},
+				Timeout:     "10s",
+				Valid:       "60s",
+				DisableIPv6: false,
 			},
 		},
 		{
@@ -5188,10 +5188,10 @@ func TestBuildDNSResolverConfig(t *testing.T) {
 				Addresses: addr,
 			},
 			expected: &DNSResolverConfig{
-				Addresses: []string{"8.8.8.8", "dns.google"},
-				Timeout:   "30s",
-				Valid:     "30s",
-				IPv6:      true,
+				Addresses:   []string{"8.8.8.8", "dns.google"},
+				Timeout:     "30s",
+				Valid:       "30s",
+				DisableIPv6: true,
 			},
 		},
 	}

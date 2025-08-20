@@ -224,10 +224,10 @@ func TestExecuteBaseHttp_DNSResolver(t *testing.T) {
 			conf: dataplane.Configuration{
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
-						Addresses: []string{"8.8.8.8", "8.8.4.4"},
-						Timeout:   "10s",
-						Valid:     "60s",
-						IPv6:      false,
+						Addresses:   []string{"8.8.8.8", "8.8.4.4"},
+						Timeout:     "10s",
+						Valid:       "60s",
+						DisableIPv6: true,
 					},
 				},
 			},
@@ -238,8 +238,8 @@ func TestExecuteBaseHttp_DNSResolver(t *testing.T) {
 			conf: dataplane.Configuration{
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
-						Addresses: []string{"8.8.8.8"},
-						IPv6:      true,
+						Addresses:   []string{"8.8.8.8"},
+						DisableIPv6: false,
 					},
 				},
 			},

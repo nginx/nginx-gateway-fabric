@@ -671,7 +671,12 @@ spec:
                           - Hostname
                           type: string
                         value:
-                          description: Value specifies the address value.
+                          description: |-
+                            Value specifies the address value.
+                            When Type is "IPAddress", this must be a valid IPv4 or IPv6 address.
+                            When Type is "Hostname", this must be a valid hostname.
+                          maxLength: 253
+                          minLength: 1
                           type: string
                       required:
                       - type
@@ -680,22 +685,17 @@ spec:
                     maxItems: 16
                     minItems: 1
                     type: array
-                    x-kubernetes-list-type: set
                   cacheTTL:
-                    description: |-
-                      CacheTTL specifies how long to cache DNS responses.
-                      Default: 30s.
+                    description: CacheTTL specifies how long to cache DNS responses.
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
                   ipv6:
                     description: |-
-                      IPv6 enables IPv6 lookups.
-                      Default: true.
+                      DisableIPv6 disables DisableIPv6 lookups.
+                      If not specified, or set to false, IPv6 lookups will be enabled.
                     type: boolean
                   timeout:
-                    description: |-
-                      Timeout specifies the timeout for name resolution.
-                      Default: 30s.
+                    description: Timeout specifies the timeout for name resolution.
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
                 required:

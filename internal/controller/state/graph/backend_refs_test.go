@@ -3,6 +3,7 @@ package graph
 import (
 	"errors"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -1638,8 +1639,8 @@ func TestValidateBackendTLSPolicyMatchingAllBackends(t *testing.T) {
 
 func TestFindBackendTLSPolicyForService(t *testing.T) {
 	t.Parallel()
-	oldCreationTimestamp := metav1.Now()
-	newCreationTimestamp := metav1.Now()
+	oldCreationTimestamp := metav1.NewTime(time.Now().Add(-time.Hour))
+	newCreationTimestamp := metav1.NewTime(time.Now())
 	getBtp := func(name string, timestamp metav1.Time) *BackendTLSPolicy {
 		return &BackendTLSPolicy{
 			Valid: true,

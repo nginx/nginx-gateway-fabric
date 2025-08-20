@@ -485,17 +485,18 @@ nginx:
   #             - type
   #             - value
   #         minItems: 1
+  #         maxItems: 16
   #       timeout:
   #         type: string
-  #         description: Timeout specifies the timeout for name resolution. Default is 30s.
+  #         description: Timeout specifies the timeout for name resolution.
   #         pattern: ^\d+[smhd]?$
   #       cacheTTL:
   #         type: string
-  #         description: CacheTTL specifies how long to cache DNS responses. Default is 30s.
+  #         description: CacheTTL specifies how long to cache DNS responses.
   #         pattern: ^\d+[smhd]?$
-  #       ipv6:
+  #       disableIPv6:
   #         type: boolean
-  #         description: IPv6 enables IPv6 lookups. Default is true.
+  #         description: DisableIPv6 disables DisableIPv6 lookups. If not specified, or set to false, IPv6 lookups will be enabled.
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.

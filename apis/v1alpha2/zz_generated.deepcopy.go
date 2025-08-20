@@ -120,8 +120,8 @@ func (in *DNSResolver) DeepCopyInto(out *DNSResolver) {
 		*out = new(v1alpha1.Duration)
 		**out = **in
 	}
-	if in.IPv6 != nil {
-		in, out := &in.IPv6, &out.IPv6
+	if in.DisableIPv6 != nil {
+		in, out := &in.DisableIPv6, &out.DisableIPv6
 		*out = new(bool)
 		**out = **in
 	}

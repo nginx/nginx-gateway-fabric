@@ -28,11 +28,6 @@ const (
 	defaultErrorLogLevel           = "info"
 	DefaultWorkerConnections       = int32(1024)
 	DefaultNginxReadinessProbePort = int32(8081)
-
-	// Default values for DNS resolver configuration.
-	defaultDNSTimeout  = "30s"
-	defaultDNSValidity = "30s"
-	defaultIPv6Enabled = true
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -1259,19 +1254,24 @@ func buildDNSResolverConfig(dnsResolver *ngfAPIv1alpha2.DNSResolver) *DNSResolve
 
 	config := &DNSResolverConfig{
 		Addresses: convertDNSResolverAddresses(dnsResolver.Addresses),
-		Timeout:   defaultDNSTimeout,
-		Valid:     defaultDNSValidity,
-		IPv6:      defaultIPv6Enabled,
 	}
 
 	if dnsResolver.Timeout != nil {
 		config.Timeout = string(*dnsResolver.Timeout)
+	} else {
+		config.Timeout = "30s"
 	}
+
 	if dnsResolver.CacheTTL != nil {
 		config.Valid = string(*dnsResolver.CacheTTL)
+	} else {
+		config.Valid = "30s"
 	}
-	if dnsResolver.IPv6 != nil {
-		config.IPv6 = *dnsResolver.IPv6
+
+	if dnsResolver.DisableIPv6 != nil {
+		config.DisableIPv6 = *dnsResolver.DisableIPv6
+	} else {
+		config.DisableIPv6 = true
 	}
 
 	return config
