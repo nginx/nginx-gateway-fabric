@@ -173,7 +173,7 @@ jobs:
         with:
           minor-label: "enhancement"
           major-label: "change"
-          publish: ${{ inputs.is_production_release && !inputs.dry_run }}
+          publish: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
           collapse-after: 20
           notes-header: |
             *Below is the auto-generated changelog, which includes all PRs that went into the release.
@@ -192,7 +192,7 @@ jobs:
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
           version: v2.11.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          args: ${{ (inputs.is_production_release && !inputs.dry_run) && 'release' || 'build --snapshot' }} --clean
+          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || 'build --snapshot' }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
@@ -284,7 +284,7 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       enable-experimental: ${{ matrix.enable-experimental }}
-      production-release: ${{ inputs.is_production_release && !inputs.dry_run }}
+      production-release: ${{ inputs.is_production_release == true && (inputs.dry_run == false || inputs.dry_run == null) }}
     secrets: inherit
     permissions:
       contents: write
@@ -334,7 +334,7 @@ jobs:
           echo "path=$(basename -- $(echo $output | cut -d: -f2))" >> $GITHUB_OUTPUT
 
       - name: Push to GitHub Container Registry
-        if: ${{ !inputs.dry_run }}
+        if: ${{ inputs.dry_run == false || inputs.dry_run == null }}
         run: |
           helm push ${{ steps.package.outputs.path }} oci://ghcr.io/nginx/charts
 
