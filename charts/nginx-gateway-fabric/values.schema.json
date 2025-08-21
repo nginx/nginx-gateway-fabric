@@ -498,6 +498,15 @@
           "title": "nginxOneConsole",
           "type": "object"
         },
+        "patches": {
+          "description": "Custom patches to apply to the NGINX Deployment/DaemonSet.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "patches",
+          "type": "array"
+        },
         "plus": {
           "default": false,
           "description": "Is NGINX Plus image being used.",
@@ -576,6 +585,15 @@
               },
               "required": [],
               "title": "nodePorts",
+              "type": "array"
+            },
+            "patches": {
+              "description": "Custom patches to apply to the NGINX Service.",
+              "items": {
+                "required": []
+              },
+              "required": [],
+              "title": "patches",
               "type": "array"
             },
             "type": {
