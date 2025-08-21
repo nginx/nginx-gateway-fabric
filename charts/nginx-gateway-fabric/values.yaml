@@ -641,12 +641,11 @@ nginx:
     # -- Custom patches to apply to the NGINX Service.
     patches: []
     # -- Example:
-    # patches:
     #   - type: JSONPatch
     #     value:
     #       - op: replace
-    #         path: /spec/externalTrafficPolicy
-    #         value: "Cluster"
+    #         path: /spec/sessionAffinity
+    #         value: "ClientIP"
 
   # -- Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource.
   debug: false
