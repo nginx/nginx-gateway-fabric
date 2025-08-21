@@ -144,6 +144,8 @@
                       },
                       "value": {
                         "description": "Value specifies the address value.",
+                        "maxItems": 253,
+                        "minItems": 1,
                         "required": [],
                         "type": "string"
                       }

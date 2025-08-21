@@ -480,6 +480,8 @@ nginx:
   #               description: Type specifies the type of address.
   #             value:
   #               type: string
+  #               minItems: 1
+  #               maxItems: 253
   #               description: Value specifies the address value.
   #           required:
   #             - type
