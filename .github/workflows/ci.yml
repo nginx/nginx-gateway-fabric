@@ -222,6 +222,14 @@ jobs:
       id-token: write # for docker/login to login to NGINX registry
     secrets: inherit
 
+  verify-ipv6:
+    name: Verify IPv6 Environment
+    needs: [vars, build-oss, build-plus]
+        uses: ./.github/workflows/verify-ipv6.yml
+    with:
+      image-repository: nginx-gateway-fabric
+      image-tag: ${{ github.sha }}
+
   functional-tests:
     name: Functional tests
     needs: [vars, build-oss, build-plus]

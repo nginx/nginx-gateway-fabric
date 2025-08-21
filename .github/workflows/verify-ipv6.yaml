@@ -1,0 +1,218 @@
+name: Verify IPv6 Functionality
+
+on:
+  workflow_call:
+    inputs:
+      image-repository:
+        required: true
+        type: string
+      image-tag:
+        required: true
+        type: string
+
+jobs:
+  verify-ipv6:
+    name: Verify IPv6 Functionality
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Golang Environment
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+
+      - name: Enable IPv6 on Docker
+        run: |
+          # Configure Docker daemon to support IPv6
+          echo '{
+            "ipv6": true,
+            "fixed-cidr-v6": "2001:db8:1::/64",
+            "experimental": true,
+            "ip6tables": true
+          }' | sudo tee /etc/docker/daemon.json
+
+          # Restart Docker service
+          sudo systemctl restart docker
+
+      - name: Create Kind Cluster with IPv6
+        uses: helm/kind-action@v1.8.0
+        with:
+          config: |
+            kind: Cluster
+            apiVersion: kind.x-k8s.io/v1alpha4
+            name: kind-ipv6
+            networking:
+              ipFamily: ipv6
+              apiServerAddress: "127.0.0.1"
+            nodes:
+              - role: control-plane
+
+      - name: Wait for Cluster to be Ready
+        run: |
+          echo "Waiting for cluster to be ready..."
+          kubectl wait --for=condition=Ready nodes --all --timeout=180s
+          kubectl get nodes -o wide
+          kubectl cluster-info
+
+
+      - name: Load Images to Kind
+        run: |
+          kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}
+
+      - name: Install NGF via Helm
+        run: |
+          # Install CRDs
+          kubectl kustomize config/crd | kubectl apply --server-side -f -
+          
+          # Install NGF
+          
+
+      - name: Wait for NGF to be Ready
+        run: |
+          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/component=controller -n nginx-gateway --timeout=120s
+          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/component=nginx -n nginx-gateway --timeout=120s
+          kubectl get pods -n nginx-gateway -o wide
+
+      - name: Deploy Test Application
+        run: |
+          # Create a simple test application
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: echo-server
+            labels:
+              app: echo-server
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: echo-server
+            template:
+              metadata:
+                labels:
+                  app: echo-server
+              spec:
+                containers:
+                - name: echo-server
+                  image: jmalloc/echo-server:latest
+                  ports:
+                  - containerPort: 8080
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: echo-server
+          spec:
+            selector:
+              app: echo-server
+            ports:
+            - port: 80
+              targetPort: 8080
+          EOF
+          
+          kubectl wait --for=condition=Available deployment/echo-server --timeout=60s
+          kubectl get pods -o wide
+
+      - name: Configure Gateway and HTTPRoute
+        run: |
+          # Create Gateway and HTTPRoute resources
+          cat <<EOF | kubectl apply -f -
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: Gateway
+          metadata:
+            name: gateway
+          spec:
+            gatewayClassName: nginx
+            listeners:
+            - name: http
+              port: 80
+              protocol: HTTP
+          ---
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: echo-route
+          spec:
+            parentRefs:
+            - name: gateway
+            rules:
+            - matches:
+              - path:
+                  type: PathPrefix
+                  value: /
+              backendRefs:
+              - name: echo-server
+                port: 80
+          EOF
+          
+          # Wait for Gateway to be ready
+          kubectl wait --for=condition=Ready gateway/gateway --timeout=60s
+          kubectl get gateway gateway -o yaml
+
+      - name: Get NGF Service IPv6 Address and Port
+        run: |
+          # Get NodePort of the NGF service
+          NODE_PORT=$(kubectl get svc -n nginx-gateway -l app.kubernetes.io/component=nginx -o jsonpath='{.items[0].spec.ports[0].nodePort}')
+          echo "NODE_PORT=$NODE_PORT" >> $GITHUB_ENV
+          
+          # Get IPv6 address of the worker node
+          NODE_IPV6=$(kubectl get nodes -l kubernetes.io/hostname!=kind-ipv6-control-plane -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' | head -1)
+          echo "NODE_IPV6=$NODE_IPV6" >> $GITHUB_ENV
+          
+          echo "NGF is accessible at [$NODE_IPV6]:$NODE_PORT"
+
+      - name: Verify Connectivity with Curl
+        run: |
+          # Install curl with IPv6 support if needed
+          sudo apt-get update
+          sudo apt-get install -y curl iputils-ping
+
+          # Test ping first to verify basic connectivity
+          ping6 -c 4 ${{ env.NODE_IPV6 }}
+          
+          # Test HTTP connection using curl with IPv6
+          echo "Testing connection to echo-server via NGF..."
+          curl -v --retry 5 --retry-delay 2 -H "Host: echo-server" http://[${{ env.NODE_IPV6 }}]:${{ env.NODE_PORT }}/
+          
+          # Verify response
+          RESPONSE=$(curl -s -H "Host: echo-server" http://[${{ env.NODE_IPV6 }}]:${{ env.NODE_PORT }}/)
+          if [[ "$RESPONSE" == *"echo-server"* ]]; then
+            echo "✅ Successfully verified IPv6 connectivity to the application through NGF!"
+          else
+            echo "❌ Failed to get correct response from application"
+            exit 1
+          fi
+
+      - name: Cleanup Resources
+        if: always()
+        run: |
+          echo "Cleaning up resources..."
+          # Delete Gateway and HTTPRoute
+          kubectl delete httproute echo-route --ignore-not-found
+          kubectl delete gateway gateway --ignore-not-found
+          
+          # Delete Application
+          kubectl delete service echo-server --ignore-not-found
+          kubectl delete deployment echo-server --ignore-not-found
+          
+          # Uninstall NGF
+          helm uninstall ngf
+          
+          echo "All resources cleaned up"
+
+      - name: Collect Logs on Failure
+        if: failure()
+        run: |
+          echo "Collecting logs for troubleshooting..."
+          kubectl get pods -A
+          kubectl logs -l app.kubernetes.io/component=controller -n nginx-gateway --tail=100 || true
+          kubectl logs -l app.kubernetes.io/component=nginx -n nginx-gateway --tail=100 || true
+          kubectl describe gateway gateway || true
+          kubectl describe httproute echo-route || true
+          kubectl describe service -n nginx-gateway || true
+          kubectl describe nodes
