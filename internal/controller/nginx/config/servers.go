@@ -326,13 +326,19 @@ func createLocations(
 			matches = append(matches, match)
 		}
 
+		// Deduplicate matches with identical conditions (method, headers, query params)
+		// When multiple matches have identical conditions but different redirect paths,
+		// we keep only the first one (conflict resolution: first rule wins)
+		matches = deduplicateMatches(matches)
+
 		httpMatchKey := serverID + "_" + strconv.Itoa(pathRuleIdx)
+		// Set the HTTPMatchKey for all external locations as they all need to perform HTTP matching
 		for i := range extLocations {
-			// FIXME(sberman): De-dupe matches and associated locations
-			// so we don't need nginx/njs to perform unnecessary matching.
-			// https://github.com/nginx/nginx-gateway-fabric/issues/662
 			extLocations[i].HTTPMatchKey = httpMatchKey
-			matchPairs[extLocations[i].HTTPMatchKey] = matches
+		}
+		// Only set the matches once in the map to avoid redundant operations
+		if len(extLocations) > 0 {
+			matchPairs[httpMatchKey] = matches
 		}
 
 		locs = append(locs, extLocations...)
@@ -1072,4 +1078,59 @@ func deduplicateStrings(content []string) []string {
 	}
 
 	return result
+}
+
+// deduplicateMatches removes duplicate matches that have identical match conditions
+// (method, headers, query params) but different redirect paths. When conflicts exist,
+// the first match wins (conflict resolution based on rule order).
+func deduplicateMatches(matches []routeMatch) []routeMatch {
+	if len(matches) <= 1 {
+		return matches
+	}
+
+	seen := make(map[string]routeMatch)
+	result := make([]routeMatch, 0, len(matches))
+
+	for _, match := range matches {
+		// Create a key based on the match conditions (excluding RedirectPath)
+		key := createMatchConditionsKey(match)
+
+		// If we haven't seen these match conditions before, add the match
+		if _, exists := seen[key]; !exists {
+			seen[key] = match
+			result = append(result, match)
+		}
+		// If we have seen these conditions before, skip (first match wins)
+	}
+
+	return result
+}
+
+// createMatchConditionsKey creates a unique key for the match conditions
+// (method, headers, query params, any) excluding the redirect path.
+func createMatchConditionsKey(match routeMatch) string {
+	var keyParts []string
+
+	// Include method
+	if match.Method != "" {
+		keyParts = append(keyParts, "method:"+match.Method)
+	}
+
+	// Include headers (already sorted in createRouteMatch)
+	for _, header := range match.Headers {
+		keyParts = append(keyParts, "header:"+header)
+	}
+
+	// Include query params
+	for _, param := range match.QueryParams {
+		keyParts = append(keyParts, "param:"+param)
+	}
+
+	// Include any flag
+	if match.Any {
+		keyParts = append(keyParts, "any:true")
+	}
+
+	// Join all parts to create a unique key
+	return strings.Join(keyParts, "|")
 }

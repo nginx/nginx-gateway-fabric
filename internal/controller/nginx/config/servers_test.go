@@ -4062,3 +4062,253 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 	g.Expect(serverConf).NotTo(ContainSubstring("if ($ssl_server_name != $host)"),
 		"Expected SNI host validation block to be absent when DisableSNIHostValidation is true")
 }
+
+func TestCreateLocationsDeduplicateMatches(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	// Create a path rule that results in multiple external locations
+	// and tests the comprehensive deduplication of identical match conditions
+	pathRule := dataplane.PathRule{
+		Path:     "/coffee",
+		PathType: dataplane.PathTypePrefix,
+		MatchRules: []dataplane.MatchRule{
+			{
+				Match: dataplane.Match{
+					Headers: []dataplane.HTTPHeaderMatch{
+						{
+							Name:  "version",
+							Value: "v2",
+							Type:  dataplane.MatchTypeExact,
+						},
+					},
+				},
+				BackendGroup: dataplane.BackendGroup{
+					Source: types.NamespacedName{Name: "coffee-v2-svc", Namespace: "default"},
+					Backends: []dataplane.Backend{
+						{UpstreamName: "default_coffee-v2-svc_80"},
+					},
+				},
+			},
+			{
+				// Identical match conditions but different backend (should be deduplicated)
+				Match: dataplane.Match{
+					Headers: []dataplane.HTTPHeaderMatch{
+						{
+							Name:  "version",
+							Value: "v2",
+							Type:  dataplane.MatchTypeExact,
+						},
+					},
+				},
+				BackendGroup: dataplane.BackendGroup{
+					Source: types.NamespacedName{Name: "coffee-v1-svc", Namespace: "default"},
+					Backends: []dataplane.Backend{
+						{UpstreamName: "default_coffee-v1-svc_80"},
+					},
+				},
+			},
+			{
+				// Different match conditions (should be kept)
+				Match: dataplane.Match{
+					Headers: []dataplane.HTTPHeaderMatch{
+						{
+							Name:  "version",
+							Value: "v3",
+							Type:  dataplane.MatchTypeExact,
+						},
+					},
+				},
+				BackendGroup: dataplane.BackendGroup{
+					Source: types.NamespacedName{Name: "coffee-v3-svc", Namespace: "default"},
+					Backends: []dataplane.Backend{
+						{UpstreamName: "default_coffee-v3-svc_80"},
+					},
+				},
+			},
+		},
+	}
+
+	server := dataplane.VirtualServer{
+		Hostname:  "cafe.example.com",
+		Port:      8080,
+		PathRules: []dataplane.PathRule{pathRule},
+	}
+
+	locations, matchPairs, _ := createLocations(&server, "1", &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+
+	// Find external locations (should be 2 for prefix path without trailing slash)
+	var externalLocs []http.Location
+	for _, loc := range locations {
+		if loc.Type == http.RedirectLocationType {
+			externalLocs = append(externalLocs, loc)
+		}
+	}
+
+	// Both external locations should have the same HTTPMatchKey
+	g.Expect(externalLocs).To(HaveLen(2))
+	g.Expect(externalLocs[0].HTTPMatchKey).To(Equal("1_0"))
+	g.Expect(externalLocs[1].HTTPMatchKey).To(Equal("1_0"))
+
+	// The matchPairs map should only have one entry for this key (no duplication)
+	g.Expect(matchPairs).To(HaveKey("1_0"))
+
+	// CRITICAL: This is the comprehensive fix - duplicated match conditions should be removed
+	// We had 3 rules, but rules 0 and 1 have identical match conditions (version:v2)
+	// So after deduplication, we should only have 2 matches: version:v2 (first wins) and version:v3
+	g.Expect(matchPairs["1_0"]).To(HaveLen(2))
+
+	// Verify the matches are correct
+	matches := matchPairs["1_0"]
+
+	// First match should be version:v2 (first rule wins over duplicate)
+	g.Expect(matches[0].Headers).To(ContainElement("version:Exact:v2"))
+	g.Expect(matches[0].RedirectPath).To(Equal("/_ngf-internal-rule0-route0"))
+
+	// Second match should be version:v3 (different condition, kept)
+	g.Expect(matches[1].Headers).To(ContainElement("version:Exact:v3"))
+	g.Expect(matches[1].RedirectPath).To(Equal("/_ngf-internal-rule0-route2"))
+
+	// Verify the external locations are created correctly
+	var exactLoc, prefixLoc http.Location
+	for _, loc := range externalLocs {
+		switch loc.Path {
+		case "= /coffee":
+			exactLoc = loc
+		case "/coffee/":
+			prefixLoc = loc
+		}
+	}
+	g.Expect(exactLoc.Path).To(Equal("= /coffee"))
+	g.Expect(prefixLoc.Path).To(Equal("/coffee/"))
+}
+
+func TestDeduplicateMatches(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		matches  []routeMatch
+		expected []routeMatch
+	}{
+		{
+			name:     "empty matches",
+			matches:  []routeMatch{},
+			expected: []routeMatch{},
+		},
+		{
+			name: "single match",
+			matches: []routeMatch{
+				{
+					Method:       "GET",
+					Headers:      []string{"version:Exact:v1"},
+					RedirectPath: "/route1",
+				},
+			},
+			expected: []routeMatch{
+				{
+					Method:       "GET",
+					Headers:      []string{"version:Exact:v1"},
+					RedirectPath: "/route1",
+				},
+			},
+		},
+		{
+			name: "no duplicates",
+			matches: []routeMatch{
+				{
+					Headers:      []string{"version:Exact:v1"},
+					RedirectPath: "/route1",
+				},
+				{
+					Headers:      []string{"version:Exact:v2"},
+					RedirectPath: "/route2",
+				},
+			},
+			expected: []routeMatch{
+				{
+					Headers:      []string{"version:Exact:v1"},
+					RedirectPath: "/route1",
+				},
+				{
+					Headers:      []string{"version:Exact:v2"},
+					RedirectPath: "/route2",
+				},
+			},
+		},
+		{
+			name: "duplicate conditions - first wins",
+			matches: []routeMatch{
+				{
+					Headers:      []string{"version:Exact:v2"},
+					RedirectPath: "/route1",
+				},
+				{
+					Headers:      []string{"version:Exact:v2"},
+					RedirectPath: "/route2", // Same conditions, different path
+				},
+				{
+					Headers:      []string{"version:Exact:v3"},
+					RedirectPath: "/route3", // Different conditions
+				},
+			},
+			expected: []routeMatch{
+				{
+					Headers:      []string{"version:Exact:v2"},
+					RedirectPath: "/route1", // First one wins
+				},
+				{
+					Headers:      []string{"version:Exact:v3"},
+					RedirectPath: "/route3", // Different conditions kept
+				},
+			},
+		},
+		{
+			name: "complex duplicates with methods and query params",
+			matches: []routeMatch{
+				{
+					Method:       "GET",
+					Headers:      []string{"version:Exact:v2"},
+					QueryParams:  []string{"env:Exact:prod"},
+					RedirectPath: "/route1",
+				},
+				{
+					Method:       "GET",
+					Headers:      []string{"version:Exact:v2"},
+					QueryParams:  []string{"env:Exact:prod"},
+					RedirectPath: "/route2", // Identical conditions
+				},
+				{
+					Method:       "POST",
+					Headers:      []string{"version:Exact:v2"},
+					QueryParams:  []string{"env:Exact:prod"},
+					RedirectPath: "/route3", // Different method
+				},
+			},
+			expected: []routeMatch{
+				{
+					Method:       "GET",
+					Headers:      []string{"version:Exact:v2"},
+					QueryParams:  []string{"env:Exact:prod"},
+					RedirectPath: "/route1", // First GET wins
+				},
+				{
+					Method:       "POST",
+					Headers:      []string{"version:Exact:v2"},
+					QueryParams:  []string{"env:Exact:prod"},
+					RedirectPath: "/route3", // Different method kept
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			result := deduplicateMatches(tt.matches)
+			g.Expect(result).To(Equal(tt.expected))
+		})
+	}
+}
