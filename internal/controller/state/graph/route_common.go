@@ -308,6 +308,8 @@ func buildSectionNameRefs(
 		}
 
 		// If there is no section name, handle based on whether port is specified
+		// FIXME(sarthyparty): this logic seems to be duplicated in findAttachableListeners so we should refactor this,
+		// either here or in findAttachableListeners
 		if p.SectionName == nil {
 			// If port is specified, preserve the port-only nature for proper validation
 			if p.Port != nil {
@@ -315,10 +317,10 @@ func buildSectionNameRefs(
 					Idx:         i,
 					Gateway:     CreateParentRefGateway(gw),
 					SectionName: nil, // Keep as nil to preserve port-only semantics
-					Port:        p.Port,
+					Port:        nil,
 				})
 			} else {
-				// If no port and no sectionName, expand to all listeners (existing behavior)
+				// If no port and no sectionName, expand to all listeners
 				for _, l := range gw.Listeners {
 					k.sectionName = string(l.Source.Name)
 
