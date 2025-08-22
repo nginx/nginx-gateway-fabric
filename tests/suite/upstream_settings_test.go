@@ -46,25 +46,84 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				Name: namespace,
 			},
 		}
+		GinkgoWriter.Printf("\nCreating namespace %q\n", ns)
+		cnErr := resourceManager.Apply([]client.Object{ns})
+		if cnErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during applying resource to namespace %q, error: %v\n",
+				ns,
+				cnErr,
+			)
+		}
+		Expect(cnErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Namespace %q applied successfully,\n", ns)
 
-		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
-		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+		// Log applying resources
+		GinkgoWriter.Printf("Applying resources from files %v to namespace %q\n", files, namespace)
+		applyErr := resourceManager.ApplyFromFiles(files, namespace)
+		if applyErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during applying resource from files %v, in namespace %q, error: %v\n",
+				files,
+				namespace,
+				applyErr,
+			)
+		}
+		Expect(applyErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Resources from files applied successfully to namespace %q,\n", namespace)
 
+		// Log waiting for readiness
+		GinkgoWriter.Printf("Waiting for apps to be ready in namespace %q\n", namespace)
+		waitingErr := resourceManager.WaitForAppsToBeReady(namespace)
+		if waitingErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during waiting for apps to be ready in namespace %q, error: %v\n",
+				namespace,
+				waitingErr,
+			)
+		}
+		Expect(waitingErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Apps are ready in namespace %q,\n", namespace)
+
+		GinkgoWriter.Printf("Retrieving ready NGINX pods in namespace %q\n", namespace)
 		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		if err != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during retrieving ready NGINX pod names in namespace %q, error: %v\n",
+				namespace,
+				err,
+			)
+		}
 		Expect(err).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Nginx pods in namespace %q: %v\n", namespace, nginxPodNames)
 		Expect(nginxPodNames).To(HaveLen(1))
 
 		nginxPodName = nginxPodNames[0]
-
+		GinkgoWriter.Printf(
+			"Setting up port-forward to nginx pod %s in namespace %q\n",
+			nginxPodName,
+			namespace,
+		)
 		setUpPortForward(nginxPodName, namespace)
 	})
 
 	AfterAll(func() {
+		GinkgoWriter.Printf("Adding NGINX logs and events to report in namespace %q\n", namespace)
 		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+		GinkgoWriter.Printf("Cleaning up port-forward\n")
 		cleanUpPortForward()
 
-		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
+		GinkgoWriter.Printf("Deleting namespace %q\n", namespace)
+		dnErr := resourceManager.DeleteNamespace(namespace)
+		if dnErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during deleting namespace %q, error: %v\n",
+				namespace,
+				dnErr,
+			)
+		}
+		Expect(dnErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Namespace %q deleted successfully,\n", namespace)
 	})
 
 	When("UpstreamSettingsPolicies target distinct Services", func() {
@@ -73,11 +132,32 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		}
 
 		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(usps, namespace)).To(Succeed())
+			GinkgoWriter.Printf("Applying resources from files %v to namespace %q\n", usps, namespace)
+			applyErr := resourceManager.ApplyFromFiles(usps, namespace)
+			if applyErr != nil {
+				GinkgoWriter.Printf(
+					"ERROR occurred during applying resource from files %v, in namespace %q, error: %v\n",
+					usps,
+					namespace,
+					applyErr,
+				)
+			}
+			Expect(applyErr).ToNot(HaveOccurred())
+			GinkgoWriter.Printf("Resources from files applied successfully to namespace %q,\n", namespace)
 		})
 
 		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(usps, namespace)).To(Succeed())
+			GinkgoWriter.Printf("Deleting resources from files %v in namespace %q\n", usps, namespace)
+			drErr := resourceManager.DeleteFromFiles(usps, namespace)
+			if drErr != nil {
+				GinkgoWriter.Printf(
+					"ERROR occurred during deleting resource from files %v, in namespace %q, error: %v\n",
+					usps,
+					namespace,
+					drErr,
+				)
+			}
+			Expect(drErr).ToNot(HaveOccurred())
 		})
 
 		Specify("they are accepted", func() {
@@ -85,7 +165,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				"multiple-http-svc-usp",
 				"grpc-svc-usp",
 			}
-
+			GinkgoWriter.Printf("Verifying acceptance for policies %v\n", usPolicies)
 			for _, name := range usPolicies {
 				uspolicyNsName := types.NamespacedName{Name: name, Namespace: namespace}
 
@@ -130,15 +210,30 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			var conf *framework.Payload
 
 			BeforeAll(func() {
+				GinkgoWriter.Printf("Retrieving NGINX configuration for pod %s in namespace %q\n", nginxPodName, namespace)
 				var err error
 				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				if err != nil {
+					GinkgoWriter.Printf(
+						"Failed to retrieve NGINX configuration for pod %s in namespace %q: %v\n",
+						nginxPodName,
+						namespace,
+						err,
+					)
+				}
 				Expect(err).ToNot(HaveOccurred())
+				GinkgoWriter.Printf("NGINX configuration retrieved successfully\n")
 			})
 
 			DescribeTable("are set properly for",
 				func(expCfgs []framework.ExpectedNginxField) {
 					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						GinkgoWriter.Printf("Validating NGINX field: %v\n", expCfg)
+						validationErr := framework.ValidateNginxFieldExists(conf, expCfg)
+						if validationErr != nil {
+							GinkgoWriter.Printf("NGINX field validation failed: %v\n", validationErr)
+						}
+						Expect(validationErr).ToNot(HaveOccurred())
 					}
 				},
 				Entry("HTTP upstreams", []framework.ExpectedNginxField{
@@ -260,17 +355,54 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		}
 
 		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(usps, namespace)).To(Succeed())
+			GinkgoWriter.Printf("\nApplying resources from files %v to namespace %q\n", usps, namespace)
+			applyErr := resourceManager.ApplyFromFiles(usps, namespace)
+			if applyErr != nil {
+				GinkgoWriter.Printf(
+					"Failed to apply resources from files %v to namespace %q: %v\n",
+					usps,
+					namespace,
+					applyErr,
+				)
+			}
+			Expect(applyErr).ToNot(HaveOccurred())
 		})
 
 		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(usps, namespace)).To(Succeed())
+			GinkgoWriter.Printf("Deleting resources from files %v in namespace %q\n", usps, namespace)
+			deleteErr := resourceManager.DeleteFromFiles(usps, namespace)
+			if deleteErr != nil {
+				GinkgoWriter.Printf(
+					"Failed to delete resources from files %v in namespace %q: %v\n",
+					usps,
+					namespace,
+					deleteErr,
+				)
+			}
+			Expect(deleteErr).ToNot(HaveOccurred())
 		})
 
 		DescribeTable("upstreamSettingsPolicy status is set as expected",
 			func(name string, status metav1.ConditionStatus, condReason v1alpha2.PolicyConditionReason) {
 				uspolicyNsName := types.NamespacedName{Name: name, Namespace: namespace}
-				Expect(waitForUSPolicyStatus(uspolicyNsName, gatewayName, status, condReason)).To(Succeed())
+				GinkgoWriter.Printf(
+					"Waiting for upstreamSettingsPolicy %q on gateway %q status to be %q with reason %q\n",
+					name,
+					gatewayName,
+					status,
+					condReason,
+				)
+				waitingStatusErr := waitForUSPolicyStatus(uspolicyNsName, gatewayName, status, condReason)
+				if waitingStatusErr != nil {
+					GinkgoWriter.Printf("Failed to wait for upstreamSettingsPolicy status: %v\n", waitingStatusErr)
+				}
+				Expect(waitingStatusErr).ToNot(HaveOccurred())
+				GinkgoWriter.Printf(
+					"UpstreamSettingsPolicy %q status is %q with reason %q Succeeded\n",
+					name,
+					status,
+					condReason,
+				)
 			},
 			Entry("uspolicy merge-usp-1", "merge-usp-1", metav1.ConditionTrue, v1alpha2.PolicyReasonAccepted),
 			Entry("uspolicy merge-usp-2", "merge-usp-2", metav1.ConditionTrue, v1alpha2.PolicyReasonAccepted),
@@ -281,6 +413,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
+				GinkgoWriter.Printf("Testing HTTPRoutes reachability in namespace %q\n", namespace)
 				port := 80
 				if portFwdPort != 0 {
 					port = portFwdPort
@@ -310,15 +443,30 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			var conf *framework.Payload
 
 			BeforeAll(func() {
+				GinkgoWriter.Printf(
+					"\nRetrieving NGINX configuration for pod %s in namespace %q\n",
+					nginxPodName,
+					namespace,
+				)
 				var err error
 				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				if err != nil {
+					GinkgoWriter.Printf("Failed to retrieve NGINX configuration for pod %s: %v\n", nginxPodName, err)
+				}
 				Expect(err).ToNot(HaveOccurred())
+				GinkgoWriter.Printf("NGINX configuration retrieved successfully for pod %s\n", nginxPodName)
 			})
 
 			DescribeTable("are set properly for",
 				func(expCfgs []framework.ExpectedNginxField) {
 					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						GinkgoWriter.Printf("Validating NGINX field: %q\n", expCfg)
+						validationErr := framework.ValidateNginxFieldExists(conf, expCfg)
+						if validationErr != nil {
+							GinkgoWriter.Printf("Failed to validate NGINX field %q: %v\n", expCfg, validationErr)
+						}
+						Expect(validationErr).ToNot(HaveOccurred())
+						GinkgoWriter.Printf("NGINX field %q validated successfully\n", expCfg)
 					}
 				},
 				Entry("Coffee upstream", []framework.ExpectedNginxField{
@@ -379,10 +527,20 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		Specify("upstreamSettingsPolicy sets no condition", func() {
 			files := []string{"upstream-settings-policy/invalid-svc-usps.yaml"}
 
-			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
+			GinkgoWriter.Printf("Applying resources from files %v to namespace %q\n", files, namespace)
+			applyErr := resourceManager.ApplyFromFiles(files, namespace)
+			if applyErr != nil {
+				GinkgoWriter.Printf(
+					"Failed to apply resources from files %v to namespace %q: %v\n",
+					files,
+					namespace, applyErr,
+				)
+			}
+			Expect(applyErr).ToNot(HaveOccurred())
 
 			uspolicyNsName := types.NamespacedName{Name: "usps-target-not-found", Namespace: namespace}
 
+			GinkgoWriter.Printf("Waiting for UpstreamSettingsPolicy %q to have no ancestors\n", uspolicyNsName)
 			Consistently(
 				func() bool {
 					return usPolicyHasNoAncestors(uspolicyNsName)
@@ -390,7 +548,17 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				WithPolling(500 * time.Millisecond).
 				Should(BeTrue())
 
-			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
+			GinkgoWriter.Printf("Deleting resources from files %v in namespace %q\n", files, namespace)
+			deleteErr := resourceManager.DeleteFromFiles(files, namespace)
+			if deleteErr != nil {
+				GinkgoWriter.Printf(
+					"Failed to delete resources from files %v in namespace %q: %v\n",
+					files,
+					namespace,
+					deleteErr,
+				)
+			}
+			Expect(deleteErr).ToNot(HaveOccurred())
 		})
 	})
 
@@ -398,10 +566,30 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		Specify("upstreamSettingsPolicy is not Accepted with the reason TargetNotFound", func() {
 			// delete existing gateway
 			gatewayFileName := "upstream-settings-policy/gateway.yaml"
-			Expect(resourceManager.DeleteFromFiles([]string{gatewayFileName}, namespace)).To(Succeed())
+			GinkgoWriter.Printf("Deleting resources from file %q in namespace %q\n", gatewayFileName, namespace)
+			deleteErr := resourceManager.DeleteFromFiles([]string{gatewayFileName}, namespace)
+			if deleteErr != nil {
+				GinkgoWriter.Printf(
+					"Failed to delete resources from files %v in namespace %q: %v\n",
+					[]string{gatewayFileName},
+					namespace,
+					deleteErr,
+				)
+			}
+			Expect(deleteErr).ToNot(HaveOccurred())
 
 			files := []string{"upstream-settings-policy/invalid-target-usps.yaml"}
-			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
+			GinkgoWriter.Printf("Applying resources from files %v to namespace %q\n", files, namespace)
+			applyErr := resourceManager.ApplyFromFiles(files, namespace)
+			if applyErr != nil {
+				GinkgoWriter.Printf(
+					"Failed to apply resources from files %v to namespace %q: %v\n",
+					files,
+					namespace,
+					applyErr,
+				)
+			}
+			Expect(applyErr).ToNot(HaveOccurred())
 
 			uspolicyNsName := types.NamespacedName{Name: "soda-svc-usp", Namespace: namespace}
 			gatewayName = "gateway-not-valid"
@@ -412,7 +600,17 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				v1alpha2.PolicyReasonTargetNotFound,
 			)).To(Succeed())
 
-			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
+			GinkgoWriter.Printf("Deleting resources from files %v in namespace %q\n", files, namespace)
+			deleteFromFileErr := resourceManager.DeleteFromFiles(files, namespace)
+			if deleteFromFileErr != nil {
+				GinkgoWriter.Printf(
+					"Failed to delete resources from files %v in namespace %q: %v\n",
+					files,
+					namespace,
+					deleteFromFileErr,
+				)
+			}
+			Expect(deleteFromFileErr).ToNot(HaveOccurred())
 		})
 	})
 })
@@ -426,6 +624,7 @@ func usPolicyHasNoAncestors(usPolicyNsName types.NamespacedName) bool {
 	var usPolicy ngfAPI.UpstreamSettingsPolicy
 	if err := k8sClient.Get(ctx, usPolicyNsName, &usPolicy); err != nil {
 		GinkgoWriter.Printf("Failed to get UpstreamSettingsPolicy %q: %s", usPolicyNsName, err.Error())
+
 		return false
 	}
 
@@ -456,7 +655,10 @@ func waitForUSPolicyStatus(
 			var usPolicy ngfAPI.UpstreamSettingsPolicy
 			var err error
 
+			GinkgoWriter.Printf("Retrieving UpstreamSettingsPolicy %q\n", usPolicyNsName)
 			if err := k8sClient.Get(ctx, usPolicyNsName, &usPolicy); err != nil {
+				GinkgoWriter.Printf("Failed to get UpstreamSettingsPolicy %q: %s", usPolicyNsName, err.Error())
+
 				return false, err
 			}
 
@@ -467,18 +669,42 @@ func waitForUSPolicyStatus(
 			}
 
 			if len(usPolicy.Status.Ancestors) != 1 {
-				return false, fmt.Errorf("policy has %d ancestors, expected 1", len(usPolicy.Status.Ancestors))
+				lenErr := fmt.Errorf("policy has %d ancestors, expected 1", len(usPolicy.Status.Ancestors))
+				GinkgoWriter.Printf(
+					"UpstreamSettingsPolicy %q has %d ancestors, expected 1, returning error: %v\n",
+					usPolicyNsName,
+					len(usPolicy.Status.Ancestors),
+					lenErr,
+				)
+
+				return false, lenErr
 			}
 
 			ancestors := usPolicy.Status.Ancestors
 
 			for _, ancestor := range ancestors {
 				if err := ancestorMustEqualGatewayRef(ancestor, gatewayName, usPolicy.Namespace); err != nil {
+					GinkgoWriter.Printf(
+						"Failed to validate ancestor %q for UpstreamSettingsPolicy %q: %v\n",
+						ancestor,
+						usPolicyNsName,
+						err,
+					)
+
 					return false, err
 				}
 
 				err = ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
+				if err != nil {
+					GinkgoWriter.Printf(
+						"Failed to validate ancestor %q for UpstreamSettingsPolicy %q: %v\n",
+						ancestor,
+						usPolicyNsName,
+						err,
+					)
+				}
 			}
+
 			return err == nil, err
 		},
 	)
