@@ -317,7 +317,7 @@ func buildSectionNameRefs(
 					Idx:         i,
 					Gateway:     CreateParentRefGateway(gw),
 					SectionName: nil, // Keep as nil to preserve port-only semantics
-					Port:        nil,
+					Port:        p.Port,
 				})
 			} else {
 				// If no port and no sectionName, expand to all listeners
@@ -335,7 +335,7 @@ func buildSectionNameRefs(
 						Idx:         i,
 						Gateway:     CreateParentRefGateway(gw),
 						SectionName: &l.Source.Name,
-						Port:        p.Port,
+						Port:        nil,
 					})
 				}
 			}
