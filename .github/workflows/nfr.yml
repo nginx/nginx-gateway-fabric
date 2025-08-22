@@ -192,7 +192,7 @@ jobs:
       - name: Open a PR with the results
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
         with:
-          token: ${{ secrets.NGINX_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: NFR Test Results for NGF version ${{ needs.vars.outputs.version }}
           author: nginx-bot <integrations@nginx.com>
           committer: nginx-bot <integrations@nginx.com>
