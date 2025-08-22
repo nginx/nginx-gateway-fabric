@@ -4,6 +4,53 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.1.1
+
+* fix: remove patch label/ annotation cross contamination by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/3754
+* fix: host readiness probe on ipv6 in addition to ipv4 by @lucasl0st in https://github.com/nginx/nginx-gateway-fabric/pull/3765
+* feat: Support ExternalName Services by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/3759
+* Add patches to helm chart spec  by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/3773
+
+%%DATE%%
+
+FEATURES:
+
+-
+
+BUG FIXES:
+
+-
+
+DOCUMENTATION:
+
+-
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.1.1
+-
+
+UPGRADE:
+
+-
+
+KNOWN ISSUES:
+
+-
+
+COMPATIBILITY:
+
+- Gateway API version: ``
+- NGINX version: ``
+- NGINX Plus version: ``
+- NGINX Agent version: ``
+- Kubernetes version: ``
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.1.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.1.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.1.1`
 ## Release 2.1.0
 
 _August 14, 2025_
