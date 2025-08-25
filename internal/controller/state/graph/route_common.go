@@ -870,12 +870,17 @@ func findAttachableListeners(ref *ParentRef, listeners []*Listener) ([]*Listener
 	if sectionName != "" {
 		for _, l := range listeners {
 			if l.Name == sectionName {
-				if l.Attachable && (ref.Port == nil || l.Source.Port == *ref.Port) {
+				listenerPortMatches := ref.Port == nil || l.Source.Port == *ref.Port
+				if l.Attachable && listenerPortMatches {
 					return []*Listener{l}, true
 				}
-				if ref.Port != nil && l.Source.Port != *ref.Port {
+
+				if !listenerPortMatches {
 					return nil, false
 				}
+
+				// This is the case where the port of parentRef is nil or the same as the listener port.
+				// We return true because we have technically found a listener, but its not attachable.
 				return nil, true
 			}
 		}
