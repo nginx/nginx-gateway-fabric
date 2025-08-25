@@ -12,6 +12,9 @@ defaults:
   run:
     shell: bash
 
+env:
+  GOPROXY: ${{ github.repository_owner == 'nginx' && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_DEV_ENDPOINT) || 'direct' }}
+
 concurrency:
   group: ${{ github.ref_name }}-lint
   cancel-in-progress: true
