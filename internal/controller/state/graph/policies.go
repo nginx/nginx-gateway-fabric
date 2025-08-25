@@ -497,7 +497,7 @@ func getHostnameMatches(hostname string, routeHostnames []v1.Hostname) []string 
 	}
 
 	if foundExactMatch {
-		return []string{}
+		return []string{hostname}
 	}
 	return moreSpecificHostnames
 }
