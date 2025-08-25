@@ -8,7 +8,12 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -2124,6 +2129,118 @@ func TestCreateServersConflicts(t *testing.T) {
 			g.Expect(helpers.Diff(expectedServers, result)).To(BeEmpty())
 		})
 	}
+}
+
+func TestInternalLocationForHttpRouteAdvancedRules(t *testing.T) {
+
+	pathRules := []dataplane.PathRule{
+		{
+			Path:     "/rest",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{
+						Headers: []dataplane.HTTPHeaderMatch{
+							{
+								Name:  "Referer",
+								Type:  dataplane.MatchTypeRegularExpression,
+								Value: "(?i)(mydomain|myotherdomain).+\\.example\\.(cloud|com)",
+							},
+						},
+					},
+				},
+				{
+					BackendGroup: dataplane.BackendGroup{
+						Backends: []dataplane.Backend{
+							{
+								UpstreamName: "coffee",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Path:     "/rest",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					BackendGroup: dataplane.BackendGroup{
+						Backends: []dataplane.Backend{
+							{
+								UpstreamName: "coffee-api",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			MatchRules: []dataplane.MatchRule{
+				{
+					BackendGroup: dataplane.BackendGroup{
+						Backends: []dataplane.Backend{
+							{
+								UpstreamName: "coffee",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	policy := &ngfAPIv1alpha1.ClientSettingsPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "http-example-com",
+			Namespace: "default",
+		},
+		Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+			TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				Kind:  "Gateway",
+				Group: "gateway.networking.k8s.io",
+			},
+			Body: &ngfAPIv1alpha1.ClientBody{
+				MaxSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("250m"),
+			},
+		},
+	}
+
+	httpServers := []dataplane.VirtualServer{
+		{
+			IsDefault: true,
+			Port:      8080,
+		},
+		{
+			Hostname:  "http.example.com",
+			PathRules: pathRules,
+			Port:      8080,
+			Policies:  []policies.Policy{policy},
+		},
+	}
+
+	fakeGenerator := &policiesfakes.FakeGenerator{}
+	fakeGenerator.GenerateForLocationReturns(policies.GenerateResultFiles{
+		{
+			Name:    "ext-policy.conf",
+			Content: []byte("client_max_body_size 600m"),
+		},
+	})
+
+	fakeGenerator.GenerateForInternalLocationReturns(policies.GenerateResultFiles{
+		{
+			Name:    "ext-policy.conf",
+			Content: []byte("client_max_body_size 600m"),
+		},
+	})
+	locations, matches, _ := createLocations(&httpServers[1], "1", fakeGenerator, alwaysFalseKeepAliveChecker)
+
+	fmt.Println("---------------------------")
+	fmt.Printf("%+v\n", locations)
+	fmt.Println("---------------------------")
+	fmt.Println("---------------------------")
+	fmt.Printf("%+v\n", matches)
+	fmt.Println("---------------------------")
 }
 
 func TestCreateServers_Includes(t *testing.T) {
