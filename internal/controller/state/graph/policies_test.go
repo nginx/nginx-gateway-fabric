@@ -1297,6 +1297,43 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:      "no overlap different hostnames (hostname slice bug regression test)",
+			validator: &policiesfakes.FakeValidator{},
+			policies: map[PolicyKey]policies.Policy{
+				pol1Key: pol1,
+				pol3Key: pol3,
+			},
+			routes: map[RouteKey]*L7Route{
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee"},
+				}: createTestRouteWithPathsAndHostname("hr-coffee", "app1.playground.testapis.net", "/"),
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee-tea"},
+				}: createTestRouteWithPathsAndHostname("hr-coffee-tea", "app2.playground.testapis.net", "/"),
+			},
+			valid: true,
+		},
+		{
+			name:      "no overlap wildcard listener with specific route hostnames",
+			validator: &policiesfakes.FakeValidator{},
+			policies: map[PolicyKey]policies.Policy{
+				pol1Key: pol1, // Policy targeting first route only
+			},
+			routes: map[RouteKey]*L7Route{
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee"},
+				}: createTestRouteWithWildcardListener("hr-coffee", "*.example.com", []string{"api.example.com"}, "/"),
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee-tea"},
+				}: createTestRouteWithWildcardListener("hr-coffee-tea", "*.example.com", []string{"web.example.com"}, "/"),
+			},
+			valid: true,
+		},
 	}
 
 	gateways := map[types.NamespacedName]*Gateway{
@@ -1621,6 +1658,92 @@ func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 			{
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{"listener-1": {"foo.example.com"}},
+					ListenerPort:      80,
+				},
+			},
+		},
+	}
+
+	return route
+}
+
+func createTestRouteWithPathsAndHostname(name string, hostname string, paths ...string) *L7Route {
+	routeMatches := make([]v1.HTTPRouteMatch, 0, len(paths))
+
+	for _, path := range paths {
+		routeMatches = append(routeMatches, v1.HTTPRouteMatch{
+			Path: &v1.HTTPPathMatch{
+				Type:  helpers.GetPointer(v1.PathMatchExact),
+				Value: helpers.GetPointer(path),
+			},
+		})
+	}
+
+	route := &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: testNs,
+			},
+		},
+		Spec: L7RouteSpec{
+			Rules: []RouteRule{
+				{Matches: routeMatches},
+			},
+		},
+		ParentRefs: []ParentRef{
+			{
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{"listener-1": {hostname}},
+					ListenerPort:      80,
+				},
+			},
+		},
+	}
+
+	return route
+}
+
+func createTestRouteWithWildcardListener(
+	name string,
+	listenerHostname string,
+	routeHostnames []string,
+	paths ...string,
+) *L7Route {
+	routeMatches := make([]v1.HTTPRouteMatch, 0, len(paths))
+
+	for _, path := range paths {
+		routeMatches = append(routeMatches, v1.HTTPRouteMatch{
+			Path: &v1.HTTPPathMatch{
+				Type:  helpers.GetPointer(v1.PathMatchExact),
+				Value: helpers.GetPointer(path),
+			},
+		})
+	}
+
+	// Convert string slice to v1.Hostname slice
+	specHostnames := make([]v1.Hostname, 0, len(routeHostnames))
+	for _, h := range routeHostnames {
+		specHostnames = append(specHostnames, v1.Hostname(h))
+	}
+
+	route := &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: testNs,
+			},
+		},
+		Spec: L7RouteSpec{
+			Hostnames: specHostnames,
+			Rules: []RouteRule{
+				{Matches: routeMatches},
+			},
+		},
+		ParentRefs: []ParentRef{
+			{
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{"listener-1": {listenerHostname}},
 					ListenerPort:      80,
 				},
 			},

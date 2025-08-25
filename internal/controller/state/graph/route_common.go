@@ -926,7 +926,7 @@ func findAcceptedHostnames(listenerHostname *v1.Hostname, routeHostnames []v1.Ho
 
 	for _, h := range routeHostnames {
 		routeHost := string(h)
-		if match(hostname, routeHost) {
+		if Match(hostname, routeHost) {
 			result = append(result, GetMoreSpecificHostname(hostname, routeHost))
 		}
 	}
@@ -934,7 +934,7 @@ func findAcceptedHostnames(listenerHostname *v1.Hostname, routeHostnames []v1.Ho
 	return result
 }
 
-func match(listenerHost, routeHost string) bool {
+func Match(listenerHost, routeHost string) bool {
 	if listenerHost == "" {
 		return true
 	}
