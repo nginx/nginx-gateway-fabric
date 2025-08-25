@@ -303,47 +303,36 @@ func buildSectionNameRefs(
 		}
 
 		gwNsName := client.ObjectKeyFromObject(gw.Source)
-		k := key{
-			gwNsName: gwNsName,
-		}
 
-		// If there is no section name, handle based on whether port is specified
-		// FIXME(sarthyparty): this logic seems to be duplicated in findAttachableListeners so we should refactor this,
-		// either here or in findAttachableListeners
+		// If there is no section name, validate uniqueness by expanding in the uniqueness map only
 		if p.SectionName == nil {
-			// If port is specified, preserve the port-only nature for proper validation
-			if p.Port != nil {
-				sectionNameRefs = append(sectionNameRefs, ParentRef{
-					Idx:         i,
-					Gateway:     CreateParentRefGateway(gw),
-					SectionName: nil, // Keep as nil to preserve port-only semantics
-					Port:        p.Port,
-				})
-			} else {
-				// If no port and no sectionName, expand to all listeners
-				for _, l := range gw.Listeners {
-					k.sectionName = string(l.Source.Name)
+			// Check uniqueness for all listener names in this gateway
+			for _, l := range gw.Listeners {
+				k := key{
+					gwNsName:    gwNsName,
+					sectionName: string(l.Source.Name),
+				}
 
-					if err := checkUniqueSections(k); err != nil {
-						return nil, err
-					}
-
-					sectionNameRefs = append(sectionNameRefs, ParentRef{
-						// if the ParentRefs we create are for each listener in the same gateway, we keep the
-						// parentRefIndex the same so when we look at a route's parentRef's we can see
-						// if the parentRef is a unique parentRef or one we created internally
-						Idx:         i,
-						Gateway:     CreateParentRefGateway(gw),
-						SectionName: &l.Source.Name,
-						Port:        nil,
-					})
+				if err := checkUniqueSections(k); err != nil {
+					return nil, err
 				}
 			}
+
+			// Create a single parentRef without expansion
+			sectionNameRefs = append(sectionNameRefs, ParentRef{
+				Idx:         i,
+				Gateway:     CreateParentRefGateway(gw),
+				SectionName: nil, // Keep as nil to indicate attachment to multiple listeners
+				Port:        p.Port,
+			})
 
 			continue
 		}
 
-		k.sectionName = string(*p.SectionName)
+		k := key{
+			gwNsName:    gwNsName,
+			sectionName: string(*p.SectionName),
+		}
 		if err := checkUniqueSections(k); err != nil {
 			return nil, err
 		}

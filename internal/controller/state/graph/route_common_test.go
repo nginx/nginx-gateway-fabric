@@ -121,12 +121,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 		{
 			Idx:         6,
 			Gateway:     CreateParentRefGateway(gws[gwNsName3]),
-			SectionName: helpers.GetPointer[gatewayv1.SectionName]("http"),
-		},
-		{
-			Idx:         6,
-			Gateway:     CreateParentRefGateway(gws[gwNsName3]),
-			SectionName: helpers.GetPointer[gatewayv1.SectionName]("https"),
+			SectionName: nil, // No expansion - keep as nil to represent attachment to all listeners
 		},
 	}
 
