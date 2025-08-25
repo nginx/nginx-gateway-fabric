@@ -303,34 +303,36 @@ func buildSectionNameRefs(
 		}
 
 		gwNsName := client.ObjectKeyFromObject(gw.Source)
-		k := key{
-			gwNsName: gwNsName,
-		}
 
-		// If there is no section name, we create ParentRefs for each listener in the gateway
+		// If there is no section name, validate uniqueness by expanding in the uniqueness map only
 		if p.SectionName == nil {
+			// Check uniqueness for all listener names in this gateway
 			for _, l := range gw.Listeners {
-				k.sectionName = string(l.Source.Name)
+				k := key{
+					gwNsName:    gwNsName,
+					sectionName: string(l.Source.Name),
+				}
 
 				if err := checkUniqueSections(k); err != nil {
 					return nil, err
 				}
-
-				sectionNameRefs = append(sectionNameRefs, ParentRef{
-					// if the ParentRefs we create are for each listener in the same gateway, we keep the
-					// parentRefIndex the same so when we look at a route's parentRef's we can see
-					// if the parentRef is a unique parentRef or one we created internally
-					Idx:         i,
-					Gateway:     CreateParentRefGateway(gw),
-					SectionName: &l.Source.Name,
-					Port:        p.Port,
-				})
 			}
+
+			// Create a single parentRef without expansion
+			sectionNameRefs = append(sectionNameRefs, ParentRef{
+				Idx:         i,
+				Gateway:     CreateParentRefGateway(gw),
+				SectionName: nil, // Keep as nil to indicate attachment to multiple listeners
+				Port:        p.Port,
+			})
 
 			continue
 		}
 
-		k.sectionName = string(*p.SectionName)
+		k := key{
+			gwNsName:    gwNsName,
+			sectionName: string(*p.SectionName),
+		}
 		if err := checkUniqueSections(k); err != nil {
 			return nil, err
 		}
@@ -532,10 +534,8 @@ func validateParentRef(
 
 	ref.Attachment = attachment
 
-	path := field.NewPath("spec").Child("parentRefs").Index(ref.Idx)
-
 	attachableListeners, listenerExists := findAttachableListeners(
-		getSectionName(ref.SectionName),
+		ref,
 		gw.Listeners,
 	)
 
@@ -546,17 +546,7 @@ func validateParentRef(
 		return attachment, nil
 	}
 
-	// Case 2: Attachment is not possible due to unsupported configuration.
-
-	if ref.Port != nil {
-		valErr := field.Forbidden(path.Child("port"), "cannot be set")
-		attachment.FailedConditions = append(
-			attachment.FailedConditions, conditions.NewRouteUnsupportedValue(valErr.Error()),
-		)
-		return attachment, attachableListeners
-	}
-
-	// Case 3: Attachment is not possible because Gateway is invalid
+	// Case 2: Attachment is not possible because Gateway is invalid
 
 	if !gw.Valid {
 		attachment.FailedConditions = append(attachment.FailedConditions, conditions.NewRouteInvalidGateway())
@@ -873,29 +863,53 @@ func tryToAttachL7RouteToListeners(
 
 // findAttachableListeners returns a list of attachable listeners and whether the listener exists for a non-empty
 // sectionName.
-func findAttachableListeners(sectionName string, listeners []*Listener) ([]*Listener, bool) {
+func findAttachableListeners(ref *ParentRef, listeners []*Listener) ([]*Listener, bool) {
+	sectionName := getSectionName(ref.SectionName)
+
+	// Case 1: sectionName is specified - look for that specific listener
 	if sectionName != "" {
 		for _, l := range listeners {
 			if l.Name == sectionName {
-				if l.Attachable {
+				listenerPortMatches := ref.Port == nil || l.Source.Port == *ref.Port
+				if l.Attachable && listenerPortMatches {
 					return []*Listener{l}, true
 				}
+
+				if !listenerPortMatches {
+					return nil, false
+				}
+
+				// This is the case where the port of parentRef is nil or the same as the listener port.
+				// We return true because we have technically found a listener, but its not attachable.
 				return nil, true
 			}
 		}
 		return nil, false
 	}
 
-	attachableListeners := make([]*Listener, 0, len(listeners))
-	for _, l := range listeners {
-		if !l.Attachable {
-			continue
+	// Case 2: Only port is specified - find all attachable listeners matching that port
+	if ref.Port != nil {
+		var attachableListeners []*Listener
+		var foundListener bool
+		for _, l := range listeners {
+			if l.Source.Port == *ref.Port {
+				foundListener = true
+				if l.Attachable {
+					attachableListeners = append(attachableListeners, l)
+				}
+			}
 		}
-
-		attachableListeners = append(attachableListeners, l)
+		return attachableListeners, foundListener
 	}
 
-	return attachableListeners, true
+	// Case 3: Neither sectionName nor port specified - return all attachable listeners
+	var attachableListeners []*Listener
+	for _, l := range listeners {
+		if l.Attachable {
+			attachableListeners = append(attachableListeners, l)
+		}
+	}
+	return attachableListeners, len(listeners) > 0
 }
 
 func findAcceptedHostnames(listenerHostname *v1.Hostname, routeHostnames []v1.Hostname) []string {
@@ -912,7 +926,7 @@ func findAcceptedHostnames(listenerHostname *v1.Hostname, routeHostnames []v1.Ho
 
 	for _, h := range routeHostnames {
 		routeHost := string(h)
-		if match(hostname, routeHost) {
+		if Match(hostname, routeHost) {
 			result = append(result, GetMoreSpecificHostname(hostname, routeHost))
 		}
 	}
@@ -920,7 +934,7 @@ func findAcceptedHostnames(listenerHostname *v1.Hostname, routeHostnames []v1.Ho
 	return result
 }
 
-func match(listenerHost, routeHost string) bool {
+func Match(listenerHost, routeHost string) bool {
 	if listenerHost == "" {
 		return true
 	}

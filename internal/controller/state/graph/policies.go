@@ -455,31 +455,88 @@ func checkTargetRoutesForOverlap(
 // as a route referenced in a policy.
 func checkForRouteOverlap(route *L7Route, hostPortPaths map[string]string) *conditions.Condition {
 	for _, parentRef := range route.ParentRefs {
-		if parentRef.Attachment != nil {
-			port := parentRef.Attachment.ListenerPort
-			for _, hostname := range parentRef.Attachment.AcceptedHostnames {
-				for _, rule := range route.Spec.Rules {
-					for _, match := range rule.Matches {
-						if match.Path != nil && match.Path.Value != nil {
-							key := fmt.Sprintf("%s:%d%s", hostname, port, *match.Path.Value)
-							if val, ok := hostPortPaths[key]; !ok {
-								hostPortPaths[key] = fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
-							} else {
-								conflictingRouteName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
-								msg := fmt.Sprintf("Policy cannot be applied to target %q since another "+
-									"Route %q shares a hostname:port/path combination with this target", val, conflictingRouteName)
-								cond := conditions.NewPolicyNotAcceptedTargetConflict(msg)
+		if parentRef.Attachment == nil {
+			continue
+		}
 
-								return &cond
-							}
-						}
-					}
+		port := parentRef.Attachment.ListenerPort
+		for _, hostnames := range parentRef.Attachment.AcceptedHostnames {
+			mergedHostnames := getMergedHostnames(route, hostnames)
+			if cond := checkHostnamesOverlap(route, mergedHostnames, port, hostPortPaths); cond != nil {
+				return cond
+			}
+		}
+	}
+	return nil
+}
+
+func getMergedHostnames(route *L7Route, hostnames []string) []string {
+	mergedHostnames := make([]string, 0)
+	for _, hostname := range hostnames {
+		if len(route.Spec.Hostnames) > 0 {
+			mergedHostnames = append(mergedHostnames, getHostnameMatches(hostname, route.Spec.Hostnames)...)
+		} else {
+			mergedHostnames = append(mergedHostnames, hostname)
+		}
+	}
+	return mergedHostnames
+}
+
+func getHostnameMatches(hostname string, routeHostnames []v1.Hostname) []string {
+	foundExactMatch := false
+	moreSpecificHostnames := make([]string, 0)
+
+	for _, h := range routeHostnames {
+		if hostname == string(h) {
+			foundExactMatch = true
+			break
+		}
+		if Match(hostname, string(h)) {
+			moreSpecificHostnames = append(moreSpecificHostnames, GetMoreSpecificHostname(hostname, string(h)))
+		}
+	}
+
+	if foundExactMatch {
+		return []string{hostname}
+	}
+	return moreSpecificHostnames
+}
+
+func checkHostnamesOverlap(
+	route *L7Route, hostnames []string, port v1.PortNumber, hostPortPaths map[string]string,
+) *conditions.Condition {
+	for _, hostname := range hostnames {
+		if cond := checkHostnamePathsOverlap(route, hostname, port, hostPortPaths); cond != nil {
+			return cond
+		}
+	}
+	return nil
+}
+
+func checkHostnamePathsOverlap(
+	route *L7Route, hostname string, port v1.PortNumber, hostPortPaths map[string]string,
+) *conditions.Condition {
+	for _, rule := range route.Spec.Rules {
+		for _, match := range rule.Matches {
+			if match.Path != nil && match.Path.Value != nil {
+				key := fmt.Sprintf("%s:%d%s", hostname, port, *match.Path.Value)
+				if val, ok := hostPortPaths[key]; !ok {
+					hostPortPaths[key] = fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
+				} else {
+					return createTargetConflictCondition(route, val)
 				}
 			}
 		}
 	}
-
 	return nil
+}
+
+func createTargetConflictCondition(route *L7Route, conflictingRoute string) *conditions.Condition {
+	conflictingRouteName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
+	msg := fmt.Sprintf("Policy cannot be applied to target %q since another "+
+		"Route %q shares a hostname:port/path combination with this target", conflictingRoute, conflictingRouteName)
+	cond := conditions.NewPolicyNotAcceptedTargetConflict(msg)
+	return &cond
 }
 
 // buildHostPortPaths uses the same logic as checkForRouteOverlap, except it's
