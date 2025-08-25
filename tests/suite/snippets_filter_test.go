@@ -37,24 +37,73 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 				Name: namespace,
 			},
 		}
+		GinkgoWriter.Printf("Creating namespace %q\n", ns)
+		applyErr := resourceManager.Apply([]client.Object{ns})
+		if applyErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during applying resource to namespace %q, error: %v\n",
+				ns,
+				applyErr,
+			)
+		}
+		Expect(applyErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Namespace %q applied successfully,\n", ns)
 
-		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
-		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+		GinkgoWriter.Printf("Applying resources from files %v to namespace %q\n", files, namespace)
+		applyFromFilesErr := resourceManager.ApplyFromFiles(files, namespace)
+		if applyFromFilesErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during applying resource from files %v, in namespace %q, error: %s\n",
+				files,
+				namespace,
+				applyFromFilesErr,
+			)
+		}
+		Expect(applyFromFilesErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Resources from files applied successfully to namespace %q,\n", namespace)
 
+		GinkgoWriter.Printf("Waiting for apps to be ready in namespace %q\n", namespace)
+		waitingErr := resourceManager.WaitForAppsToBeReady(namespace)
+		if waitingErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during waiting for apps to be ready in namespace %q, error: %s\n",
+				namespace,
+				waitingErr,
+			)
+		}
+		Expect(waitingErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Apps are ready in namespace %q,\n", namespace)
+
+		GinkgoWriter.Printf("Retrieving ready NGINX pods in namespace %q\n", namespace)
 		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		if err != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during waiting for NginxPods to be ready in namespace %q, error: %s\n",
+				namespace,
+				err,
+			)
+		}
 		Expect(err).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Nginx pods in namespace %q: %v\n", namespace, nginxPodNames)
 		Expect(nginxPodNames).To(HaveLen(1))
 
 		nginxPodName = nginxPodNames[0]
 
+		GinkgoWriter.Printf("Setting up port-forward to nginx pod %s in namespace %q\n", nginxPodNames, namespace)
 		setUpPortForward(nginxPodName, namespace)
 	})
 
 	AfterAll(func() {
+		GinkgoWriter.Printf("Cleaning up portForward")
 		cleanUpPortForward()
 
-		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
+		GinkgoWriter.Printf("Deleting namespace %q\n", namespace)
+		deleteNSErr := resourceManager.DeleteNamespace(namespace)
+		if deleteNSErr != nil {
+			GinkgoWriter.Printf("ERROR occurred during deleting namespace %q, error: %s\n", namespace, deleteNSErr)
+		}
+		Expect(deleteNSErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Namespace %q deleted successfully\n", namespace)
 	})
 
 	When("SnippetsFilters are applied to the resources", func() {
@@ -63,13 +112,41 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 		}
 
 		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(snippetsFilter, namespace)).To(Succeed())
+			GinkgoWriter.Printf(
+				"Applying resources from files with snippetsFilter: %v to namespace %q\n",
+				snippetsFilter,
+				namespace,
+			)
+			applyFromFilesErr := resourceManager.ApplyFromFiles(snippetsFilter, namespace)
+			if applyFromFilesErr != nil {
+				GinkgoWriter.Printf(
+					"ERROR occurred during applying from files with snippetsFilter: %v, error: %v\n",
+					snippetsFilter,
+					applyFromFilesErr,
+				)
+			}
+			Expect(applyFromFilesErr).ToNot(HaveOccurred())
+			GinkgoWriter.Printf("SnippetsFilter: %v applied successfully to namespace %q,\n", snippetsFilter, namespace)
 			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 		})
 
 		AfterAll(func() {
+			GinkgoWriter.Printf("Adding NGINX logs and Events to Report in namespace %q\n", namespace)
 			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
-			Expect(resourceManager.DeleteFromFiles(snippetsFilter, namespace)).To(Succeed())
+			deleteFromFilesErr := resourceManager.DeleteFromFiles(snippetsFilter, namespace)
+			if deleteFromFilesErr != nil {
+				GinkgoWriter.Printf(
+					"ERROR occurred during deleting from files with snippetsFilter: %v, error: %v\n",
+					snippetsFilter,
+					deleteFromFilesErr,
+				)
+			}
+			Expect(deleteFromFilesErr).ToNot(HaveOccurred())
+			GinkgoWriter.Printf(
+				"Resources from files with snippetsFilter: %v deleted successfully from namespace %q,\n",
+				snippetsFilter,
+				namespace,
+			)
 		})
 
 		Specify("snippetsFilters are accepted", func() {
@@ -85,7 +162,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 					WithArguments(nsname).
 					WithTimeout(timeoutConfig.GetStatusTimeout).
 					WithPolling(500*time.Millisecond).
-					Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
+					Should(Succeed(), fmt.Sprintf("%q was not accepted", name))
 			}
 		})
 
@@ -96,6 +173,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 					port = portFwdPort
 				}
 				baseURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+				GinkgoWriter.Printf("Setting up base URL for tests: %s\n", baseURL)
 
 				Eventually(
 					func() error {
@@ -121,14 +199,48 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 			BeforeAll(func() {
 				var err error
+				GinkgoWriter.Printf(
+					"Retrieving NGINX configuration for Pod %s in Namespace %q\n",
+					nginxPodName,
+					namespace,
+				)
 				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				if err != nil {
+					GinkgoWriter.Printf(
+						"ERROR occurred during retrieving NGINX configuration: %v\n",
+						err,
+					)
+				}
 				Expect(err).ToNot(HaveOccurred())
+				GinkgoWriter.Printf(
+					"NGINX configuration: %v retrieved successfully for Pod %q in Namespace %q\n",
+					conf,
+					nginxPodName,
+					namespace,
+				)
 			})
 
 			DescribeTable("are set properly for",
 				func(expCfgs []framework.ExpectedNginxField) {
 					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						GinkgoWriter.Printf(
+							"Validating NGINX field %q with value %q in file %q, server %q, location %q\n",
+							expCfg.Directive,
+							expCfg.Value,
+							expCfg.File,
+							expCfg.Server,
+							expCfg.Location,
+						)
+						validationErr := framework.ValidateNginxFieldExists(conf, expCfg)
+						if validationErr != nil {
+							GinkgoWriter.Printf(
+								"ERROR occurred during validation of NGINX field to exist with expected field: %q, nerror: %s\n",
+								expCfg.Directive,
+								validationErr,
+							)
+						}
+						Expect(validationErr).ToNot(HaveOccurred())
+						GinkgoWriter.Printf("NGINX field %q exists as expected\n", expCfg.Directive)
 					}
 				},
 				Entry("HTTPRoute", []framework.ExpectedNginxField{
@@ -229,7 +341,22 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 		Specify("if directives already present in the config are used", func() {
 			files := []string{"snippets-filter/invalid-duplicate-sf.yaml"}
 
-			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
+			GinkgoWriter.Printf(
+				"Applying resources from files with invalid snippetsFilter: %v to namespace %q\n",
+				files,
+				namespace,
+			)
+			applyFromFilesErr := resourceManager.ApplyFromFiles(files, namespace)
+			if applyFromFilesErr != nil {
+				GinkgoWriter.Printf(
+					"Error occurred during applying from files %v in namespace %q, error: %s\n",
+					files,
+					namespace,
+					applyFromFilesErr,
+				)
+			}
+			Expect(applyFromFilesErr).ToNot(HaveOccurred())
+			GinkgoWriter.Printf("SnippetsFilter applied successfully\n")
 
 			nsname := types.NamespacedName{Name: "tea", Namespace: namespace}
 			Eventually(checkHTTPRouteToHaveGatewayNotProgrammedCond).
@@ -244,7 +371,17 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 		Specify("if directives are provided in the wrong context", func() {
 			files := []string{"snippets-filter/invalid-context-sf.yaml"}
 
-			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
+			applyFromFilesErr := resourceManager.ApplyFromFiles(files, namespace)
+			if applyFromFilesErr != nil {
+				GinkgoWriter.Printf(
+					"Error occurred during applying from files %v in namespace %q, error: %s\n",
+					files,
+					namespace,
+					applyFromFilesErr,
+				)
+			}
+			Expect(applyFromFilesErr).ToNot(HaveOccurred())
+			GinkgoWriter.Printf("SnippetsFilter applied successfully\n")
 
 			nsname := types.NamespacedName{Name: "soda", Namespace: namespace}
 			Eventually(checkHTTPRouteToHaveGatewayNotProgrammedCond).
@@ -253,7 +390,9 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 				WithPolling(500 * time.Millisecond).
 				Should(Succeed())
 
+			GinkgoWriter.Printf("Deleting resources from files: %v in namespace %q\n", files, namespace)
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
+			GinkgoWriter.Printf("Resources from files deleted successfully\n")
 		})
 	})
 })

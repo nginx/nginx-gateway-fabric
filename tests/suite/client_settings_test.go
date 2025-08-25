@@ -43,26 +43,82 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			},
 		}
 
-		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
-		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+		GinkgoWriter.Printf("\nCreating namespace %q\n", ns)
+		applyErr := resourceManager.Apply([]client.Object{ns})
+		if applyErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during applying resource to namespace %q, error: %v\n",
+				ns,
+				applyErr,
+			)
+		}
+		Expect(applyErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Namespace %q applied successfully,\n", ns)
 
+		GinkgoWriter.Printf("Applying resources from files %v to namespace %q\n", files, namespace)
+		applyFromFilesErr := resourceManager.ApplyFromFiles(files, namespace)
+		if applyFromFilesErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during applying resource from files %v, in namespace %q, error: %v\n",
+				files,
+				namespace,
+				applyFromFilesErr,
+			)
+		}
+		Expect(applyFromFilesErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Resources from files applied successfully to namespace %q,\n", namespace)
+
+		GinkgoWriter.Printf("Waiting for applications to be ready in namespace %q\n", namespace)
+		waitErr := resourceManager.WaitForAppsToBeReady(namespace)
+		if waitErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during waiting for applications to be ready in namespace %q, error: %v\n",
+				namespace,
+				waitErr,
+			)
+		}
+		Expect(waitErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Applications ready in namespace %q\n", namespace)
+
+		GinkgoWriter.Printf("Retrieving ready NGINX pods in namespace %q\n", namespace)
 		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		if err != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during retrieving ready NGINX pod names in namespace %q, error: %v\n",
+				namespace,
+				err,
+			)
+		}
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
+		GinkgoWriter.Printf("NGINX pods in namespace %q: %v\n", namespace, nginxPodNames)
 
 		nginxPodName = nginxPodNames[0]
 
+		GinkgoWriter.Printf("Setting up port-forward for NGINX pod %q in namespace %q\n", nginxPodName, namespace)
 		setUpPortForward(nginxPodName, namespace)
 	})
 
 	AfterAll(func() {
+		GinkgoWriter.Printf("Adding NGINX logs and events report for namespace %q\n", namespace)
 		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+		GinkgoWriter.Printf("Cleaning up port-forward for namespace %q\n", namespace)
 		cleanUpPortForward()
 
-		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
+		GinkgoWriter.Printf("Deleting namespace %q\n", namespace)
+		deleteErr := resourceManager.DeleteNamespace(namespace)
+		if deleteErr != nil {
+			GinkgoWriter.Printf(
+				"ERROR occurred during deleting namespace %q, error: %v\n",
+				namespace,
+				deleteErr,
+			)
+		}
+		Expect(deleteErr).ToNot(HaveOccurred())
+		GinkgoWriter.Printf("Namespace %q deleted successfully,\n", namespace)
 	})
 
+	// Log the When block for valid policies
 	When("valid ClientSettingsPolicies are created", func() {
 		var (
 			policies = []string{
@@ -73,7 +129,18 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 		)
 
 		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
+			GinkgoWriter.Printf("Creating valid ClientSettingsPolicies from files %v in namespace %q\n", policies, namespace)
+			applyErr := resourceManager.ApplyFromFiles(policies, namespace)
+			if applyErr != nil {
+				GinkgoWriter.Printf(
+					"ERROR occurred during applying resource from files %v, in namespace %q, error: %v\n",
+					policies,
+					namespace,
+					applyErr,
+				)
+			}
+			Expect(applyErr).ToNot(HaveOccurred())
+			GinkgoWriter.Printf("Valid ClientSettingsPolicies created successfully in namespace %q\n", namespace)
 
 			port := 80
 			if portFwdPort != 0 {
@@ -81,6 +148,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			}
 
 			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
+			GinkgoWriter.Printf("Setting up base URL for tests: %s\n", baseURL)
 		})
 
 		AfterAll(func() {
@@ -99,8 +167,17 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			for _, name := range policyNames {
 				nsname := types.NamespacedName{Name: name, Namespace: namespace}
 
+				GinkgoWriter.Printf("Waiting for ClientSettingsPolicy %q to be accepted\n", name)
 				err := waitForCSPolicyToBeAccepted(nsname)
+				if err != nil {
+					GinkgoWriter.Printf(
+						"ERROR occurred during waiting for ClientSettingsPolicy %q to be accepted, error: %v\n",
+						name,
+						err,
+					)
+				}
 				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
+				GinkgoWriter.Printf("ClientSettingsPolicy %q accepted successfully\n", name)
 			}
 		})
 
@@ -133,14 +210,34 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 
 			BeforeAll(func() {
 				var err error
+				GinkgoWriter.Printf("Retrieving NGINX configuration for namespace %q, pod %s\n", namespace, nginxPodName)
 				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				if err != nil {
+					GinkgoWriter.Printf(
+						"ERROR occurred during retrieving NGINX configuration for namespace %q, pod %s, error: %v\n",
+						namespace,
+						nginxPodName,
+						err,
+					)
+				}
 				Expect(err).ToNot(HaveOccurred())
+				GinkgoWriter.Printf("NGINX configuration retrieved successfully\n")
 			})
 
 			DescribeTable("is set properly for",
 				func(expCfgs []framework.ExpectedNginxField) {
 					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						fieldValidationErr := framework.ValidateNginxFieldExists(conf, expCfg)
+						GinkgoWriter.Printf("Validating NGINX field %q\n", expCfg)
+						if fieldValidationErr != nil {
+							GinkgoWriter.Printf(
+								"ERROR occurred during validating NGINX field %q, error: %v\n",
+								expCfg,
+								fieldValidationErr,
+							)
+						}
+						Expect(fieldValidationErr).ToNot(HaveOccurred())
+						GinkgoWriter.Printf("NGINX field %q validated successfully\n", expCfg)
 					}
 				},
 				Entry("gateway policy", []framework.ExpectedNginxField{
@@ -248,14 +345,24 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 				url := baseURL + uri
 
 				payload := make([]byte, byteLengthOfRequestBody)
+				GinkgoWriter.Printf("\nGenerating random payload of %d bytes for request to %s\n", byteLengthOfRequestBody, url)
 				_, err := rand.Read(payload)
+				if err != nil {
+					GinkgoWriter.Printf("ERROR occurred during generating random payload for request to %s, error: %v\n", url, err)
+				}
 				Expect(err).ToNot(HaveOccurred())
 
+				GinkgoWriter.Printf("Sending request to %s with payload of %d bytes\n", url, byteLengthOfRequestBody)
 				resp, err := framework.Post(url, address, bytes.NewReader(payload), timeoutConfig.RequestTimeout, nil, nil)
+				if err != nil {
+					GinkgoWriter.Printf("ERROR occurred during sending request to %s, error: %v\n", url, err)
+				}
 				Expect(err).ToNot(HaveOccurred())
+				GinkgoWriter.Printf("Received response status: %d for request to %s\n", resp.StatusCode, url)
 				Expect(resp).To(HaveHTTPStatus(expStatus))
 
 				if expStatus == http.StatusOK {
+					GinkgoWriter.Printf("Request was successful, checking response body to include URI: %s\n", uri)
 					Expect(resp).To(HaveHTTPBody(ContainSubstring(fmt.Sprintf("URI: %s", uri))))
 				}
 			},
@@ -282,11 +389,18 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 				"clientsettings/invalid-route-csp.yaml",
 			}
 
-			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
+			GinkgoWriter.Printf("\nCreating ClientSettingsPolicy from files %v in namespace %q\n", files, namespace)
+			applyErr := resourceManager.ApplyFromFiles(files, namespace)
+			if applyErr != nil {
+				GinkgoWriter.Printf("ERROR occurred during applying files %v for %s, error: %v\n", files, namespace, applyErr)
+			}
+			Expect(applyErr).ToNot(HaveOccurred())
+			GinkgoWriter.Printf("ClientSettingsPolicy created successfully\n")
 
 			nsname := types.NamespacedName{Name: "invalid-route-csp", Namespace: namespace}
 			Expect(waitForCSPolicyToHaveTargetNotFoundAcceptedCond(nsname)).To(Succeed())
 
+			GinkgoWriter.Printf("Deleting ClientSettingsPolicy from files %v in namespace %q\n", files, namespace)
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		})
 	})
@@ -312,11 +426,14 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 					"z-grpc-conflict",
 				}
 
+				GinkgoWriter.Printf("\nCreating ClientSettingsPolicies from files %v in namespace %q\n", policies, namespace)
 				Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
+				GinkgoWriter.Printf("ClientSettingsPolicies created successfully in namespace\n")
 
 				for _, name := range conflictedPolicyNames {
 					nsname := types.NamespacedName{Name: name, Namespace: namespace}
 
+					GinkgoWriter.Printf("Waiting for ClientSettingsPolicy %q to be marked as conflicted\n", name)
 					err := waitForCSPolicyToBeConflicted(nsname)
 					Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not marked as conflicted", name))
 				}
@@ -324,10 +441,12 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 				for _, name := range mergeablePolicyNames {
 					nsname := types.NamespacedName{Name: name, Namespace: namespace}
 
+					GinkgoWriter.Printf("Waiting for ClientSettingsPolicy %q to be accepted\n", name)
 					err := waitForCSPolicyToBeAccepted(nsname)
 					Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
 				}
 
+				GinkgoWriter.Printf("Deleting ClientSettingsPolicies from files %v in namespace %q\n", policies, namespace)
 				Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 			})
 		})
@@ -393,7 +512,10 @@ func waitForClientSettingsAncestorStatus(
 		func(ctx context.Context) (bool, error) {
 			var pol ngfAPI.ClientSettingsPolicy
 
+			GinkgoWriter.Printf("\nRetrieving ClientSettingsPolicy %q\n", policyNsname)
 			if err := k8sClient.Get(ctx, policyNsname, &pol); err != nil {
+				GinkgoWriter.Printf("ERROR occurred during retrieving ClientSettingsPolicy %q, error: %v\n", policyNsname, err)
+
 				return false, err
 			}
 
@@ -403,17 +525,37 @@ func waitForClientSettingsAncestorStatus(
 				return false, nil
 			}
 
+			GinkgoWriter.Printf(
+				"ClientSettingsPolicy %q has %d ancestors, and we expect 1\n",
+				policyNsname,
+				len(pol.Status.Ancestors),
+			)
 			if len(pol.Status.Ancestors) != 1 {
 				return false, fmt.Errorf("policy has %d ancestors, expected 1", len(pol.Status.Ancestors))
 			}
 
 			ancestor := pol.Status.Ancestors[0]
 
+			GinkgoWriter.Printf("Retrieving ancestor status for ClientSettingsPolicy %q\n", policyNsname)
 			if err := ancestorMustEqualTargetRef(ancestor, pol.GetTargetRefs()[0], policyNsname.Namespace); err != nil {
+				GinkgoWriter.Printf(
+					"ERROR occurred during retrieving ancestor status for ClientSettingsPolicy %q, error: %v\n",
+					policyNsname,
+					err,
+				)
+
 				return false, err
 			}
 
+			GinkgoWriter.Printf("Checking ancestor status for ClientSettingsPolicy %q\n", policyNsname)
 			err := ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
+			if err != nil {
+				GinkgoWriter.Printf(
+					"ERROR occurred during checking ancestor status for ClientSettingsPolicy %q, error: %v\n",
+					policyNsname,
+					err,
+				)
+			}
 
 			return err == nil, err
 		},

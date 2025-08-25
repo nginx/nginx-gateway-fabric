@@ -267,6 +267,7 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 }
 
 func teardown(relName string) {
+	GinkgoWriter.Printf("Uninstalling NGF release %q\n", relName)
 	cfg := framework.InstallationConfig{
 		ReleaseName: relName,
 		Namespace:   ngfNamespace,
