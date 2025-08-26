@@ -2132,6 +2132,8 @@ func TestCreateServersConflicts(t *testing.T) {
 	}
 }
 
+// TestHttpRouteSameRoutesAdvancedRoutingWithPolicy uses pathRules that are the same as the  HTTPRoute in issue 3763
+// This test will generate the invalid NGINX configuration that would cause the duplicate directive error.
 func TestHttpRouteSameRoutesAdvancedRoutingWithPolicy(t *testing.T) {
 
 	policy := &ngfAPIv1alpha1.ClientSettingsPolicy{
@@ -2240,6 +2242,9 @@ func TestHttpRouteSameRoutesAdvancedRoutingWithPolicy(t *testing.T) {
 	}
 }
 
+// TestHttpRouteSameRoutesAdvancedRoutingWithoutPolicy uses pathRules that are the same as the  HTTPRoute in issue 3763
+// This test is the same as TestHttpRouteSameRoutesAdvancedRoutingWithPolicy with the exception that none of the pathRules have policies
+// This test will generate the expected NGINX config for a normal advancted routing scenario.
 func TestHttpRouteSameRoutesAdvancedRoutingWithoutPolicy(t *testing.T) {
 
 	pathRules := []dataplane.PathRule{
@@ -2318,113 +2323,6 @@ func TestHttpRouteSameRoutesAdvancedRoutingWithoutPolicy(t *testing.T) {
 		clientsettings.NewGenerator(),
 	)
 
-	results := gen.executeServers(conf, policyGenerator, alwaysFalseKeepAliveChecker)
-
-	for _, r := range results {
-		fmt.Print(string(r.data))
-	}
-}
-
-func TestValidHttpRouteDifferentRoutes(t *testing.T) {
-
-	policy := &ngfAPIv1alpha1.ClientSettingsPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "http-example-com",
-			Namespace: "default",
-		},
-		Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-			TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
-				Kind:  "Gateway",
-				Group: "gateway.networking.k8s.io",
-			},
-			Body: &ngfAPIv1alpha1.ClientBody{
-				MaxSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("600m"),
-			},
-		},
-	}
-
-	pathRules := []dataplane.PathRule{
-		{
-			Path:     "/rest1",
-			PathType: dataplane.PathTypePrefix,
-			MatchRules: []dataplane.MatchRule{
-				{
-					Match: dataplane.Match{
-						Headers: []dataplane.HTTPHeaderMatch{
-							{
-								Name:  "Referer",
-								Type:  dataplane.MatchTypeRegularExpression,
-								Value: "(?i)(mydomain|myotherdomain).+\\.example\\.(cloud|com)",
-							},
-						},
-					},
-				},
-				{
-					BackendGroup: dataplane.BackendGroup{
-						Backends: []dataplane.Backend{
-							{
-								UpstreamName: "coffee",
-							},
-						},
-					},
-				},
-			},
-			Policies: []policies.Policy{
-				policy,
-			},
-		},
-		{
-			Path:     "/rest2",
-			PathType: dataplane.PathTypePrefix,
-			MatchRules: []dataplane.MatchRule{
-				{
-					BackendGroup: dataplane.BackendGroup{
-						Backends: []dataplane.Backend{
-							{
-								UpstreamName: "coffee-api",
-							},
-						},
-					},
-				},
-			},
-			Policies: []policies.Policy{
-				policy,
-			},
-		},
-		{
-			MatchRules: []dataplane.MatchRule{
-				{
-					BackendGroup: dataplane.BackendGroup{
-						Backends: []dataplane.Backend{
-							{
-								UpstreamName: "coffee",
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	policyGenerator := policies.NewCompositeGenerator(
-		clientsettings.NewGenerator(),
-	)
-
-	conf := dataplane.Configuration{
-		HTTPServers: []dataplane.VirtualServer{
-			{
-				IsDefault: true,
-				Port:      8080,
-			},
-			{
-				Hostname:  "http.example.com",
-				PathRules: pathRules,
-				Port:      8080,
-				Policies:  []policies.Policy{},
-			},
-		},
-	}
-	gen := GeneratorImpl{}
 	results := gen.executeServers(conf, policyGenerator, alwaysFalseKeepAliveChecker)
 
 	for _, r := range results {
