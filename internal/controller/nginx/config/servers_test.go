@@ -17,6 +17,7 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -2131,7 +2132,23 @@ func TestCreateServersConflicts(t *testing.T) {
 	}
 }
 
-func TestInternalLocationForHttpRouteAdvancedRules(t *testing.T) {
+func TestInvalidHttpRoute(t *testing.T) {
+
+	policy := &ngfAPIv1alpha1.ClientSettingsPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "http-example-com",
+			Namespace: "default",
+		},
+		Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+			TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				Kind:  "Gateway",
+				Group: "gateway.networking.k8s.io",
+			},
+			Body: &ngfAPIv1alpha1.ClientBody{
+				MaxSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("600m"),
+			},
+		},
+	}
 
 	pathRules := []dataplane.PathRule{
 		{
@@ -2159,6 +2176,9 @@ func TestInternalLocationForHttpRouteAdvancedRules(t *testing.T) {
 					},
 				},
 			},
+			Policies: []policies.Policy{
+				policy,
+			},
 		},
 		{
 			Path:     "/rest",
@@ -2173,6 +2193,9 @@ func TestInternalLocationForHttpRouteAdvancedRules(t *testing.T) {
 						},
 					},
 				},
+			},
+			Policies: []policies.Policy{
+				policy,
 			},
 		},
 		{
@@ -2190,6 +2213,35 @@ func TestInternalLocationForHttpRouteAdvancedRules(t *testing.T) {
 		},
 	}
 
+	policyGenerator := policies.NewCompositeGenerator(
+		clientsettings.NewGenerator(),
+	)
+
+	conf := dataplane.Configuration{
+		HTTPServers: []dataplane.VirtualServer{
+			{
+				IsDefault: true,
+				Port:      8080,
+			},
+			{
+				Hostname:  "http.example.com",
+				PathRules: pathRules,
+				Port:      8080,
+				Policies:  []policies.Policy{},
+			},
+		},
+	}
+	gen := GeneratorImpl{}
+	results := gen.executeServers(conf, policyGenerator, alwaysFalseKeepAliveChecker)
+
+	// Print resulting NGINX Config
+	for _, r := range results {
+		fmt.Print(string(r.data))
+	}
+}
+
+func TestValidHttpRoute(t *testing.T) {
+
 	policy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "http-example-com",
@@ -2201,46 +2253,98 @@ func TestInternalLocationForHttpRouteAdvancedRules(t *testing.T) {
 				Group: "gateway.networking.k8s.io",
 			},
 			Body: &ngfAPIv1alpha1.ClientBody{
-				MaxSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("250m"),
+				MaxSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("600m"),
 			},
 		},
 	}
 
-	httpServers := []dataplane.VirtualServer{
+	pathRules := []dataplane.PathRule{
 		{
-			IsDefault: true,
-			Port:      8080,
+			Path:     "/rest1",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{
+						Headers: []dataplane.HTTPHeaderMatch{
+							{
+								Name:  "Referer",
+								Type:  dataplane.MatchTypeRegularExpression,
+								Value: "(?i)(mydomain|myotherdomain).+\\.example\\.(cloud|com)",
+							},
+						},
+					},
+				},
+				{
+					BackendGroup: dataplane.BackendGroup{
+						Backends: []dataplane.Backend{
+							{
+								UpstreamName: "coffee",
+							},
+						},
+					},
+				},
+			},
+			Policies: []policies.Policy{
+				policy,
+			},
 		},
 		{
-			Hostname:  "http.example.com",
-			PathRules: pathRules,
-			Port:      8080,
-			Policies:  []policies.Policy{policy},
+			Path:     "/rest2",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					BackendGroup: dataplane.BackendGroup{
+						Backends: []dataplane.Backend{
+							{
+								UpstreamName: "coffee-api",
+							},
+						},
+					},
+				},
+			},
+			Policies: []policies.Policy{
+				policy,
+			},
+		},
+		{
+			MatchRules: []dataplane.MatchRule{
+				{
+					BackendGroup: dataplane.BackendGroup{
+						Backends: []dataplane.Backend{
+							{
+								UpstreamName: "coffee",
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
-	fakeGenerator := &policiesfakes.FakeGenerator{}
-	fakeGenerator.GenerateForLocationReturns(policies.GenerateResultFiles{
-		{
-			Name:    "ext-policy.conf",
-			Content: []byte("client_max_body_size 600m"),
-		},
-	})
+	policyGenerator := policies.NewCompositeGenerator(
+		clientsettings.NewGenerator(),
+	)
 
-	fakeGenerator.GenerateForInternalLocationReturns(policies.GenerateResultFiles{
-		{
-			Name:    "ext-policy.conf",
-			Content: []byte("client_max_body_size 600m"),
+	conf := dataplane.Configuration{
+		HTTPServers: []dataplane.VirtualServer{
+			{
+				IsDefault: true,
+				Port:      8080,
+			},
+			{
+				Hostname:  "http.example.com",
+				PathRules: pathRules,
+				Port:      8080,
+				Policies:  []policies.Policy{},
+			},
 		},
-	})
-	locations, matches, _ := createLocations(&httpServers[1], "1", fakeGenerator, alwaysFalseKeepAliveChecker)
+	}
+	gen := GeneratorImpl{}
+	results := gen.executeServers(conf, policyGenerator, alwaysFalseKeepAliveChecker)
 
-	fmt.Println("---------------------------")
-	fmt.Printf("%+v\n", locations)
-	fmt.Println("---------------------------")
-	fmt.Println("---------------------------")
-	fmt.Printf("%+v\n", matches)
-	fmt.Println("---------------------------")
+	for _, r := range results {
+		fmt.Print(string(r.data))
+	}
 }
 
 func TestCreateServers_Includes(t *testing.T) {
