@@ -282,6 +282,25 @@ jobs:
     secrets: inherit
     if: ${{ needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' }}
 
+  ipv6-only-tests:
+    name: IPv6-Only tests
+    needs: [vars, build-oss, build-plus]
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [nginx, plus]
+        k8s-version:
+          [
+            "${{ needs.vars.outputs.k8s_latest }}", # Only test against latest k8s for IPv6-only
+          ]
+    uses: ./.github/workflows/ipv6-only.yml
+    with:
+      image: ${{ matrix.image }}
+      k8s-version: ${{ matrix.k8s-version }}
+    secrets: inherit
+    permissions:
+      contents: read
+
   publish-helm:
     name: Package and Publish Helm Chart
     runs-on: ubuntu-24.04
