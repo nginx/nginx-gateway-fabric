@@ -2132,7 +2132,7 @@ func TestCreateServersConflicts(t *testing.T) {
 	}
 }
 
-func TestInvalidHttpRoute(t *testing.T) {
+func TestHttpRouteSameRoutesAdvancedRoutingWithPolicy(t *testing.T) {
 
 	policy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2240,7 +2240,92 @@ func TestInvalidHttpRoute(t *testing.T) {
 	}
 }
 
-func TestValidHttpRoute(t *testing.T) {
+func TestHttpRouteSameRoutesAdvancedRoutingWithoutPolicy(t *testing.T) {
+
+	pathRules := []dataplane.PathRule{
+		{
+			Path:     "/rest",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match: dataplane.Match{
+						Headers: []dataplane.HTTPHeaderMatch{
+							{
+								Name:  "Referer",
+								Type:  dataplane.MatchTypeRegularExpression,
+								Value: "(?i)(mydomain|myotherdomain).+\\.example\\.(cloud|com)",
+							},
+						},
+					},
+				},
+				{
+					BackendGroup: dataplane.BackendGroup{
+						Backends: []dataplane.Backend{
+							{
+								UpstreamName: "coffee",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Path:     "/rest",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					BackendGroup: dataplane.BackendGroup{
+						Backends: []dataplane.Backend{
+							{
+								UpstreamName: "coffee-api",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			MatchRules: []dataplane.MatchRule{
+				{
+					BackendGroup: dataplane.BackendGroup{
+						Backends: []dataplane.Backend{
+							{
+								UpstreamName: "coffee",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	conf := dataplane.Configuration{
+		HTTPServers: []dataplane.VirtualServer{
+			{
+				IsDefault: true,
+				Port:      8080,
+			},
+			{
+				Hostname:  "http.example.com",
+				PathRules: pathRules,
+				Port:      8080,
+			},
+		},
+	}
+	gen := GeneratorImpl{}
+
+	policyGenerator := policies.NewCompositeGenerator(
+		clientsettings.NewGenerator(),
+	)
+
+	results := gen.executeServers(conf, policyGenerator, alwaysFalseKeepAliveChecker)
+
+	for _, r := range results {
+		fmt.Print(string(r.data))
+	}
+}
+
+func TestValidHttpRouteDifferentRoutes(t *testing.T) {
 
 	policy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 		ObjectMeta: metav1.ObjectMeta{
