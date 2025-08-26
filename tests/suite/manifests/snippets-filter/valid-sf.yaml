@@ -7,11 +7,11 @@ spec:
     - context: main
       value: worker_priority 0;
     - context: http
-      value: aio on;
+      value: aio off;
     - context: http.server
-      value: auth_delay 10s;
+      value: auth_delay 0s;
     - context: http.server.location
-      value: keepalive_time 10s;
+      value: keepalive_time 1h;
 ---
 apiVersion: gateway.nginx.org/v1alpha1
 kind: SnippetsFilter

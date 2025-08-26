@@ -105,6 +105,7 @@ type UpstreamKeepAlive struct {
 // UpstreamServer holds all configuration for an HTTP upstream server.
 type UpstreamServer struct {
 	Address string
+	Resolve bool
 }
 
 // SplitClient holds all configuration for an HTTP split client.

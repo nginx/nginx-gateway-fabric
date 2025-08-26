@@ -300,6 +300,16 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 					},
 				},
 			},
+			{
+				Name: "resolve-upstream",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "external.example.com",
+						Port:    80,
+						Resolve: true,
+					},
+				},
+			},
 		},
 		StreamUpstreams: []dataplane.Upstream{
 			{
@@ -307,6 +317,15 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 				Endpoints: []resolver.Endpoint{
 					{
 						Address: "5.6.7.8",
+					},
+				},
+			},
+			{
+				Name: "resolve-stream-upstream",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "external.example.com",
+						Resolve: true,
 					},
 				},
 			},
@@ -345,7 +364,8 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	}
 	deployment.SetNGINXPlusActions(initialActions)
 
-	// Call UpdateUpstreamServers with the same configuration
+	// Call UpdateUpstreamServers with the same configuration and external name only
+	// Upstream servers pointing to external endpoints with resolve should not update via API
 	updater.UpdateUpstreamServers(deployment, conf)
 
 	// Verify that no new actions were sent

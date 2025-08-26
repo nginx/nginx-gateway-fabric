@@ -4271,6 +4271,7 @@ func TestBuildStreamUpstreams(t *testing.T) {
 	secureApp4Key := getL4RouteKey("secure-app4")
 	secureApp5Key := getL4RouteKey("secure-app5")
 	secureApp6Key := getL4RouteKey("secure-app6")
+	externalAppKey := getL4RouteKey("external-app")
 
 	gateway := &graph.Gateway{
 		Source: &v1.Gateway{
@@ -4376,6 +4377,25 @@ func TestBuildStreamUpstreams(t *testing.T) {
 							},
 						},
 					},
+					externalAppKey: {
+						Valid: true,
+						Spec: graph.L4RouteSpec{
+							Hostnames: []v1.Hostname{"external.example.com"},
+							BackendRef: graph.BackendRef{
+								Valid:     true,
+								SvcNsName: externalAppKey.NamespacedName,
+								ServicePort: apiv1.ServicePort{
+									Name:     "https",
+									Protocol: "TCP",
+									Port:     443,
+									TargetPort: intstr.IntOrString{
+										Type:   intstr.Int,
+										IntVal: 443,
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -4399,7 +4419,24 @@ func TestBuildStreamUpstreams(t *testing.T) {
 		return fakeEndpoints, nil
 	}
 
-	streamUpstreams := buildStreamUpstreams(t.Context(), logr.Discard(), gateway, &fakeResolver, Dual)
+	// Add an ExternalName service for testing DNS resolution
+	externalNameService := &graph.ReferencedService{
+		IsExternalName: true,
+		ExternalName:   "external.example.com",
+	}
+
+	referencedServices := map[types.NamespacedName]*graph.ReferencedService{
+		{Namespace: "default", Name: "external-app"}: externalNameService,
+	}
+
+	streamUpstreams := buildStreamUpstreams(
+		t.Context(),
+		logr.Discard(),
+		gateway,
+		&fakeResolver,
+		referencedServices,
+		Dual,
+	)
 
 	expectedStreamUpstreams := []Upstream{
 		{
@@ -4409,6 +4446,12 @@ func TestBuildStreamUpstreams(t *testing.T) {
 		{
 			Name:      "default_secure-app5_8443",
 			Endpoints: fakeEndpoints,
+		},
+		{
+			Name: "default_external-app_443",
+			Endpoints: []resolver.Endpoint{
+				{Address: "external.example.com", Port: 443, Resolve: true},
+			},
 		},
 	}
 	g := NewWithT(t)
@@ -4996,8 +5039,8 @@ func TestBuildWorkerConnections(t *testing.T) {
 func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 	t.Parallel()
 	test := []struct {
-		msg      string
 		gateway  *graph.Gateway
+		msg      string
 		expected BaseHTTPConfig
 	}{
 		{
@@ -5096,6 +5139,68 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			g := NewWithT(t)
 
 			g.Expect(buildBaseHTTPConfig(tc.gateway, nil)).To(Equal(tc.expected))
+		})
+	}
+}
+
+func TestBuildDNSResolverConfig(t *testing.T) {
+	t.Parallel()
+
+	addr := []ngfAPIv1alpha2.DNSResolverAddress{
+		{
+			Type:  ngfAPIv1alpha2.DNSResolverIPAddressType,
+			Value: "8.8.8.8",
+		},
+		{
+			Type:  ngfAPIv1alpha2.DNSResolverHostnameType,
+			Value: "dns.google",
+		},
+	}
+
+	tests := []struct {
+		dnsResolver *ngfAPIv1alpha2.DNSResolver
+		expected    *DNSResolverConfig
+		name        string
+	}{
+		{
+			name:        "nil DNS resolver",
+			dnsResolver: nil,
+			expected:    nil,
+		},
+		{
+			name: "DNS resolver with all options",
+			dnsResolver: &ngfAPIv1alpha2.DNSResolver{
+				Addresses:   addr,
+				Timeout:     helpers.GetPointer(ngfAPIv1alpha1.Duration("10s")),
+				CacheTTL:    helpers.GetPointer(ngfAPIv1alpha1.Duration("60s")),
+				DisableIPv6: helpers.GetPointer(true),
+			},
+			expected: &DNSResolverConfig{
+				Addresses:   []string{"8.8.8.8", "dns.google"},
+				Timeout:     "10s",
+				Valid:       "60s",
+				DisableIPv6: true,
+			},
+		},
+		{
+			name: "DNS resolver with minimal configuration",
+			dnsResolver: &ngfAPIv1alpha2.DNSResolver{
+				Addresses: addr,
+			},
+			expected: &DNSResolverConfig{
+				Addresses:   []string{"8.8.8.8", "dns.google"},
+				DisableIPv6: false,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildDNSResolverConfig(test.dnsResolver)
+			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }

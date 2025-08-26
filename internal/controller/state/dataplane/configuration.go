@@ -52,6 +52,7 @@ func BuildConfiguration(
 	gatewaySnippetsFilters := gateway.GetReferencedSnippetsFilters(g.Routes, g.SnippetsFilters)
 
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters)
+	baseStreamConfig := buildBaseStreamConfig(gateway)
 
 	httpServers, sslServers := buildServers(gateway)
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
@@ -79,6 +80,7 @@ func BuildConfiguration(
 			logger,
 			gateway,
 			serviceResolver,
+			g.ReferencedServices,
 			baseHTTPConfig.IPFamily),
 		BackendGroups: backendGroups,
 		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway.Listeners),
@@ -88,6 +90,7 @@ func BuildConfiguration(
 		),
 		Telemetry:         buildTelemetry(g, gateway),
 		BaseHTTPConfig:    baseHTTPConfig,
+		BaseStreamConfig:  baseStreamConfig,
 		Logging:           buildLogging(gateway),
 		NginxPlus:         nginxPlus,
 		MainSnippets:      buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
@@ -174,6 +177,7 @@ func buildStreamUpstreams(
 	logger logr.Logger,
 	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	ipFamily IPFamilyType,
 ) []Upstream {
 	// There can be duplicate upstreams if multiple routes reference the same upstream.
@@ -211,11 +215,12 @@ func buildStreamUpstreams(
 
 			allowedAddressType := getAllowedAddressType(ipFamily)
 
-			eps, err := serviceResolver.Resolve(
+			eps, err := resolveUpstreamEndpoints(
 				ctx,
 				logger,
-				br.SvcNsName,
-				br.ServicePort,
+				br,
+				serviceResolver,
+				referencedServices,
 				allowedAddressType,
 			)
 			if err != nil {
@@ -783,7 +788,14 @@ func buildUpstream(
 
 	var errMsg string
 
-	eps, err := svcResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
+	eps, err := resolveUpstreamEndpoints(
+		ctx,
+		logger,
+		br,
+		svcResolver,
+		referencedServices,
+		allowedAddressType,
+	)
 	if err != nil {
 		errMsg = err.Error()
 		logger.V(1).Info("failed to resolve endpoints, endpoints may not be ready", "error", errMsg, "service", br.SvcNsName)
@@ -1044,6 +1056,24 @@ func buildBaseHTTPConfig(
 		}
 	}
 
+	baseConfig.DNSResolver = buildDNSResolverConfig(np.DNSResolver)
+
+	return baseConfig
+}
+
+// buildBaseStreamConfig generates the base stream context config that should be applied to all stream servers.
+func buildBaseStreamConfig(gateway *graph.Gateway) BaseStreamConfig {
+	baseConfig := BaseStreamConfig{}
+
+	// safe to access EffectiveNginxProxy since we only call this function when the Gateway is not nil.
+	np := gateway.EffectiveNginxProxy
+	if np == nil {
+		return baseConfig
+	}
+
+	// Add DNS resolver configuration for ExternalName services in stream context
+	baseConfig.DNSResolver = buildDNSResolverConfig(np.DNSResolver)
+
 	return baseConfig
 }
 
@@ -1214,4 +1244,66 @@ func GetDefaultConfiguration(g *graph.Graph, gateway *graph.Gateway) Configurati
 		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections: buildWorkerConnections(gateway),
 	}
+}
+
+// buildDNSResolverConfig builds a DNSResolverConfig from an NginxProxy DNSResolver configuration.
+func buildDNSResolverConfig(dnsResolver *ngfAPIv1alpha2.DNSResolver) *DNSResolverConfig {
+	if dnsResolver == nil {
+		return nil
+	}
+
+	config := &DNSResolverConfig{
+		Addresses: convertDNSResolverAddresses(dnsResolver.Addresses),
+	}
+
+	if dnsResolver.Timeout != nil {
+		config.Timeout = string(*dnsResolver.Timeout)
+	}
+
+	if dnsResolver.CacheTTL != nil {
+		config.Valid = string(*dnsResolver.CacheTTL)
+	}
+
+	if dnsResolver.DisableIPv6 != nil {
+		config.DisableIPv6 = *dnsResolver.DisableIPv6
+	}
+
+	return config
+}
+
+// resolveUpstreamEndpoints handles service resolution for both regular and ExternalName services.
+func resolveUpstreamEndpoints(
+	ctx context.Context,
+	logger logr.Logger,
+	br graph.BackendRef,
+	svcResolver resolver.ServiceResolver,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	allowedAddressType []discoveryV1.AddressType,
+) ([]resolver.Endpoint, error) {
+	// Check if this is an ExternalName service
+	if graphSvc, exists := referencedServices[br.SvcNsName]; exists && graphSvc.IsExternalName {
+		// For ExternalName services, create an endpoint directly with the external name
+		endpoint := resolver.Endpoint{
+			Address: graphSvc.ExternalName,
+			Port:    br.ServicePort.Port,
+			IPv6:    false, // DNS names are neither IPv4 nor IPv6
+			Resolve: true,  // ExternalName services require DNS resolution
+		}
+
+		logger.V(1).Info("resolved ExternalName service",
+			"service", br.SvcNsName,
+			"externalName", graphSvc.ExternalName,
+			"port", br.ServicePort.Port)
+
+		return []resolver.Endpoint{endpoint}, nil
+	}
+
+	// For regular services, use the existing Resolve method
+	return svcResolver.Resolve(
+		ctx,
+		logger,
+		br.SvcNsName,
+		br.ServicePort,
+		allowedAddressType,
+	)
 }

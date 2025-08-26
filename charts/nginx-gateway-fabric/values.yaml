@@ -229,6 +229,15 @@ nginx:
   # -- The number of replicas of the NGINX Deployment. This value is ignored if autoscaling.enable is true.
   replicas: 1
 
+  # -- Custom patches to apply to the NGINX Deployment/DaemonSet.
+  patches: []
+  # -- Example:
+  # - type: StrategicMerge
+  #   value:
+  #     metadata:
+  #       labels:
+  #         team: "nginx-gateway-fabric"
+
   # -- Autoscaling configuration for the NGINX data plane.
   autoscaling:
     # -- Enable or disable Horizontal Pod Autoscaler for the NGINX data plane.
@@ -462,6 +471,43 @@ nginx:
   #     minimum: 1
   #     maximum: 65535
   #     description: The number of worker connections for NGINX. Default is 1024.
+  #   dnsResolver:
+  #     type: object
+  #     description: DNSResolver specifies the DNS resolver configuration for external name resolution. This enables support for routing to ExternalName Services.
+  #     properties:
+  #       addresses:
+  #         type: array
+  #         description: List of DNS server addresses. Each address specifies a type and value.
+  #         items:
+  #           type: object
+  #           properties:
+  #             type:
+  #               type: string
+  #               enum:
+  #                 - IPAddress
+  #                 - Hostname
+  #               description: Type specifies the type of address.
+  #             value:
+  #               type: string
+  #               minItems: 1
+  #               maxItems: 253
+  #               description: Value specifies the address value.
+  #           required:
+  #             - type
+  #             - value
+  #         minItems: 1
+  #         maxItems: 16
+  #       timeout:
+  #         type: string
+  #         description: Timeout specifies the timeout for name resolution.
+  #         pattern: ^\d+[smhd]?$
+  #       cacheTTL:
+  #         type: string
+  #         description: CacheTTL specifies how long to cache DNS responses.
+  #         pattern: ^\d+[smhd]?$
+  #       disableIPv6:
+  #         type: boolean
+  #         description: DisableIPv6 disables DisableIPv6 lookups. If not specified, or set to false, IPv6 lookups will be enabled.
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.
@@ -591,6 +637,15 @@ nginx:
     nodePorts: []
     # - port: 30025
     #   listenerPort: 80
+
+    # -- Custom patches to apply to the NGINX Service.
+    patches: []
+    # -- Example:
+    #   - type: JSONPatch
+    #     value:
+    #       - op: replace
+    #         path: /spec/sessionAffinity
+    #         value: "ClientIP"
 
   # -- Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource.
   debug: false

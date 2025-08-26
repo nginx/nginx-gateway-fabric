@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -181,6 +182,29 @@ func createBackendRef(
 
 	var conds []conditions.Condition
 	invalidForGateways := make(map[types.NamespacedName]conditions.Condition)
+
+	// Check if this is an ExternalName service and validate DNS resolver configuration
+	svc, svcExists := services[svcNsName]
+	if svcExists && svc.Spec.Type == v1.ServiceTypeExternalName {
+		invalidForGateways = checkExternalNameValidForGateways(route.ParentRefs, invalidForGateways)
+
+		// Check if externalName field is empty or whitespace-only
+		if strings.TrimSpace(svc.Spec.ExternalName) == "" {
+			backendRef := BackendRef{
+				SvcNsName:          svcNsName,
+				ServicePort:        svcPort,
+				Weight:             weight,
+				Valid:              false,
+				IsMirrorBackend:    ref.MirrorBackendIdx != nil,
+				InvalidForGateways: invalidForGateways,
+			}
+
+			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(
+				"ExternalName service has empty or invalid externalName field",
+			))
+		}
+	}
+
 	for _, parentRef := range route.ParentRefs {
 		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
 			invalidForGateways[parentRef.Gateway.NamespacedName] = conditions.NewRouteInvalidIPFamily(err.Error())
@@ -372,6 +396,20 @@ func verifyIPFamily(npCfg *EffectiveNginxProxy, svcIPFamily []v1.IPFamily) error
 	}
 
 	return nil
+}
+
+func checkExternalNameValidForGateways(
+	parentRefs []ParentRef,
+	invalidForGateways map[types.NamespacedName]conditions.Condition,
+) map[types.NamespacedName]conditions.Condition {
+	for _, parentRef := range parentRefs {
+		if parentRef.Gateway.EffectiveNginxProxy == nil || parentRef.Gateway.EffectiveNginxProxy.DNSResolver == nil {
+			invalidForGateways[parentRef.Gateway.NamespacedName] = conditions.NewRouteBackendRefUnsupportedValue(
+				"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
+			)
+		}
+	}
+	return invalidForGateways
 }
 
 func validateRouteBackendRef(

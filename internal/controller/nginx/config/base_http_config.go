@@ -11,6 +11,7 @@ import (
 var baseHTTPTemplate = gotemplate.Must(gotemplate.New("baseHttp").Parse(baseHTTPTemplateText))
 
 type httpConfig struct {
+	DNSResolver             *dataplane.DNSResolverConfig
 	Includes                []shared.Include
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
@@ -25,6 +26,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
 		Includes:                includes,
 		NginxReadinessProbePort: conf.BaseHTTPConfig.NginxReadinessProbePort,
 		IPFamily:                getIPFamily(conf.BaseHTTPConfig),
+		DNSResolver:             conf.BaseHTTPConfig.DNSResolver,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)

@@ -23,35 +23,37 @@ const (
 
 // Configuration is an intermediate representation of dataplane configuration.
 type Configuration struct {
-	// SSLKeyPairs holds all unique SSLKeyPairs.
-	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
-	// CertBundles holds all unique Certificate Bundles.
-	CertBundles map[CertBundleID]CertBundle
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
-	// SSLServers holds all SSLServers.
-	SSLServers []VirtualServer
-	// TLSPassthroughServers hold all TLSPassthroughServers
-	TLSPassthroughServers []Layer4VirtualServer
-	// Upstreams holds all unique http Upstreams.
-	Upstreams []Upstream
-	// DeploymentContext contains metadata about NGF and the cluster.
-	DeploymentContext DeploymentContext
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
+	// CertBundles holds all unique Certificate Bundles.
+	CertBundles map[CertBundleID]CertBundle
+	// BaseStreamConfig holds the configuration options at the stream context.
+	BaseStreamConfig BaseStreamConfig
+	// SSLKeyPairs holds all unique SSLKeyPairs.
+	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
+	// DeploymentContext contains metadata about NGF and the cluster.
+	DeploymentContext DeploymentContext
+	// Logging defines logging related settings for NGINX.
+	Logging Logging
 	// StreamUpstreams holds all unique stream Upstreams
 	StreamUpstreams []Upstream
+	// TLSPassthroughServers hold all TLSPassthroughServers
+	TLSPassthroughServers []Layer4VirtualServer
 	// BackendGroups holds all unique BackendGroups.
 	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
 	MainSnippets []Snippet
-	// Telemetry holds the Otel configuration.
-	Telemetry Telemetry
-	// Logging defines logging related settings for NGINX.
-	Logging Logging
+	// Upstreams holds all unique http Upstreams.
+	Upstreams []Upstream
 	// NginxPlus specifies NGINX Plus additional settings.
 	NginxPlus NginxPlus
+	// SSLServers holds all SSLServers.
+	SSLServers []VirtualServer
+	// HTTPServers holds all HTTPServers.
+	HTTPServers []VirtualServer
+	// Telemetry holds the Otel configuration.
+	Telemetry Telemetry
 	// BaseHTTPConfig holds the configuration options at the http context.
 	BaseHTTPConfig BaseHTTPConfig
 	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
@@ -366,6 +368,8 @@ type SpanAttribute struct {
 
 // BaseHTTPConfig holds the configuration options at the http context.
 type BaseHTTPConfig struct {
+	// DNSResolver defines the DNS resolver configuration for NGINX.
+	DNSResolver *DNSResolverConfig
 	// IPFamily specifies the IP family for all servers.
 	IPFamily IPFamilyType
 	// Snippets contain the snippets that apply to the http context.
@@ -378,6 +382,12 @@ type BaseHTTPConfig struct {
 	HTTP2 bool
 	// DisableSNIHostValidation specifies if the SNI host validation should be disabled.
 	DisableSNIHostValidation bool
+}
+
+// BaseStreamConfig holds the configuration options at the stream context.
+type BaseStreamConfig struct {
+	// DNSResolver specifies the DNS resolver configuration for ExternalName services.
+	DNSResolver *DNSResolverConfig
 }
 
 // Snippet is a snippet of configuration.
@@ -396,6 +406,18 @@ type RewriteClientIPSettings struct {
 	TrustedAddresses []string
 	// IPRecursive specifies whether a recursive search is used when selecting the client IP.
 	IPRecursive bool
+}
+
+// DNSResolverConfig defines the DNS resolver configuration for NGINX.
+type DNSResolverConfig struct {
+	// Timeout specifies the timeout for name resolution.
+	Timeout string
+	// Valid specifies how long to cache DNS responses.
+	Valid string
+	// Addresses specifies the list of DNS server addresses.
+	Addresses []string
+	// DisableIPv6 specifies whether to disable DisableIPv6 lookups.
+	DisableIPv6 bool
 }
 
 // RewriteIPModeType specifies the mode for rewriting the client IP.

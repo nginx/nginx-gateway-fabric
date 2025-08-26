@@ -126,6 +126,62 @@
               "required": [],
               "type": "boolean"
             },
+            "dnsResolver": {
+              "description": "DNSResolver specifies the DNS resolver configuration for external name resolution. This enables support for routing to ExternalName Services.",
+              "properties": {
+                "addresses": {
+                  "description": "List of DNS server addresses. Each address specifies a type and value.",
+                  "items": {
+                    "properties": {
+                      "type": {
+                        "description": "Type specifies the type of address.",
+                        "enum": [
+                          "IPAddress",
+                          "Hostname"
+                        ],
+                        "required": [],
+                        "type": "string"
+                      },
+                      "value": {
+                        "description": "Value specifies the address value.",
+                        "maxItems": 253,
+                        "minItems": 1,
+                        "required": [],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "value"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "required": [],
+                  "type": "array"
+                },
+                "cacheTTL": {
+                  "description": "CacheTTL specifies how long to cache DNS responses.",
+                  "pattern": "^\\d+[smhd]?$",
+                  "required": [],
+                  "type": "string"
+                },
+                "disableIPv6": {
+                  "description": "DisableIPv6 disables DisableIPv6 lookups. If not specified, or set to false, IPv6 lookups will be enabled.",
+                  "required": [],
+                  "type": "boolean"
+                },
+                "timeout": {
+                  "description": "Timeout specifies the timeout for name resolution.",
+                  "pattern": "^\\d+[smhd]?$",
+                  "required": [],
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "type": "object"
+            },
             "ipFamily": {
               "description": "IPFamily specifies the IP family to be used by the NGINX.",
               "enum": [
@@ -498,6 +554,15 @@
           "title": "nginxOneConsole",
           "type": "object"
         },
+        "patches": {
+          "description": "Custom patches to apply to the NGINX Deployment/DaemonSet.",
+          "items": {
+            "required": []
+          },
+          "required": [],
+          "title": "patches",
+          "type": "array"
+        },
         "plus": {
           "default": false,
           "description": "Is NGINX Plus image being used.",
@@ -576,6 +641,15 @@
               },
               "required": [],
               "title": "nodePorts",
+              "type": "array"
+            },
+            "patches": {
+              "description": "Custom patches to apply to the NGINX Service.",
+              "items": {
+                "required": []
+              },
+              "required": [],
+              "title": "patches",
               "type": "array"
             },
             "type": {
