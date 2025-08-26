@@ -287,6 +287,7 @@ jobs:
       k8s-version: ${{ matrix.k8s-version }}
       enable-experimental: ${{ matrix.enable-experimental }}
       production-release: ${{ inputs.is_production_release == true && (inputs.dry_run == false || inputs.dry_run == null) }}
+      release_version: ${{ inputs.release_version }}
     secrets: inherit
     permissions:
       contents: write
