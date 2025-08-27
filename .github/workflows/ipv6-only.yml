@@ -169,7 +169,7 @@ jobs:
           # Test 1: Basic connectivity test using test client pod
           echo "Test 1: Basic IPv6 connectivity"
           kubectl exec ipv6-test-client -- curl --version
-          kubectl exec ipv6-test-client -- nslookup nginx-gateway-fabric.nginx-gateway.svc.cluster.local
+          kubectl exec ipv6-test-client -- nslookup nginx-gateway.nginx-gateway.svc.cluster.local
 
           # Test 2: Test NGF service directly via IPv6
           echo "Test 2: NGF Service IPv6 connectivity"
