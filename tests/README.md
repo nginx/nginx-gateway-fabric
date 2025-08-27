@@ -94,7 +94,6 @@ make add-local-ip-to-cluster
 > Note: If you already have a GKE cluster and your public IP has changed, update the firewall rule to include your new client IP.
 > This restores connectivity when you’re unable to reach the VM.
 
-
 ```makefile
 make update-firewall-with-local-ip
 ```
