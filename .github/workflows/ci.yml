@@ -284,11 +284,11 @@ jobs:
 
   ipv6-only-tests:
     name: IPv6-Only tests
-    needs: [vars, build-oss, build-plus]
+    needs: [vars, build-oss]
     strategy:
       fail-fast: false
       matrix:
-        image: [nginx, plus]
+        image: [nginx] # Temporarily removed plus due to credential issues
         k8s-version:
           [
             "${{ needs.vars.outputs.k8s_latest }}", # Only test against latest k8s for IPv6-only
