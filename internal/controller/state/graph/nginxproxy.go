@@ -272,6 +272,8 @@ func validateNginxProxy(
 
 	allErrs = append(allErrs, validateLogging(npCfg)...)
 
+	allErrs = append(allErrs, validateDNSResolver(validator, npCfg)...)
+
 	allErrs = append(allErrs, validateRewriteClientIP(npCfg)...)
 
 	allErrs = append(allErrs, validateNginxPlus(npCfg)...)
@@ -311,6 +313,72 @@ func validateLogging(npCfg *ngfAPIv1alpha2.NginxProxy) field.ErrorList {
 					))
 			}
 		}
+	}
+
+	return allErrs
+}
+
+func validateDNSResolver(
+	validator validation.GenericValidator,
+	npCfg *ngfAPIv1alpha2.NginxProxy,
+) field.ErrorList {
+	if npCfg.Spec.DNSResolver == nil {
+		return nil
+	}
+
+	var allErrs field.ErrorList
+	dnsResolver := npCfg.Spec.DNSResolver
+	dnsResolverPath := field.NewPath("spec", "dnsResolver")
+
+	if dnsResolver.Timeout != nil {
+		if err := validator.ValidateNginxDuration(string(*dnsResolver.Timeout)); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				dnsResolverPath.Child("timeout"),
+				*dnsResolver.Timeout,
+				err.Error(),
+			))
+		}
+	}
+
+	if dnsResolver.CacheTTL != nil {
+		if err := validator.ValidateNginxDuration(string(*dnsResolver.CacheTTL)); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				dnsResolverPath.Child("valid"),
+				*dnsResolver.CacheTTL,
+				err.Error(),
+			))
+		}
+	}
+
+	addressesPath := dnsResolverPath.Child("addresses")
+	for i, addr := range dnsResolver.Addresses {
+		addrPath := addressesPath.Index(i)
+
+		if addr.Type == ngfAPIv1alpha2.DNSResolverIPAddressType {
+			if errs := k8svalidation.IsValidIP(addrPath.Child("value"), addr.Value); len(errs) > 0 {
+				allErrs = append(allErrs, field.Invalid(
+					addrPath.Child("value"),
+					addr.Value,
+					"must be a valid IP address",
+				))
+			}
+		}
+
+		if addr.Type == ngfAPIv1alpha2.DNSResolverHostnameType {
+			if errs := k8svalidation.IsDNS1123Subdomain(addr.Value); len(errs) > 0 {
+				for _, e := range errs {
+					allErrs = append(allErrs, field.Invalid(
+						addrPath.Child("value"),
+						addr.Value,
+						e,
+					))
+				}
+			}
+		}
+	}
+
+	if len(dnsResolver.Addresses) == 0 {
+		allErrs = append(allErrs, field.Required(addressesPath, "addresses field is required"))
 	}
 
 	return allErrs

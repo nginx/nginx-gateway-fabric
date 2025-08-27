@@ -411,3 +411,86 @@ func TestCreateStreamServersWithNone(t *testing.T) {
 
 	g.Expect(streamServers).To(BeNil())
 }
+
+func TestExecuteStreamServersWithResolver(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name           string
+		expectedConfig string
+		conf           dataplane.Configuration
+	}{
+		{
+			name: "stream servers with DNS resolver",
+			conf: dataplane.Configuration{
+				BaseStreamConfig: dataplane.BaseStreamConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses:   []string{"8.8.8.8", "8.8.4.4"},
+						Timeout:     "10s",
+						Valid:       "60s",
+						DisableIPv6: true,
+					},
+				},
+			},
+			expectedConfig: `
+# DNS resolver configuration for ExternalName services
+resolver 8.8.8.8 8.8.4.4 valid=60s ipv6=off;
+resolver_timeout 10s;
+
+server {
+    listen unix:/var/run/nginx/connection-closed-server.sock;
+    return "";
+}
+`,
+		},
+		{
+			name: "stream servers without DNS resolver",
+			conf: dataplane.Configuration{
+				BaseStreamConfig: dataplane.BaseStreamConfig{
+					DNSResolver: nil,
+				},
+			},
+			expectedConfig: `
+
+server {
+    listen unix:/var/run/nginx/connection-closed-server.sock;
+    return "";
+}
+`,
+		},
+		{
+			name: "stream servers with DNS resolver IPv6 enabled",
+			conf: dataplane.Configuration{
+				BaseStreamConfig: dataplane.BaseStreamConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses:   []string{"2001:4860:4860::8888"},
+						Timeout:     "5s",
+						Valid:       "30s",
+						DisableIPv6: false,
+					},
+				},
+			},
+			expectedConfig: `
+# DNS resolver configuration for ExternalName services
+resolver 2001:4860:4860::8888 valid=30s;
+resolver_timeout 5s;
+
+server {
+    listen unix:/var/run/nginx/connection-closed-server.sock;
+    return "";
+}
+`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			generator := GeneratorImpl{}
+			results := generator.executeStreamServers(test.conf)
+
+			g.Expect(results).To(HaveLen(1))
+			g.Expect(string(results[0].data)).To(Equal(test.expectedConfig))
+		})
+	}
+}

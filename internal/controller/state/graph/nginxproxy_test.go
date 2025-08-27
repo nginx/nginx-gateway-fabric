@@ -906,6 +906,188 @@ func TestValidateNginxProxy(t *testing.T) {
 	}
 }
 
+func TestValidateDNSResolver(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		np             *ngfAPIv1alpha2.NginxProxy
+		validator      *validationfakes.FakeGenericValidator
+		name           string
+		errorString    string
+		expectErrCount int
+	}{
+		{
+			name:      "valid DNS resolver with IPv4 addresses",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "8.8.8.8"},
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "1.1.1.1"},
+						},
+						Timeout:  helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s"),
+						CacheTTL: helpers.GetPointer[ngfAPIv1alpha1.Duration]("60s"),
+					},
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name:      "valid DNS resolver with hostnames",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverHostnameType, Value: "dns.google"},
+							{Type: ngfAPIv1alpha2.DNSResolverHostnameType, Value: "one.one.one.one"},
+						},
+						Timeout:  helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
+						CacheTTL: helpers.GetPointer[ngfAPIv1alpha1.Duration]("30s"),
+					},
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name:      "valid DNS resolver with IPv6 addresses",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "2001:4860:4860::8888"},
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "2606:4700:4700::1111"},
+						},
+					},
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name:      "valid DNS resolver with mixed address types",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "8.8.8.8"},
+							{Type: ngfAPIv1alpha2.DNSResolverHostnameType, Value: "dns.google"},
+						},
+					},
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name:      "invalid DNS resolver timeout duration",
+			validator: createInvalidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "8.8.8.8"},
+						},
+						Timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("invalid-duration"),
+					},
+				},
+			},
+			errorString:    "spec.dnsResolver.timeout",
+			expectErrCount: 1,
+		},
+		{
+			name:      "invalid DNS resolver - both duration fields invalid",
+			validator: createInvalidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "8.8.8.8"},
+						},
+						Timeout:  helpers.GetPointer[ngfAPIv1alpha1.Duration]("invalid"),
+						CacheTTL: helpers.GetPointer[ngfAPIv1alpha1.Duration]("invalid"),
+					},
+				},
+			},
+			errorString:    "spec.dnsResolver",
+			expectErrCount: 2,
+		},
+		{
+			name:      "invalid IP address",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "256.256.256.256"},
+						},
+					},
+				},
+			},
+			errorString:    "spec.dnsResolver.addresses[0].value",
+			expectErrCount: 1,
+		},
+		{
+			name:      "invalid hostname",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverHostnameType, Value: "invalid..hostname"},
+						},
+					},
+				},
+			},
+			errorString:    "spec.dnsResolver.addresses[0].value",
+			expectErrCount: 1,
+		},
+		{
+			name:      "multiple invalid DNS resolver addresses",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverHostnameType, Value: "invalid..hostname"},
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "999.999.999.999"},
+							{Type: ngfAPIv1alpha2.DNSResolverHostnameType, Value: ""},
+						},
+					},
+				},
+			},
+			errorString:    "spec.dnsResolver.addresses",
+			expectErrCount: 3,
+		},
+		{
+			name:      "empty addresses array",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{},
+					},
+				},
+			},
+			errorString:    "spec.dnsResolver.addresses",
+			expectErrCount: 1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			allErrs := validateNginxProxy(test.validator, test.np)
+			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
+			if len(allErrs) > 0 {
+				g.Expect(allErrs.ToAggregate().Error()).To(ContainSubstring(test.errorString))
+			}
+		})
+	}
+}
+
 func TestValidateRewriteClientIP(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

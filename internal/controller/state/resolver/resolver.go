@@ -32,12 +32,14 @@ type ServiceResolver interface {
 
 // Endpoint is the internal representation of a Kubernetes endpoint.
 type Endpoint struct {
-	// Address is the IP address of the endpoint.
+	// Address is the IP address or DNS name of the endpoint.
 	Address string
 	// Port is the port of the endpoint.
 	Port int32
 	// IPv6 is true if the endpoint is an IPv6 address.
 	IPv6 bool
+	// Resolve is true if the address is a DNS name that needs to be resolved (e.g., for ExternalName services).
+	Resolve bool
 }
 
 // ServiceResolverImpl implements ServiceResolver.

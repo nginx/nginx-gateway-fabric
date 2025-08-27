@@ -1,6 +1,15 @@
 package config
 
+//nolint:lll
 const streamServersTemplateText = `
+{{- if .DNSResolver }}
+# DNS resolver configuration for ExternalName services
+resolver{{ range $addr := .DNSResolver.Addresses }} {{ $addr }}{{ end }}{{ if .DNSResolver.Valid }} valid={{ .DNSResolver.Valid }}{{ end }}{{ if .DNSResolver.DisableIPv6 }} ipv6=off{{ end }};
+{{- if .DNSResolver.Timeout }}
+resolver_timeout {{ .DNSResolver.Timeout }};
+{{- end }}
+{{- end }}
+
 {{- range $s := .Servers }}
 server {
 	{{- if or ($.IPFamily.IPv4) ($s.IsSocket) }}

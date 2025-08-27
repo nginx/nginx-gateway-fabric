@@ -210,3 +210,77 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteBaseHttp_DNSResolver(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		expectedConfig string
+		conf           dataplane.Configuration
+	}{
+		{
+			name: "DNS resolver with all options",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses:   []string{"8.8.8.8", "8.8.4.4"},
+						Timeout:     "10s",
+						Valid:       "60s",
+						DisableIPv6: true,
+					},
+				},
+			},
+			expectedConfig: "resolver 8.8.8.8 8.8.4.4 valid=60s ipv6=off;\nresolver_timeout 10s;",
+		},
+		{
+			name: "DNS resolver with single address and IPv6 enabled",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses:   []string{"8.8.8.8"},
+						DisableIPv6: false,
+					},
+				},
+			},
+			expectedConfig: "resolver 8.8.8.8;",
+		},
+		{
+			name: "no DNS resolver",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DNSResolver: nil,
+				},
+			},
+			expectedConfig: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf)
+			g.Expect(res).To(HaveLen(1))
+
+			httpConfig := string(res[0].data)
+
+			if test.expectedConfig != "" {
+				// Check that the resolver directive is present
+				g.Expect(httpConfig).To(ContainSubstring(test.expectedConfig))
+				// Check that the comment is present
+				g.Expect(httpConfig).To(ContainSubstring("# DNS resolver configuration for ExternalName services"))
+			} else {
+				// Check that no resolver directive is present
+				g.Expect(httpConfig).ToNot(ContainSubstring("resolver"))
+				g.Expect(httpConfig).ToNot(ContainSubstring("# DNS resolver configuration for ExternalName services"))
+			}
+
+			// Verify that standard config elements are still present
+			g.Expect(httpConfig).To(ContainSubstring("map $http_host $gw_api_compliant_host {"))
+			g.Expect(httpConfig).To(ContainSubstring("map $http_upgrade $connection_upgrade {"))
+			g.Expect(httpConfig).To(ContainSubstring("map $request_uri $request_uri_path {"))
+		})
+	}
+}

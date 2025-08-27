@@ -8,6 +8,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -183,6 +184,19 @@ func convertSnippetsFilter(filter *graph.SnippetsFilter) SnippetsFilter {
 			),
 			Contents: snippet,
 		}
+	}
+
+	return result
+}
+
+func convertDNSResolverAddresses(addresses []ngfAPIv1alpha2.DNSResolverAddress) []string {
+	if len(addresses) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(addresses))
+	for _, addr := range addresses {
+		result = append(result, addr.Value)
 	}
 
 	return result

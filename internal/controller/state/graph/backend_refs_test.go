@@ -3,6 +3,7 @@ package graph
 import (
 	"errors"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -979,6 +980,58 @@ func TestCreateBackend(t *testing.T) {
 	svc1 := createService("service1")
 	svc2 := createService("service2")
 	svc3 := createService("service3")
+
+	// Create an ExternalName service for testing DNS resolver validation
+	externalSvc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "external-service",
+			Namespace: "test",
+		},
+		Spec: v1.ServiceSpec{
+			Type:         v1.ServiceTypeExternalName,
+			ExternalName: "example.com",
+			Ports: []v1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+		},
+	}
+
+	// Create an ExternalName service with empty externalName field for testing validation
+	externalSvcEmpty := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "external-service-empty",
+			Namespace: "test",
+		},
+		Spec: v1.ServiceSpec{
+			Type:         v1.ServiceTypeExternalName,
+			ExternalName: "", // Empty external name
+			Ports: []v1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+		},
+	}
+
+	// Create an ExternalName service with whitespace-only externalName field for testing validation
+	externalSvcWhitespace := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "external-service-whitespace",
+			Namespace: "test",
+		},
+		Spec: v1.ServiceSpec{
+			Type:         v1.ServiceTypeExternalName,
+			ExternalName: "   \t\n   ", // Whitespace-only external name
+			Ports: []v1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+		},
+	}
+
 	svc1NamespacedName := types.NamespacedName{Namespace: "test", Name: "service1"}
 	svc2NamespacedName := types.NamespacedName{Namespace: "test", Name: "service2"}
 	svc3NamespacedName := types.NamespacedName{Namespace: "test", Name: "service3"}
@@ -1204,12 +1257,136 @@ func TestCreateBackend(t *testing.T) {
 			},
 			name: "invalid policy",
 		},
+		{
+			ref: gatewayv1.HTTPBackendRef{
+				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+					backend.Name = "external-service"
+					return backend
+				}),
+			},
+			expectedBackend: BackendRef{
+				SvcNsName:   types.NamespacedName{Namespace: "test", Name: "external-service"},
+				ServicePort: v1.ServicePort{Port: 80},
+				Weight:      5,
+				Valid:       true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+					{Namespace: "test", Name: "gateway"}: conditions.NewRouteBackendRefUnsupportedValue(
+						"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
+					),
+				},
+			},
+			expectedServicePortReference: "test_external-service_80",
+			expectedConditions:           nil,
+			name:                         "ExternalName service without DNS resolver",
+		},
+		{
+			ref: gatewayv1.HTTPBackendRef{
+				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+					backend.Name = "external-service"
+					return backend
+				}),
+			},
+			nginxProxySpec: &EffectiveNginxProxy{
+				DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+					Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+						{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "8.8.8.8"},
+					},
+				},
+			},
+			expectedBackend: BackendRef{
+				SvcNsName:          types.NamespacedName{Namespace: "test", Name: "external-service"},
+				ServicePort:        v1.ServicePort{Port: 80},
+				Weight:             5,
+				Valid:              true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+			},
+			expectedServicePortReference: "test_external-service_80",
+			expectedConditions:           nil,
+			name:                         "ExternalName service with DNS resolver",
+		},
+		{
+			ref: gatewayv1.HTTPBackendRef{
+				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+					backend.Name = "external-service"
+					return backend
+				}),
+			},
+			expectedBackend: BackendRef{
+				SvcNsName:   types.NamespacedName{Namespace: "test", Name: "external-service"},
+				ServicePort: v1.ServicePort{Port: 80},
+				Weight:      5,
+				Valid:       true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+					{Namespace: "test", Name: "gateway2"}: conditions.NewRouteBackendRefUnsupportedValue(
+						"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
+					),
+				},
+			},
+			expectedServicePortReference: "test_external-service_80",
+			expectedConditions:           nil,
+			name:                         "ExternalName service with multiple gateways - mixed DNS resolver config",
+		},
+		{
+			ref: gatewayv1.HTTPBackendRef{
+				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+					backend.Name = "external-service-empty"
+					return backend
+				}),
+			},
+			expectedBackend: BackendRef{
+				SvcNsName:   types.NamespacedName{Namespace: "test", Name: "external-service-empty"},
+				ServicePort: v1.ServicePort{Port: 80},
+				Weight:      5,
+				Valid:       false,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+					{Namespace: "test", Name: "gateway"}: conditions.NewRouteBackendRefUnsupportedValue(
+						"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
+					),
+				},
+			},
+			expectedServicePortReference: "",
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedValue(
+					"ExternalName service has empty or invalid externalName field",
+				),
+			},
+			name: "ExternalName service with empty externalName field",
+		},
+		{
+			ref: gatewayv1.HTTPBackendRef{
+				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+					backend.Name = "external-service-whitespace"
+					return backend
+				}),
+			},
+			expectedBackend: BackendRef{
+				SvcNsName:   types.NamespacedName{Namespace: "test", Name: "external-service-whitespace"},
+				ServicePort: v1.ServicePort{Port: 80},
+				Weight:      5,
+				Valid:       false,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+					{Namespace: "test", Name: "gateway"}: conditions.NewRouteBackendRefUnsupportedValue(
+						"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
+					),
+				},
+			},
+			expectedServicePortReference: "",
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedValue(
+					"ExternalName service has empty or invalid externalName field",
+				),
+			},
+			name: "ExternalName service with whitespace-only externalName field",
+		},
 	}
 
 	services := map[types.NamespacedName]*v1.Service{
-		client.ObjectKeyFromObject(svc1): svc1,
-		client.ObjectKeyFromObject(svc2): svc2,
-		client.ObjectKeyFromObject(svc3): svc3,
+		client.ObjectKeyFromObject(svc1):                  svc1,
+		client.ObjectKeyFromObject(svc2):                  svc2,
+		client.ObjectKeyFromObject(svc3):                  svc3,
+		client.ObjectKeyFromObject(externalSvc):           externalSvc,
+		client.ObjectKeyFromObject(externalSvcEmpty):      externalSvcEmpty,
+		client.ObjectKeyFromObject(externalSvcWhitespace): externalSvcWhitespace,
 	}
 	policies := map[types.NamespacedName]*BackendTLSPolicy{
 		client.ObjectKeyFromObject(btp.Source):  &btp,
@@ -1247,6 +1424,27 @@ func TestCreateBackend(t *testing.T) {
 						},
 					},
 				},
+			}
+
+			// Special case: for the multiple gateways test, add a second gateway
+			if test.name == "ExternalName service with multiple gateways - mixed DNS resolver config" {
+				route.ParentRefs = append(route.ParentRefs, ParentRef{
+					Gateway: &ParentRefGateway{
+						NamespacedName: types.NamespacedName{
+							Namespace: "test",
+							Name:      "gateway2",
+						},
+						EffectiveNginxProxy: nil, // No DNS resolver
+					},
+				})
+				// For this test, the first gateway should have DNS resolver
+				route.ParentRefs[0].Gateway.EffectiveNginxProxy = &EffectiveNginxProxy{
+					DNSResolver: &ngfAPIv1alpha2.DNSResolver{
+						Addresses: []ngfAPIv1alpha2.DNSResolverAddress{
+							{Type: ngfAPIv1alpha2.DNSResolverIPAddressType, Value: "8.8.8.8"},
+						},
+					},
+				}
 			}
 
 			backend, conds := createBackendRef(
@@ -1441,8 +1639,8 @@ func TestValidateBackendTLSPolicyMatchingAllBackends(t *testing.T) {
 
 func TestFindBackendTLSPolicyForService(t *testing.T) {
 	t.Parallel()
-	oldCreationTimestamp := metav1.Now()
-	newCreationTimestamp := metav1.Now()
+	oldCreationTimestamp := metav1.NewTime(time.Now().Add(-time.Hour))
+	newCreationTimestamp := metav1.NewTime(time.Now())
 	getBtp := func(name string, timestamp metav1.Time) *BackendTLSPolicy {
 		return &BackendTLSPolicy{
 			Valid: true,

@@ -20,7 +20,6 @@
     - [Upgrading the CRDs](#upgrading-the-crds)
     - [Upgrading the Chart from the OCI Registry](#upgrading-the-chart-from-the-oci-registry)
     - [Upgrading the Chart from the Sources](#upgrading-the-chart-from-the-sources)
-    - [Configure Delayed Termination for Zero Downtime Upgrades](#configure-delayed-termination-for-zero-downtime-upgrades)
   - [Uninstalling the Chart](#uninstalling-the-chart)
     - [Uninstalling the Gateway Resources](#uninstalling-the-gateway-resources)
   - [Configuration](#configuration)
@@ -117,15 +116,10 @@ helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namesp
 
 ## Upgrading the Chart
 
-> [!NOTE]
->
-> See [below](#configure-delayed-termination-for-zero-downtime-upgrades) for instructions on how to configure delayed
-> termination if required for zero downtime upgrades in your environment.
-
 ### Upgrading the Gateway Resources
 
 Before you upgrade a release, ensure the Gateway API resources are the correct version as supported by the NGINX
-Gateway Fabric - [see the Technical Specifications](../../README.md#technical-specifications).:
+Gateway Fabric - [see the Technical Specifications](https://github.com/nginx/nginx-gateway-fabric/blob/main/README.md#technical-specifications).:
 
 To upgrade the Gateway CRDs from [the Gateway API repo](https://github.com/kubernetes-sigs/gateway-api), run:
 
@@ -167,57 +161,6 @@ the release `ngf`, run:
 ```shell
 helm upgrade ngf . -n nginx-gateway
 ```
-
-### Configure Delayed Termination for Zero Downtime Upgrades
-
-To achieve zero downtime upgrades (meaning clients will not see any interruption in traffic while a rolling upgrade is
-being performed on NGF), you may need to configure delayed termination on the NGF Pod, depending on your environment.
-
-> [!NOTE]
->
-> When proxying Websocket or any long-lived connections, NGINX will not terminate until that connection is closed
-> by either the client or the backend. This means that unless all those connections are closed by clients/backends
-> before or during an upgrade, NGINX will not terminate, which means Kubernetes will kill NGINX. As a result, the
-> clients will see the connections abruptly closed and thus experience downtime.
-
-1. Add `lifecycle` to both the nginx and the nginx-gateway container definition. To do so, update your `values.yaml`
-   file to include the following (update the `sleep` values to what is required in your environment):
-
-   ```yaml
-    nginxGateway:
-        <...>
-        lifecycle:
-            preStop:
-                exec:
-                    command:
-                    - /usr/bin/gateway
-                    - sleep
-                    - --duration=40s # This flag is optional, the default is 30s
-
-    nginx:
-        <...>
-        lifecycle:
-            preStop:
-                exec:
-                    command:
-                    - /bin/sleep
-                    - "40"
-   ```
-
-2. Ensure the `terminationGracePeriodSeconds` matches or exceeds the `sleep` value from the `preStopHook` (the default
-   is 30). This is to ensure Kubernetes does not terminate the Pod before the `preStopHook` is complete. To do so,
-   update your `values.yaml` file to include the following (update the value to what is required in your environment):
-
-   ```yaml
-   terminationGracePeriodSeconds: 50
-   ```
-
-> [!NOTE]
->
-> More information on container lifecycle hooks can be found in the official
-> [kubernetes documentation](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks) and a detailed
-> description of Pod termination behavior can be found in
-> [Termination of Pods](https://kubernetes.io/docs/concepts/workloads/Pods/Pod-lifecycle/#Pod-termination).
 
 ## Uninstalling the Chart
 
@@ -264,7 +207,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `certGenerator.ttlSecondsAfterFinished` | How long to wait after the cert generator job has finished before it is removed by the job controller. | int | `30` |
 | `clusterDomain` | The DNS cluster domain of your Kubernetes cluster. | string | `"cluster.local"` |
 | `gateways` | A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference. | list | `[]` |
-| `nginx` | The nginx section contains the configuration for all NGINX data plane deployments installed by the NGINX Gateway Fabric control plane. | object | `{"autoscaling":{"enable":false},"config":{},"container":{"hostPorts":[],"lifecycle":{},"readinessProbe":{},"resources":{},"volumeMounts":[]},"debug":false,"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric/nginx","tag":"edge"},"imagePullSecret":"","imagePullSecrets":[],"kind":"deployment","nginxOneConsole":{"dataplaneKeySecretName":"","endpointHost":"agent.connect.nginx.com","endpointPort":443,"skipVerify":false},"plus":false,"pod":{},"replicas":1,"service":{"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"type":"LoadBalancer"},"usage":{"caSecretName":"","clientSSLSecretName":"","endpoint":"","resolver":"","secretName":"nplus-license","skipVerify":false}}` |
+| `nginx` | The nginx section contains the configuration for all NGINX data plane deployments installed by the NGINX Gateway Fabric control plane. | object | `{"autoscaling":{"enable":false},"config":{},"container":{"hostPorts":[],"lifecycle":{},"readinessProbe":{},"resources":{},"volumeMounts":[]},"debug":false,"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric/nginx","tag":"edge"},"imagePullSecret":"","imagePullSecrets":[],"kind":"deployment","nginxOneConsole":{"dataplaneKeySecretName":"","endpointHost":"agent.connect.nginx.com","endpointPort":443,"skipVerify":false},"patches":[],"plus":false,"pod":{},"replicas":1,"service":{"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"patches":[],"type":"LoadBalancer"},"usage":{"caSecretName":"","clientSSLSecretName":"","endpoint":"","resolver":"","secretName":"nplus-license","skipVerify":false}}` |
 | `nginx.autoscaling` | Autoscaling configuration for the NGINX data plane. | object | `{"enable":false}` |
 | `nginx.autoscaling.enable` | Enable or disable Horizontal Pod Autoscaler for the NGINX data plane. | bool | `false` |
 | `nginx.config` | The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{}` |
@@ -283,15 +226,17 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginx.nginxOneConsole.endpointHost` | The Endpoint host that the NGINX One Console telemetry metrics will be sent to. | string | `"agent.connect.nginx.com"` |
 | `nginx.nginxOneConsole.endpointPort` | The endpoint port that the NGINX One Console telemetry metrics will be sent to. | int | `443` |
 | `nginx.nginxOneConsole.skipVerify` | Skip TLS verification for NGINX One Console connections. | bool | `false` |
+| `nginx.patches` | Custom patches to apply to the NGINX Deployment/DaemonSet. | list | `[]` |
 | `nginx.plus` | Is NGINX Plus image being used. | bool | `false` |
 | `nginx.pod` | The pod configuration for the NGINX data plane pod. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{}` |
 | `nginx.replicas` | The number of replicas of the NGINX Deployment. This value is ignored if autoscaling.enable is true. | int | `1` |
-| `nginx.service` | The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"type":"LoadBalancer"}` |
+| `nginx.service` | The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this instance of NGINX Gateway Fabric. | object | `{"externalTrafficPolicy":"Local","loadBalancerClass":"","loadBalancerIP":"","loadBalancerSourceRanges":[],"nodePorts":[],"patches":[],"type":"LoadBalancer"}` |
 | `nginx.service.externalTrafficPolicy` | The externalTrafficPolicy of the service. The value Local preserves the client source IP. | string | `"Local"` |
 | `nginx.service.loadBalancerClass` | LoadBalancerClass is the class of the load balancer implementation this Service belongs to. Requires nginx.service.type set to LoadBalancer. | string | `""` |
 | `nginx.service.loadBalancerIP` | The static IP address for the load balancer. Requires nginx.service.type set to LoadBalancer. | string | `""` |
 | `nginx.service.loadBalancerSourceRanges` | The IP ranges (CIDR) that are allowed to access the load balancer. Requires nginx.service.type set to LoadBalancer. | list | `[]` |
 | `nginx.service.nodePorts` | A list of NodePorts to expose on the NGINX data plane service. Each NodePort MUST map to a Gateway listener port, otherwise it will be ignored. The default NodePort range enforced by Kubernetes is 30000-32767. | list | `[]` |
+| `nginx.service.patches` | Custom patches to apply to the NGINX Service. | list | `[]` |
 | `nginx.service.type` | The type of service to create for the NGINX data plane. | string | `"LoadBalancer"` |
 | `nginx.usage.caSecretName` | The name of the Secret containing the NGINX Instance Manager CA certificate. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `""` |
 | `nginx.usage.clientSSLSecretName` | The name of the Secret containing the client certificate and key for authenticating with NGINX Instance Manager. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `""` |

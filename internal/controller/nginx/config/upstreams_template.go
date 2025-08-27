@@ -19,7 +19,7 @@ upstream {{ $u.Name }} {
     state {{ $u.StateFile }};
     {{- else }}
         {{ range $server := $u.Servers }}
-    server {{ $server.Address }};
+    server {{ $server.Address }}{{ if $server.Resolve }} resolve{{ end }};
         {{- end }}
     {{- end }}
     {{ if $u.KeepAlive.Connections -}}
@@ -49,7 +49,7 @@ upstream {{ $u.Name }} {
     state {{ $u.StateFile }};
     {{- else }}
         {{ range $server := $u.Servers }}
-    server {{ $server.Address }};
+    server {{ $server.Address }}{{ if $server.Resolve }} resolve{{ end }};
         {{- end }}
     {{- end }}
 }

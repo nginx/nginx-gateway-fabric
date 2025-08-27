@@ -1,7 +1,16 @@
 package config
 
+//nolint:lll
 const baseHTTPTemplateText = `
 {{- if .HTTP2 }}http2 on;{{ end }}
+
+{{- if .DNSResolver }}
+# DNS resolver configuration for ExternalName services
+resolver{{ range $addr := .DNSResolver.Addresses }} {{ $addr }}{{ end }}{{ if .DNSResolver.Valid }} valid={{ .DNSResolver.Valid }}{{ end }}{{ if .DNSResolver.DisableIPv6 }} ipv6=off{{ end }};
+{{- if .DNSResolver.Timeout }}
+resolver_timeout {{ .DNSResolver.Timeout }};
+{{- end }}
+{{- end }}
 
 # Set $gw_api_compliant_host variable to the value of $http_host unless $http_host is empty, then set it to the value
 # of $host. We prefer $http_host because it contains the original value of the host header, which is required by the

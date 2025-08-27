@@ -650,6 +650,57 @@ spec:
                   introduces security risks as described in Gateway API GEP-3567.
                   If not specified, defaults to false (validation enabled).
                 type: boolean
+              dnsResolver:
+                description: |-
+                  DNSResolver specifies the DNS resolver configuration for external name resolution.
+                  This enables support for routing to ExternalName Services.
+                properties:
+                  addresses:
+                    description: |-
+                      Addresses specifies the list of DNS server addresses.
+                      Each address can be an IP address or hostname.
+                      Example: [{"type": "IPAddress", "value": "8.8.8.8"}, {"type": "Hostname", "value": "dns.google"}]
+                    items:
+                      description: DNSResolverAddress specifies the address type and
+                        value for a DNS resolver address.
+                      properties:
+                        type:
+                          description: Type specifies the type of address.
+                          enum:
+                          - IPAddress
+                          - Hostname
+                          type: string
+                        value:
+                          description: |-
+                            Value specifies the address value.
+                            When Type is "IPAddress", this must be a valid IPv4 or IPv6 address.
+                            When Type is "Hostname", this must be a valid hostname.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - type
+                      - value
+                      type: object
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                  cacheTTL:
+                    description: CacheTTL specifies how long to cache DNS responses.
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  disableIPv6:
+                    description: |-
+                      DisableIPv6 disables IPv6 lookups.
+                      If not specified, or set to false, IPv6 lookups will be enabled.
+                    type: boolean
+                  timeout:
+                    description: Timeout specifies the timeout for name resolution.
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                required:
+                - addresses
+                type: object
               ipFamily:
                 default: dual
                 description: |-

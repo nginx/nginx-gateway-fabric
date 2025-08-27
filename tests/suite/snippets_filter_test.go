@@ -64,6 +64,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(snippetsFilter, namespace)).To(Succeed())
+			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 		})
 
 		AfterAll(func() {
@@ -143,7 +144,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 					},
 					{
 						Directive: "aio",
-						Value:     "on",
+						Value:     "off",
 						File:      fmt.Sprintf("%s%s", httpContext, httpRouteSuffix),
 					},
 					{
@@ -153,7 +154,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 					},
 					{
 						Directive: "auth_delay",
-						Value:     "10s",
+						Value:     "0s",
 						File:      fmt.Sprintf("%s%s", httpServerContext, httpRouteSuffix),
 					},
 					{
@@ -171,7 +172,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 					},
 					{
 						Directive: "keepalive_time",
-						Value:     "10s",
+						Value:     "1h",
 						File:      fmt.Sprintf("%s%s", httpServerLocationContext, httpRouteSuffix),
 					},
 				}),
