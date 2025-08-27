@@ -680,21 +680,27 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	)
 
-	hrAdvancedRouteWithPolicy, groupsHRAdvanced, routeHRAdvanced := createTestResources(
-		"hr-advanced-route-with-policy",
+	hrAdvancedRouteWithPolicyAndHeaderMatch, groupsHRAdvancedWithHeaderMatch, routeHRAdvancedWithHeaderMatch := createTestResources(
+		"hr-advanced-route-with-policy-header-match",
 		"policy.com",
 		"listener-80-1",
 		pathAndType{path: "/rest", pathType: prefix},
-		pathAndType{path: "/rest", pathType: prefix},
 	)
 
-	routeHRAdvanced.Spec.Rules[0].Matches[0].Headers = []v1.HTTPHeaderMatch{
+	routeHRAdvancedWithHeaderMatch.Spec.Rules[0].Matches[0].Headers = []v1.HTTPHeaderMatch{
 		{
 			Name:  "Referrer",
 			Type:  helpers.GetPointer(v1.HeaderMatchRegularExpression),
 			Value: "(?i)(mydomain|myotherdomain).+\\.example\\.(cloud|com)",
 		},
 	}
+
+	hrAdvancedRouteWithPolicyNoHeaderMatch, groupsHRAdvancedNoHeaderMatch, routeHRAdvancedNoHeaderMatch := createTestResources(
+		"hr-advanced-route-with-policy-no-header-match",
+		"policy.com",
+		"listener-80-1",
+		pathAndType{path: "/rest", pathType: prefix},
+	)
 
 	l7RouteWithPolicy.Policies = []*graph.Policy{hrPolicy1, invalidPolicy}
 
@@ -2372,13 +2378,15 @@ func TestBuildConfiguration(t *testing.T) {
 						Source:      listener80,
 						Valid:       true,
 						Routes: map[graph.RouteKey]*graph.L7Route{
-							graph.CreateRouteKey(hrAdvancedRouteWithPolicy): routeHRAdvanced,
+							graph.CreateRouteKey(hrAdvancedRouteWithPolicyAndHeaderMatch): routeHRAdvancedWithHeaderMatch,
+							graph.CreateRouteKey(hrAdvancedRouteWithPolicyNoHeaderMatch):  routeHRAdvancedNoHeaderMatch,
 						},
 					},
 				}...)
 				gw.Policies = []*graph.Policy{gwPolicy1, gwPolicy2}
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
-					graph.CreateRouteKey(hrAdvancedRouteWithPolicy): routeHRAdvanced,
+					graph.CreateRouteKey(hrAdvancedRouteWithPolicyAndHeaderMatch): routeHRAdvancedWithHeaderMatch,
+					graph.CreateRouteKey(hrAdvancedRouteWithPolicyNoHeaderMatch):  routeHRAdvancedNoHeaderMatch,
 				}
 				return g
 			}),
@@ -2397,8 +2405,8 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: groupsHRAdvanced[0],
-										Source:       &hrAdvancedRouteWithPolicy.ObjectMeta,
+										BackendGroup: groupsHRAdvancedWithHeaderMatch[0],
+										Source:       &hrAdvancedRouteWithPolicyAndHeaderMatch.ObjectMeta,
 										Match: Match{
 											Headers: []HTTPHeaderMatch{
 												{
@@ -2417,11 +2425,11 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: groupsHRAdvanced[1],
-										Source:       &hrAdvancedRouteWithPolicy.ObjectMeta,
+										BackendGroup: groupsHRAdvancedNoHeaderMatch[0],
+										Source:       &hrAdvancedRouteWithPolicyNoHeaderMatch.ObjectMeta,
 									},
 								},
-								// Policies: []policies.Policy{hrPolicy2.Source},
+								Policies: []policies.Policy{hrPolicy2.Source},
 							},
 						},
 						Port:     80,
@@ -2429,7 +2437,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 				}
 				conf.Upstreams = []Upstream{fooUpstream}
-				conf.BackendGroups = []BackendGroup{groupsHRAdvanced[0], groupsHRAdvanced[1]}
+				conf.BackendGroups = []BackendGroup{groupsHRAdvancedWithHeaderMatch[0], groupsHRAdvancedNoHeaderMatch[0]}
 				return conf
 			}),
 			msg: "Simple Gateway and HTTPRoute with advanced routing and policies attached",
