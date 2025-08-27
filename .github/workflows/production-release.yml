@@ -19,12 +19,14 @@ defaults:
     shell: bash
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   create-tag-and-release:
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/heads/release-')
+    permissions:
+      contents: write
     steps:
       - name: Validate Release Branch and Version
         run: |
