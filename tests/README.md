@@ -91,6 +91,14 @@ make create-gke-cluster
 make add-local-ip-to-cluster
 ```
 
+> Note: If you already have a GKE cluster and your public IP has changed, update the firewall rule to include your new client IP.
+> This restores connectivity when you’re unable to reach the VM.
+
+
+```makefile
+make update-firewall-with-local-ip
+```
+
 ### Step 2 - Build and Load Images
 
 Loading the images only applies to a `kind` cluster. If using a cloud provider, you will need to tag and push

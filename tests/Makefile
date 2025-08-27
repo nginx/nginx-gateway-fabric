@@ -166,6 +166,10 @@ delete-gke-cluster: ## Delete the GKE cluster
 add-local-ip-to-cluster: ## Add local IP to the GKE cluster master-authorized-networks
 	./scripts/add-local-ip-auth-networks.sh
 
+.PHONY: update-firewall-with-local-ip
+update-firewall-with-local-ip: ## Update the firewall rule with local IP address
+	./scripts/update-firewall-with-local-ip.sh
+
 HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.type=ClusterIP --skip-schema-validation
 
 # this target is used to install the gateway-api CRDs from the main branch (only used in the nightly CI job)
