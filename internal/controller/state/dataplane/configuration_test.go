@@ -680,6 +680,22 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	)
 
+	hrAdvancedRouteWithPolicy, groupsHRAdvanced, routeHRAdvanced := createTestResources(
+		"hr-advanced-route-with-policy",
+		"policy.com",
+		"listener-80-1",
+		pathAndType{path: "/rest", pathType: prefix},
+		pathAndType{path: "/rest", pathType: prefix},
+	)
+
+	routeHRAdvanced.Spec.Rules[0].Matches[0].Headers = []v1.HTTPHeaderMatch{
+		{
+			Name:  "Referrer",
+			Type:  helpers.GetPointer(v1.HeaderMatchRegularExpression),
+			Value: "(?i)(mydomain|myotherdomain).+\\.example\\.(cloud|com)",
+		},
+	}
+
 	l7RouteWithPolicy.Policies = []*graph.Policy{hrPolicy1, invalidPolicy}
 
 	httpsHRWithPolicy, expHTTPSHRWithPolicyGroups, l7HTTPSRouteWithPolicy := createTestResources(
@@ -2349,6 +2365,78 @@ func TestBuildConfiguration(t *testing.T) {
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
 				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, []*graph.Listener{
+					{
+						Name:        "listener-80-1",
+						GatewayName: gatewayNsName,
+						Source:      listener80,
+						Valid:       true,
+						Routes: map[graph.RouteKey]*graph.L7Route{
+							graph.CreateRouteKey(hrAdvancedRouteWithPolicy): routeHRAdvanced,
+						},
+					},
+				}...)
+				gw.Policies = []*graph.Policy{gwPolicy1, gwPolicy2}
+				g.Routes = map[graph.RouteKey]*graph.L7Route{
+					graph.CreateRouteKey(hrAdvancedRouteWithPolicy): routeHRAdvanced,
+				}
+				return g
+			}),
+			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.HTTPServers = []VirtualServer{
+					{
+						IsDefault: true,
+						Port:      80,
+						Policies:  []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
+					},
+					{
+						Hostname: "policy.com",
+						PathRules: []PathRule{
+							{
+								Path:     "/rest",
+								PathType: PathTypePrefix,
+								MatchRules: []MatchRule{
+									{
+										BackendGroup: groupsHRAdvanced[0],
+										Source:       &hrAdvancedRouteWithPolicy.ObjectMeta,
+										Match: Match{
+											Headers: []HTTPHeaderMatch{
+												{
+													Name:  "Referrer",
+													Value: "(?i)(mydomain|myotherdomain).+\\.example\\.(cloud|com)",
+													Type:  "RegularExpression",
+												},
+											},
+										},
+									},
+								},
+								Policies: []policies.Policy{hrPolicy2.Source},
+							},
+							{
+								Path:     "/rest",
+								PathType: PathTypePrefix,
+								MatchRules: []MatchRule{
+									{
+										BackendGroup: groupsHRAdvanced[1],
+										Source:       &hrAdvancedRouteWithPolicy.ObjectMeta,
+									},
+								},
+								// Policies: []policies.Policy{hrPolicy2.Source},
+							},
+						},
+						Port:     80,
+						Policies: []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
+					},
+				}
+				conf.Upstreams = []Upstream{fooUpstream}
+				conf.BackendGroups = []BackendGroup{groupsHRAdvanced[0], groupsHRAdvanced[1]}
+				return conf
+			}),
+			msg: "Simple Gateway and HTTPRoute with advanced routing and policies attached",
+		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				gw := g.Gateways[gatewayNsName]
 				gw.Source.ObjectMeta = metav1.ObjectMeta{
 					Name:      "gw",
 					Namespace: "ns",
@@ -2546,6 +2634,12 @@ func TestBuildConfiguration(t *testing.T) {
 				fakeResolver,
 				false,
 			)
+
+			if test.msg == "Simple Gateway and HTTPRoute with advanced routing and policies attached" {
+				fmt.Printf("Results for %s: %+v\n", test.msg, result.HTTPServers)
+				fmt.Println("-----")
+				fmt.Printf("Expected for %s: %+v\n", test.msg, test.expConf.HTTPServers)
+			}
 
 			g.Expect(result.BackendGroups).To(ConsistOf(test.expConf.BackendGroups))
 			g.Expect(result.Upstreams).To(ConsistOf(test.expConf.Upstreams))
