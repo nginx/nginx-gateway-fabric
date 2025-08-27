@@ -145,11 +145,9 @@ jobs:
         run: |
           echo "Waiting for NGF to be ready..."
           kubectl wait --for=condition=available --timeout=300s deployment/nginx-gateway -n nginx-gateway
-          kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=nginx-gateway-fabric -n nginx-gateway
 
           echo "Waiting for test applications to be ready..."
           kubectl wait --for=condition=available --timeout=300s deployment/test-app-ipv6
-          kubectl wait --for=condition=ready --timeout=300s pod -l app=test-app-ipv6
 
       - name: Deploy IPv6 Test Client
         run: |
