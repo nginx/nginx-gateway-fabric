@@ -591,10 +591,10 @@ func (hpr *hostPathRules) upsertRoute(
 				if !exist {
 					hostRule.Path = path
 					hostRule.PathType = convertPathType(*m.Path.Type)
+					hostRule.Policies = append(hostRule.Policies, pols...)
 				}
 
 				hostRule.GRPC = GRPC
-				hostRule.Policies = append(hostRule.Policies, pols...)
 
 				hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
 					Source:       objectSrc,
