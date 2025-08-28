@@ -680,14 +680,19 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	)
 
-	hrAdvancedRouteWithPolicyAndHeaderMatch, groupsHRAdvancedWithHeaderMatch, routeHRAdvancedWithHeaderMatch := createTestResources(
+	hrAdvancedRouteWithPolicyAndHeaderMatch,
+		groupsHRAdvancedWithHeaderMatch,
+		routeHRAdvancedWithHeaderMatch := createTestResources(
 		"hr-advanced-route-with-policy-header-match",
 		"policy.com",
 		"listener-80-1",
 		pathAndType{path: "/rest", pathType: prefix},
 	)
 
-	pathMatch := helpers.GetPointer(v1.HTTPPathMatch{Value: helpers.GetPointer("/rest"), Type: helpers.GetPointer(v1.PathMatchPathPrefix)})
+	pathMatch := helpers.GetPointer(v1.HTTPPathMatch{
+		Value: helpers.GetPointer("/rest"),
+		Type:  helpers.GetPointer(v1.PathMatchPathPrefix),
+	})
 
 	routeHRAdvancedWithHeaderMatch.Spec.Rules[0].Matches = []v1.HTTPRouteMatch{
 		{
