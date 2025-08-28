@@ -46,6 +46,8 @@ type ParentRefAttachmentStatus struct {
 	// still attach. The backendRef condition would be displayed here.
 	FailedConditions []conditions.Condition
 	// ListenerPort is the port on the Listener that the Route is attached to.
+	// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3813
+	// Needs to be a map of <gatewayNamespacedName/listenerName> to port number
 	ListenerPort v1.PortNumber
 	// Attached indicates if the ParentRef is attached to the Gateway.
 	Attached bool
@@ -308,7 +310,8 @@ func buildSectionNameRefs(
 		}
 
 		// If there is no section name, handle based on whether port is specified
-		// FIXME(sarthyparty): this logic seems to be duplicated in findAttachableListeners so we should refactor this,
+		// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
+		// this logic seems to be duplicated in findAttachableListeners so we should refactor this,
 		// either here or in findAttachableListeners
 		if p.SectionName == nil {
 			// If port is specified, preserve the port-only nature for proper validation
@@ -335,7 +338,6 @@ func buildSectionNameRefs(
 						Idx:         i,
 						Gateway:     CreateParentRefGateway(gw),
 						SectionName: &l.Source.Name,
-						Port:        nil,
 					})
 				}
 			}
@@ -884,9 +886,11 @@ func findAttachableListeners(ref *ParentRef, listeners []*Listener) ([]*Listener
 				if l.Attachable && (ref.Port == nil || l.Source.Port == *ref.Port) {
 					return []*Listener{l}, true
 				}
+				// We return false because we didn't find a listener that matches the port
 				if ref.Port != nil && l.Source.Port != *ref.Port {
 					return nil, false
 				}
+				// Return true because we found a listener that matches the sectionName and port but is not attachable
 				return nil, true
 			}
 		}
