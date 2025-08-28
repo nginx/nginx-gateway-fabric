@@ -687,20 +687,24 @@ func TestBuildConfiguration(t *testing.T) {
 		pathAndType{path: "/rest", pathType: prefix},
 	)
 
-	routeHRAdvancedWithHeaderMatch.Spec.Rules[0].Matches[0].Headers = []v1.HTTPHeaderMatch{
+	pathMatch := helpers.GetPointer(v1.HTTPPathMatch{Value: helpers.GetPointer("/rest"), Type: helpers.GetPointer(v1.PathMatchPathPrefix)})
+
+	routeHRAdvancedWithHeaderMatch.Spec.Rules[0].Matches = []v1.HTTPRouteMatch{
 		{
-			Name:  "Referrer",
-			Type:  helpers.GetPointer(v1.HeaderMatchRegularExpression),
-			Value: "(?i)(mydomain|myotherdomain).+\\.example\\.(cloud|com)",
+			Path: pathMatch,
+			Headers: []v1.HTTPHeaderMatch{
+				{
+					Name:  "Referrer",
+					Type:  helpers.GetPointer(v1.HeaderMatchRegularExpression),
+					Value: "(?i)(mydomain|myotherdomain).+\\.example\\.(cloud|com)",
+				},
+			},
+		},
+		{
+			Path: pathMatch,
 		},
 	}
-
-	hrAdvancedRouteWithPolicyNoHeaderMatch, groupsHRAdvancedNoHeaderMatch, routeHRAdvancedNoHeaderMatch := createTestResources(
-		"hr-advanced-route-with-policy-no-header-match",
-		"policy.com",
-		"listener-80-1",
-		pathAndType{path: "/rest", pathType: prefix},
-	)
+	routeHRAdvancedWithHeaderMatch.Spec.Hostnames = []v1.Hostname{"policy.com"}
 
 	l7RouteWithPolicy.Policies = []*graph.Policy{hrPolicy1, invalidPolicy}
 
@@ -2379,18 +2383,19 @@ func TestBuildConfiguration(t *testing.T) {
 						Valid:       true,
 						Routes: map[graph.RouteKey]*graph.L7Route{
 							graph.CreateRouteKey(hrAdvancedRouteWithPolicyAndHeaderMatch): routeHRAdvancedWithHeaderMatch,
-							graph.CreateRouteKey(hrAdvancedRouteWithPolicyNoHeaderMatch):  routeHRAdvancedNoHeaderMatch,
 						},
 					},
 				}...)
 				gw.Policies = []*graph.Policy{gwPolicy1, gwPolicy2}
+				routeHRAdvancedWithHeaderMatch.Policies = []*graph.Policy{hrPolicy1}
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(hrAdvancedRouteWithPolicyAndHeaderMatch): routeHRAdvancedWithHeaderMatch,
-					graph.CreateRouteKey(hrAdvancedRouteWithPolicyNoHeaderMatch):  routeHRAdvancedNoHeaderMatch,
 				}
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.SSLServers = []VirtualServer{}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
 				conf.HTTPServers = []VirtualServer{
 					{
 						IsDefault: true,
@@ -2417,19 +2422,12 @@ func TestBuildConfiguration(t *testing.T) {
 											},
 										},
 									},
-								},
-								Policies: []policies.Policy{hrPolicy2.Source},
-							},
-							{
-								Path:     "/rest",
-								PathType: PathTypePrefix,
-								MatchRules: []MatchRule{
 									{
-										BackendGroup: groupsHRAdvancedNoHeaderMatch[0],
-										Source:       &hrAdvancedRouteWithPolicyNoHeaderMatch.ObjectMeta,
+										BackendGroup: groupsHRAdvancedWithHeaderMatch[0],
+										Source:       &hrAdvancedRouteWithPolicyAndHeaderMatch.ObjectMeta,
 									},
 								},
-								Policies: []policies.Policy{hrPolicy2.Source},
+								Policies: []policies.Policy{hrPolicy1.Source},
 							},
 						},
 						Port:     80,
@@ -2437,10 +2435,10 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 				}
 				conf.Upstreams = []Upstream{fooUpstream}
-				conf.BackendGroups = []BackendGroup{groupsHRAdvancedWithHeaderMatch[0], groupsHRAdvancedNoHeaderMatch[0]}
+				conf.BackendGroups = []BackendGroup{groupsHRAdvancedWithHeaderMatch[0]}
 				return conf
 			}),
-			msg: "Simple Gateway and HTTPRoute with advanced routing and policies attached",
+			msg: "Gateway and HTTPRoute with policies attached with advanced routing",
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
@@ -2642,12 +2640,6 @@ func TestBuildConfiguration(t *testing.T) {
 				fakeResolver,
 				false,
 			)
-
-			if test.msg == "Simple Gateway and HTTPRoute with advanced routing and policies attached" {
-				fmt.Printf("Results for %s: %+v\n", test.msg, result.HTTPServers)
-				fmt.Println("-----")
-				fmt.Printf("Expected for %s: %+v\n", test.msg, test.expConf.HTTPServers)
-			}
 
 			g.Expect(result.BackendGroups).To(ConsistOf(test.expConf.BackendGroups))
 			g.Expect(result.Upstreams).To(ConsistOf(test.expConf.Upstreams))
