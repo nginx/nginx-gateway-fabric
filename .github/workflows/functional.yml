@@ -16,6 +16,7 @@ defaults:
 
 env:
   PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
+  GOPROXY: ${{ github.repository_owner == 'nginx' && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_DEV_ENDPOINT) || 'direct' }}
 
 permissions:
   contents: read
