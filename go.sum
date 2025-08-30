@@ -145,8 +145,8 @@ github.com/nginx/telemetry-exporter v0.1.4 h1:3ikgKlyz/O57oaBLkxCInMjr74AhGTKr9r
 github.com/nginx/telemetry-exporter v0.1.4/go.mod h1:bl6qmsxgk4a9D0X8R5E3sUNXN2iECPEK1JNbRLhN5C4=
 github.com/nginxinc/nginx-plus-go-client/v2 v2.0.1 h1:5VVK38bnELMDWnwfF6dSv57ResXh9AUzeDa72ENj94o=
 github.com/nginxinc/nginx-plus-go-client/v2 v2.0.1/go.mod h1:He+1izxYxVVO5/C9ZTukwOpvkAx5eS19nRQgKXDhX5I=
-github.com/onsi/ginkgo/v2 v2.25.1 h1:Fwp6crTREKM+oA6Cz4MsO8RhKQzs2/gOIVOUscMAfZY=
-github.com/onsi/ginkgo/v2 v2.25.1/go.mod h1:ppTWQ1dh9KM/F1XgpeRqelR+zHVwV81DGRSDnFxK7Sk=
+github.com/onsi/ginkgo/v2 v2.25.2 h1:hepmgwx1D+llZleKQDMEvy8vIlCxMGt7W5ZxDjIEhsw=
+github.com/onsi/ginkgo/v2 v2.25.2/go.mod h1:43uiyQC4Ed2tkOzLsEYm7hnrb7UJTWHYNsuy3bG/snE=
 github.com/onsi/gomega v1.38.2 h1:eZCjf2xjZAqe+LeWvKb5weQ+NcPwX84kqJ0cZNxok2A=
 github.com/onsi/gomega v1.38.2/go.mod h1:W2MJcYxRGV63b418Ai34Ud0hEdTVXq9NW9+Sx6uXf3k=
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
