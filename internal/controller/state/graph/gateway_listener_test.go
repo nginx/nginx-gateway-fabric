@@ -383,6 +383,20 @@ func TestGetAndValidateListenerSupportedKinds(t *testing.T) {
 			expected:  []v1.RouteGroupKind{HTTPRouteGroupKind},
 		},
 		{
+			protocol: v1.HTTPProtocolType,
+			kind: []v1.RouteGroupKind{
+				HTTPRouteGroupKind,
+				GRPCRouteGroupKind,
+				GRPCRouteGroupKind,
+			},
+			expectErr: false,
+			name:      "handle duplicate kinds",
+			expected: []v1.RouteGroupKind{
+				HTTPRouteGroupKind,
+				GRPCRouteGroupKind,
+			},
+		},
+		{
 			protocol: v1.TLSProtocolType,
 			kind: []v1.RouteGroupKind{
 				HTTPRouteGroupKind,

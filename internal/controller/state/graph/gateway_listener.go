@@ -287,7 +287,8 @@ func getAndValidateListenerSupportedKinds(listener v1.Listener) (
 	}
 
 	if listener.AllowedRoutes != nil && listener.AllowedRoutes.Kinds != nil {
-		supportedKinds = make([]v1.RouteGroupKind, 0, len(listener.AllowedRoutes.Kinds))
+		unique := make(map[string]struct{})
+		supportedKinds = make([]v1.RouteGroupKind, 0)
 		for _, kind := range listener.AllowedRoutes.Kinds {
 			if !validProtocolRouteKind(kind) {
 				group := v1.GroupName
@@ -298,7 +299,15 @@ func getAndValidateListenerSupportedKinds(listener v1.Listener) (
 				conds = append(conds, conditions.NewListenerInvalidRouteKinds(msg)...)
 				continue
 			}
-			supportedKinds = append(supportedKinds, kind)
+			// Use group/kind as key for uniqueness
+			key := string(kind.Kind)
+			if kind.Group != nil {
+				key = string(*kind.Group) + "/" + key
+			}
+			if _, exists := unique[key]; !exists {
+				unique[key] = struct{}{}
+				supportedKinds = append(supportedKinds, kind)
+			}
 		}
 		return conds, supportedKinds
 	}
