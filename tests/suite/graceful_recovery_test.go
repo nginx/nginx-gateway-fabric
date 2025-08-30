@@ -518,42 +518,93 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 })
 
 func expectRequestToSucceed(appURL, address string, responseBodyMessage string) error {
+	requestDetails := fmt.Sprintf("URL: %s, Address: %s, Headers: %v, QueryParams: %v\n", appURL, address, nil, nil)
+	GinkgoWriter.Printf("Sending GET request: %s", requestDetails)
 	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
+	GinkgoWriter.Printf(
+		"For the request ExpectedToSucceed %vReceived response: status: %d, body: %s, err: %v\n",
+		requestDetails,
+		status,
+		body,
+		err,
+	)
+	if err != nil {
+		GinkgoWriter.Printf(
+			"ERROR occurred during getting response for request: %verror: %s\n",
+			requestDetails,
+			err,
+		)
+	}
 
 	if status != http.StatusOK {
-		return fmt.Errorf("http status was not 200, got %d: %w", status, err)
+		statusErr := fmt.Errorf("http status was not 200, got %d: %w", status, err)
+		GinkgoWriter.Printf(
+			"ERROR: Returned status is not OK for request %v it is: %v, returning error: %s\n",
+			requestDetails,
+			status,
+			statusErr,
+		)
+
+		return statusErr
 	}
 
 	if !strings.Contains(body, responseBodyMessage) {
-		return fmt.Errorf("expected response body to contain correct body message, got: %s", body)
+		bodyErr := fmt.Errorf("expected response body to contain correct body message, got: %s", body)
+		GinkgoWriter.Printf("ERROR in Body content: %v\n", bodyErr)
+
+		return bodyErr
 	}
 
 	return err
 }
 
 func expectRequestToFail(appURL, address string) error {
+	requestDetails := fmt.Sprintf("URL: %s, Address: %s, Headers: %v, QueryParams: %v\n", appURL, address, nil, nil)
+	GinkgoWriter.Printf("\n\nSending GET request: %s", requestDetails)
 	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
+	GinkgoWriter.Printf(
+		"For the request ExpectedToFail %vReceived response: status: %d, body: %s, err: %v\n",
+		requestDetails,
+		status,
+		body,
+		err,
+	)
+	if err != nil {
+		GinkgoWriter.Printf("ERROR occurred during getting response: %v\n", err)
+	}
+
 	if status != 0 {
-		return errors.New("expected http status to be 0")
+		statusErr := errors.New("expected http status to be 0")
+		GinkgoWriter.Printf("ERROR: Unexpected status: %v\n", statusErr)
+
+		return statusErr
 	}
 
 	if body != "" {
-		return fmt.Errorf("expected response body to be empty, instead received: %s", body)
+		bodyErr := fmt.Errorf("expected response body to be empty, instead received: %s", body)
+		GinkgoWriter.Printf("ERROR: Body has non-empty content: %v\n", bodyErr)
+
+		return bodyErr
 	}
 
 	if err == nil {
-		return errors.New("expected request to error")
+		defaultErr := errors.New("expected request to error")
+		GinkgoWriter.Printf("ERROR: Default test error: %v\n", defaultErr)
+
+		return defaultErr
 	}
 
 	return nil
 }
 
 func getNginxErrorLogs(nginxPodName, namespace string) string {
+	GinkgoWriter.Printf("Getting NGINX logs for Pod %q in Namespace %q\n", nginxPodName, namespace)
 	nginxLogs, err := resourceManager.GetPodLogs(
 		namespace,
 		nginxPodName,
 		&core.PodLogOptions{Container: nginxContainerName},
 	)
+	GinkgoWriter.Printf("Logs error: %v\n", err)
 	Expect(err).ToNot(HaveOccurred())
 
 	errPrefixes := []string{
@@ -628,9 +679,12 @@ func checkNGFContainerLogsForErrors(ngfPodName string) {
 		ngfPodName,
 		&core.PodLogOptions{Container: ngfContainerName},
 	)
+	GinkgoWriter.Printf("Error get Pod logs: %v\n", err)
 	Expect(err).ToNot(HaveOccurred())
 
 	for _, line := range strings.Split(ngfLogs, "\n") {
-		Expect(line).ToNot(ContainSubstring("\"level\":\"error\""), line)
+		strToContain := "\"level\":\"error\""
+		GinkgoWriter.Printf("Checking NGF log line: %s to not contain %q\n", line, strToContain)
+		Expect(line).ToNot(ContainSubstring(strToContain), line)
 	}
 }
