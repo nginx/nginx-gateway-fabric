@@ -84,11 +84,11 @@ func GetBuildInfo() (commitHash string, commitTime string, dirtyBuild string) {
 }
 
 // AddNginxLogsAndEventsToReport adds nginx logs and events from the namespace to the report if the spec failed.
-func AddNginxLogsAndEventsToReport(rm ResourceManager, namespace string) {
+func AddNginxLogsAndEventsToReport(rm ResourceManager, namespace string, opts ...Option) {
 	if CurrentSpecReport().Failed() {
 		var returnLogs string
 
-		nginxPodNames, _ := GetReadyNginxPodNames(rm.K8sClient, namespace, rm.TimeoutConfig.GetStatusTimeout)
+		nginxPodNames, _ := rm.GetReadyNginxPodNames(namespace, rm.TimeoutConfig.GetStatusTimeout, opts...)
 
 		for _, nginxPodName := range nginxPodNames {
 			returnLogs += fmt.Sprintf("Logs for Nginx Pod %s:\n", nginxPodName)

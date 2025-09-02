@@ -11,3 +11,12 @@ func WithLoggingDisabled() Option {
 		opts.logEnabled = false
 	}
 }
+
+func LogOptions(opts ...Option) *Options {
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	return options
+}
