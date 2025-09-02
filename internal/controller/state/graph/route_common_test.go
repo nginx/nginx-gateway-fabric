@@ -3737,30 +3737,30 @@ func TestFindAttachableListenersWithPort(t *testing.T) {
 	port443 := gatewayv1.PortNumber(443)
 	port8080 := gatewayv1.PortNumber(8080)
 
-	listeners := []*Listener{
-		{
-			Name:       "http-80",
-			Attachable: true,
-			Source: gatewayv1.Listener{
-				Name: "http-80",
-				Port: port80,
-			},
+	httpListener := &Listener{
+		Name:       "http-80",
+		Attachable: true,
+		Source: gatewayv1.Listener{
+			Name: "http-80",
+			Port: port80,
 		},
-		{
-			Name:       "https-443",
-			Attachable: true,
-			Source: gatewayv1.Listener{
-				Name: "https-443",
-				Port: port443,
-			},
+	}
+
+	httpsListener := &Listener{
+		Name:       "https-443",
+		Attachable: true,
+		Source: gatewayv1.Listener{
+			Name: "https-443",
+			Port: port443,
 		},
-		{
-			Name:       "http-8080",
-			Attachable: false, // not attachable
-			Source: gatewayv1.Listener{
-				Name: "http-8080",
-				Port: port8080,
-			},
+	}
+
+	nonAttachableListener := &Listener{
+		Name:       "http-8080",
+		Attachable: false, // not attachable
+		Source: gatewayv1.Listener{
+			Name: "http-8080",
+			Port: port8080,
 		},
 	}
 
@@ -3775,7 +3775,7 @@ func TestFindAttachableListenersWithPort(t *testing.T) {
 			parentRef: &ParentRef{
 				Port: &port80,
 			},
-			expectedListeners:      []*Listener{listeners[0]}, // only http-80
+			expectedListeners:      []*Listener{httpListener},
 			expectedListenerExists: true,
 		},
 		{
@@ -3783,7 +3783,7 @@ func TestFindAttachableListenersWithPort(t *testing.T) {
 			parentRef: &ParentRef{
 				Port: &port443,
 			},
-			expectedListeners:      []*Listener{listeners[1]}, // only https-443
+			expectedListeners:      []*Listener{httpsListener},
 			expectedListenerExists: true,
 		},
 		{
@@ -3807,7 +3807,7 @@ func TestFindAttachableListenersWithPort(t *testing.T) {
 			parentRef: &ParentRef{
 				Port: nil,
 			},
-			expectedListeners:      []*Listener{listeners[0], listeners[1]}, // both attachable listeners
+			expectedListeners:      []*Listener{httpListener, httpsListener},
 			expectedListenerExists: true,
 		},
 		{
@@ -3816,7 +3816,7 @@ func TestFindAttachableListenersWithPort(t *testing.T) {
 				SectionName: helpers.GetPointer(gatewayv1.SectionName("http-80")),
 				Port:        &port80,
 			},
-			expectedListeners:      []*Listener{listeners[0]},
+			expectedListeners:      []*Listener{httpListener},
 			expectedListenerExists: true,
 		},
 		{
@@ -3844,7 +3844,10 @@ func TestFindAttachableListenersWithPort(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			attachableListeners, listenerExists := findAttachableListeners(tt.parentRef, listeners)
+			attachableListeners, listenerExists := findAttachableListeners(
+				tt.parentRef,
+				[]*Listener{httpListener, httpsListener, nonAttachableListener},
+			)
 
 			g.Expect(listenerExists).To(Equal(tt.expectedListenerExists))
 			g.Expect(attachableListeners).To(HaveLen(len(tt.expectedListeners)))

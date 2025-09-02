@@ -323,7 +323,7 @@ func buildSectionNameRefs(
 					Port:        p.Port,
 				})
 			} else {
-				// If no port and no sectionName, expand to all listeners
+				// If there is no port and section name, we create ParentRefs for each listener in the gateway
 				for _, l := range gw.Listeners {
 					k.sectionName = string(l.Source.Name)
 
