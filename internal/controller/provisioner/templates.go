@@ -97,5 +97,5 @@ data_plane_config:
             max_interval: 1.5s
             max_elapsed_time: 3s
             randomization_factor: 0.5
-            multiplier: .5
+            multiplier: 1.5
 `
