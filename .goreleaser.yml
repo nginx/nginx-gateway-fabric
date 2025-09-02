@@ -55,4 +55,4 @@ milestones:
   - close: true
 
 snapshot:
-  name_template: "edge"
+  version_template: "edge"
