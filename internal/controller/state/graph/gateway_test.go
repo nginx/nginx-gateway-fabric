@@ -893,7 +893,7 @@ func TestBuildGateway(t *testing.T) {
 							Routes:      map[RouteKey]*L7Route{},
 							L4Routes:    map[L4RouteKey]*L4Route{},
 							Conditions: conditions.NewListenerInvalidCertificateRef(
-								`tls.certificateRefs[0]: Invalid value: test/does-not-exist: secret does not exist`,
+								`tls.certificateRefs[0]: Invalid value: {"Namespace":"test","Name":"does-not-exist"}: secret does not exist`,
 							),
 							SupportedKinds: supportedKindsForListeners,
 						},

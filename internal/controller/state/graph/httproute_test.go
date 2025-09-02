@@ -877,8 +877,8 @@ func TestBuildHTTPRoute(t *testing.T) {
 				Conditions: []conditions.Condition{
 					conditions.NewRouteResolvedRefsInvalidFilter(
 						"spec.rules[0].filters[0].extensionRef: Not found: " +
-							"v1.LocalObjectReference{Group:\"gateway.nginx.org\", Kind:\"SnippetsFilter\", " +
-							"Name:\"does-not-exist\"}",
+							`{"group":"gateway.nginx.org","kind":"SnippetsFilter",` +
+							`"name":"does-not-exist"}`,
 					),
 				},
 				Spec: L7RouteSpec{
@@ -920,8 +920,8 @@ func TestBuildHTTPRoute(t *testing.T) {
 					),
 					conditions.NewRouteResolvedRefsInvalidFilter(
 						"spec.rules[0].filters[1].extensionRef: Not found: " +
-							"v1.LocalObjectReference{Group:\"gateway.nginx.org\", Kind:\"SnippetsFilter\", " +
-							"Name:\"does-not-exist\"}",
+							`{"group":"gateway.nginx.org","kind":"SnippetsFilter",` +
+							`"name":"does-not-exist"}`,
 					),
 				},
 				Spec: L7RouteSpec{
