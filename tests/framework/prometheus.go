@@ -458,7 +458,7 @@ func CreateEndTimeFinder(
 // CreateResponseChecker returns a function that checks if there is a successful response from a url.
 func CreateResponseChecker(url, address string, requestTimeout time.Duration) func() error {
 	return func() error {
-		status, _, err := Get(url, address, requestTimeout, nil, nil)
+		status, _, err := Get(url, address, requestTimeout, nil, nil, true)
 		if err != nil {
 			return fmt.Errorf("bad response: %w", err)
 		}

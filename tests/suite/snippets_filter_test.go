@@ -271,29 +271,46 @@ func checkHTTPRouteToHaveGatewayNotProgrammedCond(httpRouteNsName types.Namespac
 	var err error
 
 	if err = k8sClient.Get(ctx, httpRouteNsName, &hr); err != nil {
+		GinkgoWriter.Printf("ERROR: failed to get HTTPRoute: %v\n", err)
+
 		return err
 	}
 
 	if len(hr.Status.Parents) != 1 {
-		return fmt.Errorf("httproute has %d parent statuses, expected 1", len(hr.Status.Parents))
+		tooManyParentStatusesErr := fmt.Errorf("httproute has %d parent statuses, expected 1", len(hr.Status.Parents))
+		GinkgoWriter.Printf("ERROR: %v\n", tooManyParentStatusesErr)
+
+		return tooManyParentStatusesErr
 	}
 
 	parent := hr.Status.Parents[0]
 	if parent.Conditions == nil {
-		return fmt.Errorf("expected parent conditions to not be nil")
+		nilConditionErr := fmt.Errorf("expected parent conditions to not be nil")
+		GinkgoWriter.Printf("ERROR: %v\n", nilConditionErr)
+
+		return nilConditionErr
 	}
 
 	cond := parent.Conditions[1]
 	if cond.Type != string(v1.GatewayConditionAccepted) {
-		return fmt.Errorf("expected condition type to be Accepted, got %s", cond.Type)
+		wrongTypeErr := fmt.Errorf("expected condition type to be Accepted, got %s", cond.Type)
+		GinkgoWriter.Printf("ERROR: %v\n", wrongTypeErr)
+
+		return wrongTypeErr
 	}
 
 	if cond.Status != metav1.ConditionFalse {
-		return fmt.Errorf("expected condition status to be False, got %s", cond.Status)
+		wrongStatusErr := fmt.Errorf("expected condition status to be False, got %s", cond.Status)
+		GinkgoWriter.Printf("ERROR: %v\n", wrongStatusErr)
+
+		return wrongStatusErr
 	}
 
 	if cond.Reason != string(conditions.RouteReasonGatewayNotProgrammed) {
-		return fmt.Errorf("expected condition reason to be GatewayNotProgrammed, got %s", cond.Reason)
+		wrongReasonErr := fmt.Errorf("expected condition reason to be GatewayNotProgrammed, got %s", cond.Reason)
+		GinkgoWriter.Printf("ERROR: %v\n", wrongReasonErr)
+
+		return wrongReasonErr
 	}
 
 	return nil
@@ -312,33 +329,50 @@ func checkForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedNa
 	var err error
 
 	if err = k8sClient.Get(ctx, snippetsFilterNsNames, &sf); err != nil {
+		GinkgoWriter.Printf("ERROR: failed to get SnippetsFilter: %v\n", err)
+
 		return err
 	}
 
 	if len(sf.Status.Controllers) != 1 {
-		return fmt.Errorf("snippetsFilter has %d controller statuses, expected 1", len(sf.Status.Controllers))
+		tooManyStatusesErr := fmt.Errorf("snippetsFilter has %d controller statuses, expected 1", len(sf.Status.Controllers))
+		GinkgoWriter.Printf("ERROR: %v\n", tooManyStatusesErr)
+
+		return tooManyStatusesErr
 	}
 
 	status := sf.Status.Controllers[0]
 	if status.ControllerName != ngfControllerName {
-		return fmt.Errorf("expected controller name to be %s, got %s", ngfControllerName, status.ControllerName)
+		wrongNameErr := fmt.Errorf("expected controller name to be %s, got %s", ngfControllerName, status.ControllerName)
+		GinkgoWriter.Printf("ERROR: %v\n", wrongNameErr)
+
+		return wrongNameErr
 	}
 
 	condition := status.Conditions[0]
 	if condition.Type != string(ngfAPI.SnippetsFilterConditionTypeAccepted) {
-		return fmt.Errorf("expected condition type to be Accepted, got %s", condition.Type)
+		wrongTypeErr := fmt.Errorf("expected condition type to be Accepted, got %s", condition.Type)
+		GinkgoWriter.Printf("ERROR: %v\n", wrongTypeErr)
+
+		return wrongTypeErr
 	}
 
 	if status.Conditions[0].Status != metav1.ConditionTrue {
-		return fmt.Errorf("expected condition status to be %s, got %s", metav1.ConditionTrue, condition.Status)
+		wrongStatusErr := fmt.Errorf("expected condition status to be %s, got %s", metav1.ConditionTrue, condition.Status)
+		GinkgoWriter.Printf("ERROR: %v\n", wrongStatusErr)
+
+		return wrongStatusErr
 	}
 
 	if status.Conditions[0].Reason != string(ngfAPI.SnippetsFilterConditionReasonAccepted) {
-		return fmt.Errorf(
+		wrongReasonErr := fmt.Errorf(
 			"expected condition reason to be %s, got %s",
 			ngfAPI.SnippetsFilterConditionReasonAccepted,
 			condition.Reason,
 		)
+		GinkgoWriter.Printf("ERROR: %v\n", wrongReasonErr)
+
+		return wrongReasonErr
 	}
 
 	return nil

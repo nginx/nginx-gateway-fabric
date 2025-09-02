@@ -518,7 +518,7 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 })
 
 func expectRequestToSucceed(appURL, address string, responseBodyMessage string) error {
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
+	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil, true)
 
 	if status != http.StatusOK {
 		return fmt.Errorf("http status was not 200, got %d: %w", status, err)
@@ -531,8 +531,16 @@ func expectRequestToSucceed(appURL, address string, responseBodyMessage string) 
 	return err
 }
 
+// The function is expecting the request to fail (hence the name) because NGINX is not there to route the request.
+// The purpose of the graceful recovery test is to simulate various failure scenarios including NGINX
+// container restarts, NGF pod restarts, and Kubernetes node restarts to show the system can recover
+// after these real world scenarios and resume serving application traffic after recovery.
+// In this case, we verify that our requests fail and then that eventually are successful again - verifying that
+// NGINX went down and came back up again.
+// We only want an error returned from this particular function if it does not appear that NGINX has
+// stopped serving traffic.
 func expectRequestToFail(appURL, address string) error {
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
+	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil, true)
 	if status != 0 {
 		return errors.New("expected http status to be 0")
 	}
