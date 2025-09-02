@@ -124,7 +124,7 @@ func TestValidator_Validate(t *testing.T) {
 				return p
 			}),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.keepAlive.timeout: Invalid value: \"null\": " +
+				conditions.NewPolicyInvalid("spec.keepAlive.timeout: Invalid value: null: " +
 					"server timeout must be set if header timeout is set"),
 			},
 		},
