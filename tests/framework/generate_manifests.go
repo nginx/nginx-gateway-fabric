@@ -7,6 +7,7 @@ import (
 	"io"
 	"text/template"
 
+	. "github.com/onsi/ginkgo/v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -221,6 +222,7 @@ func GenerateScaleListenerObjects(numListeners int, tls bool) (ScaleObjects, err
 }
 
 func generateSecrets(secrets []string) ([]client.Object, error) {
+	GinkgoWriter.Printf("Generating secrets\n")
 	objects := make([]client.Object, 0, len(secrets))
 
 	for _, secret := range secrets {
@@ -237,6 +239,7 @@ func generateSecrets(secrets []string) ([]client.Object, error) {
 
 		objects = append(objects, objs...)
 	}
+	GinkgoWriter.Printf("Generated %d secrets\n", len(objects))
 
 	return objects, nil
 }
