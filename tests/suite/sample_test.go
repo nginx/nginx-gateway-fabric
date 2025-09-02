@@ -61,7 +61,7 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 
 		Eventually(
 			func() error {
-				status, body, err := framework.Get(url, address, timeoutConfig.RequestTimeout, nil, nil)
+				status, body, err := framework.Get(url, address, timeoutConfig.RequestTimeout, nil, nil, true)
 				if err != nil {
 					return err
 				}

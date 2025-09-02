@@ -35,7 +35,14 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 		var nginxGateway ngfAPI.NginxGateway
 
 		if err := k8sClient.Get(ctx, nsname, &nginxGateway); err != nil {
-			return nginxGateway, fmt.Errorf("failed to get nginxGateway: %w", err)
+			gatewayErr := fmt.Errorf("failed to get nginxGateway: %w", err)
+			GinkgoWriter.Printf(
+				"ERROR occurred during getting NGINX Gateway in namespace %q: %v\n",
+				nsname.Namespace,
+				gatewayErr,
+			)
+
+			return nginxGateway, gatewayErr
 		}
 
 		return nginxGateway, nil
@@ -43,14 +50,20 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 
 	verifyNginxGatewayConditions := func(ng ngfAPI.NginxGateway) error {
 		if ng.Status.Conditions == nil {
-			return errors.New("nginxGateway has no conditions")
+			noConditionsErr := errors.New("nginxGateway has no conditions")
+			GinkgoWriter.Printf("ERROR: %v\n", noConditionsErr)
+
+			return noConditionsErr
 		}
 
 		if len(ng.Status.Conditions) != 1 {
-			return fmt.Errorf(
+			tooManyConditionsErr := fmt.Errorf(
 				"expected nginxGateway to have only one condition, instead has %d conditions",
 				len(ng.Status.Conditions),
 			)
+			GinkgoWriter.Printf("ERROR: %v\n", tooManyConditionsErr)
+
+			return tooManyConditionsErr
 		}
 
 		return nil
@@ -72,22 +85,30 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 		condition := ng.Status.Conditions[0]
 
 		if condition.Type != "Valid" {
-			return fmt.Errorf(
+			invalidConditionTypeErr := fmt.Errorf(
 				"expected nginxGateway condition type to be Valid, instead has type %s",
 				condition.Type,
 			)
+			GinkgoWriter.Printf("ERROR: %v\n", invalidConditionTypeErr)
+
+			return invalidConditionTypeErr
 		}
 
 		if condition.Reason != "Valid" {
-			return fmt.Errorf("expected nginxGateway reason to be Valid, instead is %s", condition.Reason)
+			invalidReasonErr := fmt.Errorf("expected nginxGateway reason to be Valid, instead is %s", condition.Reason)
+			GinkgoWriter.Printf("ERROR: %v\n", invalidReasonErr)
+
+			return invalidReasonErr
 		}
 
 		if condition.ObservedGeneration != expObservedGen {
-			return fmt.Errorf(
+			observedGenerationErr := fmt.Errorf(
 				"expected nginxGateway observed generation to be %d, instead is %d",
 				expObservedGen,
 				condition.ObservedGeneration,
 			)
+			GinkgoWriter.Printf("ERROR: %v\n", observedGenerationErr)
+			return observedGenerationErr
 		}
 
 		return nil
@@ -105,7 +126,10 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 		}
 
 		if len(podNames) != 1 {
-			return "", fmt.Errorf("expected 1 pod name, got %d", len(podNames))
+			tooManyPodsErr := fmt.Errorf("expected 1 pod name, got %d", len(podNames))
+			GinkgoWriter.Printf("ERROR: %v\n", tooManyPodsErr)
+
+			return "", tooManyPodsErr
 		}
 
 		return podNames[0], nil
