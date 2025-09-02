@@ -24,10 +24,7 @@ func Get(
 	headers, queryParams map[string]string,
 	opts ...Option,
 ) (int, string, error) {
-	options := &Options{logEnabled: true}
-	for _, opt := range opts {
-		opt(options)
-	}
+	options := LogOptions(opts...)
 
 	resp, err := makeRequest(http.MethodGet, url, address, nil, timeout, headers, queryParams, opts...)
 	if err != nil {
@@ -99,11 +96,7 @@ func makeRequest(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	options := &Options{logEnabled: true}
-
-	for _, opt := range opts {
-		opt(options)
-	}
+	options := LogOptions(opts...)
 	if options.logEnabled {
 		requestDetails := fmt.Sprintf(
 			"Method: %s, URL: %s, Address: %s, Headers: %v, QueryParams: %v\n",
