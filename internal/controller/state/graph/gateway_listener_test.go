@@ -221,7 +221,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 				},
 			},
 			expected: conditions.NewListenerUnsupportedValue(
-				"tls.certificateRefs: Too many: 2: must have at most 1 items",
+				"tls.certificateRefs: Too many: 2: must have at most 1 item",
 			),
 			name: "too many cert refs",
 		},
