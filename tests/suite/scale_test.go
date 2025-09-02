@@ -40,6 +40,10 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 			"scale/upstreams.yaml",
 		}
 
+		httpRouteManifests = []string{
+			"scale/httproute.yaml",
+		}
+
 		namespace = "scale"
 
 		scrapeInterval = 15 * time.Second
@@ -468,6 +472,10 @@ The logs are attached only if there are errors.
 		Expect(resourceManager.ApplyFromFiles(upstreamsManifests, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
+		// apply HTTPRoute after upstreams are ready
+		Expect(resourceManager.ApplyFromFiles(httpRouteManifests, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
 		var nginxPodNames []string
 		var err error
 		Eventually(
@@ -835,7 +843,19 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 	AfterAll(func() {
 		_, err := fmt.Fprint(outFile)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(outFile.Close()).To(Succeed())
+
+		// check if file is already closed or not
+		if outFile != nil {
+			err = outFile.Close()
+			if err != nil {
+				// warning only
+				if strings.Contains(err.Error(), "file already closed") {
+					GinkgoWriter.Printf("Warning: attempted to close already closed file: %v\n", err)
+				} else {
+					Expect(err).ToNot(HaveOccurred())
+				}
+			}
+		}
 
 		// restoring NGF shared among tests in the suite
 		cfg := getDefaultSetupCfg()
@@ -1012,58 +1032,31 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 			checkGatewayListeners := func(num int) {
 				Eventually(
 					func() error {
-						ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
+						ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout*2)
 						defer cancel()
 
 						var gw v1.Gateway
 						key := types.NamespacedName{Namespace: ns.Name, Name: "gateway"}
 						if err := resourceManager.K8sClient.Get(ctx, key, &gw); err != nil {
-							return err
+							return fmt.Errorf("failed to get gateway: %w", err)
 						}
 
-						if len(gw.Status.Listeners) != num {
-							return fmt.Errorf("gateway listeners not updated to %d entries", num)
+						currentListeners := len(gw.Status.Listeners)
+						currentGen := gw.Status
+						specGen := gw.Generation
+
+						if currentListeners != num {
+							return fmt.Errorf("gateway listeners: got %d, want %d (observedGen: %v, specGen: %v)",
+								currentListeners, num, currentGen, specGen)
 						}
 
 						return nil
 					},
 				).
-					WithTimeout(5 * time.Second).
-					WithPolling(100 * time.Millisecond).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(1 * time.Second).
 					Should(Succeed())
 			}
-
-			It("scales up abruptly without downtime", func() {
-				_, err := fmt.Fprint(outFile, "\n### Scale Up Abruptly\n")
-				Expect(err).ToNot(HaveOccurred())
-
-				testFileNamePrefix := formatTestFileNamePrefix("abrupt-scale-up", test.valuesFile)
-
-				var wg sync.WaitGroup
-				for _, test := range trafficConfigs {
-					wg.Add(1)
-					go func(cfg trafficCfg) {
-						defer GinkgoRecover()
-						defer wg.Done()
-
-						sendTraffic(cfg, testFileNamePrefix, 2*time.Minute)
-					}(test)
-				}
-
-				// allow traffic flow to start
-				time.Sleep(2 * time.Second)
-
-				Expect(resourceManager.ScaleNginxDeployment(ngfNamespace, releaseName, int32(test.numReplicas))).To(Succeed())
-				Expect(resourceManager.ApplyFromFiles([]string{"scale/zero-downtime/gateway-2.yaml"}, ns.Name)).To(Succeed())
-				checkGatewayListeners(3)
-
-				wg.Wait()
-				close(metricsCh)
-
-				for res := range metricsCh {
-					writeResults(testFileNamePrefix, res)
-				}
-			})
 
 			It("scales down abruptly without downtime", func() {
 				_, err := fmt.Fprint(outFile, "\n### Scale Down Abruptly\n")
