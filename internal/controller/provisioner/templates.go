@@ -89,4 +89,13 @@ collector:
             "ngf":
                 receivers: ["host_metrics", "nginx_metrics"]
                 exporters: ["prometheus"]
-{{- end }}`
+{{- end }}
+data_plane_config:
+    nginx:
+        reload_backoff:
+            initial_interval: .5s
+            max_interval: 1.5s
+            max_elapsed_time: 3s
+            randomization_factor: 0.5
+            multiplier: 1.5
+`
