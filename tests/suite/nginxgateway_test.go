@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
-	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
 var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), func() {
@@ -34,15 +33,8 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 
 		var nginxGateway ngfAPI.NginxGateway
 
-		if err := k8sClient.Get(ctx, nsname, &nginxGateway); err != nil {
-			gatewayErr := fmt.Errorf("failed to get nginxGateway: %w", err)
-			GinkgoWriter.Printf(
-				"ERROR occurred during getting NGINX Gateway in namespace %q: %v\n",
-				nsname.Namespace,
-				gatewayErr,
-			)
-
-			return nginxGateway, gatewayErr
+		if err := resourceManager.Get(ctx, nsname, &nginxGateway); err != nil {
+			return nginxGateway, fmt.Errorf("failed to get nginxGateway: %w", err)
 		}
 
 		return nginxGateway, nil
@@ -115,8 +107,7 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 	}
 
 	getNGFPodName := func() (string, error) {
-		podNames, err := framework.GetReadyNGFPodNames(
-			k8sClient,
+		podNames, err := resourceManager.GetReadyNGFPodNames(
 			ngfNamespace,
 			releaseName,
 			timeoutConfig.GetStatusTimeout,
