@@ -315,7 +315,7 @@ jobs:
     name: Package and Publish Helm Chart
     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, helm-tests]
-    if: ${{ inputs.is_production_release || (github.event_name == 'push' && ! startsWith(github.ref, 'refs/heads/release-')) }}
+    if: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) || (github.event_name == 'push' && ! startsWith(github.ref, 'refs/heads/release-')) }}
     permissions:
       contents: read
       packages: write # for helm to push to GHCR
