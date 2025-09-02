@@ -46,7 +46,7 @@ type ParentRefAttachmentStatus struct {
 	// still attach. The backendRef condition would be displayed here.
 	FailedConditions []conditions.Condition
 	// ListenerPort is the port on the Listener that the Route is attached to.
-	// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3813
+	// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
 	// Needs to be a map of <gatewayNamespacedName/listenerName> to port number
 	ListenerPort v1.PortNumber
 	// Attached indicates if the ParentRef is attached to the Gateway.
