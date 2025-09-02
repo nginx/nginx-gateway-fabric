@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -844,12 +845,9 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 		_, err := fmt.Fprint(outFile)
 		Expect(err).ToNot(HaveOccurred())
 
-		// check if file is already closed or not
 		if outFile != nil {
-			err = outFile.Close()
-			if err != nil {
-				// warning only
-				if strings.Contains(err.Error(), "file already closed") {
+			if err := outFile.Close(); err != nil {
+				if errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "file already closed") {
 					GinkgoWriter.Printf("Warning: attempted to close already closed file: %v\n", err)
 				} else {
 					Expect(err).ToNot(HaveOccurred())
@@ -1048,7 +1046,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 						return nil
 					},
 				).
-					WithTimeout(timeoutConfig.RequestTimeout).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
 					WithPolling(1 * time.Second).
 					Should(Succeed())
 			}
