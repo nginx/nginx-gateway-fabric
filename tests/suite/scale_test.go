@@ -1041,13 +1041,8 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 							return fmt.Errorf("failed to get gateway: %w", err)
 						}
 
-						currentListeners := len(gw.Status.Listeners)
-						currentGen := gw.Status
-						specGen := gw.Generation
-
-						if currentListeners != num {
-							return fmt.Errorf("gateway listeners: got %d, want %d (observedGen: %v, specGen: %v)",
-								currentListeners, num, currentGen, specGen)
+						if len(gw.Status.Listeners) != num {
+							return fmt.Errorf("gateway listeners not updated to %d entries", num)
 						}
 
 						return nil
@@ -1057,6 +1052,38 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 					WithPolling(1 * time.Second).
 					Should(Succeed())
 			}
+
+			It("scales up abruptly without downtime", func() {
+				_, err := fmt.Fprint(outFile, "\n### Scale Up Abruptly\n")
+				Expect(err).ToNot(HaveOccurred())
+
+				testFileNamePrefix := formatTestFileNamePrefix("abrupt-scale-up", test.valuesFile)
+
+				var wg sync.WaitGroup
+				for _, test := range trafficConfigs {
+					wg.Add(1)
+					go func(cfg trafficCfg) {
+						defer GinkgoRecover()
+						defer wg.Done()
+
+						sendTraffic(cfg, testFileNamePrefix, 2*time.Minute)
+					}(test)
+				}
+
+				// allow traffic flow to start
+				time.Sleep(2 * time.Second)
+
+				Expect(resourceManager.ScaleNginxDeployment(ngfNamespace, releaseName, int32(test.numReplicas))).To(Succeed())
+				Expect(resourceManager.ApplyFromFiles([]string{"scale/zero-downtime/gateway-2.yaml"}, ns.Name)).To(Succeed())
+				checkGatewayListeners(3)
+
+				wg.Wait()
+				close(metricsCh)
+
+				for res := range metricsCh {
+					writeResults(testFileNamePrefix, res)
+				}
+			})
 
 			It("scales down abruptly without downtime", func() {
 				_, err := fmt.Fprint(outFile, "\n### Scale Down Abruptly\n")
