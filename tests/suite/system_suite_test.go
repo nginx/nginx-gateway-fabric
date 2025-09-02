@@ -124,7 +124,6 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 	options := client.Options{
 		Scheme: scheme,
 	}
-
 	var err error
 	k8sClient, err = client.New(k8sConfig, options)
 	Expect(err).ToNot(HaveOccurred())
@@ -179,8 +178,7 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 
 	installCfg := createNGFInstallConfig(cfg, extraInstallArgs...)
 
-	podNames, err := framework.GetReadyNGFPodNames(
-		k8sClient,
+	podNames, err := resourceManager.GetReadyNGFPodNames(
 		installCfg.Namespace,
 		installCfg.ReleaseName,
 		timeoutConfig.CreateTimeout,
@@ -237,6 +235,7 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		installCfg.NgfImageRepository = *ngfImageRepository
 		installCfg.NginxImageRepository = *nginxImageRepository
 		if *plusEnabled && cfg.nfr {
+			GinkgoWriter.Printf("Using NGINX Plus image repository %q\n", *nginxPlusImageRepository)
 			installCfg.NginxImageRepository = *nginxPlusImageRepository
 		}
 		installCfg.ImageTag = *imageTag
@@ -246,9 +245,11 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		chartVersion = "0.0.0-edge"
 		installCfg.ChartVersion = chartVersion
 		if *plusEnabled && cfg.nfr {
+			GinkgoWriter.Printf("Using NGINX Plus image repository %q\n", *nginxPlusImageRepository)
 			installCfg.NginxImageRepository = fmt.Sprintf(formatNginxPlusEdgeImagePath, *gkeProject)
 		}
 	case *plusEnabled && cfg.nfr:
+		GinkgoWriter.Printf("Using NGINX Plus image repository %q\n", *nginxPlusImageRepository)
 		installCfg.NginxImageRepository = fmt.Sprintf(formatNginxPlusEdgeImagePath, *gkeProject)
 	}
 
@@ -263,7 +264,7 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 	}
 
 	if *plusEnabled {
-		Expect(framework.CreateLicenseSecret(k8sClient, ngfNamespace, *plusLicenseFileName)).To(Succeed())
+		Expect(framework.CreateLicenseSecret(resourceManager, ngfNamespace, *plusLicenseFileName)).To(Succeed())
 	}
 
 	output, err = framework.InstallNGF(installCfg, extraInstallArgs...)
@@ -278,7 +279,7 @@ func teardown(relName string) {
 		Namespace:   ngfNamespace,
 	}
 
-	output, err := framework.UninstallNGF(cfg, k8sClient)
+	output, err := framework.UninstallNGF(cfg, resourceManager)
 	Expect(err).ToNot(HaveOccurred(), string(output))
 
 	output, err = framework.UninstallGatewayAPI(*gatewayAPIVersion)
@@ -293,7 +294,11 @@ func teardown(relName string) {
 		true, /* poll immediately */
 		func(ctx context.Context) (bool, error) {
 			key := k8sTypes.NamespacedName{Name: ngfNamespace}
-			if err := k8sClient.Get(ctx, key, &core.Namespace{}); err != nil && apierrors.IsNotFound(err) {
+			if err := resourceManager.Get(
+				ctx,
+				key,
+				&core.Namespace{},
+			); err != nil && apierrors.IsNotFound(err) {
 				return true, nil
 			}
 
