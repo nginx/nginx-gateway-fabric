@@ -30,7 +30,9 @@ The terms AI workload, LLM workload, and model workload are used interchangeably
 
 The intention of the Gateway API Inference Extension is to optimize load-balancing for self-hosted GenAI models in Kubernetes. These workloads can serve massive amounts of data, and their performance is influenced greatly by the infrastructure that they are running on (e.g. GPUs). Routing client requests to these types of backends requires specialized decision making to ensure the best performance and responses.
 
-In order to make this routing decision, a component known as the Endpoint Picker (EPP) is deployed. The EPP uses configuration and metrics to determine which AI workload in an InferencePool should receive the request. It returns this endpoint in a header to the `inference Gateway` (which would be NGINX in our case) to forward the request to that endpoint. The model name that the request should be routed to can be contained in the body of the request, or in a header.
+To make these routing decisions, a component known as the [Endpoint Picker (EPP)](https://gateway-api-inference-extension.sigs.k8s.io/#endpoint-picker) is deployed. The EPP uses configuration and metrics to determine which AI workload in an InferencePool should receive the request. It returns this endpoint in a header to the `inference Gateway` (which would be NGINX in our case) to forward the request to that endpoint. The model name that the request should be routed to can be contained in the body of the request, or in a header.
+
+Check out the [request flow](https://gateway-api-inference-extension.sigs.k8s.io/#request-flow) section of the Gateway API documentation to learn more.
 
 ## Use Cases
 
@@ -139,6 +141,29 @@ However, there could still be a valid use case for NGF to track and configure NG
 Because of this, NGF should watch the endpoints associated with an InferencePool, and create an upstream. One way to accomplish this is for NGF to create a Headless "shadow" Service that encompasses those endpoints. By defining this Service, NGF can use all of its existing Service/EndpointSlice logic to build the upstreams as if it was a normal Service.
 
 **The main point of concern with this is how can we fallback to use the upstream servers if the EPP is unavailable to give us an endpoint?** This may have to be discovered during implementation.
+
+### Flow Diagram
+
+```mermaid
+flowchart TD
+  A[Client Request] --> B[NGINX]
+  subgraph NGINX Pod
+    subgraph NGINX Container
+      B --1--> C[NJS Module: extract model name if needed]
+      C --2--> B
+      B --3--> D[NJS Module: Subrequest to Go App]
+    end
+    subgraph Go Application Container
+      E[Go Application]
+    end
+    D -- 4. subrequest --> E
+  end
+  E -- 5. gRPC ext_proc protocol --> F[Endpoint Picker Pod]
+  F -- 6. Endpoint in Header --> E
+  E --7--> D
+  D --8--> B
+  B --9--> G[AI Workload Endpoint]
+```
 
 ## API, Customer Driven Interfaces, and User Experience
 
