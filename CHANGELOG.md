@@ -4,6 +4,36 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.1.1
+
+_September 3, 2025_
+
+BUG FIXES:
+
+- Fix remove patch label/ annotation cross contamination. [3754](https://github.com/nginx/nginx-gateway-fabric/pull/3754)
+- Fix host readiness probe on ipv6 in addition to ipv4. [3765](https://github.com/nginx/nginx-gateway-fabric/pull/3765). Thanks to [lucasl0st](https://github.com/lucasl0st).
+- Prevent policy `includes` duplication in advanced routing configuration. [3799](https://github.com/nginx/nginx-gateway-fabric/pull/3799)
+- Adjust nginx agent backoff settings and revert request timeout. [3820](https://github.com/nginx/nginx-gateway-fabric/pull/3820)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.1.1
+- Add patches to helm chart spec. [3773](https://github.com/nginx/nginx-gateway-fabric/pull/3773)
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.29.1`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.2.1`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.1.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.1.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.1.1`
+
 ## Release 2.1.0
 
 _August 14, 2025_
