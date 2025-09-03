@@ -1046,7 +1046,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 						return nil
 					},
 				).
-					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithTimeout(timeoutConfig.GatewayListenerUpdateTimeout).
 					WithPolling(1 * time.Second).
 					Should(Succeed())
 			}
