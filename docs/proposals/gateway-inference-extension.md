@@ -195,6 +195,8 @@ The Gateway API Inference Extension repository provides [conformance tests](http
 
 At a high level, testing should ensure that traffic can be routed from a client, through NGINX, to the proper inference workload, based on the contents of the request.
 
+For development purposes, the [Getting started guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/) explains how to deploy some sample model servers.
+
 ## Security Considerations
 
 If the Endpoint Picker (EPP) supports it, we should use a secure TLS connection. This ensures an encrypted and authenticated communication channel between the NGINX data plane and the EPP. For production environments, an integration with `cert-manager` is likely the best solution, as we recommend this for various other secure channels within the NGF ecosystem. Otherwise, our control plane may have to provision certificates in the default case (similar to NGF's startup `cert-generator` Job).
