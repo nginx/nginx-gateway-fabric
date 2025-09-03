@@ -457,6 +457,9 @@ func checkForRouteOverlap(route *L7Route, hostPortPaths map[string]string) *cond
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Attachment != nil {
 			port := parentRef.Attachment.ListenerPort
+			// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
+			// Need to merge listener hostnames with route hostnames so wildcards are handled correctly
+			// Also the AcceptedHostnames is a map of slices of strings, so we need to flatten it
 			for _, hostname := range parentRef.Attachment.AcceptedHostnames {
 				for _, rule := range route.Spec.Rules {
 					for _, match := range rule.Matches {

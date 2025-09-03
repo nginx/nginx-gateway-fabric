@@ -720,7 +720,9 @@ func TestBindRouteToListeners(t *testing.T) {
 				Source: gw,
 				Valid:  true,
 				Listeners: []*Listener{
-					createListener("listener-80-1"),
+					createModifiedListener("listener-80-1", func(l *Listener) {
+						l.Source.Port = 80
+					}),
 				},
 			},
 			expectedSectionNameRefs: []ParentRef{
@@ -729,19 +731,24 @@ func TestBindRouteToListeners(t *testing.T) {
 					Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					SectionName: hrWithPort.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
-						Attached: false,
-						FailedConditions: []conditions.Condition{
-							conditions.NewRouteUnsupportedValue(
-								`spec.parentRefs[0].port: Forbidden: cannot be set`,
-							),
+						Attached:         true,
+						FailedConditions: nil,
+						AcceptedHostnames: map[string][]string{
+							"test/gateway/listener-80-1": {"foo.example.com"},
 						},
-						AcceptedHostnames: map[string][]string{},
+						ListenerPort: 80,
 					},
 					Port: hrWithPort.Spec.ParentRefs[0].Port,
 				},
 			},
 			expectedGatewayListeners: []*Listener{
-				createListener("listener-80-1"),
+				func() *Listener {
+					l := createModifiedListener("listener-80-1", func(l *Listener) {
+						l.Source.Port = 80
+					})
+					l.Routes[CreateRouteKey(hrWithPort)] = routeWithPort
+					return l
+				}(),
 			},
 			name: "port is configured",
 		},
@@ -1904,7 +1911,9 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					Name:      "gateway",
 				},
 				Listeners: []*Listener{
-					createListener("listener-443"),
+					createModifiedListener("listener-443", func(l *Listener) {
+						l.Source.Port = 443
+					}),
 				},
 			},
 			expectedSectionNameRefs: []ParentRef{
@@ -1912,9 +1921,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{},
 						FailedConditions: []conditions.Condition{
-							conditions.NewRouteUnsupportedValue(
-								`spec.parentRefs[0].port: Forbidden: cannot be set`,
-							),
+							conditions.NewRouteNoMatchingParent(),
 						},
 						Attached: false,
 					},
@@ -1925,7 +1932,9 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				},
 			},
 			expectedGatewayListeners: []*Listener{
-				createListener("listener-443"),
+				createModifiedListener("listener-443", func(l *Listener) {
+					l.Source.Port = 443
+				}),
 			},
 			name: "port is not nil",
 		},
@@ -3719,4 +3728,142 @@ func TestBindRoutesToListeners(t *testing.T) {
 	g.Expect(func() {
 		bindRoutesToListeners(nil, nil, nil, nil)
 	}).ToNot(Panic())
+}
+
+func TestFindAttachableListenersWithPort(t *testing.T) {
+	t.Parallel()
+
+	port80 := gatewayv1.PortNumber(80)
+	port443 := gatewayv1.PortNumber(443)
+	port8080 := gatewayv1.PortNumber(8080)
+
+	httpListener := &Listener{
+		Name:       "http-80",
+		Attachable: true,
+		Source: gatewayv1.Listener{
+			Name: "http-80",
+			Port: port80,
+		},
+	}
+
+	httpsListener := &Listener{
+		Name:       "https-443",
+		Attachable: true,
+		Source: gatewayv1.Listener{
+			Name: "https-443",
+			Port: port443,
+		},
+	}
+
+	nonAttachableListener := &Listener{
+		Name:       "http-8080",
+		Attachable: false, // not attachable
+		Source: gatewayv1.Listener{
+			Name: "http-8080",
+			Port: port8080,
+		},
+	}
+
+	tests := []struct {
+		name                   string
+		parentRef              *ParentRef
+		expectedListeners      []*Listener
+		expectedListenerExists bool
+	}{
+		{
+			name: "port 80 filter returns only port 80 listener",
+			parentRef: &ParentRef{
+				Port: &port80,
+			},
+			expectedListeners:      []*Listener{httpListener},
+			expectedListenerExists: true,
+		},
+		{
+			name: "port 443 filter returns only port 443 listener",
+			parentRef: &ParentRef{
+				Port: &port443,
+			},
+			expectedListeners:      []*Listener{httpsListener},
+			expectedListenerExists: true,
+		},
+		{
+			name: "port 8080 filter returns empty because listener is not attachable",
+			parentRef: &ParentRef{
+				Port: &port8080,
+			},
+			expectedListeners:      []*Listener{},
+			expectedListenerExists: true,
+		},
+		{
+			name: "port 9999 filter returns empty because no listener has that port",
+			parentRef: &ParentRef{
+				Port: helpers.GetPointer(gatewayv1.PortNumber(9999)),
+			},
+			expectedListeners:      []*Listener{},
+			expectedListenerExists: false,
+		},
+		{
+			name: "no port specified returns all attachable listeners",
+			parentRef: &ParentRef{
+				Port: nil,
+			},
+			expectedListeners:      []*Listener{httpListener, httpsListener},
+			expectedListenerExists: true,
+		},
+		{
+			name: "sectionName with matching port returns that specific listener",
+			parentRef: &ParentRef{
+				SectionName: helpers.GetPointer(gatewayv1.SectionName("http-80")),
+				Port:        &port80,
+			},
+			expectedListeners:      []*Listener{httpListener},
+			expectedListenerExists: true,
+		},
+		{
+			name: "sectionName with non-matching port returns empty",
+			parentRef: &ParentRef{
+				SectionName: helpers.GetPointer(gatewayv1.SectionName("http-80")),
+				Port:        &port443, // wrong port for http-80 listener
+			},
+			expectedListeners:      []*Listener{},
+			expectedListenerExists: false,
+		},
+		{
+			name: "sectionName that doesn't exist returns empty with false",
+			parentRef: &ParentRef{
+				SectionName: helpers.GetPointer(gatewayv1.SectionName("nonexistent")),
+				Port:        &port80,
+			},
+			expectedListeners:      []*Listener{},
+			expectedListenerExists: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			attachableListeners, listenerExists := findAttachableListeners(
+				tt.parentRef,
+				[]*Listener{httpListener, httpsListener, nonAttachableListener},
+			)
+
+			g.Expect(listenerExists).To(Equal(tt.expectedListenerExists))
+			g.Expect(attachableListeners).To(HaveLen(len(tt.expectedListeners)))
+
+			// Compare listeners by name since they're the same instances
+			expectedNames := make([]string, len(tt.expectedListeners))
+			for i, l := range tt.expectedListeners {
+				expectedNames[i] = l.Name
+			}
+
+			actualNames := make([]string, len(attachableListeners))
+			for i, l := range attachableListeners {
+				actualNames[i] = l.Name
+			}
+
+			g.Expect(actualNames).To(ConsistOf(expectedNames))
+		})
+	}
 }

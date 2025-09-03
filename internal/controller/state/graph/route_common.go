@@ -46,6 +46,8 @@ type ParentRefAttachmentStatus struct {
 	// still attach. The backendRef condition would be displayed here.
 	FailedConditions []conditions.Condition
 	// ListenerPort is the port on the Listener that the Route is attached to.
+	// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
+	// Needs to be a map of <gatewayNamespacedName/listenerName> to port number
 	ListenerPort v1.PortNumber
 	// Attached indicates if the ParentRef is attached to the Gateway.
 	Attached bool
@@ -307,24 +309,37 @@ func buildSectionNameRefs(
 			gwNsName: gwNsName,
 		}
 
-		// If there is no section name, we create ParentRefs for each listener in the gateway
+		// If there is no section name, handle based on whether port is specified
+		// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
+		// this logic seems to be duplicated in findAttachableListeners so we should refactor this,
+		// either here or in findAttachableListeners
 		if p.SectionName == nil {
-			for _, l := range gw.Listeners {
-				k.sectionName = string(l.Source.Name)
-
-				if err := checkUniqueSections(k); err != nil {
-					return nil, err
-				}
-
+			// If port is specified, preserve the port-only nature for proper validation
+			if p.Port != nil {
 				sectionNameRefs = append(sectionNameRefs, ParentRef{
-					// if the ParentRefs we create are for each listener in the same gateway, we keep the
-					// parentRefIndex the same so when we look at a route's parentRef's we can see
-					// if the parentRef is a unique parentRef or one we created internally
 					Idx:         i,
 					Gateway:     CreateParentRefGateway(gw),
-					SectionName: &l.Source.Name,
+					SectionName: nil, // Keep as nil to preserve port-only semantics
 					Port:        p.Port,
 				})
+			} else {
+				// If there is no port and section name, we create ParentRefs for each listener in the gateway
+				for _, l := range gw.Listeners {
+					k.sectionName = string(l.Source.Name)
+
+					if err := checkUniqueSections(k); err != nil {
+						return nil, err
+					}
+
+					sectionNameRefs = append(sectionNameRefs, ParentRef{
+						// if the ParentRefs we create are for each listener in the same gateway, we keep the
+						// parentRefIndex the same so when we look at a route's parentRef's we can see
+						// if the parentRef is a unique parentRef or one we created internally
+						Idx:         i,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: &l.Source.Name,
+					})
+				}
 			}
 
 			continue
@@ -532,10 +547,8 @@ func validateParentRef(
 
 	ref.Attachment = attachment
 
-	path := field.NewPath("spec").Child("parentRefs").Index(ref.Idx)
-
 	attachableListeners, listenerExists := findAttachableListeners(
-		getSectionName(ref.SectionName),
+		ref,
 		gw.Listeners,
 	)
 
@@ -546,17 +559,7 @@ func validateParentRef(
 		return attachment, nil
 	}
 
-	// Case 2: Attachment is not possible due to unsupported configuration.
-
-	if ref.Port != nil {
-		valErr := field.Forbidden(path.Child("port"), "cannot be set")
-		attachment.FailedConditions = append(
-			attachment.FailedConditions, conditions.NewRouteUnsupportedValue(valErr.Error()),
-		)
-		return attachment, attachableListeners
-	}
-
-	// Case 3: Attachment is not possible because Gateway is invalid
+	// Case 2: Attachment is not possible because Gateway is invalid
 
 	if !gw.Valid {
 		attachment.FailedConditions = append(attachment.FailedConditions, conditions.NewRouteInvalidGateway())
@@ -873,29 +876,50 @@ func tryToAttachL7RouteToListeners(
 
 // findAttachableListeners returns a list of attachable listeners and whether the listener exists for a non-empty
 // sectionName.
-func findAttachableListeners(sectionName string, listeners []*Listener) ([]*Listener, bool) {
+func findAttachableListeners(ref *ParentRef, listeners []*Listener) ([]*Listener, bool) {
+	sectionName := getSectionName(ref.SectionName)
+
+	// Case 1: sectionName is specified - look for that specific listener
 	if sectionName != "" {
 		for _, l := range listeners {
 			if l.Name == sectionName {
-				if l.Attachable {
+				if l.Attachable && (ref.Port == nil || l.Source.Port == *ref.Port) {
 					return []*Listener{l}, true
 				}
+				// We return false because we didn't find a listener that matches the port
+				if ref.Port != nil && l.Source.Port != *ref.Port {
+					return nil, false
+				}
+				// Return true because we found a listener that matches the sectionName and port but is not attachable
 				return nil, true
 			}
 		}
 		return nil, false
 	}
 
-	attachableListeners := make([]*Listener, 0, len(listeners))
-	for _, l := range listeners {
-		if !l.Attachable {
-			continue
+	// Case 2: Only port is specified - find all attachable listeners matching that port
+	if ref.Port != nil {
+		var attachableListeners []*Listener
+		var foundListener bool
+		for _, l := range listeners {
+			if l.Source.Port == *ref.Port {
+				foundListener = true
+				if l.Attachable {
+					attachableListeners = append(attachableListeners, l)
+				}
+			}
 		}
-
-		attachableListeners = append(attachableListeners, l)
+		return attachableListeners, foundListener
 	}
 
-	return attachableListeners, true
+	// Case 3: Neither sectionName nor port specified - return all attachable listeners
+	var attachableListeners []*Listener
+	for _, l := range listeners {
+		if l.Attachable {
+			attachableListeners = append(attachableListeners, l)
+		}
+	}
+	return attachableListeners, len(listeners) > 0
 }
 
 func findAcceptedHostnames(listenerHostname *v1.Hostname, routeHostnames []v1.Hostname) []string {
