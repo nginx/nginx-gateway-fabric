@@ -23,7 +23,7 @@ HELM CHART:
 COMPATIBILITY:
 
 - Gateway API version: `1.3.0`
-- NGINX version: `1.29.0`
+- NGINX version: `1.29.1`
 - NGINX Plus version: `R35`
 - NGINX Agent version: `v3.2.1`
 - Kubernetes version: `1.25+`
