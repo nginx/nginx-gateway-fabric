@@ -38,22 +38,26 @@ type TimeoutConfig struct {
 
 	// KubernetesClientTimeout represents the maximum time for Kubernetes client operations.
 	KubernetesClientTimeout time.Duration
+
+	// GatewayListenerUpdateTimeout represents the maximum time for Gateway Listener count to be updated.
+	GatewayListenerUpdateTimeout time.Duration
 }
 
 // DefaultTimeoutConfig populates a TimeoutConfig with the default values.
 func DefaultTimeoutConfig() TimeoutConfig {
 	return TimeoutConfig{
-		CreateTimeout:           60 * time.Second,
-		UpdateTimeout:           60 * time.Second,
-		DeleteTimeout:           10 * time.Second,
-		DeleteNamespaceTimeout:  150 * time.Second,
-		GetTimeout:              10 * time.Second,
-		ManifestFetchTimeout:    10 * time.Second,
-		RequestTimeout:          10 * time.Second,
-		ContainerRestartTimeout: 10 * time.Second,
-		GetLeaderLeaseTimeout:   60 * time.Second,
-		GetStatusTimeout:        60 * time.Second,
-		TestForTrafficTimeout:   60 * time.Second,
-		KubernetesClientTimeout: 10 * time.Second,
+		CreateTimeout:                60 * time.Second,
+		UpdateTimeout:                60 * time.Second,
+		DeleteTimeout:                10 * time.Second,
+		DeleteNamespaceTimeout:       150 * time.Second,
+		GetTimeout:                   10 * time.Second,
+		ManifestFetchTimeout:         10 * time.Second,
+		RequestTimeout:               30 * time.Second,
+		ContainerRestartTimeout:      10 * time.Second,
+		GetLeaderLeaseTimeout:        60 * time.Second,
+		GetStatusTimeout:             60 * time.Second,
+		TestForTrafficTimeout:        60 * time.Second,
+		KubernetesClientTimeout:      10 * time.Second,
+		GatewayListenerUpdateTimeout: 60 * time.Second,
 	}
 }
