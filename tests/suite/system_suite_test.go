@@ -237,7 +237,6 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		installCfg.NgfImageRepository = *ngfImageRepository
 		installCfg.NginxImageRepository = *nginxImageRepository
 		if *plusEnabled && cfg.nfr {
-			GinkgoWriter.Printf("Using NGINX Plus image repository %q\n", *nginxPlusImageRepository)
 			installCfg.NginxImageRepository = *nginxPlusImageRepository
 		}
 		installCfg.ImageTag = *imageTag
@@ -247,11 +246,9 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		chartVersion = "0.0.0-edge"
 		installCfg.ChartVersion = chartVersion
 		if *plusEnabled && cfg.nfr {
-			GinkgoWriter.Printf("Using NGINX Plus image repository %q\n", *nginxPlusImageRepository)
 			installCfg.NginxImageRepository = fmt.Sprintf(formatNginxPlusEdgeImagePath, *gkeProject)
 		}
 	case *plusEnabled && cfg.nfr:
-		GinkgoWriter.Printf("Using NGINX Plus image repository %q\n", *nginxPlusImageRepository)
 		installCfg.NginxImageRepository = fmt.Sprintf(formatNginxPlusEdgeImagePath, *gkeProject)
 	}
 

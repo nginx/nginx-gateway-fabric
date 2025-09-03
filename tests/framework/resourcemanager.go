@@ -1146,7 +1146,7 @@ func countNumberOfReadyParents(parents []v1.RouteParentStatus) int {
 			}
 		}
 	}
-	GinkgoWriter.Printf("Found %d ready parents\n", readyCount)
+	GinkgoWriter.Printf("Found %d ready parent(s)\n", readyCount)
 
 	return readyCount
 }

@@ -22,7 +22,7 @@ func PortForward(config *rest.Config, namespace, podName string, ports []string,
 	roundTripper, upgrader, err := spdy.RoundTripperFor(config)
 	if err != nil {
 		roundTripperErr := fmt.Errorf("error creating roundtripper: %w", err)
-		GinkgoWriter.Printf("ERROR: %v\n", roundTripperErr)
+		GinkgoWriter.Printf("%v\n", roundTripperErr)
 
 		return roundTripperErr
 	}
@@ -30,7 +30,7 @@ func PortForward(config *rest.Config, namespace, podName string, ports []string,
 	serverURL, err := url.Parse(config.Host)
 	if err != nil {
 		parseConfigErr := fmt.Errorf("error parsing rest config host: %w", err)
-		GinkgoWriter.Printf("ERROR: %v\n", parseConfigErr)
+		GinkgoWriter.Printf("%v\n", parseConfigErr)
 
 		return parseConfigErr
 	}
@@ -57,7 +57,7 @@ func PortForward(config *rest.Config, namespace, podName string, ports []string,
 		forwarder, err := portforward.New(dialer, ports, stopCh, readyCh, newSafeBuffer(), newSafeBuffer())
 		if err != nil {
 			createPortForwardErr := fmt.Errorf("error creating port forwarder: %w", err)
-			GinkgoWriter.Printf("ERROR: %v\n", createPortForwardErr)
+			GinkgoWriter.Printf("%v\n", createPortForwardErr)
 
 			return createPortForwardErr
 		}

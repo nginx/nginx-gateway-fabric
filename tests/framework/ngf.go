@@ -107,7 +107,7 @@ func CreateLicenseSecret(k8sClient client.Client, namespace, filename string) er
 	conf, err := os.ReadFile(filename)
 	if err != nil {
 		readFileErr := fmt.Errorf("error reading file %q: %w", filename, err)
-		GinkgoWriter.Printf("ERROR: %v\n", readFileErr)
+		GinkgoWriter.Printf("%v\n", readFileErr)
 
 		return readFileErr
 	}
@@ -123,7 +123,7 @@ func CreateLicenseSecret(k8sClient client.Client, namespace, filename string) er
 
 	if err := k8sClient.Create(ctx, ns); err != nil && !apierrors.IsAlreadyExists(err) {
 		createNSErr := fmt.Errorf("error creating namespace: %w", err)
-		GinkgoWriter.Printf("ERROR: %v\n", createNSErr)
+		GinkgoWriter.Printf("%v\n", createNSErr)
 
 		return createNSErr
 	}
@@ -140,7 +140,7 @@ func CreateLicenseSecret(k8sClient client.Client, namespace, filename string) er
 
 	if err := k8sClient.Create(ctx, secret); err != nil && !apierrors.IsAlreadyExists(err) {
 		createSecretErr := fmt.Errorf("error creating secret: %w", err)
-		GinkgoWriter.Printf("ERROR: %v\n", createSecretErr)
+		GinkgoWriter.Printf("%v\n", createSecretErr)
 
 		return createSecretErr
 	}
