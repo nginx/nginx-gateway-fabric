@@ -11,9 +11,6 @@ defaults:
   run:
     shell: bash
 
-env:
-  GOPROXY: ${{ github.repository_owner == 'nginx' && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_DEV_ENDPOINT) || 'direct' }}
-
 concurrency:
   group: ${{ github.ref_name }}-renovate
   cancel-in-progress: true
@@ -52,6 +49,16 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           ref: ${{ github.head_ref }}
+
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          GOPROXY_VALUE="direct"
+          else
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0

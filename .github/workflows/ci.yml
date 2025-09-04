@@ -29,9 +29,6 @@ defaults:
   run:
     shell: bash
 
-env:
-  GOPROXY: ${{ (github.repository_owner == 'nginx' && (inputs.is_production_release || github.event_name == 'push' && github.ref == 'refs/heads/main') && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_ENDPOINT)) || (github.repository_owner == 'nginx' && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_DEV_ENDPOINT) || 'direct') }}
-
 concurrency:
   group: ${{ github.ref_name }}-ci
   cancel-in-progress: true
@@ -48,11 +45,27 @@ jobs:
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
       k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
       helm_changes: ${{ steps.filter.outputs.charts }}
+      goproxy: ${{ steps.goproxy.outputs.goproxy }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          echo "No Artifactory secrets available - using direct GOPROXY"
+          GOPROXY_VALUE="direct"
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Production mode - using production Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
+          else
+          echo "Development mode - using dev Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "goproxy=${GOPROXY_VALUE}" >> $GITHUB_OUTPUT
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
@@ -92,6 +105,8 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-24.04
     needs: vars
+    env:
+      GOPROXY: ${{ needs.vars.outputs.goproxy }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -144,6 +159,8 @@ jobs:
     name: Build Binary
     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, unit-tests, njs-unit-tests]
+    env:
+      GOPROXY: ${{ needs.vars.outputs.goproxy }}
     permissions:
       contents: write # for goreleaser/goreleaser-action and lucacome/draft-release to create/update releases
       id-token: write # for goreleaser/goreleaser-action to sign artifacts
@@ -345,6 +362,8 @@ jobs:
     name: CEL Tests
     runs-on: ubuntu-24.04
     needs: vars
+    env:
+      GOPROXY: ${{ needs.vars.outputs.goproxy }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
