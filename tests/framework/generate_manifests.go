@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"text/template"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -150,13 +151,17 @@ func decodeObjects(reader io.Reader) ([]client.Object, error) {
 }
 
 // GenerateScaleListenerObjects generates objects for a given number of listeners for the scale test.
+// Modified to create all services and gateways first, then scale routes.
 func GenerateScaleListenerObjects(numListeners int, tls bool) (ScaleObjects, error) {
+	log.Printf("GenerateScaleListenerObjects: Starting generation for %d listeners, TLS=%v", numListeners, tls)
 	var result ScaleObjects
 
 	listeners := make([]listener, 0)
 	backends := make([]string, 0)
 	secrets := make([]string, 0)
+	routes := make([]route, 0)
 
+	// Generate all listeners, backends, and routes
 	for i := range numListeners {
 		listenerName := fmt.Sprintf("listener-%d", i)
 		hostnamePrefix := fmt.Sprintf("%d", i)
@@ -181,39 +186,65 @@ func GenerateScaleListenerObjects(numListeners int, tls bool) (ScaleObjects, err
 			BackendName:    backendName,
 		}
 
+		routes = append(routes, r)
 		backends = append(backends, backendName)
+	}
 
-		objects, err := generateManifests(listeners, []route{r})
+	log.Printf("GenerateScaleListenerObjects: Generated %d listeners, %d backends, %d secrets", len(listeners), len(backends), len(secrets))
+
+	// Generate gateway with all listeners
+	log.Printf("GenerateScaleListenerObjects: Generating gateway with %d listeners", len(listeners))
+	gatewayObjects, err := generateManifests(listeners, []route{})
+	if err != nil {
+		return ScaleObjects{}, err
+	}
+	log.Printf("GenerateScaleListenerObjects: Generated %d gateway objects", len(gatewayObjects))
+
+	// Generate secrets if TLS is enabled
+	secretObjects, err := generateSecrets(secrets)
+	if err != nil {
+		return ScaleObjects{}, err
+	}
+	log.Printf("GenerateScaleListenerObjects: Generated %d secret objects", len(secretObjects))
+
+	// Generate backend app objects (services, deployments)
+	log.Printf("GenerateScaleListenerObjects: Generating backend objects for %d backends", len(backends))
+	backendObjects, err := generateBackendAppObjects(backends)
+	if err != nil {
+		return ScaleObjects{}, err
+	}
+	log.Printf("GenerateScaleListenerObjects: Generated %d backend objects", len(backendObjects))
+
+	// BaseObjects includes services, secrets, and gateway with all listeners
+	result.BaseObjects = append(result.BaseObjects, secretObjects...)
+	result.BaseObjects = append(result.BaseObjects, backendObjects...)
+	result.BaseObjects = append(result.BaseObjects, gatewayObjects...)
+	log.Printf("GenerateScaleListenerObjects: BaseObjects contains %d total objects", len(result.BaseObjects))
+
+	// Each iteration creates one route
+	for i := range numListeners {
+		log.Printf("GenerateScaleListenerObjects: Generating route %d: %s", i, routes[i].Name)
+		objects, err := generateManifests([]listener{}, []route{routes[i]})
 		if err != nil {
 			return ScaleObjects{}, err
 		}
 
 		result.ScaleIterationGroups = append(result.ScaleIterationGroups, objects)
+		log.Printf("GenerateScaleListenerObjects: Route %d generated %d objects", i, len(objects))
 	}
 
-	secretObjects, err := generateSecrets(secrets)
-	if err != nil {
-		return ScaleObjects{}, err
-	}
-
-	result.BaseObjects = append(result.BaseObjects, secretObjects...)
-
-	backendObjects, err := generateBackendAppObjects(backends)
-	if err != nil {
-		return ScaleObjects{}, err
-	}
-
-	result.BaseObjects = append(result.BaseObjects, backendObjects...)
-
+	log.Printf("GenerateScaleListenerObjects: Completed. BaseObjects: %d, ScaleIterationGroups: %d", len(result.BaseObjects), len(result.ScaleIterationGroups))
 	return result, nil
 }
 
 func generateSecrets(secrets []string) ([]client.Object, error) {
+	log.Printf("generateSecrets: Generating %d secrets: %v", len(secrets), secrets)
 	objects := make([]client.Object, 0, len(secrets))
 
-	for _, secret := range secrets {
+	for i, secret := range secrets {
 		var buf bytes.Buffer
 
+		log.Printf("generateSecrets: Executing secret template for secret %d: %s", i, secret)
 		if err := secretTmpl.Execute(&buf, secret); err != nil {
 			return nil, err
 		}
@@ -223,14 +254,18 @@ func generateSecrets(secrets []string) ([]client.Object, error) {
 			return nil, err
 		}
 
+		log.Printf("generateSecrets: Secret %s generated %d objects", secret, len(objs))
 		objects = append(objects, objs...)
 	}
 
+	log.Printf("generateSecrets: Total secret objects generated: %d", len(objects))
 	return objects, nil
 }
 
 // GenerateScaleHTTPRouteObjects generates objects for a given number of routes for the scale test.
+// Modified to create all services and gateways first, then scale routes.
 func GenerateScaleHTTPRouteObjects(numRoutes int) (ScaleObjects, error) {
+	log.Printf("GenerateScaleHTTPRouteObjects: Starting generation for %d routes", numRoutes)
 	var result ScaleObjects
 
 	l := listener{
@@ -240,6 +275,27 @@ func GenerateScaleHTTPRouteObjects(numRoutes int) (ScaleObjects, error) {
 
 	backendName := "backend"
 
+	// Generate the Gateway once and add it to BaseObjects
+	log.Printf("GenerateScaleHTTPRouteObjects: Generating gateway with single listener")
+	gatewayObjects, err := generateManifests([]listener{l}, []route{})
+	if err != nil {
+		return ScaleObjects{}, err
+	}
+	log.Printf("GenerateScaleHTTPRouteObjects: Generated %d gateway objects", len(gatewayObjects))
+
+	// Generate backend app objects (services, deployments)
+	log.Printf("GenerateScaleHTTPRouteObjects: Generating backend objects for backend: %s", backendName)
+	backendObjects, err := generateBackendAppObjects([]string{backendName})
+	if err != nil {
+		return ScaleObjects{}, err
+	}
+	log.Printf("GenerateScaleHTTPRouteObjects: Generated %d backend objects", len(backendObjects))
+
+	// BaseObjects now includes services and gateway
+	result.BaseObjects = append(backendObjects, gatewayObjects...)
+	log.Printf("GenerateScaleHTTPRouteObjects: BaseObjects contains %d total objects", len(result.BaseObjects))
+
+	// Each iteration only creates one route
 	for i := range numRoutes {
 		r := route{
 			Name:           fmt.Sprintf("route-%d", i),
@@ -248,58 +304,59 @@ func GenerateScaleHTTPRouteObjects(numRoutes int) (ScaleObjects, error) {
 			BackendName:    backendName,
 		}
 
-		var listeners []listener
-		if i == 0 {
-			// only generate a Gateway on the first iteration
-			listeners = []listener{l}
-		}
-
-		objects, err := generateManifests(listeners, []route{r})
+		log.Printf("GenerateScaleHTTPRouteObjects: Generating route %d: %s with hostname %s", i, r.Name, r.HostnamePrefix)
+		// Generate only the route (no gateway, no listeners)
+		objects, err := generateManifests([]listener{}, []route{r})
 		if err != nil {
 			return ScaleObjects{}, err
 		}
 
 		result.ScaleIterationGroups = append(result.ScaleIterationGroups, objects)
+		log.Printf("GenerateScaleHTTPRouteObjects: Route %d generated %d objects", i, len(objects))
 	}
 
-	backendObjects, err := generateBackendAppObjects([]string{backendName})
-	if err != nil {
-		return ScaleObjects{}, err
-	}
-
-	result.BaseObjects = backendObjects
-
+	log.Printf("GenerateScaleHTTPRouteObjects: Completed. BaseObjects: %d, ScaleIterationGroups: %d", len(result.BaseObjects), len(result.ScaleIterationGroups))
 	return result, nil
 }
 
 func generateManifests(listeners []listener, routes []route) ([]client.Object, error) {
+	log.Printf("generateManifests: Called with %d listeners, %d routes", len(listeners), len(routes))
 	var buf bytes.Buffer
 
 	if len(listeners) > 0 {
+		log.Printf("generateManifests: Executing gateway template with %d listeners", len(listeners))
 		if err := gwTmpl.Execute(&buf, listeners); err != nil {
 			return nil, err
 		}
 	}
 
-	for _, r := range routes {
+	for i, r := range routes {
 		if buf.Len() > 0 {
 			buf.WriteString("\n---\n")
 		}
 
+		log.Printf("generateManifests: Executing route template for route %d: %s", i, r.Name)
 		if err := hrTmpl.Execute(&buf, r); err != nil {
 			return nil, err
 		}
 	}
 
-	return decodeObjects(&buf)
+	objects, err := decodeObjects(&buf)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("generateManifests: Decoded %d objects from templates", len(objects))
+	return objects, nil
 }
 
 func generateBackendAppObjects(backends []string) ([]client.Object, error) {
+	log.Printf("generateBackendAppObjects: Generating objects for %d backends: %v", len(backends), backends)
 	objects := make([]client.Object, 0, 2*len(backends))
 
-	for _, backend := range backends {
+	for i, backend := range backends {
 		var buf bytes.Buffer
 
+		log.Printf("generateBackendAppObjects: Executing app template for backend %d: %s", i, backend)
 		if err := appTmpl.Execute(&buf, backend); err != nil {
 			return nil, err
 		}
@@ -309,8 +366,10 @@ func generateBackendAppObjects(backends []string) ([]client.Object, error) {
 			return nil, err
 		}
 
+		log.Printf("generateBackendAppObjects: Backend %s generated %d objects", backend, len(objs))
 		objects = append(objects, objs...)
 	}
 
+	log.Printf("generateBackendAppObjects: Total objects generated: %d", len(objects))
 	return objects, nil
 }
