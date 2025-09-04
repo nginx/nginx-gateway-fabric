@@ -5,17 +5,32 @@ on:
     branches:
       - main
       - release-*
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+*"
   pull_request:
     branches:
       - "**"
   schedule:
     - cron: "0 4 * * *" # run every day at 4am UTC
+  workflow_call:
+    inputs:
+      is_production_release:
+        required: false
+        type: boolean
+        default: false
+      release_version:
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
     shell: bash
+
+env:
+  GOPROXY: ${{ (github.repository_owner == 'nginx' && (inputs.is_production_release || github.event_name == 'push' && github.ref == 'refs/heads/main') && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_ENDPOINT)) || (github.repository_owner == 'nginx' && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_DEV_ENDPOINT) || 'direct') }}
 
 concurrency:
   group: ${{ github.ref_name }}-ci
@@ -127,7 +142,7 @@ jobs:
 
   binary:
     name: Build Binary
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, unit-tests, njs-unit-tests]
     permissions:
       contents: write # for goreleaser/goreleaser-action and lucacome/draft-release to create/update releases
@@ -147,12 +162,18 @@ jobs:
             go.sum
             .github/.cache/buster-for-binary
 
+      - name: Set Go module cache
+        run: |
+          mkdir -p ${{ github.workspace }}/.gocache
+          echo "GOMODCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
+          echo "GOCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
+
       - name: Create/Update Draft
         uses: lucacome/draft-release@00f74370c044c322da6cb52acc707d62c7762c71 # v1.2.4
         with:
           minor-label: "enhancement"
           major-label: "change"
-          publish: ${{ github.ref_type == 'tag' }}
+          publish: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
           collapse-after: 20
           notes-header: |
             *Below is the auto-generated changelog, which includes all PRs that went into the release.
@@ -160,18 +181,18 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
 
       - name: Download Syft
+        if: ${{ inputs.is_production_release }}
         uses: anchore/sbom-action/download-syft@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
-        if: github.ref_type == 'tag'
 
       - name: Install Cosign
+        if: ${{ inputs.is_production_release }}
         uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
-        if: github.ref_type == 'tag'
 
       - name: Build binary
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
           version: v2.12.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          args: ${{ github.ref_type == 'tag' && 'release' || 'build --snapshot' }} --clean
+          args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || 'build --snapshot' }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
@@ -200,6 +221,9 @@ jobs:
     with:
       image: ${{ matrix.image }}
       platforms: ${{ matrix.platforms }}
+      tag: ${{ inputs.release_version || '' }}
+      dry_run: ${{ inputs.dry_run || false}}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -214,6 +238,9 @@ jobs:
     with:
       image: plus
       platforms: "linux/arm64, linux/amd64"
+      tag: ${{ inputs.release_version || '' }}
+      dry_run: ${{ inputs.dry_run || false }}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -259,6 +286,8 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       enable-experimental: ${{ matrix.enable-experimental }}
+      production-release: ${{ inputs.is_production_release == true && (inputs.dry_run == false || inputs.dry_run == null) }}
+      release_version: ${{ inputs.release_version }}
     secrets: inherit
     permissions:
       contents: write
@@ -284,9 +313,9 @@ jobs:
 
   publish-helm:
     name: Package and Publish Helm Chart
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, helm-tests]
-    if: ${{ github.event_name == 'push' && ! startsWith(github.ref, 'refs/heads/release-') }}
+    if: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) || (github.event_name == 'push' && ! startsWith(github.ref, 'refs/heads/release-')) }}
     permissions:
       contents: read
       packages: write # for helm to push to GHCR
@@ -304,10 +333,11 @@ jobs:
       - name: Package
         id: package
         run: |
-          output=$(helm package ${{ github.ref_type != 'tag' && '--app-version edge --version 0.0.0-edge' || '' }} charts/nginx-gateway-fabric)
+          output=$(helm package ${{ !inputs.is_production_release && '--app-version edge --version 0.0.0-edge' || '' }} charts/nginx-gateway-fabric)
           echo "path=$(basename -- $(echo $output | cut -d: -f2))" >> $GITHUB_OUTPUT
 
       - name: Push to GitHub Container Registry
+        if: ${{ inputs.dry_run == false || inputs.dry_run == null }}
         run: |
           helm push ${{ steps.package.outputs.path }} oci://ghcr.io/nginx/charts
 
