@@ -45,6 +45,7 @@ jobs:
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
       k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
       helm_changes: ${{ steps.filter.outputs.charts }}
+      goproxy: ${{ steps.goproxy.outputs.goproxy }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
