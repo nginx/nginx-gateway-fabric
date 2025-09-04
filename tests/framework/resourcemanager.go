@@ -157,7 +157,7 @@ func (rm *ResourceManager) Apply(resources []client.Object) error {
 			return retryErr
 		}
 	}
-	GinkgoWriter.Printf("Resources defined as Go objectsapplied successfully\n")
+	GinkgoWriter.Printf("Resources defined as Go objects applied successfully\n")
 
 	return nil
 }
