@@ -22,11 +22,16 @@ func Get(
 	url, address string,
 	timeout time.Duration,
 	headers, queryParams map[string]string,
-	logging bool,
+	opts ...Option,
 ) (int, string, error) {
-	resp, err := makeRequest(http.MethodGet, url, address, nil, timeout, headers, queryParams, logging)
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	resp, err := makeRequest(http.MethodGet, url, address, nil, timeout, headers, queryParams, opts...)
 	if err != nil {
-		if logging {
+		if options.logEnabled {
 			GinkgoWriter.Printf(
 				"ERROR occurred during getting response, error: %s\nReturning status: 0, body: ''\n",
 				err,
@@ -43,7 +48,7 @@ func Get(
 		GinkgoWriter.Printf("ERROR in Body content: %v returning body: ''\n", err)
 		return resp.StatusCode, "", err
 	}
-	if logging {
+	if options.logEnabled {
 		GinkgoWriter.Printf("Successfully received response and parsed body: %s\n", body.String())
 	}
 
@@ -58,7 +63,7 @@ func Post(
 	timeout time.Duration,
 	headers, queryParams map[string]string,
 ) (*http.Response, error) {
-	response, err := makeRequest(http.MethodPost, url, address, body, timeout, headers, queryParams, true)
+	response, err := makeRequest(http.MethodPost, url, address, body, timeout, headers, queryParams)
 	if err != nil {
 		GinkgoWriter.Printf("ERROR occurred during getting response, error: %s\n", err)
 	}
@@ -71,7 +76,7 @@ func makeRequest(
 	body io.Reader,
 	timeout time.Duration,
 	headers, queryParams map[string]string,
-	logging bool,
+	opts ...Option,
 ) (*http.Response, error) {
 	dialer := &net.Dialer{}
 
@@ -94,7 +99,12 @@ func makeRequest(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	if logging {
+	options := &Options{logEnabled: true}
+
+	for _, opt := range opts {
+		opt(options)
+	}
+	if options.logEnabled {
 		requestDetails := fmt.Sprintf(
 			"Method: %s, URL: %s, Address: %s, Headers: %v, QueryParams: %v\n",
 			strings.ToUpper(method),

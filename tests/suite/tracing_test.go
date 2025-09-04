@@ -131,7 +131,14 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 		for range count {
 			Eventually(
 				func() error {
-					status, _, err := framework.Get(url, address, timeoutConfig.RequestTimeout, nil, nil, false)
+					status, _, err := framework.Get(
+						url,
+						address,
+						timeoutConfig.RequestTimeout,
+						nil,
+						nil,
+						framework.WithLoggingDisabled(),
+					)
 					if err != nil {
 						return err
 					}

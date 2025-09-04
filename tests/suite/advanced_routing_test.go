@@ -117,10 +117,8 @@ func expectRequestToRespondFromExpectedServer(
 	headers, queryParams map[string]string,
 ) error {
 	GinkgoWriter.Printf("Expecting request to respond from the server %q\n", expServerName)
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, headers, queryParams, true)
+	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, headers, queryParams)
 	if err != nil {
-		GinkgoWriter.Printf("ERROR making GET request to %q: %v\n", appURL, err)
-
 		return err
 	}
 

@@ -518,7 +518,7 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 })
 
 func expectRequestToSucceed(appURL, address string, responseBodyMessage string) error {
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil, true)
+	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
 
 	if status != http.StatusOK {
 		return fmt.Errorf("http status was not 200, got %d: %w", status, err)
@@ -540,7 +540,7 @@ func expectRequestToSucceed(appURL, address string, responseBodyMessage string) 
 // We only want an error returned from this particular function if it does not appear that NGINX has
 // stopped serving traffic.
 func expectRequestToFail(appURL, address string) error {
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil, true)
+	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
 	if status != 0 {
 		return errors.New("expected http status to be 0")
 	}
