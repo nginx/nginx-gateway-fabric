@@ -30,7 +30,7 @@ defaults:
     shell: bash
 
 env:
-  GOPROXY: ${{ (github.repository_owner == 'nginx' && (inputs.is_production_release || github.event_name == 'push' && github.ref == 'refs/heads/main') && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_ENDPOINT)) || (github.repository_owner == 'nginx' && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_DEV_ENDPOINT) || 'direct') }}
+  GOPROXY: ${{ github.repository_owner != 'nginx' && 'direct' || (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_ENDPOINT) || format('https://{0}:{1}@{2}', secrets.ARTIFACTORY_USER, secrets.ARTIFACTORY_TOKEN, secrets.ARTIFACTORY_DEV_ENDPOINT) }}
 
 concurrency:
   group: ${{ github.ref_name }}-ci
