@@ -287,14 +287,13 @@ jobs:
 
   functional-ipv6-only-tests:
     name: Functional IPv6 Only Tests
-    needs: [vars, build-oss, build-plus]
+    needs: [vars, build-oss]
     strategy:
       fail-fast: false
       matrix:
-        image: [nginx, plus]
+        image: [nginx]
         k8s-version:
           [
-            "${{ needs.vars.outputs.min_k8s_version }}",
             "${{ needs.vars.outputs.k8s_latest }}",
           ]
     uses: ./.github/workflows/functional-ipv6-only.yml

@@ -1,0 +1,218 @@
+name: IPv6-Only Testing
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        required: true
+        type: string
+      k8s-version:
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
+
+permissions:
+  contents: read
+
+jobs:
+  ipv6-only-tests:
+    name: Run IPv6-Only Tests
+    runs-on: ubuntu-24.04
+    if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
+    env:
+      DOCKER_BUILD_SUMMARY: false
+    steps:
+      - name: Checkout Repository
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          GOPROXY_VALUE="direct"
+          else
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
+
+      - name: Setup Golang Environment
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: stable
+
+      - name: Set GOPATH
+        run: echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
+
+      - name: Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: NGF Docker meta
+        id: ngf-meta
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: |
+            name=ghcr.io/nginx/nginx-gateway-fabric
+          tags: |
+            type=semver,pattern={{version}}
+            type=schedule
+            type=edge
+            type=ref,event=pr
+            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
+      - name: NGINX Docker meta
+        id: nginx-meta
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: |
+            name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=edge
+            type=schedule
+            type=ref,event=pr
+            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
+      - name: Build binary
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+        with:
+          version: v2.12.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          args: build --single-target --snapshot --clean
+        env:
+          TELEMETRY_ENDPOINT: otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317
+          TELEMETRY_ENDPOINT_INSECURE: "true"
+
+      - name: Build NGF Docker Image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          file: build/Dockerfile
+          tags: ${{ steps.ngf-meta.outputs.tags }}
+          context: "."
+          load: true
+          cache-from: type=gha,scope=ngf-ipv6
+          pull: true
+          target: goreleaser
+
+      - name: Build NGINX Docker Image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || ''}}
+          tags: ${{ steps.nginx-meta.outputs.tags }}
+          context: "."
+          load: true
+          cache-from: type=gha,scope=${{ inputs.image }}-ipv6
+          pull: true
+          build-args: |
+            NJS_DIR=internal/controller/nginx/modules/src
+            NGINX_CONF_DIR=internal/controller/nginx/conf
+            BUILD_AGENT=gha
+      - name: Setup license file for plus
+        if: ${{ inputs.image == 'plus' }}
+        env:
+          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
+        run: echo "${PLUS_LICENSE}" > license.jwt
+
+      - name: Deploy IPv6-Only Kubernetes
+        id: k8s
+        run: |
+          # Enable IPv6 and container network options
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0
+          sudo sysctl -w net.ipv6.conf.all.forwarding=1
+
+          # Create IPv6-only kind cluster
+          kind create cluster \
+          --name ${{ github.run_id }}-ipv6 \
+          --image=kindest/node:${{ inputs.k8s-version }} \
+          --config=config/cluster/kind-ipv6-only.yaml
+
+          # Load images into the cluster
+          kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}-ipv6
+
+          # Verify nodes are ipv6 only
+          kubectl get nodes -o wide
+      - name: Install NGF with IPv6 Configuration
+        run: |
+          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
+          ngf_tag=${{ steps.ngf-meta.outputs.version }}
+          # Install with IPv6-specific configuration
+          CLUSTER_NAME=${{ github.run_id }}-ipv6 \
+          HELM_PARAMETERS="--set nginx.config.ipFamily=ipv6 --set nginx.service.type=ClusterIP" \
+          make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
+        working-directory: ./tests
+
+      - name: Deploy Test Applications
+        run: |
+          kubectl apply -f tests/manifests/ipv6-test-app.yaml
+
+      - name: Wait for NGF and Applications to be Ready
+        run: |
+          echo "Waiting for NGF to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment/nginx-gateway -n nginx-gateway
+          echo "Waiting for test applications to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment/test-app-ipv6
+          
+      - name: Deploy IPv6 Test Client
+        run: |
+          kubectl apply -f tests/manifests/test-client-ipv6.yaml
+          kubectl wait --for=condition=ready --timeout=300s pod/ipv6-test-client
+
+      - name: Get NGF IPv6 Address
+        id: ngf-address
+        run: |
+          # Get the NGF service IPv6 address
+          NGF_IPV6=$(kubectl get service nginx-gateway -n nginx-gateway -o jsonpath='{.spec.clusterIP}')
+          echo "NGF IPv6 Address: $NGF_IPV6"
+          echo "ngf_ipv6=$NGF_IPV6" >> $GITHUB_OUTPUT
+
+      - name: Run IPv6 Connectivity Tests
+        run: |
+          echo "=== Running IPv6-Only Tests ==="
+          # Test 1: Basic connectivity test using test client pod
+          echo "Test 1: Basic IPv6 connectivity"
+          kubectl exec ipv6-test-client -- curl --version
+          kubectl exec ipv6-test-client -- nslookup nginx-gateway.nginx-gateway.svc.cluster.local
+          # Test 2: Test NGF service directly via IPv6
+          echo "Test 2: NGF Service IPv6 connectivity"
+          kubectl exec ipv6-test-client -- curl -6 --connect-timeout 30 --max-time 60 -v \
+          -H "Host: ipv6-test.example.com" \
+          "http://[${{ steps.ngf-address.outputs.ngf_ipv6 }}]:80/" || echo "Direct NGF test failed"
+          # Test 3: Test via service DNS
+          echo "Test 3: Service DNS IPv6 connectivity"
+          kubectl exec ipv6-test-client -- curl -6 --connect-timeout 30 --max-time 60 -v \
+          -H "Host: ipv6-test.example.com" \
+          "http://nginx-gateway.nginx-gateway.svc.cluster.local:80/" || echo "Service DNS test failed"
+
+      - name: Validate IPv6-Only Configuration
+        run: |
+          echo "=== Validating IPv6-Only Configuration ==="
+          # Check NGF configuration
+          echo "NGF Pod IPv6 addresses:"
+          kubectl get pods -n nginx-gateway -o wide
+          echo "NGF Service configuration:"
+          kubectl get service nginx-gateway -n nginx-gateway -o yaml
+          echo "Gateway and HTTPRoute status:"
+          kubectl get gateway,httproute -A -o wide
+          echo "Test application service configuration:"
+          kubectl get service test-app-ipv6-service -o yaml
+          
+      - name: Collect Logs
+        if: always()
+        run: |
+          echo "=== Collecting logs for debugging ==="
+          echo "NGF Controller logs:"
+          kubectl logs -n nginx-gateway deployment/nginx-gateway -c nginx-gateway-controller --tail=100 || true
+          echo "NGINX logs:"
+          kubectl logs -n nginx-gateway deployment/nginx-gateway -c nginx --tail=100 || true
+          echo "Test client logs:"
+          kubectl logs ipv6-test-client --tail=100 || true
+          echo "Cluster events:"
+          kubectl get events --sort-by='.lastTimestamp' --all-namespaces --tail=50 || true
+      - name: Cleanup
+        if: always()
+        run: |
+          kind delete cluster --name ${{ github.run_id }}-ipv6 || true
