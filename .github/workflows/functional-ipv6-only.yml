@@ -131,7 +131,7 @@ jobs:
       - name: Deploy Kubernetes
         id: k8s
         run: |
-          kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }} --config=./kind/ipv6-only.yaml
+          kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }} --config=./config/cluster/kind-ipv6-only.yaml
           kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}
 
       - name: Run functional telemetry tests
