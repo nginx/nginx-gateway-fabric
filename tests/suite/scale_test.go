@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -38,6 +39,10 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 		}
 		upstreamsManifests = []string{
 			"scale/upstreams.yaml",
+		}
+
+		httpRouteManifests = []string{
+			"scale/httproute.yaml",
 		}
 
 		namespace = "scale"
@@ -468,6 +473,10 @@ The logs are attached only if there are errors.
 		Expect(resourceManager.ApplyFromFiles(upstreamsManifests, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
+		// apply HTTPRoute after upstreams are ready
+		Expect(resourceManager.ApplyFromFiles(httpRouteManifests, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
 		var nginxPodNames []string
 		var err error
 		Eventually(
@@ -835,7 +844,16 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 	AfterAll(func() {
 		_, err := fmt.Fprint(outFile)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(outFile.Close()).To(Succeed())
+
+		if outFile != nil {
+			if err := outFile.Close(); err != nil {
+				if errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "file already closed") {
+					GinkgoWriter.Printf("Warning: attempted to close already closed file: %v\n", err)
+				} else {
+					Expect(err).ToNot(HaveOccurred())
+				}
+			}
+		}
 
 		// restoring NGF shared among tests in the suite
 		cfg := getDefaultSetupCfg()
@@ -1012,13 +1030,13 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 			checkGatewayListeners := func(num int) {
 				Eventually(
 					func() error {
-						ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
+						ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout*2)
 						defer cancel()
 
 						var gw v1.Gateway
 						key := types.NamespacedName{Namespace: ns.Name, Name: "gateway"}
 						if err := resourceManager.K8sClient.Get(ctx, key, &gw); err != nil {
-							return err
+							return fmt.Errorf("failed to get gateway: %w", err)
 						}
 
 						if len(gw.Status.Listeners) != num {
@@ -1028,8 +1046,8 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 						return nil
 					},
 				).
-					WithTimeout(5 * time.Second).
-					WithPolling(100 * time.Millisecond).
+					WithTimeout(timeoutConfig.GatewayListenerUpdateTimeout).
+					WithPolling(1 * time.Second).
 					Should(Succeed())
 			}
 

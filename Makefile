@@ -130,7 +130,7 @@ install-crds: ## Install CRDs
 
 .PHONY: install-gateway-crds
 install-gateway-crds: ## Install Gateway API CRDs
-	kubectl kustomize $(SELF_DIR)config/crd/gateway-api/$(if $(filter true,$(ENABLE_EXPERIMENTAL)),experimental,standard) | kubectl apply -f -
+	kubectl kustomize $(SELF_DIR)config/crd/gateway-api/$(if $(filter true,$(ENABLE_EXPERIMENTAL)),experimental,standard) | kubectl apply --server-side -f -
 
 .PHONY: uninstall-gateway-crds
 uninstall-gateway-crds: ## Uninstall Gateway API CRDs
