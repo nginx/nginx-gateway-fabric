@@ -133,6 +133,7 @@ jobs:
         run: |
           kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }} --config=./config/cluster/kind-ipv6-only.yaml
           kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}
+          kubectl get nodes -o wide
 
       - name: Run functional telemetry tests
         run: |
