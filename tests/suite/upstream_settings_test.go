@@ -425,11 +425,19 @@ func usPolicyHasNoAncestors(usPolicyNsName types.NamespacedName) bool {
 
 	var usPolicy ngfAPI.UpstreamSettingsPolicy
 	if err := k8sClient.Get(ctx, usPolicyNsName, &usPolicy); err != nil {
-		GinkgoWriter.Printf("Failed to get UpstreamSettingsPolicy %q: %s", usPolicyNsName, err.Error())
+		GinkgoWriter.Printf("ERROR: Failed to get UpstreamSettingsPolicy %q: %s", usPolicyNsName, err.Error())
 		return false
 	}
+	isZeroAncestors := len(usPolicy.Status.Ancestors) == 0
+	if !isZeroAncestors {
+		GinkgoWriter.Printf(
+			"UpstreamSettingsPolicy %q has %d ancestors in status\n",
+			usPolicyNsName,
+			len(usPolicy.Status.Ancestors),
+		)
+	}
 
-	return len(usPolicy.Status.Ancestors) == 0
+	return isZeroAncestors
 }
 
 func waitForUSPolicyStatus(
@@ -457,6 +465,8 @@ func waitForUSPolicyStatus(
 			var err error
 
 			if err := k8sClient.Get(ctx, usPolicyNsName, &usPolicy); err != nil {
+				GinkgoWriter.Printf("ERROR: Failed to get UpstreamSettingsPolicy %q: %s", usPolicyNsName, err.Error())
+
 				return false, err
 			}
 
@@ -467,13 +477,18 @@ func waitForUSPolicyStatus(
 			}
 
 			if len(usPolicy.Status.Ancestors) != 1 {
-				return false, fmt.Errorf("policy has %d ancestors, expected 1", len(usPolicy.Status.Ancestors))
+				tooManyAncestorsErr := fmt.Errorf("policy has %d ancestors, expected 1", len(usPolicy.Status.Ancestors))
+				GinkgoWriter.Printf("ERROR: %v\n", tooManyAncestorsErr)
+
+				return false, tooManyAncestorsErr
 			}
 
 			ancestors := usPolicy.Status.Ancestors
 
 			for _, ancestor := range ancestors {
 				if err := ancestorMustEqualGatewayRef(ancestor, gatewayName, usPolicy.Namespace); err != nil {
+					GinkgoWriter.Printf("ERROR: %v\n", err)
+
 					return false, err
 				}
 
