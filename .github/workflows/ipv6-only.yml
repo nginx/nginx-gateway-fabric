@@ -155,7 +155,7 @@ jobs:
           kubectl wait --for=condition=available --timeout=300s deployment/nginx-gateway -n nginx-gateway
           echo "Waiting for test applications to be ready..."
           kubectl wait --for=condition=available --timeout=300s deployment/test-app-ipv6
-          
+
       - name: Deploy IPv6 Test Client
         run: |
           kubectl apply -f tests/manifests/test-client-ipv6.yaml
@@ -199,7 +199,7 @@ jobs:
           kubectl get gateway,httproute -A -o wide
           echo "Test application service configuration:"
           kubectl get service test-app-ipv6-service -o yaml
-          
+
       - name: Collect Logs
         if: always()
         run: |
