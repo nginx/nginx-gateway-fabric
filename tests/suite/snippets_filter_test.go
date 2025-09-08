@@ -270,7 +270,9 @@ func checkHTTPRouteToHaveGatewayNotProgrammedCond(httpRouteNsName types.Namespac
 	var hr v1.HTTPRoute
 	var err error
 
-	if err = framework.K8sGet(ctx, k8sClient, httpRouteNsName, &hr); err != nil {
+	if err = k8sClient.Get(ctx, httpRouteNsName, &hr); err != nil {
+		GinkgoWriter.Printf("ERROR: %v\n", err)
+
 		return err
 	}
 
@@ -326,7 +328,9 @@ func checkForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedNa
 	var sf ngfAPI.SnippetsFilter
 	var err error
 
-	if err = framework.K8sGet(ctx, k8sClient, snippetsFilterNsNames, &sf); err != nil {
+	if err = k8sClient.Get(ctx, snippetsFilterNsNames, &sf); err != nil {
+		GinkgoWriter.Printf("ERROR: %v\n", err)
+
 		return err
 	}
 

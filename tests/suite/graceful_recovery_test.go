@@ -74,12 +74,15 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		defer cancel()
 
 		var pod core.Pod
-		if err := framework.K8sGet(
-			ctx, k8sClient,
+		if err := k8sClient.Get(
+			ctx,
 			types.NamespacedName{Namespace: namespace, Name: podName},
 			&pod,
 		); err != nil {
-			return 0, fmt.Errorf("error retrieving Pod: %w", err)
+			podErr := fmt.Errorf("error retrieving Pod: %w", err)
+			GinkgoWriter.Printf("%s\n", podErr)
+
+			return 0, podErr
 		}
 
 		var restartCount int
@@ -135,13 +138,15 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		defer cancel()
 
 		var nginxPod core.Pod
-		if err := framework.K8sGet(
+		if err := k8sClient.Get(
 			ctx,
-			k8sClient,
 			types.NamespacedName{Namespace: ns.Name, Name: nginxPodName},
 			&nginxPod,
 		); err != nil {
-			return nil, fmt.Errorf("error retrieving nginx Pod: %w", err)
+			podErr := fmt.Errorf("error retrieving nginx Pod: %w", err)
+			GinkgoWriter.Printf("%s\n", podErr)
+
+			return nil, podErr
 		}
 
 		b, err := resourceManager.GetFileContents("graceful-recovery/node-debugger-job.yaml")
@@ -313,6 +318,7 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 					ngfNamespace,
 					releaseName,
 					timeoutConfig.GetStatusTimeout,
+					framework.WithLoggingDisabled(),
 				)
 				return len(podNames) == 1 && err == nil
 			}).
@@ -379,8 +385,11 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		var lease coordination.Lease
 		key := types.NamespacedName{Name: "ngf-test-nginx-gateway-fabric-leader-election", Namespace: ngfNamespace}
 
-		if err := framework.K8sGet(ctx, k8sClient, key, &lease); err != nil {
-			return "", errors.New("could not retrieve leader election lease")
+		if err := k8sClient.Get(ctx, key, &lease); err != nil {
+			leaseErr := errors.New("could not retrieve leader election lease")
+			GinkgoWriter.Printf("ERROR: %s\n", leaseErr)
+
+			return "", leaseErr
 		}
 
 		if *lease.Spec.HolderIdentity == "" {
@@ -411,7 +420,13 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 	}
 
 	BeforeAll(func() {
-		podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetStatusTimeout)
+		podNames, err := framework.GetReadyNGFPodNames(
+			k8sClient,
+			ngfNamespace,
+			releaseName,
+			timeoutConfig.GetStatusTimeout,
+			framework.WithLoggingDisabled(),
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(podNames).To(HaveLen(1))
 
@@ -500,6 +515,7 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 					ngfNamespace,
 					releaseName,
 					timeoutConfig.GetStatusTimeout,
+					framework.WithLoggingDisabled(),
 				)
 				return len(newNGFPodNames) == 1 && err == nil
 			}).

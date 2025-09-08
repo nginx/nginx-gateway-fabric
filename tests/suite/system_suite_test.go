@@ -293,7 +293,9 @@ func teardown(relName string) {
 		true, /* poll immediately */
 		func(ctx context.Context) (bool, error) {
 			key := k8sTypes.NamespacedName{Name: ngfNamespace}
-			if err := framework.K8sGet(ctx, k8sClient, key, &core.Namespace{}); err != nil && apierrors.IsNotFound(err) {
+			if err := k8sClient.Get(ctx, key, &core.Namespace{}); err != nil && apierrors.IsNotFound(err) {
+				GinkgoWriter.Printf("Namespace %q successfully deleted\n", ngfNamespace)
+
 				return true, nil
 			}
 

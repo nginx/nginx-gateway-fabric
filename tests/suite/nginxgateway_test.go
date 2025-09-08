@@ -34,8 +34,11 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 
 		var nginxGateway ngfAPI.NginxGateway
 
-		if err := framework.K8sGet(ctx, k8sClient, nsname, &nginxGateway); err != nil {
-			return nginxGateway, fmt.Errorf("failed to get nginxGateway: %w", err)
+		if err := k8sClient.Get(ctx, nsname, &nginxGateway); err != nil {
+			gatewayErr := fmt.Errorf("failed to get nginxGateway: %w", err)
+			GinkgoWriter.Printf("ERROR: %v\n", gatewayErr)
+
+			return nginxGateway, gatewayErr
 		}
 
 		return nginxGateway, nil

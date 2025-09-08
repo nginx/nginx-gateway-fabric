@@ -393,7 +393,9 @@ func waitForClientSettingsAncestorStatus(
 		func(ctx context.Context) (bool, error) {
 			var pol ngfAPI.ClientSettingsPolicy
 
-			if err := framework.K8sGet(ctx, k8sClient, policyNsname, &pol); err != nil {
+			if err := k8sClient.Get(ctx, policyNsname, &pol); err != nil {
+				GinkgoWriter.Printf("ERROR: Failed to get ClientSettingsPolicy %q: %s", policyNsname, err.Error())
+
 				return false, err
 			}
 
