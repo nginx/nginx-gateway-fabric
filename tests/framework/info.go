@@ -11,6 +11,11 @@ import (
 
 // GetLogs returns the logs for all containers in all pods for a release.
 func GetLogs(rm ResourceManager, namespace string, releaseName string) string {
+	GinkgoWriter.Printf(
+		"Getting logs for all containers in all pods for release %q in namespace %q\n",
+		releaseName,
+		namespace,
+	)
 	var returnLogs string
 	pods, err := rm.GetPods(namespace, client.MatchingLabels{
 		"app.kubernetes.io/instance": releaseName,
@@ -26,6 +31,13 @@ func GetLogs(rm ResourceManager, namespace string, releaseName string) string {
 				Container: container.Name,
 			})
 			if err != nil {
+				GinkgoWriter.Printf(
+					"ERROR occurred during getting logs for container %q in pod %q in namespace %q: %v\n",
+					container.Name,
+					pod.Name,
+					pod.Namespace,
+					err,
+				)
 				returnLogs += fmt.Sprintf("  failed to get logs: %v\n", err)
 				continue
 			}
@@ -40,6 +52,8 @@ func GetEvents(rm ResourceManager, namespace string) string {
 	var returnEvents string
 	events, err := rm.GetEvents(namespace)
 	if err != nil {
+		GinkgoWriter.Printf("ERROR occurred during getting events in namespace %q: %v\n", namespace, err)
+
 		return fmt.Sprintf("failed to get events: %v", err)
 	}
 
@@ -60,6 +74,7 @@ func GetEvents(rm ResourceManager, namespace string) string {
 
 // GetBuildInfo returns the build information.
 func GetBuildInfo() (commitHash string, commitTime string, dirtyBuild string) {
+	GinkgoWriter.Printf("Getting build info\n")
 	commitHash = "unknown"
 	commitTime = "unknown"
 	dirtyBuild = "unknown"
@@ -84,11 +99,12 @@ func GetBuildInfo() (commitHash string, commitTime string, dirtyBuild string) {
 }
 
 // AddNginxLogsAndEventsToReport adds nginx logs and events from the namespace to the report if the spec failed.
-func AddNginxLogsAndEventsToReport(rm ResourceManager, namespace string) {
+func AddNginxLogsAndEventsToReport(rm ResourceManager, namespace string, opts ...Option) {
 	if CurrentSpecReport().Failed() {
+		GinkgoWriter.Printf("Current spec failed. Adding Nginx logs and events to report for namespace %q\n", namespace)
 		var returnLogs string
 
-		nginxPodNames, _ := GetReadyNginxPodNames(rm.K8sClient, namespace, rm.TimeoutConfig.GetStatusTimeout)
+		nginxPodNames, _ := GetReadyNginxPodNames(rm.K8sClient, namespace, rm.TimeoutConfig.GetStatusTimeout, opts...)
 
 		for _, nginxPodName := range nginxPodNames {
 			returnLogs += fmt.Sprintf("Logs for Nginx Pod %s:\n", nginxPodName)

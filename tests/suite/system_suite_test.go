@@ -293,7 +293,7 @@ func teardown(relName string) {
 		true, /* poll immediately */
 		func(ctx context.Context) (bool, error) {
 			key := k8sTypes.NamespacedName{Name: ngfNamespace}
-			if err := k8sClient.Get(ctx, key, &core.Namespace{}); err != nil && apierrors.IsNotFound(err) {
+			if err := framework.K8sGet(ctx, k8sClient, key, &core.Namespace{}); err != nil && apierrors.IsNotFound(err) {
 				return true, nil
 			}
 

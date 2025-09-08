@@ -76,8 +76,14 @@ type ClusterInfo struct {
 }
 
 // Apply creates or updates Kubernetes resources defined as Go objects.
-func (rm *ResourceManager) Apply(resources []client.Object) error {
-	GinkgoWriter.Printf("Applying resources defined as Go objects\n")
+func (rm *ResourceManager) Apply(resources []client.Object, opts ...Option) error {
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+	if options.logEnabled {
+		GinkgoWriter.Printf("Applying resources defined as Go objects\n")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.CreateTimeout)
 	defer cancel()
 
@@ -104,20 +110,14 @@ func (rm *ResourceManager) Apply(resources []client.Object) error {
 		if err := rm.K8sClient.Get(ctx, client.ObjectKeyFromObject(resource), obj); err != nil {
 			if !apierrors.IsNotFound(err) {
 				notFoundErr := fmt.Errorf("error getting resource: %w", err)
-				GinkgoWriter.Printf(
-					"ERROR occurred during getting Kubernetes resources: %s\n",
-					notFoundErr,
-				)
+				GinkgoWriter.Printf("%s\n", notFoundErr)
 
 				return notFoundErr
 			}
 
 			if err := rm.K8sClient.Create(ctx, resource); err != nil {
 				creatingResourceErr := fmt.Errorf("error creating resource: %w", err)
-				GinkgoWriter.Printf(
-					"ERROR occurred during applying creates Kubernetes resources: %s\n",
-					creatingResourceErr,
-				)
+				GinkgoWriter.Printf("%s\n", creatingResourceErr)
 
 				return creatingResourceErr
 			}
@@ -149,10 +149,7 @@ func (rm *ResourceManager) Apply(resources []client.Object) error {
 		})
 		if err != nil {
 			retryErr := fmt.Errorf("error updating resource: %w", err)
-			GinkgoWriter.Printf(
-				"ERROR occurred during retries: %s\n",
-				retryErr,
-			)
+			GinkgoWriter.Printf("%s\n", retryErr)
 
 			return retryErr
 		}
@@ -163,30 +160,41 @@ func (rm *ResourceManager) Apply(resources []client.Object) error {
 }
 
 // ApplyFromFiles creates or updates Kubernetes resources defined within the provided YAML files.
-func (rm *ResourceManager) ApplyFromFiles(files []string, namespace string) error {
+func (rm *ResourceManager) ApplyFromFiles(files []string, namespace string, opts ...Option) error {
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
 	for _, file := range files {
-		GinkgoWriter.Printf("Applying resources from file: %q to namespace %q\n", file, namespace)
+		if options.logEnabled {
+			GinkgoWriter.Printf("\nApplying resources from file: %q to namespace %q\n", file, namespace)
+		}
 		data, err := rm.GetFileContents(file)
 		if err != nil {
-			GinkgoWriter.Printf("ERROR occurred during getting file contents for file %q, error: %s\n", file, err)
-
 			return err
 		}
 
 		if err = rm.ApplyFromBuffer(data, namespace); err != nil {
-			GinkgoWriter.Printf("ERROR occurred during applying resources from file %q, error: %s\n", file, err)
-
 			return err
 		}
 	}
-	GinkgoWriter.Printf("Resources from files applied successfully to namespace %q,\n", namespace)
+	if options.logEnabled {
+		GinkgoWriter.Printf("Resources from files applied successfully to namespace %q,\n", namespace)
+	}
 
 	return nil
 }
 
-func (rm *ResourceManager) ApplyFromBuffer(buffer *bytes.Buffer, namespace string) error {
+func (rm *ResourceManager) ApplyFromBuffer(buffer *bytes.Buffer, namespace string, opts ...Option) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.CreateTimeout)
 	defer cancel()
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+	if options.logEnabled {
+		GinkgoWriter.Printf("Applying resources from buffer to namespace %q\n", namespace)
+	}
 
 	handlerFunc := func(obj unstructured.Unstructured) error {
 		obj.SetNamespace(namespace)
@@ -195,14 +203,14 @@ func (rm *ResourceManager) ApplyFromBuffer(buffer *bytes.Buffer, namespace strin
 		if err := rm.K8sClient.Get(ctx, nsName, fetchedObj); err != nil {
 			if !apierrors.IsNotFound(err) {
 				getResourceErr := fmt.Errorf("error getting resource: %w", err)
-				GinkgoWriter.Printf("ERROR occurred during getting resource from buffer, error: %s\n", getResourceErr)
+				GinkgoWriter.Printf("%s\n", getResourceErr)
 
 				return getResourceErr
 			}
 
 			if err := rm.K8sClient.Create(ctx, &obj); err != nil {
 				createResourceErr := fmt.Errorf("error creating resource: %w", err)
-				GinkgoWriter.Printf("ERROR occurred during creating resource from buffer, error: %s\n", createResourceErr)
+				GinkgoWriter.Printf("%s\n", createResourceErr)
 
 				return createResourceErr
 			}
@@ -231,8 +239,7 @@ func (rm *ResourceManager) ApplyFromBuffer(buffer *bytes.Buffer, namespace strin
 		})
 		if err != nil {
 			retryErr := fmt.Errorf("error updating resource: %w", err)
-			GinkgoWriter.Printf(
-				"ERROR occurred during retries, while update from buffer error: %s\n",
+			GinkgoWriter.Printf("%s\n",
 				retryErr,
 			)
 
@@ -254,7 +261,7 @@ func (rm *ResourceManager) Delete(resources []client.Object, opts ...client.Dele
 	for _, resource := range resources {
 		if err := rm.K8sClient.Delete(ctx, resource, opts...); err != nil && !apierrors.IsNotFound(err) {
 			delErr := fmt.Errorf("error deleting resource: %w", err)
-			GinkgoWriter.Printf("ERROR occurred during deleting resource, error: %s\n", delErr)
+			GinkgoWriter.Printf("%s\n", delErr)
 
 			return delErr
 		}
@@ -264,27 +271,33 @@ func (rm *ResourceManager) Delete(resources []client.Object, opts ...client.Dele
 	return nil
 }
 
-func (rm *ResourceManager) DeleteNamespace(name string) error {
+func (rm *ResourceManager) DeleteNamespace(name string, opts ...Option) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.DeleteNamespaceTimeout)
 	GinkgoWriter.Printf("Deleting namespace %q\n", name)
 	defer cancel()
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
 
 	ns := &core.Namespace{}
 	if err := rm.K8sClient.Get(ctx, types.NamespacedName{Name: name}, ns); err != nil {
 		if apierrors.IsNotFound(err) {
-			GinkgoWriter.Printf("Namespace %q not found, nothing to delete\n", name)
+			if options.logEnabled {
+				GinkgoWriter.Printf("Namespace %q not found, nothing to delete\n", name)
+			}
 
 			return nil
 		}
 		getNsErr := fmt.Errorf("error getting namespace: %w", err)
-		GinkgoWriter.Printf("ERROR occurred during getting namespace, error: %s\n", getNsErr)
+		GinkgoWriter.Printf("%s\n", getNsErr)
 
 		return getNsErr
 	}
 
 	if err := rm.K8sClient.Delete(ctx, ns); err != nil {
 		delErr := fmt.Errorf("error deleting namespace: %w", err)
-		GinkgoWriter.Printf("ERROR occurred during deleting namespace, error: %s\n", delErr)
+		GinkgoWriter.Printf("%s\n", delErr)
 
 		return delErr
 	}
@@ -303,7 +316,7 @@ func (rm *ResourceManager) DeleteNamespace(name string) error {
 					return true, nil
 				}
 				getNsErr := fmt.Errorf("error getting namespace: %w", err)
-				GinkgoWriter.Printf("ERROR occurred during getting namespace, error: %s\n", getNsErr)
+				GinkgoWriter.Printf("%s\n", getNsErr)
 
 				return false, getNsErr
 			}
@@ -312,10 +325,14 @@ func (rm *ResourceManager) DeleteNamespace(name string) error {
 		})
 }
 
-func (rm *ResourceManager) DeleteNamespaces(names []string) error {
+func (rm *ResourceManager) DeleteNamespaces(names []string, opts ...Option) error {
 	GinkgoWriter.Printf("Deleting namespaces: %v\n", names)
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.DeleteNamespaceTimeout*2)
 	defer cancel()
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
 
 	var combinedErrors error
 	for _, name := range names {
@@ -323,11 +340,13 @@ func (rm *ResourceManager) DeleteNamespaces(names []string) error {
 
 		if err := rm.K8sClient.Delete(ctx, ns); err != nil {
 			if apierrors.IsNotFound(err) {
-				GinkgoWriter.Printf("Namespace %q not found, nothing to delete\n", name)
+				if options.logEnabled {
+					GinkgoWriter.Printf("Namespace %q not found, nothing to delete\n", name)
+				}
 				continue
 			}
 			delNsErr := fmt.Errorf("error deleting namespace: %w", err)
-			GinkgoWriter.Printf("ERROR occurred during deleting namespace %q, error: %s\n", name, delNsErr)
+			GinkgoWriter.Printf("%q: %w\n", name, delNsErr)
 
 			combinedErrors = errors.Join(combinedErrors, delNsErr)
 		}
@@ -375,8 +394,6 @@ func (rm *ResourceManager) DeleteFromFiles(files []string, namespace string) err
 	for _, file := range files {
 		data, err := rm.GetFileContents(file)
 		if err != nil {
-			GinkgoWriter.Printf("ERROR occurred during getting file contents for file %q, error: %s\n", file, err)
-
 			return err
 		}
 
@@ -419,34 +436,49 @@ func (rm *ResourceManager) readAndHandleObject(
 // path or an https:// URL to YAML manifests and provides the contents.
 func (rm *ResourceManager) GetFileContents(file string) (*bytes.Buffer, error) {
 	if strings.HasPrefix(file, "http://") {
-		return nil, fmt.Errorf("data can't be retrieved from %s: http is not supported, use https", file)
+		err := fmt.Errorf("data can't be retrieved from %s: http is not supported, use https", file)
+		GinkgoWriter.Printf("ERROR occurred during getting contents for file %q, error: %s\n", file, err)
+
+		return nil, err
 	} else if strings.HasPrefix(file, "https://") {
 		ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.ManifestFetchTimeout)
 		defer cancel()
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, file, nil)
 		if err != nil {
+			GinkgoWriter.Printf("ERROR occurred during getting contents for file %q, error: %s\n", file, err)
+
 			return nil, err
 		}
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
+			GinkgoWriter.Printf("ERROR occurred during getting contents for file %q, error: %s\n", file, err)
+
 			return nil, err
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("%d response when getting %s file contents", resp.StatusCode, file)
+			err = fmt.Errorf("%d response when getting %s file contents", resp.StatusCode, file)
+			GinkgoWriter.Printf("ERROR occurred during getting contents for file %q, error: %s\n", file, err)
+
+			return nil, err
 		}
 
 		manifests := new(bytes.Buffer)
 		count, err := manifests.ReadFrom(resp.Body)
 		if err != nil {
+			GinkgoWriter.Printf("ERROR occurred during getting contents for file %q, error: %s\n", file, err)
+
 			return nil, err
 		}
 
 		if resp.ContentLength != -1 && count != resp.ContentLength {
-			return nil, fmt.Errorf("received %d bytes from %s, expected %d", count, file, resp.ContentLength)
+			err = fmt.Errorf("received %d bytes from %s, expected %d", count, file, resp.ContentLength)
+			GinkgoWriter.Printf("ERROR occurred during getting contents for file %q, error: %s\n", file, err)
+
+			return nil, err
 		}
 		return manifests, nil
 	}
@@ -457,6 +489,8 @@ func (rm *ResourceManager) GetFileContents(file string) (*bytes.Buffer, error) {
 
 	b, err := rm.FS.ReadFile(file)
 	if err != nil {
+		GinkgoWriter.Printf("ERROR occurred during getting file contents for file %q, error: %s\n", file, err)
+
 		return nil, err
 	}
 
@@ -465,18 +499,18 @@ func (rm *ResourceManager) GetFileContents(file string) (*bytes.Buffer, error) {
 
 // WaitForAppsToBeReady waits for all apps in the specified namespace to be ready,
 // or until the ctx timeout is reached.
-func (rm *ResourceManager) WaitForAppsToBeReady(namespace string) error {
+func (rm *ResourceManager) WaitForAppsToBeReady(namespace string, opts ...Option) error {
 	GinkgoWriter.Printf("Waiting for apps to be ready in namespace %q\n", namespace)
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.CreateTimeout)
 	defer cancel()
 
-	return rm.WaitForAppsToBeReadyWithCtx(ctx, namespace)
+	return rm.WaitForAppsToBeReadyWithCtx(ctx, namespace, opts...)
 }
 
 // WaitForAppsToBeReadyWithCtx waits for all apps in the specified namespace to be ready or
 // until the provided context is canceled.
-func (rm *ResourceManager) WaitForAppsToBeReadyWithCtx(ctx context.Context, namespace string) error {
-	if err := rm.WaitForPodsToBeReady(ctx, namespace); err != nil {
+func (rm *ResourceManager) WaitForAppsToBeReadyWithCtx(ctx context.Context, namespace string, opts ...Option) error {
+	if err := rm.WaitForPodsToBeReady(ctx, namespace, opts...); err != nil {
 		GinkgoWriter.Printf("ERROR occurred during waiting for pods to be ready, error: %s\n", err)
 
 		return err
@@ -504,8 +538,16 @@ func (rm *ResourceManager) WaitForAppsToBeReadyWithCtx(ctx context.Context, name
 
 // WaitForPodsToBeReady waits for all Pods in the specified namespace to be ready or
 // until the provided context is canceled.
-func (rm *ResourceManager) WaitForPodsToBeReady(ctx context.Context, namespace string) error {
-	return wait.PollUntilContextCancel(
+func (rm *ResourceManager) WaitForPodsToBeReady(
+	ctx context.Context,
+	namespace string,
+	opts ...Option,
+) error {
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+	waitingErr := wait.PollUntilContextCancel(
 		ctx,
 		500*time.Millisecond,
 		true, /* poll immediately */
@@ -523,10 +565,22 @@ func (rm *ResourceManager) WaitForPodsToBeReady(ctx context.Context, namespace s
 					}
 				}
 			}
+			if options.logEnabled {
+				GinkgoWriter.Printf("Pods ready: %d out of %d in namespace %q\n", podsReady, len(podList.Items), namespace)
+			}
 
 			return podsReady == len(podList.Items), nil
 		},
 	)
+	if waitingErr != nil {
+		GinkgoWriter.Printf(
+			"ERROR occurred during waiting for Pods to be ready in namespace %q, error: %s\n",
+			namespace,
+			waitingErr,
+		)
+	}
+
+	return waitingErr
 }
 
 func (rm *ResourceManager) waitForGatewaysToBeReady(ctx context.Context, namespace string) error {
@@ -554,6 +608,7 @@ func (rm *ResourceManager) waitForGatewaysToBeReady(ctx context.Context, namespa
 }
 
 func (rm *ResourceManager) waitForHTTPRoutesToBeReady(ctx context.Context, namespace string) error {
+	GinkgoWriter.Printf("Waiting for HTTPRoutes to be ready in namespace %q\n", namespace)
 	return wait.PollUntilContextCancel(
 		ctx,
 		500*time.Millisecond,
@@ -576,10 +631,13 @@ func (rm *ResourceManager) waitForHTTPRoutesToBeReady(ctx context.Context, names
 }
 
 func (rm *ResourceManager) waitForGRPCRoutesToBeReady(ctx context.Context, namespace string) error {
+	GinkgoWriter.Printf("Waiting for GRPCRoutes to be ready in namespace %q\n", namespace)
 	// First, check if grpcroute even exists for v1. If not, ignore.
 	var routeList v1.GRPCRouteList
 	err := rm.K8sClient.List(ctx, &routeList, client.InNamespace(namespace))
 	if err != nil && strings.Contains(err.Error(), "no matches for kind") {
+		GinkgoWriter.Printf("No GRPCRoute resources found in namespace %q, skipping wait\n", namespace)
+
 		return nil
 	}
 
@@ -687,7 +745,7 @@ func (rm *ResourceManager) GetClusterInfo() (ClusterInfo, error) {
 	ci := &ClusterInfo{}
 	if err := rm.K8sClient.List(ctx, &nodes); err != nil {
 		getNodesErr := fmt.Errorf("error getting nodes: %w", err)
-		GinkgoWriter.Printf("ERROR occurred during getting nodes in cluster, error: %s\n",
+		GinkgoWriter.Printf("%s\n",
 			getNodesErr,
 		)
 
@@ -714,7 +772,7 @@ func (rm *ResourceManager) GetClusterInfo() (ClusterInfo, error) {
 
 	if err := rm.K8sClient.Get(ctx, key, &ns); err != nil {
 		getK8sNamespaceErr := fmt.Errorf("error getting kube-system namespace: %w", err)
-		GinkgoWriter.Printf("ERROR occurred during getting kube-system namespace, error: %s\n",
+		GinkgoWriter.Printf("%s\n",
 			getK8sNamespaceErr,
 		)
 
@@ -753,7 +811,7 @@ func (rm *ResourceManager) GetPodNames(namespace string, labels client.MatchingL
 	for _, pod := range podList.Items {
 		names = append(names, pod.Name)
 	}
-	GinkgoWriter.Printf("Found pod names in namespace %q: %v\n", namespace, names)
+	GinkgoWriter.Printf("Found pod name in namespace %q: %v\n", namespace, names)
 
 	return names, nil
 }
@@ -1024,6 +1082,7 @@ func GetReadyNGFPodNames(
 	namespace,
 	releaseName string,
 	timeout time.Duration,
+	opts ...Option,
 ) ([]string, error) {
 	GinkgoWriter.Printf("Getting ready NGF Pod names in namespace %q with release name %q\n", namespace, releaseName)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -1048,7 +1107,7 @@ func GetReadyNGFPodNames(
 				return false, fmt.Errorf("error getting list of NGF Pods: %w", err)
 			}
 
-			ngfPodNames = getReadyPodNames(podList)
+			ngfPodNames = getReadyPodNames(podList, opts...)
 			return len(ngfPodNames) > 0, nil
 		},
 	)
@@ -1078,6 +1137,7 @@ func GetReadyNginxPodNames(
 	k8sClient client.Client,
 	namespace string,
 	timeout time.Duration,
+	opts ...Option,
 ) ([]string, error) {
 	GinkgoWriter.Printf("Getting ready NGINX Pod names in namespace %q\n", namespace)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -1100,21 +1160,28 @@ func GetReadyNginxPodNames(
 				return false, fmt.Errorf("error getting list of NGINX Pods: %w", err)
 			}
 
-			nginxPodNames = getReadyPodNames(podList)
+			nginxPodNames = getReadyPodNames(podList, opts...)
 			return len(nginxPodNames) > 0, nil
 		},
 	)
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	if err != nil {
 		waitingPodsErr := fmt.Errorf("timed out waiting for NGINX Pods to be ready: %w", err)
-		GinkgoWriter.Printf("ERROR occurred during waiting for NGINX Pods to be ready in namespace %q, error: %s\n",
-			namespace,
-			waitingPodsErr,
-		)
+		if options.logEnabled {
+			GinkgoWriter.Printf("ERROR occurred during waiting for NGINX Pods to be ready in namespace %q, error: %s\n",
+				namespace,
+				waitingPodsErr,
+			)
+		}
 
 		return nil, waitingPodsErr
 	}
 	GinkgoWriter.Printf(
-		"Successfully found ready NGINX Pod names in namespace %q: %v\n",
+		"Successfully found ready NGINX Pod name(s) in namespace %q: %v\n",
 		namespace,
 		nginxPodNames,
 	)
@@ -1122,7 +1189,7 @@ func GetReadyNginxPodNames(
 	return nginxPodNames, nil
 }
 
-func getReadyPodNames(podList core.PodList) []string {
+func getReadyPodNames(podList core.PodList, opts ...Option) []string {
 	var names []string
 	for _, pod := range podList.Items {
 		for _, cond := range pod.Status.Conditions {
@@ -1131,7 +1198,13 @@ func getReadyPodNames(podList core.PodList) []string {
 			}
 		}
 	}
-	GinkgoWriter.Printf("Found %d ready pod names: %v\n", len(names), names)
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+	if options.logEnabled {
+		GinkgoWriter.Printf("Found %d ready pod names: %v\n", len(names), names)
+	}
 
 	return names
 }
@@ -1153,8 +1226,18 @@ func countNumberOfReadyParents(parents []v1.RouteParentStatus) int {
 
 // WaitForPodsToBeReadyWithCount waits for all Pods in the specified namespace to be ready or
 // until the provided context is canceled.
-func (rm *ResourceManager) WaitForPodsToBeReadyWithCount(ctx context.Context, namespace string, count int) error {
+func (rm *ResourceManager) WaitForPodsToBeReadyWithCount(
+	ctx context.Context,
+	namespace string,
+	count int,
+	opts ...Option,
+) error {
 	GinkgoWriter.Printf("Waiting for %d pods to be ready in namespace %q\n", count, namespace)
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	return wait.PollUntilContextCancel(
 		ctx,
 		500*time.Millisecond,
@@ -1173,7 +1256,9 @@ func (rm *ResourceManager) WaitForPodsToBeReadyWithCount(ctx context.Context, na
 					}
 				}
 			}
-			GinkgoWriter.Printf("Found %d/%d ready pods in namespace %q\n", podsReady, count, namespace)
+			if options.logEnabled {
+				GinkgoWriter.Printf("Found %d/%d ready pods in namespace %q\n", podsReady, count, namespace)
+			}
 
 			return podsReady == count, nil
 		},
@@ -1216,8 +1301,18 @@ func (rm *ResourceManager) WaitForGatewayObservedGeneration(
 
 // GetNginxConfig uses crossplane to get the nginx configuration and convert it to JSON.
 // If the crossplane image is loaded locally on the node, crossplaneImageRepo can be empty.
-func (rm *ResourceManager) GetNginxConfig(nginxPodName, namespace, crossplaneImageRepo string) (*Payload, error) {
+func (rm *ResourceManager) GetNginxConfig(
+	nginxPodName,
+	namespace,
+	crossplaneImageRepo string,
+	opts ...Option,
+) (*Payload, error) {
 	GinkgoWriter.Printf("Getting NGINX config from pod %q in namespace %q\n", nginxPodName, namespace)
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	if err := injectCrossplaneContainer(
 		rm.ClientGoClient,
 		rm.TimeoutConfig.UpdateTimeout,
@@ -1263,10 +1358,12 @@ func (rm *ResourceManager) GetNginxConfig(nginxPodName, namespace, crossplaneIma
 		},
 	); err != nil {
 		containerErr := fmt.Errorf("could not connect to ephemeral container: %w", err)
-		GinkgoWriter.Printf("ERROR occurred during waiting for NGINX Pods to be ready in namespace %q, error: %s\n",
-			namespace,
-			containerErr,
-		)
+		if options.logEnabled {
+			GinkgoWriter.Printf("ERROR occurred during waiting for NGINX Pods to be ready in namespace %q, error: %s\n",
+				namespace,
+				containerErr,
+			)
+		}
 
 		return nil, containerErr
 	}

@@ -52,7 +52,7 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 
 		key := types.NamespacedName{Name: "ngf-test-proxy-config", Namespace: "nginx-gateway"}
 		var nginxProxy ngfAPIv1alpha2.NginxProxy
-		Expect(k8sClient.Get(ctx, key, &nginxProxy)).To(Succeed())
+		Expect(framework.K8sGet(ctx, k8sClient, key, &nginxProxy)).To(Succeed())
 
 		nginxProxy.Spec.Telemetry = &telemetry
 
@@ -240,9 +240,7 @@ func verifyGatewayClassResolvedRefs() error {
 	defer cancel()
 
 	var gc gatewayv1.GatewayClass
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, &gc); err != nil {
-		GinkgoWriter.Printf("ERROR getting GatewayClass %s: %v\n", gatewayClassName, err)
-
+	if err := framework.K8sGet(ctx, k8sClient, types.NamespacedName{Name: gatewayClassName}, &gc); err != nil {
 		return err
 	}
 
@@ -272,9 +270,7 @@ func verifyPolicyStatus() error {
 
 	var pol ngfAPIv1alpha2.ObservabilityPolicy
 	key := types.NamespacedName{Name: "test-observability-policy", Namespace: "helloworld"}
-	if err := k8sClient.Get(ctx, key, &pol); err != nil {
-		GinkgoWriter.Printf("ERROR getting ObservabilityPolicy %q in namespace %q: %v\n", key.Name, key.Namespace, err)
-
+	if err := framework.K8sGet(ctx, k8sClient, key, &pol); err != nil {
 		return err
 	}
 

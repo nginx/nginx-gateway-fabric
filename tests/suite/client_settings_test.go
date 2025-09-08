@@ -393,7 +393,7 @@ func waitForClientSettingsAncestorStatus(
 		func(ctx context.Context) (bool, error) {
 			var pol ngfAPI.ClientSettingsPolicy
 
-			if err := k8sClient.Get(ctx, policyNsname, &pol); err != nil {
+			if err := framework.K8sGet(ctx, k8sClient, policyNsname, &pol); err != nil {
 				return false, err
 			}
 
