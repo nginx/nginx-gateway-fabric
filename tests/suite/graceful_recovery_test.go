@@ -74,7 +74,11 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		defer cancel()
 
 		var pod core.Pod
-		if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: podName}, &pod); err != nil {
+		if err := framework.K8sGet(
+			ctx, k8sClient,
+			types.NamespacedName{Namespace: namespace, Name: podName},
+			&pod,
+		); err != nil {
 			return 0, fmt.Errorf("error retrieving Pod: %w", err)
 		}
 
@@ -95,8 +99,11 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		}
 
 		if restartCount != currentRestartCount+1 {
-			return fmt.Errorf("expected current restart count: %d to match incremented restart count: %d",
+			restartErr := fmt.Errorf("expected current restart count: %d to match incremented restart count: %d",
 				restartCount, currentRestartCount+1)
+			GinkgoWriter.Printf("%s\n", restartErr)
+
+			return restartErr
 		}
 
 		return nil
@@ -108,7 +115,10 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		var nodes core.NodeList
 
 		if err := k8sClient.List(ctx, &nodes); err != nil {
-			return nil, fmt.Errorf("error listing nodes: %w", err)
+			nodesErr := fmt.Errorf("error listing nodes: %w", err)
+			GinkgoWriter.Printf("%s\n", nodesErr)
+
+			return nil, nodesErr
 		}
 
 		names := make([]string, 0, len(nodes.Items))
@@ -125,31 +135,48 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		defer cancel()
 
 		var nginxPod core.Pod
-		if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: nginxPodName}, &nginxPod); err != nil {
+		if err := framework.K8sGet(
+			ctx,
+			k8sClient,
+			types.NamespacedName{Namespace: ns.Name, Name: nginxPodName},
+			&nginxPod,
+		); err != nil {
 			return nil, fmt.Errorf("error retrieving nginx Pod: %w", err)
 		}
 
 		b, err := resourceManager.GetFileContents("graceful-recovery/node-debugger-job.yaml")
 		if err != nil {
-			return nil, fmt.Errorf("error processing node debugger job file: %w", err)
+			debugErr := fmt.Errorf("error processing node debugger job file: %w", err)
+			GinkgoWriter.Printf("%s\n", debugErr)
+
+			return nil, debugErr
 		}
 
 		job := &v1.Job{}
 		if err = yaml.Unmarshal(b.Bytes(), job); err != nil {
-			return nil, fmt.Errorf("error with yaml unmarshal: %w", err)
+			yamlErr := fmt.Errorf("error with yaml unmarshal: %w", err)
+			GinkgoWriter.Printf("%s\n", yamlErr)
+
+			return nil, yamlErr
 		}
 
 		job.Spec.Template.Spec.NodeSelector["kubernetes.io/hostname"] = nginxPod.Spec.NodeName
 		if len(job.Spec.Template.Spec.Containers) != 1 {
-			return nil, fmt.Errorf(
+			containerErr := fmt.Errorf(
 				"expected node debugger job to contain one container, actual number: %d",
 				len(job.Spec.Template.Spec.Containers),
 			)
+			GinkgoWriter.Printf("ERROR: %s\n", containerErr)
+
+			return nil, containerErr
 		}
 		job.Namespace = ns.Name
 
 		if err = resourceManager.Apply([]client.Object{job}); err != nil {
-			return nil, fmt.Errorf("error in applying job: %w", err)
+			jobErr := fmt.Errorf("error in applying job: %w", err)
+			GinkgoWriter.Printf("%s\n", jobErr)
+
+			return nil, jobErr
 		}
 
 		return job, nil
@@ -352,12 +379,15 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		var lease coordination.Lease
 		key := types.NamespacedName{Name: "ngf-test-nginx-gateway-fabric-leader-election", Namespace: ngfNamespace}
 
-		if err := k8sClient.Get(ctx, key, &lease); err != nil {
+		if err := framework.K8sGet(ctx, k8sClient, key, &lease); err != nil {
 			return "", errors.New("could not retrieve leader election lease")
 		}
 
 		if *lease.Spec.HolderIdentity == "" {
-			return "", errors.New("leader election lease holder identity is empty")
+			leaderErr := errors.New("leader election lease holder identity is empty")
+			GinkgoWriter.Printf("ERROR: %s\n", leaderErr)
+
+			return "", leaderErr
 		}
 
 		return *lease.Spec.HolderIdentity, nil

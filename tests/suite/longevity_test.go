@@ -56,7 +56,7 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 		Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(promFile, ngfNamespace)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(ns.Name, framework.WithLoggingDisabled())).To(Succeed())
 	})
 
 	It("collects results", Label("longevity-teardown"), func() {
@@ -75,14 +75,14 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 		Expect(framework.WriteSystemInfoToFile(resultsFile, clusterInfo, *plusEnabled)).To(Succeed())
 
 		// gather wrk output
-		homeDir, err := os.UserHomeDir()
+		homeDir, err := framework.UserHomeDir()
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(framework.WriteContent(resultsFile, "\n## Traffic\n")).To(Succeed())
 		Expect(writeTrafficResults(resultsFile, homeDir, "coffee.txt", "HTTP")).To(Succeed())
 		Expect(writeTrafficResults(resultsFile, homeDir, "tea.txt", "HTTPS")).To(Succeed())
 
-		framework.AddNginxLogsAndEventsToReport(resourceManager, ns.Name)
+		framework.AddNginxLogsAndEventsToReport(resourceManager, ns.Name, framework.WithLoggingDisabled())
 		Expect(resourceManager.DeleteFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
 	})
@@ -90,7 +90,7 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 
 func writeTrafficResults(resultsFile *os.File, homeDir, filename, testname string) error {
 	file := fmt.Sprintf("%s/%s", homeDir, filename)
-	content, err := os.ReadFile(file)
+	content, err := framework.ReadFile(file)
 	if err != nil {
 		return err
 	}

@@ -66,7 +66,11 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		k8sConfig := ctlr.GetConfigOrDie()
 
 		if !clusterInfo.IsGKE {
-			Expect(promInstance.PortForward(k8sConfig, promPortForwardStopCh)).To(Succeed())
+			pfErr := promInstance.PortForward(k8sConfig, promPortForwardStopCh)
+			if pfErr != nil {
+				GinkgoWriter.Printf("ERROR occurred during port-forwarding Prometheus, error: %s\n", pfErr)
+			}
+			Expect(pfErr).NotTo(HaveOccurred())
 		}
 	})
 
@@ -85,6 +89,8 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 	})
 
 	createUniqueResources := func(resourceCount int, fileName string) error {
+		GinkgoWriter.Printf("Creating %d unique resources from %s\n", resourceCount, fileName)
+		var appliedResources []string
 		for i := 1; i <= resourceCount; i++ {
 			namespace := "namespace" + strconv.Itoa(i)
 
@@ -98,11 +104,24 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 			fileString = strings.ReplaceAll(fileString, "tea", "tea"+namespace)
 
 			data := bytes.NewBufferString(fileString)
+			appliedResources = append(appliedResources, namespace)
 
-			if err := resourceManager.ApplyFromBuffer(data, namespace); err != nil {
+			if err := resourceManager.ApplyFromBuffer(data, namespace, framework.WithLoggingDisabled()); err != nil {
+				GinkgoWriter.Printf(
+					"ERROR on creating and applying unique resources, could proceed %v\n the error happened on %q: %v\n",
+					appliedResources,
+					namespace,
+					err,
+				)
 				return fmt.Errorf("error processing manifest file: %w", err)
 			}
 		}
+		GinkgoWriter.Printf(
+			"Successfully created %d unique resources from %s: %v\n",
+			resourceCount,
+			fileName,
+			appliedResources,
+		)
 
 		return nil
 	}
@@ -117,7 +136,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 					Name: "namespace" + strconv.Itoa(i),
 				},
 			}
-			Expect(k8sClient.Create(ctx, &ns)).To(Succeed())
+			Expect(framework.K8sCreate(ctx, k8sClient, &ns)).To(Succeed())
 		}
 
 		Expect(resourceManager.Apply([]client.Object{&reconfigNamespace})).To(Succeed())
@@ -126,7 +145,9 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 				"reconfig/cafe-secret.yaml",
 				"reconfig/reference-grant.yaml",
 			},
-			reconfigNamespace.Name)).To(Succeed())
+			reconfigNamespace.Name,
+			framework.WithLoggingDisabled(),
+		)).To(Succeed())
 
 		Expect(createUniqueResources(resourceCount, "manifests/reconfig/cafe.yaml")).To(Succeed())
 
@@ -138,7 +159,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 					Name: "namespace" + strconv.Itoa(i),
 				},
 			}
-			Expect(resourceManager.WaitForPodsToBeReady(ctx, ns.Name)).To(Succeed())
+			Expect(resourceManager.WaitForPodsToBeReady(ctx, ns.Name, framework.WithLoggingDisabled())).To(Succeed())
 		}
 	}
 
@@ -147,21 +168,24 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		defer cancel()
 
 		var namespaces core.NamespaceList
-		if err := k8sClient.List(ctx, &namespaces); err != nil {
+		if err := framework.K8sList(ctx, k8sClient, &namespaces); err != nil {
 			return fmt.Errorf("error getting namespaces: %w", err)
 		}
+		GinkgoWriter.Printf("Found %d namespaces, expected at least%d\n", len(namespaces.Items), resourceCount)
 		Expect(len(namespaces.Items)).To(BeNumerically(">=", resourceCount))
 
 		var routes v1.HTTPRouteList
-		if err := k8sClient.List(ctx, &routes); err != nil {
+		if err := framework.K8sList(ctx, k8sClient, &routes); err != nil {
 			return fmt.Errorf("error getting HTTPRoutes: %w", err)
 		}
+		GinkgoWriter.Printf("Found %d HTTPRoutes, expected %d\n", len(routes.Items), resourceCount*3)
 		Expect(routes.Items).To(HaveLen(resourceCount * 3))
 
 		var pods core.PodList
-		if err := k8sClient.List(ctx, &pods); err != nil {
+		if err := framework.K8sList(ctx, k8sClient, &pods); err != nil {
 			return fmt.Errorf("error getting Pods: %w", err)
 		}
+		GinkgoWriter.Printf("Found %d Pods, expected at least %d\n", len(pods.Items), resourceCount*2)
 		Expect(len(pods.Items)).To(BeNumerically(">=", resourceCount*2))
 
 		return nil
@@ -175,7 +199,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 			namespaces[i] = "namespace" + strconv.Itoa(i+1)
 		}
 
-		err = resourceManager.DeleteNamespaces(namespaces)
+		err = resourceManager.DeleteNamespaces(namespaces, framework.WithLoggingDisabled())
 		Expect(resourceManager.DeleteNamespace(reconfigNamespace.Name)).To(Succeed())
 
 		return err
@@ -196,7 +220,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 			}
 
 			// each call to ValidateNginxFieldExists takes about 1ms
-			if err := framework.ValidateNginxFieldExists(conf, expUpstream); err != nil {
+			if err := framework.ValidateNginxFieldExists(conf, expUpstream, framework.WithLoggingDisabled()); err != nil {
 				select {
 				case <-ctx.Done():
 					return fmt.Errorf("error validating nginx conf was generated in "+namespace+": %w", err.Error())
@@ -222,6 +246,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		if stringTimeToReadyTotal == "0" {
 			stringTimeToReadyTotal = "< 1"
 		}
+		GinkgoWriter.Printf("Calculated time to ready total for %q: %s\n", nginxPodName, stringTimeToReadyTotal)
 
 		return stringTimeToReadyTotal
 	}
@@ -327,6 +352,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 							k8sClient,
 							reconfigNamespace.Name,
 							timeoutConfig.GetStatusTimeout,
+							framework.WithLoggingDisabled(),
 						)
 						return len(nginxPodNames) == 1 && err == nil
 					}).
@@ -371,7 +397,13 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 				cfg.nfr = true
 				setup(cfg)
 
-				podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
+				podNames, err := framework.GetReadyNGFPodNames(
+					k8sClient,
+					ngfNamespace,
+					releaseName,
+					timeoutConfig.GetTimeout,
+					framework.WithLoggingDisabled(),
+				)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(podNames).To(HaveLen(1))
 				ngfPodName := podNames[0]
@@ -386,6 +418,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 							k8sClient,
 							reconfigNamespace.Name,
 							timeoutConfig.GetStatusTimeout,
+							framework.WithLoggingDisabled(),
 						)
 						return len(nginxPodNames) == 1 && err == nil
 					}).
@@ -406,7 +439,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 							File:      "http.conf",
 						}
 
-						return framework.ValidateNginxFieldExists(conf, defaultUpstream) == nil
+						return framework.ValidateNginxFieldExists(conf, defaultUpstream, framework.WithLoggingDisabled()) == nil
 					}).
 					WithTimeout(timeoutConfig.CreateTimeout).
 					Should(BeTrue())
@@ -439,7 +472,11 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 	})
 
 	AfterEach(func() {
-		framework.AddNginxLogsAndEventsToReport(resourceManager, reconfigNamespace.Name)
+		framework.AddNginxLogsAndEventsToReport(
+			resourceManager,
+			reconfigNamespace.Name,
+			framework.WithLoggingDisabled(),
+		)
 
 		Expect(cleanupResources()).Should(Succeed())
 		teardown(releaseName)

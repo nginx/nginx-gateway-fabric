@@ -151,7 +151,11 @@ func decodeObjects(reader io.Reader) ([]client.Object, error) {
 }
 
 // GenerateScaleListenerObjects generates objects for a given number of listeners for the scale test.
-func GenerateScaleListenerObjects(numListeners int, tls bool) (ScaleObjects, error) {
+func GenerateScaleListenerObjects(
+	numListeners int,
+	tls bool,
+	opts ...Option,
+) (ScaleObjects, error) {
 	var result ScaleObjects
 
 	listeners := make([]listener, 0)
@@ -184,7 +188,13 @@ func GenerateScaleListenerObjects(numListeners int, tls bool) (ScaleObjects, err
 
 		backends = append(backends, backendName)
 
-		GinkgoWriter.Printf("Generating manifests for listeners %v and route %v\n", listeners, r)
+		options := &Options{logEnabled: true}
+		for _, opt := range opts {
+			opt(options)
+		}
+		if !options.logEnabled {
+			GinkgoWriter.Printf("Generating manifests for listeners %v and route %v\n", listeners, r)
+		}
 		objects, err := generateManifests(listeners, []route{r})
 		if err != nil {
 			GinkgoWriter.Printf("Error generating manifests: %v\n", err)
