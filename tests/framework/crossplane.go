@@ -102,8 +102,7 @@ func fieldExistsInUpstream(
 	directive Directive,
 ) bool {
 	GinkgoWriter.Printf(
-		"Checking upstream %q for directive %q with value %q\n",
-		directive.Args[0],
+		"Checking upstream for directive %q with value %q\n",
 		expFieldCfg.Directive,
 		expFieldCfg.Value,
 	)

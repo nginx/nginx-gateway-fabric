@@ -541,10 +541,12 @@ func CreateEndTimeFinder(
 
 // CreateResponseChecker returns a function that checks if there is a successful response from a url.
 func CreateResponseChecker(url, address string, requestTimeout time.Duration, opts ...Option) func() error {
-	GinkgoWriter.Printf("Starting checking response for url %q and address %q\n", url, address)
 	options := &Options{logEnabled: true}
 	for _, opt := range opts {
 		opt(options)
+	}
+	if options.logEnabled {
+		GinkgoWriter.Printf("Starting checking response for url %q and address %q\n", url, address)
 	}
 
 	return func() error {

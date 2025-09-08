@@ -139,10 +139,12 @@ func (rm *ResourceManager) Apply(resources []client.Object, opts ...Option) erro
 			resource.SetResourceVersion(obj.GetResourceVersion())
 			updateErr := rm.K8sClient.Update(ctx, resource)
 			if updateErr != nil {
-				GinkgoWriter.Printf(
-					"ERROR occurred during updating Kubernetes resources on retries: %s\n",
-					updateErr,
-				)
+				if options.logEnabled {
+					GinkgoWriter.Printf(
+						"ERROR occurred during updating Kubernetes resources on retries: %s\n",
+						updateErr,
+					)
+				}
 			}
 
 			return updateErr
@@ -154,8 +156,9 @@ func (rm *ResourceManager) Apply(resources []client.Object, opts ...Option) erro
 			return retryErr
 		}
 	}
-	GinkgoWriter.Printf("Resources defined as Go objects applied successfully\n")
-
+	if options.logEnabled {
+		GinkgoWriter.Printf("Resources defined as Go objects applied successfully\n")
+	}
 	return nil
 }
 
