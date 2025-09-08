@@ -216,6 +216,7 @@ func createBackendRef(
 		ref.Namespace,
 		string(ref.Name),
 		route.Source.GetNamespace(),
+		svcPort,
 	)
 	if err != nil {
 		backendRef := BackendRef{
@@ -307,8 +308,10 @@ func findBackendTLSPolicyForService(
 	refNamespace *gatewayv1.Namespace,
 	refName,
 	routeNamespace string,
+	servicePort v1.ServicePort,
 ) (*BackendTLSPolicy, error) {
 	var beTLSPolicy *BackendTLSPolicy
+	var conflictingPolicies []*BackendTLSPolicy
 	var err error
 
 	refNs := routeNamespace
@@ -316,19 +319,43 @@ func findBackendTLSPolicyForService(
 		refNs = string(*refNamespace)
 	}
 
+	// First pass: find all policies targeting this service and port
 	for _, btp := range backendTLSPolicies {
 		btpNs := btp.Source.Namespace
 		for _, targetRef := range btp.Source.Spec.TargetRefs {
 			if string(targetRef.Name) == refName && btpNs == refNs {
-				if beTLSPolicy != nil {
-					if sort.LessClientObject(btp.Source, beTLSPolicy.Source) {
-						beTLSPolicy = btp
+				// Check if this policy applies to the specific port we're interested in
+				if targetRef.SectionName != nil {
+					// Policy targets a specific port by name
+					if servicePort.Name != string(*targetRef.SectionName) {
+						// This policy targets a different port, skip it
+						continue
 					}
-				} else {
+				}
+				// Policy applies to all ports (no sectionName) or matches our port
+
+				if beTLSPolicy == nil {
 					beTLSPolicy = btp
+				} else {
+					// Found a conflict - determine which policy wins
+					if sort.LessClientObject(btp.Source, beTLSPolicy.Source) {
+						// btp wins, beTLSPolicy loses
+						conflictingPolicies = append(conflictingPolicies, beTLSPolicy)
+						beTLSPolicy = btp
+					} else {
+						// beTLSPolicy wins, btp loses
+						conflictingPolicies = append(conflictingPolicies, btp)
+					}
 				}
 			}
 		}
+	}
+
+	// Set conflicted conditions on losing policies
+	for _, conflictedPolicy := range conflictingPolicies {
+		conflictedPolicy.IsReferenced = true
+		conflictedPolicy.Conditions = append(conflictedPolicy.Conditions,
+			conditions.NewPolicyConflicted("Conflicts with another BackendTLSPolicy targeting the same Service"))
 	}
 
 	if beTLSPolicy != nil {

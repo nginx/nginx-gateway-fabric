@@ -1707,7 +1707,13 @@ func TestFindBackendTLSPolicyForService(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			btp, err := findBackendTLSPolicyForService(test.backendTLSPolicies, ref.Namespace, string(ref.Name), "test")
+			btp, err := findBackendTLSPolicyForService(
+				test.backendTLSPolicies,
+				ref.Namespace,
+				string(ref.Name),
+				"test",
+				v1.ServicePort{Name: "https", Port: 443},
+			)
 
 			g.Expect(btp.Source.Name).To(Equal(test.expectedBtpName))
 			g.Expect(err).ToNot(HaveOccurred())

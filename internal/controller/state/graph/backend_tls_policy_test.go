@@ -479,13 +479,59 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 
 			valid, ignored, conds := validateBackendTLSPolicy(test.tlsPolicy, configMapResolver, secretMapResolver)
 
-			if !test.isValid && !test.ignored {
-				g.Expect(conds).To(HaveLen(1))
-			} else {
-				g.Expect(conds).To(BeEmpty())
-			}
 			g.Expect(valid).To(Equal(test.isValid))
 			g.Expect(ignored).To(Equal(test.ignored))
+
+			if test.isValid && !test.ignored {
+				// Valid cases should have ResolvedRefs condition set to true
+				if len(test.tlsPolicy.Spec.Validation.CACertificateRefs) > 0 {
+					g.Expect(conds).To(HaveLen(1))
+					g.Expect(conds[0].Type).To(Equal(string(conditions.GatewayResolvedRefs)))
+					g.Expect(conds[0].Status).To(Equal(metav1.ConditionTrue))
+				} else {
+					// WellKnownCACertificates case - no specific condition expected
+					g.Expect(conds).To(BeEmpty())
+				}
+			} else if !test.isValid && !test.ignored {
+				// Invalid cases should have at least one condition
+				g.Expect(conds).ToNot(BeEmpty())
+
+				// Check specific condition types based on the test case
+				switch test.name {
+				case "invalid ca cert ref kind":
+					// Should have InvalidKind condition and NoValidCACertificate condition
+					g.Expect(conds).To(HaveLen(2))
+					g.Expect(conds[0].Type).To(Equal(string(conditions.GatewayResolvedRefs)))
+					g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(conds[0].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonInvalidKind)))
+					g.Expect(conds[1].Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+					g.Expect(conds[1].Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(conds[1].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonNoValidCACertificate)))
+				case "invalid ca cert ref name":
+					// Should have InvalidCACertificateRef condition and NoValidCACertificate condition
+					g.Expect(conds).To(HaveLen(2))
+					g.Expect(conds[0].Type).To(Equal(string(conditions.GatewayResolvedRefs)))
+					g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(conds[0].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonInvalidCACertificateRef)))
+					g.Expect(conds[1].Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+					g.Expect(conds[1].Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(conds[1].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonNoValidCACertificate)))
+				case "invalid ca cert ref group":
+					// Should have InvalidKind condition and NoValidCACertificate condition
+					g.Expect(conds).To(HaveLen(2))
+					g.Expect(conds[0].Type).To(Equal(string(conditions.GatewayResolvedRefs)))
+					g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(conds[0].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonInvalidKind)))
+					g.Expect(conds[1].Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+					g.Expect(conds[1].Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(conds[1].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonNoValidCACertificate)))
+				default:
+					// Other invalid cases should have generic PolicyInvalid condition
+					g.Expect(conds).To(HaveLen(1))
+					g.Expect(conds[0].Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+					g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
+				}
+			}
 		})
 	}
 }
