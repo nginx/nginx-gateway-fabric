@@ -34,16 +34,16 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 	// - Node: n2d-standard-16 (16 vCPU, 64GB memory)
 
 	var (
-		// matchesManifests = []string{
-		// 	"scale/matches.yaml",
-		// }
-		// upstreamsManifests = []string{
-		// 	"scale/upstreams.yaml",
-		// }
+		matchesManifests = []string{
+			"scale/matches.yaml",
+		}
+		upstreamsManifests = []string{
+			"scale/upstreams.yaml",
+		}
 
-		// httpRouteManifests = []string{
-		// 	"scale/httproute.yaml",
-		// }
+		httpRouteManifests = []string{
+			"scale/httproute.yaml",
+		}
 
 		namespace = "scale"
 
@@ -56,7 +56,7 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 		promInstance          framework.PrometheusInstance
 		promPortForwardStopCh = make(chan struct{})
 
-		// upstreamServerCount int32
+		upstreamServerCount int32
 	)
 
 	const (
@@ -94,11 +94,11 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 			Expect(promInstance.PortForward(k8sConfig, promPortForwardStopCh)).To(Succeed())
 		}
 
-		// if *plusEnabled {
-		// 	upstreamServerCount = plusUpstreamServerCount
-		// } else {
-		// 	upstreamServerCount = ossUpstreamServerCount
-		// }
+		if *plusEnabled {
+			upstreamServerCount = plusUpstreamServerCount
+		} else {
+			upstreamServerCount = ossUpstreamServerCount
+		}
 	})
 
 	BeforeEach(func() {
@@ -409,7 +409,11 @@ The logs are attached only if there are errors.
 		Expect(err).ToNot(HaveOccurred())
 		defer ttrCsvFile.Close()
 
+		// Apply BaseObjects first (secrets and other foundational resources)
 		Expect(resourceManager.Apply(objects.BaseObjects)).To(Succeed())
+
+		// Apply GatewayAndServiceObjects next (backend services, deployments, and Gateway)
+		Expect(resourceManager.Apply(objects.GatewayAndServiceObjects)).To(Succeed())
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
@@ -469,56 +473,59 @@ The logs are attached only if there are errors.
 		Expect(os.Remove(ttrCsvFile.Name())).To(Succeed())
 	}
 
-	// runScaleUpstreams := func() {
-	// 	Expect(resourceManager.ApplyFromFiles(upstreamsManifests, namespace)).To(Succeed())
-	// 	Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+	runScaleUpstreams := func() {
+		Expect(resourceManager.ApplyFromFiles(upstreamsManifests, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
-	// 	// apply HTTPRoute after upstreams are ready
-	// 	Expect(resourceManager.ApplyFromFiles(httpRouteManifests, namespace)).To(Succeed())
-	// 	Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+		// apply HTTPRoute after upstreams are ready
+		Expect(resourceManager.ApplyFromFiles(httpRouteManifests, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
-	// 	var nginxPodNames []string
-	// 	var err error
-	// 	Eventually(
-	// 		func() bool {
-	// 			nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
-	// 			return len(nginxPodNames) == 1 && err == nil
-	// 		}).
-	// 		WithTimeout(timeoutConfig.CreateTimeout).
-	// 		Should(BeTrue())
+		var nginxPodNames []string
+		var err error
+		Eventually(
+			func() bool {
+				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+				return len(nginxPodNames) == 1 && err == nil
+			}).
+			WithTimeout(timeoutConfig.CreateTimeout).
+			Should(BeTrue())
 
-	// 	nginxPodName := nginxPodNames[0]
-	// 	Expect(nginxPodName).ToNot(BeEmpty())
+		nginxPodName := nginxPodNames[0]
+		Expect(nginxPodName).ToNot(BeEmpty())
 
-	// 	setUpPortForward(nginxPodName, namespace)
+		setUpPortForward(nginxPodName, namespace)
 
-	// 	var url string
-	// 	if portFwdPort != 0 {
-	// 		url = fmt.Sprintf("http://hello.example.com:%d", portFwdPort)
-	// 	} else {
-	// 		url = "http://hello.example.com"
-	// 	}
+		var url string
+		if portFwdPort != 0 {
+			url = fmt.Sprintf("http://hello.example.com:%d", portFwdPort)
+		} else {
+			url = "http://hello.example.com"
+		}
 
-	// 	Eventually(
-	// 		framework.CreateResponseChecker(url, address, timeoutConfig.RequestTimeout),
-	// 	).WithTimeout(5 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
+		Eventually(
+			framework.CreateResponseChecker(url, address, timeoutConfig.RequestTimeout),
+		).WithTimeout(5 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
 
-	// 	Expect(
-	// 		resourceManager.ScaleDeployment(namespace, "backend", upstreamServerCount),
-	// 	).To(Succeed())
+		Expect(
+			resourceManager.ScaleDeployment(namespace, "backend", upstreamServerCount),
+		).To(Succeed())
 
-	// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	// 	defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
 
-	// 	Expect(resourceManager.WaitForPodsToBeReady(ctx, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForPodsToBeReady(ctx, namespace)).To(Succeed())
 
-	// 	Eventually(
-	// 		framework.CreateResponseChecker(url, address, timeoutConfig.RequestTimeout),
-	// 	).WithTimeout(5 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
-	// }
+		Eventually(
+			framework.CreateResponseChecker(url, address, timeoutConfig.RequestTimeout),
+		).WithTimeout(5 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
+	}
 
 	setNamespace := func(objects framework.ScaleObjects) {
 		for _, obj := range objects.BaseObjects {
+			obj.SetNamespace(namespace)
+		}
+		for _, obj := range objects.GatewayAndServiceObjects {
 			obj.SetNamespace(namespace)
 		}
 		for _, objs := range objects.ScaleIterationGroups {
@@ -576,119 +583,119 @@ The logs are attached only if there are errors.
 		)
 	})
 
-	// It(fmt.Sprintf("scales HTTP routes to %d", httpRouteCount), func() {
-	// 	const testName = "TestScale_HTTPRoutes"
+	It(fmt.Sprintf("scales HTTP routes to %d", httpRouteCount), func() {
+		const testName = "TestScale_HTTPRoutes"
 
-	// 	testResultsDir := filepath.Join(resultsDir, testName)
-	// 	Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
+		testResultsDir := filepath.Join(resultsDir, testName)
+		Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
 
-	// 	objects, err := framework.GenerateScaleHTTPRouteObjects(httpRouteCount)
-	// 	Expect(err).ToNot(HaveOccurred())
+		objects, err := framework.GenerateScaleHTTPRouteObjects(httpRouteCount)
+		Expect(err).ToNot(HaveOccurred())
 
-	// 	setNamespace(objects)
+		setNamespace(objects)
 
-	// 	runTestWithMetricsAndLogs(
-	// 		testName,
-	// 		testResultsDir,
-	// 		func() {
-	// 			runScaleResources(
-	// 				objects,
-	// 				testResultsDir,
-	// 				"http",
-	// 			)
-	// 		},
-	// 	)
-	// })
+		runTestWithMetricsAndLogs(
+			testName,
+			testResultsDir,
+			func() {
+				runScaleResources(
+					objects,
+					testResultsDir,
+					"http",
+				)
+			},
+		)
+	})
 
-	// It(fmt.Sprintf("scales upstream servers to %d for OSS and %d for Plus",
-	// 	ossUpstreamServerCount,
-	// 	plusUpstreamServerCount,
-	// ), func() {
-	// 	const testName = "TestScale_UpstreamServers"
+	It(fmt.Sprintf("scales upstream servers to %d for OSS and %d for Plus",
+		ossUpstreamServerCount,
+		plusUpstreamServerCount,
+	), func() {
+		const testName = "TestScale_UpstreamServers"
 
-	// 	testResultsDir := filepath.Join(resultsDir, testName)
-	// 	Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
+		testResultsDir := filepath.Join(resultsDir, testName)
+		Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
 
-	// 	runTestWithMetricsAndLogs(
-	// 		testName,
-	// 		testResultsDir,
-	// 		func() {
-	// 			runScaleUpstreams()
-	// 		},
-	// 	)
-	// })
+		runTestWithMetricsAndLogs(
+			testName,
+			testResultsDir,
+			func() {
+				runScaleUpstreams()
+			},
+		)
+	})
 
-	// It("scales HTTP matches", func() {
-	// 	const testName = "TestScale_HTTPMatches"
+	It("scales HTTP matches", func() {
+		const testName = "TestScale_HTTPMatches"
 
-	// 	Expect(resourceManager.ApplyFromFiles(matchesManifests, namespace)).To(Succeed())
-	// 	Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(matchesManifests, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
-	// 	var nginxPodNames []string
-	// 	var err error
-	// 	Eventually(
-	// 		func() bool {
-	// 			nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
-	// 			return len(nginxPodNames) == 1 && err == nil
-	// 		}).
-	// 		WithTimeout(timeoutConfig.CreateTimeout).
-	// 		Should(BeTrue())
+		var nginxPodNames []string
+		var err error
+		Eventually(
+			func() bool {
+				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+				return len(nginxPodNames) == 1 && err == nil
+			}).
+			WithTimeout(timeoutConfig.CreateTimeout).
+			Should(BeTrue())
 
-	// 	nginxPodName := nginxPodNames[0]
-	// 	Expect(nginxPodName).ToNot(BeEmpty())
+		nginxPodName := nginxPodNames[0]
+		Expect(nginxPodName).ToNot(BeEmpty())
 
-	// 	setUpPortForward(nginxPodName, namespace)
+		setUpPortForward(nginxPodName, namespace)
 
-	// 	var port int
-	// 	if portFwdPort != 0 {
-	// 		port = portFwdPort
-	// 	} else {
-	// 		port = 80
-	// 	}
+		var port int
+		if portFwdPort != 0 {
+			port = portFwdPort
+		} else {
+			port = 80
+		}
 
-	// 	addr := fmt.Sprintf("%s:%d", address, port)
+		addr := fmt.Sprintf("%s:%d", address, port)
 
-	// 	baseURL := "http://cafe.example.com"
+		baseURL := "http://cafe.example.com"
 
-	// 	text := fmt.Sprintf("\n## Test %s\n\n", testName)
+		text := fmt.Sprintf("\n## Test %s\n\n", testName)
 
-	// 	_, err = fmt.Fprint(outFile, text)
-	// 	Expect(err).ToNot(HaveOccurred())
+		_, err = fmt.Fprint(outFile, text)
+		Expect(err).ToNot(HaveOccurred())
 
-	// 	run := func(t framework.Target) {
-	// 		cfg := framework.LoadTestConfig{
-	// 			Targets:     []framework.Target{t},
-	// 			Rate:        1000,
-	// 			Duration:    30 * time.Second,
-	// 			Description: "First matches",
-	// 			Proxy:       addr,
-	// 			ServerName:  "cafe.example.com",
-	// 		}
-	// 		_, metrics := framework.RunLoadTest(cfg)
+		run := func(t framework.Target) {
+			cfg := framework.LoadTestConfig{
+				Targets:     []framework.Target{t},
+				Rate:        1000,
+				Duration:    30 * time.Second,
+				Description: "First matches",
+				Proxy:       addr,
+				ServerName:  "cafe.example.com",
+			}
+			_, metrics := framework.RunLoadTest(cfg)
 
-	// 		_, err = fmt.Fprintln(outFile, "```text")
-	// 		Expect(err).ToNot(HaveOccurred())
-	// 		Expect(framework.WriteMetricsResults(outFile, &metrics)).To(Succeed())
-	// 		_, err = fmt.Fprintln(outFile, "```")
-	// 		Expect(err).ToNot(HaveOccurred())
-	// 	}
+			_, err = fmt.Fprintln(outFile, "```text")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(framework.WriteMetricsResults(outFile, &metrics)).To(Succeed())
+			_, err = fmt.Fprintln(outFile, "```")
+			Expect(err).ToNot(HaveOccurred())
+		}
 
-	// 	run(framework.Target{
-	// 		Method: "GET",
-	// 		URL:    fmt.Sprintf("%s%s", baseURL, "/latte"),
-	// 		Header: map[string][]string{
-	// 			"header-1": {"header-1-val"},
-	// 		},
-	// 	})
+		run(framework.Target{
+			Method: "GET",
+			URL:    fmt.Sprintf("%s%s", baseURL, "/latte"),
+			Header: map[string][]string{
+				"header-1": {"header-1-val"},
+			},
+		})
 
-	// 	run(framework.Target{
-	// 		Method: "GET",
-	// 		URL:    fmt.Sprintf("%s%s", baseURL, "/latte"),
-	// 		Header: map[string][]string{
-	// 			"header-50": {"header-50-val"},
-	// 		},
-	// 	})
-	// })
+		run(framework.Target{
+			Method: "GET",
+			URL:    fmt.Sprintf("%s%s", baseURL, "/latte"),
+			Header: map[string][]string{
+				"header-50": {"header-50-val"},
+			},
+		})
+	})
 
 	AfterEach(func() {
 		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
