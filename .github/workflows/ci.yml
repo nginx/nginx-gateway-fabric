@@ -285,7 +285,7 @@ jobs:
     permissions:
       contents: read
 
-  functional-ipv6-only-tests:
+  ipv6-only-tests:
     name: Functional IPv6 Only Tests
     needs: [vars, build-oss]
     strategy:
@@ -296,7 +296,7 @@ jobs:
           [
             "${{ needs.vars.outputs.k8s_latest }}",
           ]
-    uses: ./.github/workflows/functional-ipv6-only.yml
+    uses: ./.github/workflows/ipv6-only.yml
     with:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
