@@ -83,7 +83,7 @@ jobs:
         with:
           version: v2.12.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           args: 
-            build --single-target --snapshot --clean --config=./goreleaser.yml
+            build --single-target --snapshot --clean --config=goreleaser.yml
         env:
           TELEMETRY_ENDPOINT: otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317
           TELEMETRY_ENDPOINT_INSECURE: "true"
