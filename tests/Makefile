@@ -1,4 +1,5 @@
 CI ?= false
+IPv6_ONLY ?= false
 CLUSTER_NAME ?= kind
 CONFORMANCE_PREFIX = conformance-test-runner## Prefix for the conformance test runner image
 CONFORMANCE_TAG = latest## Tag for the conformance test runner image
@@ -90,7 +91,7 @@ setup-gcp-and-run-nfr-tests: create-gke-router create-and-setup-vm nfr-test ## C
 
 .PHONY: create-gke-cluster
 create-gke-cluster: ## Create a GKE cluster
-	./scripts/create-gke-cluster.sh $(CI)
+	./scripts/create-gke-cluster.sh $(CI) $(IPv6_ONLY)
 
 .PHONY: create-and-setup-vm
 create-and-setup-vm: ## Create and setup a GCP VM for tests

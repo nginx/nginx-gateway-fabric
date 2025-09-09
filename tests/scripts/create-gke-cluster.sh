@@ -8,6 +8,17 @@ ip_random_digit=$((1 + RANDOM % 250))
 
 IS_CI=${1:-false}
 
+IPV6_ENABLE=${2:-${IPV6_ENABLE:-false}}
+
+IPV6_FLAGS=""
+if [ "$IPV6_ENABLE" = "true" ]; then
+  IPV6_FLAGS="\
+    --enable-ipv6 \
+    --cluster-ipv6-cidr=fd00:1234::/56 \
+    --services-ipv6-cidr=fd00:4321::/112 \
+    --create-subnetwork name=\"${GKE_CLUSTER_NAME}-subnet\",range=10.0.0.0/16,fd00:abcd::/64,stack-type=IPV4_IPV6"
+fi
+
 if [ -z "$GKE_MACHINE_TYPE" ]; then
     # If the environment variable is not set, use a default value
     GKE_MACHINE_TYPE="e2-medium"
@@ -31,7 +42,8 @@ gcloud container clusters create "${GKE_CLUSTER_NAME}" \
     --logging=SYSTEM,WORKLOAD \
     --machine-type "${GKE_MACHINE_TYPE}" \
     --num-nodes "${GKE_NUM_NODES}" \
-    --no-enable-insecure-kubelet-readonly-port
+    --no-enable-insecure-kubelet-readonly-port \
+    $IPV6_FLAGS
 
 # Add current IP to GKE master control node access, if this script is not invoked during a CI run.
 if [ "${IS_CI}" = "false" ]; then

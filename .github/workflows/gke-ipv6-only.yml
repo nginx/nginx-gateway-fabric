@@ -1,4 +1,4 @@
-name: IPv6-Only Testing
+name: GKE IPv6-Only Testing
 
 on:
   workflow_call:
@@ -33,6 +33,39 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: access_token
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Login to GAR
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        with:
+          registry: us-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: kubectl
+
+      - name: Create GKE cluster
+        working-directory: ./tests
+        run: make create-gke-cluster CI=true IPv6_ONLY=true
+
+      - name: Create and setup VM
+        working-directory: ./tests
+        run: make create-and-setup-vm
+
+      - name: Create and setup Router
+        working-directory: ./tests
+        run: make create-gke-router || true
+          
       - name: Configure GOPROXY
         id: goproxy
         run: |
@@ -66,7 +99,7 @@ jobs:
             type=edge
             type=ref,event=pr
             type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
-
+          
       - name: NGINX Docker meta
         id: nginx-meta
         uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
@@ -115,30 +148,40 @@ jobs:
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
 
-      - name: Setup license file for plus
-        if: ${{ inputs.image == 'plus' }}
-        env:
-          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
-        run: echo "${PLUS_LICENSE}" > license.jwt
+      # - name: Setup license file for plus
+      #   if: ${{ inputs.image == 'plus' }}
+      #   env:
+      #     PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
+      #   run: echo "${PLUS_LICENSE}" > license.jwt
 
-      - name: Deploy IPv6-Only Kubernetes
-        id: k8s
-        run: |
-          # Enable IPv6 and container network options
-          # sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0
-          # sudo sysctl -w net.ipv6.conf.all.forwarding=1
+      # - name: Deploy IPv6-Only Kubernetes
+      #   id: k8s
+      #   run: |
+      #     # Enable IPv6 and container network options
+      #     # sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0
+      #     # sudo sysctl -w net.ipv6.conf.all.forwarding=1
 
-          # Create IPv6-only kind cluster
-          kind create cluster \
-          --name ${{ github.run_id }}-ipv6 \
-          --image=kindest/node:${{ inputs.k8s-version }} \
-          --config=config/cluster/kind-ipv6-only.yaml
+      #     # Create IPv6-only kind cluster
+      #     kind create cluster \
+      #     --name ${{ github.run_id }}-ipv6 \
+      #     --image=kindest/node:${{ inputs.k8s-version }} \
+      #     --config=config/cluster/kind-ipv6-only.yaml
 
-          # Load images into the cluster
-          kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}-ipv6
+      #     # Load images into the cluster
+      #     kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}-ipv6
 
-          # Verify nodes are ipv6 only
-          kubectl get nodes -o wide
+      #     # Verify nodes are ipv6 only
+      #     kubectl get nodes -o wide
+
+      - name: Push Docker Images to GAR
+        # if: ${{ github.event_name != 'pull_request' }}
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: "."
+          push: true
+          tags: |
+            ${{ steps.ngf-meta.outputs.tags }}
+            ${{ steps.nginx-meta.outputs.tags }}
 
       - name: Install NGF with IPv6 Configuration
         run: |
@@ -148,7 +191,6 @@ jobs:
           CLUSTER_NAME=${{ github.run_id }}-ipv6 \
           HELM_PARAMETERS="--set nginx.config.ipFamily=ipv6 --set nginx.service.type=ClusterIP" \
           make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
-
         working-directory: ./tests
 
       - name: Deploy Test Applications
