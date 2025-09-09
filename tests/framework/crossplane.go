@@ -69,7 +69,7 @@ func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField, opt
 				return nil
 			}
 
-			if expFieldCfg.Upstream != "" && fieldExistsInUpstream(expFieldCfg, *directive) {
+			if expFieldCfg.Upstream != "" && fieldExistsInUpstream(expFieldCfg, *directive, opts...) {
 				return nil
 			}
 		}
@@ -100,12 +100,19 @@ func fieldExistsInServer(
 func fieldExistsInUpstream(
 	expFieldCfg ExpectedNginxField,
 	directive Directive,
+	opts ...Option,
 ) bool {
-	GinkgoWriter.Printf(
-		"Checking upstream for directive %q with value %q\n",
-		expFieldCfg.Directive,
-		expFieldCfg.Value,
-	)
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+	if options.logEnabled {
+		GinkgoWriter.Printf(
+			"Checking upstream for directive %q with value %q\n",
+			expFieldCfg.Directive,
+			expFieldCfg.Value,
+		)
+	}
 	if directive.Directive == "upstream" && directive.Args[0] == expFieldCfg.Upstream {
 		for _, directive := range directive.Block {
 			if expFieldCfg.fieldFound(directive) {

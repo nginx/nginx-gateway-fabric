@@ -34,7 +34,7 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 
 		var nginxGateway ngfAPI.NginxGateway
 
-		if err := framework.K8sGet(ctx, k8sClient, nsname, &nginxGateway); err != nil {
+		if err := resourceManager.K8sClient.Get(ctx, nsname, &nginxGateway); err != nil {
 			return nginxGateway, fmt.Errorf("failed to get nginxGateway: %w", err)
 		}
 

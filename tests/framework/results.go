@@ -252,16 +252,12 @@ func NewCSVResultsWriter(resultsDir, fileName string, resultHeaders ...string) (
 
 	file, err := OpenFile(filepath.Join(resultsDir, fileName), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
-		GinkgoWriter.Printf("ERROR occurred during creating CSV results file %q, error: %s\n", fileName, err)
-
 		return nil, nil, err
 	}
 
 	writer := csv.NewWriter(file)
 
 	if err = WriteCSVRecord(writer, resultHeaders); err != nil {
-		GinkgoWriter.Printf("ERROR occurred during writing CSV headers to file %q, error: %s\n", fileName, err)
-
 		return nil, nil, err
 	}
 

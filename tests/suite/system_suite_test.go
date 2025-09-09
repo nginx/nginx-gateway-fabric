@@ -70,7 +70,7 @@ var (
 var (
 	//go:embed manifests/*
 	manifests           embed.FS
-	k8sClient           client.Client
+	k8sClient           framework.K8sClient
 	resourceManager     framework.ResourceManager
 	portForwardStopCh   chan struct{}
 	portFwdPort         int
@@ -126,7 +126,7 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 	}
 
 	var err error
-	k8sClient, err = client.New(k8sConfig, options)
+	k8sClient, err = framework.NewK8sClient(k8sConfig, options)
 	Expect(err).ToNot(HaveOccurred())
 
 	clientGoClient, err := kubernetes.NewForConfig(k8sConfig)
@@ -293,7 +293,11 @@ func teardown(relName string) {
 		true, /* poll immediately */
 		func(ctx context.Context) (bool, error) {
 			key := k8sTypes.NamespacedName{Name: ngfNamespace}
-			if err := framework.K8sGet(ctx, k8sClient, key, &core.Namespace{}); err != nil && apierrors.IsNotFound(err) {
+			if err := resourceManager.K8sClient.Get(
+				ctx,
+				key,
+				&core.Namespace{},
+			); err != nil && apierrors.IsNotFound(err) {
 				return true, nil
 			}
 

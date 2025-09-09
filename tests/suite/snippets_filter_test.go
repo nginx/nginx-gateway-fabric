@@ -42,7 +42,11 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace, framework.WithLoggingDisabled())).To(Succeed())
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		nginxPodNames, err := framework.GetReadyNginxPodNames(
+			resourceManager.K8sClient,
+			namespace,
+			timeoutConfig.GetStatusTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
@@ -270,7 +274,7 @@ func checkHTTPRouteToHaveGatewayNotProgrammedCond(httpRouteNsName types.Namespac
 	var hr v1.HTTPRoute
 	var err error
 
-	if err = framework.K8sGet(ctx, k8sClient, httpRouteNsName, &hr); err != nil {
+	if err = resourceManager.K8sClient.Get(ctx, httpRouteNsName, &hr); err != nil {
 		return err
 	}
 
@@ -326,7 +330,7 @@ func checkForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedNa
 	var sf ngfAPI.SnippetsFilter
 	var err error
 
-	if err = framework.K8sGet(ctx, k8sClient, snippetsFilterNsNames, &sf); err != nil {
+	if err = resourceManager.K8sClient.Get(ctx, snippetsFilterNsNames, &sf); err != nil {
 		return err
 	}
 

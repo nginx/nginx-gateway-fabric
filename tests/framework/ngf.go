@@ -14,7 +14,6 @@ import (
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -101,7 +100,7 @@ func InstallNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 }
 
 // CreateLicenseSecret creates the NGINX Plus JWT secret.
-func CreateLicenseSecret(k8sClient client.Client, namespace, filename string) error {
+func CreateLicenseSecret(k8sClient K8sClient, namespace, filename string) error {
 	GinkgoWriter.Printf("Creating NGINX Plus license secret in namespace %q from file %q\n", namespace, filename)
 
 	conf, err := os.ReadFile(filename)
@@ -122,10 +121,7 @@ func CreateLicenseSecret(k8sClient client.Client, namespace, filename string) er
 	}
 
 	if err := k8sClient.Create(ctx, ns); err != nil && !apierrors.IsAlreadyExists(err) {
-		createNSErr := fmt.Errorf("error creating namespace: %w", err)
-		GinkgoWriter.Printf("%v\n", createNSErr)
-
-		return createNSErr
+		return fmt.Errorf("error creating namespace: %w", err)
 	}
 
 	secret := &core.Secret{
@@ -185,7 +181,7 @@ func UpgradeNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 }
 
 // UninstallNGF uninstalls NGF.
-func UninstallNGF(cfg InstallationConfig, k8sClient client.Client) ([]byte, error) {
+func UninstallNGF(cfg InstallationConfig, k8sClient K8sClient) ([]byte, error) {
 	args := []string{
 		"uninstall", cfg.ReleaseName, "--namespace", cfg.Namespace,
 	}
@@ -199,20 +195,20 @@ func UninstallNGF(cfg InstallationConfig, k8sClient client.Client) ([]byte, erro
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = k8sClient.Delete(ctx, &core.Namespace{ObjectMeta: metav1.ObjectMeta{Name: cfg.Namespace}})
+	err = k8sClient.Delete(ctx, &core.Namespace{ObjectMeta: metav1.ObjectMeta{Name: cfg.Namespace}}, nil)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
 
 	var crList apiext.CustomResourceDefinitionList
-	if err := k8sClient.List(ctx, &crList); err != nil {
+	if err := k8sClient.List(ctx, &crList, nil); err != nil {
 		return nil, err
 	}
 
 	for _, cr := range crList.Items {
 		if strings.Contains(cr.Spec.Group, "gateway.nginx.org") {
 			cr := cr
-			if err := k8sClient.Delete(ctx, &cr); err != nil && !apierrors.IsNotFound(err) {
+			if err := k8sClient.Delete(ctx, &cr, nil); err != nil && !apierrors.IsNotFound(err) {
 				return nil, err
 			}
 		}

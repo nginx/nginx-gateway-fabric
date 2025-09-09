@@ -13,7 +13,6 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
-	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Get sends a GET request to the specified url.
@@ -148,50 +147,4 @@ func makeRequest(
 	}
 
 	return resp, nil
-}
-
-func K8sGet(
-	ctx context.Context,
-	client k8sClient.Client,
-	key k8sClient.ObjectKey,
-	obj k8sClient.Object,
-	opts ...Option,
-) error {
-	options := &Options{logEnabled: true}
-	for _, opt := range opts {
-		opt(options)
-	}
-
-	err := client.Get(ctx, key, obj)
-	if err != nil && options.logEnabled {
-		return fmt.Errorf("ERROR getting resource %q: %w", obj.GetName(), err)
-	}
-
-	return err
-}
-
-func K8sList(
-	ctx context.Context,
-	client k8sClient.Client,
-	list k8sClient.ObjectList,
-) error {
-	err := client.List(ctx, list)
-	if err != nil {
-		return fmt.Errorf("ERROR listing resource %q: %w", list.GetObjectKind(), err)
-	}
-
-	return err
-}
-
-func K8sCreate(
-	ctx context.Context,
-	client k8sClient.Client,
-	obj k8sClient.Object,
-) error {
-	err := client.Create(ctx, obj)
-	if err != nil {
-		return fmt.Errorf("ERROR creating resource %q: %w", obj.GetName(), err)
-	}
-
-	return err
 }

@@ -47,7 +47,11 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		nginxPodNames, err := framework.GetReadyNginxPodNames(
+			resourceManager.K8sClient,
+			namespace,
+			timeoutConfig.GetStatusTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
@@ -393,7 +397,7 @@ func waitForClientSettingsAncestorStatus(
 		func(ctx context.Context) (bool, error) {
 			var pol ngfAPI.ClientSettingsPolicy
 
-			if err := framework.K8sGet(ctx, k8sClient, policyNsname, &pol); err != nil {
+			if err := resourceManager.K8sClient.Get(ctx, policyNsname, &pol); err != nil {
 				return false, err
 			}
 

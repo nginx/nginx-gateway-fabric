@@ -136,7 +136,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 					Name: "namespace" + strconv.Itoa(i),
 				},
 			}
-			Expect(framework.K8sCreate(ctx, k8sClient, &ns)).To(Succeed())
+			Expect(resourceManager.K8sClient.Create(ctx, &ns)).To(Succeed())
 		}
 
 		Expect(resourceManager.Apply([]client.Object{&reconfigNamespace})).To(Succeed())
@@ -168,21 +168,21 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		defer cancel()
 
 		var namespaces core.NamespaceList
-		if err := framework.K8sList(ctx, k8sClient, &namespaces); err != nil {
+		if err := resourceManager.K8sClient.List(ctx, &namespaces, nil); err != nil {
 			return fmt.Errorf("error getting namespaces: %w", err)
 		}
 		GinkgoWriter.Printf("Found %d namespaces, expected at least%d\n", len(namespaces.Items), resourceCount)
 		Expect(len(namespaces.Items)).To(BeNumerically(">=", resourceCount))
 
 		var routes v1.HTTPRouteList
-		if err := framework.K8sList(ctx, k8sClient, &routes); err != nil {
+		if err := resourceManager.K8sClient.List(ctx, &routes, nil); err != nil {
 			return fmt.Errorf("error getting HTTPRoutes: %w", err)
 		}
 		GinkgoWriter.Printf("Found %d HTTPRoutes, expected %d\n", len(routes.Items), resourceCount*3)
 		Expect(routes.Items).To(HaveLen(resourceCount * 3))
 
 		var pods core.PodList
-		if err := framework.K8sList(ctx, k8sClient, &pods); err != nil {
+		if err := resourceManager.K8sClient.List(ctx, &pods, nil); err != nil {
 			return fmt.Errorf("error getting Pods: %w", err)
 		}
 		GinkgoWriter.Printf("Found %d Pods, expected at least %d\n", len(pods.Items), resourceCount*2)

@@ -51,7 +51,11 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		nginxPodNames, err := framework.GetReadyNginxPodNames(
+			resourceManager.K8sClient,
+			namespace,
+			timeoutConfig.GetStatusTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
@@ -138,7 +142,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			DescribeTable("are set properly for",
 				func(expCfgs []framework.ExpectedNginxField) {
 					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg, framework.WithLoggingDisabled())).To(Succeed())
 					}
 				},
 				Entry("HTTP upstreams", []framework.ExpectedNginxField{
@@ -318,7 +322,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			DescribeTable("are set properly for",
 				func(expCfgs []framework.ExpectedNginxField) {
 					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg, framework.WithLoggingDisabled())).To(Succeed())
 					}
 				},
 				Entry("Coffee upstream", []framework.ExpectedNginxField{
