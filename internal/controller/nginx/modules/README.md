@@ -22,6 +22,7 @@ dependencies.
 
 - [httpmatches](./src/httpmatches.js): a location handler for HTTP requests. It redirects requests to an internal
   location block based on the request's headers, arguments, and method.
+- [epp](./src/epp.js): handles communication with the EndpointPicker (EPP) component. This is for acquiring a specific AI endpoint to route client traffic to when using the Gateway API Inference Extension.
 
 ### Helpful Resources for Module Development
 
