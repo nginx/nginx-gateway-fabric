@@ -145,7 +145,7 @@ jobs:
 
       - name: Create GKE cluster
         working-directory: ./tests
-        run: make create-gke-cluster CI=true IPv6_ONLY=${{ needs.vars.outputs.ipv6_enabled }}
+        run: make create-gke-cluster CI=true IPV6_ENABLE=${{ needs.vars.outputs.ipv6_enabled }}
 
       - name: Create and setup VM
         working-directory: ./tests
