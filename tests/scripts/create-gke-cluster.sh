@@ -8,7 +8,7 @@ ip_random_digit=$((1 + RANDOM % 250))
 
 IS_CI=${1:-false}
 
-IPV6_ENABLE=${2:-${IPV6_ENABLE:-false}}
+IPV6_ENABLE=${2:-false}
 
 IPV6_FLAGS=""
 if [ "$IPV6_ENABLE" = "true" ]; then
