@@ -134,7 +134,7 @@ jobs:
           echo "GKE_NUM_NODES=12" >> vars.env
           echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
           echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
-          echo "HELM_PARAMETERS="${{ if inputs.ipv6_enabled }}--set nginx.config.ipFamily=ipv6 >> vars.env"
+          echo "HELM_PARAMETERS=--set nginx.config.ipFamily=${{ inputs.ipv6_enabled ? 'ipv6' : 'ipv4' }}" >> vars.env
 
       - name: Setup license file for plus
         if: matrix.type == 'plus'
