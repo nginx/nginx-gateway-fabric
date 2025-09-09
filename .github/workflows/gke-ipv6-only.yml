@@ -65,7 +65,7 @@ jobs:
       - name: Create and setup Router
         working-directory: ./tests
         run: make create-gke-router || true
-          
+
       - name: Configure GOPROXY
         id: goproxy
         run: |
@@ -99,7 +99,7 @@ jobs:
             type=edge
             type=ref,event=pr
             type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
-          
+
       - name: NGINX Docker meta
         id: nginx-meta
         uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
@@ -117,7 +117,7 @@ jobs:
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
           version: v2.12.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          args: 
+          args:
             build --single-target --snapshot --clean --config=goreleaser.yml
         env:
           TELEMETRY_ENDPOINT: otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317

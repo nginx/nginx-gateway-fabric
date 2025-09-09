@@ -12,7 +12,7 @@ IPV6_ENABLE=${2:-${IPV6_ENABLE:-false}}
 
 IPV6_FLAGS=""
 if [ "$IPV6_ENABLE" = "true" ]; then
-  IPV6_FLAGS="\
+    IPV6_FLAGS="\
     --enable-ipv6 \
     --cluster-ipv6-cidr=fd00:1234::/56 \
     --services-ipv6-cidr=fd00:4321::/112 \
