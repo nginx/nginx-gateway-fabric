@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -851,16 +850,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 	AfterAll(func() {
 		_, err := fmt.Fprint(outFile)
 		Expect(err).ToNot(HaveOccurred())
-
-		if outFile != nil {
-			if err := outFile.Close(); err != nil {
-				if errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "file already closed") {
-					GinkgoWriter.Printf("Warning: attempted to close already closed file: %v\n", err)
-				} else {
-					Expect(err).ToNot(HaveOccurred())
-				}
-			}
-		}
+		Expect(outFile.Close()).To(Succeed())
 
 		// restoring NGF shared among tests in the suite
 		cfg := getDefaultSetupCfg()
