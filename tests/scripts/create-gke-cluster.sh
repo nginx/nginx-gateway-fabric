@@ -16,7 +16,7 @@ if [ "${IPV6_ENABLE}" = "true" ]; then
     --enable-ipv6 \
     --cluster-ipv6-cidr=fd00:1234::/56 \
     --services-ipv6-cidr=fd00:4321::/112 \
-    --create-subnetwork name=\"${GKE_CLUSTER_NAME}-subnet\",range=10.0.0.0/16,fd00:abcd::/64,stack-type=IPV4_IPV6"
+    --create-subnetwork name="${GKE_CLUSTER_NAME}-subnet",range=10.0.0.0/16,stack-type=IPV4_IPV6,subnet-ipv6-range=fd00:abcd::/64"
 fi
 
 if [ -z "$GKE_MACHINE_TYPE" ]; then
