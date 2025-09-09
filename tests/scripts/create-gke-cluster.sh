@@ -11,7 +11,7 @@ IS_CI=${1:-false}
 IPV6_ENABLE=${2:-false}
 
 IPV6_FLAGS=""
-if [ "$IPV6_ENABLE" = "true" ]; then
+if [ "${IPV6_ENABLE}" = "true" ]; then
     IPV6_FLAGS="\
     --enable-ipv6 \
     --cluster-ipv6-cidr=fd00:1234::/56 \
