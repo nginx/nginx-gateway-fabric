@@ -61,6 +61,7 @@ jobs:
       test_label: ${{ github.event.inputs.test_label || 'all' }}
       version: ${{ github.event.inputs.version || 'edge' }}
       image_tag: ${{ github.event.inputs.image_tag || 'edge' }}
+      ipv6_enabled: ${{ github.event.inputs.ipv6_enabled || 'false' }}
       types: ${{ steps.var.outputs.types }}
     permissions:
       contents: read
@@ -134,7 +135,7 @@ jobs:
           echo "GKE_NUM_NODES=12" >> vars.env
           echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
           echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
-          if [ "${{ needs.vars.inputs.ipv6_enabled }}" = "true" ]; then
+          if [ "${{ needs.vars.outputs.ipv6_enabled }}" = "true" ]; then
           echo "HELM_PARAMETERS=\"--set nginx.config.ipFamily=ipv6\"" >> vars.env
           fi
       - name: Setup license file for plus
@@ -145,7 +146,7 @@ jobs:
 
       - name: Create GKE cluster
         working-directory: ./tests
-        run: make create-gke-cluster CI=true IPV6_ENABLE=${{ needs.vars.inputs.ipv6_enabled }}
+        run: make create-gke-cluster CI=true IPV6_ENABLE=${{ needs.vars.outputs.ipv6_enabled }}
 
       - name: Create and setup VM
         working-directory: ./tests
