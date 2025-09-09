@@ -81,6 +81,8 @@ func validateBackendTLSPolicy(
 
 	caCertRefs := backendTLSPolicy.Spec.Validation.CACertificateRefs
 	wellKnownCerts := backendTLSPolicy.Spec.Validation.WellKnownCACertificates
+
+	// Check mutual exclusivity
 	switch {
 	case len(caCertRefs) > 0 && wellKnownCerts != nil:
 		valid = false
@@ -88,10 +90,13 @@ func validateBackendTLSPolicy(
 		conds = append(conds, conditions.NewPolicyInvalid(msg))
 
 	case len(caCertRefs) > 0:
-		if err := validateBackendTLSCACertRef(backendTLSPolicy, configMapResolver, secretResolver); err != nil {
+		certConds := validateBackendTLSCACertRef(backendTLSPolicy, configMapResolver, secretResolver)
+		if len(certConds) > 0 {
 			valid = false
-			conds = append(conds, conditions.NewPolicyInvalid(
-				fmt.Sprintf("invalid CACertificateRef: %s", err.Error())))
+			conds = append(conds, certConds...)
+		} else if valid {
+			// Only set ResolvedRefs to true if CACertificateRefs are valid AND overall policy is valid
+			conds = append(conds, conditions.NewBackendTLSPolicyResolvedRefs())
 		}
 
 	case wellKnownCerts != nil:
@@ -103,8 +108,12 @@ func validateBackendTLSPolicy(
 
 	default:
 		valid = false
-		conds = append(conds, conditions.NewPolicyInvalid("CACertRefs and WellKnownCACerts are both nil"))
+		conds = append(
+			conds,
+			conditions.NewPolicyInvalid("either CACertificateRefs or WellKnownCACertificates must be specified"),
+		)
 	}
+
 	return valid, ignored, conds
 }
 
@@ -123,11 +132,11 @@ func validateBackendTLSCACertRef(
 	btp *v1alpha3.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
 	secretResolver *secretResolver,
-) error {
+) []conditions.Condition {
 	if len(btp.Spec.Validation.CACertificateRefs) != 1 {
 		path := field.NewPath("validation.caCertificateRefs")
 		valErr := field.TooMany(path, len(btp.Spec.Validation.CACertificateRefs), 1)
-		return valErr
+		return []conditions.Condition{conditions.NewPolicyInvalid(valErr.Error())}
 	}
 
 	selectedCertRef := btp.Spec.Validation.CACertificateRefs[0]
@@ -136,13 +145,19 @@ func validateBackendTLSCACertRef(
 	if !slices.Contains(allowedCaCertKinds, selectedCertRef.Kind) {
 		path := field.NewPath("validation.caCertificateRefs[0].kind")
 		valErr := field.NotSupported(path, btp.Spec.Validation.CACertificateRefs[0].Kind, allowedCaCertKinds)
-		return valErr
+		return []conditions.Condition{
+			conditions.NewBackendTLSPolicyInvalidKind(valErr.Error()),
+			conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
+		}
 	}
 	if selectedCertRef.Group != "" &&
 		selectedCertRef.Group != "core" {
 		path := field.NewPath("validation.caCertificateRefs[0].group")
 		valErr := field.NotSupported(path, selectedCertRef.Group, []string{"", "core"})
-		return valErr
+		return []conditions.Condition{
+			conditions.NewBackendTLSPolicyInvalidKind(valErr.Error()),
+			conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
+		}
 	}
 	nsName := types.NamespacedName{
 		Namespace: btp.Namespace,
@@ -153,15 +168,21 @@ func validateBackendTLSCACertRef(
 	case "ConfigMap":
 		if err := configMapResolver.resolve(nsName); err != nil {
 			path := field.NewPath("validation.caCertificateRefs[0]")
-			return field.Invalid(path, selectedCertRef, err.Error())
+			valErr := field.Invalid(path, selectedCertRef, err.Error())
+			return []conditions.Condition{
+				conditions.NewBackendTLSPolicyInvalidCACertificateRef(valErr.Error()),
+				conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
+			}
 		}
 	case "Secret":
 		if err := secretResolver.resolve(nsName); err != nil {
 			path := field.NewPath("validation.caCertificateRefs[0]")
-			return field.Invalid(path, selectedCertRef, err.Error())
+			valErr := field.Invalid(path, selectedCertRef, err.Error())
+			return []conditions.Condition{
+				conditions.NewBackendTLSPolicyInvalidCACertificateRef(valErr.Error()),
+				conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
+			}
 		}
-	default:
-		return fmt.Errorf("invalid certificate reference kind %q", selectedCertRef.Kind)
 	}
 	return nil
 }

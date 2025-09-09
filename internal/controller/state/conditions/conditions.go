@@ -147,6 +147,18 @@ const (
 	// when a policy cannot be applied due to the ancestor limit being reached.
 	PolicyMessageAncestorLimitReached = "Policies cannot be applied because the ancestor status list " +
 		"has reached the maximum size. The following policies have been ignored:"
+
+	// BackendTLSPolicyReasonInvalidCACertificateRef is used with the "ResolvedRefs" condition when a
+	// CACertificateRef refers to a resource that cannot be resolved or is misconfigured.
+	BackendTLSPolicyReasonInvalidCACertificateRef v1alpha2.PolicyConditionReason = "InvalidCACertificateRef"
+
+	// BackendTLSPolicyReasonInvalidKind is used with the "ResolvedRefs" condition when a
+	// CACertificateRef refers to an unknown or unsupported kind of resource.
+	BackendTLSPolicyReasonInvalidKind v1alpha2.PolicyConditionReason = "InvalidKind"
+
+	// BackendTLSPolicyReasonNoValidCACertificate is used with the "Accepted" condition when all
+	// CACertificateRefs are invalid.
+	BackendTLSPolicyReasonNoValidCACertificate v1alpha2.PolicyConditionReason = "NoValidCACertificate"
 )
 
 // Condition defines a condition to be reported in the status of resources.
@@ -1051,5 +1063,49 @@ func NewClientSettingsPolicyAffected() Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
 		Message: "ClientSettingsPolicy is applied to the resource",
+	}
+}
+
+// NewBackendTLSPolicyResolvedRefs returns a Condition that indicates that all CACertificateRefs
+// in the BackendTLSPolicy are resolved.
+func NewBackendTLSPolicyResolvedRefs() Condition {
+	return Condition{
+		Type:    string(GatewayResolvedRefs),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(GatewayResolvedRefs),
+		Message: "All CACertificateRefs are resolved",
+	}
+}
+
+// NewBackendTLSPolicyInvalidCACertificateRef returns a Condition that indicates that a
+// CACertificateRef in the BackendTLSPolicy refers to a resource that cannot be resolved or is misconfigured.
+func NewBackendTLSPolicyInvalidCACertificateRef(message string) Condition {
+	return Condition{
+		Type:    string(GatewayResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(BackendTLSPolicyReasonInvalidCACertificateRef),
+		Message: message,
+	}
+}
+
+// NewBackendTLSPolicyInvalidKind returns a Condition that indicates that a CACertificateRef
+// in the BackendTLSPolicy refers to an unknown or unsupported kind of resource.
+func NewBackendTLSPolicyInvalidKind(message string) Condition {
+	return Condition{
+		Type:    string(GatewayResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(BackendTLSPolicyReasonInvalidKind),
+		Message: message,
+	}
+}
+
+// NewBackendTLSPolicyNoValidCACertificate returns a Condition that indicates that all
+// CACertificateRefs in the BackendTLSPolicy are invalid.
+func NewBackendTLSPolicyNoValidCACertificate(message string) Condition {
+	return Condition{
+		Type:    string(v1alpha2.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(BackendTLSPolicyReasonNoValidCACertificate),
+		Message: message,
 	}
 }

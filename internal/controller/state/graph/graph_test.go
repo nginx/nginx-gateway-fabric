@@ -50,6 +50,7 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	btpAcceptedConds := []conditions.Condition{
+		conditions.NewBackendTLSPolicyResolvedRefs(),
 		conditions.NewPolicyAccepted(),
 		conditions.NewPolicyAccepted(),
 		conditions.NewPolicyAccepted(),
