@@ -31,6 +31,11 @@ on:
         default: both
         type: choice
         options: [oss, plus, both]
+      ipv6_enabled:
+        description: Whether to run the tests in an IPv6 enabled environment
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "0 16 1,15 * *" # Run on the 1st and 15th of every month at 16:00 UTC
 
@@ -138,7 +143,7 @@ jobs:
 
       - name: Create GKE cluster
         working-directory: ./tests
-        run: make create-gke-cluster CI=true
+        run: make create-gke-cluster CI=true IPv6_ONLY=${{ needs.vars.outputs.ipv6_enabled }}
 
       - name: Create and setup VM
         working-directory: ./tests
