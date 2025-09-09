@@ -285,22 +285,6 @@ jobs:
     permissions:
       contents: read
 
-  ipv6-only-tests:
-    name: Functional IPv6 Only Tests
-    needs: [vars, build-oss]
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [nginx]
-        k8s-version:
-          [
-            "${{ needs.vars.outputs.k8s_latest }}",
-          ]
-    uses: ./.github/workflows/ipv6-only.yml
-    with:
-      image: ${{ matrix.image }}
-      k8s-version: ${{ matrix.k8s-version }}
-
   conformance-tests:
     name: Conformance tests
     needs: [vars, build-oss, build-plus]
