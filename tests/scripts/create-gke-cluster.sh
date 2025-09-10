@@ -29,10 +29,14 @@ if [ "${IPV6_ENABLE}" = "true" ]; then
         --ipv6-access-type=EXTERNAL \
         --region=${GKE_CLUSTER_REGION}
 
+    gcloud compute firewall-rules create ${GKE_CLUSTER_NAME}-firewall --network ${GKE_CLUSTER_NAME}-network --allow tcp:22,tcp:3389,icmp
+
     echo "Deleting subnet ${GKE_CLUSTER_NAME}-subnet (if exists)..."
     gcloud compute networks subnets delete ${GKE_CLUSTER_NAME}-subnet --region=${GKE_CLUSTER_REGION} --quiet || true
     echo "Deleting network ${GKE_CLUSTER_NAME}-network (if exists)..."
     gcloud compute networks delete ${GKE_CLUSTER_NAME}-network --quiet || true
+    echo "Deleting firewall rule ${GKE_CLUSTER_NAME}-firewall (if exists)..."
+    gcloud compute firewall-rules delete ${GKE_CLUSTER_NAME}-firewall --quiet || true
 fi
 
 gcloud container clusters create "${GKE_CLUSTER_NAME}" \
