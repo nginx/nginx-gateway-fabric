@@ -166,21 +166,21 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		defer cancel()
 
 		var namespaces core.NamespaceList
-		if err := resourceManager.List(ctx, &namespaces, nil); err != nil {
+		if err := resourceManager.List(ctx, &namespaces); err != nil {
 			return fmt.Errorf("error getting namespaces: %w", err)
 		}
 		GinkgoWriter.Printf("Found %d namespaces, expected at least%d\n", len(namespaces.Items), resourceCount)
 		Expect(len(namespaces.Items)).To(BeNumerically(">=", resourceCount))
 
 		var routes v1.HTTPRouteList
-		if err := resourceManager.List(ctx, &routes, nil); err != nil {
+		if err := resourceManager.List(ctx, &routes); err != nil {
 			return fmt.Errorf("error getting HTTPRoutes: %w", err)
 		}
 		GinkgoWriter.Printf("Found %d HTTPRoutes, expected %d\n", len(routes.Items), resourceCount*3)
 		Expect(routes.Items).To(HaveLen(resourceCount * 3))
 
 		var pods core.PodList
-		if err := resourceManager.List(ctx, &pods, nil); err != nil {
+		if err := resourceManager.List(ctx, &pods); err != nil {
 			return fmt.Errorf("error getting Pods: %w", err)
 		}
 		GinkgoWriter.Printf("Found %d Pods, expected at least %d\n", len(pods.Items), resourceCount*2)
