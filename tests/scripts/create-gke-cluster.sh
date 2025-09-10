@@ -26,7 +26,7 @@ if [ "${IPV6_ENABLE}" = "true" ]; then
     gcloud compute networks subnets create ${GKE_CLUSTER_NAME}-subnet \
         --network=${GKE_CLUSTER_NAME}-network \
         --stack-type=IPV6_ONLY \
-        --ipv6-access-type=INTERNAL \
+        --ipv6-access-type=EXTERNAL \
         --region=${GKE_CLUSTER_REGION}
 
     echo "Deleting subnet ${GKE_CLUSTER_NAME}-subnet (if exists)..."
