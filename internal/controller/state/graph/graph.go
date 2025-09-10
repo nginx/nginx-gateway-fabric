@@ -200,6 +200,7 @@ func BuildGraph(
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	validators validation.Validators,
 	logger logr.Logger,
+	experimentalFeatures bool,
 ) *Graph {
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
@@ -232,6 +233,7 @@ func BuildGraph(
 		gc,
 		refGrantResolver,
 		processedNginxProxies,
+		experimentalFeatures,
 	)
 
 	processedBackendTLSPolicies := processBackendTLSPolicies(
