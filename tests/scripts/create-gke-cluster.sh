@@ -46,6 +46,7 @@ gcloud container clusters create "${GKE_CLUSTER_NAME}" \
     --machine-type "${GKE_MACHINE_TYPE}" \
     --num-nodes "${GKE_NUM_NODES}" \
     --no-enable-insecure-kubelet-readonly-port \
+    --network=${GKE_CLUSTER_NAME}-network \
     --subnetwork=${GKE_CLUSTER_NAME}-subnet
 
 # Add current IP to GKE master control node access, if this script is not invoked during a CI run.
