@@ -22,7 +22,7 @@ fi
 
 if [ "${IPV6_ENABLE}" = "true" ]; then
     echo "Creating IPv6 Network interface for the GKE cluster"
-    gcloud compute networks create ${GKE_CLUSTER_NAME}-network --subnet-mode=custom --bgp-routing-mode=regional --mtu=1460 --stack-type=IPV4_IPV6
+    gcloud compute networks create ${GKE_CLUSTER_NAME}-network --subnet-mode=custom --bgp-routing-mode=regional --mtu=1460
     gcloud compute networks subnets create ${GKE_CLUSTER_NAME}-subnet \
         --network=${GKE_CLUSTER_NAME}-network \
         --stack-type=IPV6_ONLY \
