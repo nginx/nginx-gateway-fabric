@@ -205,12 +205,12 @@ The logs are attached only if there are errors.
 
 		// attach error logs
 		if len(errors) > 0 {
-			f, err := framework.CreateFile(fileName)
+			f, err := os.Create(fileName)
 			Expect(err).ToNot(HaveOccurred())
 			defer f.Close()
 
 			for _, e := range errors {
-				_, err = framework.WriteString(f, fmt.Sprintf("%s\n", e))
+				_, err = io.WriteString(f, fmt.Sprintf("%s\n", e))
 				Expect(err).ToNot(HaveOccurred())
 			}
 		}
@@ -320,7 +320,7 @@ The logs are attached only if there are errors.
 			framework.GenerateMemoryPNG(testResultsDir, memCSV, memPNG),
 		).To(Succeed())
 
-		Expect(framework.Remove(memCSV)).To(Succeed())
+		Expect(os.Remove(memCSV)).To(Succeed())
 
 		result, err = promInstance.QueryRange(
 			fmt.Sprintf(`rate(container_cpu_usage_seconds_total{pod="%s",container="nginx-gateway"}[2m])`, ngfPodName),
@@ -340,7 +340,7 @@ The logs are attached only if there are errors.
 			framework.GenerateCPUPNG(testResultsDir, cpuCSV, cpuPNG),
 		).To(Succeed())
 
-		Expect(framework.Remove(cpuCSV)).To(Succeed())
+		Expect(os.Remove(cpuCSV)).To(Succeed())
 
 		eventsCount, err := framework.GetEventsCountWithStartTime(promInstance, ngfPodName, startTime)
 		Expect(err).ToNot(HaveOccurred())
@@ -492,7 +492,7 @@ The logs are attached only if there are errors.
 			seconds := ttr.Seconds()
 			record := []string{strconv.Itoa(i + 1), strconv.FormatFloat(seconds, 'f', -1, 64)}
 
-			Expect(framework.WriteCSVRecord(writer, record)).To(Succeed())
+			Expect(writer.Write(record)).To(Succeed())
 		}
 
 		writer.Flush()
@@ -503,7 +503,7 @@ The logs are attached only if there are errors.
 			framework.GenerateTTRPNG(testResultsDir, ttrCsvFile.Name(), ttrPNG),
 		).To(Succeed())
 
-		Expect(framework.Remove(ttrCsvFile.Name())).To(Succeed())
+		Expect(os.Remove(ttrCsvFile.Name())).To(Succeed())
 	}
 
 	runScaleUpstreams := func() {
@@ -586,7 +586,7 @@ The logs are attached only if there are errors.
 		const testName = "TestScale_Listeners"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
-		Expect(framework.MkdirAll(testResultsDir, 0o755)).To(Succeed())
+		Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
 
 		objects, err := framework.GenerateScaleListenerObjects(httpListenerCount, false /*non-tls*/)
 		Expect(err).ToNot(HaveOccurred())
@@ -610,7 +610,7 @@ The logs are attached only if there are errors.
 		const testName = "TestScale_HTTPSListeners"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
-		Expect(framework.MkdirAll(testResultsDir, 0o755)).To(Succeed())
+		Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
 
 		objects, err := framework.GenerateScaleListenerObjects(httpsListenerCount, true /*tls*/)
 		Expect(err).ToNot(HaveOccurred())
@@ -634,7 +634,7 @@ The logs are attached only if there are errors.
 		const testName = "TestScale_HTTPRoutes"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
-		Expect(framework.MkdirAll(testResultsDir, 0o755)).To(Succeed())
+		Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
 
 		objects, err := framework.GenerateScaleHTTPRouteObjects(httpRouteCount)
 		Expect(err).ToNot(HaveOccurred())
@@ -661,7 +661,7 @@ The logs are attached only if there are errors.
 		const testName = "TestScale_UpstreamServers"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
-		Expect(framework.MkdirAll(testResultsDir, 0o755)).To(Succeed())
+		Expect(os.MkdirAll(testResultsDir, 0o755)).To(Succeed())
 
 		runTestWithMetricsAndLogs(
 			testName,

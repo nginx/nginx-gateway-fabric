@@ -75,7 +75,7 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 		Expect(framework.WriteSystemInfoToFile(resultsFile, clusterInfo, *plusEnabled)).To(Succeed())
 
 		// gather wrk output
-		homeDir, err := framework.UserHomeDir()
+		homeDir, err := os.UserHomeDir()
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(framework.WriteContent(resultsFile, "\n## Traffic\n")).To(Succeed())
@@ -90,7 +90,7 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 
 func writeTrafficResults(resultsFile *os.File, homeDir, filename, testname string) error {
 	file := fmt.Sprintf("%s/%s", homeDir, filename)
-	content, err := framework.ReadFile(file)
+	content, err := os.ReadFile(file)
 	if err != nil {
 		return err
 	}
