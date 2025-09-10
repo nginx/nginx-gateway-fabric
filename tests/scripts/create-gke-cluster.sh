@@ -10,15 +10,6 @@ IS_CI=${1:-false}
 
 IPV6_ENABLE=${2:-false}
 
-IPV6_FLAGS=""
-if [ "${IPV6_ENABLE}" = "true" ]; then
-    IPV6_FLAGS="\
-    --enable-ipv6 \
-    --cluster-ipv6-cidr=fd00:1234::/56 \
-    --services-ipv6-cidr=fd00:4321::/112 \
-    --create-subnetwork name="${GKE_CLUSTER_NAME}-subnet",range=10.0.0.0/16,stack-type=IPV4_IPV6,subnet-ipv6-range=fd00:abcd::/64"
-fi
-
 if [ -z "$GKE_MACHINE_TYPE" ]; then
     # If the environment variable is not set, use a default value
     GKE_MACHINE_TYPE="e2-medium"
@@ -27,6 +18,21 @@ fi
 if [ -z "$GKE_NUM_NODES" ]; then
     # If the environment variable is not set, use a default value
     GKE_NUM_NODES="3"
+fi
+
+if [ "${IPV6_ENABLE}" = "true" ]; then
+    echo "Creating IPv6 Network interface for the GKE cluster"
+    gcloud compute networks create ${GKE_CLUSTER_NAME}-network --subnet-mode=custom --bgp-routing-mode=regional --mtu=1460 --stack-type=IPV4_IPV6
+    gcloud compute networks subnets create ${GKE_CLUSTER_NAME}-subnet \
+        --network=${GKE_CLUSTER_NAME}-network \
+        --stack-type=IPV6_ONLY \
+        --ipv6-access-type=INTERNAL \
+        --region=${GKE_CLUSTER_REGION}
+
+    echo "Deleting subnet ${GKE_CLUSTER_NAME}-subnet (if exists)..."
+    gcloud compute networks subnets delete ${GKE_CLUSTER_NAME}-subnet --region=${GKE_CLUSTER_REGION} --quiet || true
+    echo "Deleting network ${GKE_CLUSTER_NAME}-network (if exists)..."
+    gcloud compute networks delete ${GKE_CLUSTER_NAME}-network --quiet || true
 fi
 
 gcloud container clusters create "${GKE_CLUSTER_NAME}" \
@@ -42,8 +48,7 @@ gcloud container clusters create "${GKE_CLUSTER_NAME}" \
     --logging=SYSTEM,WORKLOAD \
     --machine-type "${GKE_MACHINE_TYPE}" \
     --num-nodes "${GKE_NUM_NODES}" \
-    --no-enable-insecure-kubelet-readonly-port \
-    $IPV6_FLAGS
+    --no-enable-insecure-kubelet-readonly-port
 
 # Add current IP to GKE master control node access, if this script is not invoked during a CI run.
 if [ "${IS_CI}" = "false" ]; then

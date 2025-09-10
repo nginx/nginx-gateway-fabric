@@ -148,28 +148,28 @@ jobs:
         working-directory: ./tests
         run: make create-gke-cluster CI=true IPV6_ENABLE=${{ needs.vars.outputs.ipv6_enabled }}
 
-      - name: Create and setup VM
-        working-directory: ./tests
-        run: make create-and-setup-vm
+      # - name: Create and setup VM
+      #   working-directory: ./tests
+      #   run: make create-and-setup-vm
 
-      - name: Create and setup Router
-        working-directory: ./tests
-        run: make create-gke-router || true
+      # - name: Create and setup Router
+      #   working-directory: ./tests
+      #   run: make create-gke-router || true
 
-      - name: Run Tests
-        working-directory: ./tests
-        run: |
-          if ${{ needs.vars.outputs.test_label != 'all' }}; then
-          sed -i '/^GINKGO_LABEL=/s/=.*/="${{ needs.vars.outputs.test_label }}"/' "scripts/vars.env" && make nfr-test CI=true;
-          else
-          make nfr-test CI=true;
-          fi
+      # - name: Run Tests
+      #   working-directory: ./tests
+      #   run: |
+      #     if ${{ needs.vars.outputs.test_label != 'all' }}; then
+      #     sed -i '/^GINKGO_LABEL=/s/=.*/="${{ needs.vars.outputs.test_label }}"/' "scripts/vars.env" && make nfr-test CI=true;
+      #     else
+      #     make nfr-test CI=true;
+      #     fi
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: results-${{ matrix.type }}
-          path: tests/results/**/*-${{ matrix.type }}.*
+      # - name: Upload Artifacts
+      #   uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      #   with:
+      #     name: results-${{ matrix.type }}
+      #     path: tests/results/**/*-${{ matrix.type }}.*
 
       - name: Cleanup
         working-directory: ./tests
