@@ -135,6 +135,14 @@ const (
 	// parametersRef resource is invalid.
 	GatewayReasonParamsRefInvalid v1.GatewayConditionReason = "ParametersRefInvalid"
 
+	// GatewayReasonSecretRefInvalid is used with the "GatewayResolvedRefs" condition when the
+	// secretRef resource is invalid.
+	GatewayReasonSecretRefInvalid v1.GatewayConditionReason = "SecretRefInvalid"
+
+	// GatewayReasonSecretRefNotPermitted is used with the "GatewayResolvedRefs" condition when the
+	// secretRef resource is not permitted by any ReferenceGrant.
+	GatewayReasonSecretRefNotPermitted v1.GatewayConditionReason = "SecretRefNotPermitted"
+
 	// PolicyReasonAncestorLimitReached is used with the "PolicyAccepted" condition when a policy
 	// cannot be applied because the ancestor status list has reached the maximum size of 16.
 	PolicyReasonAncestorLimitReached v1alpha2.PolicyConditionReason = "AncestorLimitReached"
@@ -290,6 +298,27 @@ func NewGatewayClassUnsupportedVersion(recommendedVersion string) []Condition {
 				recommendedVersion,
 			),
 		},
+	}
+}
+
+// NewGatewaySecretRefNotPermitted returns Condition that indicates that the Gateway references a TLS secret that is not
+// permitted by any ReferenceGrant.
+func NewGatewaySecretRefNotPermitted(msg string) Condition {
+	return Condition{
+		Type:    string(GatewayReasonResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(GatewayReasonSecretRefNotPermitted),
+		Message: msg,
+	}
+}
+
+// NewGatewaySecretRefInvalid returns Condition that indicates that the Gateway references a TLS secret that is invalid.
+func NewGatewaySecretRefInvalid(msg string) Condition {
+	return Condition{
+		Type:    string(GatewayReasonResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(GatewayReasonSecretRefInvalid),
+		Message: msg,
 	}
 }
 

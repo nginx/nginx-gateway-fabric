@@ -1269,19 +1269,22 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	tests := []struct {
-		store    ClusterState
-		expected *Graph
-		name     string
+		store        ClusterState
+		expected     *Graph
+		name         string
+		experimental bool
 	}{
 		{
-			store:    createStateWithGatewayClass(normalGC),
-			expected: createExpectedGraphWithGatewayClass(normalGC),
-			name:     "normal case",
+			store:        createStateWithGatewayClass(normalGC),
+			expected:     createExpectedGraphWithGatewayClass(normalGC),
+			experimental: false,
+			name:         "normal case",
 		},
 		{
-			store:    createStateWithGatewayClass(differentControllerGC),
-			expected: &Graph{},
-			name:     "gatewayclass belongs to a different controller",
+			store:        createStateWithGatewayClass(differentControllerGC),
+			expected:     &Graph{},
+			experimental: true,
+			name:         "gatewayclass belongs to a different controller",
 		},
 	}
 
@@ -1312,6 +1315,7 @@ func TestBuildGraph(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
+				test.experimental,
 			)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
