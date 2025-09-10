@@ -30,13 +30,6 @@ if [ "${IPV6_ENABLE}" = "true" ]; then
         --region=${GKE_CLUSTER_REGION}
 
     gcloud compute firewall-rules create ${GKE_CLUSTER_NAME}-firewall --network ${GKE_CLUSTER_NAME}-network --allow tcp:22,tcp:3389,icmp
-
-    echo "Deleting subnet ${GKE_CLUSTER_NAME}-subnet (if exists)..."
-    gcloud compute networks subnets delete ${GKE_CLUSTER_NAME}-subnet --region=${GKE_CLUSTER_REGION} --quiet || true
-    echo "Deleting network ${GKE_CLUSTER_NAME}-network (if exists)..."
-    gcloud compute networks delete ${GKE_CLUSTER_NAME}-network --quiet || true
-    echo "Deleting firewall rule ${GKE_CLUSTER_NAME}-firewall (if exists)..."
-    gcloud compute firewall-rules delete ${GKE_CLUSTER_NAME}-firewall --quiet || true
 fi
 
 gcloud container clusters create "${GKE_CLUSTER_NAME}" \
@@ -52,7 +45,8 @@ gcloud container clusters create "${GKE_CLUSTER_NAME}" \
     --logging=SYSTEM,WORKLOAD \
     --machine-type "${GKE_MACHINE_TYPE}" \
     --num-nodes "${GKE_NUM_NODES}" \
-    --no-enable-insecure-kubelet-readonly-port
+    --no-enable-insecure-kubelet-readonly-port \
+    --subnetwork=${GKE_CLUSTER_NAME}-subnet
 
 # Add current IP to GKE master control node access, if this script is not invoked during a CI run.
 if [ "${IS_CI}" = "false" ]; then
