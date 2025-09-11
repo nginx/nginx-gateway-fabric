@@ -82,9 +82,9 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 		Expect(writeTrafficResults(resultsFile, homeDir, "coffee.txt", "HTTP")).To(Succeed())
 		Expect(writeTrafficResults(resultsFile, homeDir, "tea.txt", "HTTPS")).To(Succeed())
 
-		framework.AddNginxLogsAndEventsToReport(resourceManager, ns.Name, framework.WithLoggingDisabled())
+		framework.AddNginxLogsAndEventsToReport(resourceManager, ns.Name)
 		Expect(resourceManager.DeleteFromFiles(files, ns.Name)).To(Succeed())
-		Expect(resourceManager.DeleteNamespace(ns.Name, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
 	})
 })
 

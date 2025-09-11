@@ -63,13 +63,12 @@ var _ = Describe("Dataplane performance", Ordered, Label("nfr", "performance"), 
 		}
 
 		Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
-		Expect(resourceManager.ApplyFromFiles(files, ns.Name, framework.WithLoggingDisabled())).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(ns.Name, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
 
 		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
 			namespace,
 			timeoutConfig.GetTimeout,
-			framework.WithLoggingDisabled(),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
@@ -92,7 +91,7 @@ var _ = Describe("Dataplane performance", Ordered, Label("nfr", "performance"), 
 	})
 
 	AfterAll(func() {
-		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace, framework.WithLoggingDisabled())
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())

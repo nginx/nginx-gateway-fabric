@@ -112,13 +112,12 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 				Name: namespace,
 			},
 		}
-		Expect(resourceManager.Apply([]client.Object{ns}, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
 
 		podNames, err := resourceManager.GetReadyNGFPodNames(
 			ngfNamespace,
 			releaseName,
 			timeoutConfig.GetTimeout,
-			framework.WithLoggingDisabled(),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(podNames).To(HaveLen(1))
@@ -246,7 +245,6 @@ The logs are attached only if there are errors.
 					q,
 					getStartTime,
 					modifyStartTime,
-					framework.WithLoggingDisabled(),
 				),
 			).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
 		}
@@ -294,7 +292,6 @@ The logs are attached only if there are errors.
 					q,
 					getEndTime,
 					noOpModifier,
-					framework.WithLoggingDisabled(),
 				),
 			).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
 		}
@@ -365,7 +362,6 @@ The logs are attached only if there are errors.
 		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
 			namespace,
 			timeoutConfig.GetStatusTimeout,
-			framework.WithLoggingDisabled(),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
@@ -439,12 +435,11 @@ The logs are attached only if there are errors.
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 
-		Expect(resourceManager.WaitForPodsToBeReady(ctx, namespace, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.WaitForPodsToBeReady(ctx, namespace)).To(Succeed())
 
 		for i := range len(objects.ScaleIterationGroups) {
 			Expect(resourceManager.Apply(
 				objects.ScaleIterationGroups[i],
-				framework.WithLoggingDisabled(),
 			)).To(Succeed())
 
 			if i == 0 {
@@ -454,7 +449,6 @@ The logs are attached only if there are errors.
 						nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
 							namespace,
 							timeoutConfig.GetStatusTimeout,
-							framework.WithLoggingDisabled(),
 						)
 						return len(nginxPodNames) == 1 && err == nil
 					}).
@@ -507,12 +501,12 @@ The logs are attached only if there are errors.
 	}
 
 	runScaleUpstreams := func() {
-		Expect(resourceManager.ApplyFromFiles(upstreamsManifests, namespace, framework.WithLoggingDisabled())).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(namespace, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(upstreamsManifests, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
 		// apply HTTPRoute after upstreams are ready
-		Expect(resourceManager.ApplyFromFiles(httpRouteManifests, namespace, framework.WithLoggingDisabled())).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(namespace, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(httpRouteManifests, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
 		var nginxPodNames []string
 		var err error
@@ -521,7 +515,6 @@ The logs are attached only if there are errors.
 				nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
 					namespace,
 					timeoutConfig.GetStatusTimeout,
-					framework.WithLoggingDisabled(),
 				)
 				return len(nginxPodNames) == 1 && err == nil
 			}).
@@ -545,7 +538,6 @@ The logs are attached only if there are errors.
 				url,
 				address,
 				timeoutConfig.RequestTimeout,
-				framework.WithLoggingDisabled(),
 			),
 		).WithTimeout(5 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
 
@@ -556,14 +548,13 @@ The logs are attached only if there are errors.
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
-		Expect(resourceManager.WaitForPodsToBeReady(ctx, namespace, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.WaitForPodsToBeReady(ctx, namespace)).To(Succeed())
 
 		Eventually(
 			framework.CreateResponseChecker(
 				url,
 				address,
 				timeoutConfig.RequestTimeout,
-				framework.WithLoggingDisabled(),
 			),
 		).WithTimeout(5 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
 	}
@@ -676,7 +667,7 @@ The logs are attached only if there are errors.
 		const testName = "TestScale_HTTPMatches"
 
 		Expect(resourceManager.ApplyFromFiles(matchesManifests, namespace)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(namespace, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
 		var nginxPodNames []string
 		var err error
@@ -685,7 +676,6 @@ The logs are attached only if there are errors.
 				nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
 					namespace,
 					timeoutConfig.GetStatusTimeout,
-					framework.WithLoggingDisabled(),
 				)
 				return len(nginxPodNames) == 1 && err == nil
 			}).
@@ -752,10 +742,9 @@ The logs are attached only if there are errors.
 		framework.AddNginxLogsAndEventsToReport(
 			resourceManager,
 			namespace,
-			framework.WithLoggingDisabled(),
 		)
 		cleanUpPortForward()
-		Expect(resourceManager.DeleteNamespace(namespace, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 		teardown(releaseName)
 	})
 
@@ -948,9 +937,9 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				cfg.nfr = true
 				setup(cfg, "--values", test.valuesFile)
 
-				Expect(resourceManager.Apply([]client.Object{&ns}, framework.WithLoggingDisabled())).To(Succeed())
+				Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
-				Expect(resourceManager.WaitForAppsToBeReady(ns.Name, framework.WithLoggingDisabled())).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
 
 				var nginxPodNames []string
 				var err error
@@ -959,7 +948,6 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 						nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
 							ns.Name,
 							timeoutConfig.GetStatusTimeout,
-							framework.WithLoggingDisabled(),
 						)
 						return len(nginxPodNames) == 1 && err == nil
 					}).
@@ -979,7 +967,6 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				framework.AddNginxLogsAndEventsToReport(
 					resourceManager,
 					ns.Name,
-					framework.WithLoggingDisabled(),
 				)
 				cleanUpPortForward()
 
@@ -1023,8 +1010,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 					Expect(resourceManager.WaitForPodsToBeReadyWithCount(
 						ctx,
 						ns.Name,
-						i+numCoffeeAndTeaPods,
-						framework.WithLoggingDisabled()),
+						i+numCoffeeAndTeaPods),
 					).To(Succeed())
 					Expect(resourceManager.WaitForGatewayObservedGeneration(ctx, ns.Name, "gateway", i)).To(Succeed())
 

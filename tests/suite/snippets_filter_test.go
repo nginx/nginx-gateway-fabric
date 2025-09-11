@@ -40,7 +40,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(namespace, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
 		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
 			namespace,
