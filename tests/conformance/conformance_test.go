@@ -1,5 +1,3 @@
-//go:build conformance
-
 /*
 Copyright 2022 The Kubernetes Authors.
 
@@ -22,6 +20,8 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/conformance"
 	conf_v1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/tests"
@@ -42,6 +42,11 @@ func TestConformance(t *testing.T) {
 	)
 
 	opts := conformance.DefaultOptions(t)
+
+	ipaddressType := v1.IPAddressType
+	opts.UnusableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: "198.51.100.0"}}
+	opts.UsableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: "192.0.2.1"}}
+
 	opts.Implementation = conf_v1.Implementation{
 		Organization: "nginx",
 		Project:      "nginx-gateway-fabric",

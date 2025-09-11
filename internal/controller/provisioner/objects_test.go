@@ -81,6 +81,12 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 					Port: 9999,
 				},
 			},
+			Addresses: []gatewayv1.GatewaySpecAddress{
+				{
+					Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+					Value: "192.0.0.2",
+				},
+			},
 		},
 	}
 
@@ -185,6 +191,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			TargetPort: intstr.FromInt(9999),
 		},
 	}))
+	g.Expect(svc.Spec.ExternalIPs).To(Equal([]string{"192.0.0.2"}))
 
 	depObj := objects[5]
 	dep, ok := depObj.(*appsv1.Deployment)

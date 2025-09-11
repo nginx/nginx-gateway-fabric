@@ -167,7 +167,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		Annotations: maps.Clone(objectMeta.Annotations),
 	}
 
-	service, err := buildNginxService(serviceObjectMeta, nProxyCfg, ports, selectorLabels)
+	service, err := buildNginxService(serviceObjectMeta, nProxyCfg, ports, selectorLabels, gateway.Spec.Addresses)
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -517,6 +517,7 @@ func buildNginxService(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ports map[int32]struct{},
 	selectorLabels map[string]string,
+	addresses []gatewayv1.GatewaySpecAddress,
 ) (*corev1.Service, error) {
 	var serviceCfg ngfAPIv1alpha2.ServiceSpec
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Service != nil {
@@ -572,6 +573,8 @@ func buildNginxService(
 		},
 	}
 
+	setSvcExternalIPs(svc, addresses)
+
 	setIPFamily(nProxyCfg, svc)
 
 	setSvcLoadBalancerSettings(serviceCfg, &svc.Spec)
@@ -584,6 +587,14 @@ func buildNginxService(
 	}
 
 	return svc, nil
+}
+
+func setSvcExternalIPs(svc *corev1.Service, addresses []gatewayv1.GatewaySpecAddress) {
+	for _, address := range addresses {
+		if address.Type != nil && *address.Type == gatewayv1.IPAddressType {
+			svc.Spec.ExternalIPs = append(svc.Spec.ExternalIPs, address.Value)
+		}
+	}
 }
 
 func setIPFamily(nProxyCfg *graph.EffectiveNginxProxy, svc *corev1.Service) {

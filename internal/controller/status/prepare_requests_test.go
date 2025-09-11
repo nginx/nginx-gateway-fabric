@@ -851,6 +851,12 @@ func TestBuildGatewayStatuses(t *testing.T) {
 		}
 	}
 
+	createGatewayWithAddresses := func(addresses []v1.GatewaySpecAddress) *v1.Gateway {
+		g := createGateway()
+		g.Spec.Addresses = addresses
+		return g
+	}
+
 	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
 
 	validListenerConditions := []metav1.Condition{
@@ -1329,6 +1335,202 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonInvalidParameters),
 							Message:            "Gateway is accepted, but ParametersRef is ignored due to an error: ParametersRef not found",
+						},
+					},
+					Listeners: []v1.ListenerStatus{
+						{
+							Name:           "listener-valid-1",
+							AttachedRoutes: 1,
+							Conditions:     validListenerConditions,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "valid gateway; valid listeners; gateway addresses type unspecified",
+			gateway: &graph.Gateway{
+				Source: createGatewayWithAddresses([]v1.GatewaySpecAddress{
+					{
+						Value: "198.0.0.1",
+					},
+				}),
+				Listeners: []*graph.Listener{
+					{
+						Name:   "listener-valid-1",
+						Valid:  true,
+						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+					},
+				},
+				Valid: true,
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonProgrammed),
+							Message:            "Gateway is programmed",
+						},
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonUnsupportedAddress),
+							Message:            "AddressType must be specified",
+						},
+					},
+					Listeners: []v1.ListenerStatus{
+						{
+							Name:           "listener-valid-1",
+							AttachedRoutes: 1,
+							Conditions:     validListenerConditions,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "valid gateway; valid listeners; gateway addresses type unsupported",
+			gateway: &graph.Gateway{
+				Source: createGatewayWithAddresses([]v1.GatewaySpecAddress{
+					{
+						Type:  helpers.GetPointer(v1.HostnameAddressType),
+						Value: "example.com",
+					},
+				}),
+				Listeners: []*graph.Listener{
+					{
+						Name:   "listener-valid-1",
+						Valid:  true,
+						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+					},
+				},
+				Valid: true,
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonProgrammed),
+							Message:            "Gateway is programmed",
+						},
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonUnsupportedAddress),
+							Message:            "Only AddressType IPAddress is supported",
+						},
+					},
+					Listeners: []v1.ListenerStatus{
+						{
+							Name:           "listener-valid-1",
+							AttachedRoutes: 1,
+							Conditions:     validListenerConditions,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "valid gateway; valid listeners; gateway addresses value unspecified",
+			gateway: &graph.Gateway{
+				Source: createGatewayWithAddresses([]v1.GatewaySpecAddress{
+					{
+						Type:  helpers.GetPointer(v1.IPAddressType),
+						Value: "",
+					},
+				}),
+				Listeners: []*graph.Listener{
+					{
+						Name:   "listener-valid-1",
+						Valid:  true,
+						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+					},
+				},
+				Valid: true,
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonAccepted),
+							Message:            "Gateway is accepted",
+						},
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonAddressNotAssigned),
+							Message: "Dynamically assigned addresses for the Gateway addresses " +
+								"field are not supported, value must be specified",
+						},
+					},
+					Listeners: []v1.ListenerStatus{
+						{
+							Name:           "listener-valid-1",
+							AttachedRoutes: 1,
+							Conditions:     validListenerConditions,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "valid gateway; valid listeners; gateway addresses value unusable",
+			gateway: &graph.Gateway{
+				Source: createGatewayWithAddresses([]v1.GatewaySpecAddress{
+					{
+						Type:  helpers.GetPointer(v1.IPAddressType),
+						Value: "<invalid-ip>",
+					},
+				}),
+				Listeners: []*graph.Listener{
+					{
+						Name:   "listener-valid-1",
+						Valid:  true,
+						Routes: map[graph.RouteKey]*graph.L7Route{routeKey: {}},
+					},
+				},
+				Valid: true,
+			},
+			expected: map[types.NamespacedName]v1.GatewayStatus{
+				{Namespace: "test", Name: "gateway"}: {
+					Addresses: addr,
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayConditionAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonAccepted),
+							Message:            "Gateway is accepted",
+						},
+						{
+							Type:               string(v1.GatewayConditionProgrammed),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayReasonAddressNotUsable),
+							Message:            "Invalid IP address",
 						},
 					},
 					Listeners: []v1.ListenerStatus{
