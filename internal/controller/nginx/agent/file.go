@@ -143,12 +143,22 @@ func (fs *fileService) getFileContents(req *pb.GetFileRequest, connKey string) (
 	}
 
 	filename := req.GetFileMeta().GetName()
-	contents := deployment.GetFile(filename, req.GetFileMeta().GetHash())
+	contents, fileFoundHash := deployment.GetFile(filename, req.GetFileMeta().GetHash())
 	if len(contents) == 0 {
+		fs.logger.V(1).Info("Error getting file for agent", "file", filename)
+		if fileFoundHash != "" {
+			fs.logger.V(1).Info(
+				"File found had wrong hash",
+				"hashWanted",
+				req.GetFileMeta().GetHash(),
+				"hashFound",
+				fileFoundHash,
+			)
+		}
 		return nil, status.Errorf(codes.NotFound, "file not found")
 	}
 
-	fs.logger.V(1).Info("Getting file for agent", "file", filename)
+	fs.logger.V(1).Info("Getting file for agent", "file", filename, "fileHash", fileFoundHash)
 
 	return contents, nil
 }

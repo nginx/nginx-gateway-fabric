@@ -52,7 +52,7 @@ func TestSetAndGetFiles(t *testing.T) {
 	g.Expect(msg.FileOverviews).To(HaveLen(9)) // 1 file + 8 ignored files
 	g.Expect(fileOverviews).To(Equal(msg.FileOverviews))
 
-	file := deployment.GetFile("test.conf", "12345")
+	file, _ := deployment.GetFile("test.conf", "12345")
 	g.Expect(file).To(Equal([]byte("test content")))
 
 	g.Expect(deployment.GetFile("invalid", "12345")).To(BeNil())
