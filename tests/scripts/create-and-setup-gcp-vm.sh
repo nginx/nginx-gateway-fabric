@@ -61,7 +61,7 @@ if [ "${ADD_VM_IP_AUTH_NETWORKS}" = "true" ]; then
     CURRENT_AUTH_NETWORK=$(gcloud container clusters describe "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}" \
         --format="value(masterAuthorizedNetworksConfig.cidrBlocks[0])" | sed 's/cidrBlock=//')
 
-    TMP_CURRENT_AUTH_NETWORK=$(gcloud container clusters describe "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}"
+    TMP_CURRENT_AUTH_NETWORK=$(gcloud container clusters describe "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}")
     echo "TMP Current GKE master authorized networks: ${TMP_CURRENT_AUTH_NETWORK}"
     gcloud container clusters update "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}" --enable-master-authorized-networks --master-authorized-networks="${EXTERNAL_IP}"/32,"${CURRENT_AUTH_NETWORK}"
 fi
