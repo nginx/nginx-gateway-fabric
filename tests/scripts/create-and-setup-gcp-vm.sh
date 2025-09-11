@@ -18,13 +18,13 @@ if [ "${IPV6_ENABLED}" = "true" ]; then
     gcloud compute networks create ${RESOURCE_NAME} --subnet-mode=custom --bgp-routing-mode=regional --mtu=1460 --quiet
     gcloud compute networks subnets create ${RESOURCE_NAME} \
         --network=${RESOURCE_NAME} \
-        --stack-type=IPV6_ONLY \
-        --ipv6-access-type=EXTERNAL \
+        --stack-type=IPV4_IPV6 \
+        --ipv6-access-type=INTERNAL \
         --region=${GKE_CLUSTER_REGION}
 
     NETWORK=${RESOURCE_NAME}
     NETWORK_TIER="ipv6-network-tier=PREMIUM"
-    STACK_TYPE="IPV6_ONLY"
+    STACK_TYPE="IPV4_IPV6"
 fi
 
 gcloud compute firewall-rules create "${RESOURCE_NAME}" \
@@ -46,24 +46,18 @@ gcloud compute instances create "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --
 # Add VM IP to GKE master control node access, if required
 if [ "${ADD_VM_IP_AUTH_NETWORKS}" = "true" ]; then
 
-    if [ "${IPV6_ENABLED}" = "true" ]; then
-        echo "IPv6 is enabled, fetching the external IPv6 address"
-        EXTERNAL_IP=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
-            --format='value(networkInterfaces[0].ipv6AccessConfigs[0].externalIpv6)')
-    else
-        echo "IPv6 is not enabled, fetching the external IPv4 address"
-        EXTERNAL_IP=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
-            --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
+    echo "IPv6 is not enabled, fetching the external IPv4 address"
+    EXTERNAL_IP=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
+        --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
 
-        echo "External IP of the VM is: ${EXTERNAL_IP}"
+    echo "External IP of the VM is: ${EXTERNAL_IP}"
 
-        CURRENT_AUTH_NETWORK=$(gcloud container clusters describe "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}" \
-        --format="value(masterAuthorizedNetworksConfig.cidrBlocks[0])" | sed 's/cidrBlock=//')
+    CURRENT_AUTH_NETWORK=$(gcloud container clusters describe "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}" \
+    --format="value(masterAuthorizedNetworksConfig.cidrBlocks[0])" | sed 's/cidrBlock=//')
 
-        echo "Current GKE master authorized networks: ${CURRENT_AUTH_NETWORK}"
+    echo "Current GKE master authorized networks: ${CURRENT_AUTH_NETWORK}"
 
-        gcloud container clusters update "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}" --enable-master-authorized-networks --master-authorized-networks="${EXTERNAL_IP}"/32,"${CURRENT_AUTH_NETWORK}"
-    fi
+    gcloud container clusters update "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}" --enable-master-authorized-networks --master-authorized-networks="${EXTERNAL_IP}"/32,"${CURRENT_AUTH_NETWORK}"
 fi
 
 # Poll for SSH connectivity
