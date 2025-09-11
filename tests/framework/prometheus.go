@@ -191,7 +191,6 @@ func (ins *PrometheusInstance) PortForward(config *rest.Config, stopCh <-chan st
 }
 
 func (ins *PrometheusInstance) getAPIClient() (v1.API, error) {
-	GinkgoWriter.Printf("Creating Prometheus API client for pod %q in namespace %q\n", ins.podName, ins.podNamespace)
 	var endpoint string
 	if ins.portForward {
 		endpoint = fmt.Sprintf("http://localhost:%d", PrometheusPortForwardPort)
@@ -231,7 +230,6 @@ func (ins *PrometheusInstance) ensureAPIClient() error {
 
 // Query sends a query to Prometheus.
 func (ins *PrometheusInstance) Query(query string) (model.Value, error) {
-	GinkgoWriter.Printf("Querying Prometheus with query: %q\n", query)
 	ctx, cancel := context.WithTimeout(context.Background(), ins.queryTimeout)
 	defer cancel()
 

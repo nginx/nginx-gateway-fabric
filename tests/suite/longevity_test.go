@@ -84,7 +84,7 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 
 		framework.AddNginxLogsAndEventsToReport(resourceManager, ns.Name, framework.WithLoggingDisabled())
 		Expect(resourceManager.DeleteFromFiles(files, ns.Name)).To(Succeed())
-		Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
+		Expect(resourceManager.DeleteNamespace(ns.Name, framework.WithLoggingDisabled())).To(Succeed())
 	})
 })
 
