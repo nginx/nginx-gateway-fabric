@@ -5,7 +5,10 @@ set -o pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 REPO_DIR=$(dirname $(dirname "$SCRIPT_DIR"))
 
+# Default network settings
 NETWORK=default
+STACK_TYPE="IPV4_ONLY"
+NETWORK_TIER="network-tier=PREMIUM"
 
 source scripts/vars.env
 
@@ -20,6 +23,8 @@ if [ "${IPV6_ENABLED}" = "true" ]; then
         --region=${GKE_CLUSTER_REGION}
 
     NETWORK=${RESOURCE_NAME}
+    NETWORK_TIER="ipv6-network-tier=PREMIUM"
+    STACK_TYPE="IPV6_ONLY"
 fi
 
 gcloud compute firewall-rules create "${RESOURCE_NAME}" \
@@ -33,12 +38,10 @@ gcloud compute firewall-rules create "${RESOURCE_NAME}" \
     --target-tags="${NETWORK_TAGS}"
 
 gcloud compute instances create "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" --machine-type=n2-standard-2 \
-    --network-interface=network-tier=PREMIUM,stack-type=IPV4_ONLY,subnet=default --maintenance-policy=MIGRATE \
+    --network-interface=${NETWORK_TIER},stack-type=${STACK_TYPE},subnet=${NETWORK} --maintenance-policy=MIGRATE \
     --provisioning-model=STANDARD --service-account="${GKE_SVC_ACCOUNT}" \
     --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append,https://www.googleapis.com/auth/cloud-platform \
-    --tags="${NETWORK_TAGS}" --create-disk=auto-delete=yes,boot=yes,device-name="${RESOURCE_NAME}",image-family=projects/"${GKE_PROJECT}"/global/images/ngf-debian,mode=rw,size=20 --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --labels=goog-ec-src=vm_add-gcloud --reservation-affinity=any \
-    --network=${NETWORK} \
-    --subnet=${NETWORK}
+    --tags="${NETWORK_TAGS}" --create-disk=auto-delete=yes,boot=yes,device-name="${RESOURCE_NAME}",image-family=projects/"${GKE_PROJECT}"/global/images/ngf-debian,mode=rw,size=20 --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --labels=goog-ec-src=vm_add-gcloud --reservation-affinity=any
 
 # Add VM IP to GKE master control node access, if required
 if [ "${ADD_VM_IP_AUTH_NETWORKS}" = "true" ]; then
