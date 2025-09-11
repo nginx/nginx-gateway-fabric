@@ -63,7 +63,7 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 			},
 		}
 
-		Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
+		Expect(resourceManager.Apply([]client.Object{&ns}, framework.WithLoggingDisabled())).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
 

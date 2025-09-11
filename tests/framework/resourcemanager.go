@@ -288,7 +288,7 @@ func (rm *ResourceManager) DeleteNamespaces(names []string, opts ...Option) erro
 		true, /* poll immediately */
 		func(ctx context.Context) (bool, error) {
 			nsList := &core.NamespaceList{}
-			if err := rm.List(ctx, nsList, nil); err != nil {
+			if err := rm.List(ctx, nsList); err != nil {
 				return false, nil //nolint:nilerr // retry on error
 			}
 
@@ -1288,12 +1288,11 @@ func (rm *ResourceManager) Delete(
 	options := LogOptions(opts...)
 	err := rm.K8sClient.Delete(ctx, obj, deleteOpts...)
 	if err != nil {
-		deleteErr := fmt.Errorf("error deleting k8s resource %q: %w", obj.GetName(), err)
 		if options.logEnabled {
-			GinkgoWriter.Printf("%v\n", deleteErr)
+			GinkgoWriter.Printf("Could not delete k8s resource %q: %w\n", obj.GetName(), err)
 		}
 
-		return deleteErr
+		return err
 	}
 	return nil
 }
