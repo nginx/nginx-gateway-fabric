@@ -450,7 +450,12 @@ The logs are attached only if there are errors.
 			startCheck := time.Now()
 
 			Eventually(
-				framework.CreateResponseChecker(url, address, timeoutConfig.RequestTimeout),
+				framework.CreateResponseChecker(
+					url,
+					address,
+					timeoutConfig.RequestTimeout,
+					framework.WithLoggingDisabled(), // disable logging to avoid huge logs
+				),
 			).WithTimeout(6 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
 
 			ttr := time.Since(startCheck)
