@@ -1063,7 +1063,7 @@ func getReadyPodNames(podList core.PodList, opts ...Option) []string {
 	}
 	options := LogOptions(opts...)
 	if options.logEnabled {
-		GinkgoWriter.Printf("Found %d ready pod names: %v\n", len(names), names)
+		GinkgoWriter.Printf("Found %d ready pod name(s): %v\n", len(names), names)
 	}
 
 	return names
