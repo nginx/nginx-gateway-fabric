@@ -145,6 +145,11 @@ jobs:
           PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: echo "${PLUS_LICENSE}" > license.jwt
 
+      - name: TMP Cleanup conflicting subnet
+        working-directory: ./tests
+        run: |
+          bash scripts/cleanup-vm.sh true
+
       - name: Create GKE cluster
         working-directory: ./tests
         run: make create-gke-cluster CI=true

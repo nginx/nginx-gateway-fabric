@@ -4,6 +4,10 @@ set -o pipefail
 
 source scripts/vars.env
 
+echo "tmp delete conflicting subnet"
+
+gcloud compute networks subnets delete gke-nfr-tests-17637219369-oss-acf63488-pe-subnet --region=${GKE_CLUSTER_REGION} --quiet || true
+
 skip_gke_master_control_node_access="${1:-false}"
 
 # Remove VM IP from GKE master control node access, if required
