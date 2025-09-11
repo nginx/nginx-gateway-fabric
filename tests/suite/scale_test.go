@@ -440,6 +440,7 @@ The logs are attached only if there are errors.
 		for i := range len(objects.ScaleIterationGroups) {
 			Expect(resourceManager.Apply(
 				objects.ScaleIterationGroups[i],
+				framework.WithLoggingDisabled(), // disable logging to avoid huge log
 			)).To(Succeed())
 
 			if i == 0 {
@@ -477,7 +478,7 @@ The logs are attached only if there are errors.
 					url,
 					address,
 					timeoutConfig.RequestTimeout,
-					framework.WithLoggingDisabled(), // disable logging to avoid huge logs
+					framework.WithLoggingDisabled(), // disable logging to avoid huge log for 1000 requests
 				),
 			).WithTimeout(6 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
 

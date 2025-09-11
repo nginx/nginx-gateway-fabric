@@ -101,7 +101,11 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 			data := bytes.NewBufferString(fileString)
 			appliedResources = append(appliedResources, namespace)
 
-			if err := resourceManager.ApplyFromBuffer(data, namespace); err != nil {
+			if err := resourceManager.ApplyFromBuffer(
+				data,
+				namespace,
+				framework.WithLoggingDisabled(), // disable logging to avoid huge logs for 150 resources
+			); err != nil {
 				manifestErr := fmt.Errorf("error processing manifest file: %w", err)
 				GinkgoWriter.Printf(
 					"ERROR on creating and applying unique resources, could proceed %v\n the error happened on %q: %v\n",
