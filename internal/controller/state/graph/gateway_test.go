@@ -1121,30 +1121,6 @@ func TestBuildGateway(t *testing.T) {
 			name: "port/protocol collisions",
 		},
 		{
-			gateway: createGateway(
-				gatewayCfg{
-					name:      "gateway1",
-					listeners: []v1.Listener{foo80Listener1, foo443HTTPSListener1},
-					addresses: []v1.GatewaySpecAddress{{}},
-				},
-			),
-			gatewayClass: validGC,
-			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test", Name: "gateway1"}: {
-					Source: getLastCreatedGateway(),
-					DeploymentName: types.NamespacedName{
-						Namespace: "test",
-						Name:      controller.CreateNginxResourceName("gateway1", gcName),
-					},
-					Valid: false,
-					Conditions: conditions.NewGatewayUnsupportedValue("spec." +
-						"addresses: Forbidden: addresses are not supported",
-					),
-				},
-			},
-			name: "gateway addresses are not supported",
-		},
-		{
 			gateway:  nil,
 			expected: nil,
 			name:     "nil gateway",

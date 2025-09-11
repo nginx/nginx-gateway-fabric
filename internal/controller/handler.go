@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -506,6 +507,14 @@ func getGatewayAddresses(
 		}
 	default:
 		addresses = append(addresses, gwSvc.Spec.ClusterIP)
+	}
+
+	for _, address := range gateway.Source.Spec.Addresses {
+		if address.Type != nil &&
+			*address.Type == gatewayv1.IPAddressType &&
+			net.ParseIP(address.Value) != nil {
+			addresses = append(addresses, address.Value)
+		}
 	}
 
 	gwAddresses := make([]gatewayv1.GatewayStatusAddress, 0, len(addresses)+len(hostnames))
