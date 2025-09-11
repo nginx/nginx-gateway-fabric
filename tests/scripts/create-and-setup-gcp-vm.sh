@@ -45,17 +45,19 @@ gcloud compute instances create "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --
 
 # Add VM IP to GKE master control node access, if required
 if [ "${ADD_VM_IP_AUTH_NETWORKS}" = "true" ]; then
-    NETWORK_INTERFACES=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
-        --format='value(networkInterfaces)')
-    ACCESS_CONFIGS=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
-        --format='value(networkInterfaces[0].accessConfigs)')
-    EXTERNAL_IP=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
-        --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
+
+    if [ "${IPV6_ENABLED}" = "true" ]; then
+        echo "IPv6 is enabled, fetching the external IPv6 address"
+        EXTERNAL_IP=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
+            --format='value(networkInterfaces[0].ipv6AccessConfigs[0].externalIpv6)')
+    else
+        echo "IPv6 is not enabled, fetching the external IPv4 address"
+        EXTERNAL_IP=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
+            --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
+    fi
     
-    echo "Network interfaces of the VM are: ${NETWORK_INTERFACES}"
-    echo "Access configs of the VM are: ${ACCESS_CONFIGS}"
     echo "External IP of the VM is: ${EXTERNAL_IP}"
-    
+
     CURRENT_AUTH_NETWORK=$(gcloud container clusters describe "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}" \
         --format="value(masterAuthorizedNetworksConfig.cidrBlocks[0])" | sed 's/cidrBlock=//')
     echo "Current GKE master authorized networks: ${CURRENT_AUTH_NETWORK}"
