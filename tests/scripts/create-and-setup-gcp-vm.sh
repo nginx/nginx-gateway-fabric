@@ -5,13 +5,28 @@ set -o pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 REPO_DIR=$(dirname $(dirname "$SCRIPT_DIR"))
 
+NETWORK=default
+
 source scripts/vars.env
+
+# Create custom network and subnet if IPv6 is enabled
+if [ "${IPV6_ENABLED}" = "true" ]; then
+    echo "Creating IPv6 Network interface for the GKE cluster"
+    gcloud compute networks create ${RESOURCE_NAME} --subnet-mode=custom --bgp-routing-mode=regional --mtu=1460 --quiet
+    gcloud compute networks subnets create ${RESOURCE_NAME} \
+        --network=${RESOURCE_NAME} \
+        --stack-type=IPV6_ONLY \
+        --ipv6-access-type=EXTERNAL \
+        --region=${GKE_CLUSTER_REGION}
+
+    NETWORK=${RESOURCE_NAME}
+fi
 
 gcloud compute firewall-rules create "${RESOURCE_NAME}" \
     --project="${GKE_PROJECT}" \
     --direction=INGRESS \
     --priority=1000 \
-    --network=default \
+    --network=${NETWORK} \
     --action=ALLOW \
     --rules=tcp:22 \
     --source-ranges="${SOURCE_IP_RANGE}" \
@@ -21,7 +36,9 @@ gcloud compute instances create "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --
     --network-interface=network-tier=PREMIUM,stack-type=IPV4_ONLY,subnet=default --maintenance-policy=MIGRATE \
     --provisioning-model=STANDARD --service-account="${GKE_SVC_ACCOUNT}" \
     --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append,https://www.googleapis.com/auth/cloud-platform \
-    --tags="${NETWORK_TAGS}" --create-disk=auto-delete=yes,boot=yes,device-name="${RESOURCE_NAME}",image-family=projects/"${GKE_PROJECT}"/global/images/ngf-debian,mode=rw,size=20 --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --labels=goog-ec-src=vm_add-gcloud --reservation-affinity=any
+    --tags="${NETWORK_TAGS}" --create-disk=auto-delete=yes,boot=yes,device-name="${RESOURCE_NAME}",image-family=projects/"${GKE_PROJECT}"/global/images/ngf-debian,mode=rw,size=20 --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --labels=goog-ec-src=vm_add-gcloud --reservation-affinity=any \
+    --network=${NETWORK} \
+    --subnetwork=${NETWORK}
 
 # Add VM IP to GKE master control node access, if required
 if [ "${ADD_VM_IP_AUTH_NETWORKS}" = "true" ]; then

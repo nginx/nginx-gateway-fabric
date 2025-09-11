@@ -8,8 +8,6 @@ ip_random_digit=$((1 + RANDOM % 250))
 
 IS_CI=${1:-false}
 
-IPV6_ENABLE=${2:-false}
-
 if [ -z "$GKE_MACHINE_TYPE" ]; then
     # If the environment variable is not set, use a default value
     GKE_MACHINE_TYPE="e2-medium"
@@ -18,18 +16,6 @@ fi
 if [ -z "$GKE_NUM_NODES" ]; then
     # If the environment variable is not set, use a default value
     GKE_NUM_NODES="3"
-fi
-
-if [ "${IPV6_ENABLE}" = "true" ]; then
-    echo "Creating IPv6 Network interface for the GKE cluster"
-    gcloud compute networks create ${GKE_CLUSTER_NAME}-network --subnet-mode=custom --bgp-routing-mode=regional --mtu=1460 --quiet
-    gcloud compute networks subnets create ${GKE_CLUSTER_NAME}-subnet \
-        --network=${GKE_CLUSTER_NAME}-network \
-        --stack-type=IPV6_ONLY \
-        --ipv6-access-type=EXTERNAL \
-        --region=${GKE_CLUSTER_REGION}
-
-    gcloud compute firewall-rules create ${GKE_CLUSTER_NAME}-firewall --network ${GKE_CLUSTER_NAME}-network --allow tcp:22,tcp:3389,icmp
 fi
 
 gcloud container clusters create "${GKE_CLUSTER_NAME}" \
@@ -45,9 +31,7 @@ gcloud container clusters create "${GKE_CLUSTER_NAME}" \
     --logging=SYSTEM,WORKLOAD \
     --machine-type "${GKE_MACHINE_TYPE}" \
     --num-nodes "${GKE_NUM_NODES}" \
-    --no-enable-insecure-kubelet-readonly-port \
-    --network=${GKE_CLUSTER_NAME}-network \
-    --subnetwork=${GKE_CLUSTER_NAME}-subnet
+    --no-enable-insecure-kubelet-readonly-port # Option is deprecated and will be removed in a future release
 
 # Add current IP to GKE master control node access, if this script is not invoked during a CI run.
 if [ "${IS_CI}" = "false" ]; then

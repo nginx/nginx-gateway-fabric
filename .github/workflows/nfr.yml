@@ -136,6 +136,7 @@ jobs:
           echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
           echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
           if [ "${{ needs.vars.outputs.ipv6_enabled }}" = "true" ]; then
+          echo "IPV6_ENABLED=true" >> vars.env
           echo "HELM_PARAMETERS=\"--set nginx.config.ipFamily=ipv6\"" >> vars.env
           fi
       - name: Setup license file for plus
@@ -146,15 +147,15 @@ jobs:
 
       - name: Create GKE cluster
         working-directory: ./tests
-        run: make create-gke-cluster CI=true IPV6_ENABLE=${{ needs.vars.outputs.ipv6_enabled }}
+        run: make create-gke-cluster CI=true
 
-      # - name: Create and setup VM
-      #   working-directory: ./tests
-      #   run: make create-and-setup-vm
+      - name: Create and setup VM
+        working-directory: ./tests
+        run: make create-and-setup-vm
 
-      # - name: Create and setup Router
-      #   working-directory: ./tests
-      #   run: make create-gke-router || true
+      - name: Create and setup Router
+        working-directory: ./tests
+        run: make create-gke-router || true
 
       # - name: Run Tests
       #   working-directory: ./tests
@@ -175,8 +176,8 @@ jobs:
         working-directory: ./tests
         if: always()
         run: |
-          # bash scripts/cleanup-vm.sh true
-          # bash scripts/cleanup-router.sh true
+          bash scripts/cleanup-vm.sh true
+          bash scripts/cleanup-router.sh true
           make delete-gke-cluster
           rm -rf scripts/vars.env
 
