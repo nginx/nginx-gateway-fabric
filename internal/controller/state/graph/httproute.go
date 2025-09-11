@@ -7,13 +7,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 var (
@@ -27,6 +30,7 @@ func buildHTTPRoute(
 	ghr *v1.HTTPRoute,
 	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
 ) *L7Route {
 	r := &L7Route{
 		Source:    ghr,
@@ -59,9 +63,10 @@ func buildHTTPRoute(
 	r.Attachable = true
 
 	rules, valid, conds := processHTTPRouteRules(
-		ghr.Spec.Rules,
+		ghr,
 		validator,
 		getSnippetsFilterResolverForNamespace(snippetsFilters, r.Source.GetNamespace()),
+		inferencePools,
 	)
 
 	r.Spec.Rules = rules
@@ -113,6 +118,7 @@ func buildHTTPMirrorRoutes(
 					tmpMirrorRoute,
 					gateways,
 					snippetsFilters,
+					nil,
 				)
 
 				if mirrorRoute != nil {
@@ -163,9 +169,11 @@ func removeHTTPMirrorFilters(filters []v1.HTTPRouteFilter) []v1.HTTPRouteFilter 
 
 func processHTTPRouteRule(
 	specRule v1.HTTPRouteRule,
+	routeNamespace string,
 	rulePath *field.Path,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
 ) (RouteRule, routeRuleErrors) {
 	var errors routeRuleErrors
 
@@ -201,10 +209,32 @@ func processHTTPRouteRule(
 				interfaceFilters = append(interfaceFilters, filter)
 			}
 		}
-		rbr := RouteBackendRef{
-			BackendRef: b.BackendRef,
-			Filters:    interfaceFilters,
+
+		var rbr RouteBackendRef
+		// If route specifies an InferencePool backend, we need to convert it to its associated
+		// headless Service backend (that we created), so nginx config can be built properly.
+		// Only do this if the InferencePool actually exists.
+		if inferencePoolBackend(b, routeNamespace, inferencePools) {
+			svcName := controller.CreateInferencePoolServiceName(string(b.Name))
+			rbr = RouteBackendRef{
+				IsInferencePool: true,
+				BackendRef: v1.BackendRef{
+					BackendObjectReference: v1.BackendObjectReference{
+						Group:     helpers.GetPointer[v1.Group](""),
+						Kind:      helpers.GetPointer[v1.Kind](kinds.Service),
+						Name:      v1.ObjectName(svcName),
+						Namespace: b.Namespace,
+					},
+					Weight: b.Weight,
+				},
+			}
+		} else {
+			rbr = RouteBackendRef{
+				BackendRef: b.BackendRef,
+			}
 		}
+
+		rbr.Filters = interfaceFilters
 		backendRefs = append(backendRefs, rbr)
 	}
 
@@ -233,25 +263,28 @@ func processHTTPRouteRule(
 }
 
 func processHTTPRouteRules(
-	specRules []v1.HTTPRouteRule,
+	route *v1.HTTPRoute,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
 ) (rules []RouteRule, valid bool, conds []conditions.Condition) {
-	rules = make([]RouteRule, len(specRules))
+	rules = make([]RouteRule, len(route.Spec.Rules))
 
 	var (
 		allRulesErrors  routeRuleErrors
 		atLeastOneValid bool
 	)
 
-	for i, rule := range specRules {
+	for i, rule := range route.Spec.Rules {
 		rulePath := field.NewPath("spec").Child("rules").Index(i)
 
 		rr, errors := processHTTPRouteRule(
 			rule,
+			route.GetNamespace(),
 			rulePath,
 			validator,
 			resolveExtRefFunc,
+			inferencePools,
 		)
 
 		if rr.ValidMatches && rr.Filters.Valid {
@@ -286,6 +319,31 @@ func processHTTPRouteRules(
 	}
 
 	return rules, valid, conds
+}
+
+// inferencePoolBackend returns if a Route references an InferencePool backend
+// and that InferencePool exists.
+func inferencePoolBackend(
+	backendRef v1.HTTPBackendRef,
+	routeNamespace string,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
+) bool {
+	if backendRef.Group != nil &&
+		*backendRef.Group == inferenceAPIGroup &&
+		*backendRef.Kind == kinds.InferencePool {
+		namespace := routeNamespace
+		if backendRef.Namespace != nil {
+			namespace = string(*backendRef.Namespace)
+		}
+		key := types.NamespacedName{
+			Name:      string(backendRef.Name),
+			Namespace: namespace,
+		}
+		if _, exists := inferencePools[key]; exists {
+			return true
+		}
+	}
+	return false
 }
 
 func validateMatch(
