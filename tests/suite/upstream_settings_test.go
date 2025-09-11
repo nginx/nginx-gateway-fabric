@@ -141,7 +141,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			DescribeTable("are set properly for",
 				func(expCfgs []framework.ExpectedNginxField) {
 					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg, framework.WithLoggingDisabled())).To(Succeed())
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 					}
 				},
 				Entry("HTTP upstreams", []framework.ExpectedNginxField{
@@ -321,7 +321,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			DescribeTable("are set properly for",
 				func(expCfgs []framework.ExpectedNginxField) {
 					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg, framework.WithLoggingDisabled())).To(Succeed())
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 					}
 				},
 				Entry("Coffee upstream", []framework.ExpectedNginxField{

@@ -230,7 +230,6 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 				nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
 					ns.Name,
 					timeoutConfig.GetStatusTimeout,
-					framework.WithLoggingDisabled(),
 				)
 				return len(nginxPodNames) == 1 && err == nil
 			}).
@@ -309,7 +308,6 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 					ngfNamespace,
 					releaseName,
 					timeoutConfig.GetStatusTimeout,
-					framework.WithLoggingDisabled(),
 				)
 				return len(podNames) == 1 && err == nil
 			}).
@@ -334,7 +332,6 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 				nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
 					ns.Name,
 					timeoutConfig.GetStatusTimeout,
-					framework.WithLoggingDisabled(),
 				)
 				return len(nginxPodNames) == 1 && err == nil
 			}).
@@ -416,7 +413,6 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 			ngfNamespace,
 			releaseName,
 			timeoutConfig.GetStatusTimeout,
-			framework.WithLoggingDisabled(),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(podNames).To(HaveLen(1))
@@ -436,7 +432,6 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
 			ns.Name,
 			timeoutConfig.GetStatusTimeout,
-			framework.WithLoggingDisabled(),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
@@ -474,7 +469,6 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
 			ns.Name,
 			timeoutConfig.GetStatusTimeout,
-			framework.WithLoggingDisabled(),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
@@ -513,7 +507,6 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 					ngfNamespace,
 					releaseName,
 					timeoutConfig.GetStatusTimeout,
-					framework.WithLoggingDisabled(),
 				)
 				return len(newNGFPodNames) == 1 && err == nil
 			}).

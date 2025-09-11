@@ -165,6 +165,7 @@ func (rm *ResourceManager) ApplyFromFiles(files []string, namespace string, opts
 func (rm *ResourceManager) ApplyFromBuffer(buffer *bytes.Buffer, namespace string, opts ...Option) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.CreateTimeout)
 	defer cancel()
+
 	options := LogOptions(opts...)
 	if options.logEnabled {
 		GinkgoWriter.Printf("Applying resources from buffer to namespace %q\n", namespace)
@@ -198,9 +199,7 @@ func (rm *ResourceManager) ApplyFromBuffer(buffer *bytes.Buffer, namespace strin
 		})
 		if err != nil {
 			retryErr := fmt.Errorf("error updating resource: %w", err)
-			GinkgoWriter.Printf("%s\n",
-				retryErr,
-			)
+			GinkgoWriter.Printf("%s\n", retryErr)
 
 			return retryErr
 		}
@@ -723,7 +722,7 @@ func (rm *ResourceManager) GetPodNames(namespace string, labels client.MatchingL
 	for _, pod := range podList.Items {
 		names = append(names, pod.Name)
 	}
-	GinkgoWriter.Printf("Found pod name in namespace %q: %v\n", namespace, names)
+	GinkgoWriter.Printf("Found pod names in namespace %q: %v\n", namespace, names)
 
 	return names, nil
 }
@@ -1251,8 +1250,7 @@ func (rm *ResourceManager) Get(
 	opts ...Option,
 ) error {
 	options := LogOptions(opts...)
-	err := rm.K8sClient.Get(ctx, key, obj)
-	if err != nil {
+	if err := rm.K8sClient.Get(ctx, key, obj); err != nil {
 		if options.logEnabled {
 			GinkgoWriter.Printf("Could not get k8s resource %q error: %v\n", obj.GetName(), err)
 		}
@@ -1268,8 +1266,7 @@ func (rm *ResourceManager) Create(
 	ctx context.Context,
 	obj client.Object,
 ) error {
-	err := rm.K8sClient.Create(ctx, obj)
-	if err != nil {
+	if err := rm.K8sClient.Create(ctx, obj); err != nil {
 		createErr := fmt.Errorf("error creating k8s resource %q: %w", obj.GetName(), err)
 		GinkgoWriter.Printf("%v\n", createErr)
 
@@ -1286,8 +1283,7 @@ func (rm *ResourceManager) Delete(
 	opts ...Option,
 ) error {
 	options := LogOptions(opts...)
-	err := rm.K8sClient.Delete(ctx, obj, deleteOpts...)
-	if err != nil {
+	if err := rm.K8sClient.Delete(ctx, obj, deleteOpts...); err != nil {
 		if options.logEnabled {
 			GinkgoWriter.Printf("Could not delete k8s resource %q: %w\n", obj.GetName(), err)
 		}
@@ -1328,8 +1324,7 @@ func (rm *ResourceManager) List(
 	list client.ObjectList,
 	listOpts ...client.ListOption,
 ) error {
-	err := rm.K8sClient.List(ctx, list, listOpts...)
-	if err != nil {
+	if err := rm.K8sClient.List(ctx, list, listOpts...); err != nil {
 		listErr := fmt.Errorf("error listing k8s resources: %w", err)
 		GinkgoWriter.Printf("%v\n", listErr)
 

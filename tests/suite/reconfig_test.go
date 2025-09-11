@@ -64,10 +64,8 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		Expect(err).ToNot(HaveOccurred())
 
 		k8sConfig := ctlr.GetConfigOrDie()
-
 		if !clusterInfo.IsGKE {
-			pfErr := promInstance.PortForward(k8sConfig, promPortForwardStopCh)
-			Expect(pfErr).NotTo(HaveOccurred())
+			Expect(promInstance.PortForward(k8sConfig, promPortForwardStopCh)).To(Succeed())
 		}
 	})
 
@@ -103,7 +101,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 			data := bytes.NewBufferString(fileString)
 			appliedResources = append(appliedResources, namespace)
 
-			if err := resourceManager.ApplyFromBuffer(data, namespace, framework.WithLoggingDisabled()); err != nil {
+			if err := resourceManager.ApplyFromBuffer(data, namespace); err != nil {
 				manifestErr := fmt.Errorf("error processing manifest file: %w", err)
 				GinkgoWriter.Printf(
 					"ERROR on creating and applying unique resources, could proceed %v\n the error happened on %q: %v\n",
@@ -137,14 +135,13 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 			Expect(resourceManager.Create(ctx, &ns)).To(Succeed())
 		}
 
-		Expect(resourceManager.Apply([]client.Object{&reconfigNamespace}, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.Apply([]client.Object{&reconfigNamespace})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(
 			[]string{
 				"reconfig/cafe-secret.yaml",
 				"reconfig/reference-grant.yaml",
 			},
 			reconfigNamespace.Name,
-			framework.WithLoggingDisabled(),
 		)).To(Succeed())
 
 		Expect(createUniqueResources(resourceCount, "manifests/reconfig/cafe.yaml")).To(Succeed())
@@ -157,7 +154,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 					Name: "namespace" + strconv.Itoa(i),
 				},
 			}
-			Expect(resourceManager.WaitForPodsToBeReady(ctx, ns.Name, framework.WithLoggingDisabled())).To(Succeed())
+			Expect(resourceManager.WaitForPodsToBeReady(ctx, ns.Name)).To(Succeed())
 		}
 	}
 
@@ -271,7 +268,6 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 					q,
 					getStartTime,
 					modifyStartTime,
-					framework.WithLoggingDisabled(),
 				),
 			).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
 		}
