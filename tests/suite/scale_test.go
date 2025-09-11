@@ -507,12 +507,12 @@ The logs are attached only if there are errors.
 	}
 
 	runScaleUpstreams := func() {
-		Expect(resourceManager.ApplyFromFiles(upstreamsManifests, namespace)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(upstreamsManifests, namespace, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace, framework.WithLoggingDisabled())).To(Succeed())
 
 		// apply HTTPRoute after upstreams are ready
-		Expect(resourceManager.ApplyFromFiles(httpRouteManifests, namespace)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(httpRouteManifests, namespace, framework.WithLoggingDisabled())).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace, framework.WithLoggingDisabled())).To(Succeed())
 
 		var nginxPodNames []string
 		var err error
@@ -755,7 +755,7 @@ The logs are attached only if there are errors.
 			framework.WithLoggingDisabled(),
 		)
 		cleanUpPortForward()
-		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
+		Expect(resourceManager.DeleteNamespace(namespace, framework.WithLoggingDisabled())).To(Succeed())
 		teardown(releaseName)
 	})
 
@@ -948,7 +948,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				cfg.nfr = true
 				setup(cfg, "--values", test.valuesFile)
 
-				Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
+				Expect(resourceManager.Apply([]client.Object{&ns}, framework.WithLoggingDisabled())).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(ns.Name, framework.WithLoggingDisabled())).To(Succeed())
 

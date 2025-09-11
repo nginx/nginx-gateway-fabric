@@ -137,7 +137,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 			Expect(resourceManager.Create(ctx, &ns)).To(Succeed())
 		}
 
-		Expect(resourceManager.Apply([]client.Object{&reconfigNamespace})).To(Succeed())
+		Expect(resourceManager.Apply([]client.Object{&reconfigNamespace}, framework.WithLoggingDisabled())).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(
 			[]string{
 				"reconfig/cafe-secret.yaml",
@@ -271,6 +271,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 					q,
 					getStartTime,
 					modifyStartTime,
+					framework.WithLoggingDisabled(),
 				),
 			).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
 		}
@@ -299,6 +300,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 					q,
 					getEndTime,
 					noOpModifier,
+					framework.WithLoggingDisabled(),
 				),
 			).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
 		}
@@ -404,7 +406,7 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 				Expect(podNames).To(HaveLen(1))
 				ngfPodName := podNames[0]
 
-				Expect(resourceManager.Apply([]client.Object{&reconfigNamespace})).To(Succeed())
+				Expect(resourceManager.Apply([]client.Object{&reconfigNamespace}, framework.WithLoggingDisabled())).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles([]string{"reconfig/gateway.yaml"}, reconfigNamespace.Name)).To(Succeed())
 
 				var nginxPodNames []string

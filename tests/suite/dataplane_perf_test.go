@@ -63,7 +63,7 @@ var _ = Describe("Dataplane performance", Ordered, Label("nfr", "performance"), 
 		}
 
 		Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
-		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
+		Expect(resourceManager.ApplyFromFiles(files, ns.Name, framework.WithLoggingDisabled())).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(ns.Name, framework.WithLoggingDisabled())).To(Succeed())
 
 		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
