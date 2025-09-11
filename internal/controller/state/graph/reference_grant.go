@@ -51,7 +51,16 @@ func toSecret(nsname types.NamespacedName) toResource {
 
 func toService(nsname types.NamespacedName) toResource {
 	return toResource{
-		kind:      "Service",
+		kind:      kinds.Service,
+		name:      nsname.Name,
+		namespace: nsname.Namespace,
+	}
+}
+
+func toInferencePool(nsname types.NamespacedName) toResource {
+	return toResource{
+		group:     inferenceAPIGroup,
+		kind:      kinds.InferencePool,
 		name:      nsname.Name,
 		namespace: nsname.Namespace,
 	}
@@ -139,6 +148,7 @@ func (r *referenceGrantResolver) refAllowed(to toResource, from fromResource) bo
 	// of the particular kind in the namespace
 	allInNamespaceKey := allowedReference{
 		to: toResource{
+			group:     to.group,
 			kind:      to.kind,
 			namespace: to.namespace,
 		},

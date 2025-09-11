@@ -74,6 +74,7 @@ func createControllerCommand() *cobra.Command {
 		leaderElectionLockNameFlag        = "leader-election-lock-name"
 		productTelemetryDisableFlag       = "product-telemetry-disable"
 		gwAPIExperimentalFlag             = "gateway-api-experimental-features"
+		gwAPIInferenceExtensionFlag       = "gateway-api-inference-extension"
 		nginxDockerSecretFlag             = "nginx-docker-secret" //nolint:gosec // not credentials
 		usageReportSecretFlag             = "usage-report-secret"
 		usageReportEndpointFlag           = "usage-report-endpoint"
@@ -139,6 +140,7 @@ func createControllerCommand() *cobra.Command {
 		}
 
 		gwExperimentalFeatures bool
+		gwInferenceExtension   bool
 
 		disableProductTelemetry bool
 
@@ -264,6 +266,7 @@ func createControllerCommand() *cobra.Command {
 				},
 				Plus:                 plus,
 				ExperimentalFeatures: gwExperimentalFeatures,
+				InferenceExtension:   gwInferenceExtension,
 				ImageSource:          imageSource,
 				Flags: config.Flags{
 					Names:  flagKeys,
@@ -422,6 +425,14 @@ func createControllerCommand() *cobra.Command {
 		false,
 		"Enable the experimental features of Gateway API which are supported by NGINX Gateway Fabric. "+
 			"Requires the Gateway APIs installed from the experimental channel.",
+	)
+
+	cmd.Flags().BoolVar(
+		&gwInferenceExtension,
+		gwAPIInferenceExtensionFlag,
+		false,
+		"Enable Gateway API Inference Extension support. Allows for configuring InferencePools to route "+
+			"traffic to AI workloads.",
 	)
 
 	cmd.Flags().Var(

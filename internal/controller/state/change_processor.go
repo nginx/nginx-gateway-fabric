@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -98,6 +99,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		TLSRoutes:          make(map[types.NamespacedName]*v1alpha2.TLSRoute),
 		NGFPolicies:        make(map[graph.PolicyKey]policies.Policy),
 		SnippetsFilters:    make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
+		InferencePools:     make(map[types.NamespacedName]*inference.InferencePool),
 	}
 
 	processor := &ChangeProcessorImpl{
@@ -164,6 +166,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			{
 				gvk:       cfg.MustExtractGVK(&apiv1.Service{}),
 				store:     newObjectStoreMapAdapter(clusterStore.Services),
+				predicate: funcPredicate{stateChanged: isReferenced},
+			},
+			{
+				gvk:       cfg.MustExtractGVK(&inference.InferencePool{}),
+				store:     newObjectStoreMapAdapter(clusterStore.InferencePools),
 				predicate: funcPredicate{stateChanged: isReferenced},
 			},
 			{
