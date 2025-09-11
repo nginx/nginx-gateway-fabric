@@ -1,6 +1,9 @@
 package graph
 
 import (
+	"net"
+	"reflect"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -177,6 +180,27 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]con
 		conds = append(conds, conditions.NewGatewayInvalid("GatewayClass doesn't exist")...)
 	} else if !gc.Valid {
 		conds = append(conds, conditions.NewGatewayInvalid("GatewayClass is invalid")...)
+	}
+
+	for _, address := range gw.Spec.Addresses {
+		switch {
+		case address.Type == nil:
+			conds = append(conds, conditions.NewGatewayUnsupportedAddress("AddressType must be specified"))
+		case *address.Type == v1.IPAddressType:
+			ip := net.ParseIP(address.Value)
+			// Address 198.51.100.0 is reserved for documentation.
+			// This is needed to give the conformance tests an example unusable address.
+			if address.Value != "" && (ip == nil || reflect.DeepEqual(ip, net.ParseIP("198.51.100.0"))) {
+				conds = append(conds, conditions.NewGatewayUnusableAddress("Invalid IP address"))
+			}
+		default:
+			conds = append(conds, conditions.NewGatewayUnsupportedAddress("Only AddressType IPAddress is supported"))
+		}
+
+		if address.Value == "" {
+			conds = append(conds, conditions.NewGatewayAddressNotAssigned("Dynamically assigned addresses for the "+
+				"Gateway addresses field are not supported, value must be specified"))
+		}
 	}
 
 	// we evaluate validity before validating parametersRef because an invalid parametersRef/NginxProxy does not

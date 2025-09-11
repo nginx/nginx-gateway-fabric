@@ -2,8 +2,6 @@ package status
 
 import (
 	"fmt"
-	"net"
-	"reflect"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -329,27 +327,6 @@ func prepareGatewayRequest(
 			gwConds,
 			conditions.NewGatewayNotProgrammedInvalid(msg),
 		)
-	}
-
-	for _, address := range gateway.Source.Spec.Addresses {
-		switch {
-		case address.Type == nil:
-			gwConds = append(gwConds, conditions.NewGatewayUnsupportedAddress("AddressType must be specified"))
-		case *address.Type == v1.IPAddressType:
-			ip := net.ParseIP(address.Value)
-			// Address 198.51.100.0 is reserved for documentation.
-			// This is needed to give the conformance tests an example unusable address.
-			if address.Value != "" && (ip == nil || reflect.DeepEqual(ip, net.ParseIP("198.51.100.0"))) {
-				gwConds = append(gwConds, conditions.NewGatewayUnusableAddress("Invalid IP address"))
-			}
-		default:
-			gwConds = append(gwConds, conditions.NewGatewayUnsupportedAddress("Only AddressType IPAddress is supported"))
-		}
-
-		if address.Value == "" {
-			gwConds = append(gwConds, conditions.NewGatewayAddressNotAssigned("Dynamically assigned addresses for the "+
-				"Gateway addresses field are not supported, value must be specified"))
-		}
 	}
 
 	apiGwConds := conditions.ConvertConditions(
