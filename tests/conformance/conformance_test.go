@@ -1,3 +1,5 @@
+//go:build conformance
+
 /*
 Copyright 2022 The Kubernetes Authors.
 
