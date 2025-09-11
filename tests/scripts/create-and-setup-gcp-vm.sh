@@ -47,8 +47,10 @@ gcloud compute instances create "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --
 if [ "${ADD_VM_IP_AUTH_NETWORKS}" = "true" ]; then
     EXTERNAL_IP=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
         --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
+    echo "External IP of the VM is: ${EXTERNAL_IP}"
     CURRENT_AUTH_NETWORK=$(gcloud container clusters describe "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}" \
         --format="value(masterAuthorizedNetworksConfig.cidrBlocks[0])" | sed 's/cidrBlock=//')
+    echo "Current GKE master authorized networks: ${CURRENT_AUTH_NETWORK}"
     gcloud container clusters update "${GKE_CLUSTER_NAME}" --zone="${GKE_CLUSTER_ZONE}" --enable-master-authorized-networks --master-authorized-networks="${EXTERNAL_IP}"/32,"${CURRENT_AUTH_NETWORK}"
 fi
 
