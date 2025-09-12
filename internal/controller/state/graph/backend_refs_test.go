@@ -1664,9 +1664,6 @@ func TestFindBackendTLSPolicyForService(t *testing.T) {
 			},
 		}
 	}
-	oldestBtp := getBtp("oldest", oldCreationTimestamp)
-	newestBtp := getBtp("newest", newCreationTimestamp)
-	alphaFirstBtp := getBtp("alphabeticallyfirst", oldCreationTimestamp)
 
 	ref := gatewayv1.HTTPBackendRef{
 		BackendRef: gatewayv1.BackendRef{
@@ -1678,6 +1675,15 @@ func TestFindBackendTLSPolicyForService(t *testing.T) {
 		},
 	}
 
+	getBTPMap := func(nameAndTimestamp map[string]metav1.Time) map[types.NamespacedName]*BackendTLSPolicy {
+		m := make(map[types.NamespacedName]*BackendTLSPolicy, len(nameAndTimestamp))
+		for n, ts := range nameAndTimestamp {
+			btp := getBtp(n, ts)
+			m[client.ObjectKeyFromObject(btp.Source)] = btp
+		}
+		return m
+	}
+
 	tests := []struct {
 		name               string
 		backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy
@@ -1685,19 +1691,23 @@ func TestFindBackendTLSPolicyForService(t *testing.T) {
 	}{
 		{
 			name: "oldest wins",
-			backendTLSPolicies: map[types.NamespacedName]*BackendTLSPolicy{
-				client.ObjectKeyFromObject(newestBtp.Source): newestBtp,
-				client.ObjectKeyFromObject(oldestBtp.Source): oldestBtp,
-			},
+			backendTLSPolicies: getBTPMap(
+				map[string]metav1.Time{
+					"newest": newCreationTimestamp,
+					"oldest": oldCreationTimestamp,
+				},
+			),
 			expectedBtpName: "oldest",
 		},
 		{
 			name: "alphabetically first wins",
-			backendTLSPolicies: map[types.NamespacedName]*BackendTLSPolicy{
-				client.ObjectKeyFromObject(oldestBtp.Source):     oldestBtp,
-				client.ObjectKeyFromObject(alphaFirstBtp.Source): alphaFirstBtp,
-				client.ObjectKeyFromObject(newestBtp.Source):     newestBtp,
-			},
+			backendTLSPolicies: getBTPMap(
+				map[string]metav1.Time{
+					"alphabeticallyfirst": oldCreationTimestamp,
+					"newest":              newCreationTimestamp,
+					"oldest":              oldCreationTimestamp,
+				},
+			),
 			expectedBtpName: "alphabeticallyfirst",
 		},
 	}
