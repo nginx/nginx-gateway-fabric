@@ -1164,8 +1164,8 @@ func TestValidateMatch(t *testing.T) {
 					Value: helpers.GetPointer("/"),
 				},
 			},
-			expectErrCount: 1,
-			name:           "wrong path type",
+			expectErrCount: 0,
+			name:           "valid regex match",
 		},
 		{
 			validator: createAllValidValidator(),
@@ -1337,7 +1337,7 @@ func TestValidateMatch(t *testing.T) {
 			validator: createAllValidValidator(),
 			match: gatewayv1.HTTPRouteMatch{
 				Path: &gatewayv1.HTTPPathMatch{
-					Type:  helpers.GetPointer(gatewayv1.PathMatchRegularExpression), // invalid
+					Type:  helpers.GetPointer(gatewayv1.PathMatchRegularExpression),
 					Value: helpers.GetPointer("/"),
 				},
 				Headers: []gatewayv1.HTTPHeaderMatch{
@@ -1355,7 +1355,7 @@ func TestValidateMatch(t *testing.T) {
 					},
 				},
 			},
-			expectErrCount: 3,
+			expectErrCount: 2,
 			name:           "multiple errors",
 		},
 		{
