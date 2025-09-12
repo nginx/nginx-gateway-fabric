@@ -120,7 +120,7 @@ jobs:
           echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
           echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
           echo "GKE_CLUSTER_NAME=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
-          echo "GKE_CLUSTER_ZONE=us-west1-c" >> vars.env
+          echo "GKE_CLUSTER_ZONE=us-west1-b" >> vars.env
           echo "GKE_CLUSTER_REGION=us-west1" >> vars.env
           echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
           echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
@@ -132,7 +132,7 @@ jobs:
           echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
           echo "GINKGO_LABEL=" >> vars.env
           echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
-          echo "GKE_NUM_NODES=12" >> vars.env
+          echo "GKE_NUM_NODES=1" >> vars.env
           echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
           echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
           if [ "${{ needs.vars.outputs.ipv6_enabled }}" = "true" ]; then
@@ -145,26 +145,26 @@ jobs:
           PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: echo "${PLUS_LICENSE}" > license.jwt
 
-      - name: TMP Cleanup conflicting resources
+      # - name: TMP Cleanup conflicting resources
+      #   working-directory: ./tests
+      #   run: |
+      #     echo "tmp delete conflicting subnet"
+      #     gcloud compute forwarding-rules delete gk3-nfr-tests-17637219369-oss-b6387c3a-d2289ac6-pe --region=us-west1 --project=${{ secrets.GCP_PROJECT_ID }} --quiet || true
+      #     gcloud compute addresses delete gk3-nfr-tests-17637219369-oss-b6387c3a-d2289ac6-pe --region=us-west1 --project=${{ secrets.GCP_PROJECT_ID }} --quiet || true
+      #     gcloud compute networks subnets delete gke-nfr-tests-17637219369-oss-acf63488-pe-subnet --region=us-west1 --quiet || true
+      #     rm -rf scripts/vars.env
+
+      - name: Create GKE cluster
         working-directory: ./tests
-        run: |
-          echo "tmp delete conflicting subnet"
-          gcloud compute forwarding-rules delete gk3-nfr-tests-17637219369-oss-b6387c3a-d2289ac6-pe --region=us-west1 --project=${{ secrets.GCP_PROJECT_ID }} --quiet || true
-          gcloud compute addresses delete gk3-nfr-tests-17637219369-oss-b6387c3a-d2289ac6-pe --region=us-west1 --project=${{ secrets.GCP_PROJECT_ID }} --quiet || true
-          gcloud compute networks subnets delete gke-nfr-tests-17637219369-oss-acf63488-pe-subnet --region=us-west1 --quiet || true
-          rm -rf scripts/vars.env
+        run: make create-gke-cluster CI=true
 
-      # - name: Create GKE cluster
-      #   working-directory: ./tests
-      #   run: make create-gke-cluster CI=true
+      - name: Create and setup VM
+        working-directory: ./tests
+        run: make create-and-setup-vm
 
-      # - name: Create and setup VM
-      #   working-directory: ./tests
-      #   run: make create-and-setup-vm
-
-      # - name: Create and setup Router
-      #   working-directory: ./tests
-      #   run: make create-gke-router || true
+      - name: Create and setup Router
+        working-directory: ./tests
+        run: make create-gke-router || true
 
       # - name: Run Tests
       #   working-directory: ./tests
@@ -181,14 +181,14 @@ jobs:
       #     name: results-${{ matrix.type }}
       #     path: tests/results/**/*-${{ matrix.type }}.*
 
-      # - name: Cleanup
-      #   working-directory: ./tests
-      #   if: always()
-      #   run: |
-      #     # bash scripts/cleanup-vm.sh true
-      #     # bash scripts/cleanup-router.sh true
-      #     # make delete-gke-cluster
-      #     # rm -rf scripts/vars.env
+      - name: Cleanup
+        working-directory: ./tests
+        if: always()
+        run: |
+          bash scripts/cleanup-vm.sh true
+          bash scripts/cleanup-router.sh true
+          make delete-gke-cluster
+          rm -rf scripts/vars.env
 
   pr-results:
     name: Open PR with results
