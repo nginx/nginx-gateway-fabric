@@ -20,7 +20,8 @@ if [ "${IPV6_ENABLED}" = "true" ]; then
         --network=${RESOURCE_NAME} \
         --stack-type=IPV4_IPV6 \
         --ipv6-access-type=INTERNAL \
-        --region=${GKE_CLUSTER_REGION}
+        --region=${GKE_CLUSTER_REGION} \
+        --range=2001:db8::/64
 
     NETWORK=${RESOURCE_NAME}
     NETWORK_TIER="ipv6-network-tier=PREMIUM"
