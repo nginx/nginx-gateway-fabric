@@ -42,7 +42,10 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+			namespace,
+			timeoutConfig.GetStatusTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
@@ -270,9 +273,7 @@ func checkHTTPRouteToHaveGatewayNotProgrammedCond(httpRouteNsName types.Namespac
 	var hr v1.HTTPRoute
 	var err error
 
-	if err = k8sClient.Get(ctx, httpRouteNsName, &hr); err != nil {
-		GinkgoWriter.Printf("ERROR: failed to get HTTPRoute: %v\n", err)
-
+	if err = resourceManager.Get(ctx, httpRouteNsName, &hr); err != nil {
 		return err
 	}
 
@@ -328,9 +329,7 @@ func checkForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedNa
 	var sf ngfAPI.SnippetsFilter
 	var err error
 
-	if err = k8sClient.Get(ctx, snippetsFilterNsNames, &sf); err != nil {
-		GinkgoWriter.Printf("ERROR: failed to get SnippetsFilter: %v\n", err)
-
+	if err = resourceManager.Get(ctx, snippetsFilterNsNames, &sf); err != nil {
 		return err
 	}
 

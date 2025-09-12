@@ -51,7 +51,10 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+			namespace,
+			timeoutConfig.GetStatusTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
@@ -424,7 +427,7 @@ func usPolicyHasNoAncestors(usPolicyNsName types.NamespacedName) bool {
 	defer cancel()
 
 	var usPolicy ngfAPI.UpstreamSettingsPolicy
-	if err := k8sClient.Get(ctx, usPolicyNsName, &usPolicy); err != nil {
+	if err := resourceManager.Get(ctx, usPolicyNsName, &usPolicy); err != nil {
 		GinkgoWriter.Printf("ERROR: Failed to get UpstreamSettingsPolicy %q: %s", usPolicyNsName, err.Error())
 		return false
 	}
@@ -464,9 +467,7 @@ func waitForUSPolicyStatus(
 			var usPolicy ngfAPI.UpstreamSettingsPolicy
 			var err error
 
-			if err := k8sClient.Get(ctx, usPolicyNsName, &usPolicy); err != nil {
-				GinkgoWriter.Printf("ERROR: Failed to get UpstreamSettingsPolicy %q: %s", usPolicyNsName, err.Error())
-
+			if err := resourceManager.Get(ctx, usPolicyNsName, &usPolicy); err != nil {
 				return false, err
 			}
 

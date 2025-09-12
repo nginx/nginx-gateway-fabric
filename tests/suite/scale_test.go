@@ -114,7 +114,11 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 		}
 		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
 
-		podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
+		podNames, err := resourceManager.GetReadyNGFPodNames(
+			ngfNamespace,
+			releaseName,
+			timeoutConfig.GetTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(podNames).To(HaveLen(1))
 		ngfPodName = podNames[0]
@@ -159,6 +163,8 @@ The logs are attached only if there are errors.
 	writeScaleResults := func(dest io.Writer, results scaleTestResults) error {
 		tmpl, err := template.New("results").Parse(scaleResultTemplate)
 		if err != nil {
+			GinkgoWriter.Printf("ERROR creating results template: %v\n", err)
+
 			return err
 		}
 
@@ -245,8 +251,12 @@ The logs are attached only if there are errors.
 
 		test()
 
-		// We sleep for 2 scape intervals to ensure that Prometheus scrapes the metrics after the test() finishes
+		// We sleep for 2 scrape intervals to ensure that Prometheus scrapes the metrics after the test() finishes
 		// before endTime, so that we don't lose any metric values like reloads.
+		GinkgoWriter.Printf(
+			"Sleeping for %v to ensure Prometheus scrapes the metrics after the test finishes\n",
+			2*scrapeInterval,
+		)
 		time.Sleep(2 * scrapeInterval)
 
 		endTime := time.Now()
@@ -349,7 +359,10 @@ The logs are attached only if there are errors.
 			[]string{`"logger":"usageReporter`}, // ignore usageReporter errors
 		)
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+			namespace,
+			timeoutConfig.GetStatusTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
@@ -375,10 +388,15 @@ The logs are attached only if there are errors.
 		findRestarts := func(containerName string, pod *core.Pod) int {
 			for _, containerStatus := range pod.Status.ContainerStatuses {
 				if containerStatus.Name == containerName {
+					GinkgoWriter.Printf("INFO: container %q had %d restarts\n", containerName, containerStatus.RestartCount)
+
 					return int(containerStatus.RestartCount)
 				}
 			}
-			Fail(fmt.Sprintf("container %s not found", containerName))
+			fail := fmt.Sprintf("container %s not found", containerName)
+			GinkgoWriter.Printf("FAIL: %v\n", fail)
+
+			Fail(fail)
 			return 0
 		}
 
@@ -420,13 +438,19 @@ The logs are attached only if there are errors.
 		Expect(resourceManager.WaitForPodsToBeReady(ctx, namespace)).To(Succeed())
 
 		for i := range len(objects.ScaleIterationGroups) {
-			Expect(resourceManager.Apply(objects.ScaleIterationGroups[i])).To(Succeed())
+			Expect(resourceManager.Apply(
+				objects.ScaleIterationGroups[i],
+				framework.WithLoggingDisabled(), // disable logging to avoid huge log
+			)).To(Succeed())
 
 			if i == 0 {
 				var nginxPodNames []string
 				Eventually(
 					func() bool {
-						nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+						nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
+							namespace,
+							timeoutConfig.GetStatusTimeout,
+						)
 						return len(nginxPodNames) == 1 && err == nil
 					}).
 					WithTimeout(timeoutConfig.CreateTimeout).
@@ -454,7 +478,7 @@ The logs are attached only if there are errors.
 					url,
 					address,
 					timeoutConfig.RequestTimeout,
-					framework.WithLoggingDisabled(), // disable logging to avoid huge logs
+					framework.WithLoggingDisabled(), // disable logging to avoid huge log for 1000 requests
 				),
 			).WithTimeout(6 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
 
@@ -489,7 +513,10 @@ The logs are attached only if there are errors.
 		var err error
 		Eventually(
 			func() bool {
-				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+				nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
+					namespace,
+					timeoutConfig.GetStatusTimeout,
+				)
 				return len(nginxPodNames) == 1 && err == nil
 			}).
 			WithTimeout(timeoutConfig.CreateTimeout).
@@ -508,7 +535,11 @@ The logs are attached only if there are errors.
 		}
 
 		Eventually(
-			framework.CreateResponseChecker(url, address, timeoutConfig.RequestTimeout),
+			framework.CreateResponseChecker(
+				url,
+				address,
+				timeoutConfig.RequestTimeout,
+			),
 		).WithTimeout(5 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
 
 		Expect(
@@ -521,7 +552,11 @@ The logs are attached only if there are errors.
 		Expect(resourceManager.WaitForPodsToBeReady(ctx, namespace)).To(Succeed())
 
 		Eventually(
-			framework.CreateResponseChecker(url, address, timeoutConfig.RequestTimeout),
+			framework.CreateResponseChecker(
+				url,
+				address,
+				timeoutConfig.RequestTimeout,
+			),
 		).WithTimeout(5 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
 	}
 
@@ -639,7 +674,10 @@ The logs are attached only if there are errors.
 		var err error
 		Eventually(
 			func() bool {
-				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetStatusTimeout)
+				nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
+					namespace,
+					timeoutConfig.GetStatusTimeout,
+				)
 				return len(nginxPodNames) == 1 && err == nil
 			}).
 			WithTimeout(timeoutConfig.CreateTimeout).
@@ -702,7 +740,10 @@ The logs are attached only if there are errors.
 	})
 
 	AfterEach(func() {
-		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+		framework.AddNginxLogsAndEventsToReport(
+			resourceManager,
+			namespace,
+		)
 		cleanUpPortForward()
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 		teardown(releaseName)
@@ -905,7 +946,10 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				var err error
 				Eventually(
 					func() bool {
-						nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
+						nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
+							ns.Name,
+							timeoutConfig.GetStatusTimeout,
+						)
 						return len(nginxPodNames) == 1 && err == nil
 					}).
 					WithTimeout(timeoutConfig.CreateTimeout).
@@ -921,7 +965,10 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 			})
 
 			AfterAll(func() {
-				framework.AddNginxLogsAndEventsToReport(resourceManager, ns.Name)
+				framework.AddNginxLogsAndEventsToReport(
+					resourceManager,
+					ns.Name,
+				)
 				cleanUpPortForward()
 
 				teardown(releaseName)
@@ -961,7 +1008,11 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 
 					ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.UpdateTimeout)
 
-					Expect(resourceManager.WaitForPodsToBeReadyWithCount(ctx, ns.Name, i+numCoffeeAndTeaPods)).To(Succeed())
+					Expect(resourceManager.WaitForPodsToBeReadyWithCount(
+						ctx,
+						ns.Name,
+						i+numCoffeeAndTeaPods),
+					).To(Succeed())
 					Expect(resourceManager.WaitForGatewayObservedGeneration(ctx, ns.Name, "gateway", i)).To(Succeed())
 
 					cancel()
@@ -1037,8 +1088,11 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 
 						var gw v1.Gateway
 						key := types.NamespacedName{Namespace: ns.Name, Name: "gateway"}
-						if err := resourceManager.K8sClient.Get(ctx, key, &gw); err != nil {
-							return fmt.Errorf("failed to get gateway: %w", err)
+						if err := resourceManager.Get(ctx, key, &gw); err != nil {
+							gatewayErr := fmt.Errorf("failed to get gateway: %w", err)
+							GinkgoWriter.Printf("ERROR: %v\n", gatewayErr)
+
+							return gatewayErr
 						}
 
 						if len(gw.Status.Listeners) != num {

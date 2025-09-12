@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
@@ -49,7 +50,10 @@ func InstallPrometheus(
 		"https://prometheus-community.github.io/helm-charts",
 	).CombinedOutput()
 	if err != nil {
-		return PrometheusInstance{}, fmt.Errorf("failed to add Prometheus helm repo: %w; output: %s", err, string(output))
+		prometheusErr := fmt.Errorf("failed to add Prometheus helm repo: %w; output: %s", err, string(output))
+		GinkgoWriter.Printf("ERROR: %v\n", prometheusErr)
+
+		return PrometheusInstance{}, prometheusErr
 	}
 
 	output, err = exec.CommandContext(
@@ -59,7 +63,10 @@ func InstallPrometheus(
 		"update",
 	).CombinedOutput()
 	if err != nil {
-		return PrometheusInstance{}, fmt.Errorf("failed to update helm repos: %w; output: %s", err, string(output))
+		helmReposErr := fmt.Errorf("failed to update helm repos: %w; output: %s", err, string(output))
+		GinkgoWriter.Printf("ERROR: %v\n", helmReposErr)
+
+		return PrometheusInstance{}, helmReposErr
 	}
 
 	scrapeInterval := fmt.Sprintf("%ds", int(cfg.ScrapeInterval.Seconds()))
@@ -77,24 +84,36 @@ func InstallPrometheus(
 		"--wait",
 	).CombinedOutput()
 	if err != nil {
-		return PrometheusInstance{}, fmt.Errorf("failed to install Prometheus: %w; output: %s", err, string(output))
+		prometheusInstallationErr := fmt.Errorf("failed to install Prometheus: %w; output: %s", err, string(output))
+		GinkgoWriter.Printf("ERROR: %v\n", prometheusInstallationErr)
+
+		return PrometheusInstance{}, prometheusInstallationErr
 	}
 
 	pods, err := rm.GetPods(prometheusNamespace, client.MatchingLabels{
 		"app.kubernetes.io/name": "prometheus",
 	})
 	if err != nil {
-		return PrometheusInstance{}, fmt.Errorf("failed to get Prometheus pods: %w", err)
+		podsErr := fmt.Errorf("failed to get Prometheus pods: %w", err)
+		GinkgoWriter.Printf("ERROR: %v\n", podsErr)
+
+		return PrometheusInstance{}, podsErr
 	}
 
 	if len(pods) != 1 {
-		return PrometheusInstance{}, fmt.Errorf("expected one Prometheus pod, found %d", len(pods))
+		manyPodsErr := fmt.Errorf("expected one Prometheus pod, found %d", len(pods))
+		GinkgoWriter.Printf("ERROR: %v\n", manyPodsErr)
+
+		return PrometheusInstance{}, manyPodsErr
 	}
 
 	pod := pods[0]
 
 	if pod.Status.PodIP == "" {
-		return PrometheusInstance{}, errors.New("the Prometheus pod has no IP")
+		podIPErr := errors.New("the Prometheus pod has no IP")
+		GinkgoWriter.Printf("ERROR: %v\n", podIPErr)
+
+		return PrometheusInstance{}, podIPErr
 	}
 
 	var queryTimeout time.Duration
@@ -114,6 +133,7 @@ func InstallPrometheus(
 
 // UninstallPrometheus uninstalls Prometheus from the cluster.
 func UninstallPrometheus(rm ResourceManager) error {
+	GinkgoWriter.Printf("Uninstalling Prometheus from namespace %q\n", prometheusNamespace)
 	output, err := exec.CommandContext(
 		context.Background(),
 		"helm",
@@ -122,11 +142,17 @@ func UninstallPrometheus(rm ResourceManager) error {
 		"-n", prometheusNamespace,
 	).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to uninstall Prometheus: %w; output: %s", err, string(output))
+		uninstallErr := fmt.Errorf("failed to uninstall Prometheus: %w; output: %s", err, string(output))
+		GinkgoWriter.Printf("ERROR: %v\n", uninstallErr)
+
+		return uninstallErr
 	}
 
 	if err := rm.DeleteNamespace(prometheusNamespace); err != nil {
-		return fmt.Errorf("failed to delete Prometheus namespace: %w", err)
+		deleteNSErr := fmt.Errorf("failed to delete Prometheus namespace: %w", err)
+		GinkgoWriter.Printf("ERROR: %v\n", deleteNSErr)
+
+		return deleteNSErr
 	}
 
 	return nil
@@ -150,8 +176,12 @@ type PrometheusInstance struct {
 
 // PortForward starts port forwarding to the Prometheus instance.
 func (ins *PrometheusInstance) PortForward(config *rest.Config, stopCh <-chan struct{}) error {
+	GinkgoWriter.Printf("Starting port forwarding to Prometheus pod %q in namespace %q\n", ins.podName, ins.podNamespace)
 	if ins.portForward {
-		panic("port forwarding already started")
+		infoMsg := "port forwarding already started"
+		GinkgoWriter.Printf("INFO: %s\n", infoMsg)
+
+		panic(infoMsg)
 	}
 
 	ins.portForward = true
@@ -175,6 +205,8 @@ func (ins *PrometheusInstance) getAPIClient() (v1.API, error) {
 
 	c, err := api.NewClient(cfg)
 	if err != nil {
+		GinkgoWriter.Printf("ERROR occurred during creating Prometheus API client: %v\n", err)
+
 		return nil, err
 	}
 
@@ -185,7 +217,10 @@ func (ins *PrometheusInstance) ensureAPIClient() error {
 	if ins.apiClient == nil {
 		ac, err := ins.getAPIClient()
 		if err != nil {
-			return fmt.Errorf("failed to get Prometheus API client: %w", err)
+			apiClientErr := fmt.Errorf("failed to get Prometheus API client: %w", err)
+			GinkgoWriter.Printf("ERROR: %v\n", apiClientErr)
+
+			return apiClientErr
 		}
 		ins.apiClient = ac
 	}
@@ -209,10 +244,14 @@ func (ins *PrometheusInstance) QueryWithCtx(ctx context.Context, query string) (
 
 	result, warnings, err := ins.apiClient.Query(ctx, query, time.Time{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to query Prometheus: %w", err)
+		queryErr := fmt.Errorf("failed to query Prometheus: %w", err)
+		GinkgoWriter.Printf("ERROR: %v\n", queryErr)
+
+		return nil, queryErr
 	}
 
 	if len(warnings) > 0 {
+		GinkgoWriter.Printf("WARNING: Prometheus query returned warnings: %v\n", warnings)
 		slog.InfoContext(context.Background(),
 			"Prometheus query returned warnings",
 			"query", query,
@@ -235,16 +274,23 @@ func (ins *PrometheusInstance) QueryRange(query string, promRange v1.Range) (mod
 func (ins *PrometheusInstance) QueryRangeWithCtx(ctx context.Context,
 	query string, promRange v1.Range,
 ) (model.Value, error) {
+	GinkgoWriter.Printf("Querying Prometheus with range query: %q\n", query)
 	if err := ins.ensureAPIClient(); err != nil {
+		GinkgoWriter.Printf("ERROR during ensureAPIClient for prometheus: %v\n", err)
+
 		return nil, err
 	}
 
 	result, warnings, err := ins.apiClient.QueryRange(ctx, query, promRange)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query Prometheus: %w", err)
+		queryErr := fmt.Errorf("failed to query Prometheus: %w", err)
+		GinkgoWriter.Printf("ERROR: %v\n", queryErr)
+
+		return nil, queryErr
 	}
 
 	if len(warnings) > 0 {
+		GinkgoWriter.Printf("WARNING: Prometheus range query returned warnings: %v\n", warnings)
 		slog.InfoContext(context.Background(),
 			"Prometheus range query returned warnings",
 			"query", query,
@@ -260,11 +306,17 @@ func (ins *PrometheusInstance) QueryRangeWithCtx(ctx context.Context,
 func GetFirstValueOfPrometheusVector(val model.Value) (float64, error) {
 	res, ok := val.(model.Vector)
 	if !ok {
-		return 0, fmt.Errorf("expected a vector, got %T", val)
+		valueErr := fmt.Errorf("expected a vector, got %T", val)
+		GinkgoWriter.Printf("ERROR: %v\n", valueErr)
+
+		return 0, valueErr
 	}
 
 	if len(res) == 0 {
-		return 0, errors.New("empty vector")
+		vectorErr := errors.New("empty vector")
+		GinkgoWriter.Printf("ERROR: %v\n", vectorErr)
+
+		return 0, vectorErr
 	}
 
 	return float64(res[0].Value), nil
@@ -272,8 +324,11 @@ func GetFirstValueOfPrometheusVector(val model.Value) (float64, error) {
 
 // WritePrometheusMatrixToCSVFile writes a Prometheus matrix to a CSV file.
 func WritePrometheusMatrixToCSVFile(fileName string, value model.Value) error {
+	GinkgoWriter.Printf("Writing Prometheus matrix to CSV file %q\n", fileName)
 	file, err := os.Create(fileName)
 	if err != nil {
+		GinkgoWriter.Printf("ERROR occurred during creating file %q: %v\n", fileName, err)
+
 		return err
 	}
 	defer file.Close()
@@ -282,13 +337,18 @@ func WritePrometheusMatrixToCSVFile(fileName string, value model.Value) error {
 
 	matrix, ok := value.(model.Matrix)
 	if !ok {
-		return fmt.Errorf("expected a matrix, got %T", value)
+		matrixErr := fmt.Errorf("expected a matrix, got %T", value)
+		GinkgoWriter.Printf("ERROR: %v\n", matrixErr)
+
+		return matrixErr
 	}
 
 	for _, sample := range matrix {
 		for _, pair := range sample.Values {
 			record := []string{fmt.Sprint(pair.Timestamp.Unix()), pair.Value.String()}
 			if err := csvWriter.Write(record); err != nil {
+				GinkgoWriter.Printf("ERROR: %v\n", err)
+
 				return err
 			}
 		}
@@ -409,18 +469,30 @@ func CreateMetricExistChecker(
 	query string,
 	getTime func() time.Time,
 	modifyTime func(),
+	opts ...Option,
 ) func() error {
 	return func() error {
 		queryWithTimestamp := fmt.Sprintf("%s @ %d", query, getTime().Unix())
+		options := LogOptions(opts...)
 
 		result, err := promInstance.Query(queryWithTimestamp)
 		if err != nil {
-			return fmt.Errorf("failed to query Prometheus: %w", err)
+			queryErr := fmt.Errorf("failed to query Prometheus: %w", err)
+			if options.logEnabled {
+				GinkgoWriter.Printf("ERROR during creating metric existence checker: %v\n", queryErr)
+			}
+
+			return queryErr
 		}
 
 		if result.String() == "" {
 			modifyTime()
-			return errors.New("empty result")
+			emptyResultErr := errors.New("empty result")
+			if options.logEnabled {
+				GinkgoWriter.Printf("ERROR during creating metric existence checker: %v\n", emptyResultErr)
+			}
+
+			return emptyResultErr
 		}
 
 		return nil
@@ -436,6 +508,7 @@ func CreateEndTimeFinder(
 	endTime *time.Time,
 	queryRangeStep time.Duration,
 ) func() error {
+	GinkgoWriter.Printf("Creating end time finder with start time %v and initial end time %v\n", startTime, endTime)
 	return func() error {
 		result, err := promInstance.QueryRange(query, v1.Range{
 			Start: startTime,
@@ -443,12 +516,18 @@ func CreateEndTimeFinder(
 			Step:  queryRangeStep,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to query Prometheus: %w", err)
+			queryErr := fmt.Errorf("failed to query Prometheus: %w", err)
+			GinkgoWriter.Printf("ERROR during creating end time finder: %v\n", queryErr)
+
+			return queryErr
 		}
 
 		if result.String() == "" {
 			*endTime = time.Now()
-			return errors.New("empty result")
+			emptyResultsErr := errors.New("empty result")
+			GinkgoWriter.Printf("ERROR during creating end time finder: %v\n", emptyResultsErr)
+
+			return emptyResultsErr
 		}
 
 		return nil
@@ -457,14 +536,29 @@ func CreateEndTimeFinder(
 
 // CreateResponseChecker returns a function that checks if there is a successful response from a url.
 func CreateResponseChecker(url, address string, requestTimeout time.Duration, opts ...Option) func() error {
+	options := LogOptions(opts...)
+	if options.logEnabled {
+		GinkgoWriter.Printf("Starting checking response for url %q and address %q\n", url, address)
+	}
+
 	return func() error {
 		status, _, err := Get(url, address, requestTimeout, nil, nil, opts...)
 		if err != nil {
-			return fmt.Errorf("bad response: %w", err)
+			badReqErr := fmt.Errorf("bad response: %w", err)
+			if options.logEnabled {
+				GinkgoWriter.Printf("ERROR during creating response checker: %v\n", badReqErr)
+			}
+
+			return badReqErr
 		}
 
 		if status != 200 {
-			return fmt.Errorf("unexpected status code: %d", status)
+			statusErr := fmt.Errorf("unexpected status code: %d", status)
+			if options.logEnabled {
+				GinkgoWriter.Printf("ERROR during creating response checker: %v\n", statusErr)
+			}
+
+			return statusErr
 		}
 
 		return nil
@@ -474,11 +568,15 @@ func CreateResponseChecker(url, address string, requestTimeout time.Duration, op
 func getFirstValueOfVector(query string, promInstance PrometheusInstance) (float64, error) {
 	result, err := promInstance.Query(query)
 	if err != nil {
+		GinkgoWriter.Printf("ERROR querying Prometheus during getting first value of vector: %v\n", err)
+
 		return 0, err
 	}
 
 	val, err := GetFirstValueOfPrometheusVector(result)
 	if err != nil {
+		GinkgoWriter.Printf("ERROR getting first value of Prometheus vector: %v\n", err)
+
 		return 0, err
 	}
 
@@ -488,12 +586,17 @@ func getFirstValueOfVector(query string, promInstance PrometheusInstance) (float
 func getBuckets(query string, promInstance PrometheusInstance) ([]Bucket, error) {
 	result, err := promInstance.Query(query)
 	if err != nil {
+		GinkgoWriter.Printf("ERROR querying Prometheus during getting buckets: %v\n", err)
+
 		return nil, err
 	}
 
 	res, ok := result.(model.Vector)
 	if !ok {
-		return nil, errors.New("could not convert result to vector")
+		convertationErr := errors.New("could not convert result to vector")
+		GinkgoWriter.Printf("ERROR during getting buckets: %v\n", convertationErr)
+
+		return nil, convertationErr
 	}
 
 	buckets := make([]Bucket, 0, len(res))

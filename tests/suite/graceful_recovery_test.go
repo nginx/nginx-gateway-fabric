@@ -74,7 +74,11 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		defer cancel()
 
 		var pod core.Pod
-		if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: podName}, &pod); err != nil {
+		if err := resourceManager.Get(
+			ctx,
+			types.NamespacedName{Namespace: namespace, Name: podName},
+			&pod,
+		); err != nil {
 			return 0, fmt.Errorf("error retrieving Pod: %w", err)
 		}
 
@@ -95,8 +99,11 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		}
 
 		if restartCount != currentRestartCount+1 {
-			return fmt.Errorf("expected current restart count: %d to match incremented restart count: %d",
+			restartErr := fmt.Errorf("expected current restart count: %d to match incremented restart count: %d",
 				restartCount, currentRestartCount+1)
+			GinkgoWriter.Printf("%s\n", restartErr)
+
+			return restartErr
 		}
 
 		return nil
@@ -107,7 +114,7 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		defer cancel()
 		var nodes core.NodeList
 
-		if err := k8sClient.List(ctx, &nodes); err != nil {
+		if err := resourceManager.List(ctx, &nodes); err != nil {
 			return nil, fmt.Errorf("error listing nodes: %w", err)
 		}
 
@@ -125,26 +132,39 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		defer cancel()
 
 		var nginxPod core.Pod
-		if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns.Name, Name: nginxPodName}, &nginxPod); err != nil {
+		if err := resourceManager.Get(
+			ctx,
+			types.NamespacedName{Namespace: ns.Name, Name: nginxPodName},
+			&nginxPod,
+		); err != nil {
 			return nil, fmt.Errorf("error retrieving nginx Pod: %w", err)
 		}
 
 		b, err := resourceManager.GetFileContents("graceful-recovery/node-debugger-job.yaml")
 		if err != nil {
-			return nil, fmt.Errorf("error processing node debugger job file: %w", err)
+			debugErr := fmt.Errorf("error processing node debugger job file: %w", err)
+			GinkgoWriter.Printf("%s\n", debugErr)
+
+			return nil, debugErr
 		}
 
 		job := &v1.Job{}
 		if err = yaml.Unmarshal(b.Bytes(), job); err != nil {
-			return nil, fmt.Errorf("error with yaml unmarshal: %w", err)
+			yamlErr := fmt.Errorf("error with yaml unmarshal: %w", err)
+			GinkgoWriter.Printf("%s\n", yamlErr)
+
+			return nil, yamlErr
 		}
 
 		job.Spec.Template.Spec.NodeSelector["kubernetes.io/hostname"] = nginxPod.Spec.NodeName
 		if len(job.Spec.Template.Spec.Containers) != 1 {
-			return nil, fmt.Errorf(
+			containerErr := fmt.Errorf(
 				"expected node debugger job to contain one container, actual number: %d",
 				len(job.Spec.Template.Spec.Containers),
 			)
+			GinkgoWriter.Printf("ERROR: %s\n", containerErr)
+
+			return nil, containerErr
 		}
 		job.Namespace = ns.Name
 
@@ -174,7 +194,7 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		// default propagation policy is metav1.DeletePropagationOrphan which does not delete the underlying
 		// pod created through the job after the job is deleted. Setting it to metav1.DeletePropagationBackground
 		// deletes the underlying pod after the job is deleted.
-		Expect(resourceManager.Delete(
+		Expect(resourceManager.DeleteResources(
 			[]client.Object{job},
 			client.PropagationPolicy(metav1.DeletePropagationBackground),
 		)).To(Succeed())
@@ -207,7 +227,10 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		var err error
 		Eventually(
 			func() bool {
-				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
+				nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
+					ns.Name,
+					timeoutConfig.GetStatusTimeout,
+				)
 				return len(nginxPodNames) == 1 && err == nil
 			}).
 			WithTimeout(timeoutConfig.CreateTimeout).
@@ -281,8 +304,7 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		var podNames []string
 		Eventually(
 			func() bool {
-				podNames, err = framework.GetReadyNGFPodNames(
-					k8sClient,
+				podNames, err = resourceManager.GetReadyNGFPodNames(
 					ngfNamespace,
 					releaseName,
 					timeoutConfig.GetStatusTimeout,
@@ -307,7 +329,10 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		var nginxPodNames []string
 		Eventually(
 			func() bool {
-				nginxPodNames, err = framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
+				nginxPodNames, err = resourceManager.GetReadyNginxPodNames(
+					ns.Name,
+					timeoutConfig.GetStatusTimeout,
+				)
 				return len(nginxPodNames) == 1 && err == nil
 			}).
 			WithTimeout(timeoutConfig.CreateTimeout * 2).
@@ -352,12 +377,15 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		var lease coordination.Lease
 		key := types.NamespacedName{Name: "ngf-test-nginx-gateway-fabric-leader-election", Namespace: ngfNamespace}
 
-		if err := k8sClient.Get(ctx, key, &lease); err != nil {
+		if err := resourceManager.Get(ctx, key, &lease); err != nil {
 			return "", errors.New("could not retrieve leader election lease")
 		}
 
 		if *lease.Spec.HolderIdentity == "" {
-			return "", errors.New("leader election lease holder identity is empty")
+			leaderErr := errors.New("leader election lease holder identity is empty")
+			GinkgoWriter.Printf("ERROR: %s\n", leaderErr)
+
+			return "", leaderErr
 		}
 
 		return *lease.Spec.HolderIdentity, nil
@@ -381,7 +409,11 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 	}
 
 	BeforeAll(func() {
-		podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetStatusTimeout)
+		podNames, err := resourceManager.GetReadyNGFPodNames(
+			ngfNamespace,
+			releaseName,
+			timeoutConfig.GetStatusTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(podNames).To(HaveLen(1))
 
@@ -397,7 +429,10 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
+		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+			ns.Name,
+			timeoutConfig.GetStatusTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
@@ -431,7 +466,10 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 	It("recovers when nginx container is restarted", func() {
 		restartNginxContainer(activeNginxPodName, ns.Name, nginxContainerName)
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
+		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+			ns.Name,
+			timeoutConfig.GetStatusTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 		activeNginxPodName = nginxPodNames[0]
@@ -460,13 +498,12 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
 		defer cancel()
 
-		Expect(k8sClient.Delete(ctx, ngfPod)).To(Succeed())
+		Expect(resourceManager.Delete(ctx, ngfPod, nil)).To(Succeed())
 
 		var newNGFPodNames []string
 		Eventually(
 			func() bool {
-				newNGFPodNames, err = framework.GetReadyNGFPodNames(
-					k8sClient,
+				newNGFPodNames, err = resourceManager.GetReadyNGFPodNames(
 					ngfNamespace,
 					releaseName,
 					timeoutConfig.GetStatusTimeout,

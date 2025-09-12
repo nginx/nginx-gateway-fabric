@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
 	vegeta "github.com/tsenart/vegeta/v12/lib"
 )
 
@@ -49,6 +50,7 @@ type Metrics struct {
 // RunLoadTest uses Vegeta to send traffic to the provided Targets at the given rate for the given duration and writes
 // the results to the provided file.
 func RunLoadTest(cfg LoadTestConfig) (vegeta.Results, Metrics) {
+	GinkgoWriter.Printf("Running load test: %s\n", cfg.Description)
 	vegTargets := convertTargetToVegetaTarget(cfg.Targets)
 	targeter := vegeta.NewStaticTargeter(vegTargets...)
 
@@ -61,7 +63,12 @@ func RunLoadTest(cfg LoadTestConfig) (vegeta.Results, Metrics) {
 		Timeout: vegeta.DefaultTimeout,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
-				return dialer.DialContext(ctx, network, cfg.Proxy)
+				conn, err := dialer.DialContext(ctx, network, cfg.Proxy)
+				if err != nil {
+					GinkgoWriter.Printf("ERROR occurred during dialing %q in %q network, error: %s\n", cfg.Proxy, network, err)
+				}
+
+				return conn, err
 			},
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true, //nolint:gosec // self-signed cert for testing

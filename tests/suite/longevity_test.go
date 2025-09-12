@@ -56,7 +56,7 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 		Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(promFile, ngfNamespace)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(ns.Name, framework.WithLoggingDisabled())).To(Succeed())
 	})
 
 	It("collects results", Label("longevity-teardown"), func() {

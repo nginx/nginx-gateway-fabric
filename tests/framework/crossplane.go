@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -42,10 +43,13 @@ const crossplaneImageName = "nginx-crossplane:latest"
 
 // ValidateNginxFieldExists accepts the nginx config and the configuration for the expected field,
 // and returns whether or not that field exists where it should.
-func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField) error {
+func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField, opts ...Option) error {
 	b, err := json.Marshal(conf)
 	if err != nil {
-		return fmt.Errorf("error marshaling nginx config: %w", err)
+		marshalErr := fmt.Errorf("error marshaling nginx config: %w", err)
+		GinkgoWriter.Printf("%v\n", marshalErr)
+
+		return marshalErr
 	}
 
 	for _, config := range conf.Config {
@@ -55,7 +59,7 @@ func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField) err
 
 		for _, directive := range config.Parsed {
 			if expFieldCfg.Server == "" && expFieldCfg.Upstream == "" {
-				if expFieldCfg.fieldFound(directive) {
+				if expFieldCfg.fieldFound(directive, opts...) {
 					return nil
 				}
 				continue
@@ -65,13 +69,15 @@ func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField) err
 				return nil
 			}
 
-			if expFieldCfg.Upstream != "" && fieldExistsInUpstream(expFieldCfg, *directive) {
+			if expFieldCfg.Upstream != "" && fieldExistsInUpstream(expFieldCfg, *directive, opts...) {
 				return nil
 			}
 		}
 	}
+	directiveErr := fmt.Errorf("directive %s not found in: nginx config %s", expFieldCfg.Directive, string(b))
+	GinkgoWriter.Printf("ERROR: %v\n", directiveErr)
 
-	return fmt.Errorf("directive %s not found in: nginx config %s", expFieldCfg.Directive, string(b))
+	return directiveErr
 }
 
 func fieldExistsInServer(
@@ -94,7 +100,16 @@ func fieldExistsInServer(
 func fieldExistsInUpstream(
 	expFieldCfg ExpectedNginxField,
 	directive Directive,
+	opts ...Option,
 ) bool {
+	options := LogOptions(opts...)
+	if options.logEnabled {
+		GinkgoWriter.Printf(
+			"Checking upstream for directive %q with value %q\n",
+			expFieldCfg.Directive,
+			expFieldCfg.Value,
+		)
+	}
 	if directive.Directive == "upstream" && directive.Args[0] == expFieldCfg.Upstream {
 		for _, directive := range directive.Block {
 			if expFieldCfg.fieldFound(directive) {
@@ -115,7 +130,8 @@ func getServerName(serverBlock Directives) string {
 	return ""
 }
 
-func (e ExpectedNginxField) fieldFound(directive *Directive) bool {
+func (e ExpectedNginxField) fieldFound(directive *Directive, opts ...Option) bool {
+	options := LogOptions(opts...)
 	arg := strings.Join(directive.Args, " ")
 
 	valueMatch := arg == e.Value
@@ -123,7 +139,20 @@ func (e ExpectedNginxField) fieldFound(directive *Directive) bool {
 		valueMatch = strings.Contains(arg, e.Value)
 	}
 
-	return directive.Directive == e.Directive && valueMatch
+	if directive.Directive == e.Directive && valueMatch {
+		if options.logEnabled {
+			GinkgoWriter.Printf(
+				"Found field %q with value %q in field %q with value %q\n",
+				e.Directive,
+				e.Value,
+				directive.Directive,
+				arg,
+			)
+		}
+		return true
+	}
+
+	return false
 }
 
 func fieldExistsInLocation(locationDirective *Directive, expFieldCfg ExpectedNginxField) bool {
@@ -201,7 +230,10 @@ func injectCrossplaneContainer(
 
 	podClient := k8sClient.CoreV1().Pods(namespace)
 	if _, err := podClient.UpdateEphemeralContainers(ctx, ngfPodName, pod, metav1.UpdateOptions{}); err != nil {
-		return fmt.Errorf("error adding ephemeral container: %w", err)
+		containerErr := fmt.Errorf("error adding ephemeral container: %w", err)
+		GinkgoWriter.Printf("%v\n", containerErr)
+
+		return containerErr
 	}
 
 	return nil
@@ -231,7 +263,10 @@ func createCrossplaneExecutor(
 
 	exec, err := remotecommand.NewSPDYExecutor(k8sConfig, http.MethodPost, req.URL())
 	if err != nil {
-		return nil, fmt.Errorf("error creating executor: %w", err)
+		executorErr := fmt.Errorf("error creating executor: %w", err)
+		GinkgoWriter.Printf("%v\n", executorErr)
+
+		return nil, executorErr
 	}
 
 	return exec, nil

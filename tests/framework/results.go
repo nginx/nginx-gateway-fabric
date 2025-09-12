@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	. "github.com/onsi/ginkgo/v2"
 	vegeta "github.com/tsenart/vegeta/v12/lib"
 )
 
@@ -23,7 +24,10 @@ func CreateResultsDir(testName, version string) (string, error) {
 
 	if _, err := os.Stat(dirName); err == nil {
 		if err := os.RemoveAll(dirName); err != nil {
-			return "", fmt.Errorf("failed to remove existing directory %s: %w", dirName, err)
+			rmDirErr := fmt.Errorf("failed to remove existing directory %s: %w", dirName, err)
+			GinkgoWriter.Printf("ERROR occurred during removing existing results directory %q, error: %s\n", dirName, rmDirErr)
+
+			return "", rmDirErr
 		}
 	}
 
@@ -34,6 +38,8 @@ func CreateResultsDir(testName, version string) (string, error) {
 func CreateResultsFile(filename string) (*os.File, error) {
 	outFile, err := os.OpenFile(filename, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
+		GinkgoWriter.Printf("ERROR occurred during creating results file %q, error: %s\n", filename, err)
+
 		return nil, err
 	}
 
@@ -65,13 +71,19 @@ func WriteSystemInfoToFile(file *os.File, ci ClusterInfo, plus bool) error {
 		plus, commit, date, dirty, clusterType, ci.NodeCount, ci.K8sVersion, ci.CPUCountPerNode, ci.MemoryPerNode, ci.MaxPodsPerNode,
 	)
 	if _, err := fmt.Fprint(file, text); err != nil {
+		GinkgoWriter.Printf("ERROR occurred during writing system info to results file, error: %s\n", err)
+
 		return err
 	}
 	if ci.IsGKE {
 		if _, err := fmt.Fprintf(file, "- Zone: %s\n- Instance Type: %s\n", ci.GkeZone, ci.GkeInstanceType); err != nil {
+			GinkgoWriter.Printf("ERROR occurred during writing GKE info to results file, error: %s\n", err)
+
 			return err
 		}
 	}
+	GinkgoWriter.Printf("Wrote system info to results file\n")
+
 	return nil
 }
 
@@ -89,6 +101,13 @@ func generatePNG(resultsDir, inputFilename, outputFilename, configFilename strin
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		GinkgoWriter.Printf(
+			"ERROR occurred during generating PNG %q using gnuplot, error: %s, output: %s\n",
+			outputFilename,
+			err,
+			string(output),
+		)
+
 		return fmt.Errorf("failed to generate PNG: %w; output: %s", err, string(output))
 	}
 
@@ -118,13 +137,20 @@ func GenerateMemoryPNG(resultsDir, inputFilename, outputFilename string) error {
 // WriteMetricsResults writes the metrics results to the results file in text format.
 func WriteMetricsResults(resultsFile *os.File, metrics *Metrics) error {
 	reporter := vegeta.NewTextReporter(&metrics.Metrics)
+	reporterErr := reporter.Report(resultsFile)
+	if reporterErr != nil {
+		GinkgoWriter.Printf("ERROR occurred during writing metrics results to results file, error: %s\n", reporterErr)
+	}
+	GinkgoWriter.Printf("Wrote metrics results to results file %q\n", resultsFile.Name())
 
-	return reporter.Report(resultsFile)
+	return reporterErr
 }
 
 // WriteContent writes basic content to the results file.
 func WriteContent(resultsFile *os.File, content string) error {
 	if _, err := fmt.Fprintln(resultsFile, content); err != nil {
+		GinkgoWriter.Printf("ERROR occurred during writing content to results file, error: %s\n", err)
+
 		return err
 	}
 

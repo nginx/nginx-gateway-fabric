@@ -66,7 +66,10 @@ var _ = Describe("Dataplane performance", Ordered, Label("nfr", "performance"), 
 		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, namespace, timeoutConfig.GetTimeout)
+		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+			namespace,
+			timeoutConfig.GetTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 

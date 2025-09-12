@@ -67,7 +67,10 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(ns.Name)).To(Succeed())
 
-		nginxPodNames, err := framework.GetReadyNginxPodNames(k8sClient, ns.Name, timeoutConfig.GetStatusTimeout)
+		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+			ns.Name,
+			timeoutConfig.GetStatusTimeout,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(nginxPodNames).To(HaveLen(1))
 
@@ -83,7 +86,10 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 	})
 
 	AfterEach(func() {
-		framework.AddNginxLogsAndEventsToReport(resourceManager, ns.Name)
+		framework.AddNginxLogsAndEventsToReport(
+			resourceManager,
+			ns.Name,
+		)
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteFromFiles(files, ns.Name)).To(Succeed())
@@ -204,7 +210,7 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 
 		Expect(resourceManager.ApplyFromFiles([]string{"ngf-upgrade/gateway-updated.yaml"}, ns.Name)).To(Succeed())
 
-		podNames, err := framework.GetReadyNGFPodNames(k8sClient, ngfNamespace, releaseName, timeoutConfig.GetTimeout)
+		podNames, err := resourceManager.GetReadyNGFPodNames(ngfNamespace, releaseName, timeoutConfig.GetTimeout)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(podNames).ToNot(BeEmpty())
 
@@ -220,7 +226,7 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 			true, /* poll immediately */
 			func(_ context.Context) (bool, error) {
 				defer GinkgoRecover()
-				Expect(k8sClient.Get(leaseCtx, key, &lease)).To(Succeed())
+				Expect(resourceManager.Get(leaseCtx, key, &lease)).To(Succeed())
 
 				if lease.Spec.HolderIdentity != nil {
 					for _, podName := range podNames {
@@ -245,7 +251,7 @@ var _ = Describe("Upgrade testing", Label("nfr", "upgrade"), func() {
 			500*time.Millisecond,
 			true, /* poll immediately */
 			func(ctx context.Context) (bool, error) {
-				Expect(k8sClient.Get(ctx, key, &gw)).To(Succeed())
+				Expect(resourceManager.Get(ctx, key, &gw)).To(Succeed())
 				expListenerName := "http-new"
 				for _, listener := range gw.Status.Listeners {
 					if listener.Name == v1.SectionName(expListenerName) {
