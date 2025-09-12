@@ -122,7 +122,7 @@ stop-longevity-test: nfr-test ## Stop the longevity test and collects results
 .PHONY: .vm-nfr-test
 .vm-nfr-test: ## Runs the NFR tests on the GCP VM (called by `nfr-test`)
 	CGO_ENABLED=1 go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --randomize-suites --keep-going --fail-on-pending \
-		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) --flake-attempts=2 \
+		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) --flake-attempts=1 --show-node-events --output-interceptor-mode=none \
 		--label-filter "nfr" $(GINKGO_FLAGS) --timeout 5h ./suite --  --gateway-api-version=$(GW_API_VERSION) \
 		--gateway-api-prev-version=$(GW_API_PREV_VERSION) --image-tag=$(TAG) --version-under-test=$(NGF_VERSION) \
 		--ngf-image-repo=$(PREFIX) --nginx-image-repo=$(NGINX_PREFIX) --nginx-plus-image-repo=$(NGINX_PLUS_PREFIX) \
@@ -176,7 +176,7 @@ HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.typ
 # it overrides the target in the main Makefile when the GW_API_VERSION is set to main
 ifeq ($(GW_API_VERSION),main)
 install-gateway-crds:
-	kubectl kustomize "https://github.com/kubernetes-sigs/gateway-api/config/crd/$(if $(filter true,$(ENABLE_EXPERIMENTAL)),experimental,)?timeout=120&ref=main" | kubectl apply -f -
+	kubectl kustomize "https://github.com/kubernetes-sigs/gateway-api/config/crd/$(if $(filter true,$(ENABLE_EXPERIMENTAL)),experimental,)?timeout=120&ref=main" | kubectl apply --server-side -f -
 endif
 
 .PHONY: install-ngf-local-no-build

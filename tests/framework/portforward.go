@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
@@ -20,12 +21,18 @@ import (
 func PortForward(config *rest.Config, namespace, podName string, ports []string, stopCh <-chan struct{}) error {
 	roundTripper, upgrader, err := spdy.RoundTripperFor(config)
 	if err != nil {
-		return fmt.Errorf("error creating roundtripper: %w", err)
+		roundTripperErr := fmt.Errorf("error creating roundtripper: %w", err)
+		GinkgoWriter.Printf("%v\n", roundTripperErr)
+
+		return roundTripperErr
 	}
 
 	serverURL, err := url.Parse(config.Host)
 	if err != nil {
-		return fmt.Errorf("error parsing rest config host: %w", err)
+		parseConfigErr := fmt.Errorf("error parsing rest config host: %w", err)
+		GinkgoWriter.Printf("%v\n", parseConfigErr)
+
+		return parseConfigErr
 	}
 
 	serverURL.Path = path.Join(
@@ -35,14 +42,24 @@ func PortForward(config *rest.Config, namespace, podName string, ports []string,
 		"portforward",
 	)
 
+	GinkgoWriter.Printf("Creating new dialer for serverURL: %q\n", serverURL)
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, serverURL)
 
 	forward := func() error {
 		readyCh := make(chan struct{}, 1)
 
+		GinkgoWriter.Printf(
+			"Starting port-forward to pod %q in namespace %q for ports %v\n",
+			podName,
+			namespace,
+			ports,
+		)
 		forwarder, err := portforward.New(dialer, ports, stopCh, readyCh, newSafeBuffer(), newSafeBuffer())
 		if err != nil {
-			return fmt.Errorf("error creating port forwarder: %w", err)
+			createPortForwardErr := fmt.Errorf("error creating port forwarder: %w", err)
+			GinkgoWriter.Printf("%v\n", createPortForwardErr)
+
+			return createPortForwardErr
 		}
 
 		return forwarder.ForwardPorts()

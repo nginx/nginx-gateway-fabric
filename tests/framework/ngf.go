@@ -41,6 +41,7 @@ type InstallationConfig struct {
 // InstallGatewayAPI installs the specified version of the Gateway API resources.
 func InstallGatewayAPI(apiVersion string) ([]byte, error) {
 	apiPath := fmt.Sprintf("%s/v%s/standard-install.yaml", gwInstallBasePath, apiVersion)
+	GinkgoWriter.Printf("Installing Gateway API version %q at API path %q\n", apiVersion, apiPath)
 
 	cmd := exec.CommandContext(
 		context.Background(),
@@ -48,8 +49,11 @@ func InstallGatewayAPI(apiVersion string) ([]byte, error) {
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		GinkgoWriter.Printf("Error installing Gateway API version %q: %v\n", apiVersion, err)
+
 		return output, err
 	}
+	GinkgoWriter.Printf("Successfully installed Gateway API version %q\n", apiVersion)
 
 	return nil, nil
 }
@@ -57,11 +61,15 @@ func InstallGatewayAPI(apiVersion string) ([]byte, error) {
 // UninstallGatewayAPI uninstalls the specified version of the Gateway API resources.
 func UninstallGatewayAPI(apiVersion string) ([]byte, error) {
 	apiPath := fmt.Sprintf("%s/v%s/standard-install.yaml", gwInstallBasePath, apiVersion)
+	GinkgoWriter.Printf("Uninstalling Gateway API version %q at API path %q\n", apiVersion, apiPath)
 
 	output, err := exec.CommandContext(context.Background(), "kubectl", "delete", "-f", apiPath).CombinedOutput()
 	if err != nil && !strings.Contains(string(output), "not found") {
+		GinkgoWriter.Printf("Error uninstalling Gateway API version %q: %v\n", apiVersion, err)
+
 		return output, err
 	}
+	GinkgoWriter.Printf("Successfully uninstalled Gateway API version %q\n", apiVersion)
 
 	return nil, nil
 }
@@ -94,9 +102,14 @@ func InstallNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 
 // CreateLicenseSecret creates the NGINX Plus JWT secret.
 func CreateLicenseSecret(k8sClient client.Client, namespace, filename string) error {
+	GinkgoWriter.Printf("Creating NGINX Plus license secret in namespace %q from file %q\n", namespace, filename)
+
 	conf, err := os.ReadFile(filename)
 	if err != nil {
-		return fmt.Errorf("error reading file %q: %w", filename, err)
+		readFileErr := fmt.Errorf("error reading file %q: %w", filename, err)
+		GinkgoWriter.Printf("%v\n", readFileErr)
+
+		return readFileErr
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeoutConfig().CreateTimeout)
@@ -109,7 +122,10 @@ func CreateLicenseSecret(k8sClient client.Client, namespace, filename string) er
 	}
 
 	if err := k8sClient.Create(ctx, ns); err != nil && !apierrors.IsAlreadyExists(err) {
-		return fmt.Errorf("error creating namespace: %w", err)
+		createNSErr := fmt.Errorf("error creating namespace: %w", err)
+		GinkgoWriter.Printf("%v\n", createNSErr)
+
+		return createNSErr
 	}
 
 	secret := &core.Secret{
@@ -123,7 +139,10 @@ func CreateLicenseSecret(k8sClient client.Client, namespace, filename string) er
 	}
 
 	if err := k8sClient.Create(ctx, secret); err != nil && !apierrors.IsAlreadyExists(err) {
-		return fmt.Errorf("error creating secret: %w", err)
+		createSecretErr := fmt.Errorf("error creating secret: %w", err)
+		GinkgoWriter.Printf("%v\n", createSecretErr)
+
+		return createSecretErr
 	}
 
 	return nil
@@ -170,6 +189,7 @@ func UninstallNGF(cfg InstallationConfig, k8sClient client.Client) ([]byte, erro
 	args := []string{
 		"uninstall", cfg.ReleaseName, "--namespace", cfg.Namespace,
 	}
+	GinkgoWriter.Printf("Uninstalling NGF with command: helm %v\n", strings.Join(args, " "))
 
 	output, err := exec.CommandContext(context.Background(), "helm", args...).CombinedOutput()
 	if err != nil && !strings.Contains(string(output), "release: not found") {
@@ -204,6 +224,7 @@ func UninstallNGF(cfg InstallationConfig, k8sClient client.Client) ([]byte, erro
 func setTelemetryArgs(cfg InstallationConfig) []string {
 	var args []string
 
+	GinkgoWriter.Printf("Setting telemetry to %v\n", cfg.Telemetry)
 	if cfg.Telemetry {
 		args = append(args, formatValueSet("nginxGateway.productTelemetry.enable", "true")...)
 	} else {

@@ -13,25 +13,6 @@ spec:
     port: 80
     protocol: HTTP
 ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: route
-spec:
-  parentRefs:
-  - name: gateway
-    sectionName: listener
-  hostnames:
-  - "*.example.com"
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /
-    backendRefs:
-    - name: backend
-      port: 80
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:

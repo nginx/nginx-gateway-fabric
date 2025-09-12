@@ -40,6 +40,10 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 			"scale/upstreams.yaml",
 		}
 
+		httpRouteManifests = []string{
+			"scale/httproute.yaml",
+		}
+
 		namespace = "scale"
 
 		scrapeInterval = 15 * time.Second
@@ -404,7 +408,11 @@ The logs are attached only if there are errors.
 		Expect(err).ToNot(HaveOccurred())
 		defer ttrCsvFile.Close()
 
+		// Apply BaseObjects first (secrets and other foundational resources)
 		Expect(resourceManager.Apply(objects.BaseObjects)).To(Succeed())
+
+		// Apply GatewayAndServiceObjects next (backend services, deployments, and Gateway)
+		Expect(resourceManager.Apply(objects.GatewayAndServiceObjects)).To(Succeed())
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
@@ -442,7 +450,12 @@ The logs are attached only if there are errors.
 			startCheck := time.Now()
 
 			Eventually(
-				framework.CreateResponseChecker(url, address, timeoutConfig.RequestTimeout),
+				framework.CreateResponseChecker(
+					url,
+					address,
+					timeoutConfig.RequestTimeout,
+					framework.WithLoggingDisabled(), // disable logging to avoid huge logs
+				),
 			).WithTimeout(6 * timeoutConfig.RequestTimeout).WithPolling(100 * time.Millisecond).Should(Succeed())
 
 			ttr := time.Since(startCheck)
@@ -466,6 +479,10 @@ The logs are attached only if there are errors.
 
 	runScaleUpstreams := func() {
 		Expect(resourceManager.ApplyFromFiles(upstreamsManifests, namespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+		// apply HTTPRoute after upstreams are ready
+		Expect(resourceManager.ApplyFromFiles(httpRouteManifests, namespace)).To(Succeed())
 		Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
 		var nginxPodNames []string
@@ -510,6 +527,9 @@ The logs are attached only if there are errors.
 
 	setNamespace := func(objects framework.ScaleObjects) {
 		for _, obj := range objects.BaseObjects {
+			obj.SetNamespace(namespace)
+		}
+		for _, obj := range objects.GatewayAndServiceObjects {
 			obj.SetNamespace(namespace)
 		}
 		for _, objs := range objects.ScaleIterationGroups {
@@ -1012,13 +1032,13 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 			checkGatewayListeners := func(num int) {
 				Eventually(
 					func() error {
-						ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
+						ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout*2)
 						defer cancel()
 
 						var gw v1.Gateway
 						key := types.NamespacedName{Namespace: ns.Name, Name: "gateway"}
 						if err := resourceManager.K8sClient.Get(ctx, key, &gw); err != nil {
-							return err
+							return fmt.Errorf("failed to get gateway: %w", err)
 						}
 
 						if len(gw.Status.Listeners) != num {
@@ -1028,8 +1048,8 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 						return nil
 					},
 				).
-					WithTimeout(5 * time.Second).
-					WithPolling(100 * time.Millisecond).
+					WithTimeout(timeoutConfig.GatewayListenerUpdateTimeout).
+					WithPolling(1 * time.Second).
 					Should(Succeed())
 			}
 

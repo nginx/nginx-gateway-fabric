@@ -127,10 +127,18 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 	})
 
 	sendRequests := func(url string, count int) {
+		GinkgoWriter.Printf("Sending %d requests to %s\n", count, url)
 		for range count {
 			Eventually(
 				func() error {
-					status, _, err := framework.Get(url, address, timeoutConfig.RequestTimeout, nil, nil)
+					status, _, err := framework.Get(
+						url,
+						address,
+						timeoutConfig.RequestTimeout,
+						nil,
+						nil,
+						framework.WithLoggingDisabled(),
+					)
 					if err != nil {
 						return err
 					}
@@ -227,30 +235,46 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 })
 
 func verifyGatewayClassResolvedRefs() error {
+	GinkgoWriter.Println("Verifying GatewayClass ResolvedRefs condition is True\n")
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
 	defer cancel()
 
 	var gc gatewayv1.GatewayClass
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, &gc); err != nil {
+		GinkgoWriter.Printf("ERROR getting GatewayClass %s: %v\n", gatewayClassName, err)
+
 		return err
 	}
 
 	for _, cond := range gc.Status.Conditions {
+		GinkgoWriter.Printf(
+			"GatewayClass condition: Type=%s, Status=%s. Expected condition: Type=%s, Status=%s\n",
+			cond.Type,
+			cond.Status,
+			string(conditions.GatewayClassResolvedRefs),
+			metav1.ConditionTrue,
+		)
 		if cond.Type == string(conditions.GatewayClassResolvedRefs) && cond.Status == metav1.ConditionTrue {
+			GinkgoWriter.Println("Success: GatewayClass ResolvedRefs condition is True\n")
 			return nil
 		}
 	}
+	statusErr := errors.New("ResolvedRefs status not set to true on GatewayClass")
+	GinkgoWriter.Printf("ERROR: %v\n", statusErr)
 
-	return errors.New("ResolvedRefs status not set to true on GatewayClass")
+	return statusErr
 }
 
 func verifyPolicyStatus() error {
+	GinkgoWriter.Println("Verifying ObservabilityPolicy status\n")
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
 	defer cancel()
 
 	var pol ngfAPIv1alpha2.ObservabilityPolicy
 	key := types.NamespacedName{Name: "test-observability-policy", Namespace: "helloworld"}
 	if err := k8sClient.Get(ctx, key, &pol); err != nil {
+		GinkgoWriter.Printf("ERROR getting ObservabilityPolicy %q in namespace %q: %v\n", key.Name, key.Namespace, err)
+
 		return err
 	}
 
@@ -264,7 +288,14 @@ func verifyPolicyStatus() error {
 	}
 
 	if count != len(pol.Status.Ancestors) {
-		return fmt.Errorf("Policy not accepted; expected %d accepted conditions, got %d", len(pol.Status.Ancestors), count)
+		acceptedConditionsErr := fmt.Errorf(
+			"Policy not accepted; expected %d accepted conditions, got %d",
+			len(pol.Status.Ancestors),
+			count,
+		)
+		GinkgoWriter.Printf("ERROR: %v\n", acceptedConditionsErr)
+
+		return acceptedConditionsErr
 	}
 
 	return nil

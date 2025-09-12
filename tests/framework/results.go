@@ -21,6 +21,12 @@ func CreateResultsDir(testName, version string) (string, error) {
 
 	dirName := filepath.Join(filepath.Dir(pwd), "results", testName, version)
 
+	if _, err := os.Stat(dirName); err == nil {
+		if err := os.RemoveAll(dirName); err != nil {
+			return "", fmt.Errorf("failed to remove existing directory %s: %w", dirName, err)
+		}
+	}
+
 	return dirName, os.MkdirAll(dirName, 0o777)
 }
 

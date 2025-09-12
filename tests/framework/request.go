@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
 )
 
 // Get sends a GET request to the specified url.
@@ -20,9 +22,22 @@ func Get(
 	url, address string,
 	timeout time.Duration,
 	headers, queryParams map[string]string,
+	opts ...Option,
 ) (int, string, error) {
-	resp, err := makeRequest(http.MethodGet, url, address, nil, timeout, headers, queryParams)
+	options := &Options{logEnabled: true}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	resp, err := makeRequest(http.MethodGet, url, address, nil, timeout, headers, queryParams, opts...)
 	if err != nil {
+		if options.logEnabled {
+			GinkgoWriter.Printf(
+				"ERROR occurred during getting response, error: %s\nReturning status: 0, body: ''\n",
+				err,
+			)
+		}
+
 		return 0, "", err
 	}
 	defer resp.Body.Close()
@@ -30,7 +45,11 @@ func Get(
 	body := new(bytes.Buffer)
 	_, err = body.ReadFrom(resp.Body)
 	if err != nil {
+		GinkgoWriter.Printf("ERROR in Body content: %v returning body: ''\n", err)
 		return resp.StatusCode, "", err
+	}
+	if options.logEnabled {
+		GinkgoWriter.Printf("Successfully received response and parsed body: %s\n", body.String())
 	}
 
 	return resp.StatusCode, body.String(), nil
@@ -44,7 +63,12 @@ func Post(
 	timeout time.Duration,
 	headers, queryParams map[string]string,
 ) (*http.Response, error) {
-	return makeRequest(http.MethodPost, url, address, body, timeout, headers, queryParams)
+	response, err := makeRequest(http.MethodPost, url, address, body, timeout, headers, queryParams)
+	if err != nil {
+		GinkgoWriter.Printf("ERROR occurred during getting response, error: %s\n", err)
+	}
+
+	return response, err
 }
 
 func makeRequest(
@@ -52,6 +76,7 @@ func makeRequest(
 	body io.Reader,
 	timeout time.Duration,
 	headers, queryParams map[string]string,
+	opts ...Option,
 ) (*http.Response, error) {
 	dialer := &net.Dialer{}
 
@@ -73,6 +98,23 @@ func makeRequest(
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	options := &Options{logEnabled: true}
+
+	for _, opt := range opts {
+		opt(options)
+	}
+	if options.logEnabled {
+		requestDetails := fmt.Sprintf(
+			"Method: %s, URL: %s, Address: %s, Headers: %v, QueryParams: %v\n",
+			strings.ToUpper(method),
+			url,
+			address,
+			headers,
+			queryParams,
+		)
+		GinkgoWriter.Printf("Sending request: %s", requestDetails)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {

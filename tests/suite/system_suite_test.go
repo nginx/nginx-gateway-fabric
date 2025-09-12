@@ -193,6 +193,7 @@ func setUpPortForward(nginxPodName, nginxNamespace string) {
 	var err error
 
 	if *serviceType != "LoadBalancer" {
+		GinkgoWriter.Printf("Service Type: %s\n", *serviceType)
 		ports := []string{fmt.Sprintf("%d:80", ngfHTTPForwardedPort), fmt.Sprintf("%d:443", ngfHTTPSForwardedPort)}
 		portForwardStopCh = make(chan struct{})
 		err = framework.PortForward(resourceManager.K8sConfig, nginxNamespace, nginxPodName, ports, portForwardStopCh)
@@ -200,6 +201,7 @@ func setUpPortForward(nginxPodName, nginxNamespace string) {
 		portFwdPort = ngfHTTPForwardedPort
 		portFwdHTTPSPort = ngfHTTPSForwardedPort
 	} else {
+		GinkgoWriter.Printf("Service Type: LoadBalancer\n")
 		address, err = resourceManager.GetLBIPAddress(nginxNamespace)
 	}
 	Expect(err).ToNot(HaveOccurred())
@@ -208,6 +210,7 @@ func setUpPortForward(nginxPodName, nginxNamespace string) {
 // cleanUpPortForward closes the port forward channel and needs to be called before deleting any gateways or else
 // the logs will be flooded with port forward errors.
 func cleanUpPortForward() {
+	GinkgoWriter.Printf("Cleaning up port forward\n")
 	if portFwdPort != 0 {
 		close(portForwardStopCh)
 		portFwdPort = 0
@@ -216,6 +219,7 @@ func cleanUpPortForward() {
 }
 
 func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framework.InstallationConfig {
+	GinkgoWriter.Printf("Creating NGF installation config\n")
 	installCfg := framework.InstallationConfig{
 		ReleaseName:       cfg.releaseName,
 		Namespace:         ngfNamespace,
@@ -229,6 +233,7 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 	switch {
 	// if we aren't installing from the public charts, then set the custom images
 	case !strings.HasPrefix(cfg.chartPath, "oci://"):
+		GinkgoWriter.Printf("Chart path doesn't have prefix 'oci://'\n")
 		installCfg.NgfImageRepository = *ngfImageRepository
 		installCfg.NginxImageRepository = *nginxImageRepository
 		if *plusEnabled && cfg.nfr {
@@ -237,6 +242,7 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		installCfg.ImageTag = *imageTag
 		installCfg.ImagePullPolicy = *imagePullPolicy
 	case version == "edge":
+		GinkgoWriter.Printf("Using NGF image repository %q with version 'edge'\n", *ngfImageRepository)
 		chartVersion = "0.0.0-edge"
 		installCfg.ChartVersion = chartVersion
 		if *plusEnabled && cfg.nfr {
