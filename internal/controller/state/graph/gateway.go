@@ -179,6 +179,8 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]con
 		conds = append(conds, conditions.NewGatewayInvalid("GatewayClass is invalid")...)
 	}
 
+	// Set the unaccepted conditions here, because those make the gateway invalid. We set the unprogrammed conditions
+	// elsewhere, because those do not make the gateway invalid.
 	for _, address := range gw.Spec.Addresses {
 		if address.Type == nil {
 			conds = append(conds, conditions.NewGatewayUnsupportedAddress("AddressType must be specified"))

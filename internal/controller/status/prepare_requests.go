@@ -335,6 +335,8 @@ func prepareGatewayRequest(
 		)
 	}
 
+	// Set the unprogrammed conditions here, because those do not make the gateway invalid.
+	// We set the unaccepted conditions elsewhere, because those do make the gateway invalid.
 	for _, address := range gateway.Source.Spec.Addresses {
 		if address.Value == "" {
 			gwConds = append(gwConds, conditions.NewGatewayAddressNotAssigned("Dynamically assigned addresses for the "+
