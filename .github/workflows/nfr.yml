@@ -145,22 +145,25 @@ jobs:
           PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: echo "${PLUS_LICENSE}" > license.jwt
 
-      - name: TMP Cleanup conflicting subnet
+      - name: TMP Cleanup conflicting resources
         working-directory: ./tests
         run: |
-          bash scripts/cleanup-vm.sh true
+          echo "tmp delete conflicting subnet"
+          gcloud compute addresses delete gk3-nfr-tests-17637219369-oss-b6387c3a-d2289ac6-pe --region=us-west1 --project=${{ secrets.GCP_PROJECT_ID }} --quiet || true
+          gcloud compute networks subnets delete gke-nfr-tests-17637219369-oss-acf63488-pe-subnet --region=us-west1 --quiet || true
+          rm -rf scripts/vars.env
 
-      - name: Create GKE cluster
-        working-directory: ./tests
-        run: make create-gke-cluster CI=true
+      # - name: Create GKE cluster
+      #   working-directory: ./tests
+      #   run: make create-gke-cluster CI=true
 
-      - name: Create and setup VM
-        working-directory: ./tests
-        run: make create-and-setup-vm
+      # - name: Create and setup VM
+      #   working-directory: ./tests
+      #   run: make create-and-setup-vm
 
-      - name: Create and setup Router
-        working-directory: ./tests
-        run: make create-gke-router || true
+      # - name: Create and setup Router
+      #   working-directory: ./tests
+      #   run: make create-gke-router || true
 
       # - name: Run Tests
       #   working-directory: ./tests
@@ -177,14 +180,14 @@ jobs:
       #     name: results-${{ matrix.type }}
       #     path: tests/results/**/*-${{ matrix.type }}.*
 
-      - name: Cleanup
-        working-directory: ./tests
-        if: always()
-        run: |
-          bash scripts/cleanup-vm.sh true
-          bash scripts/cleanup-router.sh true
-          make delete-gke-cluster
-          rm -rf scripts/vars.env
+      # - name: Cleanup
+      #   working-directory: ./tests
+      #   if: always()
+      #   run: |
+      #     # bash scripts/cleanup-vm.sh true
+      #     # bash scripts/cleanup-router.sh true
+      #     # make delete-gke-cluster
+      #     # rm -rf scripts/vars.env
 
   pr-results:
     name: Open PR with results
