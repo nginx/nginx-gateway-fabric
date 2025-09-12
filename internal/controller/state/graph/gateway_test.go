@@ -1984,7 +1984,7 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 			refGrants: map[types.NamespacedName]*v1beta1.ReferenceGrant{
 				{Namespace: "diff-ns", Name: "allow-secret-diff-ns"}: {
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "test-gateway",
+						Namespace: "diff-ns",
 						Name:      "allow-secret-diff-ns",
 					},
 					Spec: v1beta1.ReferenceGrantSpec{
