@@ -55,13 +55,14 @@ func executeEventsConfig(conf dataplane.Configuration) []executeResult {
 }
 
 type mgmtConf struct {
-	Endpoint          string
-	Resolver          string
-	LicenseTokenFile  string
-	CACertFile        string
-	ClientSSLCertFile string
-	ClientSSLKeyFile  string
-	SkipVerify        bool
+	Endpoint             string
+	Resolver             string
+	LicenseTokenFile     string
+	CACertFile           string
+	ClientSSLCertFile    string
+	ClientSSLKeyFile     string
+	SkipVerify           bool
+	EnforceInitialReport bool
 }
 
 // generateMgmtFiles generates the NGINX Plus configuration file for the mgmt block. As part of this,
@@ -88,10 +89,11 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 	files := []agent.File{tokenFile}
 
 	cfg := mgmtConf{
-		Endpoint:         g.usageReportConfig.Endpoint,
-		Resolver:         g.usageReportConfig.Resolver,
-		LicenseTokenFile: tokenFile.Meta.Name,
-		SkipVerify:       g.usageReportConfig.SkipVerify,
+		Endpoint:             g.usageReportConfig.Endpoint,
+		Resolver:             g.usageReportConfig.Resolver,
+		LicenseTokenFile:     tokenFile.Meta.Name,
+		SkipVerify:           g.usageReportConfig.SkipVerify,
+		EnforceInitialReport: g.usageReportConfig.EnforceInitialReport,
 	}
 
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportCACertificate]; ok {

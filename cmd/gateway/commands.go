@@ -58,31 +58,32 @@ func createRootCommand() *cobra.Command {
 func createControllerCommand() *cobra.Command {
 	// flag names
 	const (
-		configFlag                        = "config"
-		serviceFlag                       = "service"
-		agentTLSSecretFlag                = "agent-tls-secret"
-		nginxOneDataplaneKeySecretFlag    = "nginx-one-dataplane-key-secret" //nolint:gosec // not credentials
-		nginxOneTelemetryEndpointHostFlag = "nginx-one-telemetry-endpoint-host"
-		nginxOneTelemetryEndpointPortFlag = "nginx-one-telemetry-endpoint-port"
-		nginxOneTLSSkipVerifyFlag         = "nginx-one-tls-skip-verify"
-		metricsDisableFlag                = "metrics-disable"
-		metricsSecureFlag                 = "metrics-secure-serving"
-		metricsPortFlag                   = "metrics-port"
-		healthDisableFlag                 = "health-disable"
-		healthPortFlag                    = "health-port"
-		leaderElectionDisableFlag         = "leader-election-disable"
-		leaderElectionLockNameFlag        = "leader-election-lock-name"
-		productTelemetryDisableFlag       = "product-telemetry-disable"
-		gwAPIExperimentalFlag             = "gateway-api-experimental-features"
-		nginxDockerSecretFlag             = "nginx-docker-secret" //nolint:gosec // not credentials
-		usageReportSecretFlag             = "usage-report-secret"
-		usageReportEndpointFlag           = "usage-report-endpoint"
-		usageReportResolverFlag           = "usage-report-resolver"
-		usageReportSkipVerifyFlag         = "usage-report-skip-verify"
-		usageReportClientSSLSecretFlag    = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
-		usageReportCASecretFlag           = "usage-report-ca-secret"         //nolint:gosec // not credentials
-		snippetsFiltersFlag               = "snippets-filters"
-		nginxSCCFlag                      = "nginx-scc"
+		configFlag                          = "config"
+		serviceFlag                         = "service"
+		agentTLSSecretFlag                  = "agent-tls-secret"
+		nginxOneDataplaneKeySecretFlag      = "nginx-one-dataplane-key-secret" //nolint:gosec // not credentials
+		nginxOneTelemetryEndpointHostFlag   = "nginx-one-telemetry-endpoint-host"
+		nginxOneTelemetryEndpointPortFlag   = "nginx-one-telemetry-endpoint-port"
+		nginxOneTLSSkipVerifyFlag           = "nginx-one-tls-skip-verify"
+		metricsDisableFlag                  = "metrics-disable"
+		metricsSecureFlag                   = "metrics-secure-serving"
+		metricsPortFlag                     = "metrics-port"
+		healthDisableFlag                   = "health-disable"
+		healthPortFlag                      = "health-port"
+		leaderElectionDisableFlag           = "leader-election-disable"
+		leaderElectionLockNameFlag          = "leader-election-lock-name"
+		productTelemetryDisableFlag         = "product-telemetry-disable"
+		gwAPIExperimentalFlag               = "gateway-api-experimental-features"
+		nginxDockerSecretFlag               = "nginx-docker-secret" //nolint:gosec // not credentials
+		usageReportSecretFlag               = "usage-report-secret"
+		usageReportEndpointFlag             = "usage-report-endpoint"
+		usageReportResolverFlag             = "usage-report-resolver"
+		usageReportSkipVerifyFlag           = "usage-report-skip-verify"
+		usageReportClientSSLSecretFlag      = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
+		usageReportCASecretFlag             = "usage-report-ca-secret"         //nolint:gosec // not credentials
+		snippetsFiltersFlag                 = "snippets-filters"
+		nginxSCCFlag                        = "nginx-scc"
+		usageReportEnforceInitialReportFlag = "usage-report-enforce-initial-report"
 	)
 
 	// flag values
@@ -165,6 +166,7 @@ func createControllerCommand() *cobra.Command {
 		usageReportCASecretName = stringValidatingValue{
 			validator: validateResourceName,
 		}
+		usageReportEnforceInitialReport bool
 	)
 
 	cmd := &cobra.Command{
@@ -218,12 +220,13 @@ func createControllerCommand() *cobra.Command {
 
 			if plus {
 				usageReportConfig = config.UsageReportConfig{
-					SecretName:          usageReportSecretName.value,
-					ClientSSLSecretName: usageReportClientSSLSecretName.value,
-					CASecretName:        usageReportCASecretName.value,
-					Endpoint:            usageReportEndpoint.value,
-					Resolver:            usageReportResolver.value,
-					SkipVerify:          usageReportSkipVerify,
+					SecretName:           usageReportSecretName.value,
+					ClientSSLSecretName:  usageReportClientSSLSecretName.value,
+					CASecretName:         usageReportCASecretName.value,
+					Endpoint:             usageReportEndpoint.value,
+					Resolver:             usageReportResolver.value,
+					SkipVerify:           usageReportSkipVerify,
+					EnforceInitialReport: usageReportEnforceInitialReport,
 				}
 			}
 
@@ -486,6 +489,13 @@ func createControllerCommand() *cobra.Command {
 		nginxSCCFlag,
 		`The name of the SecurityContextConstraints to be used with the NGINX data plane Pods.`+
 			` Only applicable in OpenShift.`,
+	)
+
+	cmd.Flags().BoolVar(
+		&usageReportEnforceInitialReport,
+		usageReportEnforceInitialReportFlag,
+		false,
+		"Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.",
 	)
 
 	return cmd
