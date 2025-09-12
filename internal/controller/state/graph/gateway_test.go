@@ -1121,30 +1121,6 @@ func TestBuildGateway(t *testing.T) {
 			name: "port/protocol collisions",
 		},
 		{
-			gateway: createGateway(
-				gatewayCfg{
-					name:      "gateway1",
-					listeners: []v1.Listener{foo80Listener1, foo443HTTPSListener1},
-					addresses: []v1.GatewaySpecAddress{{}},
-				},
-			),
-			gatewayClass: validGC,
-			expected: map[types.NamespacedName]*Gateway{
-				{Namespace: "test", Name: "gateway1"}: {
-					Source: getLastCreatedGateway(),
-					DeploymentName: types.NamespacedName{
-						Namespace: "test",
-						Name:      controller.CreateNginxResourceName("gateway1", gcName),
-					},
-					Valid: false,
-					Conditions: conditions.NewGatewayUnsupportedValue("spec." +
-						"addresses: Forbidden: addresses are not supported",
-					),
-				},
-			},
-			name: "gateway addresses are not supported",
-		},
-		{
 			gateway:  nil,
 			expected: nil,
 			name:     "nil gateway",
@@ -1483,6 +1459,59 @@ func TestBuildGateway(t *testing.T) {
 				},
 			},
 			name: "invalid gatewayclass and invalid NginxProxy",
+		},
+		{
+			name: "invalid gateway; gateway addresses type unspecified",
+			gateway: createGateway(gatewayCfg{
+				name:      "gateway-addr-unspecified",
+				listeners: []v1.Listener{foo80Listener1},
+				addresses: []v1.GatewaySpecAddress{
+					{
+						Value: "198.0.0.1",
+					},
+				},
+			}),
+			gatewayClass: validGC,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway-addr-unspecified"}: {
+					Source: getLastCreatedGateway(),
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway-addr-unspecified", gcName),
+					},
+					Valid: false,
+					Conditions: []conditions.Condition{
+						conditions.NewGatewayUnsupportedAddress("AddressType must be specified"),
+					},
+				},
+			},
+		},
+		{
+			name: "invalid gateway; gateway addresses type unsupported",
+			gateway: createGateway(gatewayCfg{
+				name:      "gateway-addr-unsupported",
+				listeners: []v1.Listener{foo80Listener1},
+				addresses: []v1.GatewaySpecAddress{
+					{
+						Type:  helpers.GetPointer(v1.HostnameAddressType),
+						Value: "example.com",
+					},
+				},
+			}),
+			gatewayClass: validGC,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: "test", Name: "gateway-addr-unsupported"}: {
+					Source: getLastCreatedGateway(),
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway-addr-unsupported", gcName),
+					},
+					Valid: false,
+					Conditions: []conditions.Condition{
+						conditions.NewGatewayUnsupportedAddress("Only AddressType IPAddress is supported"),
+					},
+				},
+			},
 		},
 	}
 

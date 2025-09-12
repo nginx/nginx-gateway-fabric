@@ -179,11 +179,14 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]con
 		conds = append(conds, conditions.NewGatewayInvalid("GatewayClass is invalid")...)
 	}
 
-	if len(gw.Spec.Addresses) > 0 {
-		path := field.NewPath("spec", "addresses")
-		valErr := field.Forbidden(path, "addresses are not supported")
-
-		conds = append(conds, conditions.NewGatewayUnsupportedValue(valErr.Error())...)
+	// Set the unaccepted conditions here, because those make the gateway invalid. We set the unprogrammed conditions
+	// elsewhere, because those do not make the gateway invalid.
+	for _, address := range gw.Spec.Addresses {
+		if address.Type == nil {
+			conds = append(conds, conditions.NewGatewayUnsupportedAddress("AddressType must be specified"))
+		} else if *address.Type != v1.IPAddressType {
+			conds = append(conds, conditions.NewGatewayUnsupportedAddress("Only AddressType IPAddress is supported"))
+		}
 	}
 
 	// we evaluate validity before validating parametersRef because an invalid parametersRef/NginxProxy does not
