@@ -47,7 +47,6 @@ gcloud compute instances create "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --
 # Add VM IP to GKE master control node access, if required
 if [ "${ADD_VM_IP_AUTH_NETWORKS}" = "true" ]; then
 
-    echo "IPv6 is not enabled, fetching the external IPv4 address"
     EXTERNAL_IP=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
         --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
 
