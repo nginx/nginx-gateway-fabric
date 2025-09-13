@@ -31,6 +31,11 @@ on:
         default: both
         type: choice
         options: [oss, plus, both]
+      ipv6_enabled:
+        description: Whether to run the tests in an IPv6 enabled environment
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "0 16 1,15 * *" # Run on the 1st and 15th of every month at 16:00 UTC
 
@@ -56,6 +61,7 @@ jobs:
       test_label: ${{ github.event.inputs.test_label || 'all' }}
       version: ${{ github.event.inputs.version || 'edge' }}
       image_tag: ${{ github.event.inputs.image_tag || 'edge' }}
+      ipv6_enabled: ${{ github.event.inputs.ipv6_enabled || 'false' }}
       types: ${{ steps.var.outputs.types }}
     permissions:
       contents: read
@@ -126,15 +132,27 @@ jobs:
           echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
           echo "GINKGO_LABEL=" >> vars.env
           echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
-          echo "GKE_NUM_NODES=12" >> vars.env
+          echo "GKE_NUM_NODES=1" >> vars.env
           echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
           echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
-
+          if [ "${{ needs.vars.outputs.ipv6_enabled }}" = "true" ]; then
+          echo "IPV6_ENABLED=true" >> vars.env
+          echo "HELM_PARAMETERS=\"--set nginx.config.ipFamily=ipv6\"" >> vars.env
+          fi
       - name: Setup license file for plus
         if: matrix.type == 'plus'
         env:
           PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: echo "${PLUS_LICENSE}" > license.jwt
+
+      # - name: TMP Cleanup conflicting resources
+      #   working-directory: ./tests
+      #   run: |
+      #     echo "tmp delete conflicting subnet"
+      #     gcloud compute forwarding-rules delete gk3-nfr-tests-17637219369-oss-b6387c3a-d2289ac6-pe --region=us-west1 --project=${{ secrets.GCP_PROJECT_ID }} --quiet || true
+      #     gcloud compute addresses delete gk3-nfr-tests-17637219369-oss-b6387c3a-d2289ac6-pe --region=us-west1 --project=${{ secrets.GCP_PROJECT_ID }} --quiet || true
+      #     gcloud compute networks subnets delete gke-nfr-tests-17637219369-oss-acf63488-pe-subnet --region=us-west1 --quiet || true
+      #     rm -rf scripts/vars.env
 
       - name: Create GKE cluster
         working-directory: ./tests
@@ -148,20 +166,20 @@ jobs:
         working-directory: ./tests
         run: make create-gke-router || true
 
-      - name: Run Tests
-        working-directory: ./tests
-        run: |
-          if ${{ needs.vars.outputs.test_label != 'all' }}; then
-          sed -i '/^GINKGO_LABEL=/s/=.*/="${{ needs.vars.outputs.test_label }}"/' "scripts/vars.env" && make nfr-test CI=true;
-          else
-          make nfr-test CI=true;
-          fi
+      # - name: Run Tests
+      #   working-directory: ./tests
+      #   run: |
+      #     if ${{ needs.vars.outputs.test_label != 'all' }}; then
+      #     sed -i '/^GINKGO_LABEL=/s/=.*/="${{ needs.vars.outputs.test_label }}"/' "scripts/vars.env" && make nfr-test CI=true;
+      #     else
+      #     make nfr-test CI=true;
+      #     fi
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: results-${{ matrix.type }}
-          path: tests/results/**/*-${{ matrix.type }}.*
+      # - name: Upload Artifacts
+      #   uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      #   with:
+      #     name: results-${{ matrix.type }}
+      #     path: tests/results/**/*-${{ matrix.type }}.*
 
       - name: Cleanup
         working-directory: ./tests

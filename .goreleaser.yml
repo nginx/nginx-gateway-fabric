@@ -1,4 +1,5 @@
 version: 2
+project_name: nginx-gateway-fabric
 env:
   - CGO_ENABLED=0
 
