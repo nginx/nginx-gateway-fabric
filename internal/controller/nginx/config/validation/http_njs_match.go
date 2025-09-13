@@ -15,20 +15,6 @@ import (
 // so changes to the implementation change the validation rules here.
 type HTTPNJSMatchValidator struct{}
 
-// ValidatePathInMatch a path used in the location directive.
-func (HTTPNJSMatchValidator) ValidatePathInMatch(path string) error {
-	if path == "" {
-		return errors.New("cannot be empty")
-	}
-
-	if !pathRegexp.MatchString(path) {
-		msg := k8svalidation.RegexError(pathErrMsg, pathFmt, pathExamples...)
-		return errors.New(msg)
-	}
-
-	return nil
-}
-
 func (HTTPNJSMatchValidator) ValidateHeaderNameInMatch(name string) error {
 	if err := k8svalidation.IsHTTPHeaderName(name); err != nil {
 		return errors.New(err[0])

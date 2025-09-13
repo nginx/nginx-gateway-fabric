@@ -548,8 +548,8 @@ func TestConvertPathType(t *testing.T) {
 			pathType: v1.PathMatchExact,
 		},
 		{
+			expected: PathTypeRegularExpression,
 			pathType: v1.PathMatchRegularExpression,
-			panic:    true,
 		},
 	}
 
