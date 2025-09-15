@@ -228,7 +228,6 @@ jobs:
           # Install with IPv6-specific configuration
           # HELM_PARAMETERS="--set nginx.config.ipFamily=ipv6 --set nginx.service.type=ClusterIP" \
           # make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
-          helm upgrade --install ngf oci://${ngf_prefix}/${ngf_tag} --create-namespace -n nginx-gateway --set nginx.config.ipFamily=ipv6 --set nginx.service.type=ClusterIP
         working-directory: ./tests
 
       - name: Deploy Test Applications
