@@ -57,81 +57,6 @@ The Go application could be built into the existing `nginx-gateway` binary, and 
 
 See the [Alternatives section](#alternatives) for a future improvement to this workflow.
 
-### Model Name extraction
-
-When a client sends a request to an AI workload, the desired model name (e.g. gpt-4o, llama, etc.) is included in the request body.
-
-By default, the EPP gets the model name from the request body, and then picks the proper endpoint for that model name. However, the model name could also be provided via header (`X-Gateway-Model-Name`). For example, a user could specify a desire for a traffic split or model name redirect, and therefore NGINX would need to change the model name by setting the header.
-
-Example that redirects requests to model name `food-review` to `food-review-v1`:
-
-```yaml
-kind: HTTPRoute
-apiVersion: gateway.networking.k8s.io/v1
-metadata:
-  name: my-route
-spec:
-  parentRefs:
-    - name: my-inference-gateway
-  rules:
-  - matches:
-    - headers:
-      - type: Exact
-        name: X-Gateway-Model-Name
-        value: food-review
-    backendRefs:
-    - name: vllm-llama3-8b-instruct
-      kind: InferencePool
-      group: inference.networking.x-k8s.io
-      - filters:
-        - type: RequestHeaderModifier
-          requestHeaderModifier:
-            set:
-            - name: X-Gateway-Model-Name
-              value: food-review-v1
-```
-
-Example with traffic splitting:
-
-```yaml
-kind: HTTPRoute
-apiVersion: gateway.networking.k8s.io/v1
-metadata:
-  name: my-route
-spec:
-  parentRefs:
-    - name: my-inference-gateway
-  rules:
-  - matches:
-    - headers:
-      - type: Exact
-        name: X-Gateway-Model-Name
-        value: food-review
-    backendRefs:
-    - name: vllm-llama3-8b-instruct
-      kind: InferencePool
-      group: inference.networking.x-k8s.io
-      weight: 90
-      - filters:
-        - type: RequestHeaderModifier
-          requestHeaderModifier:
-            set:
-            - name: X-Gateway-Model-Name
-              value: food-review-v1
-    - name: vllm-llama3-8b-instruct
-      kind: InferencePool
-      group: inference.networking.x-k8s.io
-      weight: 10
-      - filters:
-        - type: RequestHeaderModifier
-          requestHeaderModifier:
-            set:
-            - name: X-Gateway-Model-Name
-              value: food-review-v2
-```
-
-In both cases, NGINX would need to extract the model name from the request body. This will probably require an NJS module. If that model name matches the condition set in the Route, then NGINX sets the header appropriately when sending the request to the EPP. For the redirect example, NGINX would set the header to `food-review-v1`. For the traffic splitting example, NGINX would set the header to either `food-review-v1` or `food-review-v2` depending on the weighted traffic decision.
-
 ### Managing InferencePools
 
 By default, the EPP should know which endpoints are a part of an InferencePool, and then pick the correct endpoint to send to. This means that NGINX does not need to have an upstream for the AI workload servers, since it just gets the endpoint it needs to send to from the EPP.
@@ -140,7 +65,9 @@ However, there could still be a valid use case for NGF to track and configure NG
 
 Because of this, NGF should watch the endpoints associated with an InferencePool, and create an upstream. One way to accomplish this is for NGF to create a Headless "shadow" Service that encompasses those endpoints. By defining this Service, NGF can use all of its existing Service/EndpointSlice logic to build the upstreams as if it was a normal Service.
 
-**The main point of concern with this is how can we fallback to use the upstream servers if the EPP is unavailable to give us an endpoint?** This may have to be discovered during implementation.
+#### Status
+
+Status conditions also need to be set on the InferencePool resources, per the API spec requirements and recommendations.
 
 ### Flow Diagram
 
@@ -233,4 +160,3 @@ If this Inference Extension feature gains traction and usage, it could be worth 
 - [API specification](https://gateway-api-inference-extension.sigs.k8s.io/reference/spec/)
 - [Endpoint Picker](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp)
 - [Endpoint Picker and InferencePool Helm Chart](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/config/charts/inferencepool)
-- [Traffic splitting/redirect doc](https://docs.google.com/document/d/1s4U4T_cjQkk4UeIDyAJl2Ox6FZoBigXBXn9Ai0qV7As/edit?tab=t.0#heading=h.9re863ochpnv)
