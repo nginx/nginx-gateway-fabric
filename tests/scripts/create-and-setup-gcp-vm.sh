@@ -16,8 +16,16 @@ source scripts/vars.env
 # For IPv6, we create a dual-stack subnet with internal IPv6 addresses and external IPv4 addresses
 if [ "${IPV6_ENABLED}" = "true" ]; then
     echo "Using IPv6 Network interface for the GKE cluster"
+    # gcloud compute networks create ${RESOURCE_NAME} --subnet-mode=custom --enable-ula-internal-ipv6 --quiet # The --subnet-mode=custom flag allows us to create custom subnets
 
-    NETWORK="v4-v6"
+    # gcloud compute networks subnets create ${RESOURCE_NAME} \
+    #     --network=${RESOURCE_NAME} \
+    #     --stack-type=IPV4_IPV6 \
+    #     --ipv6-access-type=INTERNAL \
+    #     --region=${GKE_CLUSTER_REGION} \
+    #     --range=10.120.0.0/14
+
+    NETWORK="us-ipv4-ipv6"
     NETWORK_TIER="ipv6-network-tier=PREMIUM"
     STACK_TYPE="IPV4_IPV6"
 fi
