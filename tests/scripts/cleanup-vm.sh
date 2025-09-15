@@ -18,7 +18,7 @@ gcloud compute instances delete "${RESOURCE_NAME}" --quiet --project="${GKE_PROJ
 gcloud compute firewall-rules delete "${RESOURCE_NAME}" --quiet --project="${GKE_PROJECT}" || true
 
 # Clean up the custom network and subnet if IPv6 was enabled
-if [ "${IPV6_ENABLED}" = "true" ]; then
-    gcloud compute networks subnets delete ${RESOURCE_NAME} --region=${GKE_CLUSTER_REGION} --quiet || true
-    gcloud compute networks delete ${RESOURCE_NAME} --quiet || true
-fi
+# if [ "${IPV6_ENABLED}" = "true" ]; then
+#     gcloud compute networks subnets delete ${RESOURCE_NAME} --region=${GKE_CLUSTER_REGION} --quiet || true
+#     gcloud compute networks delete ${RESOURCE_NAME} --quiet || true
+# fi
