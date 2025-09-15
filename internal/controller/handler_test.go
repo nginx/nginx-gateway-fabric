@@ -528,7 +528,23 @@ var _ = Describe("eventHandler", func() {
 		poolUID1 := types.UID("uid1")
 		poolUID2 := types.UID("uid2")
 
-		fakeProcessor.ProcessReturns(&graph.Graph{
+		pool1 := &inference.InferencePool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      poolName1,
+				Namespace: namespace,
+				UID:       poolUID1,
+			},
+			Spec: inference.InferencePoolSpec{
+				Selector: inference.LabelSelector{
+					MatchLabels: map[inference.LabelKey]inference.LabelValue{"app": "foo"},
+				},
+				TargetPorts: []inference.Port{
+					{Number: 8081},
+				},
+			},
+		}
+
+		g := &graph.Graph{
 			Gateways: map[types.NamespacedName]*graph.Gateway{
 				{}: {
 					Source: &gatewayv1.Gateway{
@@ -541,23 +557,7 @@ var _ = Describe("eventHandler", func() {
 				},
 			},
 			ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
-				{Namespace: namespace, Name: poolName1}: {
-					Source: &inference.InferencePool{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      poolName1,
-							Namespace: namespace,
-							UID:       poolUID1,
-						},
-						Spec: inference.InferencePoolSpec{
-							Selector: inference.LabelSelector{
-								MatchLabels: map[inference.LabelKey]inference.LabelValue{"app": "foo"},
-							},
-							TargetPorts: []inference.Port{
-								{Number: 8081},
-							},
-						},
-					},
-				},
+				{Namespace: namespace, Name: poolName1}: {Source: pool1},
 				{Namespace: namespace, Name: poolName2}: {
 					Source: &inference.InferencePool{
 						ObjectMeta: metav1.ObjectMeta{
@@ -576,7 +576,9 @@ var _ = Describe("eventHandler", func() {
 					},
 				},
 			},
-		})
+		}
+
+		fakeProcessor.ProcessReturns(g)
 
 		e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
 		batch := []any{e}
@@ -608,6 +610,24 @@ var _ = Describe("eventHandler", func() {
 		Expect(svc2.OwnerReferences).To(HaveLen(1))
 		Expect(svc2.OwnerReferences[0].Name).To(Equal(poolName2))
 		Expect(svc2.OwnerReferences[0].UID).To(Equal(poolUID2))
+
+		// Now update pool1's selector and ensure the Service selector is updated
+		updatedSelector := map[inference.LabelKey]inference.LabelValue{"app": "baz"}
+		pool1.Spec.Selector.MatchLabels = updatedSelector
+
+		// Simulate the updated pool in the graph
+		g.ReferencedInferencePools[types.NamespacedName{Namespace: namespace, Name: poolName1}].Source = pool1
+		fakeProcessor.ProcessReturns(g)
+
+		e = &events.UpsertEvent{Resource: &inference.InferencePool{}}
+		batch = []any{e}
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+		// Check that the Service selector was updated
+		svc1 = &v1.Service{}
+		err = fakeK8sClient.Get(context.Background(), types.NamespacedName{Name: svcName1, Namespace: namespace}, svc1)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(svc1.Spec.Selector).To(HaveKeyWithValue("app", "baz"))
 	})
 
 	It("should panic for an unknown event type", func() {
