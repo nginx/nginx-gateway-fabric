@@ -17,6 +17,7 @@ source scripts/vars.env
 if [ "${IPV6_ENABLED}" = "true" ]; then
     echo "Creating IPv6 Network interface for the GKE cluster"
     gcloud compute networks create ${RESOURCE_NAME} --subnet-mode=custom --quiet # The --subnet-mode=custom flag allows us to create custom subnets
+    
     gcloud compute networks subnets create ${RESOURCE_NAME} \
         --network=${RESOURCE_NAME} \
         --stack-type=IPV4_IPV6 \

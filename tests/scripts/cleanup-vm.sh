@@ -13,12 +13,12 @@ if [ "${ADD_VM_IP_AUTH_NETWORKS}" = "true" ] && [ "${skip_gke_master_control_nod
     gcloud container clusters update "${GKE_CLUSTER_NAME}" --zone "${GKE_CLUSTER_ZONE}" --enable-master-authorized-networks --master-authorized-networks="${CURRENT_AUTH_NETWORK}"
 fi
 
-gcloud compute instances delete "${RESOURCE_NAME}" --quiet --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}"
+gcloud compute instances delete "${RESOURCE_NAME}" --quiet --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" || true
 
-gcloud compute firewall-rules delete "${RESOURCE_NAME}" --quiet --project="${GKE_PROJECT}"
+gcloud compute firewall-rules delete "${RESOURCE_NAME}" --quiet --project="${GKE_PROJECT}" || true
 
 # Clean up the custom network and subnet if IPv6 was enabled
 if [ "${IPV6_ENABLED}" = "true" ]; then
-    gcloud compute networks subnets delete ${RESOURCE_NAME} --region=${GKE_CLUSTER_REGION} --quiet
-    gcloud compute networks delete ${RESOURCE_NAME} --quiet
+    gcloud compute networks subnets delete ${RESOURCE_NAME} --region=${GKE_CLUSTER_REGION} --quiet || true
+    gcloud compute networks delete ${RESOURCE_NAME} --quiet || true
 fi
