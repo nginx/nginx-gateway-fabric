@@ -3,20 +3,6 @@ name: Non Functional Testing
 on:
   workflow_dispatch:
     inputs:
-      test_label:
-        description: NFR test to run. Choose between a specific test or all tests
-        required: true
-        default: all
-        type: choice
-        options:
-          [
-            performance,
-            upgrade,
-            scale,
-            zero-downtime-scale,
-            reconfiguration,
-            all,
-          ]
       version:
         description: Version of NGF under test
         required: true
@@ -31,14 +17,8 @@ on:
         default: both
         type: choice
         options: [oss, plus, both]
-      ipv6_enabled:
-        description: Whether to run the tests in an IPv6 enabled environment
-        required: false
-        default: false
-        type: boolean
   schedule:
     - cron: "0 16 1,15 * *" # Run on the 1st and 15th of every month at 16:00 UTC
-
 defaults:
   run:
     shell: bash
@@ -46,50 +26,21 @@ defaults:
 env:
   PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
 
-concurrency:
-  group: ${{ github.ref_name }}-nfr
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
 jobs:
-  vars:
-    name: Set up vars
+  ipv6-only-tests:
+    name: Run IPv6-Only Tests
     runs-on: ubuntu-24.04
-    outputs:
-      test_label: ${{ github.event.inputs.test_label || 'all' }}
-      version: ${{ github.event.inputs.version || 'edge' }}
-      image_tag: ${{ github.event.inputs.image_tag || 'edge' }}
-      ipv6_enabled: ${{ github.event.inputs.ipv6_enabled || 'false' }}
-      types: ${{ steps.var.outputs.types }}
-    permissions:
-      contents: read
-    steps:
-      - name: Set vars
-        id: var
-        run: |
-          if ${{ github.event.inputs.type == 'both' || github.event_name == 'schedule' }}; then
-          echo 'types=["oss","plus"]' >> $GITHUB_OUTPUT
-          else
-          echo 'types=["${{ github.event.inputs.type }}"]' >> $GITHUB_OUTPUT
-          fi
-
-  setup-and-run-tests:
-    name: Setup and Run NFR Tests
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write # needed for authenticating to GCP
-    needs: vars
-    strategy:
-      fail-fast: false
-      matrix:
-        type: ${{ fromJson(needs.vars.outputs.types) }}
+    if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
+    env:
+      DOCKER_BUILD_SUMMARY: false
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
+      ### Authenticate to GCP and set up gcloud, kubectl, and Docker
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
@@ -110,6 +61,7 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           install_components: kubectl
+      ###
 
       - name: Setup dotenv file
         working-directory: ./tests/scripts
@@ -134,11 +86,8 @@ jobs:
           echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
           echo "GKE_NUM_NODES=1" >> vars.env
           echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
-          echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
-          if [ "${{ needs.vars.outputs.ipv6_enabled }}" = "true" ]; then
           echo "IPV6_ENABLED=true" >> vars.env
-          echo "HELM_PARAMETERS=\"--set nginx.config.ipFamily=ipv6\"" >> vars.env
-          fi
+          echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
       - name: Setup license file for plus
         if: matrix.type == 'plus'
         env:
@@ -157,20 +106,181 @@ jobs:
         working-directory: ./tests
         run: make create-gke-router || true
 
-      - name: Run Tests
-        working-directory: ./tests
-        run: |
-          if ${{ needs.vars.outputs.test_label != 'all' }}; then
-          sed -i '/^GINKGO_LABEL=/s/=.*/="${{ needs.vars.outputs.test_label }}"/' "scripts/vars.env" && make nfr-test CI=true;
-          else
-          make nfr-test CI=true;
-          fi
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - name: Setup Golang Environment
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          name: results-${{ matrix.type }}
-          path: tests/results/**/*-${{ matrix.type }}.*
+          go-version: stable
+
+      - name: Set GOPATH
+        run: echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
+
+      - name: Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: NGF Docker meta
+        id: ngf-meta
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: |
+            name=ghcr.io/nginx/nginx-gateway-fabric
+          tags: |
+            type=semver,pattern={{version}}
+            type=schedule
+            type=edge
+            type=ref,event=pr
+            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
+
+      - name: NGINX Docker meta
+        id: nginx-meta
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: |
+            name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=edge
+            type=schedule
+            type=ref,event=pr
+            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
+
+      # - name: Build binary
+      #   uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+      #   with:
+      #     version: v2.11.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+      #     args: build --single-target --snapshot --clean
+      #   env:
+      #     TELEMETRY_ENDPOINT: otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317
+      #     TELEMETRY_ENDPOINT_INSECURE: "true"
+
+      # - name: Build NGF Docker Image
+      #   uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+      #   with:
+      #     file: build/Dockerfile
+      #     tags: ${{ steps.ngf-meta.outputs.tags }}
+      #     context: "."
+      #     load: true
+      #     cache-from: type=gha,scope=ngf-ipv6
+      #     pull: true
+      #     target: goreleaser
+
+      # - name: Build NGINX Docker Image
+      #   uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+      #   with:
+      #     file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || ''}}
+      #     tags: ${{ steps.nginx-meta.outputs.tags }}
+      #     context: "."
+      #     load: true
+      #     cache-from: type=gha,scope=${{ inputs.image }}-ipv6
+      #     pull: true
+      #     build-args: |
+      #       NJS_DIR=internal/controller/nginx/modules/src
+      #       NGINX_CONF_DIR=internal/controller/nginx/conf
+      #       BUILD_AGENT=gha
+
+      # - name: Deploy IPv6-Only Kubernetes
+      #   id: k8s
+      #   run: |
+      #     # Enable IPv6 and container network options
+      #     sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0
+      #     sudo sysctl -w net.ipv6.conf.all.forwarding=1
+
+      #     # Create IPv6-only kind cluster
+      #     kind create cluster \
+      #     --name ${{ github.run_id }}-ipv6 \
+      #     --image=kindest/node:${{ inputs.k8s-version }} \
+      #     --config=config/cluster/kind-cluster-ipv6-only.yaml
+
+      #     # Load images into the cluster
+      #     kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}-ipv6
+
+      - name: Install NGF with IPv6 Configuration
+        run: |
+          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
+          ngf_tag=${{ steps.ngf-meta.outputs.version }}
+
+          # Install with IPv6-specific configuration
+          HELM_PARAMETERS="--set nginx.config.ipFamily=ipv6 --set nginx.service.type=ClusterIP" \
+          make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
+        working-directory: ./tests
+
+      - name: Deploy Test Applications
+        run: |
+          kubectl apply -f tests/manifests/ipv6-test-app.yaml
+
+      - name: Wait for NGF and Applications to be Ready
+        run: |
+          echo "Waiting for NGF to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment/nginx-gateway -n nginx-gateway
+
+          echo "Waiting for test applications to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment/test-app-ipv6
+
+      - name: Deploy IPv6 Test Client
+        run: |
+          kubectl apply -f tests/manifests/test-client-ipv6.yaml
+          kubectl wait --for=condition=ready --timeout=300s pod/ipv6-test-client
+
+      - name: Get NGF IPv6 Address
+        id: ngf-address
+        run: |
+          # Get the NGF service IPv6 address
+          NGF_IPV6=$(kubectl get service nginx-gateway -n nginx-gateway -o jsonpath='{.spec.clusterIP}')
+          echo "NGF IPv6 Address: $NGF_IPV6"
+          echo "ngf_ipv6=$NGF_IPV6" >> $GITHUB_OUTPUT
+
+      - name: Run IPv6 Connectivity Tests
+        run: |
+          echo "=== Running IPv6-Only Tests ==="
+
+          # Test 1: Basic connectivity test using test client pod
+          echo "Test 1: Basic IPv6 connectivity"
+          kubectl exec ipv6-test-client -- curl --version
+          kubectl exec ipv6-test-client -- nslookup nginx-gateway.nginx-gateway.svc.cluster.local
+
+          # Test 2: Test NGF service directly via IPv6
+          echo "Test 2: NGF Service IPv6 connectivity"
+          kubectl exec ipv6-test-client -- curl -6 --connect-timeout 30 --max-time 60 -v \
+          -H "Host: ipv6-test.example.com" \
+          "http://[${{ steps.ngf-address.outputs.ngf_ipv6 }}]:80/" || echo "Direct NGF test failed"
+
+          # Test 3: Test via service DNS
+          echo "Test 3: Service DNS IPv6 connectivity"
+          kubectl exec ipv6-test-client -- curl -6 --connect-timeout 30 --max-time 60 -v \
+          -H "Host: ipv6-test.example.com" \
+          "http://nginx-gateway.nginx-gateway.svc.cluster.local:80/" || echo "Service DNS test failed"
+
+      - name: Validate IPv6-Only Configuration
+        run: |
+          echo "=== Validating IPv6-Only Configuration ==="
+
+          # Check NGF configuration
+          echo "NGF Pod IPv6 addresses:"
+          kubectl get pods -n nginx-gateway -o wide
+
+          echo "NGF Service configuration:"
+          kubectl get service nginx-gateway -n nginx-gateway -o yaml
+
+          echo "Gateway and HTTPRoute status:"
+          kubectl get gateway,httproute -A -o wide
+
+          echo "Test application service configuration:"
+          kubectl get service test-app-ipv6-service -o yaml
+
+      - name: Collect Logs
+        if: always()
+        run: |
+          echo "=== Collecting logs for debugging ==="
+          echo "NGF Controller logs:"
+          kubectl logs -n nginx-gateway deployment/nginx-gateway -c nginx-gateway-controller --tail=100 || true
+
+          echo "NGINX logs:"
+          kubectl logs -n nginx-gateway deployment/nginx-gateway -c nginx --tail=100 || true
+
+          echo "Test client logs:"
+          kubectl logs ipv6-test-client --tail=100 || true
+
+          echo "Cluster events:"
+          kubectl get events --sort-by='.lastTimestamp' --all-namespaces --tail=50 || true
 
       - name: Cleanup
         working-directory: ./tests
@@ -180,40 +290,3 @@ jobs:
           bash scripts/cleanup-router.sh true
           make delete-gke-cluster
           rm -rf scripts/vars.env
-
-  pr-results:
-    name: Open PR with results
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write # needed for opening PR with the results files
-      pull-requests: write # needed for opening PR with the results files
-    needs: [vars, setup-and-run-tests]
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
-        with:
-          path: tests/results/
-          merge-multiple: true
-
-      - name: Open a PR with the results
-        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: NFR Test Results for NGF version ${{ needs.vars.outputs.version }}
-          author: nginx-bot <integrations@nginx.com>
-          committer: nginx-bot <integrations@nginx.com>
-          branch: tests/nfr-tests-${{ needs.vars.outputs.version }}
-          delete-branch: true
-          title: NFR Test Results for NGF version ${{ needs.vars.outputs.version }}
-          add-paths: |
-            tests/results/
-          body: |
-            Update with NFR test results for NGF version ${{ needs.vars.outputs.version }} ${{ needs.vars.outputs.types }}
-            - Auto-generated by the NFR tests workflow run ${{ github.run_id }}
-            - Tests ran using Docker image tag ${{ needs.vars.outputs.image_tag }}
-            - ${{ needs.vars.outputs.test_label }} test(s) ran
-          assignees: ${{ github.actor }}
-          draft: ${{ github.event_name != 'schedule' }}
