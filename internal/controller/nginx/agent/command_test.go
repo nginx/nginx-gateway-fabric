@@ -340,24 +340,15 @@ func TestSubscribe(t *testing.T) {
 
 	mockServer := newMockSubscribeServer(ctx)
 
-	// put the requests on the listenCh for the Subscription loop to pick up
+	// Define the broadcast messages to be sent later
 	loopFile := &pb.File{
 		FileMeta: &pb.FileMeta{
 			Name: "some-other.conf",
 			Hash: "56789",
 		},
 	}
-	listenCh <- broadcast.NginxAgentMessage{
-		Type:          broadcast.ConfigApplyRequest,
-		FileOverviews: []*pb.File{loopFile},
-	}
-
 	loopAction := &pb.NGINXPlusAction{
 		Action: &pb.NGINXPlusAction_UpdateStreamServers{},
-	}
-	listenCh <- broadcast.NginxAgentMessage{
-		Type:            broadcast.APIRequest,
-		NGINXPlusAction: loopAction,
 	}
 
 	// start the Subscriber
@@ -365,6 +356,9 @@ func TestSubscribe(t *testing.T) {
 	go func() {
 		errCh <- cs.Subscribe(mockServer)
 	}()
+
+	// PHASE 1: Initial config is sent by setInitialConfig() BEFORE the event loop starts
+	// These should NOT signal ResponseCh as they're not broadcast operations
 
 	// ensure that the initial config file was sent when the Subscription connected
 	expFile := &pb.File{
@@ -374,6 +368,7 @@ func TestSubscribe(t *testing.T) {
 		},
 	}
 	ensureFileWasSent(g, mockServer, expFile)
+	// Respond to initial config - this should NOT signal ResponseCh
 	mockServer.recvChan <- &pb.DataPlaneResponse{
 		CommandResponse: &pb.CommandResponse{
 			Status: pb.CommandResponse_COMMAND_STATUS_OK,
@@ -382,22 +377,40 @@ func TestSubscribe(t *testing.T) {
 
 	// ensure that the initial API request was sent when the Subscription connected
 	ensureAPIRequestWasSent(g, mockServer, initialAction)
+	// Respond to initial API request - this should NOT signal ResponseCh
 	mockServer.recvChan <- &pb.DataPlaneResponse{
 		CommandResponse: &pb.CommandResponse{
 			Status: pb.CommandResponse_COMMAND_STATUS_OK,
 		},
 	}
 
+	// Wait for status queue to be updated after initial config completes
 	g.Eventually(func() string {
 		obj := cs.statusQueue.Dequeue(ctx)
 		return obj.Deployment.Name
 	}).Should(Equal("nginx-deployment"))
 
-	// ensure the second file was sent in the loop
+	// PHASE 2: Now send broadcast operations to the event loop
+	// Put the broadcast requests on the listenCh for the Subscription loop to pick up
+	listenCh <- broadcast.NginxAgentMessage{
+		Type:          broadcast.ConfigApplyRequest,
+		FileOverviews: []*pb.File{loopFile},
+	}
+
+	// PHASE 2: Broadcast operations from the event loop
+	// These SHOULD signal ResponseCh as they are broadcast operations
+
+	// ensure the broadcast file was sent in the loop
 	ensureFileWasSent(g, mockServer, loopFile)
 	verifyResponse(g, mockServer, responseCh)
 
-	// ensure the second action was sent in the loop
+	// Send second broadcast operation
+	listenCh <- broadcast.NginxAgentMessage{
+		Type:            broadcast.APIRequest,
+		NGINXPlusAction: loopAction,
+	}
+
+	// ensure the broadcast action was sent in the loop
 	ensureAPIRequestWasSent(g, mockServer, loopAction)
 	verifyResponse(g, mockServer, responseCh)
 
