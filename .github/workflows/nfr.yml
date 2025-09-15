@@ -145,15 +145,6 @@ jobs:
           PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
         run: echo "${PLUS_LICENSE}" > license.jwt
 
-      # - name: TMP Cleanup conflicting resources
-      #   working-directory: ./tests
-      #   run: |
-      #     echo "tmp delete conflicting subnet"
-      #     gcloud compute forwarding-rules delete gk3-nfr-tests-17637219369-oss-b6387c3a-d2289ac6-pe --region=us-west1 --project=${{ secrets.GCP_PROJECT_ID }} --quiet || true
-      #     gcloud compute addresses delete gk3-nfr-tests-17637219369-oss-b6387c3a-d2289ac6-pe --region=us-west1 --project=${{ secrets.GCP_PROJECT_ID }} --quiet || true
-      #     gcloud compute networks subnets delete gke-nfr-tests-17637219369-oss-acf63488-pe-subnet --region=us-west1 --quiet || true
-      #     rm -rf scripts/vars.env
-
       - name: Create GKE cluster
         working-directory: ./tests
         run: make create-gke-cluster CI=true

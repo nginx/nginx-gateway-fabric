@@ -26,7 +26,7 @@ if [ "${IPV6_ENABLED}" = "true" ]; then
     #     --range=10.120.0.0/14
 
     NETWORK="us-ipv4-ipv6"
-    # NETWORK_TIER="network-tier=PREMIUM"
+    # NETWORK_TIER="ipv6-network-tier=PREMIUM" # This will work only if STACK_TYPE is IPV6_ONLY
     STACK_TYPE="IPV4_IPV6"
 fi
 
