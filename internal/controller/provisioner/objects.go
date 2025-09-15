@@ -1113,6 +1113,9 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 
 func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (string, corev1.PullPolicy) {
 	image := defaultNginxImagePath
+	if p.cfg.Plus {
+		image = defaultNginxPlusImagePath
+	}
 	tag := p.cfg.GatewayPodConfig.Version
 	pullPolicy := defaultImagePullPolicy
 

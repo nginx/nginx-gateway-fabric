@@ -498,6 +498,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 		cfg: Config{
 			GatewayPodConfig: &config.GatewayPodConfig{
 				Namespace: ngfNamespace,
+				Version:   "1.0.0",
 			},
 			Plus: true,
 			PlusUsageConfig: &config.UsageReportConfig{
@@ -611,6 +612,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 		Name:      "nginx-plus-usage-certs",
 		MountPath: "/etc/nginx/certs-bootstrap/",
 	}))
+	g.Expect(container.Image).To(Equal(fmt.Sprintf("%s:1.0.0", defaultNginxPlusImagePath)))
 }
 
 func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
