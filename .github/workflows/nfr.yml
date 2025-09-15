@@ -30,9 +30,32 @@ permissions:
   contents: read
 
 jobs:
-  ipv6-only-tests:
+  vars:
+    name: Set up vars
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ github.event.inputs.version || 'edge' }}
+      image_tag: ${{ github.event.inputs.image_tag || 'edge' }}
+      types: ${{ steps.var.outputs.types }}
+    permissions:
+      contents: read
+    steps:
+      - name: Set vars
+        id: var
+        run: |
+          if ${{ github.event.inputs.type == 'both' || github.event_name == 'schedule' }}; then
+          echo 'types=["oss","plus"]' >> $GITHUB_OUTPUT
+          else
+          echo 'types=["${{ github.event.inputs.type }}"]' >> $GITHUB_OUTPUT
+          fi
+
+  setup-and-run-tests:
     name: Run IPv6-Only Tests
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # needed for authenticating to GCP
+    needs: vars
     if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
     env:
       DOCKER_BUILD_SUMMARY: false
