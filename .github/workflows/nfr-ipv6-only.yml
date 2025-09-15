@@ -56,6 +56,10 @@ jobs:
       contents: read
       id-token: write # needed for authenticating to GCP
     needs: vars
+    strategy:
+      fail-fast: false
+      matrix:
+        type: ${{ fromJson(needs.vars.outputs.types) }}
     if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
     env:
       DOCKER_BUILD_SUMMARY: false
