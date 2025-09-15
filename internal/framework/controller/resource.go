@@ -17,7 +17,12 @@ func CreateNginxResourceName(prefix, suffix string) string {
 // CreateInferencePoolServiceName creates the name for a headless Service that
 // we create for an InferencePool.
 func CreateInferencePoolServiceName(name string) string {
-	return fmt.Sprintf("%s%s", name, inferencePoolServiceSuffix)
+	svcName := fmt.Sprintf("%s%s", name, inferencePoolServiceSuffix)
+	// if InferencePool name is already at or near max length, just use that name
+	if len(svcName) > 253 {
+		return name
+	}
+	return svcName
 }
 
 // GetInferencePoolName returns the name of the InferencePool for a given headless Service name.
