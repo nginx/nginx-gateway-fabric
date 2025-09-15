@@ -10,7 +10,7 @@ gcloud compute scp --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" "${SC
 
 if [ "${IPV6_ENABLED}" = "true" ]; then
     gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
-    --command="bash -s" <"${SCRIPT_DIR}"/remote-scripts/run-ipv6-tests.sh
+    --command="bash -s" <"${SCRIPT_DIR}"/remote-scripts/run-ipv6-test.sh
     retcode=$?
 
     if [ ${retcode} -ne 0 ]; then
