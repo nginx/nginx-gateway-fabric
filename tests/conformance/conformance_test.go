@@ -32,9 +32,9 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// UnusableGatewayIPAddress 198.51.100.0 is a publicly reserved IP address specifically for documentation.
+// unusableGatewayIPAddress 198.51.100.0 is a publicly reserved IP address specifically for documentation.
 // This is needed to give the conformance tests an example valid ip unusable address.
-const UnusableGatewayIPAddress = "198.51.100.0"
+const unusableGatewayIPAddress = "198.51.100.0"
 
 func TestConformance(t *testing.T) {
 	g := NewWithT(t)
@@ -50,7 +50,7 @@ func TestConformance(t *testing.T) {
 	opts := conformance.DefaultOptions(t)
 
 	ipaddressType := v1.IPAddressType
-	opts.UnusableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: UnusableGatewayIPAddress}}
+	opts.UnusableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: unusableGatewayIPAddress}}
 	opts.UsableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: "192.0.2.1"}}
 
 	opts.Implementation = conf_v1.Implementation{
