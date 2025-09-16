@@ -25,9 +25,14 @@ if [ "${IPV6_ENABLED}" = "true" ]; then
     #     --region=${GKE_CLUSTER_REGION} \
     #     --range=10.120.0.0/14
 
-    NETWORK="us-ipv4-ipv6"
-    # NETWORK_TIER="ipv6-network-tier=PREMIUM" # This will work only if STACK_TYPE is IPV6_ONLY
-    STACK_TYPE="IPV4_IPV6"
+    # Dual-Stack Settings
+    # NETWORK="us-ipv4-ipv6"
+    # STACK_TYPE="IPV4_IPV6"
+
+    # IPv6 Only Settings
+    NETWORK="ipv6-only" 
+    NETWORK_TIER="ipv6-network-tier=PREMIUM" # This will work only if STACK_TYPE is IPV6_ONLY
+    STACK_TYPE="IPV6_ONLY"
 fi
 
 gcloud compute firewall-rules create "${RESOURCE_NAME}" \
@@ -49,8 +54,12 @@ gcloud compute instances create "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --
 # Add VM IP to GKE master control node access, if required
 if [ "${ADD_VM_IP_AUTH_NETWORKS}" = "true" ]; then
 
+    # EXTERNAL_IP=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
+    #     --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
+
+    echo "IPv6 is enabled, fetching the external IPv6 address"
     EXTERNAL_IP=$(gcloud compute instances describe "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --zone="${GKE_CLUSTER_ZONE}" \
-        --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
+        --format='value(networkInterfaces[0].ipv6AccessConfigs[0].externalIpv6)')
 
     echo "External IP of the VM is: ${EXTERNAL_IP}"
 
