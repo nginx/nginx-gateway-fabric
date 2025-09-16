@@ -888,6 +888,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 						{MountPath: "/etc/nginx/events-includes", Name: "nginx-events-includes"},
 					},
 					SecurityContext: &corev1.SecurityContext{
+						AllowPrivilegeEscalation: helpers.GetPointer(false),
 						Capabilities: &corev1.Capabilities{
 							Drop: []corev1.Capability{"ALL"},
 						},
@@ -1106,6 +1107,30 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		})
 
 		spec.Spec.Containers[0].VolumeMounts = volumeMounts
+	}
+
+	if p.cfg.InferenceExtension {
+		spec.Spec.Containers = append(spec.Spec.Containers, corev1.Container{
+			Name:            "endpoint-picker-shim",
+			Image:           p.cfg.GatewayPodConfig.Image,
+			ImagePullPolicy: pullPolicy,
+			Command: []string{
+				"/usr/bin/gateway",
+				"endpoint-picker",
+			},
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: helpers.GetPointer(false),
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+				ReadOnlyRootFilesystem: helpers.GetPointer(true),
+				RunAsGroup:             helpers.GetPointer[int64](1001),
+				RunAsUser:              helpers.GetPointer[int64](101),
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				},
+			},
+		})
 	}
 
 	return spec
