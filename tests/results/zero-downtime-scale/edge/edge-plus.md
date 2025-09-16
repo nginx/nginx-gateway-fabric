@@ -6,21 +6,21 @@ NGINX Plus: true
 
 NGINX Gateway Fabric:
 
-- Commit: 9155a2b6a8d3179165797ef3e789e97283f7a695
-- Date: 2025-03-15T07:17:11Z
+- Commit: 635b3fcd6e643f4bd24ebbd4c901619a030c4bc0
+- Date: 2025-09-15T17:56:13Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.31.6-gke.1020000
+- k8s version: v1.33.4-gke.1036000
 - vCPUs per node: 16
-- RAM per node: 65851340Ki
+- RAM per node: 65851528Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
 
-## One NGF Pod runs per node Test Results
+## One NGINX Pod runs per node Test Results
 
 ### Scale Up Gradually
 
@@ -28,9 +28,9 @@ GKE Cluster:
 
 ```text
 Requests      [total, rate, throughput]         30000, 100.00, 100.00
-Duration      [total, attack, wait]             5m0s, 5m0s, 766.303µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  441.594µs, 875.579µs, 868.868µs, 997.175µs, 1.049ms, 1.357ms, 13.238ms
-Bytes In      [total, mean]                     4673932, 155.80
+Duration      [total, attack, wait]             5m0s, 5m0s, 1.327ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  675.096µs, 1.232ms, 1.209ms, 1.429ms, 1.543ms, 1.768ms, 27.473ms
+Bytes In      [total, mean]                     4596075, 153.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:30000  
@@ -43,9 +43,9 @@ Error Set:
 
 ```text
 Requests      [total, rate, throughput]         30000, 100.00, 100.00
-Duration      [total, attack, wait]             5m0s, 5m0s, 727.187µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  414.641µs, 846.924µs, 846.028µs, 971.491µs, 1.017ms, 1.294ms, 11.941ms
-Bytes In      [total, mean]                     4850987, 161.70
+Duration      [total, attack, wait]             5m0s, 5m0s, 1.046ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  663.466µs, 1.172ms, 1.152ms, 1.361ms, 1.48ms, 1.74ms, 17.181ms
+Bytes In      [total, mean]                     4775927, 159.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:30000  
@@ -59,14 +59,15 @@ Error Set:
 #### Test: Send https /tea traffic
 
 ```text
-Requests      [total, rate, throughput]         48000, 100.00, 100.00
-Duration      [total, attack, wait]             8m0s, 8m0s, 730.887µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  433.836µs, 850.845µs, 848.555µs, 968.862µs, 1.013ms, 1.215ms, 8.39ms
-Bytes In      [total, mean]                     7478267, 155.80
+Requests      [total, rate, throughput]         48000, 100.00, 99.99
+Duration      [total, attack, wait]             8m0s, 8m0s, 1.163ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  305.029µs, 1.277ms, 1.217ms, 1.523ms, 1.634ms, 1.847ms, 219.704ms
+Bytes In      [total, mean]                     7352590, 153.18
 Bytes Out     [total, mean]                     0, 0.00
-Success       [ratio]                           100.00%
-Status Codes  [code:count]                      200:48000  
+Success       [ratio]                           99.99%
+Status Codes  [code:count]                      0:6  200:47994  
 Error Set:
+Get "https://cafe.example.com/tea": dial tcp 0.0.0.0:0->10.138.0.47:443: connect: network is unreachable
 ```
 
 ![gradual-scale-down-affinity-https-plus.png](gradual-scale-down-affinity-https-plus.png)
@@ -74,14 +75,15 @@ Error Set:
 #### Test: Send http /coffee traffic
 
 ```text
-Requests      [total, rate, throughput]         48000, 100.00, 100.00
-Duration      [total, attack, wait]             8m0s, 8m0s, 715.71µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  405.345µs, 820.868µs, 825.255µs, 941.274µs, 982.586µs, 1.188ms, 11.166ms
-Bytes In      [total, mean]                     7761660, 161.70
+Requests      [total, rate, throughput]         48000, 100.00, 99.99
+Duration      [total, attack, wait]             8m0s, 8m0s, 1.045ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  243.115µs, 1.215ms, 1.169ms, 1.465ms, 1.598ms, 1.81ms, 214.724ms
+Bytes In      [total, mean]                     7640356, 159.17
 Bytes Out     [total, mean]                     0, 0.00
-Success       [ratio]                           100.00%
-Status Codes  [code:count]                      200:48000  
+Success       [ratio]                           99.99%
+Status Codes  [code:count]                      0:7  200:47993  
 Error Set:
+Get "http://cafe.example.com/coffee": dial tcp 0.0.0.0:0->10.138.0.47:80: connect: network is unreachable
 ```
 
 ![gradual-scale-down-affinity-http-plus.png](gradual-scale-down-affinity-http-plus.png)
@@ -92,9 +94,9 @@ Error Set:
 
 ```text
 Requests      [total, rate, throughput]         12000, 100.01, 100.01
-Duration      [total, attack, wait]             2m0s, 2m0s, 731.03µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  423.637µs, 822.777µs, 824.747µs, 937.12µs, 981.297µs, 1.14ms, 3.973ms
-Bytes In      [total, mean]                     1940496, 161.71
+Duration      [total, attack, wait]             2m0s, 2m0s, 1.402ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  656.659µs, 1.129ms, 1.133ms, 1.278ms, 1.322ms, 1.507ms, 3.641ms
+Bytes In      [total, mean]                     1910438, 159.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:12000  
@@ -107,9 +109,9 @@ Error Set:
 
 ```text
 Requests      [total, rate, throughput]         12000, 100.01, 100.01
-Duration      [total, attack, wait]             2m0s, 2m0s, 887.292µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  442.281µs, 858.712µs, 854.673µs, 973.029µs, 1.017ms, 1.179ms, 10.485ms
-Bytes In      [total, mean]                     1869632, 155.80
+Duration      [total, attack, wait]             2m0s, 2m0s, 1.284ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  710.396µs, 1.192ms, 1.195ms, 1.323ms, 1.366ms, 1.579ms, 9.731ms
+Bytes In      [total, mean]                     1838355, 153.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:12000  
@@ -120,28 +122,13 @@ Error Set:
 
 ### Scale Down Abruptly
 
-#### Test: Send http /coffee traffic
-
-```text
-Requests      [total, rate, throughput]         12000, 100.01, 100.01
-Duration      [total, attack, wait]             2m0s, 2m0s, 804.798µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  424.072µs, 837.824µs, 838.15µs, 963.636µs, 1.006ms, 1.123ms, 44.463ms
-Bytes In      [total, mean]                     1940409, 161.70
-Bytes Out     [total, mean]                     0, 0.00
-Success       [ratio]                           100.00%
-Status Codes  [code:count]                      200:12000  
-Error Set:
-```
-
-![abrupt-scale-down-affinity-http-plus.png](abrupt-scale-down-affinity-http-plus.png)
-
 #### Test: Send https /tea traffic
 
 ```text
 Requests      [total, rate, throughput]         12000, 100.01, 100.01
-Duration      [total, attack, wait]             2m0s, 2m0s, 685.714µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  459.498µs, 865.342µs, 861.335µs, 990.99µs, 1.035ms, 1.151ms, 48.501ms
-Bytes In      [total, mean]                     1869571, 155.80
+Duration      [total, attack, wait]             2m0s, 2m0s, 1.314ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  730.016µs, 1.229ms, 1.213ms, 1.343ms, 1.388ms, 1.521ms, 64.443ms
+Bytes In      [total, mean]                     1838380, 153.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:12000  
@@ -150,32 +137,32 @@ Error Set:
 
 ![abrupt-scale-down-affinity-https-plus.png](abrupt-scale-down-affinity-https-plus.png)
 
-## Multiple NGF Pods run per node Test Results
-
-### Scale Up Gradually
-
 #### Test: Send http /coffee traffic
 
 ```text
-Requests      [total, rate, throughput]         30000, 100.00, 100.00
-Duration      [total, attack, wait]             5m0s, 5m0s, 499.02µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  404.188µs, 862.699µs, 858.402µs, 1.003ms, 1.053ms, 1.359ms, 11.022ms
-Bytes In      [total, mean]                     4862948, 162.10
+Requests      [total, rate, throughput]         12000, 100.01, 100.01
+Duration      [total, attack, wait]             2m0s, 2m0s, 1.177ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  678.11µs, 1.171ms, 1.161ms, 1.306ms, 1.348ms, 1.474ms, 67.354ms
+Bytes In      [total, mean]                     1910385, 159.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
-Status Codes  [code:count]                      200:30000  
+Status Codes  [code:count]                      200:12000  
 Error Set:
 ```
 
-![gradual-scale-up-http-plus.png](gradual-scale-up-http-plus.png)
+![abrupt-scale-down-affinity-http-plus.png](abrupt-scale-down-affinity-http-plus.png)
+
+## Multiple NGINX Pods run per node Test Results
+
+### Scale Up Gradually
 
 #### Test: Send https /tea traffic
 
 ```text
 Requests      [total, rate, throughput]         30000, 100.00, 100.00
-Duration      [total, attack, wait]             5m0s, 5m0s, 917.782µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  452.74µs, 884.958µs, 873.544µs, 1.017ms, 1.07ms, 1.42ms, 11.641ms
-Bytes In      [total, mean]                     4682982, 156.10
+Duration      [total, attack, wait]             5m0s, 5m0s, 1.232ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  677.29µs, 1.222ms, 1.214ms, 1.361ms, 1.417ms, 1.778ms, 29.484ms
+Bytes In      [total, mean]                     4595877, 153.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:30000  
@@ -184,30 +171,30 @@ Error Set:
 
 ![gradual-scale-up-https-plus.png](gradual-scale-up-https-plus.png)
 
-### Scale Down Gradually
-
-#### Test: Send https /tea traffic
+#### Test: Send http /coffee traffic
 
 ```text
-Requests      [total, rate, throughput]         96000, 100.00, 100.00
-Duration      [total, attack, wait]             16m0s, 16m0s, 760.896µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  433.285µs, 934.463µs, 905.034µs, 1.107ms, 1.202ms, 1.549ms, 83.045ms
-Bytes In      [total, mean]                     14985575, 156.10
+Requests      [total, rate, throughput]         30000, 100.00, 100.00
+Duration      [total, attack, wait]             5m0s, 5m0s, 1.116ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  652.028µs, 1.156ms, 1.151ms, 1.31ms, 1.364ms, 1.702ms, 29.516ms
+Bytes In      [total, mean]                     4775988, 159.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
-Status Codes  [code:count]                      200:96000  
+Status Codes  [code:count]                      200:30000  
 Error Set:
 ```
 
-![gradual-scale-down-https-plus.png](gradual-scale-down-https-plus.png)
+![gradual-scale-up-http-plus.png](gradual-scale-up-http-plus.png)
+
+### Scale Down Gradually
 
 #### Test: Send http /coffee traffic
 
 ```text
 Requests      [total, rate, throughput]         96000, 100.00, 100.00
-Duration      [total, attack, wait]             16m0s, 16m0s, 797.537µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  389.802µs, 906.16µs, 872.26µs, 1.081ms, 1.271ms, 1.729ms, 78.489ms
-Bytes In      [total, mean]                     15561579, 162.10
+Duration      [total, attack, wait]             16m0s, 16m0s, 1.136ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  577.2µs, 1.169ms, 1.161ms, 1.316ms, 1.366ms, 1.628ms, 72.479ms
+Bytes In      [total, mean]                     15283137, 159.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:96000  
@@ -216,15 +203,30 @@ Error Set:
 
 ![gradual-scale-down-http-plus.png](gradual-scale-down-http-plus.png)
 
+#### Test: Send https /tea traffic
+
+```text
+Requests      [total, rate, throughput]         96000, 100.00, 100.00
+Duration      [total, attack, wait]             16m0s, 16m0s, 1.188ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  687.721µs, 1.229ms, 1.216ms, 1.364ms, 1.419ms, 1.697ms, 68.011ms
+Bytes In      [total, mean]                     14707422, 153.20
+Bytes Out     [total, mean]                     0, 0.00
+Success       [ratio]                           100.00%
+Status Codes  [code:count]                      200:96000  
+Error Set:
+```
+
+![gradual-scale-down-https-plus.png](gradual-scale-down-https-plus.png)
+
 ### Scale Up Abruptly
 
 #### Test: Send https /tea traffic
 
 ```text
 Requests      [total, rate, throughput]         12000, 100.01, 100.01
-Duration      [total, attack, wait]             2m0s, 2m0s, 1.038ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  438.072µs, 859.877µs, 851.049µs, 991.439µs, 1.042ms, 1.261ms, 9.194ms
-Bytes In      [total, mean]                     1873263, 156.11
+Duration      [total, attack, wait]             2m0s, 2m0s, 1.264ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  718.712µs, 1.247ms, 1.217ms, 1.353ms, 1.401ms, 1.716ms, 37.253ms
+Bytes In      [total, mean]                     1838307, 153.19
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:12000  
@@ -237,9 +239,9 @@ Error Set:
 
 ```text
 Requests      [total, rate, throughput]         12000, 100.01, 100.01
-Duration      [total, attack, wait]             2m0s, 2m0s, 745.836µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  397.717µs, 825.498µs, 823.88µs, 955.33µs, 1.002ms, 1.198ms, 9.229ms
-Bytes In      [total, mean]                     1945082, 162.09
+Duration      [total, attack, wait]             2m0s, 2m0s, 1.329ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  670.205µs, 1.191ms, 1.169ms, 1.31ms, 1.357ms, 1.582ms, 113.243ms
+Bytes In      [total, mean]                     1910371, 159.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:12000  
@@ -253,14 +255,15 @@ Error Set:
 #### Test: Send http /coffee traffic
 
 ```text
-Requests      [total, rate, throughput]         12000, 100.01, 100.01
-Duration      [total, attack, wait]             2m0s, 2m0s, 853.74µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  434.496µs, 857.503µs, 848.746µs, 975.447µs, 1.022ms, 1.187ms, 26.289ms
-Bytes In      [total, mean]                     1945253, 162.10
+Requests      [total, rate, throughput]         12000, 100.01, 91.67
+Duration      [total, attack, wait]             2m0s, 2m0s, 1.262ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  488.744µs, 1.133ms, 1.175ms, 1.329ms, 1.374ms, 1.478ms, 3.391ms
+Bytes In      [total, mean]                     1901179, 158.43
 Bytes Out     [total, mean]                     0, 0.00
-Success       [ratio]                           100.00%
-Status Codes  [code:count]                      200:12000  
+Success       [ratio]                           91.67%
+Status Codes  [code:count]                      200:11000  502:1000  
 Error Set:
+502 Bad Gateway
 ```
 
 ![abrupt-scale-down-http-plus.png](abrupt-scale-down-http-plus.png)
@@ -269,9 +272,9 @@ Error Set:
 
 ```text
 Requests      [total, rate, throughput]         12000, 100.01, 100.01
-Duration      [total, attack, wait]             2m0s, 2m0s, 849.564µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  453.708µs, 899.405µs, 881.221µs, 1.024ms, 1.074ms, 1.234ms, 8.51ms
-Bytes In      [total, mean]                     1873266, 156.11
+Duration      [total, attack, wait]             2m0s, 2m0s, 1.186ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  746.375µs, 1.23ms, 1.233ms, 1.364ms, 1.407ms, 1.537ms, 20.761ms
+Bytes In      [total, mean]                     1838411, 153.20
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:12000  
