@@ -855,3 +855,89 @@ func TestCreateGatewayPodConfig(t *testing.T) {
 	g.Expect(err).To(MatchError(errors.New("environment variable POD_UID not set")))
 	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
 }
+
+func TestUsageReportConfig(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		params      UsageReportParams
+		expected    config.UsageReportConfig
+		plus        bool
+		expectError bool
+	}{
+		{
+			name: "NGINX Plus enabled with all valid parameters",
+			plus: true,
+			params: UsageReportParams{
+				SecretName:           stringValidatingValue{value: "test-secret"},
+				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
+				CASecretName:         stringValidatingValue{value: "ca-secret"},
+				Endpoint:             stringValidatingValue{value: "example.com"},
+				Resolver:             stringValidatingValue{value: "resolver.com"},
+				SkipVerify:           true,
+				EnforceInitialReport: false,
+			},
+			expectError: false,
+			expected: config.UsageReportConfig{
+				SecretName:           "test-secret",
+				ClientSSLSecretName:  "client-ssl-secret",
+				CASecretName:         "ca-secret",
+				Endpoint:             "example.com",
+				Resolver:             "resolver.com",
+				SkipVerify:           true,
+				EnforceInitialReport: false,
+			},
+		},
+		{
+			name: "NGINX Plus enabled with missing secret",
+			plus: true,
+			params: UsageReportParams{
+				SecretName:           stringValidatingValue{value: ""},
+				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
+				CASecretName:         stringValidatingValue{value: "ca-secret"},
+				Endpoint:             stringValidatingValue{value: "example.com"},
+				Resolver:             stringValidatingValue{value: "resolver.com"},
+				SkipVerify:           true,
+				EnforceInitialReport: false,
+			},
+			expectError: true,
+		},
+		{
+			name: "NGINX Plus disabled",
+			plus: false,
+			params: UsageReportParams{
+				SecretName:           stringValidatingValue{value: "test-secret"},
+				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
+				CASecretName:         stringValidatingValue{value: "ca-secret"},
+				Endpoint:             stringValidatingValue{value: "example.com"},
+				Resolver:             stringValidatingValue{value: "resolver.com"},
+				SkipVerify:           true,
+				EnforceInitialReport: false,
+			},
+			expectError: false,
+			expected:    config.UsageReportConfig{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := buildUsageReportConfig(tc.plus, tc.params)
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("expected an error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("did not expect an error but got: %v", err)
+				}
+
+				if result != tc.expected {
+					t.Errorf("expected result %+v, but got %+v", tc.expected, result)
+				}
+			}
+		})
+	}
+}

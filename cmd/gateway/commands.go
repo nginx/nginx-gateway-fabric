@@ -42,6 +42,17 @@ const (
 	nginxOneTelemetryEndpointHost = "agent.connect.nginx.com"
 )
 
+// UsageReportParams holds the parameters for building the usage report configuration for PLUS.
+type UsageReportParams struct {
+	SecretName           stringValidatingValue
+	ClientSSLSecretName  stringValidatingValue
+	CASecretName         stringValidatingValue
+	Endpoint             stringValidatingValue
+	Resolver             stringValidatingValue
+	SkipVerify           bool
+	EnforceInitialReport bool
+}
+
 func createRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:           "gateway",
@@ -149,25 +160,26 @@ func createControllerCommand() *cobra.Command {
 		nginxDockerSecrets = stringSliceValidatingValue{
 			validator: validateResourceName,
 		}
-		usageReportSkipVerify bool
-		usageReportSecretName = stringValidatingValue{
+	)
+
+	usageReportParams := UsageReportParams{
+		SecretName: stringValidatingValue{
 			validator: validateResourceName,
 			value:     "nplus-license",
-		}
-		usageReportEndpoint = stringValidatingValue{
+		},
+		Endpoint: stringValidatingValue{
 			validator: validateEndpointOptionalPort,
-		}
-		usageReportResolver = stringValidatingValue{
+		},
+		Resolver: stringValidatingValue{
 			validator: validateEndpointOptionalPort,
-		}
-		usageReportClientSSLSecretName = stringValidatingValue{
+		},
+		ClientSSLSecretName: stringValidatingValue{
 			validator: validateResourceName,
-		}
-		usageReportCASecretName = stringValidatingValue{
+		},
+		CASecretName: stringValidatingValue{
 			validator: validateResourceName,
-		}
-		usageReportEnforceInitialReport bool
-	)
+		},
+	}
 
 	cmd := &cobra.Command{
 		Use:   "controller",
@@ -213,21 +225,9 @@ func createControllerCommand() *cobra.Command {
 				return fmt.Errorf("error parsing telemetry endpoint insecure: %w", err)
 			}
 
-			var usageReportConfig config.UsageReportConfig
-			if plus && usageReportSecretName.value == "" {
-				return errors.New("usage-report-secret is required when using NGINX Plus")
-			}
-
-			if plus {
-				usageReportConfig = config.UsageReportConfig{
-					SecretName:           usageReportSecretName.value,
-					ClientSSLSecretName:  usageReportClientSSLSecretName.value,
-					CASecretName:         usageReportCASecretName.value,
-					Endpoint:             usageReportEndpoint.value,
-					Resolver:             usageReportResolver.value,
-					SkipVerify:           usageReportSkipVerify,
-					EnforceInitialReport: usageReportEnforceInitialReport,
-				}
+			usageReportConfig, urcErr := buildUsageReportConfig(plus, usageReportParams)
+			if urcErr != nil {
+				return urcErr
 			}
 
 			flagKeys, flagValues := parseFlags(cmd.Flags())
@@ -435,33 +435,33 @@ func createControllerCommand() *cobra.Command {
 	)
 
 	cmd.Flags().Var(
-		&usageReportSecretName,
+		&usageReportParams.SecretName,
 		usageReportSecretFlag,
 		"The name of the Secret containing the JWT for NGINX Plus usage reporting. Must exist in the same namespace "+
 			"that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).",
 	)
 
 	cmd.Flags().Var(
-		&usageReportEndpoint,
+		&usageReportParams.Endpoint,
 		usageReportEndpointFlag,
 		"The endpoint of the NGINX Plus usage reporting server.",
 	)
 
 	cmd.Flags().Var(
-		&usageReportResolver,
+		&usageReportParams.Resolver,
 		usageReportResolverFlag,
 		"The nameserver used to resolve the NGINX Plus usage reporting endpoint. Used with NGINX Instance Manager.",
 	)
 
 	cmd.Flags().BoolVar(
-		&usageReportSkipVerify,
+		&usageReportParams.SkipVerify,
 		usageReportSkipVerifyFlag,
 		false,
 		"Disable client verification of the NGINX Plus usage reporting server certificate.",
 	)
 
 	cmd.Flags().Var(
-		&usageReportClientSSLSecretName,
+		&usageReportParams.ClientSSLSecretName,
 		usageReportClientSSLSecretFlag,
 		"The name of the Secret containing the client certificate and key for authenticating with NGINX Instance Manager. "+
 			"Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in "+
@@ -469,11 +469,18 @@ func createControllerCommand() *cobra.Command {
 	)
 
 	cmd.Flags().Var(
-		&usageReportCASecretName,
+		&usageReportParams.CASecretName,
 		usageReportCASecretFlag,
 		"The name of the Secret containing the NGINX Instance Manager CA certificate. "+
 			"Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in "+
 			"(default namespace: nginx-gateway).",
+	)
+
+	cmd.Flags().BoolVar(
+		&usageReportParams.EnforceInitialReport,
+		usageReportEnforceInitialReportFlag,
+		true,
+		"Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.",
 	)
 
 	cmd.Flags().BoolVar(
@@ -491,14 +498,27 @@ func createControllerCommand() *cobra.Command {
 			` Only applicable in OpenShift.`,
 	)
 
-	cmd.Flags().BoolVar(
-		&usageReportEnforceInitialReport,
-		usageReportEnforceInitialReportFlag,
-		true,
-		"Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.",
-	)
-
 	return cmd
+}
+
+func buildUsageReportConfig(plus bool, params UsageReportParams) (config.UsageReportConfig, error) {
+	if plus && params.SecretName.value == "" {
+		return config.UsageReportConfig{}, errors.New("usage-report-secret is required when using NGINX Plus")
+	}
+
+	if plus {
+		return config.UsageReportConfig{
+			SecretName:           params.SecretName.value,
+			ClientSSLSecretName:  params.ClientSSLSecretName.value,
+			CASecretName:         params.CASecretName.value,
+			Endpoint:             params.Endpoint.value,
+			Resolver:             params.Resolver.value,
+			SkipVerify:           params.SkipVerify,
+			EnforceInitialReport: params.EnforceInitialReport,
+		}, nil
+	}
+
+	return config.UsageReportConfig{}, nil
 }
 
 func createGenerateCertsCommand() *cobra.Command {
