@@ -34,8 +34,10 @@ gcloud container clusters create "${GKE_CLUSTER_NAME}" \
     --no-enable-insecure-kubelet-readonly-port \
     --stack-type="${GKE_CLUSTER_STACK_TYPE}" \
     --ipv6-access-type="${GKE_CLUSTER_IPV6_ACCESS_TYPE}" \
-    --create-subnetwork name=${RESOURCE_NAME},range=/21 \
+    --network=us-ipv4-ipv6 \
+    --subnetwork=us-ipv4-ipv6 \
     --enable-dataplane-v2
+    # --create-subnetwork name=${RESOURCE_NAME},range=/21 \ ## Might need this later
 
 # Add current IP to GKE master control node access, if this script is not invoked during a CI run.
 if [ "${IS_CI}" = "false" ]; then
