@@ -189,9 +189,24 @@ func TestToService(t *testing.T) {
 	ref := toService(types.NamespacedName{Namespace: "ns", Name: "service"})
 
 	exp := toResource{
-		kind:      "Service",
+		kind:      kinds.Service,
 		namespace: "ns",
 		name:      "service",
+	}
+
+	g := NewWithT(t)
+	g.Expect(ref).To(Equal(exp))
+}
+
+func TestToInferencePool(t *testing.T) {
+	t.Parallel()
+	ref := toInferencePool(types.NamespacedName{Namespace: "ns", Name: "inference-pool"})
+
+	exp := toResource{
+		group:     inferenceAPIGroup,
+		kind:      kinds.InferencePool,
+		namespace: "ns",
+		name:      "inference-pool",
 	}
 
 	g := NewWithT(t)
@@ -306,7 +321,24 @@ func TestRefAllowedFrom(t *testing.T) {
 				},
 				To: []v1beta1.ReferenceGrantTo{
 					{
-						Kind: "Service",
+						Kind: kinds.Service,
+					},
+				},
+			},
+		},
+		{Namespace: allowedHTTPRouteNs, Name: "hr-2-ipool"}: {
+			Spec: v1beta1.ReferenceGrantSpec{
+				From: []v1beta1.ReferenceGrantFrom{
+					{
+						Group:     v1beta1.GroupName,
+						Kind:      kinds.HTTPRoute,
+						Namespace: v1beta1.Namespace(hrNs),
+					},
+				},
+				To: []v1beta1.ReferenceGrantTo{
+					{
+						Group: inferenceAPIGroup,
+						Kind:  kinds.InferencePool,
 					},
 				},
 			},
@@ -322,7 +354,7 @@ func TestRefAllowedFrom(t *testing.T) {
 				},
 				To: []v1beta1.ReferenceGrantTo{
 					{
-						Kind: "Service",
+						Kind: kinds.Service,
 					},
 				},
 			},
@@ -338,7 +370,7 @@ func TestRefAllowedFrom(t *testing.T) {
 				},
 				To: []v1beta1.ReferenceGrantTo{
 					{
-						Kind: "Service",
+						Kind: kinds.Service,
 					},
 				},
 			},
@@ -373,6 +405,18 @@ func TestRefAllowedFrom(t *testing.T) {
 			name:           "ref not allowed from httproute to service",
 			refAllowedFrom: fromHTTPRoute(hrNs),
 			toResource:     toService(notAllowedNsName),
+			expAllowed:     false,
+		},
+		{
+			name:           "ref allowed from httproute to inferencepool",
+			refAllowedFrom: fromHTTPRoute(hrNs),
+			toResource:     toInferencePool(allowedHTTPRouteNsName),
+			expAllowed:     true,
+		},
+		{
+			name:           "ref not allowed from httproute to inferencepool",
+			refAllowedFrom: fromHTTPRoute(hrNs),
+			toResource:     toInferencePool(notAllowedNsName),
 			expAllowed:     false,
 		},
 		{

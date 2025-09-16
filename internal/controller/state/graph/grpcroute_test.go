@@ -232,6 +232,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 				grRoutes,
 				test.gateways,
 				snippetsFilters,
+				nil,
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
 		})
