@@ -6,11 +6,15 @@ source "${HOME}"/vars.env
 
 cd nginx-gateway-fabric/tests
 
-helm upgrade --install ngf ${PREFIX}/${TAG} \
+echo "Prefix: ${PREFIX}, Tag: ${TAG}"
+
+echo "Installing NGF with IPv6 configuration"
+helm install ngf oci://${PREFIX}/${TAG} \
     --create-namespace -n nginx-gateway \
     --set nginx.config.ipFamily=ipv6 \
     --set nginx.service.type=ClusterIP
 
+echo "Deploying IPv6 test application"
 kubectl apply -f tests/manifests/ipv6-test-app.yaml
 
 echo "Waiting for NGF to be ready..."

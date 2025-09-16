@@ -162,7 +162,7 @@ jobs:
         uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
         with:
           images: |
-            name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
+            name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image_tag == 'plus' && 'nginx-plus' || inputs.image_tag§ }}
           tags: |
             type=semver,pattern={{version}}
             type=edge

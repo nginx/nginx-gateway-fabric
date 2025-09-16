@@ -140,6 +140,32 @@ jobs:
       - name: Set GOPATH
         run: echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
 
+      - name: NGF Docker meta
+        id: ngf-meta
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: |
+            name=ghcr.io/nginx/nginx-gateway-fabric
+          tags: |
+            type=semver,pattern={{version}}
+            type=schedule
+            type=edge
+            type=ref,event=pr
+            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
+
+      - name: NGINX Docker meta
+        id: nginx-meta
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: |
+            name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image_tag == 'plus' && 'nginx-plus' || inputs.image_tag }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=edge
+            type=schedule
+            type=ref,event=pr
+            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
+
       - name: Install and test NGF with IPv6 Configuration
         run: |
           ./scripts/run-tests-gcp-vm.sh
