@@ -15,13 +15,10 @@ echo "Applying NGF CRDs"
 kubectl apply --server-side -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.1.1/deploy/crds.yaml
 
 echo "Installing NGF with IPv6 configuration"
-helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+helm install nginx-gateway oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --create-namespace -n nginx-gateway \
     --set nginx.config.ipFamily=ipv6 \
     --set nginx.service.type=ClusterIP
-
-echo "Waiting for NGF deployment to be available"
-kubectl wait --timeout=5m -n nginx-gateway deployment/ngf-nginx-gateway-fabric --for=condition=Available
 
 echo "Deploying IPv6 test application"
 kubectl apply -f tests/manifests/ipv6-test-app.yaml
