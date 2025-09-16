@@ -35,8 +35,7 @@ gcloud container clusters create "${GKE_CLUSTER_NAME}" \
     --stack-type="${GKE_CLUSTER_STACK_TYPE}" \
     --ipv6-access-type="${GKE_CLUSTER_IPV6_ACCESS_TYPE}" \
     --create-subnetwork name=${RESOURCE_NAME},range=/21 \
-    --network=us-ipv4-ipv6 \ 
-    --enable-dataplane-v2
+    --network=us-ipv4-ipv6 --enable-dataplane-v2
 
 
 # Add current IP to GKE master control node access, if this script is not invoked during a CI run.
