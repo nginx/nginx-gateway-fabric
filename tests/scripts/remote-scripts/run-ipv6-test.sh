@@ -4,11 +4,12 @@ set -e
 
 source "${HOME}"/vars.env
 
-source scripts/vars.env
-
 cd nginx-gateway-fabric/tests
 
-helm upgrade --install ngf ${PREFIX}/${TAG} --create-namespace -n nginx-gateway --set nginx.config.ipFamily=ipv6 --set nginx.service.type=ClusterIP
+helm upgrade --install ngf ${PREFIX}/${TAG} \
+    --create-namespace -n nginx-gateway \
+    --set nginx.config.ipFamily=ipv6 \
+    --set nginx.service.type=ClusterIP
 
 kubectl apply -f tests/manifests/ipv6-test-app.yaml
 
