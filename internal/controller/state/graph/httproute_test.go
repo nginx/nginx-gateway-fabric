@@ -118,6 +118,17 @@ var expRouteBackendRef = RouteBackendRef{
 	},
 }
 
+func createInferencePoolBackend(name, namespace string) gatewayv1.BackendRef {
+	return gatewayv1.BackendRef{
+		BackendObjectReference: gatewayv1.BackendObjectReference{
+			Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
+			Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+			Name:      gatewayv1.ObjectName(name),
+			Namespace: helpers.GetPointer(gatewayv1.Namespace(namespace)),
+		},
+	}
+}
+
 func TestBuildHTTPRoutes(t *testing.T) {
 	t.Parallel()
 
@@ -383,28 +394,14 @@ func TestBuildHTTPRoute(t *testing.T) {
 	hrInferencePool := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
 	hrInferencePool.Spec.Rules[0].BackendRefs = []gatewayv1.HTTPBackendRef{
 		{
-			BackendRef: gatewayv1.BackendRef{
-				BackendObjectReference: gatewayv1.BackendObjectReference{
-					Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
-					Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
-					Name:      "ipool",
-					Namespace: helpers.GetPointer(gatewayv1.Namespace(gatewayNsName.Namespace)),
-				},
-			},
+			BackendRef: createInferencePoolBackend("ipool", gatewayNsName.Namespace),
 		},
 	}
-	// route with an inference pool backend
+	// route with an inference pool backend that does not exist
 	hrInferencePoolDoesNotExist := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
 	hrInferencePoolDoesNotExist.Spec.Rules[0].BackendRefs = []gatewayv1.HTTPBackendRef{
 		{
-			BackendRef: gatewayv1.BackendRef{
-				BackendObjectReference: gatewayv1.BackendObjectReference{
-					Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
-					Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
-					Name:      "ipool-does-not-exist",
-					Namespace: helpers.GetPointer(gatewayv1.Namespace(gatewayNsName.Namespace)),
-				},
-			},
+			BackendRef: createInferencePoolBackend("ipool-does-not-exist", gatewayNsName.Namespace),
 		},
 	}
 
@@ -1045,14 +1042,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 							Matches: hrInferencePoolDoesNotExist.Spec.Rules[0].Matches,
 							RouteBackendRefs: []RouteBackendRef{
 								{
-									BackendRef: gatewayv1.BackendRef{
-										BackendObjectReference: gatewayv1.BackendObjectReference{
-											Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
-											Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
-											Name:      "ipool-does-not-exist",
-											Namespace: helpers.GetPointer[gatewayv1.Namespace]("test"),
-										},
-									},
+									BackendRef: createInferencePoolBackend("ipool-does-not-exist", gatewayNsName.Namespace),
 								},
 							},
 						},

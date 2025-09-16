@@ -343,6 +343,7 @@ func inferencePoolBackend(
 			return true
 		}
 	}
+
 	return false
 }
 

@@ -22,6 +22,7 @@ func CreateInferencePoolServiceName(name string) string {
 	if len(svcName) > 253 {
 		return name
 	}
+
 	return svcName
 }
 
