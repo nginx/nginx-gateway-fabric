@@ -101,7 +101,7 @@ jobs:
           echo "GKE_CLUSTER_ZONE=us-west1-b" >> vars.env
           echo "GKE_CLUSTER_REGION=us-west1" >> vars.env
           echo "GKE_CLUSTER_STACK_TYPE=ipv4-ipv6" >> vars.env
-          echo "GKE_CLUSTER_IPV6_ACCESS_TYPE=EXTERNAL" >> vars.env
+          echo "GKE_CLUSTER_IPV6_ACCESS_TYPE=external" >> vars.env
           echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
           echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
           echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
