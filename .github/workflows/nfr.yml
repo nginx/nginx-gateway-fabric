@@ -100,14 +100,14 @@ jobs:
           echo "GKE_CLUSTER_NAME=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "GKE_CLUSTER_ZONE=us-west1-b" >> vars.env
           echo "GKE_CLUSTER_REGION=us-west1" >> vars.env
+          echo "GKE_CLUSTER_STACK_TYPE=ipv4-ipv6" >> vars.env
+          echo "GKE_CLUSTER_IPV6_ACCESS_TYPE=EXTERNAL" >> vars.env
           echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
           echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
           echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
           echo "NETWORK_TAGS=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "NGF_BRANCH=${{ github.ref_name }}" >> vars.env
           echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
-          echo "STACK_TYPE=IPV4_IPV6" >> vars.env
-          echo "IPV6_ACCESS_TYPE=EXTERNAL" >> vars.env
           echo "ADD_VM_IP_AUTH_NETWORKS=true" >> vars.env
           echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
           echo "GINKGO_LABEL=" >> vars.env

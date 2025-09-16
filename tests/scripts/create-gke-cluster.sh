@@ -32,8 +32,8 @@ gcloud container clusters create "${GKE_CLUSTER_NAME}" \
     --machine-type "${GKE_MACHINE_TYPE}" \
     --num-nodes "${GKE_NUM_NODES}" \
     --no-enable-insecure-kubelet-readonly-port \
-    --stack-type=IPV4_IPV6 \
-    --ipv6-access-type=EXTERNAL \
+    --stack-type="${GKE_CLUSTER_STACK_TYPE}" \
+    --ipv6-access-type="${GKE_CLUSTER_IPV6_ACCESS_TYPE}" \
 
 # Add current IP to GKE master control node access, if this script is not invoked during a CI run.
 if [ "${IS_CI}" = "false" ]; then
