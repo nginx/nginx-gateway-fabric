@@ -838,6 +838,20 @@
           "title": "gwAPIExperimentalFeatures",
           "type": "object"
         },
+        "gwAPIInferenceExtension": {
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable Gateway API Inference Extension support. Allows for configuring InferencePools to route traffic to AI workloads.",
+              "required": [],
+              "title": "enable",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "gwAPIInferenceExtension",
+          "type": "object"
+        },
         "image": {
           "description": "The image configuration for the NGINX Gateway Fabric control plane.",
           "properties": {

@@ -1,6 +1,6 @@
 // This file contains the methods to get an AI workload endpoint from the EndpointPicker (EPP).
 
-// TODO (sberman): this module will need to be enhanced to include the following:
+// TODO(sberman): this module will need to be enhanced to include the following:
 // - function that sends the subrequest to the Go middleware application (to get the endpoint from EPP)
 // - if a user has specified an Exact matching condition for a model name, extract the model name from
 // the request body, and if it matches that condition, set the proper value in the X-Gateway-Model-Name header

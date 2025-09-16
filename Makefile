@@ -139,6 +139,14 @@ install-gateway-crds: ## Install Gateway API CRDs
 uninstall-gateway-crds: ## Uninstall Gateway API CRDs
 	kubectl kustomize $(SELF_DIR)config/crd/gateway-api/$(if $(filter true,$(ENABLE_EXPERIMENTAL)),experimental,standard) | kubectl delete -f -
 
+.PHONY: install-inference-crds
+install-inference-crds: ## Install Gateway API Inference Extension CRDs
+	kubectl kustomize $(SELF_DIR)config/crd/inference-extension | kubectl apply -f -
+
+.PHONY: uninstall-inference-crds
+uninstall-inference-crds: ## Uninstall Gateway API Inference Extension CRDs
+	kubectl kustomize $(SELF_DIR)config/crd/inference-extension | kubectl delete -f -
+
 .PHONY: generate-manifests
 generate-manifests: ## Generate manifests using Helm.
 	./scripts/generate-manifests.sh
