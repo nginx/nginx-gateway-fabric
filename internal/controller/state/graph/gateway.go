@@ -213,8 +213,7 @@ func validateGateway(
 			conds = append(conds, conditions.NewGatewayUnsupportedValue(valErr.Error())...)
 		} else {
 			secretNsName, secretNs := getGatewayCertSecretNsName(gw)
-			err := secretResolver.resolve(*secretNsName)
-			if err != nil {
+			if err := secretResolver.resolve(*secretNsName); err != nil {
 				path := field.NewPath("backend.clientCertificateRef")
 				valErr := field.Invalid(path, secretNsName, err.Error())
 				conds = append(conds, conditions.NewGatewaySecretRefInvalid(valErr.Error()))
