@@ -21,7 +21,7 @@ helm install nginx-gateway oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --set nginx.service.type=ClusterIP
 
 echo "Deploying IPv6 test application"
-kubectl apply -f tests/manifests/ipv6-test-app.yaml
+kubectl apply -f manifests/ipv6-test-app.yaml
 
 echo "Waiting for NGF to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/nginx-gateway -n nginx-gateway
@@ -30,7 +30,7 @@ echo "Waiting for test applications to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/test-app-ipv6
 
 echo "Deploying IPv6 test client"
-kubectl apply -f tests/manifests/test-client-ipv6.yaml
+kubectl apply -f manifests/test-client-ipv6.yaml
 kubectl wait --for=condition=ready --timeout=300s pod/ipv6-test-client
 
 
