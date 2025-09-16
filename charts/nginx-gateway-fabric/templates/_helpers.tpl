@@ -110,14 +110,3 @@ Filters out empty fields from a struct.
 {{- $result | toYaml -}}
 {{- end -}}
 {{- end }}
-
-{{/*
-Enforcing the initial NGINX Plus licensing report.
-*/}}
-{{- define "nginx-gateway.enforceInitialReport" -}}
-{{- if .Values.Usage.enforceInitialReport }}
-enforce_initial_report on;
-{{- else }}
-enforce_initial_report off;
-{{- end }}
-{{- end }}

@@ -693,7 +693,7 @@
               "type": "string"
             },
             "enforceInitialReport": {
-              "default": false,
+              "default": true,
               "description": "Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.",
               "required": [],
               "title": "enforceInitialReport",

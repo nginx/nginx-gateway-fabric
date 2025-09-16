@@ -29,11 +29,7 @@ const mgmtTemplateText = `mgmt {
     ssl_certificate        /etc/nginx/certs-bootstrap/tls.crt;
     ssl_certificate_key    /etc/nginx/certs-bootstrap/tls.key;
     {{- end }}
-    {{- if .EnforceInitialReport }}
-    enforce_initial_report on;
-    {{- else }}
     enforce_initial_report off;
-    {{- end }}
     deployment_context /etc/nginx/main-includes/deployment_ctx.json;
 }`
 

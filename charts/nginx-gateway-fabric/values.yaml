@@ -338,7 +338,7 @@ nginx:
     clientSSLSecretName: ""
 
     # -- Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.
-    enforceInitialReport: false
+    enforceInitialReport: true
 
   # @schema
   # type: object

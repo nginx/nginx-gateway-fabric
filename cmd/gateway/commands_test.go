@@ -154,7 +154,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--usage-report-resolver=resolver.com",
 				"--usage-report-ca-secret=ca-secret",
 				"--usage-report-client-ssl-secret=client-secret",
-				"--usage-report-enforce-initial-report=true",
+				"--usage-report-enforce-initial-report",
 				"--snippets-filters",
 				"--nginx-scc=nginx-sscc-name",
 				"--nginx-one-dataplane-key-secret=dataplane-key-secret",

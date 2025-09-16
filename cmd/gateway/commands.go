@@ -81,9 +81,9 @@ func createControllerCommand() *cobra.Command {
 		usageReportSkipVerifyFlag           = "usage-report-skip-verify"
 		usageReportClientSSLSecretFlag      = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
 		usageReportCASecretFlag             = "usage-report-ca-secret"         //nolint:gosec // not credentials
+		usageReportEnforceInitialReportFlag = "usage-report-enforce-initial-report"
 		snippetsFiltersFlag                 = "snippets-filters"
 		nginxSCCFlag                        = "nginx-scc"
-		usageReportEnforceInitialReportFlag = "usage-report-enforce-initial-report"
 	)
 
 	// flag values
@@ -494,7 +494,7 @@ func createControllerCommand() *cobra.Command {
 	cmd.Flags().BoolVar(
 		&usageReportEnforceInitialReport,
 		usageReportEnforceInitialReportFlag,
-		false,
+		true,
 		"Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.",
 	)
 

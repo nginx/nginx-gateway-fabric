@@ -125,7 +125,7 @@ type UsageReportConfig struct {
 	Resolver string
 	// SkipVerify controls whether the nginx verifies the server certificate.
 	SkipVerify bool
-	// Enabled is the flag for toggling usage reporting on or off.
+	// EnforceInitialReport is the flag for toggling usage reporting on or off.
 	EnforceInitialReport bool
 }
 
