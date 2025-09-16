@@ -34,7 +34,7 @@ gcloud container clusters create "${GKE_CLUSTER_NAME}" \
     --no-enable-insecure-kubelet-readonly-port \
     --stack-type="${GKE_CLUSTER_STACK_TYPE}" \
     --ipv6-access-type="${GKE_CLUSTER_IPV6_ACCESS_TYPE}" \
-    --create-subnetwork name=${RESOURCE_NAME},range=/21,ipv6-access-type=INTERNAL \
+    --create-subnetwork name=${RESOURCE_NAME},range=2600:1900:4041:625:0:1:0:0/96 \
     --network=us-ipv4-ipv6 --enable-dataplane-v2
 
 
