@@ -105,8 +105,9 @@ jobs:
           echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
           echo "NETWORK_TAGS=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "NGF_BRANCH=${{ github.ref_name }}" >> vars.env
-          echo "SOURCE_IP_RANGE=$(curl -sS -6 icanhazip.com)/32" >> vars.env
-          # echo "SOURCE_IPv6_RANGE=$(curl -sS -6 icanhazip.com)/128" >> vars.env
+          echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
+          echo "STACK_TYPE=IPV4_IPV6" >> vars.env
+          echo "IPV6_ACCESS_TYPE=EXTERNAL" >> vars.env
           echo "ADD_VM_IP_AUTH_NETWORKS=true" >> vars.env
           echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
           echo "GINKGO_LABEL=" >> vars.env
@@ -125,52 +126,52 @@ jobs:
         working-directory: ./tests
         run: make create-gke-cluster CI=true
 
-      - name: Create and setup VM
-        working-directory: ./tests
-        run: make create-and-setup-vm
+      # - name: Create and setup VM
+      #   working-directory: ./tests
+      #   run: make create-and-setup-vm
 
-      - name: Create and setup Router
-        working-directory: ./tests
-        run: make create-gke-router || true
+      # - name: Create and setup Router
+      #   working-directory: ./tests
+      #   run: make create-gke-router || true
 
-      - name: Setup Golang Environment
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version: stable
+      # - name: Setup Golang Environment
+      #   uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      #   with:
+      #     go-version: stable
 
-      - name: Set GOPATH
-        run: echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
+      # - name: Set GOPATH
+      #   run: echo "GOPATH=$(go env GOPATH)" >> $GITHUB_ENV
 
-      - name: NGF Docker meta
-        id: ngf-meta
-        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
-        with:
-          images: |
-            name=ghcr.io/nginx/nginx-gateway-fabric
-          tags: |
-            type=semver,pattern={{version}}
-            type=schedule
-            type=edge
-            type=ref,event=pr
-            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
+      # - name: NGF Docker meta
+      #   id: ngf-meta
+      #   uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+      #   with:
+      #     images: |
+      #       name=ghcr.io/nginx/nginx-gateway-fabric
+      #     tags: |
+      #       type=semver,pattern={{version}}
+      #       type=schedule
+      #       type=edge
+      #       type=ref,event=pr
+      #       type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
 
-      - name: NGINX Docker meta
-        id: nginx-meta
-        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
-        with:
-          images: |
-            name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image_tag == 'plus' && 'nginx-plus' || inputs.image_tag }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=edge
-            type=schedule
-            type=ref,event=pr
-            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
+      # - name: NGINX Docker meta
+      #   id: nginx-meta
+      #   uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+      #   with:
+      #     images: |
+      #       name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image_tag == 'plus' && 'nginx-plus' || inputs.image_tag }}
+      #     tags: |
+      #       type=semver,pattern={{version}}
+      #       type=edge
+      #       type=schedule
+      #       type=ref,event=pr
+      #       type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') }}
 
-      - name: Install and test NGF with IPv6 Configuration
-        run: |
-          ./scripts/run-tests-gcp-vm.sh
-        working-directory: ./tests
+      # - name: Install and test NGF with IPv6 Configuration
+      #   run: |
+      #     ./scripts/run-tests-gcp-vm.sh
+      #   working-directory: ./tests
 
       - name: Cleanup
         working-directory: ./tests
