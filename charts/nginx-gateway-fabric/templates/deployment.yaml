@@ -100,6 +100,9 @@ spec:
         {{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
         - --gateway-api-experimental-features
         {{- end }}
+        {{- if .Values.nginxGateway.gwAPIInferenceExtension.enable }}
+        - --gateway-api-inference-extension
+        {{- end }}
         {{- if .Values.nginxGateway.snippetsFilters.enable }}
         - --snippets-filters
         {{- end }}

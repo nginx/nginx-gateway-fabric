@@ -25,6 +25,12 @@ const (
 	BackendTLSPolicy = "BackendTLSPolicy"
 )
 
+// Gateway API Inference Extension kinds.
+const (
+	// InferencePool is the InferencePool kind.
+	InferencePool = "InferencePool"
+)
+
 // Core API Kinds.
 const (
 	// Service is the Service kind.

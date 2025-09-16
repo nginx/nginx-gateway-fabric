@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -25,6 +26,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -214,6 +216,44 @@ func TestBuildGraph(t *testing.T) {
 		return rule
 	}
 
+	createValidRuleWithInferencePoolBackendRef := func(matches []gatewayv1.HTTPRouteMatch) RouteRule {
+		refs := []BackendRef{
+			{
+				SvcNsName: types.NamespacedName{
+					Namespace: testNs,
+					Name:      controller.CreateInferencePoolServiceName("ipool"),
+				},
+				ServicePort:        v1.ServicePort{Port: 80},
+				Valid:              true,
+				Weight:             1,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+			},
+		}
+		rbrs := []RouteBackendRef{
+			{
+				IsInferencePool: true,
+				BackendRef: gatewayv1.BackendRef{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Group:     helpers.GetPointer[gatewayv1.Group](""),
+						Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.Service),
+						Name:      gatewayv1.ObjectName(controller.CreateInferencePoolServiceName("ipool")),
+						Namespace: helpers.GetPointer(gatewayv1.Namespace(testNs)),
+					},
+				},
+			},
+		}
+		return RouteRule{
+			ValidMatches: true,
+			Filters: RouteRuleFilters{
+				Filters: []Filter{},
+				Valid:   true,
+			},
+			BackendRefs:      refs,
+			Matches:          matches,
+			RouteBackendRefs: rbrs,
+		}
+	}
+
 	routeMatches := []gatewayv1.HTTPRouteMatch{
 		{
 			Path: &gatewayv1.HTTPPathMatch{
@@ -334,6 +374,32 @@ func TestBuildGraph(t *testing.T) {
 						},
 					},
 				},
+			},
+		},
+	}
+
+	inferencePool := &inference.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "ipool",
+		},
+		Spec: inference.InferencePoolSpec{
+			TargetPorts: []inference.Port{
+				{Number: 80},
+			},
+		},
+	}
+
+	ir := createRoute("ir", "gateway-1", "listener-80-1")
+	ir.Spec.Hostnames = []gatewayv1.Hostname{"inference.example.com"}
+	// Update the backend ref to point to the InferencePool instead of a Service
+	ir.Spec.Rules[0].BackendRefs[0] = gatewayv1.HTTPBackendRef{
+		BackendRef: gatewayv1.BackendRef{
+			BackendObjectReference: gatewayv1.BackendObjectReference{
+				Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+				Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
+				Name:      gatewayv1.ObjectName(inferencePool.Name),
+				Namespace: helpers.GetPointer(gatewayv1.Namespace(inferencePool.Namespace)),
 			},
 		},
 	}
@@ -489,7 +555,20 @@ func TestBuildGraph(t *testing.T) {
 
 	svc1 := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "test", Name: "foo2",
+			Namespace: testNs, Name: "foo2",
+		},
+		Spec: v1.ServiceSpec{
+			Ports: []v1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+		},
+	}
+
+	inferenceSvc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs, Name: controller.CreateInferencePoolServiceName(inferencePool.Name),
 		},
 		Spec: v1.ServiceSpec{
 			Ports: []v1.ServicePort{
@@ -691,6 +770,7 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(hr1): hr1,
 				client.ObjectKeyFromObject(hr2): hr2,
 				client.ObjectKeyFromObject(hr3): hr3,
+				client.ObjectKeyFromObject(ir):  ir,
 			},
 			TLSRoutes: map[types.NamespacedName]*v1alpha2.TLSRoute{
 				client.ObjectKeyFromObject(tr):  tr,
@@ -700,8 +780,12 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(gr): gr,
 			},
 			Services: map[types.NamespacedName]*v1.Service{
-				client.ObjectKeyFromObject(svc):  svc,
-				client.ObjectKeyFromObject(svc1): svc1,
+				client.ObjectKeyFromObject(svc):          svc,
+				client.ObjectKeyFromObject(svc1):         svc1,
+				client.ObjectKeyFromObject(inferenceSvc): inferenceSvc,
+			},
+			InferencePools: map[types.NamespacedName]*inference.InferencePool{
+				client.ObjectKeyFromObject(inferencePool): inferencePool,
 			},
 			Namespaces: map[types.NamespacedName]*v1.Namespace{
 				client.ObjectKeyFromObject(ns): ns,
@@ -992,6 +1076,37 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
+	inferenceRoute := &L7Route{
+		RouteType:  RouteTypeHTTP,
+		Valid:      true,
+		Attachable: true,
+		Source:     ir,
+		ParentRefs: []ParentRef{
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				SectionName: ir.Spec.ParentRefs[0].SectionName,
+				Attachment: &ParentRefAttachmentStatus{
+					Attached: true,
+					AcceptedHostnames: map[string][]string{
+						CreateGatewayListenerKey(
+							client.ObjectKeyFromObject(gw1.Source),
+							"listener-80-1",
+						): {"inference.example.com"},
+					},
+					ListenerPort: 80,
+				},
+			},
+		},
+		Spec: L7RouteSpec{
+			Hostnames: ir.Spec.Hostnames,
+			Rules:     []RouteRule{createValidRuleWithInferencePoolBackendRef(routeMatches)},
+		},
+	}
+
 	supportedKindsForListeners := []gatewayv1.RouteGroupKind{
 		{Kind: gatewayv1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
 		{Kind: gatewayv1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
@@ -1021,6 +1136,7 @@ func TestBuildGraph(t *testing.T) {
 							Routes: map[RouteKey]*L7Route{
 								CreateRouteKey(hr1): routeHR1,
 								CreateRouteKey(gr):  routeGR,
+								CreateRouteKey(ir):  inferenceRoute,
 							},
 							SupportedKinds:            supportedKindsForListeners,
 							L4Routes:                  map[L4RouteKey]*L4Route{},
@@ -1175,6 +1291,7 @@ func TestBuildGraph(t *testing.T) {
 				CreateRouteKey(hr1): routeHR1,
 				CreateRouteKey(hr3): routeHR3,
 				CreateRouteKey(gr):  routeGR,
+				CreateRouteKey(ir):  inferenceRoute,
 			},
 			L4Routes: map[L4RouteKey]*L4Route{
 				CreateRouteKeyL4(tr):  routeTR,
@@ -1198,6 +1315,14 @@ func TestBuildGraph(t *testing.T) {
 				},
 				client.ObjectKeyFromObject(svc1): {
 					GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: testNs, Name: "gateway-1"}: {}},
+				},
+				client.ObjectKeyFromObject(inferenceSvc): {
+					GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: testNs, Name: "gateway-1"}: {}},
+				},
+			},
+			ReferencedInferencePools: map[types.NamespacedName]*ReferencedInferencePool{
+				client.ObjectKeyFromObject(inferencePool): {
+					Source: inferencePool,
 				},
 			},
 			ReferencedCaCertConfigMaps: map[types.NamespacedName]*CaCertConfigMap{
@@ -1382,6 +1507,20 @@ func TestIsReferenced(t *testing.T) {
 	}
 	emptyService := &v1.Service{}
 
+	inferenceInGraph := &inference.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "inferenceInGraph",
+		},
+	}
+	inferenceNotInGraph := &inference.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "inferenceNotInGraph",
+		},
+	}
+	emptyInferencePool := &inference.InferencePool{}
+
 	createEndpointSlice := func(name string, svcName string) *discoveryV1.EndpointSlice {
 		return &discoveryV1.EndpointSlice{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1460,6 +1599,9 @@ func TestIsReferenced(t *testing.T) {
 		},
 		ReferencedServices: map[types.NamespacedName]*ReferencedService{
 			client.ObjectKeyFromObject(serviceInGraph): {},
+		},
+		ReferencedInferencePools: map[types.NamespacedName]*ReferencedInferencePool{
+			client.ObjectKeyFromObject(inferenceInGraph): {},
 		},
 		ReferencedCaCertConfigMaps: map[types.NamespacedName]*CaCertConfigMap{
 			client.ObjectKeyFromObject(baseConfigMap): {
@@ -1558,6 +1700,26 @@ func TestIsReferenced(t *testing.T) {
 		{
 			name:     "Empty Service",
 			resource: emptyService,
+			graph:    graph,
+			expected: false,
+		},
+
+		// InferencePool tests
+		{
+			name:     "InferencePool is referenced",
+			resource: inferenceInGraph,
+			graph:    graph,
+			expected: true,
+		},
+		{
+			name:     "InferencePool is not referenced",
+			resource: inferenceNotInGraph,
+			graph:    graph,
+			expected: false,
+		},
+		{
+			name:     "Empty InferencePool",
+			resource: emptyInferencePool,
 			graph:    graph,
 			expected: false,
 		},

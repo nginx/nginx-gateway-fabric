@@ -48,6 +48,8 @@ type Config struct {
 	Plus bool
 	// ExperimentalFeatures indicates if experimental features are enabled.
 	ExperimentalFeatures bool
+	// InferenceExtension indicates if Gateway API Inference Extension support is enabled.
+	InferenceExtension bool
 	// SnippetsFilters indicates if SnippetsFilters are enabled.
 	SnippetsFilters bool
 }

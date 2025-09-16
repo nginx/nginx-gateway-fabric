@@ -12,11 +12,13 @@ import (
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
+	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -149,6 +151,7 @@ var _ = Describe("eventHandler", func() {
 			metricsCollector: collectors.NewControllerNoopCollector(),
 		})
 		Expect(handler.cfg.graphBuiltHealthChecker.ready).To(BeFalse())
+		handler.leader = true
 	})
 
 	AfterEach(func() {
@@ -518,6 +521,115 @@ var _ = Describe("eventHandler", func() {
 		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).To(Succeed())
 	})
 
+	It("should create a headless Service for each referenced InferencePool", func() {
+		namespace := "test-ns"
+		poolName1 := "pool1"
+		poolName2 := "pool2"
+		poolUID1 := types.UID("uid1")
+		poolUID2 := types.UID("uid2")
+
+		pool1 := &inference.InferencePool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      poolName1,
+				Namespace: namespace,
+				UID:       poolUID1,
+			},
+			Spec: inference.InferencePoolSpec{
+				Selector: inference.LabelSelector{
+					MatchLabels: map[inference.LabelKey]inference.LabelValue{"app": "foo"},
+				},
+				TargetPorts: []inference.Port{
+					{Number: 8081},
+				},
+			},
+		}
+
+		g := &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				{}: {
+					Source: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "test",
+							Name:      "gateway",
+						},
+					},
+					Valid: true,
+				},
+			},
+			ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
+				{Namespace: namespace, Name: poolName1}: {Source: pool1},
+				{Namespace: namespace, Name: poolName2}: {
+					Source: &inference.InferencePool{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      poolName2,
+							Namespace: namespace,
+							UID:       poolUID2,
+						},
+						Spec: inference.InferencePoolSpec{
+							Selector: inference.LabelSelector{
+								MatchLabels: map[inference.LabelKey]inference.LabelValue{"app": "bar"},
+							},
+							TargetPorts: []inference.Port{
+								{Number: 9090},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		fakeProcessor.ProcessReturns(g)
+
+		e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
+		batch := []any{e}
+
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+		// Check Service for pool1
+		svc1 := &v1.Service{}
+		svcName1 := controller.CreateInferencePoolServiceName(poolName1)
+		err := fakeK8sClient.Get(context.Background(), types.NamespacedName{Name: svcName1, Namespace: namespace}, svc1)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(svc1.Spec.ClusterIP).To(Equal(v1.ClusterIPNone))
+		Expect(svc1.Spec.Selector).To(HaveKeyWithValue("app", "foo"))
+		Expect(svc1.Spec.Ports).To(HaveLen(1))
+		Expect(svc1.Spec.Ports[0].Port).To(Equal(int32(8081)))
+		Expect(svc1.OwnerReferences).To(HaveLen(1))
+		Expect(svc1.OwnerReferences[0].Name).To(Equal(poolName1))
+		Expect(svc1.OwnerReferences[0].UID).To(Equal(poolUID1))
+
+		// Check Service for pool2
+		svc2 := &v1.Service{}
+		svcName2 := controller.CreateInferencePoolServiceName(poolName2)
+		err = fakeK8sClient.Get(context.Background(), types.NamespacedName{Name: svcName2, Namespace: namespace}, svc2)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(svc2.Spec.ClusterIP).To(Equal(v1.ClusterIPNone))
+		Expect(svc2.Spec.Selector).To(HaveKeyWithValue("app", "bar"))
+		Expect(svc2.Spec.Ports).To(HaveLen(1))
+		Expect(svc2.Spec.Ports[0].Port).To(Equal(int32(9090)))
+		Expect(svc2.OwnerReferences).To(HaveLen(1))
+		Expect(svc2.OwnerReferences[0].Name).To(Equal(poolName2))
+		Expect(svc2.OwnerReferences[0].UID).To(Equal(poolUID2))
+
+		// Now update pool1's selector and ensure the Service selector is updated
+		updatedSelector := map[inference.LabelKey]inference.LabelValue{"app": "baz"}
+		pool1.Spec.Selector.MatchLabels = updatedSelector
+
+		// Simulate the updated pool in the graph
+		g.ReferencedInferencePools[types.NamespacedName{Namespace: namespace, Name: poolName1}].Source = pool1
+		fakeProcessor.ProcessReturns(g)
+
+		e = &events.UpsertEvent{Resource: &inference.InferencePool{}}
+		batch = []any{e}
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+		// Check that the Service selector was updated
+		svc1 = &v1.Service{}
+		err = fakeK8sClient.Get(context.Background(), types.NamespacedName{Name: svcName1, Namespace: namespace}, svc1)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(svc1.Spec.Selector).To(HaveKeyWithValue("app", "baz"))
+	})
+
 	It("should panic for an unknown event type", func() {
 		e := &struct{}{}
 
@@ -688,3 +800,156 @@ var _ = Describe("getDeploymentContext", func() {
 		})
 	})
 })
+
+var _ = Describe("ensureInferencePoolServices", func() {
+	var (
+		handler           *eventHandlerImpl
+		fakeK8sClient     client.Client
+		fakeEventRecorder *record.FakeRecorder
+		namespace         = "test-ns"
+		poolName          = "my-inference-pool"
+		poolUID           = types.UID("pool-uid")
+	)
+
+	BeforeEach(func() {
+		fakeK8sClient = fake.NewFakeClient()
+		fakeEventRecorder = record.NewFakeRecorder(1)
+		handler = newEventHandlerImpl(eventHandlerConfig{
+			ctx:           context.Background(),
+			k8sClient:     fakeK8sClient,
+			statusQueue:   status.NewQueue(),
+			eventRecorder: fakeEventRecorder,
+			logger:        logr.Discard(),
+		})
+		// Set as leader so ensureInferencePoolServices will run
+		handler.leader = true
+	})
+
+	It("creates a headless Service for a referenced InferencePool", func() {
+		pools := map[types.NamespacedName]*graph.ReferencedInferencePool{
+			{Namespace: namespace, Name: poolName}: {
+				Source: &inference.InferencePool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      poolName,
+						Namespace: namespace,
+						UID:       poolUID,
+					},
+					Spec: inference.InferencePoolSpec{
+						Selector: inference.LabelSelector{
+							MatchLabels: map[inference.LabelKey]inference.LabelValue{"app": "foo"},
+						},
+						TargetPorts: []inference.Port{
+							{Number: 8080},
+						},
+					},
+				},
+			},
+		}
+
+		handler.ensureInferencePoolServices(context.Background(), pools)
+
+		// The Service should have been created
+		svc := &v1.Service{}
+		svcName := controller.CreateInferencePoolServiceName(poolName)
+		err := fakeK8sClient.Get(context.Background(), types.NamespacedName{Name: svcName, Namespace: namespace}, svc)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(svc.Spec.ClusterIP).To(Equal(v1.ClusterIPNone))
+		Expect(svc.Spec.Selector).To(HaveKeyWithValue("app", "foo"))
+		Expect(svc.Spec.Ports).To(HaveLen(1))
+		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(8080)))
+		Expect(svc.OwnerReferences).To(HaveLen(1))
+		Expect(svc.OwnerReferences[0].Name).To(Equal(poolName))
+		Expect(svc.OwnerReferences[0].UID).To(Equal(poolUID))
+	})
+
+	It("does nothing if not leader", func() {
+		handler.leader = false
+		pools := map[types.NamespacedName]*graph.ReferencedInferencePool{
+			{Namespace: namespace, Name: poolName}: {
+				Source: &inference.InferencePool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      poolName,
+						Namespace: namespace,
+						UID:       poolUID,
+					},
+					Spec: inference.InferencePoolSpec{
+						Selector: inference.LabelSelector{
+							MatchLabels: map[inference.LabelKey]inference.LabelValue{"app": "foo"},
+						},
+						TargetPorts: []inference.Port{
+							{Number: 8080},
+						},
+					},
+				},
+			},
+		}
+
+		handler.ensureInferencePoolServices(context.Background(), pools)
+		svc := &v1.Service{}
+		svcName := controller.CreateInferencePoolServiceName(poolName)
+		err := fakeK8sClient.Get(context.Background(), types.NamespacedName{Name: svcName, Namespace: namespace}, svc)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("skips pools with nil Source", func() {
+		pools := map[types.NamespacedName]*graph.ReferencedInferencePool{
+			{Namespace: namespace, Name: poolName}: {
+				Source: nil,
+			},
+		}
+		handler.ensureInferencePoolServices(context.Background(), pools)
+		// Should not panic or create anything
+		svc := &v1.Service{}
+		svcName := controller.CreateInferencePoolServiceName(poolName)
+		err := fakeK8sClient.Get(context.Background(), types.NamespacedName{Name: svcName, Namespace: namespace}, svc)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("emits an event if Service creation fails", func() {
+		// Use a client that will fail on CreateOrUpdate
+		handler.cfg.k8sClient = &badFakeClient{}
+		handler.leader = true
+
+		pools := map[types.NamespacedName]*graph.ReferencedInferencePool{
+			{Namespace: namespace, Name: poolName}: {
+				Source: &inference.InferencePool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      poolName,
+						Namespace: namespace,
+						UID:       poolUID,
+					},
+					Spec: inference.InferencePoolSpec{
+						Selector: inference.LabelSelector{
+							MatchLabels: map[inference.LabelKey]inference.LabelValue{"app": "foo"},
+						},
+						TargetPorts: []inference.Port{
+							{Number: 8080},
+						},
+					},
+				},
+			},
+		}
+
+		handler.ensureInferencePoolServices(context.Background(), pools)
+		Eventually(func() int { return len(fakeEventRecorder.Events) }).Should(BeNumerically(">=", 1))
+		event := <-fakeEventRecorder.Events
+		Expect(event).To(ContainSubstring("ServiceCreateOrUpdateFailed"))
+	})
+})
+
+// badFakeClient always returns an error on Create or Update.
+type badFakeClient struct {
+	client.Client
+}
+
+func (*badFakeClient) Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
+	return apiErrors.NewNotFound(v1.Resource("service"), "not-found")
+}
+
+func (*badFakeClient) Create(context.Context, client.Object, ...client.CreateOption) error {
+	return errors.New("create error")
+}
+
+func (*badFakeClient) Update(context.Context, client.Object, ...client.UpdateOption) error {
+	return errors.New("update error")
+}

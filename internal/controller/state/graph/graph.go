@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -40,6 +41,7 @@ type ClusterState struct {
 	GRPCRoutes         map[types.NamespacedName]*gatewayv1.GRPCRoute
 	NGFPolicies        map[PolicyKey]policies.Policy
 	SnippetsFilters    map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
+	InferencePools     map[types.NamespacedName]*inference.InferencePool
 }
 
 // Graph is a Graph-like representation of Gateway API resources.
@@ -65,6 +67,9 @@ type Graph struct {
 	ReferencedNamespaces map[types.NamespacedName]*v1.Namespace
 	// ReferencedServices includes the NamespacedNames of all the Services that are referenced by at least one Route.
 	ReferencedServices map[types.NamespacedName]*ReferencedService
+	// ReferencedInferencePools includes the NamespacedNames of all the InferencePools
+	// that are referenced by at least one Route.
+	ReferencedInferencePools map[types.NamespacedName]*ReferencedInferencePool
 	// ReferencedCaCertConfigMaps includes ConfigMaps that have been referenced by any BackendTLSPolicies.
 	ReferencedCaCertConfigMaps map[types.NamespacedName]*CaCertConfigMap
 	// ReferencedNginxProxies includes NginxProxies that have been referenced by a GatewayClass or a Gateway.
@@ -115,11 +120,15 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 		_, existed := g.ReferencedNamespaces[nsname]
 		exists := isNamespaceReferenced(obj, g.Gateways)
 		return existed || exists
-	// Service reference exists if at least one HTTPRoute references it.
+	// Service reference exists if at least one Route references it.
 	case *v1.Service:
 		_, exists := g.ReferencedServices[nsname]
 		return exists
-	// EndpointSlice reference exists if its Service owner is referenced by at least one HTTPRoute.
+	// InferencePool reference exists if at least one Route references it.
+	case *inference.InferencePool:
+		_, exists := g.ReferencedInferencePools[nsname]
+		return exists
+	// EndpointSlice reference exists if its Service owner is referenced by at least one Route.
 	case *discoveryV1.EndpointSlice:
 		svcName := index.GetServiceNameFromEndpointSlice(obj)
 
@@ -249,7 +258,9 @@ func BuildGraph(
 		state.GRPCRoutes,
 		gws,
 		processedSnippetsFilters,
+		state.InferencePools,
 	)
+	referencedInferencePools := buildReferencedInferencePools(routes, gws, state.InferencePools)
 
 	l4routes := buildL4RoutesForGateways(
 		state.TLSRoutes,
@@ -262,6 +273,7 @@ func BuildGraph(
 		routes,
 		refGrantResolver,
 		state.Services,
+		referencedInferencePools,
 		processedBackendTLSPolicies,
 	)
 	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces)
@@ -295,6 +307,7 @@ func BuildGraph(
 		ReferencedSecrets:          secretResolver.getResolvedSecrets(),
 		ReferencedNamespaces:       referencedNamespaces,
 		ReferencedServices:         referencedServices,
+		ReferencedInferencePools:   referencedInferencePools,
 		ReferencedCaCertConfigMaps: configMapResolver.getResolvedConfigMaps(),
 		ReferencedNginxProxies:     processedNginxProxies,
 		BackendTLSPolicies:         processedBackendTLSPolicies,

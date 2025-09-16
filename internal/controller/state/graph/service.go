@@ -34,7 +34,6 @@ func buildReferencedServices(
 		}
 
 		processL7RoutesForGateway(l7routes, gw, gwNsName, referencedServices, services)
-
 		processL4RoutesForGateway(l4Routes, gw, gwNsName, referencedServices, services)
 	}
 

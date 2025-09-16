@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -47,9 +48,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 		{
 			name: "base case",
 			cfg: config.Config{
-				GatewayClassName:     gcName,
-				ExperimentalFeatures: false,
-				SnippetsFilters:      false,
+				GatewayClassName: gcName,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -75,7 +74,6 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			cfg: config.Config{
 				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
-				SnippetsFilters:      false,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -100,11 +98,36 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
+			name: "inference extension enabled",
+			cfg: config.Config{
+				GatewayClassName:   gcName,
+				InferenceExtension: true,
+			},
+			expectedObjects: []client.Object{
+				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
+			},
+			expectedObjectLists: []client.ObjectList{
+				&apiv1.ServiceList{},
+				&apiv1.SecretList{},
+				&apiv1.NamespaceList{},
+				&discoveryV1.EndpointSliceList{},
+				&gatewayv1.HTTPRouteList{},
+				&gatewayv1.GatewayList{},
+				&gatewayv1beta1.ReferenceGrantList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
+				&gatewayv1.GRPCRouteList{},
+				partialObjectMetadataList,
+				&inference.InferencePoolList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+			},
+		},
+		{
 			name: "snippets filters enabled",
 			cfg: config.Config{
-				GatewayClassName:     gcName,
-				ExperimentalFeatures: false,
-				SnippetsFilters:      true,
+				GatewayClassName: gcName,
+				SnippetsFilters:  true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -127,10 +150,11 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "experimental and snippets filters enabled",
+			name: "experimental, inference, and snippets filters enabled",
 			cfg: config.Config{
 				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
+				InferenceExtension:   true,
 				SnippetsFilters:      true,
 			},
 			expectedObjects: []client.Object{
@@ -147,6 +171,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&gatewayv1beta1.ReferenceGrantList{},
 				&ngfAPIv1alpha2.NginxProxyList{},
 				partialObjectMetadataList,
+				&inference.InferencePoolList{},
 				&gatewayv1alpha3.BackendTLSPolicyList{},
 				&gatewayv1alpha2.TLSRouteList{},
 				&gatewayv1.GRPCRouteList{},

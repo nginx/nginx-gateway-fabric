@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -317,6 +318,7 @@ func createScheme() *runtime.Scheme {
 	utilruntime.Must(apiext.AddToScheme(scheme))
 	utilruntime.Must(ngfAPIv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(ngfAPIv1alpha2.AddToScheme(scheme))
+	utilruntime.Must(inference.Install(scheme))
 
 	return scheme
 }
