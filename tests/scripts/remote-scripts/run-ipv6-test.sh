@@ -9,7 +9,7 @@ cd nginx-gateway-fabric/tests
 echo "Prefix: ${PREFIX}, Tag: ${TAG}"
 
 echo "Installing NGF with IPv6 configuration"
-helm install ngf oci://${PREFIX}/${TAG} \
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --create-namespace -n nginx-gateway \
     --set nginx.config.ipFamily=ipv6 \
     --set nginx.service.type=ClusterIP
