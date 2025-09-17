@@ -5,6 +5,7 @@ set -e # Exit immediately if a command exits with a non-zero status
 RELEASE=$1
 HELM_RELEASE_NAME=${2:-ngf}
 NAMESPACE=${3:-nginx-gateway}
+CLUSTER_NAME=${4:-ipv6-only}
 
 cleanup() {
     echo "Cleaning up resources..."
@@ -15,6 +16,9 @@ cleanup() {
 }
 
 trap cleanup EXIT
+
+echo "Creating IPv6 kind cluster..."
+kind create cluster --name ${CLUSTER_NAME} --config kind/kind-ipv6-only.yaml
 
 echo "Applying Gateway API CRDs"
 kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=${RELEASE}" | kubectl apply -f -
