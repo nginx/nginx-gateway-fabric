@@ -435,7 +435,6 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 			"SkipVerify":           p.cfg.PlusUsageConfig.SkipVerify,
 			"UsageCASecret":        caSecret,
 			"UsageClientSSLSecret": clientSSLSecret,
-			"EnforceInitialReport": p.cfg.PlusUsageConfig.EnforceInitialReport,
 		}
 
 		bootstrapCM.Data["mgmt.conf"] = string(helpers.MustExecuteTemplate(mgmtTemplate, mgmtFields))

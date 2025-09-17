@@ -861,15 +861,13 @@ func TestUsageReportConfig(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		params      UsageReportParams
+		params      usageReportParams
 		expected    config.UsageReportConfig
-		plus        bool
 		expectError bool
 	}{
 		{
 			name: "NGINX Plus enabled with all valid parameters",
-			plus: true,
-			params: UsageReportParams{
+			params: usageReportParams{
 				SecretName:           stringValidatingValue{value: "test-secret"},
 				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
 				CASecretName:         stringValidatingValue{value: "ca-secret"},
@@ -891,8 +889,7 @@ func TestUsageReportConfig(t *testing.T) {
 		},
 		{
 			name: "NGINX Plus enabled with missing secret",
-			plus: true,
-			params: UsageReportParams{
+			params: usageReportParams{
 				SecretName:           stringValidatingValue{value: ""},
 				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
 				CASecretName:         stringValidatingValue{value: "ca-secret"},
@@ -902,20 +899,6 @@ func TestUsageReportConfig(t *testing.T) {
 				EnforceInitialReport: false,
 			},
 			expectError: true,
-		},
-		{
-			name: "NGINX Plus disabled",
-			plus: false,
-			params: UsageReportParams{
-				SecretName:           stringValidatingValue{value: "test-secret"},
-				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
-				CASecretName:         stringValidatingValue{value: "ca-secret"},
-				Endpoint:             stringValidatingValue{value: "example.com"},
-				Resolver:             stringValidatingValue{value: "resolver.com"},
-				SkipVerify:           true,
-				EnforceInitialReport: false,
-			},
-			expectError: false,
 			expected:    config.UsageReportConfig{},
 		},
 	}
@@ -923,7 +906,7 @@ func TestUsageReportConfig(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			result, err := buildUsageReportConfig(tc.plus, tc.params)
+			result, err := buildUsageReportConfig(tc.params)
 
 			if tc.expectError {
 				if err == nil {

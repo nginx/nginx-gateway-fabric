@@ -42,8 +42,8 @@ const (
 	nginxOneTelemetryEndpointHost = "agent.connect.nginx.com"
 )
 
-// UsageReportParams holds the parameters for building the usage report configuration for PLUS.
-type UsageReportParams struct {
+// usageReportParams holds the parameters for building the usage report configuration for PLUS.
+type usageReportParams struct {
 	SecretName           stringValidatingValue
 	ClientSSLSecretName  stringValidatingValue
 	CASecretName         stringValidatingValue
@@ -162,7 +162,7 @@ func createControllerCommand() *cobra.Command {
 		}
 	)
 
-	usageReportParams := UsageReportParams{
+	usageReportParams := usageReportParams{
 		SecretName: stringValidatingValue{
 			validator: validateResourceName,
 			value:     "nplus-license",
@@ -225,9 +225,12 @@ func createControllerCommand() *cobra.Command {
 				return fmt.Errorf("error parsing telemetry endpoint insecure: %w", err)
 			}
 
-			usageReportConfig, urcErr := buildUsageReportConfig(plus, usageReportParams)
-			if urcErr != nil {
-				return urcErr
+			var usageReportConfig config.UsageReportConfig
+			if plus {
+				usageReportConfig, err = buildUsageReportConfig(usageReportParams)
+				if err != nil {
+					return err
+				}
 			}
 
 			flagKeys, flagValues := parseFlags(cmd.Flags())
@@ -501,24 +504,20 @@ func createControllerCommand() *cobra.Command {
 	return cmd
 }
 
-func buildUsageReportConfig(plus bool, params UsageReportParams) (config.UsageReportConfig, error) {
-	if plus && params.SecretName.value == "" {
+func buildUsageReportConfig(params usageReportParams) (config.UsageReportConfig, error) {
+	if params.SecretName.value == "" {
 		return config.UsageReportConfig{}, errors.New("usage-report-secret is required when using NGINX Plus")
 	}
 
-	if plus {
-		return config.UsageReportConfig{
-			SecretName:           params.SecretName.value,
-			ClientSSLSecretName:  params.ClientSSLSecretName.value,
-			CASecretName:         params.CASecretName.value,
-			Endpoint:             params.Endpoint.value,
-			Resolver:             params.Resolver.value,
-			SkipVerify:           params.SkipVerify,
-			EnforceInitialReport: params.EnforceInitialReport,
-		}, nil
-	}
-
-	return config.UsageReportConfig{}, nil
+	return config.UsageReportConfig{
+		SecretName:           params.SecretName.value,
+		ClientSSLSecretName:  params.ClientSSLSecretName.value,
+		CASecretName:         params.CASecretName.value,
+		Endpoint:             params.Endpoint.value,
+		Resolver:             params.Resolver.value,
+		SkipVerify:           params.SkipVerify,
+		EnforceInitialReport: params.EnforceInitialReport,
+	}, nil
 }
 
 func createGenerateCertsCommand() *cobra.Command {

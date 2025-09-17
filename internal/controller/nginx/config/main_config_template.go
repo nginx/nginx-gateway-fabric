@@ -37,9 +37,7 @@ mgmt {
 	ssl_certificate {{ .ClientSSLCertFile }};
 	ssl_certificate_key {{ .ClientSSLKeyFile }};
 	{{- end }}
-	{{- if .EnforceInitialReport }}
-	enforce_initial_report on;
-	{{- else }}
+	{{- if not .EnforceInitialReport }}
 	enforce_initial_report off;
 	{{- end }}
 }
