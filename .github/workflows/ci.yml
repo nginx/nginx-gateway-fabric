@@ -163,7 +163,6 @@ jobs:
       GOPROXY: ${{ needs.vars.outputs.goproxy }}
     outputs:
       json: ${{ steps.gateway_binaries.outputs.json }}
-      goversionm: ${{ steps.go_deps.outputs.goversionm }}
     permissions:
       contents: write # for goreleaser/goreleaser-action and lucacome/draft-release to create/update releases
       id-token: write # for goreleaser/goreleaser-action to sign artifacts
@@ -208,22 +207,6 @@ jobs:
         if: ${{ inputs.is_production_release }}
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
 
-      - name: Generate Module Dependencies Info
-        id: go_deps
-        run: |
-          # Generate module info before GoReleaser strips the binary
-          echo "Generating module dependencies info..."
-          cd cmd/gateway
-          go list -m all > ../../goversionm_${{ github.run_id }}_${{ github.run_number }}.txt
-          echo "Module dependencies saved to goversionm_${{ github.run_id }}_${{ github.run_number }}.txt"
-          cd ../..
-          # Move goversionm file to dist directory so it gets cached with binaries
-          mkdir -p dist
-          goversionm_file="goversionm_${{ github.run_id }}_${{ github.run_number }}.txt"
-          mv "$goversionm_file" "dist/$goversionm_file"
-          echo "Module dependencies saved to dist/$goversionm_file"
-          echo "goversionm=$goversionm_file" >> $GITHUB_OUTPUT
-
       - name: Build binary
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
@@ -267,7 +250,9 @@ jobs:
 
   assertion:
     name: Generate and Sign Assertion Documents
-    needs: binary
+    needs: [vars, binary]
+    env:
+      GOPROXY: ${{ needs.vars.outputs.goproxy }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -277,11 +262,20 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-      - name: Fetch Cached Artifacts
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      - name: Setup Golang Environment
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          path: ${{ github.workspace }}/dist
-          key: nginx-gateway-fabric-${{ github.run_id }}-${{ github.run_number }}
+          go-version: stable
+
+      - name: Generate Module Dependencies Info
+        id: go_deps
+        run: |
+          echo "Generating module dependencies info..."
+          cd cmd/gateway
+          go list -m all > ../../goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ strategy.job-index }}.txt
+          echo "Module dependencies saved to goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ strategy.job-index }}.txt"
+          cd ../..
+          echo "goversionm=goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ strategy.job-index }}.txt" >> $GITHUB_OUTPUT
 
       - name: Generate Assertion Document
         id: assertiondoc
@@ -299,7 +293,7 @@ jobs:
           artifactory-api-token: ${{ secrets.ARTIFACTORY_TOKEN }}
           artifactory-url: ${{ secrets.ARTIFACTORY_URL }}
           artifactory-repo: 'f5-nginx-go-local-approved-dependency'
-          build-content-path: ${{ needs.binary.outputs.goversionm }}
+          build-content-path: ${{ steps.go_deps.outputs.goversionm }}
           assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.sha }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
 
       - name: Sign and Store Assertion Document
