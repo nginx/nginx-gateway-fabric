@@ -587,6 +587,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("ssl_trusted_certificate"))
 	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("ssl_certificate"))
 	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("ssl_certificate_key"))
+	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("enforce_initial_report off"))
 
 	cmObj = objects[5]
 	cm, ok = cmObj.(*corev1.ConfigMap)

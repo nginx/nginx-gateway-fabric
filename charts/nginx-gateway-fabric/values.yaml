@@ -337,6 +337,9 @@ nginx:
     # Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).
     clientSSLSecretName: ""
 
+    # -- Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.
+    enforceInitialReport: true
+
   # @schema
   # type: object
   # properties:

@@ -154,6 +154,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--usage-report-resolver=resolver.com",
 				"--usage-report-ca-secret=ca-secret",
 				"--usage-report-client-ssl-secret=client-secret",
+				"--usage-report-enforce-initial-report",
 				"--snippets-filters",
 				"--nginx-scc=nginx-sscc-name",
 				"--nginx-one-dataplane-key-secret=dataplane-key-secret",
@@ -853,4 +854,73 @@ func TestCreateGatewayPodConfig(t *testing.T) {
 	cfg, err = createGatewayPodConfig(version, "svc")
 	g.Expect(err).To(MatchError(errors.New("environment variable POD_UID not set")))
 	g.Expect(cfg).To(Equal(config.GatewayPodConfig{}))
+}
+
+func TestUsageReportConfig(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		params      usageReportParams
+		expected    config.UsageReportConfig
+		expectError bool
+	}{
+		{
+			name: "NGINX Plus enabled with all valid parameters",
+			params: usageReportParams{
+				SecretName:           stringValidatingValue{value: "test-secret"},
+				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
+				CASecretName:         stringValidatingValue{value: "ca-secret"},
+				Endpoint:             stringValidatingValue{value: "example.com"},
+				Resolver:             stringValidatingValue{value: "resolver.com"},
+				SkipVerify:           true,
+				EnforceInitialReport: false,
+			},
+			expectError: false,
+			expected: config.UsageReportConfig{
+				SecretName:           "test-secret",
+				ClientSSLSecretName:  "client-ssl-secret",
+				CASecretName:         "ca-secret",
+				Endpoint:             "example.com",
+				Resolver:             "resolver.com",
+				SkipVerify:           true,
+				EnforceInitialReport: false,
+			},
+		},
+		{
+			name: "NGINX Plus enabled with missing secret",
+			params: usageReportParams{
+				SecretName:           stringValidatingValue{value: ""},
+				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
+				CASecretName:         stringValidatingValue{value: "ca-secret"},
+				Endpoint:             stringValidatingValue{value: "example.com"},
+				Resolver:             stringValidatingValue{value: "resolver.com"},
+				SkipVerify:           true,
+				EnforceInitialReport: false,
+			},
+			expectError: true,
+			expected:    config.UsageReportConfig{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := buildUsageReportConfig(tc.params)
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("expected an error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("did not expect an error but got: %v", err)
+				}
+
+				if result != tc.expected {
+					t.Errorf("expected result %+v, but got %+v", tc.expected, result)
+				}
+			}
+		})
+	}
 }

@@ -692,6 +692,13 @@
               "title": "endpoint",
               "type": "string"
             },
+            "enforceInitialReport": {
+              "default": true,
+              "description": "Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.",
+              "required": [],
+              "title": "enforceInitialReport",
+              "type": "boolean"
+            },
             "resolver": {
               "default": "",
               "description": "The nameserver used to resolve the NGINX Plus usage reporting endpoint. Used with NGINX Instance Manager.",

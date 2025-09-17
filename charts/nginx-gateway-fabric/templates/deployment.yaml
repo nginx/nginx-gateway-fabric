@@ -72,6 +72,9 @@ spec:
           {{- if .Values.nginx.usage.clientSSLSecretName }}
         - --usage-report-client-ssl-secret={{ .Values.nginx.usage.clientSSLSecretName }}
           {{- end }}
+          {{- if hasKey .Values.nginx.usage "enforceInitialReport" }}
+        - --usage-report-enforce-initial-report={{ .Values.nginx.usage.enforceInitialReport }}
+          {{- end }}
         {{- end }}
         {{- if .Values.nginxGateway.metrics.enable }}
         - --metrics-port={{ .Values.nginxGateway.metrics.port }}
