@@ -16,6 +16,8 @@ SUPPORTED_EXTENDED_FEATURES = HTTPRouteQueryParamMatching,HTTPRouteMethodMatchin
 STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC
 EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
+RELEASE ?= main # e.g. v2.1.0
+RELEASE_IMAGE ?= latest # e.g. release-2.1.0-rc
 SKIP_TESTS =
 CEL_TEST_TARGET =
 
@@ -117,6 +119,11 @@ start-longevity-test: nfr-test ## Start the longevity test to run for 4 days in 
 .PHONY: stop-longevity-test
 stop-longevity-test: export STOP_LONGEVITY=true
 stop-longevity-test: nfr-test ## Stop the longevity test and collects results
+
+.PHONY: ipv6-tests
+ipv6-tests: GOARCH=amd64
+ipv6-tests: ## Example usage: make ipv6-tests RELEASE=vX.Y.Z RELEASE_IMAGE=release-X.Y-rc
+	./ipv6/run-ipv6-test.sh $(RELEASE) $(RELEASE_IMAGE)
 
 
 .PHONY: .vm-nfr-test
