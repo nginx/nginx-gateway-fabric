@@ -2,6 +2,10 @@
 
 set -e # Exit immediately if a command exits with a non-zero status
 
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+
+cd "$SCRIPT_DIR"
+
 RELEASE=$1
 HELM_RELEASE_NAME=${2:-ngf}
 NAMESPACE=${3:-nginx-gateway}
@@ -9,16 +13,16 @@ CLUSTER_NAME=${4:-ipv6-only}
 
 cleanup() {
     echo "Cleaning up resources..."
-    kubectl delete -f tests/manifests/ipv6-test-app.yaml || true
-    kubectl delete -f tests/manifests/ipv6-test-client.yaml || true
-    kubectl delete -f tests/manifests/gateway.yaml || true
+    kubectl delete -f manifests/ipv6-test-app.yaml || true
+    kubectl delete -f manifests/ipv6-test-client.yaml || true
+    kubectl delete -f manifests/gateway.yaml || true
     helm uninstall ${HELM_RELEASE_NAME} -n ${NAMESPACE} || true
 }
 
 trap cleanup EXIT
 
 echo "Creating IPv6 kind cluster..."
-kind create cluster --name ${CLUSTER_NAME} --config kind/kind-ipv6-only.yaml
+kind create cluster --name ${CLUSTER_NAME}-${RELEASE} --config config/kind-ipv6-only.yaml
 
 echo "Applying Gateway API CRDs"
 kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=${RELEASE}" | kubectl apply -f -
@@ -33,7 +37,7 @@ helm upgrade --install ${HELM_RELEASE_NAME} oci://ghcr.io/nginx/charts/nginx-gat
 
 # Make sure to create a Gateway!
 echo "Deploying Gateway..."
-kubectl apply -f tests/manifests/gateway.yaml
+kubectl apply -f manifests/gateway.yaml
 echo "Waiting for NGINX Gateway to be ready..."
 kubectl wait --for=condition=accepted --timeout=300s gateway/gateway
 POD_NAME=$(kubectl get pods -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
@@ -42,7 +46,7 @@ kubectl wait --for=condition=ready --timeout=300s pod/${POD_NAME}
 # Might need to do local build for plus testing...
 
 echo "Deploying IPv6 test application"
-kubectl apply -f tests/manifests/ipv6-test-app.yaml
+kubectl apply -f manifests/ipv6-test-app.yaml
 
 echo "Waiting for NGF to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/${HELM_RELEASE_NAME}-nginx-gateway-fabric -n ${NAMESPACE}
@@ -51,7 +55,7 @@ echo "Waiting for test applications to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/test-app-ipv6
 
 echo "Deploying IPv6 test client"
-kubectl apply -f tests/manifests/ipv6-test-client.yaml
+kubectl apply -f manifests/ipv6-test-client.yaml
 kubectl wait --for=condition=ready --timeout=300s pod/ipv6-test-client
 
 
