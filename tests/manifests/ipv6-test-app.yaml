@@ -47,8 +47,9 @@ metadata:
   namespace: default
 spec:
   parentRefs:
-  - name: nginx-gateway
-    namespace: nginx-gateway
+  - name: gateway
+    sectionName: http
+    namespace: default
   hostnames:
   - "ipv6-test.example.com"
   rules:
