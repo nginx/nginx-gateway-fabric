@@ -66,7 +66,8 @@ func TestUpdateConfig(t *testing.T) {
 			updater.UpdateConfig(deployment, []File{file})
 
 			g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
-			g.Expect(deployment.GetFile(file.Meta.Name, file.Meta.Hash)).To(Equal(file.Contents))
+			fileContents, _ := deployment.GetFile(file.Meta.Name, file.Meta.Hash)
+			g.Expect(fileContents).To(Equal(file.Contents))
 
 			if test.expErr {
 				g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
