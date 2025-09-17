@@ -63,6 +63,8 @@ type ChangeProcessorConfig struct {
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
 	GatewayClassName string
+	// ExperimentalFeatures indicates whether experimental features are enabled.
+	ExperimentalFeatures bool
 }
 
 // ChangeProcessorImpl is an implementation of ChangeProcessor.
@@ -269,6 +271,7 @@ func (c *ChangeProcessorImpl) Process() *graph.Graph {
 		c.cfg.PlusSecrets,
 		c.cfg.Validators,
 		c.cfg.Logger,
+		c.cfg.ExperimentalFeatures,
 	)
 
 	return c.latestGraph
