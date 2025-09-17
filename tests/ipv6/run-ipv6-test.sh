@@ -5,10 +5,10 @@ set -e # Exit immediately if a command exits with a non-zero status
 RELEASE=$1
 RELEASE_IMAGE=$2
 
-if [[ -z "$RELEASE" || -z "$RELEASE_IMAGE" ]]; then
-  echo "Usage: $0 <RELEASE> <RELEASE_IMAGE> [HELM_RELEASE_NAME] [NAMESPACE] [CLUSTER_NAME]"
-  echo "Error: RELEASE and RELEASE_IMAGE are required parameters. Example usage `make ipv6-test RELEASE=vX.Y.Z RELEASE_IMAGE=release-X.Y-rc`"
-  exit 1
+if [[ -z $RELEASE || -z $RELEASE_IMAGE ]]; then
+    echo "Usage: $0 <RELEASE> <RELEASE_IMAGE> [HELM_RELEASE_NAME] [NAMESPACE] [CLUSTER_NAME]"
+    echo "Error: RELEASE and RELEASE_IMAGE are required parameters. Example usage $(make ipv6-test RELEASE=vX.Y.Z RELEASE_IMAGE=release-X.Y-rc)"
+    exit 1
 fi
 
 HELM_RELEASE_NAME=${3:-ngf}
@@ -76,27 +76,27 @@ kubectl exec ipv6-test-client -- nslookup gateway-nginx.default.svc.cluster.loca
 test1_status=$?
 
 if [[ $test1_status -eq 0 ]]; then
-  echo "✅ Test 1: Basic IPv6 connectivity succeeded"
+    echo "✅ Test 1: Basic IPv6 connectivity succeeded"
 fi
 
 echo "== Test 2: NGF Service IPv6 connectivity =="
 kubectl exec ipv6-test-client -- curl -6 --connect-timeout 30 --max-time 60 -v \
-  -H "Host: ipv6-test.example.com" \
-  "http://[${NGF_IPV6}]:80/" || echo "Test 2: NGF Service IPv6 connectivity failed" 
+    -H "Host: ipv6-test.example.com" \
+    "http://[${NGF_IPV6}]:80/" || echo "Test 2: NGF Service IPv6 connectivity failed"
 test2_status=$?
 
 if [[ $test2_status -eq 0 ]]; then
-  echo "✅ Test 2: NGF Service IPv6 connectivity succeeded"
+    echo "✅ Test 2: NGF Service IPv6 connectivity succeeded"
 fi
 
 echo "== Test 3: Service DNS IPv6 connectivity =="
 kubectl exec ipv6-test-client -- curl -6 --connect-timeout 30 --max-time 60 -v \
-  -H "Host: ipv6-test.example.com" \
-  "http://gateway-nginx.default.svc.cluster.local:80/" || echo "Test 3: Service DNS IPv6 connectivity failed"
+    -H "Host: ipv6-test.example.com" \
+    "http://gateway-nginx.default.svc.cluster.local:80/" || echo "Test 3: Service DNS IPv6 connectivity failed"
 test3_status=$?
 
 if [[ $test3_status -eq 0 ]]; then
-  echo "✅ Test 3: Service DNS IPv6 connectivity succeeded"
+    echo "✅ Test 3: Service DNS IPv6 connectivity succeeded"
 fi
 
 echo "=== Displaying IPv6-Only Configuration ==="
@@ -106,7 +106,7 @@ echo "NGF Service configuration:"
 kubectl get service ${HELM_RELEASE_NAME}-nginx-gateway-fabric -n nginx-gateway -o yaml || true
 
 if [[ $test1_status -eq 0 && $test2_status -eq 0 && $test3_status -eq 0 ]]; then
-  echo -e "✅ All tests passed!"
+    echo -e "✅ All tests passed!"
 else
-  echo -e "❌ One or more tests failed. Check the output above to help debug any issues."
+    echo -e "❌ One or more tests failed. Check the output above to help debug any issues."
 fi

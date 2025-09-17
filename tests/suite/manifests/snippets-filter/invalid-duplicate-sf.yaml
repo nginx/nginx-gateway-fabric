@@ -19,21 +19,21 @@ metadata:
   name: tea
 spec:
   parentRefs:
-  - name: gateway
-    sectionName: http
+    - name: gateway
+      sectionName: http
   hostnames:
-  - "cafe.example.com"
+    - "cafe.example.com"
   rules:
-  - matches:
-    - path:
-        type: Exact
-        value: /tea
-    filters:
-      - type: ExtensionRef
-        extensionRef:
-          group: gateway.nginx.org
-          kind: SnippetsFilter
-          name: duplicate-directive
-    backendRefs:
-    - name: tea
-      port: 80
+    - matches:
+        - path:
+            type: Exact
+            value: /tea
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: SnippetsFilter
+            name: duplicate-directive
+      backendRefs:
+        - name: tea
+          port: 80
