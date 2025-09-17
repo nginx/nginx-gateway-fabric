@@ -155,7 +155,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	channels := broadcaster.Subscribe()
 	defer broadcaster.CancelSubscription(channels.ID)
 
-	var pendingRequest *broadcast.NginxAgentMessage
+	var pendingBroadcastRequest *broadcast.NginxAgentMessage
 
 	for {
 		// When a message is received over the ListenCh, it is assumed and required that the
@@ -194,9 +194,9 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 				return grpcStatus.Error(codes.Internal, err.Error())
 			}
 
-			// Track the pending request so we don't intercept
-			// initial config replies after connection reset
-			pendingRequest = &msg
+			// Track this broadcast request to distinguish it from initial config operations.
+			// Only broadcast operations should signal ResponseCh for coordination.
+			pendingBroadcastRequest = &msg
 		case err = <-msgr.Errors():
 			cs.logger.Error(err, "connection error", "pod", conn.PodName)
 			deployment.SetPodErrorStatus(conn.PodName, err)
@@ -204,7 +204,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			case channels.ResponseCh <- struct{}{}:
 			default:
 			}
-			if pendingRequest != nil {
+			if pendingBroadcastRequest != nil {
 				cs.logger.V(1).Info("Connection error during pending request, operation failed")
 			}
 
@@ -225,9 +225,10 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 				deployment.SetPodErrorStatus(conn.PodName, nil)
 			}
 
-			// Only signal completion if we had a pending broadcast request
-			if pendingRequest != nil {
-				pendingRequest = nil
+			// Signal broadcast completion only for tracked broadcast operations.
+			// Initial config responses are ignored to prevent spurious success messages.
+			if pendingBroadcastRequest != nil {
+				pendingBroadcastRequest = nil
 				channels.ResponseCh <- struct{}{}
 			} else {
 				cs.logger.V(1).Info("Received response for non-broadcast request (likely initial config)", "pod", conn.PodName)
