@@ -2,27 +2,33 @@
 
 set -e # Exit immediately if a command exits with a non-zero status
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-
-cd "$SCRIPT_DIR"
-
 RELEASE=$1
-HELM_RELEASE_NAME=${2:-ngf}
-NAMESPACE=${3:-nginx-gateway}
-CLUSTER_NAME=${4:-ipv6-only}
+RELEASE_IMAGE=$2
+
+if [[ -z "$RELEASE" || -z "$RELEASE_IMAGE" ]]; then
+  echo "Usage: $0 <RELEASE> <RELEASE_IMAGE> [HELM_RELEASE_NAME] [NAMESPACE] [CLUSTER_NAME]"
+  echo "Error: RELEASE and RELEASE_IMAGE are required parameters. Example usage `make ipv6-test RELEASE=vX.Y.Z RELEASE_IMAGE=release-X.Y-rc`"
+  exit 1
+fi
+
+HELM_RELEASE_NAME=${3:-ngf}
+NAMESPACE=${4:-nginx-gateway}
+CLUSTER_NAME=${5:-ipv6-only-${RELEASE}}
+RELEASE_REPO=ghcr.io/nginx/nginx-gateway-fabric
 
 cleanup() {
     echo "Cleaning up resources..."
-    kubectl delete -f manifests/ipv6-test-app.yaml || true
-    kubectl delete -f manifests/ipv6-test-client.yaml || true
-    kubectl delete -f manifests/gateway.yaml || true
+    kubectl delete -f ipv6/manifests/ipv6-test-app.yaml || true
+    kubectl delete -f ipv6/manifests/ipv6-test-client.yaml || true
+    kubectl delete -f ipv6/manifests/gateway.yaml || true
     helm uninstall ${HELM_RELEASE_NAME} -n ${NAMESPACE} || true
+    kind delete cluster --name ${CLUSTER_NAME} || true
 }
 
 trap cleanup EXIT
 
 echo "Creating IPv6 kind cluster..."
-kind create cluster --name ${CLUSTER_NAME}-${RELEASE} --config config/kind-ipv6-only.yaml
+kind create cluster --name ${CLUSTER_NAME} --config ipv6/config/kind-ipv6-only.yaml
 
 echo "Applying Gateway API CRDs"
 kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=${RELEASE}" | kubectl apply -f -
@@ -30,23 +36,28 @@ kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gate
 echo "Applying NGF CRDs"
 kubectl apply --server-side -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/${RELEASE}/deploy/crds.yaml
 
+echo "Pulling NGF image ${RELEASE_REPO}..."
+docker pull ${RELEASE_REPO}:${RELEASE_IMAGE}
+
+echo "Loading NGF image into kind cluster..."
+docker save ${RELEASE_REPO}:${RELEASE_IMAGE} | docker exec -i ${CLUSTER_NAME}-control-plane ctr --namespace=k8s.io images import -
+
 helm upgrade --install ${HELM_RELEASE_NAME} oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --create-namespace -n ${NAMESPACE} \
     --set nginx.config.ipFamily=ipv6 \
-    --set nginx.service.type=ClusterIP
+    --set nginx.service.type=ClusterIP \
+    --set nginxGateway.image.repository=${RELEASE_REPO} \
+    --set nginxGateway.image.tag=${RELEASE_IMAGE}
 
-# Make sure to create a Gateway!
 echo "Deploying Gateway..."
-kubectl apply -f manifests/gateway.yaml
+kubectl apply -f ipv6/manifests/gateway.yaml
 echo "Waiting for NGINX Gateway to be ready..."
 kubectl wait --for=condition=accepted --timeout=300s gateway/gateway
 POD_NAME=$(kubectl get pods -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
 kubectl wait --for=condition=ready --timeout=300s pod/${POD_NAME}
 
-# Might need to do local build for plus testing...
-
 echo "Deploying IPv6 test application"
-kubectl apply -f manifests/ipv6-test-app.yaml
+kubectl apply -f ipv6/manifests/ipv6-test-app.yaml
 
 echo "Waiting for NGF to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/${HELM_RELEASE_NAME}-nginx-gateway-fabric -n ${NAMESPACE}
@@ -55,9 +66,8 @@ echo "Waiting for test applications to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/test-app-ipv6
 
 echo "Deploying IPv6 test client"
-kubectl apply -f manifests/ipv6-test-client.yaml
+kubectl apply -f ipv6/manifests/ipv6-test-client.yaml
 kubectl wait --for=condition=ready --timeout=300s pod/ipv6-test-client
-
 
 echo "Getting NGF service IPv6 address"
 NGF_IPV6=$(kubectl get service gateway-nginx -o jsonpath='{.spec.clusterIP}')
@@ -65,25 +75,37 @@ echo "NGF IPv6 Address: $NGF_IPV6"
 
 echo "=== Running IPv6-Only Tests ==="
 
-echo "Test 1: Basic IPv6 connectivity"
+echo "== Test 1: Basic IPv6 connectivity =="
 kubectl exec ipv6-test-client -- curl --version
-kubectl exec ipv6-test-client -- nslookup gateway-nginx.default.svc.cluster.local
+kubectl exec ipv6-test-client -- nslookup gateway-nginx.default.svc.cluster.local || echo "Test 1: Basic IPv6 connectivity failed"
 test1_status=$?
 
-echo "Test 2: NGF Service IPv6 connectivity"
+if [[ $test1_status -eq 0 ]]; then
+  echo "✅ Test 1: Basic IPv6 connectivity succeeded"
+fi
+
+echo "== Test 2: NGF Service IPv6 connectivity =="
 kubectl exec ipv6-test-client -- curl -6 --connect-timeout 30 --max-time 60 -v \
   -H "Host: ipv6-test.example.com" \
-  "http://[${NGF_IPV6}]:80/"
+  "http://[${NGF_IPV6}]:80/" || echo "Test 2: NGF Service IPv6 connectivity failed" 
 test2_status=$?
 
-echo "Test 3: Service DNS IPv6 connectivity"
+if [[ $test2_status -eq 0 ]]; then
+  echo "✅ Test 2: NGF Service IPv6 connectivity succeeded"
+fi
+
+echo "== Test 3: Service DNS IPv6 connectivity =="
 kubectl exec ipv6-test-client -- curl -6 --connect-timeout 30 --max-time 60 -v \
   -H "Host: ipv6-test.example.com" \
-  "http://gateway-nginx.default.svc.cluster.local:80/"
+  "http://gateway-nginx.default.svc.cluster.local:80/" || echo "Test 3: Service DNS IPv6 connectivity failed"
 test3_status=$?
 
+if [[ $test3_status -eq 0 ]]; then
+  echo "✅ Test 3: Service DNS IPv6 connectivity succeeded"
+fi
+
 if [[ $test1_status -eq 0 && $test2_status -eq 0 && $test3_status -eq 0 ]]; then
-  echo "All tests passed."
+  echo -e "✅ All tests passed!"
 else
-  echo "One or more tests failed."
+  echo -e "\033[31m One or more tests failed. \033[0m"
 fi
