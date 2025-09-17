@@ -155,6 +155,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	channels := broadcaster.Subscribe()
 	defer broadcaster.CancelSubscription(channels.ID)
 
+	var pendingBroadcastRequest *broadcast.NginxAgentMessage
+
 	for {
 		// When a message is received over the ListenCh, it is assumed and required that the
 		// deployment object is already LOCKED. This lock is acquired by the event handler before calling
@@ -191,12 +193,19 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 
 				return grpcStatus.Error(codes.Internal, err.Error())
 			}
+
+			// Track this broadcast request to distinguish it from initial config operations.
+			// Only broadcast operations should signal ResponseCh for coordination.
+			pendingBroadcastRequest = &msg
 		case err = <-msgr.Errors():
 			cs.logger.Error(err, "connection error", "pod", conn.PodName)
 			deployment.SetPodErrorStatus(conn.PodName, err)
 			select {
 			case channels.ResponseCh <- struct{}{}:
 			default:
+			}
+			if pendingBroadcastRequest != nil {
+				cs.logger.V(1).Info("Connection error during pending request, operation failed")
 			}
 
 			if errors.Is(err, io.EOF) {
@@ -215,7 +224,15 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			} else {
 				deployment.SetPodErrorStatus(conn.PodName, nil)
 			}
-			channels.ResponseCh <- struct{}{}
+
+			// Signal broadcast completion only for tracked broadcast operations.
+			// Initial config responses are ignored to prevent spurious success messages.
+			if pendingBroadcastRequest != nil {
+				pendingBroadcastRequest = nil
+				channels.ResponseCh <- struct{}{}
+			} else {
+				cs.logger.V(1).Info("Received response for non-broadcast request (likely initial config)", "pod", conn.PodName)
+			}
 		}
 	}
 }
@@ -265,6 +282,9 @@ func (cs *commandService) setInitialConfig(
 	defer deployment.FileLock.Unlock()
 
 	fileOverviews, configVersion := deployment.GetFileOverviews()
+
+	cs.logger.Info("Sending initial configuration to agent", "pod", conn.PodName, "configVersion", configVersion)
+
 	if err := msgr.Send(ctx, buildRequest(fileOverviews, conn.InstanceID, configVersion)); err != nil {
 		cs.logAndSendErrorStatus(deployment, conn, err)
 
@@ -348,9 +368,11 @@ func (cs *commandService) waitForInitialConfigApply(
 			res := msg.GetCommandResponse()
 			if res.GetStatus() != pb.CommandResponse_COMMAND_STATUS_OK {
 				applyErr := fmt.Errorf("msg: %s; error: %s", res.GetMessage(), res.GetError())
+				cs.logger.V(1).Info("Received initial config response with error", "error", applyErr)
 				return applyErr, nil
 			}
 
+			cs.logger.V(1).Info("Received successful initial config response")
 			return applyErr, connectionErr
 		}
 	}
