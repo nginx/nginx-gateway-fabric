@@ -210,7 +210,6 @@ jobs:
 
       - name: Generate Module Dependencies Info
         id: go_deps
-        if: inputs.is_production_release
         run: |
           # Generate module info before GoReleaser strips the binary
           echo "Generating module dependencies info..."
@@ -235,7 +234,6 @@ jobs:
           TELEMETRY_ENDPOINT_INSECURE: "false"
 
       - name: Extract gateway binaries info
-        if: inputs.is_production_release
         id: gateway_binaries
         run: |
           set -e
@@ -264,7 +262,6 @@ jobs:
   assertion:
     name: Generate and Sign Assertion Documents
     needs: binary
-    if: inputs.is_production_release
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
