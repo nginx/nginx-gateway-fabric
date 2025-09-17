@@ -216,7 +216,13 @@ jobs:
           cd cmd/gateway
           go list -m all > ../../goversionm_${{ github.run_id }}_${{ github.run_number }}.txt
           echo "Module dependencies saved to goversionm_${{ github.run_id }}_${{ github.run_number }}.txt"
-          echo "goversionm=$(find . -type f -name "goversionm*.txt" | head -n 1)" >> $GITHUB_OUTPUT
+          cd ../..
+          # Move goversionm file to dist directory so it gets cached with binaries
+          mkdir -p dist
+          goversionm_file="goversionm_${{ github.run_id }}_${{ github.run_number }}.txt"
+          mv "$goversionm_file" "dist/$goversionm_file"
+          echo "Module dependencies saved to dist/$goversionm_file"
+          echo "goversionm=$goversionm_file" >> $GITHUB_OUTPUT
 
       - name: Build binary
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
@@ -271,18 +277,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-      - name: Restore Cached Artifacts
+      - name: Fetch Cached Artifacts
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           path: ${{ github.workspace }}/dist
           key: nginx-gateway-fabric-${{ github.run_id }}-${{ github.run_number }}
-          fail-on-cache-miss: true
 
       - name: Generate Assertion Document
         id: assertiondoc
         uses: nginxinc/compliance-rules/.github/actions/assertion@311fe9c56e981a5a1b805577746bbe66d59399ab
         with:
-          artifact-name: ${{ github.event.repository.name }}_${{ github.ref_name }}
+          artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}
           artifact-digest: ${{ matrix.gateway.digest }}
           build-type: 'github'
           builder-id: 'github.com'
@@ -294,8 +299,8 @@ jobs:
           artifactory-api-token: ${{ secrets.ARTIFACTORY_TOKEN }}
           artifactory-url: ${{ secrets.ARTIFACTORY_URL }}
           artifactory-repo: 'f5-nginx-go-local-approved-dependency'
-          assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.ref_name }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
           build-content-path: ${{ needs.binary.outputs.goversionm }}
+          assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.sha }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
 
       - name: Sign and Store Assertion Document
         id: sign
