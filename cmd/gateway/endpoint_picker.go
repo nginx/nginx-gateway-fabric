@@ -32,7 +32,7 @@ type extProcClientFactory func(target string) (extprocv3.ExternalProcessorClient
 // endpointPickerServer starts an HTTP server on the given port with the provided handler.
 func endpointPickerServer(handler http.Handler) error {
 	server := &http.Server{
-		Addr:              fmt.Sprintf(":%d", defaultPort),
+		Addr:              fmt.Sprintf("127.0.0.1:%d", defaultPort),
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
