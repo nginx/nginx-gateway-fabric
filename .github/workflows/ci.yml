@@ -251,6 +251,9 @@ jobs:
   assertion:
     name: Generate and Sign Assertion Documents
     needs: [vars, binary]
+    permissions:
+      contents: read
+      id-token: write # for compliance-rules action to sign assertion doc
     env:
       GOPROXY: ${{ needs.vars.outputs.goproxy }}
     runs-on: ubuntu-24.04
@@ -272,10 +275,11 @@ jobs:
         run: |
           echo "Generating module dependencies info..."
           cd cmd/gateway
-          go list -m all > ../../goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ strategy.job-index }}.txt
-          echo "Module dependencies saved to goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ strategy.job-index }}.txt"
+          goversionm=goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.txt
+          go list -m all > ../../goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.txt
+          echo "Module dependencies saved to goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.txt"
           cd ../..
-          echo "goversionm=goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ strategy.job-index }}.txt" >> $GITHUB_OUTPUT
+          echo "goversionm=goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.txt" >> $GITHUB_OUTPUT
 
       - name: Generate Assertion Document
         id: assertiondoc
@@ -294,7 +298,7 @@ jobs:
           artifactory-url: ${{ secrets.ARTIFACTORY_URL }}
           artifactory-repo: 'f5-nginx-go-local-approved-dependency'
           build-content-path: ${{ steps.go_deps.outputs.goversionm }}
-          assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.sha }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
+          assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
 
       - name: Sign and Store Assertion Document
         id: sign
