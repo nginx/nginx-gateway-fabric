@@ -757,6 +757,20 @@ func createSleepCommand() *cobra.Command {
 	return cmd
 }
 
+func createEndpointPickerCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "endpoint-picker",
+		Short: "Shim server for communication between NGINX and the Gateway API Inference Extension Endpoint Picker",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			logger := ctlrZap.New().WithName("endpoint-picker-shim")
+			handler := createEndpointPickerHandler(realExtProcClientFactory(), logger)
+			return endpointPickerServer(handler)
+		},
+	}
+
+	return cmd
+}
+
 func parseFlags(flags *pflag.FlagSet) ([]string, []string) {
 	var flagKeys, flagValues []string
 
