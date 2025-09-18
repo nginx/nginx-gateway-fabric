@@ -22,7 +22,6 @@ func PrepareRouteRequests(
 	l4routes map[graph.L4RouteKey]*graph.L4Route,
 	routes map[graph.RouteKey]*graph.L7Route,
 	transitionTime metav1.Time,
-	nginxReloadRes graph.NginxReloadResult,
 	gatewayCtlrName string,
 ) []UpdateRequest {
 	reqs := make([]UpdateRequest, 0, len(routes))
@@ -32,7 +31,6 @@ func PrepareRouteRequests(
 			gatewayCtlrName,
 			r.ParentRefs,
 			r.Conditions,
-			nginxReloadRes,
 			transitionTime,
 			r.Source.GetGeneration(),
 		)
@@ -55,7 +53,6 @@ func PrepareRouteRequests(
 			gatewayCtlrName,
 			r.ParentRefs,
 			r.Conditions,
-			nginxReloadRes,
 			transitionTime,
 			r.Source.GetGeneration(),
 		)
@@ -134,7 +131,6 @@ func prepareRouteStatus(
 	gatewayCtlrName string,
 	parentRefs []graph.ParentRef,
 	conds []conditions.Condition,
-	nginxReloadRes graph.NginxReloadResult,
 	transitionTime metav1.Time,
 	srcGeneration int64,
 ) v1.RouteStatus {
@@ -161,13 +157,6 @@ func prepareRouteStatus(
 		allConds = append(allConds, conds...)
 		if failedAttachmentCondCount > 0 {
 			allConds = append(allConds, ref.Attachment.FailedConditions...)
-		}
-
-		if nginxReloadRes.Error != nil {
-			allConds = append(
-				allConds,
-				conditions.NewRouteGatewayNotProgrammed(conditions.RouteMessageFailedNginxReload),
-			)
 		}
 
 		conds := conditions.DeduplicateConditions(allConds)
