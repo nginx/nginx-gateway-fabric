@@ -25,12 +25,12 @@ trap cleanup EXIT
 
 kind create cluster --name ${CLUSTER_NAME} --config ipv6/config/kind-ipv6-only.yaml
 
-echo "Applying Gateway API CRDs"
+echo "== Applying Gateway API CRDs"
 kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=${RELEASE}" | kubectl apply -f -
 
-echo "Installing NGINX Gateway Fabric..."
-echo "Using NGF from ${RELEASE_REPO}:${RELEASE_IMAGE}..."
-echo "Using NGINX from ${RELEASE_REPO}/nginx:${RELEASE_IMAGE}..."
+echo "== Installing NGINX Gateway Fabric..."
+echo "== Using NGF from ${RELEASE_REPO}:${RELEASE_IMAGE}..."
+echo "== Using NGINX from ${RELEASE_REPO}/nginx:${RELEASE_IMAGE}..."
 
 helm install ${HELM_RELEASE_NAME} --wait oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --create-namespace -n ${NAMESPACE} \
@@ -41,28 +41,28 @@ helm install ${HELM_RELEASE_NAME} --wait oci://ghcr.io/nginx/charts/nginx-gatewa
     --set nginx.image.repository=${RELEASE_REPO}/nginx \
     --set nginx.image.tag=${RELEASE_IMAGE}
 
-echo "Deploying Gateway..."
+echo "== Deploying Gateway..."
 kubectl apply -f ipv6/manifests/gateway.yaml
 
 kubectl wait --for=condition=accepted --timeout=300s gateway/gateway
 POD_NAME=$(kubectl get pods -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
 kubectl wait --for=condition=ready --timeout=300s pod/${POD_NAME}
 
-echo "Deploying IPv6 test application"
+echo "== Deploying IPv6 test application"
 kubectl apply -f ipv6/manifests/ipv6-test-app.yaml
 
-echo "Waiting for test applications to be ready..."
+echo "== Waiting for test applications to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/test-app-ipv6
 
-echo "Deploying IPv6 test client"
-kubectl apply -f ipv6/manifests/ipv6-test-client.yaml
-kubectl wait --for=condition=ready --timeout=300s pod/ipv6-test-client
-
-echo "Getting NGF service IPv6 address from gateway status"
+echo " ==Getting NGF service IPv6 address from gateway status"
 NGF_IPV6=$(kubectl get gateway -o jsonpath='{.items[0].status.addresses[0].value}')
 echo "NGF IPv6 Address: $NGF_IPV6"
 
 echo "=== Running IPv6-Only Tests ==="
+
+echo "== Starting IPv6 test client"
+kubectl apply -f ipv6/manifests/ipv6-test-client.yaml
+kubectl wait --for=condition=ready --timeout=300s pod/ipv6-test-client
 
 echo "== Test 1: Basic IPv6 connectivity =="
 kubectl exec ipv6-test-client -- curl --version
