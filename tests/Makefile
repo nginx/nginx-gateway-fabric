@@ -17,7 +17,7 @@ STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC
 EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
 RELEASE ?= main # e.g. v2.1.0
-RELEASE_IMAGE ?= latest # e.g. release-2.1.0-rc
+RELEASE_IMAGE ?= edge # e.g. release-2.1.0-rc
 SKIP_TESTS =
 CEL_TEST_TARGET =
 

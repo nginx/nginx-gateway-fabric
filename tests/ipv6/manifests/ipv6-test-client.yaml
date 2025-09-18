@@ -9,7 +9,7 @@ spec:
   restartPolicy: Never
   containers:
   - name: test-client
-    image: curlimages/curl:8.11.1
+    image: curlimages/curl:8.16.0
     imagePullPolicy: IfNotPresent
     command: ["sleep", "3600"]  # Keep pod alive for exec commands
     resources:

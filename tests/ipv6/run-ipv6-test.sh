@@ -18,10 +18,6 @@ RELEASE_REPO=ghcr.io/nginx/nginx-gateway-fabric
 
 cleanup() {
     echo "Cleaning up resources..."
-    kubectl delete -f ipv6/manifests/ipv6-test-app.yaml || true
-    kubectl delete -f ipv6/manifests/ipv6-test-client.yaml || true
-    kubectl delete -f ipv6/manifests/gateway.yaml || true
-    helm uninstall ${HELM_RELEASE_NAME} -n ${NAMESPACE} || true
     kind delete cluster --name ${CLUSTER_NAME} || true
 }
 
@@ -32,30 +28,28 @@ kind create cluster --name ${CLUSTER_NAME} --config ipv6/config/kind-ipv6-only.y
 echo "Applying Gateway API CRDs"
 kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=${RELEASE}" | kubectl apply -f -
 
-docker pull ${RELEASE_REPO}:${RELEASE_IMAGE}
+echo "Installing NGINX Gateway Fabric..."
+echo "Using NGF from ${RELEASE_REPO}:${RELEASE_IMAGE}..."
+echo "Using NGINX from ${RELEASE_REPO}/nginx:${RELEASE_IMAGE}..."
 
-docker save ${RELEASE_REPO}:${RELEASE_IMAGE} | docker exec -i ${CLUSTER_NAME}-control-plane ctr --namespace=k8s.io images import -
-
-helm upgrade --install ${HELM_RELEASE_NAME} oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+helm install ${HELM_RELEASE_NAME} --wait oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --create-namespace -n ${NAMESPACE} \
     --set nginx.config.ipFamily=ipv6 \
     --set nginx.service.type=ClusterIP \
     --set nginxGateway.image.repository=${RELEASE_REPO} \
-    --set nginxGateway.image.tag=${RELEASE_IMAGE}
+    --set nginxGateway.image.tag=${RELEASE_IMAGE} \
+    --set nginx.image.repository=${RELEASE_REPO}/nginx \
+    --set nginx.image.tag=${RELEASE_IMAGE} \
 
 echo "Deploying Gateway..."
 kubectl apply -f ipv6/manifests/gateway.yaml
 
-echo "Waiting for NGINX Gateway to be ready..."
 kubectl wait --for=condition=accepted --timeout=300s gateway/gateway
 POD_NAME=$(kubectl get pods -l app.kubernetes.io/instance=${HELM_RELEASE_NAME} -o jsonpath='{.items[0].metadata.name}')
 kubectl wait --for=condition=ready --timeout=300s pod/${POD_NAME}
 
 echo "Deploying IPv6 test application"
 kubectl apply -f ipv6/manifests/ipv6-test-app.yaml
-
-echo "Waiting for NGF to be ready..."
-kubectl wait --for=condition=available --timeout=300s deployment/${HELM_RELEASE_NAME}-nginx-gateway-fabric -n ${NAMESPACE}
 
 echo "Waiting for test applications to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/test-app-ipv6
@@ -64,8 +58,8 @@ echo "Deploying IPv6 test client"
 kubectl apply -f ipv6/manifests/ipv6-test-client.yaml
 kubectl wait --for=condition=ready --timeout=300s pod/ipv6-test-client
 
-echo "Getting NGF service IPv6 address"
-NGF_IPV6=$(kubectl get service gateway-nginx -o jsonpath='{.spec.clusterIP}')
+echo "Getting NGF service IPv6 address from gateway status"
+NGF_IPV6=$(kubectl get gateway -o jsonpath='{.items[0].status.addresses[0].value}')
 echo "NGF IPv6 Address: $NGF_IPV6"
 
 echo "=== Running IPv6-Only Tests ==="
