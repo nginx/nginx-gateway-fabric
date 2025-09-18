@@ -39,7 +39,7 @@ helm install ${HELM_RELEASE_NAME} --wait oci://ghcr.io/nginx/charts/nginx-gatewa
     --set nginxGateway.image.repository=${RELEASE_REPO} \
     --set nginxGateway.image.tag=${RELEASE_IMAGE} \
     --set nginx.image.repository=${RELEASE_REPO}/nginx \
-    --set nginx.image.tag=${RELEASE_IMAGE} \
+    --set nginx.image.tag=${RELEASE_IMAGE}
 
 echo "Deploying Gateway..."
 kubectl apply -f ipv6/manifests/gateway.yaml
