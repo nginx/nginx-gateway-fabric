@@ -285,12 +285,12 @@ jobs:
         id: assertiondoc
         uses: nginxinc/compliance-rules/.github/actions/assertion@311fe9c56e981a5a1b805577746bbe66d59399ab
         with:
-          artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}
+          artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
           artifact-digest: ${{ matrix.gateway.digest }}
           build-type: 'github'
           builder-id: 'github.com'
           builder-version: '0.1.0-xyz'
-          invocation-id: ${{ github.run_id }}.${{ github.run_number }}.${{ github.run_attempt }}
+          invocation-id: ${{ github.run_id }}.${{ github.run_number }}.${{ strategy.job-index }}
           started-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
           finished-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
           artifactory-user: ${{ secrets.ARTIFACTORY_USER }}
