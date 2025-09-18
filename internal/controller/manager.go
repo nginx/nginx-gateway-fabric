@@ -220,6 +220,7 @@ func StartManager(cfg config.Config) error {
 			NginxDockerSecretNames:         cfg.NginxDockerSecretNames,
 			PlusUsageConfig:                &cfg.UsageReportConfig,
 			NginxOneConsoleTelemetryConfig: cfg.NginxOneConsoleTelemetryConfig,
+			InferenceExtension:             cfg.InferenceExtension,
 		},
 	)
 	if err != nil {
