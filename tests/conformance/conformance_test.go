@@ -22,6 +22,8 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/conformance"
 	conf_v1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/tests"
@@ -29,6 +31,10 @@ import (
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/yaml"
 )
+
+// unusableGatewayIPAddress 198.51.100.0 is a publicly reserved IP address specifically for documentation.
+// This is needed to give the conformance tests an example valid ip unusable address.
+const unusableGatewayIPAddress = "198.51.100.0"
 
 func TestConformance(t *testing.T) {
 	g := NewWithT(t)
@@ -42,6 +48,11 @@ func TestConformance(t *testing.T) {
 	)
 
 	opts := conformance.DefaultOptions(t)
+
+	ipaddressType := v1.IPAddressType
+	opts.UnusableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: unusableGatewayIPAddress}}
+	opts.UsableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: "192.0.2.1"}}
+
 	opts.Implementation = conf_v1.Implementation{
 		Organization: "nginx",
 		Project:      "nginx-gateway-fabric",

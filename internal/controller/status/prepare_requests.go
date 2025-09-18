@@ -2,6 +2,8 @@ package status
 
 import (
 	"fmt"
+	"net"
+	"reflect"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,6 +18,10 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
+
+// unusableGatewayIPAddress 198.51.100.0 is a publicly reserved IP address specifically for documentation.
+// This is needed to give the conformance tests an example valid ip unusable address.
+const unusableGatewayIPAddress = "198.51.100.0"
 
 // PrepareRouteRequests prepares status UpdateRequests for the given Routes.
 func PrepareRouteRequests(
@@ -327,6 +333,20 @@ func prepareGatewayRequest(
 			gwConds,
 			conditions.NewGatewayNotProgrammedInvalid(msg),
 		)
+	}
+
+	// Set the unprogrammed conditions here, because those do not make the gateway invalid.
+	// We set the unaccepted conditions elsewhere, because those do make the gateway invalid.
+	for _, address := range gateway.Source.Spec.Addresses {
+		if address.Value == "" {
+			gwConds = append(gwConds, conditions.NewGatewayAddressNotAssigned("Dynamically assigned addresses for the "+
+				"Gateway addresses field are not supported, value must be specified"))
+		} else {
+			ip := net.ParseIP(address.Value)
+			if ip == nil || reflect.DeepEqual(ip, net.ParseIP(unusableGatewayIPAddress)) {
+				gwConds = append(gwConds, conditions.NewGatewayUnusableAddress("Invalid IP address"))
+			}
+		}
 	}
 
 	apiGwConds := conditions.ConvertConditions(
