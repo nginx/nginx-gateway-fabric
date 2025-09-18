@@ -58,6 +58,7 @@ type Config struct {
 	NginxDockerSecretNames         []string
 	NginxOneConsoleTelemetryConfig config.NginxOneConsoleTelemetryConfig
 	Plus                           bool
+	InferenceExtension             bool
 }
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.

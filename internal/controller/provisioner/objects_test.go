@@ -1765,3 +1765,57 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	g.Expect(svc.Labels).To(HaveKeyWithValue("app", "nginx"))
 	g.Expect(dep.Labels).To(HaveKeyWithValue("app", "nginx"))
 }
+
+func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	agentTLSSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      agentTLSTestSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{"tls.crt": []byte("tls")},
+	}
+	fakeClient := fake.NewFakeClient(agentTLSSecret)
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig: &config.GatewayPodConfig{
+				Namespace: ngfNamespace,
+			},
+			AgentTLSSecretName: agentTLSTestSecretName,
+			InferenceExtension: true,
+		},
+		k8sClient: fakeClient,
+		baseLabelSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{"app": "nginx"},
+		},
+	}
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
+	}
+
+	objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, &graph.EffectiveNginxProxy{})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Find the deployment object
+	var deployment *appsv1.Deployment
+	for _, obj := range objects {
+		if d, ok := obj.(*appsv1.Deployment); ok {
+			deployment = d
+			break
+		}
+	}
+	g.Expect(deployment).ToNot(BeNil())
+	containers := deployment.Spec.Template.Spec.Containers
+	g.Expect(containers).To(HaveLen(2))
+	g.Expect(containers[1].Name).To(Equal("endpoint-picker-shim"))
+}
