@@ -118,6 +118,11 @@ start-longevity-test: nfr-test ## Start the longevity test to run for 4 days in 
 stop-longevity-test: export STOP_LONGEVITY=true
 stop-longevity-test: nfr-test ## Stop the longevity test and collects results
 
+.PHONY: ipv6-tests
+ipv6-tests: GOARCH=amd64
+ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
+	./ipv6/run-ipv6-test.sh $(TAG)
+
 
 .PHONY: .vm-nfr-test
 .vm-nfr-test: ## Runs the NFR tests on the GCP VM (called by `nfr-test`)

@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app-ipv6
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-app-ipv6
+  template:
+    metadata:
+      labels:
+        app: test-app-ipv6
+    spec:
+      containers:
+      - name: nginx
+        image: nginxdemos/nginx-hello:plain-text
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-app-ipv6-service
+  namespace: default
+spec:
+  selector:
+    app: test-app-ipv6
+  ports:
+  - port: 80
+    targetPort: 80
+  ipFamilies: [IPv6]
+  ipFamilyPolicy: SingleStack
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: test-route-ipv6
+  namespace: default
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+    namespace: default
+  hostnames:
+  - "ipv6-test.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: test-app-ipv6-service
+      port: 80
