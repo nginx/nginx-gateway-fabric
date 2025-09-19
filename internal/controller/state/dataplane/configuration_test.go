@@ -2777,6 +2777,93 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 	}
 }
 
+func TestUpsertRoute_PathRuleHasInferenceBackend(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Setup minimal route with one BackendRef marked as IsInferencePool
+	backendRef := graph.BackendRef{
+		SvcNsName:       types.NamespacedName{Name: "svc", Namespace: "test"},
+		ServicePort:     apiv1.ServicePort{Port: 80},
+		Valid:           true,
+		IsInferencePool: true,
+	}
+
+	listenerName := "listener-80"
+	gwName := types.NamespacedName{Namespace: "test", Name: "gw"}
+
+	route := &graph.L7Route{
+		RouteType: graph.RouteTypeHTTP,
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hr",
+				Namespace: "test",
+			},
+		},
+		Spec: graph.L7RouteSpec{
+			Rules: []graph.RouteRule{
+				{
+					ValidMatches: true,
+					Filters:      graph.RouteRuleFilters{Valid: true},
+					BackendRefs:  []graph.BackendRef{backendRef},
+					Matches: []v1.HTTPRouteMatch{
+						{
+							Path: &v1.HTTPPathMatch{
+								Type:  helpers.GetPointer(v1.PathMatchPathPrefix),
+								Value: helpers.GetPointer("/infer"),
+							},
+						},
+					},
+				},
+			},
+		},
+		ParentRefs: []graph.ParentRef{
+			{
+				Attachment: &graph.ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{
+						graph.CreateGatewayListenerKey(gwName, listenerName): {"*"},
+					},
+				},
+			},
+		},
+		Valid: true,
+	}
+
+	listener := &graph.Listener{
+		Name:        listenerName,
+		GatewayName: gwName,
+		Valid:       true,
+		Routes: map[graph.RouteKey]*graph.L7Route{
+			graph.CreateRouteKey(route.Source): route,
+		},
+	}
+
+	gateway := &graph.Gateway{
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "test",
+			},
+		},
+		Listeners: []*graph.Listener{listener},
+	}
+
+	hpr := newHostPathRules()
+	hpr.upsertRoute(route, listener, gateway)
+
+	// Find the PathRule for "/infer"
+	found := false
+	for _, rules := range hpr.rulesPerHost {
+		for _, pr := range rules {
+			if pr.Path == "/infer" {
+				found = true
+				g.Expect(pr.HasInferenceBackends).To(BeTrue())
+			}
+		}
+	}
+	g.Expect(found).To(BeTrue(), "PathRule for '/infer' not found")
+}
+
 func TestNewBackendGroup_Mirror(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -2788,7 +2875,7 @@ func TestNewBackendGroup_Mirror(t *testing.T) {
 		IsMirrorBackend: true,
 	}
 
-	group := newBackendGroup([]graph.BackendRef{backendRef}, types.NamespacedName{}, types.NamespacedName{}, 0)
+	group, _ := newBackendGroup([]graph.BackendRef{backendRef}, types.NamespacedName{}, types.NamespacedName{}, 0)
 
 	g.Expect(group.Backends).To(BeEmpty())
 }

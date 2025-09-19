@@ -281,6 +281,7 @@ spec:
         - --nginx-docker-secret=nginx-plus-registry-secret
         - --nginx-plus
         - --usage-report-secret=nplus-license
+        - --usage-report-enforce-initial-report=true
         - --metrics-port=9113
         - --health-port=8081
         - --leader-election-lock-name=nginx-gateway-leader-election
