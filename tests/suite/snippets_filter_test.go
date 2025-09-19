@@ -14,7 +14,6 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
@@ -28,7 +27,8 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 		namespace = "snippets-filter"
 
-		nginxPodName string
+		nginxPodName  string
+		gatewayNsName = types.NamespacedName{Name: "gateway", Namespace: namespace}
 	)
 
 	BeforeAll(func() {
@@ -230,9 +230,8 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
-			nsname := types.NamespacedName{Name: "tea", Namespace: namespace}
-			Eventually(checkHTTPRouteToHaveGatewayNotProgrammedCond).
-				WithArguments(nsname).
+			Eventually(checkGatewayToHaveGatewayNotProgrammedCond).
+				WithArguments(gatewayNsName).
 				WithTimeout(timeoutConfig.GetStatusTimeout).
 				WithPolling(500 * time.Millisecond).
 				Should(Succeed())
@@ -245,9 +244,8 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
-			nsname := types.NamespacedName{Name: "soda", Namespace: namespace}
-			Eventually(checkHTTPRouteToHaveGatewayNotProgrammedCond).
-				WithArguments(nsname).
+			Eventually(checkGatewayToHaveGatewayNotProgrammedCond).
+				WithArguments(gatewayNsName).
 				WithTimeout(timeoutConfig.GetStatusTimeout).
 				WithPolling(500 * time.Millisecond).
 				Should(Succeed())
@@ -257,42 +255,52 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 	})
 })
 
-func checkHTTPRouteToHaveGatewayNotProgrammedCond(httpRouteNsName types.NamespacedName) error {
+func checkGatewayToHaveGatewayNotProgrammedCond(gatewayNsName types.NamespacedName) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
 	defer cancel()
 
 	GinkgoWriter.Printf(
-		"Checking for HTTPRoute %q to have the condition Accepted/True/GatewayNotProgrammed\n",
-		httpRouteNsName,
+		"Checking for Gateway %q to have the condition Programmed/False/Invalid \n",
+		gatewayNsName,
 	)
 
-	var hr v1.HTTPRoute
+	var gw v1.Gateway
 	var err error
 
-	if err = k8sClient.Get(ctx, httpRouteNsName, &hr); err != nil {
+	if err = k8sClient.Get(ctx, gatewayNsName, &gw); err != nil {
 		return err
 	}
 
-	if len(hr.Status.Parents) != 1 {
-		return fmt.Errorf("httproute has %d parent statuses, expected 1", len(hr.Status.Parents))
+	gwStatus := gw.Status
+	if gwStatus.Conditions == nil {
+		nilConditionErr := fmt.Errorf("expected gateway conditions to not be nil")
+		GinkgoWriter.Printf("ERROR: %v\n", nilConditionErr)
+
+		return nilConditionErr
 	}
 
-	parent := hr.Status.Parents[0]
-	if parent.Conditions == nil {
-		return fmt.Errorf("expected parent conditions to not be nil")
+	for i := range gwStatus.Conditions {
+		GinkgoWriter.Printf("Gateway condition %d: Type=%s, Status=%s, Reason=%s\n",
+			i, gwStatus.Conditions[i].Type, gwStatus.Conditions[i].Status, gwStatus.Conditions[i].Reason)
 	}
 
-	cond := parent.Conditions[1]
-	if cond.Type != string(v1.GatewayConditionAccepted) {
-		return fmt.Errorf("expected condition type to be Accepted, got %s", cond.Type)
+	cond := gwStatus.Conditions[1]
+	if cond.Type != string(v1.GatewayConditionProgrammed) {
+		wrongTypeErr := fmt.Errorf("expected condition type to be Programmed, got %s", cond.Type)
+		GinkgoWriter.Printf("ERROR: %v\n", wrongTypeErr)
+
+		return wrongTypeErr
 	}
 
 	if cond.Status != metav1.ConditionFalse {
 		return fmt.Errorf("expected condition status to be False, got %s", cond.Status)
 	}
 
-	if cond.Reason != string(conditions.RouteReasonGatewayNotProgrammed) {
-		return fmt.Errorf("expected condition reason to be GatewayNotProgrammed, got %s", cond.Reason)
+	if cond.Reason != string(v1.GatewayReasonInvalid) {
+		wrongReasonErr := fmt.Errorf("expected condition reason to be GatewayReasonInvalid, got %s", cond.Reason)
+		GinkgoWriter.Printf("ERROR: %v\n", wrongReasonErr)
+
+		return wrongReasonErr
 	}
 
 	return nil

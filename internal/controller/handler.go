@@ -337,7 +337,6 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gr.L4Routes,
 		gr.Routes,
 		transitionTime,
-		gw.LatestReloadResult,
 		h.cfg.gatewayCtlrName,
 	)
 
