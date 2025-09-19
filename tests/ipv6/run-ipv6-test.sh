@@ -9,7 +9,7 @@ TAG=$1
 
 if [[ -z $TAG ]]; then
     echo "Usage: $0 <TAG> [RELEASE_NAME] [NAMESPACE] [CLUSTER_NAME]"
-    echo "Error: TAG is a required parameter. Example usage: `make ipv6-test TAG=release-X.Y-rc`"
+    echo "Error: TAG is a required parameter. Example usage: $(make ipv6-test TAG=release-X.Y-rc)"
     exit 1
 fi
 
@@ -33,11 +33,11 @@ echo "== Using NGINX from ${RELEASE_REPO}/nginx:${TAG}..."
 
 HELM_PARAMETERS="--set nginx.config.ipFamily=ipv6"
 make helm-install-local HELM_PARAMETERS="${HELM_PARAMETERS}" \
-  PREFIX="${RELEASE_REPO}" \
-  TAG="${TAG}" \
-  SELF_DIR="${REPO_DIR}/" \
-  NGINX_SERVICE_TYPE="ClusterIP" \
-  PULL_POLICY="Always"
+    PREFIX="${RELEASE_REPO}" \
+    TAG="${TAG}" \
+    SELF_DIR="${REPO_DIR}/" \
+    NGINX_SERVICE_TYPE="ClusterIP" \
+    PULL_POLICY="Always"
 
 echo "== Deploying Gateway..."
 kubectl apply -f ipv6/manifests/gateway.yaml
