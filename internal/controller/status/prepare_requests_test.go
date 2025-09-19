@@ -432,7 +432,6 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 		map[graph.L4RouteKey]*graph.L4Route{},
 		routes,
 		transitionTime,
-		graph.NginxReloadResult{},
 		gatewayCtlrName,
 	)
 
@@ -511,7 +510,6 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 		map[graph.L4RouteKey]*graph.L4Route{},
 		routes,
 		transitionTime,
-		graph.NginxReloadResult{},
 		gatewayCtlrName,
 	)
 
@@ -588,7 +586,6 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 		routes,
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
-		graph.NginxReloadResult{},
 		gatewayCtlrName,
 	)
 
@@ -603,108 +600,6 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(hr.Status.Parents))
 	}
-}
-
-func TestBuildRouteStatusesNginxErr(t *testing.T) {
-	t.Parallel()
-	const gatewayCtlrName = "controller"
-
-	hr1 := &v1.HTTPRoute{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:  "test",
-			Name:       "hr-valid",
-			Generation: 3,
-		},
-		Spec: v1.HTTPRouteSpec{
-			CommonRouteSpec: commonRouteSpecValid,
-		},
-	}
-
-	routeKey := graph.CreateRouteKey(hr1)
-
-	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
-
-	routes := map[graph.RouteKey]*graph.L7Route{
-		routeKey: {
-			Valid:     true,
-			RouteType: graph.RouteTypeHTTP,
-			Source:    hr1,
-			ParentRefs: []graph.ParentRef{
-				{
-					Idx:     0,
-					Gateway: &graph.ParentRefGateway{NamespacedName: gwNsName},
-					Attachment: &graph.ParentRefAttachmentStatus{
-						Attached: true,
-					},
-					SectionName: commonRouteSpecValid.ParentRefs[0].SectionName,
-				},
-			},
-		},
-	}
-
-	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
-
-	expectedStatus := v1.HTTPRouteStatus{
-		RouteStatus: v1.RouteStatus{
-			Parents: []v1.RouteParentStatus{
-				{
-					ParentRef: v1.ParentReference{
-						Namespace:   helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
-						Name:        v1.ObjectName(gwNsName.Name),
-						SectionName: helpers.GetPointer[v1.SectionName]("listener-80-1"),
-					},
-					ControllerName: gatewayCtlrName,
-					Conditions: []metav1.Condition{
-						{
-							Type:               string(v1.RouteConditionResolvedRefs),
-							Status:             metav1.ConditionTrue,
-							ObservedGeneration: 3,
-							LastTransitionTime: transitionTime,
-							Reason:             string(v1.RouteReasonResolvedRefs),
-							Message:            "All references are resolved",
-						},
-						{
-							Type:               string(v1.RouteConditionAccepted),
-							Status:             metav1.ConditionFalse,
-							ObservedGeneration: 3,
-							LastTransitionTime: transitionTime,
-							Reason:             string(conditions.RouteReasonGatewayNotProgrammed),
-							Message:            conditions.RouteMessageFailedNginxReload,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	g := NewWithT(t)
-
-	k8sClient := createK8sClientFor(&v1.HTTPRoute{})
-
-	for _, r := range routes {
-		err := k8sClient.Create(context.Background(), r.Source)
-		g.Expect(err).ToNot(HaveOccurred())
-	}
-
-	updater := NewUpdater(k8sClient, logr.Discard())
-
-	reqs := PrepareRouteRequests(
-		map[graph.L4RouteKey]*graph.L4Route{},
-		routes,
-		transitionTime,
-		graph.NginxReloadResult{Error: errors.New("test error")},
-		gatewayCtlrName,
-	)
-
-	g.Expect(reqs).To(HaveLen(1))
-
-	updater.Update(context.Background(), reqs...)
-
-	var hr v1.HTTPRoute
-
-	err := k8sClient.Get(context.Background(), routeKey.NamespacedName, &hr)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(helpers.Diff(expectedStatus, hr.Status)).To(BeEmpty())
 }
 
 func TestBuildGatewayClassStatuses(t *testing.T) {
