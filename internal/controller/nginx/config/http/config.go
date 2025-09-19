@@ -26,26 +26,58 @@ type Server struct {
 type LocationType string
 
 const (
+	// InternalLocationType defines an internal location that is only accessible within NGINX.
 	InternalLocationType LocationType = "internal"
+	// ExternalLocationType defines a normal external location that is accessible by clients.
 	ExternalLocationType LocationType = "external"
+	// RedirectLocationType defines an external location that redirects to an internal location
+	// based on HTTP matching conditions.
 	RedirectLocationType LocationType = "redirect"
+	// InferenceExternalLocationType defines an external location that is used for calling NJS
+	// to get the inference workload endpoint and redirects to the internal location that will proxy_pass
+	// to that endpoint.
+	InferenceExternalLocationType LocationType = "inference-external"
+	// InferenceInternalLocationType defines an internal location that is used for calling NJS
+	// to get the inference workload endpoint and redirects to the internal location that will proxy_pass
+	// to that endpoint. This is used when an HTTP redirect location is also defined that redirects
+	// to this internal inference location.
+	InferenceInternalLocationType LocationType = "inference-internal"
 )
 
 // Location holds all configuration for an HTTP location.
 type Location struct {
-	Path                           string
-	ProxyPass                      string
-	HTTPMatchKey                   string
+	// Return specifies a return directive (e.g., HTTP status or redirect) for this location block.
+	Return *Return
+	// ProxySSLVerify controls SSL verification for upstreams when proxying requests.
+	ProxySSLVerify *ProxySSLVerify
+	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
+	ProxyPass string
+	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
+	HTTPMatchKey string
+	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
 	MirrorSplitClientsVariableName string
-	Type                           LocationType
-	ProxySetHeaders                []Header
-	ProxySSLVerify                 *ProxySSLVerify
-	Return                         *Return
-	ResponseHeaders                ResponseHeaders
-	Rewrites                       []string
-	MirrorPaths                    []string
-	Includes                       []shared.Include
-	GRPC                           bool
+	// EPPInternalPath is the internal path for the inference NJS module to redirect to.
+	EPPInternalPath string
+	// EPPHost is the host for the EndpointPicker, used for inference routing.
+	EPPHost string
+	// Type indicates the type of location (external, internal, redirect, etc).
+	Type LocationType
+	// Path is the NGINX location path.
+	Path string
+	// ResponseHeaders are custom response headers to be sent.
+	ResponseHeaders ResponseHeaders
+	// ProxySetHeaders are headers to set when proxying requests upstream.
+	ProxySetHeaders []Header
+	// Rewrites are rewrite rules for modifying request paths.
+	Rewrites []string
+	// MirrorPaths are paths to which requests are mirrored.
+	MirrorPaths []string
+	// Includes are additional NGINX config snippets or policies to include in this location.
+	Includes []shared.Include
+	// EPPPort is the port for the EndpointPicker, used for inference routing.
+	EPPPort int
+	// GRPC indicates if this location proxies gRPC traffic.
+	GRPC bool
 }
 
 // Header defines an HTTP header to be passed to the proxied server.

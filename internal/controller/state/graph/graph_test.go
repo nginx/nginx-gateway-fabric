@@ -223,10 +223,12 @@ func TestBuildGraph(t *testing.T) {
 					Namespace: testNs,
 					Name:      controller.CreateInferencePoolServiceName("ipool"),
 				},
-				ServicePort:        v1.ServicePort{Port: 80},
-				Valid:              true,
-				Weight:             1,
-				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				ServicePort:          v1.ServicePort{Port: 80},
+				Valid:                true,
+				Weight:               1,
+				InvalidForGateways:   map[types.NamespacedName]conditions.Condition{},
+				IsInferencePool:      true,
+				EndpointPickerConfig: &inference.EndpointPickerRef{},
 			},
 		}
 		rbrs := []RouteBackendRef{
