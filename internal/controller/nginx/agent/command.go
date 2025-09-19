@@ -99,6 +99,10 @@ func (cs *commandService) CreateConnection(
 		return response, grpcStatus.Errorf(codes.Internal, "error getting pod owner %s", err.Error())
 	}
 
+	if err := cs.validatePodImageVersion(podName, owner); err != nil {
+		return cs.handleVersionValidationError(err, podName)
+	}
+
 	conn := agentgrpc.Connection{
 		Parent:     owner,
 		PodName:    podName,
@@ -139,6 +143,10 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		return err
 	}
 	defer deployment.RemovePodStatus(conn.PodName)
+
+	if err := cs.validateAndHandleVersionMismatch(conn.PodName, conn.Parent); err != nil {
+		return err
+	}
 
 	cs.logger.Info(fmt.Sprintf("Successfully connected to nginx agent %s", conn.PodName))
 
@@ -186,6 +194,13 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			}
 
 			cs.logger.V(1).Info("Sending configuration to agent", "requestType", msg.Type)
+
+			if err := cs.validateAndHandleVersionMismatch(conn.PodName, conn.Parent); err != nil {
+				deployment.SetPodErrorStatus(conn.PodName, fmt.Errorf("nginx image version validation failed: %s", err.Error()))
+				channels.ResponseCh <- struct{}{}
+				return err
+			}
+
 			if err := msgr.Send(ctx, req); err != nil {
 				cs.logger.Error(err, "error sending request to agent")
 				deployment.SetPodErrorStatus(conn.PodName, err)
@@ -280,6 +295,11 @@ func (cs *commandService) setInitialConfig(
 ) error {
 	deployment.FileLock.Lock()
 	defer deployment.FileLock.Unlock()
+
+	if err := cs.validateAndHandleVersionMismatch(conn.PodName, conn.Parent); err != nil {
+		cs.logAndSendErrorStatus(deployment, conn, fmt.Errorf("nginx image version validation failed: %s", err.Error()))
+		return err
+	}
 
 	fileOverviews, configVersion := deployment.GetFileOverviews()
 
@@ -507,6 +527,122 @@ func (cs *commandService) getPodOwner(podName string) (types.NamespacedName, err
 	}
 
 	return types.NamespacedName{Namespace: pod.Namespace, Name: replicaOwnerRefs[0].Name}, nil
+}
+
+// handleVersionValidationError creates a standardized error response for version validation failures.
+func (cs *commandService) handleVersionValidationError(
+	err error,
+	podName string,
+) (*pb.CreateConnectionResponse, error) {
+	response := &pb.CreateConnectionResponse{
+		Response: &pb.CommandResponse{
+			Status:  pb.CommandResponse_COMMAND_STATUS_ERROR,
+			Message: "nginx image version mismatch",
+			Error:   err.Error(),
+		},
+	}
+	cs.logger.Error(err, "nginx image version validation failed", "podName", podName)
+	return response, grpcStatus.Errorf(codes.FailedPrecondition, "nginx image version validation failed: %s", err.Error())
+}
+
+// validateAndHandleVersionMismatch performs version validation and returns a grpc error if validation fails.
+func (cs *commandService) validateAndHandleVersionMismatch(
+	podName string,
+	deploymentNSName types.NamespacedName,
+) error {
+	if err := cs.validatePodImageVersion(podName, deploymentNSName); err != nil {
+		cs.logger.Error(err, "nginx image version validation failed", "podName", podName)
+		return grpcStatus.Errorf(codes.FailedPrecondition, "nginx image version validation failed: %s", err.Error())
+	}
+	return nil
+}
+
+// findNginxContainerImage finds the nginx container image in a list of containers.
+func findNginxContainerImage(containers []v1.Container) (string, error) {
+	for _, container := range containers {
+		if container.Name == "nginx" {
+			return container.Image, nil
+		}
+	}
+	return "", fmt.Errorf("nginx container not found")
+}
+
+// validatePodImageVersion checks if the pod's nginx container image version matches the expected version
+// from its deployment. Returns an error if versions don't match.
+func (cs *commandService) validatePodImageVersion(podName string, deploymentNSName types.NamespacedName) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get all pods and find the one with the matching name
+	var pods v1.PodList
+	if err := cs.k8sReader.List(ctx, &pods); err != nil {
+		return fmt.Errorf("error listing pods for version validation: %w", err)
+	}
+
+	var targetPod *v1.Pod
+	for i := range pods.Items {
+		if pods.Items[i].Name == podName {
+			targetPod = &pods.Items[i]
+			break
+		}
+	}
+
+	if targetPod == nil {
+		return fmt.Errorf("no pod found with name %q for version validation", podName)
+	}
+
+	// Find the nginx container in the pod
+	podNginxImage, err := findNginxContainerImage(targetPod.Spec.Containers)
+	if err != nil {
+		return fmt.Errorf("nginx container not found in pod %q", podName)
+	}
+
+	// Get the expected image from the deployment
+	expectedImage, err := cs.getExpectedNginxImage(ctx, deploymentNSName)
+	if err != nil {
+		return fmt.Errorf("error getting expected nginx image: %w", err)
+	}
+
+	// Compare images
+	if podNginxImage != expectedImage {
+		return fmt.Errorf("nginx image version mismatch: pod has %q but expected %q", podNginxImage, expectedImage)
+	}
+
+	cs.logger.V(1).Info("Pod nginx image version validated successfully",
+		"podName", podName,
+		"image", podNginxImage)
+
+	return nil
+}
+
+// getExpectedNginxImage retrieves the expected nginx container image from the deployment or daemonset.
+func (cs *commandService) getExpectedNginxImage(
+	ctx context.Context,
+	deploymentNSName types.NamespacedName,
+) (string, error) {
+	// Try to get as Deployment first
+	var deployment appsv1.Deployment
+	if err := cs.k8sReader.Get(ctx, deploymentNSName, &deployment); err == nil {
+		// Found deployment, extract nginx container image
+		image, err := findNginxContainerImage(deployment.Spec.Template.Spec.Containers)
+		if err != nil {
+			return "", fmt.Errorf("nginx container not found in deployment %q", deploymentNSName.Name)
+		}
+		return image, nil
+	}
+
+	// Try to get as DaemonSet
+	var daemonSet appsv1.DaemonSet
+	if err := cs.k8sReader.Get(ctx, deploymentNSName, &daemonSet); err == nil {
+		// Found daemonset, extract nginx container image
+		image, err := findNginxContainerImage(daemonSet.Spec.Template.Spec.Containers)
+		if err != nil {
+			return "", fmt.Errorf("nginx container not found in daemonset %q", deploymentNSName.Name)
+		}
+		return image, nil
+	}
+
+	return "", fmt.Errorf("neither deployment nor daemonset found with name %q", deploymentNSName.Name)
 }
 
 // UpdateDataPlaneStatus is called by agent on startup and upon any change in agent metadata,
