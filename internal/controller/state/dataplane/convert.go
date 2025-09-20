@@ -131,6 +131,8 @@ func convertPathType(pathType v1.PathMatchType) PathType {
 		return PathTypePrefix
 	case v1.PathMatchExact:
 		return PathTypeExact
+	case v1.PathMatchRegularExpression:
+		return PathTypeRegularExpression
 	default:
 		panic(fmt.Sprintf("unsupported path type: %s", pathType))
 	}
