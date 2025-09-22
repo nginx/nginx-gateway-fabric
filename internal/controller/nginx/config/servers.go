@@ -310,6 +310,11 @@ and which backend to use, then redirects to the internal inference location. The
 location calls the inference NJS module to get the AI endpoint to proxy to, then redirects to the
 internal location that proxies to the backend.
 
+Note that the location path naming here is a little different than the previous example.
+The final location that proxy_passes has the non-inference name to avoid too much refactoring
+in the code, and the intermediate location has -inference in the name, whereas in the previous example
+it was the final location that had -inference in the name.
+
 location /coffee {
 	js_content httpmatches.match; // chooses backend and redirects to appropriate internal inference location
 }
