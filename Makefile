@@ -44,6 +44,7 @@ HELM_SCHEMA_VERSION = 0.18.1
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
 NGINX_PREFIX ?= $(PREFIX)/nginx## The name of the nginx image. For example: nginx-gateway-fabric/nginx
 NGINX_PLUS_PREFIX ?= $(PREFIX)/nginx-plus## The name of the nginx plus image. For example: nginx-gateway-fabric/nginx-plus
+BUILD_OS ?= alpine## The OS of the nginx image. Possible values: alpine and ubi
 TAG ?= $(VERSION:v%=%)## The tag of the image. For example, 1.1.0
 TARGET ?= local## The target of the build. Possible values: local and container
 OUT_DIR ?= build/out## The folder where the binary will be stored
@@ -91,7 +92,7 @@ build-prod-nginx-image: build-nginx-image ## Build the custom nginx image for pr
 
 .PHONY: build-nginx-image
 build-nginx-image: check-for-docker ## Build the custom nginx image
-	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) -f $(SELF_DIR)build/Dockerfile.nginx -t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) -f $(SELF_DIR)build/$(BUILD_OS)/Dockerfile.nginx -t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-prod-nginx-plus-image
 build-prod-nginx-plus-image: build-nginx-plus-image ## Build the custom nginx plus image for production

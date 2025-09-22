@@ -2,11 +2,12 @@
 FROM scratch AS nginx-files
 
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
-ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
+ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 ADD --link --chown=101:1001 build/ubi/repos/nginx.repo nginx.repo
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
-FROM ubi9-minimal
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+# FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.3.1
@@ -14,20 +15,17 @@ ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
-RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/tmp/nginx_signing.rsa.pub \
-    --mount=type=bind,from=nginx-files,src=nginx.repo,target=/etc/yum.repos.d/nginx.repo \
+# c-ares is required by for nginx-module-otel. It is not available in ubi9-minimal by default
+RUN --mount=type=bind,from=nginx-files,src=nginx.repo,target=/etc/yum.repos.d/nginx.repo \
     --mount=type=bind,from=nginx-files,src=agent.repo,target=/etc/yum.repos.d/agent.repo \
-    && rpm --import /tmp/nginx_signing.rsa.pub 
-
-RUN microdnf --nodocs install -y nginx \
-    && microdnf --nodocs install -y nginx-module-njs nginx-module-otel nginx-module-image-filter nginx-module-xslt \
-    && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION}*
-
-RUN groupadd --system --gid 1001 nginx  \
-    && useradd --system --gid nginx --no-create-home --home-dir /nonexistent --comment "nginx user" --shell /bin/false --uid 101 nginx  \
-    && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
+    --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_signing.key \
+    rpm --import /tmp/nginx_signing.key \
     && microdnf update -y \
     && microdnf --nodocs install -y shadow-utils subscription-manager \
+    # microdnf --enablerepo=appstream install -y c-ares \
+    && microdnf --nodocs install -y nginx \
+    && microdnf --nodocs install -y nginx-module-njs nginx-module-image-filter nginx-module-xslt \
+    && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
     && microdnf clean all
 
 RUN mkdir -p /usr/lib/nginx/modules \
