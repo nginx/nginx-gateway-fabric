@@ -776,7 +776,7 @@ func getBuildInfo() (commitHash string, commitTime string, dirtyBuild string) {
 
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return
+		return commitHash, commitTime, dirtyBuild
 	}
 	for _, kv := range info.Settings {
 		switch kv.Key {
@@ -789,7 +789,7 @@ func getBuildInfo() (commitHash string, commitTime string, dirtyBuild string) {
 		}
 	}
 
-	return
+	return commitHash, commitTime, dirtyBuild
 }
 
 func createGatewayPodConfig(version, svcName string) (config.GatewayPodConfig, error) {
