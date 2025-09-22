@@ -76,18 +76,18 @@ flowchart TD
   A[Client Request] --> B[NGINX]
   subgraph NGINX Pod
     subgraph NGINX Container
-      B --1--> D[NJS Module: Subrequest to Go App]
+      B --1--> C[NJS Module: Subrequest to Go App]
     end
     subgraph Go Application Container
-      E[Go Application]
+      D[Go Application]
     end
-    D -- 2. subrequest --> E
+    C -- 2. subrequest --> D
   end
-  E -- 3. gRPC ext_proc protocol --> F[Endpoint Picker Pod]
-  F -- 4. Endpoint in Header --> E
-  E --5--> D
-  D --6--> B
-  B --7--> G[AI Workload Endpoint]
+  D -- 3. gRPC ext_proc protocol --> E[Endpoint Picker Pod]
+  E -- 4. Endpoint in Header --> D
+  D --5--> C
+  C --6--> B
+  B --7--> F[AI Workload Endpoint]
 ```
 
 ## API, Customer Driven Interfaces, and User Experience
