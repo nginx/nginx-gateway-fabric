@@ -421,6 +421,7 @@ func updateExternalLocationsForRule(
 			mirrorPercentage,
 		)
 	}
+
 	return extLocations
 }
 
@@ -469,6 +470,7 @@ func createInternalLocationsForRule(
 		internalLocations = append(internalLocations, intLocation)
 		matches = append(matches, match)
 	}
+
 	return internalLocations, matches
 }
 
@@ -511,6 +513,7 @@ func createInferenceLocationsForRule(
 		locs = append(locs, intLocation)
 	}
 	locs = append(locs, extLocations...)
+
 	return locs
 }
 
@@ -518,6 +521,7 @@ func needsInternalLocationsForMatches(rule dataplane.PathRule) bool {
 	if len(rule.MatchRules) > 1 {
 		return true
 	}
+
 	return len(rule.MatchRules) == 1 && !isPathOnlyMatch(rule.MatchRules[0].Match)
 }
 
@@ -530,13 +534,13 @@ type pathAndTypeMap map[string]map[dataplane.PathType]struct{}
 // 2. Each path rule may have an additional location if it contains non-path-only matches.
 // 3. Each prefix path rule may have an additional location if it doesn't contain trailing slash.
 // 4. There may be an additional location for the default root path.
-// 5. There may be an additional location for the inference extension.
+// 5. There may be an additional location per parent location for the inference extension.
 // We also return a map of all paths and their types.
 func getMaxLocationCountAndPathMap(pathRules []dataplane.PathRule) (int, pathAndTypeMap) {
 	maxLocs := 1
 	pathsAndTypes := make(pathAndTypeMap)
 	for _, rule := range pathRules {
-		maxLocs += len(rule.MatchRules) + 3
+		maxLocs += (len(rule.MatchRules) * 2) + 2
 		if pathsAndTypes[rule.Path] == nil {
 			pathsAndTypes[rule.Path] = map[dataplane.PathType]struct{}{
 				rule.PathType: {},
