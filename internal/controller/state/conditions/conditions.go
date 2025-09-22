@@ -49,10 +49,6 @@ const (
 	// as another route.
 	RouteReasonHostnameConflict v1.RouteConditionReason = "HostnameConflict"
 
-	// RouteReasonGatewayNotProgrammed is used when the associated Gateway is not programmed.
-	// Used with Accepted (false).
-	RouteReasonGatewayNotProgrammed v1.RouteConditionReason = "GatewayNotProgrammed"
-
 	// RouteReasonUnsupportedConfiguration is used when the associated Gateway does not support the Route.
 	// Used with Accepted (false).
 	RouteReasonUnsupportedConfiguration v1.RouteConditionReason = "UnsupportedConfiguration"
@@ -489,17 +485,6 @@ func NewRouteUnsupportedConfiguration(msg string) Condition {
 		Type:    string(v1.RouteConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonUnsupportedConfiguration),
-		Message: msg,
-	}
-}
-
-// NewRouteGatewayNotProgrammed returns a Condition that indicates that the Gateway it references is not programmed,
-// which does not guarantee that the Route has been configured.
-func NewRouteGatewayNotProgrammed(msg string) Condition {
-	return Condition{
-		Type:    string(v1.RouteConditionAccepted),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(RouteReasonGatewayNotProgrammed),
 		Message: msg,
 	}
 }
