@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nginx-gateway.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nginx-gateway.labels" . | nindent 4 }}
+{{- if .Values.nginxGateway.service.labels }}
+{{ toYaml .Values.nginxGateway.service.labels | indent 4 }}
+{{- end }}
+{{- if .Values.nginxGateway.service.annotations }}
+  annotations:
+{{ toYaml .Values.nginxGateway.service.annotations | indent 4 }}
+{{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "nginx-gateway.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: agent-grpc
+    port: 443
+    protocol: TCP
+    targetPort: 8443
