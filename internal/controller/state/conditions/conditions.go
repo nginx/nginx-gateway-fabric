@@ -854,6 +854,25 @@ func NewGatewayInvalid(msg string) []Condition {
 	}
 }
 
+// NewGatewayUnsupportedValue returns Conditions that indicate that a field of the Gateway has an unsupported value.
+// Unsupported means that the value is not supported by the implementation or invalid.
+func NewGatewayUnsupportedValue(msg string) []Condition {
+	return []Condition{
+		{
+			Type:    string(v1.GatewayConditionAccepted),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(GatewayReasonUnsupportedValue),
+			Message: msg,
+		},
+		{
+			Type:    string(v1.GatewayConditionProgrammed),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(GatewayReasonUnsupportedValue),
+			Message: msg,
+		},
+	}
+}
+
 // NewGatewayUnsupportedAddress returns a Condition that indicates the Gateway is not accepted because it
 // contains an address type that is not supported.
 func NewGatewayUnsupportedAddress(msg string) Condition {
