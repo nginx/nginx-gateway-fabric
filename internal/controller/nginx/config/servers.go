@@ -379,6 +379,9 @@ func createLocations(
 			)
 			httpMatchKey := serverID + "_" + strconv.Itoa(pathRuleIdx)
 			for i := range extLocations {
+				// FIXME(sberman): De-dupe matches and associated locations
+				// so we don't need nginx/njs to perform unnecessary matching.
+				// https://github.com/nginx/nginx-gateway-fabric/issues/662
 				extLocations[i].HTTPMatchKey = httpMatchKey
 				matchPairs[extLocations[i].HTTPMatchKey] = matches
 			}
@@ -615,8 +618,8 @@ func getLocationTypeForPathRule(rule dataplane.PathRule) http.LocationType {
 	return http.ExternalLocationType
 }
 
-// initializes the internal location that is redirected to by an external location HTTP matching decision.
-// This location will proxy_pass to the backend.
+// initializeInternalMatchLocation initializes the internal location that is redirected to by an
+// external location HTTP matching decision. This location will proxy_pass to the backend.
 func initializeInternalMatchLocation(
 	pathruleIdx,
 	matchRuleIdx int,
@@ -627,7 +630,7 @@ func initializeInternalMatchLocation(
 	return createMatchLocation(path, grpc), createRouteMatch(match, path)
 }
 
-// initializes the internal inference location that is redirected to by
+// initializeInternalInferenceRedirectLocation initializes the internal inference location that is redirected to by
 // an external HTTP matching location. This location then redirects to the final proxy_pass location.
 func initializeInternalInferenceRedirectLocation(pathruleIdx, matchRuleIdx int) http.Location {
 	return http.Location{
@@ -636,8 +639,9 @@ func initializeInternalInferenceRedirectLocation(pathruleIdx, matchRuleIdx int) 
 	}
 }
 
-// initializes the internal location that is redirected to by an internal inference location, which was
-// redirected to by the external HTTP matching location. This location will proxy_pass to the backend.
+// initializeInternalMatchLocationWithInference initializes the internal location that is redirected to by
+// an internal inference location, which was redirected to by the external HTTP matching location.
+// This location will proxy_pass to the backend.
 // The routeMatch is created with the inference internal location path, so that the HTTP match in the external
 // location can redirect to the proper inference location, which then redirects to this location.
 func initializeInternalMatchLocationWithInference(
@@ -651,7 +655,8 @@ func initializeInternalMatchLocationWithInference(
 	return createMatchLocation(path, grpc), createRouteMatch(match, inferencePath(pathruleIdx, matchRuleIdx))
 }
 
-// initializes the internal inference location that does the final proxy_pass to the inference backend.
+// initializeInternalInferenceLocation initializes the internal inference location that does the final
+// proxy_pass to the inference backend.
 // This is used when the external location redirects directly here, without any HTTP matching.
 func initializeInternalInferenceLocation(pathruleIdx, matchRuleIdx int) http.Location {
 	return http.Location{
