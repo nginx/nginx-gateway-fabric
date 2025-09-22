@@ -7,6 +7,7 @@ NJS_DIR = internal/controller/nginx/modules/src
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
 BUILD_AGENT = local
+BASE_IMAGE ?= nginx:1.29.1-alpine-otel
 
 PROD_TELEMETRY_ENDPOINT = oss.edge.df.f5.com:443
 # the telemetry related variables below are also configured in goreleaser.yml
@@ -52,7 +53,7 @@ PLUS_ENABLED ?= false
 PLUS_LICENSE_FILE ?= $(SELF_DIR)license.jwt
 PLUS_USAGE_ENDPOINT ?=## The N+ usage endpoint. For development, please set to the N1 staging endpoint.
 
-override NGINX_DOCKER_BUILD_OPTIONS += --build-arg NJS_DIR=$(NJS_DIR) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) --build-arg BUILD_AGENT=$(BUILD_AGENT)
+override NGINX_DOCKER_BUILD_OPTIONS += --build-arg NJS_DIR=$(NJS_DIR) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) --build-arg BUILD_AGENT=$(BUILD_AGENT) --build-arg BASE_IMAGE=$(BASE_IMAGE)
 
 .DEFAULT_GOAL := help
 
