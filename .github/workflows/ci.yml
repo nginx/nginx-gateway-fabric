@@ -274,7 +274,8 @@ jobs:
         run: |
           go version -m dist/gateway_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}*/gateway > goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.txt
           echo "goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)" >> $GITHUB_OUTPUT
-          cat $GITHUB_OUTPUT
+          goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)
+          cat $goversionm
 
       - name: Generate Assertion Document
         id: assertiondoc
