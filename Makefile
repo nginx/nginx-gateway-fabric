@@ -45,6 +45,7 @@ PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-g
 NGINX_PREFIX ?= $(PREFIX)/nginx## The name of the nginx image. For example: nginx-gateway-fabric/nginx
 NGINX_PLUS_PREFIX ?= $(PREFIX)/nginx-plus## The name of the nginx plus image. For example: nginx-gateway-fabric/nginx-plus
 BUILD_OS ?= alpine## The OS of the nginx image. Possible values: alpine and ubi
+IMAGE_PULL_POLICY ?= Never## The image pull policy for the NGF and nginx images. Possible values: Always, Never, IfNotPresent
 TAG ?= $(VERSION:v%=%)## The tag of the image. For example, 1.1.0
 TARGET ?= local## The target of the build. Possible values: local and container
 OUT_DIR ?= build/out## The folder where the binary will be stored
@@ -228,7 +229,7 @@ install-ngf-local-build-with-plus: check-for-plus-usage-endpoint build-images-wi
 
 .PHONY: helm-install-local
 helm-install-local: install-gateway-crds ## Helm install NGF on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build.
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=Never --set nginx.service.type=NodePort --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=Never --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway $(HELM_PARAMETERS)
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=$(IMAGE_PULL_POLICY) --set nginx.service.type=NodePort --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(IMAGE_PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway $(HELM_PARAMETERS) || helm uninstall nginx-gateway -n nginx-gateway
 
 .PHONY: helm-install-local-with-plus
 helm-install-local-with-plus: check-for-plus-usage-endpoint install-gateway-crds ## Helm install NGF with NGINX Plus on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build-with-plus.
