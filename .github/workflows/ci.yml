@@ -152,7 +152,7 @@ jobs:
     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, unit-tests, njs-unit-tests]
     env:
-      GOPROXY: ${{ needs.vars.outputs.goproxy }}
+      GOPROXY: "https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-local-approved-dependency"
     outputs:
       json: ${{ steps.gateway_binaries.outputs.json }}
     permissions:
@@ -247,7 +247,8 @@ jobs:
       contents: read
       id-token: write # for compliance-rules action to sign assertion doc
     env:
-      GOPROXY: ${{ needs.vars.outputs.goproxy }}
+      GOPROXY: "https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-local-approved-dependency"
+
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -277,7 +278,7 @@ jobs:
 
       - name: Generate Assertion Document
         id: assertiondoc
-        uses: nginxinc/compliance-rules/.github/actions/assertion@8cc3e2d960f32aa4b77c1e719adb92228132b11b
+        uses: nginxinc/compliance-rules/.github/actions/assertion@main
         with:
           artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
           artifact-digest: ${{ matrix.gateway.digest }}
@@ -296,7 +297,7 @@ jobs:
 
       - name: Sign and Store Assertion Document
         id: sign
-        uses: nginxinc/compliance-rules/.github/actions/sign@8cc3e2d960f32aa4b77c1e719adb92228132b11b
+        uses: nginxinc/compliance-rules/.github/actions/sign@main
         with:
           assertion-doc: ${{ steps.assertiondoc.outputs.assertion-document-path }}
 
