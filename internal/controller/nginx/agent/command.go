@@ -521,25 +521,20 @@ func (cs *commandService) getPodOwner(podName string) (types.NamespacedName, *v1
 	return types.NamespacedName{Namespace: pod.Namespace, Name: replicaOwnerRefs[0].Name}, pod, nil
 }
 
-// findContainerImage returns the image of the first container with the given name.
-// Returns empty string if container is not found.
-func findContainerImage(containers []v1.Container, containerName string) string {
-	for _, container := range containers {
-		if container.Name == containerName {
-			return container.Image
-		}
-	}
-	return ""
-}
-
 // validatePodImageVersion checks if the pod's nginx container image version matches the expected version
 // from its deployment. Returns an error if versions don't match.
 func (cs *commandService) validatePodImageVersion(
 	pod *v1.Pod,
 	expectedImage string,
 ) error {
-	// Find the nginx container in the pod
-	podNginxImage := findContainerImage(pod.Spec.Containers, "nginx")
+	var podNginxImage string
+
+	for _, container := range pod.Spec.Containers {
+		if container.Name == "nginx" {
+			podNginxImage = container.Image
+			break
+		}
+	}
 	if podNginxImage == "" {
 		return fmt.Errorf("nginx container not found in pod %q", pod.Name)
 	}

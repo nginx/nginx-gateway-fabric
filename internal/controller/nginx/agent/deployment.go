@@ -77,8 +77,8 @@ func (d *Deployment) GetBroadcaster() broadcast.Broadcaster {
 
 // SetImageVersion sets the deployment's image version.
 func (d *Deployment) SetImageVersion(imageVersion string) {
-	d.errLock.Lock()
-	defer d.errLock.Unlock()
+	d.FileLock.Lock()
+	defer d.FileLock.Unlock()
 
 	d.imageVersion = imageVersion
 }
