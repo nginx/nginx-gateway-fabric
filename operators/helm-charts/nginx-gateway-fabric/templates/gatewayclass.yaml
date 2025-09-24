@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.nginxGateway.gatewayClassName }}
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+  {{- if .Values.nginxGateway.gatewayClassAnnotations }}
+  annotations:
+    {{- range $key, $value := .Values.nginxGateway.gatewayClassAnnotations }}
+    {{ printf "%s: %s" $key $value }}
+    {{- end }}
+  {{- end }}
+spec:
+  controllerName: {{ .Values.nginxGateway.gatewayControllerName }}
+  parametersRef:
+    group: gateway.nginx.org
+    kind: NginxProxy
+    name: {{ include "nginx-gateway.proxy-config-name" . }}
+    namespace: {{ .Release.Namespace }}
