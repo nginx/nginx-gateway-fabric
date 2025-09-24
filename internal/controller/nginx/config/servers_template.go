@@ -92,7 +92,7 @@ server {
 
         {{ range $l := $s.Locations }}
     location {{ $l.Path }} {
-        {{ if eq $l.Type "internal" -}}
+        {{ if contains $l.Type "internal" -}}
         internal;
         {{ end }}
 
@@ -118,9 +118,17 @@ server {
         return {{ $l.Return.Code }} "{{ $l.Return.Body }}";
         {{- end }}
 
-        {{- if eq $l.Type "redirect" }}
+        {{- if eq $l.Type "redirect" -}}
         set $match_key {{ $l.HTTPMatchKey }};
         js_content httpmatches.redirect;
+        {{- end }}
+
+        {{- if contains $l.Type "inference" -}}
+        js_var $inference_workload_endpoint;
+        set $epp_internal_path {{ $l.EPPInternalPath }};
+        set $epp_host {{ $l.EPPHost }};
+        set $epp_port {{ $l.EPPPort }};
+        js_content epp.getEndpoint;
         {{- end }}
 
         {{ $proxyOrGRPC := "proxy" }}{{ if $l.GRPC }}{{ $proxyOrGRPC = "grpc" }}{{ end }}

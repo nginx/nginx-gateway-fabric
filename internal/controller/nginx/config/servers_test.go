@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
 	"k8s.io/apimachinery/pkg/types"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -1239,7 +1240,7 @@ func TestCreateServers(t *testing.T) {
 					Filters: dataplane.HTTPFilters{
 						RequestRedirect: &dataplane.HTTPRequestRedirectFilter{
 							Hostname:   helpers.GetPointer("redirect.example.com"),
-							StatusCode: helpers.GetPointer[int](301),
+							StatusCode: helpers.GetPointer(301),
 							Port:       helpers.GetPointer[int32](8080),
 							Path: &dataplane.HTTPPathModifier{
 								Type:        dataplane.ReplaceFullPath,
@@ -2440,6 +2441,154 @@ func TestCreateLocations_Includes(t *testing.T) {
 	for i, location := range locations {
 		g.Expect(location.Path).To(Equal(expLocations[i].Path))
 		g.Expect(location.Includes).To(ConsistOf(expLocations[i].Includes))
+	}
+}
+
+func TestCreateLocations_InferenceBackends(t *testing.T) {
+	t.Parallel()
+
+	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
+
+	fooGroup := dataplane.BackendGroup{
+		Source:  hrNsName,
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{
+				UpstreamName: "test_foo_80",
+				Valid:        true,
+				Weight:       1,
+				EndpointPickerConfig: &inference.EndpointPickerRef{
+					Name: "test-epp",
+					Port: &inference.Port{
+						Number: 80,
+					},
+				},
+			},
+		},
+	}
+
+	pathRuleInferenceOnly := dataplane.PathRule{
+		Path:                 "/inference",
+		PathType:             dataplane.PathTypeExact,
+		HasInferenceBackends: true,
+		MatchRules: []dataplane.MatchRule{
+			{
+				Match:        dataplane.Match{},
+				BackendGroup: fooGroup,
+			},
+		},
+	}
+
+	pathRuleInferenceWithMatch := dataplane.PathRule{
+		Path:                 "/inference-match",
+		PathType:             dataplane.PathTypeExact,
+		HasInferenceBackends: true,
+		MatchRules: []dataplane.MatchRule{
+			{
+				Match: dataplane.Match{
+					Method: helpers.GetPointer("POST"),
+				},
+				BackendGroup: fooGroup,
+			},
+		},
+	}
+
+	tests := []struct {
+		expMatches httpMatchPairs
+		name       string
+		pathRules  []dataplane.PathRule
+		expLocs    []http.Location
+	}{
+		{
+			name:      "inference only, no internal locations for matches",
+			pathRules: []dataplane.PathRule{pathRuleInferenceOnly},
+			expLocs: []http.Location{
+				{
+					Path:      "/_ngf-internal-rule0-route0-inference",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://$inference_backend_test_foo_80$request_uri",
+					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$gw_api_compliant_host"},
+						{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
+						{Name: "X-Real-IP", Value: "$remote_addr"},
+						{Name: "X-Forwarded-Proto", Value: "$scheme"},
+						{Name: "X-Forwarded-Host", Value: "$host"},
+						{Name: "X-Forwarded-Port", Value: "$server_port"},
+						{Name: "Upgrade", Value: "$http_upgrade"},
+						{Name: "Connection", Value: "$connection_upgrade"},
+					},
+				},
+				{
+					Path:            "= /inference",
+					Type:            http.InferenceExternalLocationType,
+					EPPInternalPath: "/_ngf-internal-rule0-route0-inference",
+					EPPHost:         "test-epp",
+					EPPPort:         80,
+				},
+				createDefaultRootLocation(),
+			},
+			expMatches: httpMatchPairs{},
+		},
+		{
+			name:      "inference with match, needs internal locations for matches",
+			pathRules: []dataplane.PathRule{pathRuleInferenceWithMatch},
+			expLocs: []http.Location{
+				{
+					Path:         "= /inference-match",
+					Type:         http.RedirectLocationType,
+					HTTPMatchKey: "1_0",
+				},
+				{
+					Path:            "/_ngf-internal-rule0-route0-inference",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-rule0-route0",
+					EPPHost:         "test-epp",
+					EPPPort:         80,
+				},
+				{
+					Path:      "/_ngf-internal-rule0-route0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://$inference_backend_test_foo_80$request_uri",
+					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$gw_api_compliant_host"},
+						{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
+						{Name: "X-Real-IP", Value: "$remote_addr"},
+						{Name: "X-Forwarded-Proto", Value: "$scheme"},
+						{Name: "X-Forwarded-Host", Value: "$host"},
+						{Name: "X-Forwarded-Port", Value: "$server_port"},
+						{Name: "Upgrade", Value: "$http_upgrade"},
+						{Name: "Connection", Value: "$connection_upgrade"},
+					},
+				},
+				createDefaultRootLocation(),
+			},
+			expMatches: httpMatchPairs{
+				"1_0": {
+					{Method: "POST", RedirectPath: "/_ngf-internal-rule0-route0-inference"},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			locs, matches, _ := createLocations(
+				&dataplane.VirtualServer{
+					Hostname:  "example.com",
+					PathRules: tc.pathRules,
+					Port:      80,
+				},
+				"1",
+				&policiesfakes.FakeGenerator{},
+				alwaysFalseKeepAliveChecker,
+			)
+
+			g.Expect(helpers.Diff(tc.expLocs, locs)).To(BeEmpty())
+			g.Expect(matches).To(Equal(tc.expMatches))
+		})
 	}
 }
 
@@ -3686,10 +3835,11 @@ func TestCreateProxyPass(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		rewrite  *dataplane.HTTPURLRewriteFilter
-		expected string
-		grp      dataplane.BackendGroup
-		GRPC     bool
+		rewrite          *dataplane.HTTPURLRewriteFilter
+		expected         string
+		grp              dataplane.BackendGroup
+		GRPC             bool
+		inferenceBackend bool
 	}{
 		{
 			expected: "http://10.0.0.1:80$request_uri",
@@ -3702,6 +3852,20 @@ func TestCreateProxyPass(t *testing.T) {
 					},
 				},
 			},
+		},
+		// Inference case
+		{
+			expected: "http://$inference_backend_upstream_inference$request_uri",
+			grp: dataplane.BackendGroup{
+				Backends: []dataplane.Backend{
+					{
+						UpstreamName: "upstream-inference",
+						Valid:        true,
+						Weight:       1,
+					},
+				},
+			},
+			inferenceBackend: true,
 		},
 		{
 			expected: "http://$group_ns1__bg_rule0$request_uri",
@@ -3755,7 +3919,13 @@ func TestCreateProxyPass(t *testing.T) {
 		t.Run(tc.expected, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := createProxyPass(tc.grp, tc.rewrite, generateProtocolString(nil, tc.GRPC), tc.GRPC)
+			result := createProxyPass(
+				tc.grp,
+				tc.rewrite,
+				generateProtocolString(nil, tc.GRPC),
+				tc.GRPC,
+				tc.inferenceBackend,
+			)
 			g.Expect(result).To(Equal(tc.expected))
 		})
 	}

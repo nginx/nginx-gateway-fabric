@@ -166,6 +166,9 @@ type RouteBackendRef struct {
 	// If this backend is defined in a RequestMirror filter, this value will indicate the filter's index.
 	MirrorBackendIdx *int
 
+	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
+	EndpointPickerConfig *inference.EndpointPickerRef
+
 	Filters []any
 
 	// IsInferencePool indicates if this backend is an InferencePool disguised as a Service.

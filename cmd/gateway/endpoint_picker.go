@@ -14,16 +14,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	eppMetadata "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
-)
 
-const (
-	// defaultPort is the default port for this server to listen on. If collisions become a problem,
-	// we can make this configurable via the NginxProxy resource.
-	defaultPort = 54800 // why 54800? Sum "nginx" in ASCII and multiply by 100.
-	// eppEndpointHostHeader is the HTTP header used to specify the EPP endpoint host, set by the NJS module caller.
-	eppEndpointHostHeader = "X-EPP-Host"
-	// eppEndpointPortHeader is the HTTP header used to specify the EPP endpoint port, set by the NJS module caller.
-	eppEndpointPortHeader = "X-EPP-Port"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
 
 // extProcClientFactory creates a new ExternalProcessorClient and returns a close function.
@@ -32,7 +24,7 @@ type extProcClientFactory func(target string) (extprocv3.ExternalProcessorClient
 // endpointPickerServer starts an HTTP server on the given port with the provided handler.
 func endpointPickerServer(handler http.Handler) error {
 	server := &http.Server{
-		Addr:              fmt.Sprintf("127.0.0.1:%d", defaultPort),
+		Addr:              fmt.Sprintf("127.0.0.1:%d", types.GoShimPort),
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -54,13 +46,13 @@ func realExtProcClientFactory() extProcClientFactory {
 // createEndpointPickerHandler returns an http.Handler that forwards requests to the EndpointPicker.
 func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host := r.Header.Get(eppEndpointHostHeader)
-		port := r.Header.Get(eppEndpointPortHeader)
+		host := r.Header.Get(types.EPPEndpointHostHeader)
+		port := r.Header.Get(types.EPPEndpointPortHeader)
 		if host == "" || port == "" {
 			msg := fmt.Sprintf(
 				"missing at least one of required headers: %s and %s",
-				eppEndpointHostHeader,
-				eppEndpointPortHeader,
+				types.EPPEndpointHostHeader,
+				types.EPPEndpointPortHeader,
 			)
 			logger.Error(errors.New(msg), "error contacting EndpointPicker")
 			http.Error(w, msg, http.StatusBadRequest)
@@ -174,6 +166,10 @@ func buildHeaderRequest(r *http.Request) *extprocv3.ProcessingRequest {
 }
 
 func buildBodyRequest(r *http.Request) (*extprocv3.ProcessingRequest, error) {
+	if r.ContentLength == 0 {
+		return nil, errors.New("request body is empty")
+	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, fmt.Errorf("error reading request body: %w", err)

@@ -16,7 +16,13 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-var serversTemplate = gotemplate.Must(gotemplate.New("servers").Parse(serversTemplateText))
+var serversTemplate = gotemplate.Must(
+	gotemplate.New("servers").Funcs(gotemplate.FuncMap{
+		"contains": func(str http.LocationType, substr string) bool {
+			return strings.Contains(string(str), substr)
+		},
+	}).Parse(serversTemplateText),
+)
 
 const (
 	// HeaderMatchSeparator is the separator for constructing header-based match for NJS.
@@ -252,6 +258,78 @@ func extractMirrorTargetsWithPercentages(pathRules []dataplane.PathRule) map[str
 	return mirrorTargets
 }
 
+/*
+There are several different flows of location blocks, depending on the user configuration.
+The following describes them, with basic location examples.
+
+---------------
+Base case, no HTTP matching conditions or inference extension.
+
+External location proxies straight to backend.
+
+location /coffee {
+    proxy_pass http://backend;
+}
+---------------
+HTTP matching conditions.
+
+External location calls httpmatch NJS module. The module determines the HTTP request conditions that exist
+and which backend to use, then redirects to the appropriate internal location.
+The internal location proxies to the backend.
+
+location /coffee {
+    js_content httpmatches.match; // chooses backend1 or backend2, and redirects to appropriate internal location
+}
+location /_ngf-internal-rule0-route0 {
+	internal;
+	proxy_pass http://backend1;
+}
+location /_ngf-internal-rule1-route0 {
+	internal;
+	proxy_pass http://backend2;
+}
+---------------
+Inference extension, no HTTP matching conditions.
+
+External location calls inference NJS module. The module gets the AI endpoint to proxy to,
+then redirects to the internal inference location that proxies to the backend.
+
+location /coffee {
+	set $epp_internal_path /_ngf-internal-rule0-route0-inference;
+	js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-rule0-route0-inference
+}
+location /_ngf-internal-rule0-route0-inference {
+	internal;
+	proxy_pass http://$inference-backend;
+}
+---------------
+Inference extension with HTTP matching conditions.
+
+External location calls httpmatch NJS module. The module determines the HTTP request conditions that exist
+and which backend to use, then redirects to the internal inference location. The internal inference
+location calls the inference NJS module to get the AI endpoint to proxy to, then redirects to the
+internal location that proxies to the backend.
+
+Note that the location path naming here is a little different than the previous example.
+The final location that proxy_passes has the non-inference name to avoid too much refactoring
+in the code, and the intermediate location has -inference in the name, whereas in the previous example
+it was the final location that had -inference in the name.
+
+location /coffee {
+	js_content httpmatches.match; // chooses backend and redirects to appropriate internal inference location
+}
+location /_ngf-internal-rule0-route0-inference {
+	internal;
+
+	set $epp_internal_path /_ngf-internal-rule0-route0;
+	js_content epp.getEndpoint; // redirects to /_ngf-internal-rule0-route0
+}
+location /_ngf-internal-rule0-route0 {
+	internal;
+	proxy_pass http://$inference-backend;
+}
+*/
+
 type httpMatchPairs map[string][]routeMatch
 
 func createLocations(
@@ -270,8 +348,6 @@ func createLocations(
 	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
 	for pathRuleIdx, rule := range server.PathRules {
-		matches := make([]routeMatch, 0, len(rule.MatchRules))
-
 		if rule.Path == rootPath {
 			rootPathExists = true
 		}
@@ -281,7 +357,6 @@ func createLocations(
 		}
 
 		mirrorPercentage := mirrorPathToPercentage[rule.Path]
-
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
 		for i := range extLocations {
 			extLocations[i].Includes = createIncludesFromPolicyGenerateResult(
@@ -289,54 +364,45 @@ func createLocations(
 			)
 		}
 
-		if !needsInternalLocations(rule) {
-			for _, r := range rule.MatchRules {
-				extLocations = updateLocations(
-					r,
-					rule,
-					extLocations,
-					server.Port,
-					keepAliveCheck,
-					mirrorPercentage,
-				)
-			}
-
-			locs = append(locs, extLocations...)
-			continue
-		}
-
-		internalLocations := make([]http.Location, 0, len(rule.MatchRules))
-
-		for matchRuleIdx, r := range rule.MatchRules {
-			intLocation, match := initializeInternalLocation(pathRuleIdx, matchRuleIdx, r.Match, rule.GRPC)
-			intLocation.Includes = createIncludesFromPolicyGenerateResult(
-				generator.GenerateForInternalLocation(rule.Policies),
-			)
-
-			intLocation = updateLocation(
-				r,
+		switch {
+		case !needsInternalLocationsForMatches(rule) && !rule.HasInferenceBackends:
+			locs = append(locs, updateExternalLocationsForRule(
 				rule,
-				intLocation,
+				extLocations,
+				server.Port,
+				keepAliveCheck,
+				mirrorPercentage)...,
+			)
+		case needsInternalLocationsForMatches(rule):
+			internalLocations, matches := createInternalLocationsForRule(
+				pathRuleIdx,
+				rule,
+				generator,
 				server.Port,
 				keepAliveCheck,
 				mirrorPercentage,
 			)
-
-			internalLocations = append(internalLocations, intLocation)
-			matches = append(matches, match)
+			httpMatchKey := serverID + "_" + strconv.Itoa(pathRuleIdx)
+			for i := range extLocations {
+				// FIXME(sberman): De-dupe matches and associated locations
+				// so we don't need nginx/njs to perform unnecessary matching.
+				// https://github.com/nginx/nginx-gateway-fabric/issues/662
+				extLocations[i].HTTPMatchKey = httpMatchKey
+				matchPairs[extLocations[i].HTTPMatchKey] = matches
+			}
+			locs = append(locs, extLocations...)
+			locs = append(locs, internalLocations...)
+		case rule.HasInferenceBackends:
+			locs = append(locs, createInferenceLocationsForRule(
+				pathRuleIdx,
+				rule,
+				extLocations,
+				generator,
+				server.Port,
+				keepAliveCheck,
+				mirrorPercentage)...,
+			)
 		}
-
-		httpMatchKey := serverID + "_" + strconv.Itoa(pathRuleIdx)
-		for i := range extLocations {
-			// FIXME(sberman): De-dupe matches and associated locations
-			// so we don't need nginx/njs to perform unnecessary matching.
-			// https://github.com/nginx/nginx-gateway-fabric/issues/662
-			extLocations[i].HTTPMatchKey = httpMatchKey
-			matchPairs[extLocations[i].HTTPMatchKey] = matches
-		}
-
-		locs = append(locs, extLocations...)
-		locs = append(locs, internalLocations...)
 	}
 
 	if !rootPathExists {
@@ -346,10 +412,124 @@ func createLocations(
 	return locs, matchPairs, grpcServer
 }
 
-func needsInternalLocations(rule dataplane.PathRule) bool {
+func updateExternalLocationsForRule(
+	rule dataplane.PathRule,
+	extLocations []http.Location,
+	port int32,
+	keepAliveCheck keepAliveChecker,
+	mirrorPercentage *float64,
+) []http.Location {
+	for _, r := range rule.MatchRules {
+		extLocations = updateLocations(
+			r,
+			rule,
+			extLocations,
+			port,
+			keepAliveCheck,
+			mirrorPercentage,
+		)
+	}
+
+	return extLocations
+}
+
+func createInternalLocationsForRule(
+	pathRuleIdx int,
+	rule dataplane.PathRule,
+	generator policies.Generator,
+	port int32,
+	keepAliveCheck keepAliveChecker,
+	mirrorPercentage *float64,
+) ([]http.Location, []routeMatch) {
+	internalLocations := make([]http.Location, 0, len(rule.MatchRules))
+	matches := make([]routeMatch, 0, len(rule.MatchRules))
+	for matchRuleIdx, r := range rule.MatchRules {
+		var intLocation http.Location
+		var match routeMatch
+		if !rule.HasInferenceBackends {
+			intLocation, match = initializeInternalMatchLocation(pathRuleIdx, matchRuleIdx, r.Match, rule.GRPC)
+		} else {
+			intLocation, match = initializeInternalMatchLocationWithInference(pathRuleIdx, matchRuleIdx, r.Match)
+			intInfLocation := initializeInternalInferenceRedirectLocation(pathRuleIdx, matchRuleIdx)
+			for _, b := range r.BackendGroup.Backends {
+				if b.EndpointPickerConfig != nil {
+					var portNum int
+					if b.EndpointPickerConfig.Port != nil {
+						portNum = int(b.EndpointPickerConfig.Port.Number)
+					}
+					intInfLocation.EPPInternalPath = intLocation.Path
+					intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name)
+					intInfLocation.EPPPort = portNum
+				}
+			}
+			internalLocations = append(internalLocations, intInfLocation)
+		}
+		intLocation.Includes = createIncludesFromPolicyGenerateResult(
+			generator.GenerateForInternalLocation(rule.Policies),
+		)
+		intLocation = updateLocation(
+			r,
+			rule,
+			intLocation,
+			port,
+			keepAliveCheck,
+			mirrorPercentage,
+		)
+		internalLocations = append(internalLocations, intLocation)
+		matches = append(matches, match)
+	}
+
+	return internalLocations, matches
+}
+
+func createInferenceLocationsForRule(
+	pathRuleIdx int,
+	rule dataplane.PathRule,
+	extLocations []http.Location,
+	generator policies.Generator,
+	port int32,
+	keepAliveCheck keepAliveChecker,
+	mirrorPercentage *float64,
+) []http.Location {
+	locs := make([]http.Location, 0, len(rule.MatchRules)+len(extLocations))
+	for matchRuleIdx, r := range rule.MatchRules {
+		intLocation := initializeInternalInferenceLocation(pathRuleIdx, matchRuleIdx)
+		intLocation.Includes = createIncludesFromPolicyGenerateResult(
+			generator.GenerateForInternalLocation(rule.Policies),
+		)
+		intLocation = updateLocation(
+			r,
+			rule,
+			intLocation,
+			port,
+			keepAliveCheck,
+			mirrorPercentage,
+		)
+		for _, b := range r.BackendGroup.Backends {
+			if b.EndpointPickerConfig != nil {
+				for i := range extLocations {
+					var portNum int
+					if b.EndpointPickerConfig.Port != nil {
+						portNum = int(b.EndpointPickerConfig.Port.Number)
+					}
+					extLocations[i].EPPInternalPath = intLocation.Path
+					extLocations[i].EPPHost = string(b.EndpointPickerConfig.Name)
+					extLocations[i].EPPPort = portNum
+				}
+			}
+		}
+		locs = append(locs, intLocation)
+	}
+	locs = append(locs, extLocations...)
+
+	return locs
+}
+
+func needsInternalLocationsForMatches(rule dataplane.PathRule) bool {
 	if len(rule.MatchRules) > 1 {
 		return true
 	}
+
 	return len(rule.MatchRules) == 1 && !isPathOnlyMatch(rule.MatchRules[0].Match)
 }
 
@@ -362,12 +542,13 @@ type pathAndTypeMap map[string]map[dataplane.PathType]struct{}
 // 2. Each path rule may have an additional location if it contains non-path-only matches.
 // 3. Each prefix path rule may have an additional location if it doesn't contain trailing slash.
 // 4. There may be an additional location for the default root path.
+// 5. There may be an additional location per parent location for the inference extension.
 // We also return a map of all paths and their types.
 func getMaxLocationCountAndPathMap(pathRules []dataplane.PathRule) (int, pathAndTypeMap) {
 	maxLocs := 1
 	pathsAndTypes := make(pathAndTypeMap)
 	for _, rule := range pathRules {
-		maxLocs += len(rule.MatchRules) + 2
+		maxLocs += (len(rule.MatchRules) * 2) + 2
 		if pathsAndTypes[rule.Path] == nil {
 			pathsAndTypes[rule.Path] = map[dataplane.PathType]struct{}{
 				rule.PathType: {},
@@ -431,14 +612,20 @@ func initializeExternalLocations(
 }
 
 func getLocationTypeForPathRule(rule dataplane.PathRule) http.LocationType {
-	if needsInternalLocations(rule) {
+	if needsInternalLocationsForMatches(rule) {
 		return http.RedirectLocationType
+	}
+
+	if rule.HasInferenceBackends {
+		return http.InferenceExternalLocationType
 	}
 
 	return http.ExternalLocationType
 }
 
-func initializeInternalLocation(
+// initializeInternalMatchLocation initializes the internal location that is redirected to by an
+// external location HTTP matching decision. This location will proxy_pass to the backend.
+func initializeInternalMatchLocation(
 	pathruleIdx,
 	matchRuleIdx int,
 	match dataplane.Match,
@@ -446,6 +633,45 @@ func initializeInternalLocation(
 ) (http.Location, routeMatch) {
 	path := fmt.Sprintf("%s-rule%d-route%d", http.InternalRoutePathPrefix, pathruleIdx, matchRuleIdx)
 	return createMatchLocation(path, grpc), createRouteMatch(match, path)
+}
+
+// initializeInternalInferenceRedirectLocation initializes the internal inference location that is redirected to by
+// an external HTTP matching location. This location then redirects to the final proxy_pass location.
+func initializeInternalInferenceRedirectLocation(pathruleIdx, matchRuleIdx int) http.Location {
+	return http.Location{
+		Path: inferencePath(pathruleIdx, matchRuleIdx),
+		Type: http.InferenceInternalLocationType,
+	}
+}
+
+// initializeInternalMatchLocationWithInference initializes the internal location that is redirected to by
+// an internal inference location, which was redirected to by the external HTTP matching location.
+// This location will proxy_pass to the backend.
+// The routeMatch is created with the inference internal location path, so that the HTTP match in the external
+// location can redirect to the proper inference location, which then redirects to this location.
+func initializeInternalMatchLocationWithInference(
+	pathruleIdx,
+	matchRuleIdx int,
+	match dataplane.Match,
+) (http.Location, routeMatch) {
+	path := fmt.Sprintf("%s-rule%d-route%d", http.InternalRoutePathPrefix, pathruleIdx, matchRuleIdx)
+	grpc := false
+
+	return createMatchLocation(path, grpc), createRouteMatch(match, inferencePath(pathruleIdx, matchRuleIdx))
+}
+
+// initializeInternalInferenceLocation initializes the internal inference location that does the final
+// proxy_pass to the inference backend.
+// This is used when the external location redirects directly here, without any HTTP matching.
+func initializeInternalInferenceLocation(pathruleIdx, matchRuleIdx int) http.Location {
+	return http.Location{
+		Path: inferencePath(pathruleIdx, matchRuleIdx),
+		Type: http.InternalLocationType,
+	}
+}
+
+func inferencePath(pathruleIdx int, matchRuleIdx int) string {
+	return fmt.Sprintf("%s-rule%d-route%d-inference", http.InternalRoutePathPrefix, pathruleIdx, matchRuleIdx)
 }
 
 // updateLocation updates a location with any relevant configurations, like proxy_pass, filters, tls settings, etc.
@@ -459,6 +685,7 @@ func updateLocation(
 ) http.Location {
 	filters := matchRule.Filters
 	grpc := pathRule.GRPC
+	inferenceBackend := pathRule.HasInferenceBackends
 
 	if filters.InvalidFilter != nil {
 		location.Return = &http.Return{Code: http.StatusInternalServerError}
@@ -474,7 +701,7 @@ func updateLocation(
 
 	location = updateLocationRewriteFilter(location, filters.RequestURLRewrite, pathRule)
 	location = updateLocationMirrorFilters(location, filters.RequestMirrors, pathRule.Path, mirrorPercentage)
-	location = updateLocationProxySettings(location, matchRule, grpc, keepAliveCheck)
+	location = updateLocationProxySettings(location, matchRule, grpc, inferenceBackend, keepAliveCheck)
 
 	return location
 }
@@ -554,6 +781,7 @@ func updateLocationProxySettings(
 	location http.Location,
 	matchRule dataplane.MatchRule,
 	grpc bool,
+	inferenceBackend bool,
 	keepAliveCheck keepAliveChecker,
 ) http.Location {
 	extraHeaders := make([]http.Header, 0, 3)
@@ -574,6 +802,7 @@ func updateLocationProxySettings(
 		matchRule.Filters.RequestURLRewrite,
 		generateProtocolString(location.ProxySSLVerify, grpc),
 		grpc,
+		inferenceBackend,
 	)
 
 	location.ResponseHeaders = responseHeaders
@@ -872,6 +1101,7 @@ func createProxyPass(
 	filter *dataplane.HTTPURLRewriteFilter,
 	protocol string,
 	grpc bool,
+	inferenceBackend bool,
 ) string {
 	var requestURI string
 	if !grpc {
@@ -881,6 +1111,12 @@ func createProxyPass(
 	}
 
 	backendName := backendGroupName(backendGroup)
+
+	if inferenceBackend {
+		backendVarName := strings.ReplaceAll(backendName, "-", "_")
+		return "http://$inference_backend_" + backendVarName + requestURI
+	}
+
 	if backendGroupNeedsSplit(backendGroup) {
 		return protocol + "://$" + convertStringToSafeVariableName(backendName) + requestURI
 	}
