@@ -1,12 +1,12 @@
 # Adds namespace to all resources.
-namespace: operators-system
+namespace: nginx-gateway-fabric-system
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
 # "wordpress" becomes "alices-wordpress".
 # Note that it should also match with the prefix (text before '-') of the namespace
 # field above.
-namePrefix: operators-
+namePrefix: nginx-gateway-fabric-
 
 # Labels to add to all resources and selectors.
 #labels:
@@ -35,5 +35,3 @@ patches:
 - path: manager_metrics_patch.yaml
   target:
     kind: Deployment
-
-
