@@ -5,6 +5,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
@@ -139,6 +140,8 @@ type PathRule struct {
 	Policies []policies.Policy
 	// GRPC indicates if this is a gRPC rule
 	GRPC bool
+	// HasInferenceBackends indicates whether the PathRule contains a backend for an inference workload.
+	HasInferenceBackends bool
 }
 
 // InvalidHTTPFilter is a special filter for handling the case when configured filters are invalid.
@@ -325,6 +328,9 @@ func (bg *BackendGroup) Name() string {
 type Backend struct {
 	// VerifyTLS holds the backend TLS verification configuration.
 	VerifyTLS *VerifyTLS
+	// EndpointPickerConfig holds the configuration for the EndpointPicker for this backend.
+	// This is set if this backend is for an inference workload.
+	EndpointPickerConfig *inference.EndpointPickerRef
 	// UpstreamName is the name of the upstream for this backend.
 	UpstreamName string
 	// Weight is the weight of the BackendRef.
