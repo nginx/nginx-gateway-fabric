@@ -1,8 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	gotemplate "text/template"
+
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -26,6 +29,8 @@ const (
 
 func executeMaps(conf dataplane.Configuration) []executeResult {
 	maps := buildAddHeaderMaps(append(conf.HTTPServers, conf.SSLServers...))
+	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
+
 	result := executeResult{
 		dest: httpConfigFile,
 		data: helpers.MustExecuteTemplate(mapsTemplate, maps),
@@ -176,4 +181,43 @@ func createAddHeadersMap(name string) shared.Map {
 		Variable:   "$" + mapVarName,
 		Parameters: params,
 	}
+}
+
+// buildInferenceMaps creates maps for InferencePool Backends.
+func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
+	inferenceMaps := make([]shared.Map, 0, len(groups))
+	for _, group := range groups {
+		for _, backend := range group.Backends {
+			if backend.EndpointPickerConfig != nil {
+				var defaultResult string
+				switch backend.EndpointPickerConfig.FailureMode {
+				// in FailClose mode, if the EPP is unavailable or returns an error,
+				// we return an invalid backend to ensure the request fails
+				case inference.EndpointPickerFailClose:
+					defaultResult = invalidBackendRef
+				// in FailOpen mode, if the EPP is unavailable or returns an error,
+				// we fall back to the upstream
+				case inference.EndpointPickerFailOpen:
+					defaultResult = backend.UpstreamName
+				}
+				params := []shared.MapParameter{
+					{
+						Value:  "~.+",
+						Result: "$inference_workload_endpoint",
+					},
+					{
+						Value:  "default",
+						Result: defaultResult,
+					},
+				}
+				backendVarName := strings.ReplaceAll(backend.UpstreamName, "-", "_")
+				inferenceMaps = append(inferenceMaps, shared.Map{
+					Source:     "$inference_workload_endpoint",
+					Variable:   fmt.Sprintf("$inference_backend_%s", backendVarName),
+					Parameters: params,
+				})
+			}
+		}
+	}
+	return inferenceMaps
 }

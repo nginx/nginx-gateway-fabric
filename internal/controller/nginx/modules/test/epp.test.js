@@ -1,52 +1,106 @@
 import { default as epp } from '../src/epp.js';
-import { expect, describe, it } from 'vitest';
+import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
 
-function makeRequest(body) {
-	let r = {
-		// Test mocks
-		error(msg) {
-			r.variables.error = msg;
-		},
-		requestText: body,
-		variables: {},
+function makeRequest({
+	method = 'POST',
+	headersIn = {},
+	args = {},
+	requestText = '',
+	variables = {},
+} = {}) {
+	return {
+		method,
+		headersIn,
+		requestText,
+		variables,
+		args,
+		error: vi.fn(),
+		log: vi.fn(),
+		internalRedirect: vi.fn(),
 	};
-
-	return r;
 }
 
-describe('extractModel', () => {
-	const tests = [
-		{
-			name: 'returns the model value',
-			body: '{"model":"gpt-4"}',
-			model: 'gpt-4',
-			error: undefined,
-		},
-		{
-			name: 'returns empty string if model is missing',
-			body: '{"foo":1}',
-			model: '',
-			error: 'request body does not contain model parameter',
-		},
-		{
-			name: 'returns empty string for invalid JSON',
-			body: 'not-json',
-			model: '',
-			error: `error parsing request body for model name: Unexpected token 'o', "not-json" is not valid JSON`,
-		},
-		{
-			name: 'empty request body',
-			body: '',
-			model: '',
-			error: 'error parsing request body for model name: Unexpected end of JSON input',
-		},
-	];
+describe('getEndpoint', () => {
+	let originalNgx;
+	beforeEach(() => {
+		originalNgx = globalThis.ngx;
+	});
+	afterEach(() => {
+		globalThis.ngx = originalNgx;
+	});
 
-	tests.forEach((test) => {
-		it(test.name, () => {
-			let r = makeRequest(test.body);
-			expect(epp.extractModel(r)).to.equal(test.model);
-			expect(r.variables.error).to.equal(test.error);
+	it('throws if host or port is missing', async () => {
+		const r = makeRequest({ variables: { epp_internal_path: '/foo' } });
+		await expect(epp.getEndpoint(r)).rejects.toThrow(/Missing required variables/);
+	});
+
+	it('throws if internal path is missing', async () => {
+		const r = makeRequest({ variables: { epp_host: 'host', epp_port: '1234' } });
+		await expect(epp.getEndpoint(r)).rejects.toThrow(/Missing required variable/);
+	});
+
+	it('sets endpoint and logs on 200 with endpoint header', async () => {
+		const endpoint = 'http://endpoint';
+		globalThis.ngx = {
+			fetch: vi.fn().mockResolvedValue({
+				status: 200,
+				headers: { get: () => endpoint },
+				text: vi.fn(),
+			}),
+		};
+		const r = makeRequest({
+			variables: { epp_host: 'host', epp_port: '1234', epp_internal_path: '/foo' },
 		});
+		await epp.getEndpoint(r);
+		expect(r.variables.inference_workload_endpoint).toBe(endpoint);
+		expect(r.log).toHaveBeenCalledWith(expect.stringContaining(endpoint));
+		expect(r.internalRedirect).toHaveBeenCalledWith('/foo');
+	});
+
+	it('calls error if response is not 200 or endpoint header missing', async () => {
+		globalThis.ngx = {
+			fetch: vi.fn().mockResolvedValue({
+				status: 404,
+				headers: { get: () => null },
+				text: vi.fn().mockResolvedValue('fail'),
+			}),
+		};
+		const r = makeRequest({
+			variables: { epp_host: 'host', epp_port: '1234', epp_internal_path: '/foo' },
+		});
+		await epp.getEndpoint(r);
+		expect(r.error).toHaveBeenCalledWith(
+			expect.stringContaining('could not get specific inference endpoint'),
+		);
+		expect(r.internalRedirect).toHaveBeenCalledWith('/foo');
+	});
+
+	it('calls error if fetch throws', async () => {
+		globalThis.ngx = {
+			fetch: vi.fn().mockRejectedValue(new Error('network fail')),
+		};
+		const r = makeRequest({
+			variables: { epp_host: 'host', epp_port: '1234', epp_internal_path: '/foo' },
+		});
+		await epp.getEndpoint(r);
+		expect(r.error).toHaveBeenCalledWith(expect.stringContaining('Error in ngx.fetch'));
+		expect(r.internalRedirect).toHaveBeenCalledWith('/foo');
+	});
+
+	it('preserves args in internal redirect when args are present', async () => {
+		const endpoint = 'http://endpoint';
+		globalThis.ngx = {
+			fetch: vi.fn().mockResolvedValue({
+				status: 200,
+				headers: { get: () => endpoint },
+				text: vi.fn(),
+			}),
+		};
+		const r = makeRequest({
+			variables: { epp_host: 'host', epp_port: '1234', epp_internal_path: '/foo' },
+			args: { a: '1', b: '2' },
+		});
+		await epp.getEndpoint(r);
+		expect(r.internalRedirect).toHaveBeenCalledWith('/foo?a=1&b=2');
 	});
 });
