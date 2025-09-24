@@ -40,13 +40,12 @@ fi
 nginx_pid=$!
 
 SECONDS=0
-
-while ! curl localhost:80 -s -o /dev/null; do
-    if ((SECONDS > 10)); then
-        echo "nginx didn't start within 10 seconds"
+while [[ ! -f /var/run/nginx.pid ]] && [[ ! -f /var/run/nginx/nginx.pid ]]; do
+    if (( SECONDS > 30 )); then
+        echo "couldn't find nginx master process"
         exit 1
     fi
-    sleep 200
+    sleep 1
 done
 
 # start nginx-agent, pass args

@@ -863,6 +863,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 						{MountPath: "/var/run/nginx", Name: "nginx-run"},
 						{MountPath: "/var/cache/nginx", Name: "nginx-cache"},
 						{MountPath: "/etc/nginx/includes", Name: "nginx-includes"},
+						{MountPath: "/tmp", Name: "temp-dir"},
 					},
 				},
 			},
@@ -968,6 +969,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 				{Name: "nginx-run", VolumeSource: emptyDirVolumeSource},
 				{Name: "nginx-cache", VolumeSource: emptyDirVolumeSource},
 				{Name: "nginx-includes", VolumeSource: emptyDirVolumeSource},
+				{Name: "temp-dir", VolumeSource: emptyDirVolumeSource},
 				{
 					Name: "nginx-includes-bootstrap",
 					VolumeSource: corev1.VolumeSource{

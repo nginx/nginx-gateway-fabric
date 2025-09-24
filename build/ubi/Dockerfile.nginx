@@ -1,14 +1,16 @@
 # syntax=docker/dockerfile:1.18
 FROM scratch AS nginx-files
 
-# the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
+# Repository and key files for UBI-based builds
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 ADD --link --chown=101:1001 build/ubi/repos/nginx.repo nginx.repo
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:01a32246761b9bbe47a6a29bcd8ca6e9b6e331b3bdfa372d8987b622276f7025 AS packages
+FROM redhat/ubi9-minimal:9.6 AS ubi-minimal
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:01a32246761b9bbe47a6a29bcd8ca6e9b6e331b3bdfa372d8987b622276f7025 AS ubi9-packages
+
+FROM ubi-minimal AS ubi-nginx
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.3.1
@@ -16,51 +18,58 @@ ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-# Prepare packages
-RUN --mount=type=bind,from=nginx-files,src=nginx.repo,target=/etc/yum.repos.d/nginx.repo \
+LABEL name="NGINX Gateway Fabric NGINX" \
+	maintainer="kubernetes@nginx.com" \
+	vendor="NGINX Inc" \
+	summary="NGINX for NGINX Gateway Fabric" \
+	description="NGINX data plane for NGINX Gateway Fabric Gateway API implementation" \
+	org.nginx.ngf.image.build.agent="${BUILD_AGENT}" \
+	io.k8s.description="NGINX data plane for NGINX Gateway Fabric Gateway API implementation" \
+	io.openshift.tags="nginx,gateway,kubernetes,openshift"
+
+COPY --link --chown=101:1001 LICENSE /licenses/
+
+# Install NGINX with OTEL support using the same approach as NGINX IC
+RUN --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_signing.key \
+    --mount=type=bind,from=nginx-files,src=nginx.repo,target=/etc/yum.repos.d/nginx.repo \
     --mount=type=bind,from=nginx-files,src=agent.repo,target=/etc/yum.repos.d/agent.repo \
-    --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_signing.key \
-    --mount=type=bind,from=packages,src=/,target=/ubi-bin/ \
+    --mount=type=bind,from=ubi9-packages,src=/,target=/ubi-bin/ \
+    # Import NGINX signing key
     rpm --import /tmp/nginx_signing.key \
-    && microdnf update -y \
-    && microdnf --nodocs install -y shadow-utils subscription-manager \
-    && rpm -qa --queryformat "%{NAME}\n" | sort > pkgs-installed \
-	&& microdnf --nodocs --setopt=install_weak_deps=0 install -y diffutils dnf \
-	&& rpm -qa --queryformat "%{NAME}\n" | sort > pkgs-new \
-	&& dnf install -y /ubi-bin/*.rpm \
-	&& dnf -q repoquery --resolve --requires --recursive --whatrequires nginx --queryformat "%{NAME}" > pkgs-nginx \
-	&& dnf --setopt=protected_packages= remove -y $(comm -13 pkgs-installed pkgs-new | comm -13 pkgs-nginx -) \
-	&& rm pkgs-installed pkgs-new pkgs-nginx \
-    && microdnf --nodocs install -y nginx \
-    && microdnf --nodocs install -y nginx-module-njs nginx-module-image-filter nginx-module-xslt \
-    # && microdnf --enablerepo=appstream install -y c-ares \
-    && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}
+    # Install c-ares from the dependencies image (contains required libs)
+    && rpm -Uvh /ubi-bin/c-ares-*.rpm \
+    # Create nginx user with consistent UID/GID
+    && groupadd -g 1001 nginx \
+    && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
+    # Install NGINX and modules including OTEL
+    && microdnf --nodocs install -y nginx nginx-module-njs nginx-module-otel \
+    # Install nginx-agent
+    && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
+    # Clean up (only remove what we can)
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
 
-# RUN  rm /etc/yum.repos.d/nginx.repo \
-#     && rm /etc/yum.repos.d/agent.repo \
-#     && microdnf clean all
-
-# Configure logs and directories
-RUN mkdir -p /usr/lib/nginx/modules \
-    && mkdir -p /usr/lib64/nginx/modules \
-    && mkdir -p /var/run/nginx \
+# Configure directories and logging
+RUN mkdir -p /usr/lib/nginx/modules /var/run/nginx /usr/lib64/nginx/modules \
+    # Forward request and error logs to docker log collector
     && ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log \
-    && cp -r /usr/lib64/nginx/modules/ngx_* /usr/lib/nginx/modules/
-    # && ln -sf /usr/lib64/nginx/modules/ngx_http_js_module.so /usr/lib/nginx/modules/ngx_http_js_module.so \
-    # && ln -sf /usr/lib64/nginx/modules/ngx_stream_js_module.so /usr/lib/nginx/modules/ngx_stream_js_module.so
+    && cp -r /usr/lib64/nginx/modules/ngx_* /usr/lib/nginx/modules/ \
+    # Set proper permissions for nginx user
+    && chown -R 101:1001 /etc/nginx /var/cache/nginx /var/log/nginx /var/run/nginx /tmp \
+    && chmod 1777 /tmp
 
+# Copy configuration files and scripts
 COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/httpmatches.js /usr/lib/nginx/modules/njs/httpmatches.js
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf
 
-RUN chown -R 101:1001 /etc/nginx /var/cache/nginx /var/run/nginx /etc/nginx-agent/nginx-agent.conf
+# Set executable permissions
+RUN chmod +x /agent/entrypoint.sh && chown 101:1001 /agent/entrypoint.sh
 
-LABEL org.nginx.ngf.image.build.agent="${BUILD_AGENT}"
-
+# Switch to non-root user
 USER 101:1001
 
 ENTRYPOINT ["/agent/entrypoint.sh"]
