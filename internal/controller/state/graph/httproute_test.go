@@ -1253,6 +1253,67 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 	g.Expect(helpers.Diff(expectedMirrorRoute, routes[mirrorRouteKey])).To(BeEmpty())
 }
 
+func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	inferencePoolName := "ipool"
+	routeNamespace := "test"
+	inferencePools := map[types.NamespacedName]*inference.InferencePool{
+		{Namespace: routeNamespace, Name: inferencePoolName}: {},
+	}
+
+	// BackendRef 1: InferencePool
+	backendRef1 := gatewayv1.HTTPBackendRef{
+		BackendRef: gatewayv1.BackendRef{
+			BackendObjectReference: gatewayv1.BackendObjectReference{
+				Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
+				Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+				Name:      gatewayv1.ObjectName(inferencePoolName),
+				Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNamespace)),
+			},
+		},
+	}
+	// BackendRef 2: Service
+	backendRef2 := gatewayv1.HTTPBackendRef{
+		BackendRef: gatewayv1.BackendRef{
+			BackendObjectReference: gatewayv1.BackendObjectReference{
+				Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
+				Name: "backend",
+			},
+		},
+	}
+
+	specRule := gatewayv1.HTTPRouteRule{
+		Matches: []gatewayv1.HTTPRouteMatch{
+			{
+				Path: &gatewayv1.HTTPPathMatch{
+					Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
+					Value: helpers.GetPointer("/"),
+				},
+			},
+		},
+		BackendRefs: []gatewayv1.HTTPBackendRef{backendRef1, backendRef2},
+	}
+
+	rulePath := field.NewPath("spec").Child("rules").Index(0)
+
+	routeRule, errs := processHTTPRouteRule(
+		specRule,
+		routeNamespace,
+		rulePath,
+		validator,
+		nil,
+		inferencePools,
+	)
+
+	g.Expect(routeRule.RouteBackendRefs).To(BeEmpty())
+	g.Expect(errs.invalid).To(HaveLen(1))
+	errMsg := "cannot use InferencePool backend when multiple backendRefs are specified in a single rule"
+	g.Expect(errs.invalid[0].Error()).To(ContainSubstring(errMsg))
+}
+
 func TestValidateMatch(t *testing.T) {
 	t.Parallel()
 	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
