@@ -1,0 +1,15 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: NginxGateway
+metadata:
+  name: {{ include "nginx-gateway.config-name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+  {{- if .Values.nginxGateway.configAnnotations }}
+  annotations:
+    {{- range $key, $value := .Values.nginxGateway.configAnnotations }}
+    {{ printf "%s: %s" $key $value }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- toYaml .Values.nginxGateway.config | nindent 2 }}

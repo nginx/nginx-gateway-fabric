@@ -1,0 +1,172 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "nginx-gateway.fullname" . }}-cert-generator
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+{{- if or .Values.nginxGateway.serviceAccount.imagePullSecret .Values.nginxGateway.serviceAccount.imagePullSecrets }}
+imagePullSecrets:
+  {{- if .Values.nginxGateway.serviceAccount.imagePullSecret }}
+  - name: {{ .Values.nginxGateway.serviceAccount.imagePullSecret }}
+  {{- end }}
+  {{- if .Values.nginxGateway.serviceAccount.imagePullSecrets }}
+  {{- range .Values.nginxGateway.serviceAccount.imagePullSecrets }}
+  - name: {{ . }}
+  {{- end }}
+  {{- end }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "nginx-gateway.fullname" . }}-cert-generator
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - update
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "nginx-gateway.fullname" . }}-cert-generator
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "nginx-gateway.fullname" . }}-cert-generator
+subjects:
+- kind: ServiceAccount
+  name: {{ include "nginx-gateway.fullname" . }}-cert-generator
+  namespace: {{ .Release.Namespace }}
+---
+{{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
+kind: SecurityContextConstraints
+apiVersion: security.openshift.io/v1
+metadata:
+  name: {{ include "nginx-gateway.scc-name" . }}-cert-generator
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook": pre-install
+allowPrivilegeEscalation: false
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+readOnlyRootFilesystem: true
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 101
+  uidRangeMax: 101
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1001
+    max: 1001
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 1001
+    max: 1001
+seLinuxContext:
+  type: MustRunAs
+seccompProfiles:
+- runtime/default
+users:
+- {{ printf "system:serviceaccount:%s:%s-cert-generator" .Release.Namespace (include "nginx-gateway.fullname" .) }}
+requiredDropCapabilities:
+- ALL
+volumes:
+- projected
+---
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nginx-gateway.fullname" . }}-cert-generator
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+  annotations:
+  {{- with .Values.certGenerator.annotations -}}
+  {{ toYaml . | nindent 4 }}
+  {{- end }}
+    "helm.sh/hook": pre-install, pre-upgrade
+spec:
+  template:
+    metadata:
+      annotations:
+      {{- with .Values.certGenerator.annotations -}}
+      {{ toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+      - args:
+        - generate-certs
+        - --service={{ include "nginx-gateway.fullname" . }}
+        - --cluster-domain={{ .Values.clusterDomain }}
+        - --server-tls-secret={{ .Values.certGenerator.serverTLSSecretName }}
+        - --agent-tls-secret={{ .Values.certGenerator.agentTLSSecretName }}
+        {{- if .Values.certGenerator.overwrite }}
+        - --overwrite
+        {{- end }}
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: {{ .Values.nginxGateway.image.repository }}:{{ default .Chart.AppVersion .Values.nginxGateway.image.tag }}
+        imagePullPolicy: {{ .Values.nginxGateway.image.pullPolicy }}
+        name: cert-generator
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsUser: 101
+          runAsGroup: 1001
+      restartPolicy: Never
+      serviceAccountName: {{ include "nginx-gateway.fullname" . }}-cert-generator
+      securityContext:
+        fsGroup: 1001
+        runAsNonRoot: true
+      {{- if .Values.certGenerator.topologySpreadConstraints }}
+      topologySpreadConstraints:
+      {{- toYaml .Values.certGenerator.topologySpreadConstraints | nindent 6 }}
+      {{- end }}
+      {{- if .Values.certGenerator.affinity }}
+      affinity:
+      {{- toYaml .Values.certGenerator.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.certGenerator.tolerations }}
+      tolerations:
+      {{- toYaml .Values.certGenerator.tolerations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.certGenerator.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.certGenerator.nodeSelector | nindent 8 }}
+      {{- end }}
+  ttlSecondsAfterFinished: {{ .Values.certGenerator.ttlSecondsAfterFinished }}

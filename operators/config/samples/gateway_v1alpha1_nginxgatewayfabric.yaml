@@ -1,0 +1,116 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: NginxGatewayFabric
+metadata:
+  name: nginxgatewayfabric-sample
+spec:
+  # Default values copied from <project_dir>/helm-charts/nginx-gateway-fabric/values.yaml
+  certGenerator:
+    affinity: {}
+    agentTLSSecretName: agent-tls
+    annotations: {}
+    nodeSelector: {}
+    overwrite: false
+    serverTLSSecretName: server-tls
+    tolerations: []
+    topologySpreadConstraints: []
+    ttlSecondsAfterFinished: 30
+  clusterDomain: cluster.local
+  gateways: []
+  nginx:
+    autoscaling:
+      enable: false
+    config: {}
+    container:
+      hostPorts: []
+      lifecycle: {}
+      readinessProbe: {}
+      resources: {}
+      volumeMounts: []
+    debug: false
+    image:
+      pullPolicy: Always
+      repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
+      tag: edge
+    imagePullSecret: ""
+    imagePullSecrets: []
+    kind: deployment
+    nginxOneConsole:
+      dataplaneKeySecretName: ""
+      endpointHost: agent.connect.nginx.com
+      endpointPort: 443
+      skipVerify: false
+    patches: []
+    plus: false
+    pod: {}
+    replicas: 1
+    service:
+      externalTrafficPolicy: Local
+      loadBalancerClass: ""
+      loadBalancerIP: ""
+      loadBalancerSourceRanges: []
+      nodePorts: []
+      patches: []
+      type: LoadBalancer
+    usage:
+      caSecretName: ""
+      clientSSLSecretName: ""
+      endpoint: ""
+      enforceInitialReport: true
+      resolver: ""
+      secretName: nplus-license
+      skipVerify: false
+  nginxGateway:
+    affinity: {}
+    autoscaling:
+      enable: false
+    config:
+      logging:
+        level: info
+    configAnnotations: {}
+    extraVolumeMounts: []
+    extraVolumes: []
+    gatewayClassAnnotations: {}
+    gatewayClassName: nginx
+    gatewayControllerName: gateway.nginx.org/nginx-gateway-controller
+    gwAPIExperimentalFeatures:
+      enable: false
+    image:
+      pullPolicy: Always
+      repository: ghcr.io/nginx/nginx-gateway-fabric
+      tag: edge
+    kind: deployment
+    labels: {}
+    leaderElection:
+      enable: true
+      lockName: ""
+    lifecycle: {}
+    metrics:
+      enable: true
+      port: 9113
+      secure: false
+    name: ""
+    nodeSelector: {}
+    podAnnotations: {}
+    productTelemetry:
+      enable: true
+    readinessProbe:
+      enable: true
+      initialDelaySeconds: 3
+      port: 8081
+    replicas: 1
+    resources: {}
+    service:
+      annotations: {}
+      labels: {}
+    serviceAccount:
+      annotations: {}
+      imagePullSecret: ""
+      imagePullSecrets: []
+      name: ""
+    snippetsFilters:
+      enable: false
+    terminationGracePeriodSeconds: 30
+    tolerations: []
+    topologySpreadConstraints: []
+  
+  

@@ -1,0 +1,92 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: {{ include "nginx-gateway.proxy-config-name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.nginx.config }}
+  {{- toYaml .Values.nginx.config | nindent 2 }}
+  {{- end }}
+  kubernetes:
+    {{- if eq .Values.nginx.kind "deployment" }}
+    deployment:
+      {{- if .Values.nginx.replicas }}
+      replicas: {{ .Values.nginx.replicas }}
+      {{- end }}
+      {{- if .Values.nginx.autoscaling.enable }}
+      autoscaling:
+        enable: {{ .Values.nginx.autoscaling.enable }}
+        {{- if .Values.nginx.autoscaling.minReplicas }}
+        minReplicas: {{ .Values.nginx.autoscaling.minReplicas }}
+        {{- end }}
+        maxReplicas: {{ .Values.nginx.autoscaling.maxReplicas }}
+        {{- if .Values.nginx.autoscaling.targetCPUUtilizationPercentage }}
+        targetCPUUtilizationPercentage: {{ .Values.nginx.autoscaling.targetCPUUtilizationPercentage }}
+        {{- end }}
+        {{- if .Values.nginx.autoscaling.targetMemoryUtilizationPercentage }}
+        targetMemoryUtilizationPercentage: {{ .Values.nginx.autoscaling.targetMemoryUtilizationPercentage }}
+        {{- end }}
+        {{- if .Values.nginx.autoscaling.behavior }}
+        behavior:
+          {{- toYaml .Values.nginx.autoscaling.behavior | nindent 10 }}
+        {{- end }}
+        {{- if .Values.nginx.autoscaling.metrics }}
+        metrics:
+          {{- toYaml .Values.nginx.autoscaling.metrics | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.nginx.pod }}
+      pod:
+        {{- toYaml .Values.nginx.pod | nindent 8 }}
+      {{- end }}
+      container:
+        {{- with .Values.nginx.container }}
+        {{- $filtered := include "filterEmptyFields" . }}
+        {{- if $filtered }}
+        {{- $filtered | nindent 8 }}
+        {{- end }}
+        {{- end }}
+        image:
+          {{- toYaml .Values.nginx.image | nindent 10 }}
+        {{- if .Values.nginx.debug }}
+        debug: {{ .Values.nginx.debug }}
+        {{- end }}
+      {{- if .Values.nginx.patches }}
+      patches:
+        {{- toYaml .Values.nginx.patches | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if eq .Values.nginx.kind "daemonSet" }}
+    daemonSet:
+      {{- if .Values.nginx.pod }}
+      pod:
+        {{- toYaml .Values.nginx.pod | nindent 8 }}
+      {{- end }}
+      container:
+        {{- with .Values.nginx.container }}
+        {{- $filtered := include "filterEmptyFields" . }}
+        {{- if $filtered }}
+        {{- $filtered | nindent 8 }}
+        {{- end }}
+        {{- end }}
+        image:
+          {{- toYaml .Values.nginx.image | nindent 10 }}
+        {{- if .Values.nginx.debug }}
+        debug: {{ .Values.nginx.debug }}
+        {{- end }}
+      {{- if .Values.nginx.patches }}
+      patches:
+        {{- toYaml .Values.nginx.patches | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.nginx.service }}
+    service:
+      {{- with .Values.nginx.service }}
+      {{- $filtered := include "filterEmptyFields" . }}
+      {{- if $filtered }}
+      {{- $filtered | nindent 6 }}
+      {{- end }}
+      {{- end }}
+    {{- end }}
