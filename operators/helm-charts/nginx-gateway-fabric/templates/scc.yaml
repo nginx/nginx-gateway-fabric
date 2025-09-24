@@ -1,0 +1,80 @@
+{{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
+kind: SecurityContextConstraints
+apiVersion: security.openshift.io/v1
+metadata:
+  name: {{ include "nginx-gateway.scc-name" . }}
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+allowPrivilegeEscalation: false
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+readOnlyRootFilesystem: true
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 101
+  uidRangeMax: 101
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1001
+    max: 1001
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 1001
+    max: 1001
+seLinuxContext:
+  type: MustRunAs
+seccompProfiles:
+- runtime/default
+users:
+- {{ printf "system:serviceaccount:%s:%s" .Release.Namespace (include "nginx-gateway.serviceAccountName" .) }}
+requiredDropCapabilities:
+- ALL
+volumes:
+- secret
+---
+kind: SecurityContextConstraints
+apiVersion: security.openshift.io/v1
+metadata:
+  name: {{ include "nginx-gateway.scc-name" . }}-nginx
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+allowPrivilegeEscalation: false
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+readOnlyRootFilesystem: true
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 101
+  uidRangeMax: 101
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1001
+    max: 1001
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 1001
+    max: 1001
+seLinuxContext:
+  type: MustRunAs
+seccompProfiles:
+- runtime/default
+requiredDropCapabilities:
+- ALL
+volumes:
+- emptyDir
+- secret
+- configMap
+- projected
+{{- end }}
