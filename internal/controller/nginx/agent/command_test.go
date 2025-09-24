@@ -85,6 +85,48 @@ func createGrpcContextWithCancel() (context.Context, context.CancelFunc) {
 	}), cancel
 }
 
+func getDefaultPodList() []runtime.Object {
+	pod := &v1.PodList{
+		Items: []v1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nginx-pod",
+					Namespace: "test",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							Kind: "ReplicaSet",
+							Name: "nginx-replicaset",
+						},
+					},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Image: "nginx:v1.0.0",
+							Name:  "nginx",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	replicaSet := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nginx-replicaset",
+			Namespace: "test",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind: "Deployment",
+					Name: "nginx-deployment",
+				},
+			},
+		},
+	}
+
+	return []runtime.Object{pod, replicaSet}
+}
+
 func TestCreateConnection(t *testing.T) {
 	t.Parallel()
 
@@ -165,40 +207,9 @@ func TestCreateConnection(t *testing.T) {
 			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
 
 			var objs []runtime.Object
-			if test.errString == "" {
-				pod := &v1.PodList{
-					Items: []v1.Pod{
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "nginx-pod",
-								Namespace: "test",
-								OwnerReferences: []metav1.OwnerReference{
-									{
-										Kind: "ReplicaSet",
-										Name: "nginx-replicaset",
-									},
-								},
-							},
-						},
-					},
-				}
-
-				replicaSet := &appsv1.ReplicaSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "nginx-replicaset",
-						Namespace: "test",
-						OwnerReferences: []metav1.OwnerReference{
-							{
-								Kind: "Deployment",
-								Name: "nginx-deployment",
-							},
-						},
-					},
-				}
-
-				objs = []runtime.Object{pod, replicaSet}
+			if test.errString != "error getting pod owner" {
+				objs = getDefaultPodList()
 			}
-
 			fakeClient, err := createFakeK8sClient(objs...)
 			g.Expect(err).ToNot(HaveOccurred())
 
@@ -298,10 +309,13 @@ func TestSubscribe(t *testing.T) {
 	}
 	connTracker.GetConnectionReturns(conn)
 
+	fakeClient, err := createFakeK8sClient(getDefaultPodList()...)
+	g.Expect(err).ToNot(HaveOccurred())
+
 	store := NewDeploymentStore(&connTracker)
 	cs := newCommandService(
 		logr.Discard(),
-		fake.NewFakeClient(),
+		fakeClient,
 		store,
 		&connTracker,
 		status.NewQueue(),
@@ -329,6 +343,7 @@ func TestSubscribe(t *testing.T) {
 		},
 	}
 	deployment.SetFiles(files)
+	deployment.SetImageVersion("nginx:v1.0.0")
 
 	initialAction := &pb.NGINXPlusAction{
 		Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{},
@@ -439,11 +454,14 @@ func TestSubscribe_Reset(t *testing.T) {
 	}
 	connTracker.GetConnectionReturns(conn)
 
+	fakeClient, err := createFakeK8sClient(getDefaultPodList()...)
+	g.Expect(err).ToNot(HaveOccurred())
+
 	store := NewDeploymentStore(&connTracker)
 	resetChan := make(chan struct{})
 	cs := newCommandService(
 		logr.Discard(),
-		fake.NewFakeClient(),
+		fakeClient,
 		store,
 		&connTracker,
 		status.NewQueue(),
@@ -471,6 +489,7 @@ func TestSubscribe_Reset(t *testing.T) {
 		},
 	}
 	deployment.SetFiles(files)
+	deployment.SetImageVersion("nginx:v1.0.0")
 
 	ctx, cancel := createGrpcContextWithCancel()
 	defer cancel()
@@ -590,9 +609,10 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
 		setup     func(msgr *messengerfakes.FakeMessenger, deployment *Deployment)
+		name      string
 		errString string
+		podList   []runtime.Object
 	}{
 		{
 			name: "error sending initial config",
@@ -652,6 +672,13 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			},
 			errString: "api apply error",
 		},
+		{
+			name: "error validating nginx version",
+			setup: func(_ *messengerfakes.FakeMessenger, deployment *Deployment) {
+				deployment.SetImageVersion("nginx:v2.0.0")
+			},
+			errString: "nginx image version mismatch: pod has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+		},
 	}
 
 	for _, test := range tests {
@@ -662,9 +689,17 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
 			msgr := &messengerfakes.FakeMessenger{}
 
+			podList := test.podList
+			if len(podList) == 0 {
+				podList = getDefaultPodList()
+			}
+
+			fakeClient, err := createFakeK8sClient(podList...)
+			g.Expect(err).ToNot(HaveOccurred())
+
 			cs := newCommandService(
 				logr.Discard(),
-				fake.NewFakeClient(),
+				fakeClient,
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
@@ -678,12 +713,13 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			}
 
 			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{})
+			deployment.SetImageVersion("nginx:v1.0.0")
 
 			if test.setup != nil {
 				test.setup(msgr, deployment)
 			}
 
-			err := cs.setInitialConfig(context.Background(), deployment, conn, msgr)
+			err = cs.setInitialConfig(context.Background(), deployment, conn, msgr)
 
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(test.errString))
@@ -882,7 +918,7 @@ func TestGetPodOwner(t *testing.T) {
 				nil,
 			)
 
-			owner, err := cs.getPodOwner(test.podName)
+			owner, _, err := cs.getPodOwner(test.podName)
 
 			if test.errString != "" {
 				g.Expect(err).To(HaveOccurred())
