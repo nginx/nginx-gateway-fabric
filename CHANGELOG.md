@@ -12,7 +12,7 @@ BUG FIXES:
 
 - Fixes a bug where the subscribe method was incorrectly intercepting initial configuration operations after a ServiceAccountToken rotation and signaling broadcast completion. [3905](https://github.com/nginx/nginx-gateway-fabric/pull/3905)
 - Fixes an issue where a failed configuration reload caused all HTTPRoutes to be marked as invalid (Accepted: false). This led to external-dns removing DNS records even though the configuration had been rolled back. Routes now retain their valid state during reload failures, preventing unnecessary DNS disruptions. [3936](https://github.com/nginx/nginx-gateway-fabric/pull/3936)
-- Adds nginx image version validation during agent connections to prevent newer config being sent to pods running previous image versions during upgrades. [3928](https://github.com/nginx/nginx-gateway-fabric/pull/3928)
+- Adds NGINX image version validation during agent connections to prevent newer config being sent to pods running previous image versions during upgrades. [3928](https://github.com/nginx/nginx-gateway-fabric/pull/3928)
 
 NGINX AGENT BUG FIXES:
 
