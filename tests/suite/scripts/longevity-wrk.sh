@@ -13,6 +13,6 @@ done
 
 echo "${SVC_IP} cafe.example.com" | sudo tee -a /etc/hosts
 
-nohup wrk -t2 -c100 -d96h http://cafe.example.com/coffee &>~/coffee.txt &
+nohup wrk -t2 -c100 -d2h http://cafe.example.com/coffee &>~/coffee.txt &
 
-nohup wrk -t2 -c100 -d96h https://cafe.example.com/tea &>~/tea.txt &
+nohup wrk -t2 -c100 -d2h https://cafe.example.com/tea &>~/tea.txt &
