@@ -12,7 +12,9 @@ FROM redhat/ubi9-minimal:9.6 AS ubi-minimal
 
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:01a32246761b9bbe47a6a29bcd8ca6e9b6e331b3bdfa372d8987b622276f7025 AS ubi9-packages
 
-FROM ubi-minimal AS ubi-nginxplus
+FROM ubi-minimal AS ubi-nginx-plus
+
+ARG NGINX_PLUS_VERSION=R35
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.3.1
@@ -47,7 +49,8 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     && groupadd -g 1001 nginx \
     && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
     # Install NGINX Plus and modules (njs, otel)
-    && microdnf --nodocs install -y nginx-plus nginx-plus-module-njs nginx-plus-module-otel \
+    && microdnf --nodocs install -y nginx-plus-${NGINX_PLUS_VERSION,,} \
+    && microdnf --nodocs install -y nginx-plus-module-njs-${NGINX_PLUS_VERSION,,} nginx-plus-module-otel-${NGINX_PLUS_VERSION,,} \
     # Install nginx-agent
     && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
     # Clean up
