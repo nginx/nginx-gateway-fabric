@@ -1,32 +1,21 @@
 # Adds namespace to all resources.
-namespace: operators-system
+namespace: nginx-gateway-fabric-system
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
 # "wordpress" becomes "alices-wordpress".
 # Note that it should also match with the prefix (text before '-') of the namespace
 # field above.
-namePrefix: operators-
-
-# Labels to add to all resources and selectors.
-#labels:
-#- includeSelectors: true
-#  pairs:
-#    someName: someValue
+namePrefix: nginx-gateway-fabric-
 
 resources:
 - ../crd
 - ../rbac
 - ../manager
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
-#- ../prometheus
+# - ../prometheus
 # [METRICS] Expose the controller manager metrics service.
 - metrics_service.yaml
-# [NETWORK POLICY] Protect the /metrics endpoint and Webhook Server with NetworkPolicy.
-# Only Pod(s) running a namespace labeled with 'metrics: enabled' will be able to gather the metrics.
-# Only CR(s) which requires webhooks and are applied on namespaces labeled with 'webhooks: enabled' will
-# be able to communicate with the Webhook Server.
-#- ../network-policy
 
 # Uncomment the patches line if you enable Metrics
 patches:
@@ -35,5 +24,3 @@ patches:
 - path: manager_metrics_patch.yaml
   target:
     kind: Deployment
-
-

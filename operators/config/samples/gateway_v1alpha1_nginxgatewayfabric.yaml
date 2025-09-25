@@ -28,9 +28,9 @@ spec:
       volumeMounts: []
     debug: false
     image:
-      pullPolicy: Always
+      pullPolicy: IfNotPresent
       repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
-      tag: edge
+      tag: 2.2.0-ubi
     imagePullSecret: ""
     imagePullSecrets: []
     kind: deployment
@@ -75,9 +75,9 @@ spec:
     gwAPIExperimentalFeatures:
       enable: false
     image:
-      pullPolicy: Always
+      pullPolicy: IfNotPresent
       repository: ghcr.io/nginx/nginx-gateway-fabric
-      tag: edge
+      tag: 2.2.0-ubi
     kind: deployment
     labels: {}
     leaderElection:
@@ -112,5 +112,3 @@ spec:
     terminationGracePeriodSeconds: 30
     tolerations: []
     topologySpreadConstraints: []
-  
-  

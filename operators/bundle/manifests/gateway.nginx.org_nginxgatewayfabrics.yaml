@@ -1,0 +1,104 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  name: nginxgatewayfabrics.gateway.nginx.org
+spec:
+  group: gateway.nginx.org
+  names:
+    kind: NginxGatewayFabric
+    listKind: NginxGatewayFabricList
+    plural: nginxgatewayfabrics
+    singular: nginxgatewayfabric
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: NginxGatewayFabric is the Schema for the nginxgatewayfabrics
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the desired state of NginxGatewayFabric and
+              contains Helm values for the NGF chart
+            properties:
+              certGenerator:
+                description: Certificate generator configuration
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              clusterDomain:
+                description: The DNS cluster domain of your Kubernetes cluster
+                type: string
+              gateways:
+                description: List of Gateway objects to create
+                items:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
+              nginx:
+                description: Configuration for NGINX data plane deployments
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              nginxGateway:
+                description: Configuration for the NGINX Gateway Fabric control plane
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: Status defines the observed state of NginxGatewayFabric
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      type: string
+                  type: object
+                type: array
+              phase:
+                description: Phase represents the current phase
+                enum:
+                - Pending
+                - Installing
+                - Ready
+                - Failed
+                type: string
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

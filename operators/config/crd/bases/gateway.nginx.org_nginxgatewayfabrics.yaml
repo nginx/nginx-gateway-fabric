@@ -13,32 +13,73 @@ spec:
   scope: Namespaced
   versions:
   - name: v1alpha1
+    served: true
+    storage: true
     schema:
       openAPIV3Schema:
+        type: object
         description: NginxGatewayFabric is the Schema for the nginxgatewayfabrics API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
           spec:
-            description: Spec defines the desired state of NginxGatewayFabric
+            description: Spec defines the desired state of NginxGatewayFabric and contains Helm values for the NGF chart
             type: object
             x-kubernetes-preserve-unknown-fields: true
+            properties:
+              clusterDomain:
+                description: The DNS cluster domain of your Kubernetes cluster
+                type: string
+              nginxGateway:
+                description: Configuration for the NGINX Gateway Fabric control plane
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              nginx:
+                description: Configuration for NGINX data plane deployments
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              gateways:
+                description: List of Gateway objects to create
+                type: array
+                items:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+              certGenerator:
+                description: Certificate generator configuration
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
           status:
             description: Status defines the observed state of NginxGatewayFabric
             type: object
             x-kubernetes-preserve-unknown-fields: true
-        type: object
-    served: true
-    storage: true
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                      enum: ["True", "False", "Unknown"]
+                    lastTransitionTime:
+                      type: string
+                      format: date-time
+                    reason:
+                      type: string
+                    message:
+                      type: string
+              phase:
+                description: Phase represents the current phase
+                type: string
+                enum: ["Pending", "Installing", "Ready", "Failed"]
     subresources:
       status: {}
