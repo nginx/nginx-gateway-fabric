@@ -7,7 +7,6 @@ NJS_DIR = internal/controller/nginx/modules/src
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
 BUILD_AGENT = local
-BASE_IMAGE ?= nginx:1.29.1-alpine-otel
 
 PROD_TELEMETRY_ENDPOINT = oss.edge.df.f5.com:443
 # the telemetry related variables below are also configured in goreleaser.yml
@@ -44,7 +43,7 @@ HELM_SCHEMA_VERSION = 0.18.1
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
 NGINX_PREFIX ?= $(PREFIX)/nginx## The name of the nginx image. For example: nginx-gateway-fabric/nginx
 NGINX_PLUS_PREFIX ?= $(PREFIX)/nginx-plus## The name of the nginx plus image. For example: nginx-gateway-fabric/nginx-plus
-BUILD_OS ?= alpine## The OS of the nginx image. Possible values: alpine and ubi
+BUILD_OS ?= ## The OS of the nginx image. Possible values: alpine and ubi
 IMAGE_PULL_POLICY ?= Never## The image pull policy for the NGF and nginx images. Possible values: Always, Never, IfNotPresent
 TAG ?= $(VERSION:v%=%)## The tag of the image. For example, 1.1.0
 TARGET ?= local## The target of the build. Possible values: local and container
@@ -86,21 +85,21 @@ build-prod-ngf-image: build-ngf-image ## Build the NGF docker image for producti
 
 .PHONY: build-ngf-image
 build-ngf-image: check-for-docker build ## Build the NGF docker image
-	docker build --platform linux/$(GOARCH) --build-arg BUILD_AGENT=$(BUILD_AGENT) --target $(strip $(TARGET)) -f $(SELF_DIR)build/$(BUILD_OS)/Dockerfile -t $(strip $(PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/$(GOARCH) --build-arg BUILD_AGENT=$(BUILD_AGENT) --target $(strip $(TARGET)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile -t $(strip $(PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-prod-nginx-image
 build-prod-nginx-image: build-nginx-image ## Build the custom nginx image for production
 
 .PHONY: build-nginx-image
 build-nginx-image: check-for-docker ## Build the custom nginx image
-	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) -f $(SELF_DIR)build/$(BUILD_OS)/Dockerfile.nginx -t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginx -t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-prod-nginx-plus-image
 build-prod-nginx-plus-image: build-nginx-plus-image ## Build the custom nginx plus image for production
 
 .PHONY: build-nginx-plus-image
 build-nginx-plus-image: check-for-docker ## Build the custom nginx plus image
-	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS))  -f $(SELF_DIR)build/$(BUILD_OS)/Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS))  -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: check-for-docker
 check-for-docker: ## Check if Docker is installed
