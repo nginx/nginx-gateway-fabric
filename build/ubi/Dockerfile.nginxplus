@@ -5,8 +5,6 @@ FROM scratch AS nginx-files
 ADD --link --chown=101:1001 https://cs.nginx.com/static/files/plus-9.repo nginx-plus.repo
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
-ADD --link --chown=101:1001 nginx-repo.crt nginx-repo.crt
-ADD --link --chown=101:1001 nginx-repo.key nginx-repo.key
 
 FROM redhat/ubi9-minimal:9.6 AS ubi-minimal
 
