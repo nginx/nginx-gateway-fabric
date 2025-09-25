@@ -18,7 +18,7 @@ ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
-LABEL name="NGINX Gateway Fabric NGINX" \
+LABEL name="F5 NGINX Gateway Fabric NGINX" \
 	maintainer="kubernetes@nginx.com" \
 	vendor="F5 NGINX Inc" \
 	summary="F5 NGINX for NGINX Gateway Fabric" \
