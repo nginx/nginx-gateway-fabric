@@ -15,6 +15,7 @@ metadata:
   namespace: nginx-gateway
 ---
 apiVersion: v1
+automountServiceAccountToken: false
 kind: ServiceAccount
 metadata:
   labels:
@@ -339,6 +340,7 @@ spec:
     metadata:
       annotations: null
     spec:
+      automountServiceAccountToken: true
       containers:
       - args:
         - generate-certs

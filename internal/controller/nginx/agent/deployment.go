@@ -40,6 +40,8 @@ type Deployment struct {
 
 	broadcaster broadcast.Broadcaster
 
+	imageVersion string
+
 	configVersion string
 	// error that is set if a ConfigApply call failed for a Pod. This is needed
 	// because if subsequent upstream API calls are made within the same update event,
@@ -71,6 +73,14 @@ func newDeployment(broadcaster broadcast.Broadcaster) *Deployment {
 // GetBroadcaster returns the deployment's broadcaster.
 func (d *Deployment) GetBroadcaster() broadcast.Broadcaster {
 	return d.broadcaster
+}
+
+// SetImageVersion sets the deployment's image version.
+func (d *Deployment) SetImageVersion(imageVersion string) {
+	d.FileLock.Lock()
+	defer d.FileLock.Unlock()
+
+	d.imageVersion = imageVersion
 }
 
 // SetLatestConfigError sets the latest config apply error for the deployment.
