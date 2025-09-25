@@ -20,7 +20,7 @@ ARG BUILD_AGENT
 
 LABEL name="F5 NGINX Gateway Fabric NGINX" \
 	maintainer="kubernetes@nginx.com" \
-	vendor="F5 NGINX Inc" \
+	vendor="F5 NGINX" \
 	summary="F5 NGINX for NGINX Gateway Fabric" \
 	description="F5 NGINX data plane for NGINX Gateway Fabric Gateway API implementation" \
 	org.nginx.ngf.image.build.agent="${BUILD_AGENT}" \
