@@ -41,7 +41,7 @@ spec:
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               nginx:
-                description: Configuration for NGINX data plane deployments  
+                description: Configuration for NGINX data plane deployments
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               gateways:
@@ -83,4 +83,3 @@ spec:
                 enum: ["Pending", "Installing", "Ready", "Failed"]
     subresources:
       status: {}
-  
