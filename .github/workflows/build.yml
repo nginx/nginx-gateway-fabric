@@ -124,12 +124,13 @@ jobs:
           flavor: |
             latest=${{ (inputs.tag != '' && 'true') || 'auto' }}
           tags: |
-            type=semver,pattern={{version}}
-            type=edge
-            type=schedule
-            type=ref,event=pr
-            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.tag == '' }}
-            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=semver,pattern={{version}}${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }}
+            type=edge${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }}
+            type=schedule${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }}
+            type=ref,event=pr${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }}
+            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.tag == '' }}${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }}
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }}
+
           labels: |
             org.opencontainers.image.documentation=https://docs.nginx.com/nginx-gateway-fabric
             org.opencontainers.image.vendor=NGINX Inc <kubernetes@nginx.com>
