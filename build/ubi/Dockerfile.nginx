@@ -6,11 +6,9 @@ ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signi
 ADD --link --chown=101:1001 build/ubi/repos/nginx.repo nginx.repo
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
-FROM redhat/ubi9-minimal:9.6 AS ubi-minimal
-
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:01a32246761b9bbe47a6a29bcd8ca6e9b6e331b3bdfa372d8987b622276f7025 AS ubi9-packages
 
-FROM ubi-minimal AS ubi-nginx
+FROM redhat/ubi9-minimal:9.6 AS ubi-nginx
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.3.1
@@ -18,7 +16,7 @@ ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
-LABEL name="F5 NGINX Gateway Fabric NGINX" \
+LABEL name="F5 NGINX Gateway Fabric NGINX OSS" \
 	maintainer="kubernetes@nginx.com" \
 	vendor="F5 NGINX" \
 	summary="NGINX Gateway Fabric" \
@@ -29,7 +27,7 @@ LABEL name="F5 NGINX Gateway Fabric NGINX" \
 
 COPY --link --chown=101:1001 LICENSE /licenses/
 
-# Install NGINX with OTEL support using the same approach as NGINX IC
+# Install NGINX with packages
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_signing.key \
     --mount=type=bind,from=nginx-files,src=nginx.repo,target=/etc/yum.repos.d/nginx.repo \
     --mount=type=bind,from=nginx-files,src=agent.repo,target=/etc/yum.repos.d/agent.repo \
@@ -54,19 +52,17 @@ RUN mkdir -p /usr/lib/nginx/modules /var/run/nginx /usr/lib64/nginx/modules \
     # Forward request and error logs to docker log collector
     && ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log \
-    && mv /usr/lib64/nginx/modules/ngx_* /usr/lib/nginx/modules/ \
-    # Set proper permissions for nginx user
-    && chown -R 101:1001 /etc/nginx /var/cache/nginx /var/log/nginx /var/run/nginx
+    && mv /usr/lib64/nginx/modules/ngx_* /usr/lib/nginx/modules/
+
+# Set proper permissions for nginx user
+RUN chown -R 101:1001 /etc/nginx /var/cache/nginx
 
 # Copy configuration files and scripts
 COPY build/entrypoint.sh /agent/entrypoint.sh
-COPY ${NJS_DIR}/httpmatches.js /usr/lib/nginx/modules/njs/httpmatches.js
+COPY ${NJS_DIR}/ /usr/lib/nginx/modules/njs/
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf
-
-# Set executable permissions
-RUN chmod +x /agent/entrypoint.sh && chown 101:1001 /agent/entrypoint.sh
 
 # Switch to non-root user
 USER 101:1001
