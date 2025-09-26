@@ -114,7 +114,6 @@ The second is the `ResolvedRefs` condition, which reflects whether the `Endpoint
 
 The status of an InferencePool records the Gateway as its parent reference and associates it with the relevant conditions; when all conditions are `True`, the pool is valid and traffic can be directed to it.
 
-
 ### Personas and Processes
 
 Two new personas are introduced, the `Inference Platform Owner/Admin` and `Inference Workload Owner`.
