@@ -279,6 +279,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [nginx, plus]
+        build_os: ["", ubi]
         k8s-version:
           [
             "${{ needs.vars.outputs.min_k8s_version }}",
@@ -299,6 +300,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [nginx, plus]
+        build_os: ["", ubi]
         k8s-version:
           [
             "${{ needs.vars.outputs.min_k8s_version }}",
