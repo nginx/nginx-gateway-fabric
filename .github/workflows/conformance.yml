@@ -182,7 +182,7 @@ jobs:
         if: ${{ inputs.enable-experimental }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: conformance-profile-${{ inputs.image }}-${{ inputs.k8s-version }}${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }-${{ inputs.enable-experimental }}
+          name: conformance-profile-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}-${{ inputs.enable-experimental }}
           path: ./tests/conformance-profile.yaml
 
       - name: Upload profile to release
