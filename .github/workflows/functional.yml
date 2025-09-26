@@ -70,7 +70,7 @@ jobs:
             type=schedule,suffix=${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }}
             type=ref,event=pr,suffix=${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }}
             type=ref,event=branch,suffix=-rc${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }},enable=${{ startsWith(github.ref, 'refs/heads/release') && !inputs.production-release }}
-            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }},suffix=${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }}
+            type=raw,value={{inputs.release_version}},enable=${{ inputs.production-release && inputs.release_version != '' }},suffix=${{ inputs.build_os != '' && format('-{0}', inputs.build_os) || '' }}
 
       - name: NGINX Docker meta
         id: nginx-meta
