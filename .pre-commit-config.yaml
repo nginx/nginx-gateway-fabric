@@ -5,14 +5,11 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: (^operators/|^tests/results/|\.avdl$|_generated.go$)
+        exclude: (^tests/results/|\.avdl$|_generated.go$)
       - id: end-of-file-fixer
-        exclude: (^operators/)
       - id: check-yaml
         args: [--allow-multiple-documents]
-        exclude: (^operators/|^charts/nginx-gateway-fabric/templates)
-      - id: check-added-large-files
-        exclude: (^operators/)
+        exclude: (^charts/nginx-gateway-fabric/templates)
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: check-vcs-permalinks
@@ -26,7 +23,7 @@ repos:
         args: [--fix=lf]
       - id: no-commit-to-branch
       - id: detect-private-key
-        exclude: (^operators/|^examples/|^docs/|.*_test.go$)
+        exclude: (^examples/|^docs/|.*_test.go$)
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.28.0
