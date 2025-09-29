@@ -1,0 +1,6 @@
+[agent]
+name=agent repo
+baseurl=https://packages.nginx.org/nginx-agent/centos/9/$basearch/
+gpgcheck=1
+enabled=1
+module_hotfixes=true
