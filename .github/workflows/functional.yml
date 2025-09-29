@@ -117,6 +117,7 @@ jobs:
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
+            BUILD_OS=${{ inputs.build-os }}
 
       - name: Setup license file for plus
         if: ${{ inputs.image == 'plus' }}
