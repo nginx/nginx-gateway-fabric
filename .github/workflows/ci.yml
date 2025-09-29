@@ -270,6 +270,7 @@ jobs:
   assertion:
     name: Generate and Sign Assertion Documents
     needs: [vars, binary]
+    if: ${{ inputs.is_production_release }}
     permissions:
       contents: read
       id-token: write # for compliance-rules action to sign assertion doc
