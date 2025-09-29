@@ -6,10 +6,8 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.p
 
 FROM nginx:1.29.1-alpine-otel
 # the following apk update and add are to address CVE-2025-59375 and CVE-2025-8961/CVE-2025-9165 respectively,
-# once a new base image is available with these package updates, they can be removed
-RUN apk update && apk add --no-cache \
-    'libexpat=2.7.2-r0' \
-    'tiff=4.7.1-r0'
+# once a new base image is available with these package updates, they can be removed. libexpat >= 2.7.2-r0 and tiff >= 4.7.1-r0 are required.
+RUN apk update && apk add --no-cache libexpat tiff
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.3.2
