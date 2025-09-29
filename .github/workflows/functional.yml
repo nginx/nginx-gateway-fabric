@@ -13,6 +13,10 @@ on:
       k8s-version:
         required: true
         type: string
+      production-release:
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
