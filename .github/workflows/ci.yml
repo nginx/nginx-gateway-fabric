@@ -279,7 +279,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [nginx, plus]
-        build_os: ["", ubi]
+        build-os: ["", ubi]
         k8s-version:
           [
             "${{ needs.vars.outputs.min_k8s_version }}",
@@ -289,8 +289,7 @@ jobs:
     with:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
-      build_os: ${{ matrix.build_os }}
-      tag_suffix: ${{ matrix.build_os != '' && format('-{0}', matrix.build_os) || '' }}
+      build-os: ${{ matrix.build-os }}
     secrets: inherit
     permissions:
       contents: read
@@ -302,7 +301,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [nginx, plus]
-        build_os: ["", ubi]
+        build-os: ["", ubi]
         k8s-version:
           [
             "${{ needs.vars.outputs.min_k8s_version }}",
@@ -314,8 +313,7 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       enable-experimental: ${{ matrix.enable-experimental }}
-      build_os: ${{ matrix.build_os }}
-      tag_suffix: ${{ matrix.build_os != '' && format('-{0}', matrix.build_os) || '' }}
+      build-os: ${{ matrix.build-os }}
       production-release: ${{ inputs.is_production_release == true && (inputs.dry_run == false || inputs.dry_run == null) }}
       release_version: ${{ inputs.release_version }}
     secrets: inherit
