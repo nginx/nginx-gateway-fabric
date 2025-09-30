@@ -127,7 +127,7 @@ jobs:
           tags: ${{ steps.nginx-meta.outputs.tags }}
           context: "."
           load: true
-          cache-from: type=gha,scope=${{ inputs.image }}
+          cache-from: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
           pull: true
           build-args: |
             NJS_DIR=internal/controller/nginx/modules/src
