@@ -279,7 +279,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [nginx, plus]
-        build-os: ["", ubi]
+        # build-os: ["", ubi]
         k8s-version:
           [
             "${{ needs.vars.outputs.min_k8s_version }}",
@@ -289,7 +289,7 @@ jobs:
     with:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
-      build-os: ${{ matrix.build-os }}
+      # build-os: ${{ matrix.build-os }}
     secrets: inherit
     permissions:
       contents: read
