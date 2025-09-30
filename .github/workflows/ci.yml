@@ -45,7 +45,6 @@ jobs:
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
       k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
       helm_changes: ${{ steps.filter.outputs.charts }}
-      goproxy: ${{ steps.goproxy.outputs.goproxy }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -64,7 +63,6 @@ jobs:
           echo "Development mode - using dev Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
-          echo "goproxy=${GOPROXY_VALUE}" >> $GITHUB_OUTPUT
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
@@ -105,11 +103,19 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-24.04
     needs: vars
-    env:
-      GOPROXY: ${{ needs.vars.outputs.goproxy }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          GOPROXY_VALUE="direct"
+          else
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
@@ -159,8 +165,8 @@ jobs:
     name: Build Binary
     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, unit-tests, njs-unit-tests]
-    env:
-      GOPROXY: ${{ needs.vars.outputs.goproxy }}
+    outputs:
+      json: ${{ steps.gateway_binaries.outputs.json }}
     permissions:
       contents: write # for goreleaser/goreleaser-action and lucacome/draft-release to create/update releases
       id-token: write # for goreleaser/goreleaser-action to sign artifacts
@@ -170,6 +176,21 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
+
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          echo "No Artifactory secrets available - using direct GOPROXY"
+          GOPROXY_VALUE="direct"
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Production mode - using production Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
+          else
+          echo "Development mode - using dev Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
@@ -220,11 +241,106 @@ jobs:
           TELEMETRY_ENDPOINT: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release-') && 'oss-dev.edge.df.f5.com:443' || 'oss.edge.df.f5.com:443' }}
           TELEMETRY_ENDPOINT_INSECURE: "false"
 
+      - name: Extract gateway binaries info
+        id: gateway_binaries
+        run: |
+          set -e
+          binaries=()
+          for bin in $(find ${{ github.workspace }}/dist -type f -name "gateway"); do
+          dir=$(basename $(dirname "$bin"))
+          if [[ "$dir" =~ gateway_([a-zA-Z0-9]+)_([a-zA-Z0-9]+) ]]; then
+          os="${BASH_REMATCH[1]}"
+          arch="${BASH_REMATCH[2]}"
+          digest=$(sha256sum "$bin" | cut -d' ' -f1)
+          binaries+=("{\"path\":\"$bin\",\"os\":\"$os\",\"arch\":\"$arch\",\"digest\":\"$digest\"}")
+          fi
+          done
+          # Join array elements with commas
+          IFS=','
+          json="[${binaries[*]}]"
+          echo "Generated JSON: $json"
+          echo "json=$json" >> $GITHUB_OUTPUT
+
       - name: Cache Artifacts
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ github.workspace }}/dist
           key: nginx-gateway-fabric-${{ github.run_id }}-${{ github.run_number }}
+
+  assertion:
+    name: Generate and Sign Assertion Documents
+    needs: [vars, binary]
+    if: ${{ inputs.is_production_release }}
+    permissions:
+      contents: read
+      id-token: write # for compliance-rules action to sign assertion doc
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        gateway: ${{ fromJson(needs.binary.outputs.json) }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          echo "No Artifactory secrets available - using direct GOPROXY"
+          GOPROXY_VALUE="direct"
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Production mode - using production Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
+          else
+          echo "Development mode - using dev Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
+
+      - name: Setup Golang Environment
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: stable
+
+      - name: Fetch Cached Artifacts
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ${{ github.workspace }}/dist
+          key: nginx-gateway-fabric-${{ github.run_id }}-${{ github.run_number }}
+
+      - name: List Dependencies in Go Binary
+        id: godeps
+        run: |
+          go version -m dist/gateway_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}*/gateway > goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.txt
+          echo "goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)" >> $GITHUB_OUTPUT
+          goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)
+          cat $goversionm
+
+      - name: Generate Assertion Document
+        id: assertiondoc
+        uses: nginxinc/compliance-rules/.github/actions/assertion@83e452166aaf0ad8f07caf91a4f1f903b3dea1e6
+        with:
+          artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
+          artifact-digest: ${{ matrix.gateway.digest }}
+          build-type: 'github'
+          builder-id: 'github.com'
+          builder-version: '0.1.0-xyz'
+          invocation-id: ${{ github.run_id }}.${{ github.run_number }}.${{ strategy.job-index }}
+          started-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
+          finished-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
+          artifactory-user: ${{ secrets.ARTIFACTORY_USER }}
+          artifactory-api-token: ${{ secrets.ARTIFACTORY_TOKEN }}
+          artifactory-url: ${{ secrets.ARTIFACTORY_URL }}
+          artifactory-repo: 'f5-nginx-go-local-approved-dependency'
+          build-content-path: ${{ steps.godeps.outputs.goversionm }}
+          assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
+
+      - name: Sign and Store Assertion Document
+        id: sign
+        uses: nginxinc/compliance-rules/.github/actions/sign@83e452166aaf0ad8f07caf91a4f1f903b3dea1e6
+        with:
+          assertion-doc: ${{ steps.assertiondoc.outputs.assertion-document-path }}
 
   build-oss:
     name: Build OSS images
@@ -362,11 +478,19 @@ jobs:
     name: CEL Tests
     runs-on: ubuntu-24.04
     needs: vars
-    env:
-      GOPROXY: ${{ needs.vars.outputs.goproxy }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          GOPROXY_VALUE="direct"
+          else
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
