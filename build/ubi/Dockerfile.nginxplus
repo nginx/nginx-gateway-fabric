@@ -38,7 +38,8 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
 	--mount=type=secret,id=nginx-repo.key,dst=/etc/ssl/nginx/nginx-repo.key,mode=0644 \
     # Install shadow-utils for useradd and subscription-manager for repo access
     microdnf --nodocs install -y shadow-utils subscription-manager \
-    && microdnf --nodocs install -y procps-ng iproute iputils coreutils which curl \
+    && microdnf --nodocs install -y pcre pcre2  \
+    && microdnf --nodocs install -y procps-ng iproute iputils which \
     && rpm --import /tmp/nginx_signing.key \
     # Install c-ares from the dependencies image (contains required libs)
     && rpm -Uvh /ubi-bin/c-ares-*.rpm \

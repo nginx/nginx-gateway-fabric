@@ -36,7 +36,8 @@ RUN --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_s
     rpm --import /tmp/nginx_signing.key \
     # Install c-ares from the dependencies image (contains required libs)
     && rpm -Uvh /ubi-bin/c-ares-*.rpm \
-    && microdnf --nodocs install -y procps-ng iproute iputils coreutils which curl \
+    && microdnf --nodocs install -y pcre pcre2  \
+    && microdnf --nodocs install -y procps-ng iproute iputils which \
     # Create nginx user with consistent UID/GID
     && groupadd -g 1001 nginx \
     && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
