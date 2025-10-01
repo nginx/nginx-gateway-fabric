@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -1524,20 +1523,20 @@ func TestRefGroupKind(t *testing.T) {
 func createTestPolicyWithAncestors(numAncestors int) policies.Policy {
 	policy := &policiesfakes.FakePolicy{}
 
-	ancestors := make([]v1alpha2.PolicyAncestorStatus, numAncestors)
+	ancestors := make([]v1.PolicyAncestorStatus, numAncestors)
 
 	for i := range numAncestors {
-		ancestors[i] = v1alpha2.PolicyAncestorStatus{ControllerName: "some-other-controller"}
+		ancestors[i] = v1.PolicyAncestorStatus{ControllerName: "some-other-controller"}
 	}
 
-	policy.GetPolicyStatusReturns(v1alpha2.PolicyStatus{Ancestors: ancestors})
+	policy.GetPolicyStatusReturns(v1.PolicyStatus{Ancestors: ancestors})
 	return policy
 }
 
 func createTestPolicyAndKey(
 	gvk schema.GroupVersionKind,
 	name string,
-	refs ...v1alpha2.LocalPolicyTargetReference,
+	refs ...v1.LocalPolicyTargetReference,
 ) (policies.Policy, PolicyKey) {
 	pol := createTestPolicy(gvk, name, refs...)
 	key := createTestPolicyKey(gvk, name)
@@ -1548,7 +1547,7 @@ func createTestPolicyAndKey(
 func createTestPolicy(
 	gvk schema.GroupVersionKind,
 	name string,
-	refs ...v1alpha2.LocalPolicyTargetReference,
+	refs ...v1.LocalPolicyTargetReference,
 ) policies.Policy {
 	return &policiesfakes.FakePolicy{
 		GetNameStub: func() string {
@@ -1557,7 +1556,7 @@ func createTestPolicy(
 		GetNamespaceStub: func() string {
 			return testNs
 		},
-		GetTargetRefsStub: func() []v1alpha2.LocalPolicyTargetReference {
+		GetTargetRefsStub: func() []v1.LocalPolicyTargetReference {
 			return refs
 		},
 		GetObjectKindStub: func() schema.ObjectKind {
@@ -1577,8 +1576,8 @@ func createTestPolicyKey(gvk schema.GroupVersionKind, name string) PolicyKey {
 	}
 }
 
-func createTestRef(kind v1.Kind, group v1.Group, name string) v1alpha2.LocalPolicyTargetReference {
-	return v1alpha2.LocalPolicyTargetReference{
+func createTestRef(kind v1.Kind, group v1.Group, name string) v1.LocalPolicyTargetReference {
+	return v1.LocalPolicyTargetReference{
 		Group: group,
 		Kind:  kind,
 		Name:  v1.ObjectName(name),
@@ -2009,10 +2008,10 @@ func TestAddStatusToTargetRefs(t *testing.T) {
 func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
 	t.Parallel()
 
-	createPolicyWithAncestors := func(ancestors []v1alpha2.PolicyAncestorStatus) *Policy {
+	createPolicyWithAncestors := func(ancestors []v1.PolicyAncestorStatus) *Policy {
 		fakePolicy := &policiesfakes.FakePolicy{
-			GetPolicyStatusStub: func() v1alpha2.PolicyStatus {
-				return v1alpha2.PolicyStatus{
+			GetPolicyStatusStub: func() v1.PolicyStatus {
+				return v1.PolicyStatus{
 					Ancestors: ancestors,
 				}
 			},
@@ -2023,8 +2022,8 @@ func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
 		}
 	}
 
-	getAncestorRef := func(ctlrName, parentName string) v1alpha2.PolicyAncestorStatus {
-		return v1alpha2.PolicyAncestorStatus{
+	getAncestorRef := func(ctlrName, parentName string) v1.PolicyAncestorStatus {
+		return v1.PolicyAncestorStatus{
 			ControllerName: v1.GatewayController(ctlrName),
 			AncestorRef: v1.ParentReference{
 				Name:      v1.ObjectName(parentName),
@@ -2037,19 +2036,19 @@ func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		currentAncestors    []v1alpha2.PolicyAncestorStatus
+		currentAncestors    []v1.PolicyAncestorStatus
 		updatedAncestorsLen int
 		expectFull          bool
 	}{
 		{
 			name:                "empty current ancestors, no updated ancestors",
-			currentAncestors:    []v1alpha2.PolicyAncestorStatus{},
+			currentAncestors:    []v1.PolicyAncestorStatus{},
 			updatedAncestorsLen: 0,
 			expectFull:          false,
 		},
 		{
 			name: "less than 16 total (current + updated)",
-			currentAncestors: []v1alpha2.PolicyAncestorStatus{
+			currentAncestors: []v1.PolicyAncestorStatus{
 				getAncestorRef("other-controller", "gateway1"),
 				getAncestorRef("other-controller", "gateway2"),
 			},
@@ -2058,8 +2057,8 @@ func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
 		},
 		{
 			name: "exactly 16 non-NGF ancestors, no updated ancestors",
-			currentAncestors: func() []v1alpha2.PolicyAncestorStatus {
-				ancestors := make([]v1alpha2.PolicyAncestorStatus, 16)
+			currentAncestors: func() []v1.PolicyAncestorStatus {
+				ancestors := make([]v1.PolicyAncestorStatus, 16)
 				for i := range 16 {
 					ancestors[i] = getAncestorRef("other-controller", "gateway")
 				}
@@ -2070,8 +2069,8 @@ func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
 		},
 		{
 			name: "15 non-NGF + 1 NGF ancestor, adding 1 more NGF ancestor",
-			currentAncestors: func() []v1alpha2.PolicyAncestorStatus {
-				ancestors := make([]v1alpha2.PolicyAncestorStatus, 16)
+			currentAncestors: func() []v1.PolicyAncestorStatus {
+				ancestors := make([]v1.PolicyAncestorStatus, 16)
 				for i := range 15 {
 					ancestors[i] = getAncestorRef("other-controller", "gateway")
 				}
@@ -2083,8 +2082,8 @@ func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
 		},
 		{
 			name: "10 non-NGF ancestors, trying to add 7 NGF ancestors (would exceed 16)",
-			currentAncestors: func() []v1alpha2.PolicyAncestorStatus {
-				ancestors := make([]v1alpha2.PolicyAncestorStatus, 10)
+			currentAncestors: func() []v1.PolicyAncestorStatus {
+				ancestors := make([]v1.PolicyAncestorStatus, 10)
 				for i := range 10 {
 					ancestors[i] = getAncestorRef("other-controller", "gateway")
 				}
@@ -2095,8 +2094,8 @@ func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
 		},
 		{
 			name: "5 non-NGF + 5 NGF ancestors, trying to add 6 more NGF ancestors",
-			currentAncestors: func() []v1alpha2.PolicyAncestorStatus {
-				ancestors := make([]v1alpha2.PolicyAncestorStatus, 10)
+			currentAncestors: func() []v1.PolicyAncestorStatus {
+				ancestors := make([]v1.PolicyAncestorStatus, 10)
 				for i := range 5 {
 					ancestors[i] = getAncestorRef("other-controller", "gateway")
 				}
@@ -2140,8 +2139,8 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 	policyGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "TestPolicy"}
 
 	// Helper function to create ancestor references
-	getAncestorRef := func(ctlrName, parentName string) v1alpha2.PolicyAncestorStatus {
-		return v1alpha2.PolicyAncestorStatus{
+	getAncestorRef := func(ctlrName, parentName string) v1.PolicyAncestorStatus {
+		return v1.PolicyAncestorStatus{
 			ControllerName: v1.GatewayController(ctlrName),
 			AncestorRef: v1.ParentReference{
 				Name:      v1.ObjectName(parentName),
@@ -2153,7 +2152,7 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 	}
 
 	// Create 16 ancestors from different controllers to simulate full list
-	fullAncestors := make([]v1alpha2.PolicyAncestorStatus, 16)
+	fullAncestors := make([]v1.PolicyAncestorStatus, 16)
 	for i := range 16 {
 		fullAncestors[i] = getAncestorRef("other-controller", "other-gateway")
 	}
@@ -2165,8 +2164,8 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 		GetNamespaceStub: func() string {
 			return "test"
 		},
-		GetPolicyStatusStub: func() v1alpha2.PolicyStatus {
-			return v1alpha2.PolicyStatus{
+		GetPolicyStatusStub: func() v1.PolicyStatus {
+			return v1.PolicyStatus{
 				Ancestors: fullAncestors,
 			}
 		},
@@ -2177,8 +2176,8 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 				},
 			}
 		},
-		GetTargetRefsStub: func() []v1alpha2.LocalPolicyTargetReference {
-			return []v1alpha2.LocalPolicyTargetReference{
+		GetTargetRefsStub: func() []v1.LocalPolicyTargetReference {
+			return []v1.LocalPolicyTargetReference{
 				{
 					Group: v1.GroupName,
 					Kind:  kinds.Gateway,
@@ -2196,9 +2195,9 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 		GetNamespaceStub: func() string {
 			return "test"
 		},
-		GetPolicyStatusStub: func() v1alpha2.PolicyStatus {
-			return v1alpha2.PolicyStatus{
-				Ancestors: []v1alpha2.PolicyAncestorStatus{}, // Empty ancestors list
+		GetPolicyStatusStub: func() v1.PolicyStatus {
+			return v1.PolicyStatus{
+				Ancestors: []v1.PolicyAncestorStatus{}, // Empty ancestors list
 			}
 		},
 		GetObjectKindStub: func() schema.ObjectKind {
@@ -2208,8 +2207,8 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 				},
 			}
 		},
-		GetTargetRefsStub: func() []v1alpha2.LocalPolicyTargetReference {
-			return []v1alpha2.LocalPolicyTargetReference{
+		GetTargetRefsStub: func() []v1.LocalPolicyTargetReference {
+			return []v1.LocalPolicyTargetReference{
 				{
 					Group: v1.GroupName,
 					Kind:  kinds.Gateway,
@@ -2293,7 +2292,7 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 	g.Expect(gateway1.Conditions).To(HaveLen(1), "Gateway should have received ancestor limit condition")
 
 	condition := gateway1.Conditions[0]
-	g.Expect(condition.Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+	g.Expect(condition.Type).To(Equal(string(v1.PolicyConditionAccepted)))
 	g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 	g.Expect(condition.Reason).To(Equal(string(conditions.PolicyReasonAncestorLimitReached)))
 	g.Expect(condition.Message).To(ContainSubstring("ancestor status list has reached the maximum size"))
@@ -2356,7 +2355,7 @@ func (s *testNGFLogSink) WithName(_ string) logr.LogSink {
 
 // createPolicyWithExistingGatewayStatus creates a fake policy with a gateway in its status ancestors.
 func createPolicyWithExistingGatewayStatus(gatewayNsName types.NamespacedName, controllerName string) policies.Policy {
-	ancestors := []v1alpha2.PolicyAncestorStatus{
+	ancestors := []v1.PolicyAncestorStatus{
 		{
 			ControllerName: v1.GatewayController(controllerName),
 			AncestorRef: v1.ParentReference{
@@ -2375,11 +2374,11 @@ func createFakePolicy(name, namespace string) *policiesfakes.FakePolicy {
 	return &policiesfakes.FakePolicy{
 		GetNameStub:      func() string { return name },
 		GetNamespaceStub: func() string { return namespace },
-		GetPolicyStatusStub: func() v1alpha2.PolicyStatus {
-			return v1alpha2.PolicyStatus{}
+		GetPolicyStatusStub: func() v1.PolicyStatus {
+			return v1.PolicyStatus{}
 		},
-		GetTargetRefsStub: func() []v1alpha2.LocalPolicyTargetReference {
-			return []v1alpha2.LocalPolicyTargetReference{}
+		GetTargetRefsStub: func() []v1.LocalPolicyTargetReference {
+			return []v1.LocalPolicyTargetReference{}
 		},
 	}
 }
@@ -2387,11 +2386,11 @@ func createFakePolicy(name, namespace string) *policiesfakes.FakePolicy {
 // createFakePolicyWithAncestors creates a fake policy with specific ancestors.
 func createFakePolicyWithAncestors(
 	name, namespace string,
-	ancestors []v1alpha2.PolicyAncestorStatus,
+	ancestors []v1.PolicyAncestorStatus,
 ) *policiesfakes.FakePolicy {
 	policy := createFakePolicy(name, namespace)
-	policy.GetPolicyStatusStub = func() v1alpha2.PolicyStatus {
-		return v1alpha2.PolicyStatus{Ancestors: ancestors}
+	policy.GetPolicyStatusStub = func() v1.PolicyStatus {
+		return v1.PolicyStatus{Ancestors: ancestors}
 	}
 	return policy
 }

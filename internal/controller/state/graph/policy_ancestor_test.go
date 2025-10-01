@@ -10,7 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -27,17 +26,17 @@ func TestNGFPolicyAncestorsFull(t *testing.T) {
 	}
 
 	createPolicy := func(cfg ancestorConfig) *Policy {
-		currAncestors := make([]v1alpha2.PolicyAncestorStatus, 0, cfg.numCurrNGFAncestors+cfg.numCurrNonNGFAncestors)
+		currAncestors := make([]v1.PolicyAncestorStatus, 0, cfg.numCurrNGFAncestors+cfg.numCurrNonNGFAncestors)
 		ngfAncestors := make([]PolicyAncestor, 0, cfg.numNewNGFAncestors)
 
 		for range cfg.numCurrNonNGFAncestors {
-			currAncestors = append(currAncestors, v1alpha2.PolicyAncestorStatus{
+			currAncestors = append(currAncestors, v1.PolicyAncestorStatus{
 				ControllerName: "non-ngf",
 			})
 		}
 
 		for range cfg.numCurrNGFAncestors {
-			currAncestors = append(currAncestors, v1alpha2.PolicyAncestorStatus{
+			currAncestors = append(currAncestors, v1.PolicyAncestorStatus{
 				ControllerName: "nginx-gateway",
 			})
 		}
@@ -50,7 +49,7 @@ func TestNGFPolicyAncestorsFull(t *testing.T) {
 
 		return &Policy{
 			Source: &ngfAPIv1alpha2.ObservabilityPolicy{
-				Status: v1alpha2.PolicyStatus{
+				Status: v1.PolicyStatus{
 					Ancestors: currAncestors,
 				},
 			},

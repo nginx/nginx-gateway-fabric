@@ -136,7 +136,7 @@ func TestBuildGateway(t *testing.T) {
 		Type: apiv1.SecretTypeTLS,
 	}
 
-	gatewayTLSConfigSameNs := &v1.GatewayTLSConfig{
+	gatewayTLSConfigSameNs := &v1.ListenerTLSConfig{
 		Mode: helpers.GetPointer(v1.TLSModeTerminate),
 		CertificateRefs: []v1.SecretObjectReference{
 			{
@@ -147,7 +147,7 @@ func TestBuildGateway(t *testing.T) {
 		},
 	}
 
-	tlsConfigInvalidSecret := &v1.GatewayTLSConfig{
+	tlsConfigInvalidSecret := &v1.ListenerTLSConfig{
 		Mode: helpers.GetPointer(v1.TLSModeTerminate),
 		CertificateRefs: []v1.SecretObjectReference{
 			{
@@ -170,7 +170,7 @@ func TestBuildGateway(t *testing.T) {
 		Type: apiv1.SecretTypeTLS,
 	}
 
-	gatewayTLSConfigDiffNs := &v1.GatewayTLSConfig{
+	gatewayTLSConfigDiffNs := &v1.ListenerTLSConfig{
 		Mode: helpers.GetPointer(v1.TLSModeTerminate),
 		CertificateRefs: []v1.SecretObjectReference{
 			{
@@ -186,7 +186,7 @@ func TestBuildGateway(t *testing.T) {
 		hostname string,
 		port int,
 		protocol v1.ProtocolType,
-		tls *v1.GatewayTLSConfig,
+		tls *v1.ListenerTLSConfig,
 	) v1.Listener {
 		return v1.Listener{
 			Name:     v1.SectionName(name),
@@ -208,10 +208,10 @@ func TestBuildGateway(t *testing.T) {
 			hostname,
 			port,
 			v1.TLSProtocolType,
-			&v1.GatewayTLSConfig{Mode: helpers.GetPointer(v1.TLSModePassthrough)},
+			&v1.ListenerTLSConfig{Mode: helpers.GetPointer(v1.TLSModePassthrough)},
 		)
 	}
-	createHTTPSListener := func(name, hostname string, port int, tls *v1.GatewayTLSConfig) v1.Listener {
+	createHTTPSListener := func(name, hostname string, port int, tls *v1.ListenerTLSConfig) v1.Listener {
 		return createListener(name, hostname, port, v1.HTTPSProtocolType, tls)
 	}
 

@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
@@ -346,7 +346,7 @@ func waitForCSPolicyToBeAccepted(policyNsname types.NamespacedName) error {
 		policyNsname,
 	)
 
-	return waitForClientSettingsAncestorStatus(ctx, policyNsname, metav1.ConditionTrue, v1alpha2.PolicyReasonAccepted)
+	return waitForClientSettingsAncestorStatus(ctx, policyNsname, metav1.ConditionTrue, v1.PolicyReasonAccepted)
 }
 
 func waitForCSPolicyToBeConflicted(policyNsname types.NamespacedName) error {
@@ -362,7 +362,7 @@ func waitForCSPolicyToBeConflicted(policyNsname types.NamespacedName) error {
 		ctx,
 		policyNsname,
 		metav1.ConditionFalse,
-		v1alpha2.PolicyReasonConflicted,
+		v1.PolicyReasonConflicted,
 	)
 }
 
@@ -379,7 +379,7 @@ func waitForCSPolicyToHaveTargetNotFoundAcceptedCond(policyNsname types.Namespac
 		ctx,
 		policyNsname,
 		metav1.ConditionFalse,
-		v1alpha2.PolicyReasonTargetNotFound,
+		v1.PolicyReasonTargetNotFound,
 	)
 }
 
@@ -387,7 +387,7 @@ func waitForClientSettingsAncestorStatus(
 	ctx context.Context,
 	policyNsname types.NamespacedName,
 	condStatus metav1.ConditionStatus,
-	condReason v1alpha2.PolicyConditionReason,
+	condReason v1.PolicyConditionReason,
 ) error {
 	return wait.PollUntilContextCancel(
 		ctx,
@@ -427,9 +427,9 @@ func waitForClientSettingsAncestorStatus(
 }
 
 func ancestorStatusMustHaveAcceptedCondition(
-	status v1alpha2.PolicyAncestorStatus,
+	status v1.PolicyAncestorStatus,
 	condStatus metav1.ConditionStatus,
-	condReason v1alpha2.PolicyConditionReason,
+	condReason v1.PolicyConditionReason,
 ) error {
 	GinkgoWriter.Printf("Checking if ancestor status has accepted condition\n")
 	if len(status.Conditions) != 1 {
@@ -439,7 +439,7 @@ func ancestorStatusMustHaveAcceptedCondition(
 		return tooManyConditionsErr
 	}
 
-	if status.Conditions[0].Type != string(v1alpha2.RouteConditionAccepted) {
+	if status.Conditions[0].Type != string(v1.RouteConditionAccepted) {
 		wrongTypeErr := fmt.Errorf("expected condition type to be Accepted, got %s", status.Conditions[0].Type)
 		GinkgoWriter.Printf("ERROR: %v\n", wrongTypeErr)
 
@@ -464,8 +464,8 @@ func ancestorStatusMustHaveAcceptedCondition(
 }
 
 func ancestorMustEqualTargetRef(
-	ancestor v1alpha2.PolicyAncestorStatus,
-	targetRef v1alpha2.LocalPolicyTargetReference,
+	ancestor v1.PolicyAncestorStatus,
+	targetRef v1.LocalPolicyTargetReference,
 	namespace string,
 ) error {
 	if ancestor.ControllerName != ngfControllerName {

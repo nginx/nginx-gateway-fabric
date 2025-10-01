@@ -13,7 +13,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
-	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -91,7 +90,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		ReferenceGrants:    make(map[types.NamespacedName]*v1beta1.ReferenceGrant),
 		Secrets:            make(map[types.NamespacedName]*apiv1.Secret),
 		CRDMetadata:        make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
-		BackendTLSPolicies: make(map[types.NamespacedName]*v1alpha3.BackendTLSPolicy),
+		BackendTLSPolicies: make(map[types.NamespacedName]*v1.BackendTLSPolicy),
 		ConfigMaps:         make(map[types.NamespacedName]*apiv1.ConfigMap),
 		NginxProxies:       make(map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy),
 		GRPCRoutes:         make(map[types.NamespacedName]*v1.GRPCRoute),
@@ -147,7 +146,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 				predicate: nil,
 			},
 			{
-				gvk:       cfg.MustExtractGVK(&v1alpha3.BackendTLSPolicy{}),
+				gvk:       cfg.MustExtractGVK(&v1.BackendTLSPolicy{}),
 				store:     newObjectStoreMapAdapter(clusterStore.BackendTLSPolicies),
 				predicate: nil,
 			},

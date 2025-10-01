@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -22,7 +22,7 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 		{
 			name: "Validate TargetRef of kind Gateway is allowed",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  gatewayKind,
 					Group: gatewayGroup,
 				},
@@ -31,7 +31,7 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 		{
 			name: "Validate TargetRef of kind HTTPRoute is allowed",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  httpRouteKind,
 					Group: gatewayGroup,
 				},
@@ -40,7 +40,7 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 		{
 			name: "Validate TargetRef of kind GRPCRoute is allowed",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  grpcRouteKind,
 					Group: gatewayGroup,
 				},
@@ -50,7 +50,7 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 			name:       "Validate Invalid TargetRef Kind is not allowed",
 			wantErrors: []string{expectedTargetRefKindError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  invalidKind,
 					Group: gatewayGroup,
 				},
@@ -60,7 +60,7 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 			name:       "Validate TCPRoute TargetRef Kind is not allowed",
 			wantErrors: []string{expectedTargetRefKindError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  tcpRouteKind,
 					Group: gatewayGroup,
 				},
@@ -72,7 +72,7 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := tt.spec
-			spec.TargetRef.Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+			spec.TargetRef.Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      uniqueResourceName(testResourceName),
@@ -97,7 +97,7 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 		{
 			name: "Validate gateway.networking.k8s.io TargetRef Group is allowed",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  gatewayKind,
 					Group: gatewayGroup,
 				},
@@ -107,7 +107,7 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 			name:       "Validate invalid.networking.k8s.io TargetRef Group is not allowed",
 			wantErrors: []string{expectedTargetRefGroupError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  gatewayKind,
 					Group: invalidGroup,
 				},
@@ -117,7 +117,7 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 			name:       "Validate discovery.k8s.io/v1 TargetRef Group is not allowed",
 			wantErrors: []string{expectedTargetRefGroupError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  gatewayKind,
 					Group: discoveryGroup,
 				},
@@ -129,7 +129,7 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := tt.spec
-			spec.TargetRef.Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+			spec.TargetRef.Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      uniqueResourceName(testResourceName),
@@ -154,7 +154,7 @@ func TestClientSettingsPoliciesKeepAliveTimeout(t *testing.T) {
 		{
 			name: "Validate KeepAliveTimeout is not set",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  gatewayKind,
 					Group: gatewayGroup,
 				},
@@ -164,7 +164,7 @@ func TestClientSettingsPoliciesKeepAliveTimeout(t *testing.T) {
 		{
 			name: "Validate KeepAlive is set",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  gatewayKind,
 					Group: gatewayGroup,
 				},
@@ -180,7 +180,7 @@ func TestClientSettingsPoliciesKeepAliveTimeout(t *testing.T) {
 			name:       "Validate Header cannot be set without Server",
 			wantErrors: []string{expectedHeaderWithoutServerError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  gatewayKind,
 					Group: gatewayGroup,
 				},
@@ -197,7 +197,7 @@ func TestClientSettingsPoliciesKeepAliveTimeout(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := tt.spec
-			spec.TargetRef.Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+			spec.TargetRef.Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
 				ObjectMeta: controllerruntime.ObjectMeta{
 					Name:      uniqueResourceName(testResourceName),

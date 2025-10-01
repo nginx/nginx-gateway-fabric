@@ -16,7 +16,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -60,6 +59,8 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&apiv1.NamespaceList{},
 				&discoveryV1.EndpointSliceList{},
 				&gatewayv1.HTTPRouteList{},
+				&gatewayv1.BackendTLSPolicyList{},
+				&apiv1.ConfigMapList{},
 				&gatewayv1.GatewayList{},
 				&gatewayv1beta1.ReferenceGrantList{},
 				&ngfAPIv1alpha2.NginxProxyList{},
@@ -91,7 +92,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&gatewayv1beta1.ReferenceGrantList{},
 				&ngfAPIv1alpha2.NginxProxyList{},
 				partialObjectMetadataList,
-				&gatewayv1alpha3.BackendTLSPolicyList{},
+				&gatewayv1.BackendTLSPolicyList{},
 				&gatewayv1alpha2.TLSRouteList{},
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
@@ -115,6 +116,8 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&apiv1.NamespaceList{},
 				&discoveryV1.EndpointSliceList{},
 				&gatewayv1.HTTPRouteList{},
+				&gatewayv1.BackendTLSPolicyList{},
+				&apiv1.ConfigMapList{},
 				&gatewayv1.GatewayList{},
 				&gatewayv1beta1.ReferenceGrantList{},
 				&ngfAPIv1alpha2.NginxProxyList{},
@@ -147,7 +150,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&gatewayv1beta1.ReferenceGrantList{},
 				&ngfAPIv1alpha2.NginxProxyList{},
 				partialObjectMetadataList,
-				&gatewayv1alpha3.BackendTLSPolicyList{},
+				&gatewayv1.BackendTLSPolicyList{},
 				&gatewayv1alpha2.TLSRouteList{},
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},

@@ -5,7 +5,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
@@ -94,7 +93,7 @@ const (
 
 	// PolicyReasonNginxProxyConfigNotSet is used with the "PolicyAccepted" condition when the
 	// NginxProxy resource is missing or invalid.
-	PolicyReasonNginxProxyConfigNotSet v1alpha2.PolicyConditionReason = "NginxProxyConfigNotSet"
+	PolicyReasonNginxProxyConfigNotSet v1.PolicyConditionReason = "NginxProxyConfigNotSet"
 
 	// PolicyMessageNginxProxyInvalid is a message used with the PolicyReasonNginxProxyConfigNotSet reason
 	// when the NginxProxy resource is either invalid or not attached.
@@ -106,19 +105,19 @@ const (
 
 	// PolicyReasonTargetConflict is used with the "PolicyAccepted" condition when a Route that it targets
 	// has an overlapping hostname:port/path combination with another Route.
-	PolicyReasonTargetConflict v1alpha2.PolicyConditionReason = "TargetConflict"
+	PolicyReasonTargetConflict v1.PolicyConditionReason = "TargetConflict"
 
 	// ClientSettingsPolicyAffected is used with the "PolicyAffected" condition when a
 	// ClientSettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
-	ClientSettingsPolicyAffected v1alpha2.PolicyConditionType = "ClientSettingsPolicyAffected"
+	ClientSettingsPolicyAffected v1.PolicyConditionType = "ClientSettingsPolicyAffected"
 
 	// ObservabilityPolicyAffected is used with the "PolicyAffected" condition when an
 	// ObservabilityPolicy is applied to a HTTPRoute, or GRPCRoute.
-	ObservabilityPolicyAffected v1alpha2.PolicyConditionType = "ObservabilityPolicyAffected"
+	ObservabilityPolicyAffected v1.PolicyConditionType = "ObservabilityPolicyAffected"
 
 	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
 	// ObservabilityPolicy or ClientSettingsPolicy is applied to Gateways or Routes.
-	PolicyAffectedReason v1alpha2.PolicyConditionReason = "PolicyAffected"
+	PolicyAffectedReason v1.PolicyConditionReason = "PolicyAffected"
 
 	// GatewayResolvedRefs condition indicates whether the controller was able to resolve the
 	// parametersRef on the Gateway.
@@ -137,7 +136,7 @@ const (
 
 	// PolicyReasonAncestorLimitReached is used with the "PolicyAccepted" condition when a policy
 	// cannot be applied because the ancestor status list has reached the maximum size of 16.
-	PolicyReasonAncestorLimitReached v1alpha2.PolicyConditionReason = "AncestorLimitReached"
+	PolicyReasonAncestorLimitReached v1.PolicyConditionReason = "AncestorLimitReached"
 
 	// PolicyMessageAncestorLimitReached is a message used with PolicyReasonAncestorLimitReached
 	// when a policy cannot be applied due to the ancestor limit being reached.
@@ -146,15 +145,15 @@ const (
 
 	// BackendTLSPolicyReasonInvalidCACertificateRef is used with the "ResolvedRefs" condition when a
 	// CACertificateRef refers to a resource that cannot be resolved or is misconfigured.
-	BackendTLSPolicyReasonInvalidCACertificateRef v1alpha2.PolicyConditionReason = "InvalidCACertificateRef"
+	BackendTLSPolicyReasonInvalidCACertificateRef v1.PolicyConditionReason = "InvalidCACertificateRef"
 
 	// BackendTLSPolicyReasonInvalidKind is used with the "ResolvedRefs" condition when a
 	// CACertificateRef refers to an unknown or unsupported kind of resource.
-	BackendTLSPolicyReasonInvalidKind v1alpha2.PolicyConditionReason = "InvalidKind"
+	BackendTLSPolicyReasonInvalidKind v1.PolicyConditionReason = "InvalidKind"
 
 	// BackendTLSPolicyReasonNoValidCACertificate is used with the "Accepted" condition when all
 	// CACertificateRefs are invalid.
-	BackendTLSPolicyReasonNoValidCACertificate v1alpha2.PolicyConditionReason = "NoValidCACertificate"
+	BackendTLSPolicyReasonNoValidCACertificate v1.PolicyConditionReason = "NoValidCACertificate"
 )
 
 // Condition defines a condition to be reported in the status of resources.
@@ -948,9 +947,9 @@ func NewGatewayInvalidParameters(msg string) Condition {
 // NewPolicyAccepted returns a Condition that indicates that the Policy is accepted.
 func NewPolicyAccepted() Condition {
 	return Condition{
-		Type:    string(v1alpha2.PolicyConditionAccepted),
+		Type:    string(v1.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
-		Reason:  string(v1alpha2.PolicyReasonAccepted),
+		Reason:  string(v1.PolicyReasonAccepted),
 		Message: "Policy is accepted",
 	}
 }
@@ -959,9 +958,9 @@ func NewPolicyAccepted() Condition {
 // syntactically invalid.
 func NewPolicyInvalid(msg string) Condition {
 	return Condition{
-		Type:    string(v1alpha2.PolicyConditionAccepted),
+		Type:    string(v1.PolicyConditionAccepted),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(v1alpha2.PolicyReasonInvalid),
+		Reason:  string(v1.PolicyReasonInvalid),
 		Message: msg,
 	}
 }
@@ -970,9 +969,9 @@ func NewPolicyInvalid(msg string) Condition {
 // another Policy and a merge is not possible.
 func NewPolicyConflicted(msg string) Condition {
 	return Condition{
-		Type:    string(v1alpha2.PolicyConditionAccepted),
+		Type:    string(v1.PolicyConditionAccepted),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(v1alpha2.PolicyReasonConflicted),
+		Reason:  string(v1.PolicyReasonConflicted),
 		Message: msg,
 	}
 }
@@ -981,9 +980,9 @@ func NewPolicyConflicted(msg string) Condition {
 // resource does not exist or can not be attached to.
 func NewPolicyTargetNotFound(msg string) Condition {
 	return Condition{
-		Type:    string(v1alpha2.PolicyConditionAccepted),
+		Type:    string(v1.PolicyConditionAccepted),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(v1alpha2.PolicyReasonTargetNotFound),
+		Reason:  string(v1.PolicyReasonTargetNotFound),
 		Message: msg,
 	}
 }
@@ -992,7 +991,7 @@ func NewPolicyTargetNotFound(msg string) Condition {
 // the ancestor status list has reached the maximum size of 16.
 func NewPolicyAncestorLimitReached(policyType string, policyName string) Condition {
 	return Condition{
-		Type:    string(v1alpha2.PolicyConditionAccepted),
+		Type:    string(v1.PolicyConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(PolicyReasonAncestorLimitReached),
 		Message: fmt.Sprintf("%s %s %s", PolicyMessageAncestorLimitReached, policyType, policyName),
@@ -1003,7 +1002,7 @@ func NewPolicyAncestorLimitReached(policyType string, policyName string) Conditi
 // because the target resource has a conflict with another resource when attempting to apply this policy.
 func NewPolicyNotAcceptedTargetConflict(msg string) Condition {
 	return Condition{
-		Type:    string(v1alpha2.PolicyConditionAccepted),
+		Type:    string(v1.PolicyConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(PolicyReasonTargetConflict),
 		Message: msg,
@@ -1014,7 +1013,7 @@ func NewPolicyNotAcceptedTargetConflict(msg string) Condition {
 // because it relies on the NginxProxy configuration which is missing or invalid.
 func NewPolicyNotAcceptedNginxProxyNotSet(msg string) Condition {
 	return Condition{
-		Type:    string(v1alpha2.PolicyConditionAccepted),
+		Type:    string(v1.PolicyConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(PolicyReasonNginxProxyConfigNotSet),
 		Message: msg,
@@ -1102,7 +1101,7 @@ func NewBackendTLSPolicyInvalidKind(message string) Condition {
 // CACertificateRefs in the BackendTLSPolicy are invalid.
 func NewBackendTLSPolicyNoValidCACertificate(message string) Condition {
 	return Condition{
-		Type:    string(v1alpha2.PolicyConditionAccepted),
+		Type:    string(v1.PolicyConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(BackendTLSPolicyReasonNoValidCACertificate),
 		Message: message,

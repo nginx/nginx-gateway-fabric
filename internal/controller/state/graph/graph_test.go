@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
-	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -57,22 +56,22 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	btp := BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
+		Source: &gatewayv1.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "btp",
 				Namespace: "service",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 							Group: "",
 							Kind:  "Service",
 							Name:  "foo",
 						},
 					},
 				},
-				Validation: v1alpha3.BackendTLSPolicyValidation{
+				Validation: gatewayv1.BackendTLSPolicyValidation{
 					Hostname: "foo.example.com",
 					CACertificateRefs: []v1alpha2.LocalObjectReference{
 						{
@@ -96,7 +95,7 @@ func TestBuildGraph(t *testing.T) {
 			Kind:      (*gatewayv1.Kind)(helpers.GetPointer("Service")),
 			Name:      "foo",
 			Namespace: (*gatewayv1.Namespace)(helpers.GetPointer("service")),
-			Port:      (*gatewayv1.PortNumber)(helpers.GetPointer[int32](80)),
+			Port:      helpers.GetPointer[gatewayv1.PortNumber](80),
 		},
 	}
 
@@ -105,7 +104,7 @@ func TestBuildGraph(t *testing.T) {
 			Kind:      (*gatewayv1.Kind)(helpers.GetPointer("Service")),
 			Name:      "foo2",
 			Namespace: (*gatewayv1.Namespace)(helpers.GetPointer("test")),
-			Port:      (*gatewayv1.PortNumber)(helpers.GetPointer[int32](80)),
+			Port:      helpers.GetPointer[gatewayv1.PortNumber](80),
 		},
 	}
 
@@ -410,7 +409,7 @@ func TestBuildGraph(t *testing.T) {
 							Name:     "listener-443-1",
 							Hostname: (*gatewayv1.Hostname)(helpers.GetPointer("*.example.com")),
 							Port:     443,
-							TLS: &gatewayv1.GatewayTLSConfig{
+							TLS: &gatewayv1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(gatewayv1.TLSModeTerminate),
 								CertificateRefs: []gatewayv1.SecretObjectReference{
 									{
@@ -427,7 +426,7 @@ func TestBuildGraph(t *testing.T) {
 							Hostname: (*gatewayv1.Hostname)(helpers.GetPointer("*.example.org")),
 							Port:     443,
 							Protocol: gatewayv1.TLSProtocolType,
-							TLS:      &gatewayv1.GatewayTLSConfig{Mode: helpers.GetPointer(gatewayv1.TLSModePassthrough)},
+							TLS:      &gatewayv1.ListenerTLSConfig{Mode: helpers.GetPointer(gatewayv1.TLSModePassthrough)},
 							AllowedRoutes: &gatewayv1.AllowedRoutes{
 								Kinds: []gatewayv1.RouteGroupKind{
 									{Kind: kinds.TLSRoute, Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
@@ -439,7 +438,7 @@ func TestBuildGraph(t *testing.T) {
 							Hostname: (*gatewayv1.Hostname)(helpers.GetPointer("*.example.org")),
 							Port:     8443,
 							Protocol: gatewayv1.TLSProtocolType,
-							TLS:      &gatewayv1.GatewayTLSConfig{Mode: helpers.GetPointer(gatewayv1.TLSModePassthrough)},
+							TLS:      &gatewayv1.ListenerTLSConfig{Mode: helpers.GetPointer(gatewayv1.TLSModePassthrough)},
 						},
 					},
 				},
@@ -715,7 +714,7 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(secret):     secret,
 				client.ObjectKeyFromObject(plusSecret): plusSecret,
 			},
-			BackendTLSPolicies: map[types.NamespacedName]*v1alpha3.BackendTLSPolicy{
+			BackendTLSPolicies: map[types.NamespacedName]*gatewayv1.BackendTLSPolicy{
 				client.ObjectKeyFromObject(btp.Source): btp.Source,
 			},
 			ConfigMaps: map[types.NamespacedName]*v1.ConfigMap{
@@ -1674,13 +1673,13 @@ func TestIsNGFPolicyRelevant(t *testing.T) {
 		return mod(getGraph())
 	}
 
-	getPolicy := func(ref v1alpha2.LocalPolicyTargetReference) policies.Policy {
+	getPolicy := func(ref gatewayv1.LocalPolicyTargetReference) policies.Policy {
 		return &policiesfakes.FakePolicy{
 			GetNamespaceStub: func() string {
 				return testNs
 			},
-			GetTargetRefsStub: func() []v1alpha2.LocalPolicyTargetReference {
-				return []v1alpha2.LocalPolicyTargetReference{ref}
+			GetTargetRefsStub: func() []gatewayv1.LocalPolicyTargetReference {
+				return []gatewayv1.LocalPolicyTargetReference{ref}
 			},
 		}
 	}

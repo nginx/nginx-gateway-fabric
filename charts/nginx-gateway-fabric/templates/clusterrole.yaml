@@ -76,8 +76,8 @@ rules:
   - httproutes
   - referencegrants
   - grpcroutes
-{{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - backendtlspolicies
+{{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - tlsroutes
 {{- end }}
   verbs:
@@ -90,8 +90,8 @@ rules:
   - gateways/status
   - gatewayclasses/status
   - grpcroutes/status
-{{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - backendtlspolicies/status
+{{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - tlsroutes/status
 {{- end }}
   verbs:

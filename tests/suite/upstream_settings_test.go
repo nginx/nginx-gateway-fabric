@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
@@ -96,7 +95,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 					uspolicyNsName,
 					gatewayName,
 					metav1.ConditionTrue,
-					v1alpha2.PolicyReasonAccepted,
+					gatewayv1.PolicyReasonAccepted,
 				)
 				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
 			}
@@ -271,15 +270,15 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		})
 
 		DescribeTable("upstreamSettingsPolicy status is set as expected",
-			func(name string, status metav1.ConditionStatus, condReason v1alpha2.PolicyConditionReason) {
+			func(name string, status metav1.ConditionStatus, condReason gatewayv1.PolicyConditionReason) {
 				uspolicyNsName := types.NamespacedName{Name: name, Namespace: namespace}
 				Expect(waitForUSPolicyStatus(uspolicyNsName, gatewayName, status, condReason)).To(Succeed())
 			},
-			Entry("uspolicy merge-usp-1", "merge-usp-1", metav1.ConditionTrue, v1alpha2.PolicyReasonAccepted),
-			Entry("uspolicy merge-usp-2", "merge-usp-2", metav1.ConditionTrue, v1alpha2.PolicyReasonAccepted),
-			Entry("uspolicy merge-usp-3", "z-merge-usp-3", metav1.ConditionFalse, v1alpha2.PolicyReasonConflicted),
-			Entry("uspolicy a-usp-wins", "a-usp-wins", metav1.ConditionTrue, v1alpha2.PolicyReasonAccepted),
-			Entry("uspolicy z-usp", "z-usp", metav1.ConditionFalse, v1alpha2.PolicyReasonConflicted),
+			Entry("uspolicy merge-usp-1", "merge-usp-1", metav1.ConditionTrue, gatewayv1.PolicyReasonAccepted),
+			Entry("uspolicy merge-usp-2", "merge-usp-2", metav1.ConditionTrue, gatewayv1.PolicyReasonAccepted),
+			Entry("uspolicy merge-usp-3", "z-merge-usp-3", metav1.ConditionFalse, gatewayv1.PolicyReasonConflicted),
+			Entry("uspolicy a-usp-wins", "a-usp-wins", metav1.ConditionTrue, gatewayv1.PolicyReasonAccepted),
+			Entry("uspolicy z-usp", "z-usp", metav1.ConditionFalse, gatewayv1.PolicyReasonConflicted),
 		)
 
 		Context("verify working traffic", func() {
@@ -412,7 +411,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				uspolicyNsName,
 				gatewayName,
 				metav1.ConditionFalse,
-				v1alpha2.PolicyReasonTargetNotFound,
+				gatewayv1.PolicyReasonTargetNotFound,
 			)).To(Succeed())
 
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
@@ -447,7 +446,7 @@ func waitForUSPolicyStatus(
 	usPolicyNsName types.NamespacedName,
 	gatewayName string,
 	condStatus metav1.ConditionStatus,
-	condReason v1alpha2.PolicyConditionReason,
+	condReason gatewayv1.PolicyConditionReason,
 ) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout*2)
 	defer cancel()
@@ -501,7 +500,7 @@ func waitForUSPolicyStatus(
 }
 
 func ancestorMustEqualGatewayRef(
-	ancestor v1alpha2.PolicyAncestorStatus,
+	ancestor gatewayv1.PolicyAncestorStatus,
 	gatewayName string,
 	namespace string,
 ) error {

@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
+	v1a "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 type FakePolicy struct {
@@ -153,15 +153,15 @@ type FakePolicy struct {
 	getOwnerReferencesReturnsOnCall map[int]struct {
 		result1 []v1.OwnerReference
 	}
-	GetPolicyStatusStub        func() v1alpha2.PolicyStatus
+	GetPolicyStatusStub        func() v1a.PolicyStatus
 	getPolicyStatusMutex       sync.RWMutex
 	getPolicyStatusArgsForCall []struct {
 	}
 	getPolicyStatusReturns struct {
-		result1 v1alpha2.PolicyStatus
+		result1 v1a.PolicyStatus
 	}
 	getPolicyStatusReturnsOnCall map[int]struct {
-		result1 v1alpha2.PolicyStatus
+		result1 v1a.PolicyStatus
 	}
 	GetResourceVersionStub        func() string
 	getResourceVersionMutex       sync.RWMutex
@@ -183,15 +183,15 @@ type FakePolicy struct {
 	getSelfLinkReturnsOnCall map[int]struct {
 		result1 string
 	}
-	GetTargetRefsStub        func() []v1alpha2.LocalPolicyTargetReference
+	GetTargetRefsStub        func() []v1a.LocalPolicyTargetReference
 	getTargetRefsMutex       sync.RWMutex
 	getTargetRefsArgsForCall []struct {
 	}
 	getTargetRefsReturns struct {
-		result1 []v1alpha2.LocalPolicyTargetReference
+		result1 []v1a.LocalPolicyTargetReference
 	}
 	getTargetRefsReturnsOnCall map[int]struct {
-		result1 []v1alpha2.LocalPolicyTargetReference
+		result1 []v1a.LocalPolicyTargetReference
 	}
 	GetUIDStub        func() types.UID
 	getUIDMutex       sync.RWMutex
@@ -263,10 +263,10 @@ type FakePolicy struct {
 	setOwnerReferencesArgsForCall []struct {
 		arg1 []v1.OwnerReference
 	}
-	SetPolicyStatusStub        func(v1alpha2.PolicyStatus)
+	SetPolicyStatusStub        func(v1a.PolicyStatus)
 	setPolicyStatusMutex       sync.RWMutex
 	setPolicyStatusArgsForCall []struct {
-		arg1 v1alpha2.PolicyStatus
+		arg1 v1a.PolicyStatus
 	}
 	SetResourceVersionStub        func(string)
 	setResourceVersionMutex       sync.RWMutex
@@ -1029,7 +1029,7 @@ func (fake *FakePolicy) GetOwnerReferencesReturnsOnCall(i int, result1 []v1.Owne
 	}{result1}
 }
 
-func (fake *FakePolicy) GetPolicyStatus() v1alpha2.PolicyStatus {
+func (fake *FakePolicy) GetPolicyStatus() v1a.PolicyStatus {
 	fake.getPolicyStatusMutex.Lock()
 	ret, specificReturn := fake.getPolicyStatusReturnsOnCall[len(fake.getPolicyStatusArgsForCall)]
 	fake.getPolicyStatusArgsForCall = append(fake.getPolicyStatusArgsForCall, struct {
@@ -1053,32 +1053,32 @@ func (fake *FakePolicy) GetPolicyStatusCallCount() int {
 	return len(fake.getPolicyStatusArgsForCall)
 }
 
-func (fake *FakePolicy) GetPolicyStatusCalls(stub func() v1alpha2.PolicyStatus) {
+func (fake *FakePolicy) GetPolicyStatusCalls(stub func() v1a.PolicyStatus) {
 	fake.getPolicyStatusMutex.Lock()
 	defer fake.getPolicyStatusMutex.Unlock()
 	fake.GetPolicyStatusStub = stub
 }
 
-func (fake *FakePolicy) GetPolicyStatusReturns(result1 v1alpha2.PolicyStatus) {
+func (fake *FakePolicy) GetPolicyStatusReturns(result1 v1a.PolicyStatus) {
 	fake.getPolicyStatusMutex.Lock()
 	defer fake.getPolicyStatusMutex.Unlock()
 	fake.GetPolicyStatusStub = nil
 	fake.getPolicyStatusReturns = struct {
-		result1 v1alpha2.PolicyStatus
+		result1 v1a.PolicyStatus
 	}{result1}
 }
 
-func (fake *FakePolicy) GetPolicyStatusReturnsOnCall(i int, result1 v1alpha2.PolicyStatus) {
+func (fake *FakePolicy) GetPolicyStatusReturnsOnCall(i int, result1 v1a.PolicyStatus) {
 	fake.getPolicyStatusMutex.Lock()
 	defer fake.getPolicyStatusMutex.Unlock()
 	fake.GetPolicyStatusStub = nil
 	if fake.getPolicyStatusReturnsOnCall == nil {
 		fake.getPolicyStatusReturnsOnCall = make(map[int]struct {
-			result1 v1alpha2.PolicyStatus
+			result1 v1a.PolicyStatus
 		})
 	}
 	fake.getPolicyStatusReturnsOnCall[i] = struct {
-		result1 v1alpha2.PolicyStatus
+		result1 v1a.PolicyStatus
 	}{result1}
 }
 
@@ -1188,7 +1188,7 @@ func (fake *FakePolicy) GetSelfLinkReturnsOnCall(i int, result1 string) {
 	}{result1}
 }
 
-func (fake *FakePolicy) GetTargetRefs() []v1alpha2.LocalPolicyTargetReference {
+func (fake *FakePolicy) GetTargetRefs() []v1a.LocalPolicyTargetReference {
 	fake.getTargetRefsMutex.Lock()
 	ret, specificReturn := fake.getTargetRefsReturnsOnCall[len(fake.getTargetRefsArgsForCall)]
 	fake.getTargetRefsArgsForCall = append(fake.getTargetRefsArgsForCall, struct {
@@ -1212,32 +1212,32 @@ func (fake *FakePolicy) GetTargetRefsCallCount() int {
 	return len(fake.getTargetRefsArgsForCall)
 }
 
-func (fake *FakePolicy) GetTargetRefsCalls(stub func() []v1alpha2.LocalPolicyTargetReference) {
+func (fake *FakePolicy) GetTargetRefsCalls(stub func() []v1a.LocalPolicyTargetReference) {
 	fake.getTargetRefsMutex.Lock()
 	defer fake.getTargetRefsMutex.Unlock()
 	fake.GetTargetRefsStub = stub
 }
 
-func (fake *FakePolicy) GetTargetRefsReturns(result1 []v1alpha2.LocalPolicyTargetReference) {
+func (fake *FakePolicy) GetTargetRefsReturns(result1 []v1a.LocalPolicyTargetReference) {
 	fake.getTargetRefsMutex.Lock()
 	defer fake.getTargetRefsMutex.Unlock()
 	fake.GetTargetRefsStub = nil
 	fake.getTargetRefsReturns = struct {
-		result1 []v1alpha2.LocalPolicyTargetReference
+		result1 []v1a.LocalPolicyTargetReference
 	}{result1}
 }
 
-func (fake *FakePolicy) GetTargetRefsReturnsOnCall(i int, result1 []v1alpha2.LocalPolicyTargetReference) {
+func (fake *FakePolicy) GetTargetRefsReturnsOnCall(i int, result1 []v1a.LocalPolicyTargetReference) {
 	fake.getTargetRefsMutex.Lock()
 	defer fake.getTargetRefsMutex.Unlock()
 	fake.GetTargetRefsStub = nil
 	if fake.getTargetRefsReturnsOnCall == nil {
 		fake.getTargetRefsReturnsOnCall = make(map[int]struct {
-			result1 []v1alpha2.LocalPolicyTargetReference
+			result1 []v1a.LocalPolicyTargetReference
 		})
 	}
 	fake.getTargetRefsReturnsOnCall[i] = struct {
-		result1 []v1alpha2.LocalPolicyTargetReference
+		result1 []v1a.LocalPolicyTargetReference
 	}{result1}
 }
 
@@ -1693,10 +1693,10 @@ func (fake *FakePolicy) SetOwnerReferencesArgsForCall(i int) []v1.OwnerReference
 	return argsForCall.arg1
 }
 
-func (fake *FakePolicy) SetPolicyStatus(arg1 v1alpha2.PolicyStatus) {
+func (fake *FakePolicy) SetPolicyStatus(arg1 v1a.PolicyStatus) {
 	fake.setPolicyStatusMutex.Lock()
 	fake.setPolicyStatusArgsForCall = append(fake.setPolicyStatusArgsForCall, struct {
-		arg1 v1alpha2.PolicyStatus
+		arg1 v1a.PolicyStatus
 	}{arg1})
 	stub := fake.SetPolicyStatusStub
 	fake.recordInvocation("SetPolicyStatus", []interface{}{arg1})
@@ -1712,13 +1712,13 @@ func (fake *FakePolicy) SetPolicyStatusCallCount() int {
 	return len(fake.setPolicyStatusArgsForCall)
 }
 
-func (fake *FakePolicy) SetPolicyStatusCalls(stub func(v1alpha2.PolicyStatus)) {
+func (fake *FakePolicy) SetPolicyStatusCalls(stub func(v1a.PolicyStatus)) {
 	fake.setPolicyStatusMutex.Lock()
 	defer fake.setPolicyStatusMutex.Unlock()
 	fake.SetPolicyStatusStub = stub
 }
 
-func (fake *FakePolicy) SetPolicyStatusArgsForCall(i int) v1alpha2.PolicyStatus {
+func (fake *FakePolicy) SetPolicyStatusArgsForCall(i int) v1a.PolicyStatus {
 	fake.setPolicyStatusMutex.RLock()
 	defer fake.setPolicyStatusMutex.RUnlock()
 	argsForCall := fake.setPolicyStatusArgsForCall[i]
