@@ -145,7 +145,7 @@ kubectl delete -f tests/conformance/conformance-rbac.yaml
 The key differences when running conformance tests on OpenShift vs. standard Kubernetes:
 
 1. **SCC Permissions:** Required for coredns and infrastructure pods
-2. **Service Type:** Must use ClusterIP to avoid DNS issues
+2. **Service Type:** Must use `ClusterIP` to avoid DNS issues
 3. **Architecture:** Explicit amd64 build required when building from arm64 machines
 4. **Test Skips:** HTTPRouteServiceTypes must be skipped due to EndpointSlice restrictions
 5. **Image Registry:** Images must be pushed to a registry accessible by OpenShift
