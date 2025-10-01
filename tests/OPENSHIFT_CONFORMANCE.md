@@ -93,7 +93,7 @@ make -C tests run-conformance-tests-openshift \
 
 This target:
 
-- Applies the RBAC configuration automatically
+- Applies the RBAC configuration
 - Runs only the extended features supported on the GatewayAPIs shipped with OpenShift
 - Skips `HTTPRouteServiceTypes` test (incompatible with OpenShift)
 - Pulls the image from your registry
