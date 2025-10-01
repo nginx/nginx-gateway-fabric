@@ -232,7 +232,7 @@ func TestGenerate(t *testing.T) {
 
 	g.Expect(files[9].Meta.Name).To(Equal("/etc/nginx/main-includes/main.conf"))
 	mainConfStr := string(files[9].Contents)
-	g.Expect(mainConfStr).To(ContainSubstring("load_module modules/ngx_otel_module.so;"))
+	g.Expect(mainConfStr).To(ContainSubstring("load_module /usr/lib/nginx/modules/ngx_otel_module.so;"))
 	g.Expect(mainConfStr).To(ContainSubstring("include /etc/nginx/includes/main_snippet1.conf;"))
 	g.Expect(mainConfStr).To(ContainSubstring("include /etc/nginx/includes/main_snippet2.conf;"))
 
