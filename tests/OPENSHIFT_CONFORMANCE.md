@@ -9,9 +9,10 @@ This document describes the steps required to run Gateway API conformance tests 
 - `kubectl` configured to access your OpenShift cluster
 - Docker/Podman for building images
 - Access to a container registry (e.g., quay.io)
-- NGF should be preinstalled on the cluster before running the tests. You can install using the Operator or Helm. Note:
+- NGF should be preinstalled on the cluster before running the tests. You can install using the Operator or Helm.
+**Note** :
   - the NGINX service type needs to be set to `ClusterIP`
-  - the NGINX image referenced in the `NginxProxy` resource needs to be accessible to the cluster
+  - the NGINX image referenced in the NginxProxy needs to be accessible to the cluster
 
 ## Overview
 
