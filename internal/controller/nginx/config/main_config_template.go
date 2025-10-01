@@ -2,7 +2,7 @@ package config
 
 const mainConfigTemplateText = `
 {{ if .Conf.Telemetry.Endpoint -}}
-load_module modules/ngx_otel_module.so;
+load_module /usr/lib/nginx/modules/ngx_otel_module.so;
 {{ end -}}
 
 error_log stderr {{ .Conf.Logging.ErrorLevel }};
