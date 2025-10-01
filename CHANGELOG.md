@@ -10,7 +10,7 @@ _October 1, 2025_
 
 BUG FIXES:
 
-- Update alpine packages libexpat and tiff to fix cves. [3973](https://github.com/nginx/nginx-gateway-fabric/pull/3973)
+- Update Alpine packages libexpat and tiff to fix cves. [3973](https://github.com/nginx/nginx-gateway-fabric/pull/3973)
 
 HELM CHART:
 
