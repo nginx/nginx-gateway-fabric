@@ -12,7 +12,7 @@ This document describes the steps required to run Gateway API conformance tests 
 - NGF should be preinstalled on the cluster before running the tests. You can install using the Operator or Helm.
 **Note** :
   - the NGINX service type needs to be set to `ClusterIP`
-  - the NGINX image referenced in the NginxProxy needs to be accessible to the cluster
+  - the NGINX image referenced in the `NginxProxy` resource needs to be accessible to the cluster
 
 ## Overview
 
