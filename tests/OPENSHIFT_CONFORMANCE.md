@@ -53,7 +53,7 @@ For **Gateway API v1.2.1**, you must update tests/conformance/conformance_test.g
 
 ## Step 2: Build and Push Conformance Test Image
 
-OpenShift typically runs on amd64 architecture. If building from an arm64 machine, ensure you build for the correct architecture.
+OpenShift typically runs on amd64 architecture. If you are building images from an arm64 machine, make sure to specify the target platform so the image is built for the correct architecture
 
 1. Build the conformance test runner image for amd64:
 
