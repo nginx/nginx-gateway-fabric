@@ -6,16 +6,16 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 635b3fcd6e643f4bd24ebbd4c901619a030c4bc0
-- Date: 2025-09-15T17:56:13Z
+- Commit: 9010072ecd34a8fa99bfdd3d7580c9d725fb063e
+- Date: 2025-10-01T09:39:27Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.33.4-gke.1036000
+- k8s version: v1.33.4-gke.1172000
 - vCPUs per node: 16
-- RAM per node: 65851528Ki
+- RAM per node: 65851524Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -24,21 +24,21 @@ GKE Cluster:
 
 ### Event Batch Processing
 
-- Total: 207
-- Average Time: 23ms
+- Total: 249
+- Average Time: 13ms
 - Event Batch Processing distribution:
-	- 500.0ms: 202
-	- 1000.0ms: 207
-	- 5000.0ms: 207
-	- 10000.0ms: 207
-	- 30000.0ms: 207
-	- +Infms: 207
+	- 500.0ms: 249
+	- 1000.0ms: 249
+	- 5000.0ms: 249
+	- 10000.0ms: 249
+	- 30000.0ms: 249
+	- +Infms: 249
 
 ### Errors
 
 - NGF errors: 2
 - NGF container restarts: 0
-- NGINX errors: 0
+- NGINX errors: 1
 - NGINX container restarts: 0
 
 ### Graphs and Logs
@@ -50,21 +50,21 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 269
-- Average Time: 16ms
+- Total: 296
+- Average Time: 13ms
 - Event Batch Processing distribution:
-	- 500.0ms: 263
-	- 1000.0ms: 269
-	- 5000.0ms: 269
-	- 10000.0ms: 269
-	- 30000.0ms: 269
-	- +Infms: 269
+	- 500.0ms: 295
+	- 1000.0ms: 296
+	- 5000.0ms: 296
+	- 10000.0ms: 296
+	- 30000.0ms: 296
+	- +Infms: 296
 
 ### Errors
 
 - NGF errors: 3
 - NGF container restarts: 0
-- NGINX errors: 0
+- NGINX errors: 1
 - NGINX container restarts: 0
 
 ### Graphs and Logs
@@ -77,9 +77,9 @@ The logs are attached only if there are errors.
 ### Event Batch Processing
 
 - Total: 1009
-- Average Time: 600ms
+- Average Time: 158ms
 - Event Batch Processing distribution:
-	- 500.0ms: 295
+	- 500.0ms: 938
 	- 1000.0ms: 1009
 	- 5000.0ms: 1009
 	- 10000.0ms: 1009
@@ -102,15 +102,15 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 46
-- Average Time: 405ms
+- Total: 104
+- Average Time: 126ms
 - Event Batch Processing distribution:
-	- 500.0ms: 29
-	- 1000.0ms: 46
-	- 5000.0ms: 46
-	- 10000.0ms: 46
-	- 30000.0ms: 46
-	- +Infms: 46
+	- 500.0ms: 98
+	- 1000.0ms: 104
+	- 5000.0ms: 104
+	- 10000.0ms: 104
+	- 30000.0ms: 104
+	- +Infms: 104
 
 ### Errors
 
@@ -127,20 +127,20 @@ The logs are attached only if there are errors.
 ## Test TestScale_HTTPMatches
 
 ```text
-Requests      [total, rate, throughput]         29999, 1000.01, 999.97
-Duration      [total, attack, wait]             30s, 29.999s, 1.057ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  751.608µs, 1.002ms, 965.548µs, 1.092ms, 1.151ms, 1.335ms, 22.262ms
-Bytes In      [total, mean]                     4829839, 161.00
+Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
+Duration      [total, attack, wait]             30s, 29.999s, 790.118µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  731.157µs, 932.108µs, 908.756µs, 1.007ms, 1.048ms, 1.214ms, 12.628ms
+Bytes In      [total, mean]                     4800000, 160.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
-Status Codes  [code:count]                      200:29999  
+Status Codes  [code:count]                      200:30000  
 Error Set:
 ```
 ```text
-Requests      [total, rate, throughput]         30000, 1000.03, 1000.00
-Duration      [total, attack, wait]             30s, 29.999s, 1.059ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  823.833µs, 1.06ms, 1.039ms, 1.168ms, 1.227ms, 1.393ms, 16.671ms
-Bytes In      [total, mean]                     4830000, 161.00
+Requests      [total, rate, throughput]         30000, 1000.04, 1000.00
+Duration      [total, attack, wait]             30s, 29.999s, 1.043ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  815.619µs, 1.028ms, 1.005ms, 1.131ms, 1.184ms, 1.342ms, 14.667ms
+Bytes In      [total, mean]                     4800000, 160.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:30000  
