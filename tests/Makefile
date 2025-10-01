@@ -13,9 +13,11 @@ NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY = Never## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
 SUPPORTED_EXTENDED_FEATURES = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,GatewayAddressEmpty,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteBackendProtocolWebSocket,HTTPRouteParentRefPort,HTTPRouteDestinationPortMatching,GatewayStaticAddresses
+SUPPORTED_EXTENDED_FEATURES_OPENSHIFT = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,GatewayAddressEmpty,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteBackendProtocolWebSocket,HTTPRouteParentRefPort,HTTPRouteDestinationPortMatching
 STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC
 EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
+SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes # Doesn't work on OpenShift due to security restrictions
 SKIP_TESTS =
 CEL_TEST_TARGET =
 
@@ -40,7 +42,7 @@ update-go-modules: ## Update the gateway-api go modules to latest main version
 
 .PHONY: build-test-runner-image
 build-test-runner-image: ## Build conformance test runner image
-	docker build -t $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) -f conformance/Dockerfile .
+	docker build --platform $(GOOS)/$(GOARCH) -t $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) -f conformance/Dockerfile .
 
 .PHONY: build-crossplane-image
 build-crossplane-image: ## Build the crossplane image
@@ -56,6 +58,26 @@ run-conformance-tests: ## Run conformance tests
 		--restart=Never -- sh -c "go test -v . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--report-output=output.txt; cat output.txt" | tee output.txt
+	./scripts/check-pod-exit-code.sh
+	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml
+	grpc_core_result=`yq '.profiles[0].core.result' conformance-profile.yaml`; \
+	http_core_result=`yq '.profiles[1].core.result' conformance-profile.yaml`; \
+	http_extended_result=`yq '.profiles[1].extended.result' conformance-profile.yaml`; \
+	if [ "$$grpc_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
+		exit 0; \
+	else \
+		exit 2; \
+	fi
+
+.PHONY: run-conformance-tests-openshift
+run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips tests incompatible with OpenShift)
+	kubectl apply -f conformance/conformance-rbac.yaml
+	kubectl run -i conformance \
+		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Always \
+		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
+		--restart=Never -- sh -c "go test -v . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES_OPENSHIFT) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS_OPENSHIFT) --conformance-profiles=$(CONFORMANCE_PROFILES) \
+								--service-type=$(GW_SERVICE_TYPE) --report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml
 	rm output.txt
