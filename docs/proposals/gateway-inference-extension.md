@@ -104,6 +104,14 @@ InferenceObjective represents the desired state of a specific model use case. As
 
 It is my impression that this API is purely for the EPP to handle, and does not need to be handled by NGINX Gateway Fabric.
 
+### Inference Status
+
+Each InferencePool publishes two conditions that together describe its overall state. The first is the `Accepted` condition, which communicates whether the pool is referenced by an HTTPRoute that the Gateway has accepted. When the route is not accepted, this condition is explicitly set to `False` with the reason `InferencePoolReasonHTTPRouteNotAccepted`, making it clear that the Gateway rejected the route referencing the pool.
+
+The second is the `ResolvedRefs` condition, which reflects whether the `EndpointPickerRef` associated with the pool is valid. If it is misconfigured such as being an unsupported kind, left undefined, or pointing to a non-existent Service, this condition is set to `False` with the reason `InferencePoolReasonInvalidExtensionRef`.
+
+The status of an InferencePool records the Gateway as its parent reference and associates it with the relevant conditions; when all conditions are `True`, the pool is valid and traffic can be directed to it.
+
 ### Personas and Processes
 
 Two new personas are introduced, the `Inference Platform Owner/Admin` and `Inference Workload Owner`.
