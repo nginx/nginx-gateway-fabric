@@ -4,6 +4,32 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.1.3
+
+_October 1, 2025_
+
+BUG FIXES:
+
+- Update Alpine packages libexpat and tiff to fix cves. [3973](https://github.com/nginx/nginx-gateway-fabric/pull/3973)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.1.3
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.29.1`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.3.1`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.1.3`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.1.3`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.1.3`
+
 ## Release 2.1.2
 
 _September 25, 2025_
