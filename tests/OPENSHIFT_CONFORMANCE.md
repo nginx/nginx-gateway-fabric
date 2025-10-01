@@ -47,9 +47,7 @@ To run conformance tests that match the exact Gateway API version on OpenShift:
 
 2. Update test configuration to remove features not available in the OCP-installed Gateway API version.
 
-   **For Gateway API v1.2.1 specifically:**
-
-   Update `tests/conformance/conformance_test.go` to remove references to `v1beta1.GatewayStaticAddresses`, as this feature was added in Gateway API v1.3.0. The test will fail to compile in a v1.2.1 environment if this reference is not removed.
+For **Gateway API v1.2.1**, you must update tests/conformance/conformance_test.go to eliminate references to v1beta1.GatewayStaticAddresses. This field was only introduced in Gateway API v1.3.0, and leaving it in place will cause the test to fail to compile in a v1.2.1 environment.
 
    **Note:** This is separate from `SUPPORTED_EXTENDED_FEATURES_OPENSHIFT` in the Makefile, which controls which features are tested. This change is required because the conformance test code itself references v1.3.0+ features that don't exist in v1.2.1.
 
