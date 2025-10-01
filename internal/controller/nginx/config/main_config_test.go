@@ -20,7 +20,7 @@ func TestExecuteMainConfig_Telemetry(t *testing.T) {
 			Endpoint: "endpoint",
 		},
 	}
-	loadModuleDirective := "load_module /usr/lib/nginx/modules/ngx_otel_module.so;"
+	loadModuleDirective := "load_module modules/ngx_otel_module.so;"
 
 	tests := []struct {
 		name                   string
