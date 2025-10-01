@@ -8,7 +8,7 @@ ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:01a32246761b9bbe47a6a29bcd8ca6e9b6e331b3bdfa372d8987b622276f7025 AS ubi9-packages
 
-FROM redhat/ubi9-minimal:9.6 AS ubi-nginx
+FROM redhat/ubi9:9.6 AS ubi-nginx
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.3.1
@@ -40,11 +40,11 @@ RUN --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_s
     && groupadd -g 1001 nginx \
     && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
     # Install NGINX and modules including OTEL
-    && microdnf --nodocs install -y nginx nginx-module-njs nginx-module-otel \
+    && dnf --nodocs install -y nginx nginx-module-njs nginx-module-otel \
     # Install nginx-agent
-    && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
+    && dnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
     # Clean up (only remove what we can)
-    && microdnf clean all \
+    && dnf clean all \
     && rm -rf /var/cache/yum
 
 # Configure directories and logging

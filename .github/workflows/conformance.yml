@@ -133,9 +133,6 @@ jobs:
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
-          secrets: |
-            ${{ contains(inputs.image, 'plus') && format('"nginx-repo.crt={0}"', secrets.NGINX_CRT) || '' }}
-            ${{ contains(inputs.image, 'plus') && format('"nginx-repo.key={0}"', secrets.NGINX_KEY) || '' }}
 
       - name: Update Go Modules
         if: ${{ github.event_name == 'schedule' }}
@@ -181,18 +178,12 @@ jobs:
           if [ "${core_result}" == "failure" ] || [ "${extended_result}" == "failure" ]; then echo "Conformance test failed, see above for details." && exit 2; fi
         working-directory: ./tests
 
-      - name: Echo artifact name
-        if: ${{ inputs.enable-experimental }}
-        run: |
-          echo "Artifact name: conformance-profile-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}"
-
       - name: Upload profile to GitHub
         if: ${{ inputs.enable-experimental }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: conformance-profile-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}
           path: ./tests/conformance-profile.yaml
-
 
       - name: Upload profile to release
         if: ${{ inputs.production-release && inputs.enable-experimental }}
