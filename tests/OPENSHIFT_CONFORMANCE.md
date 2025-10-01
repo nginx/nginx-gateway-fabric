@@ -19,7 +19,7 @@ OpenShift has stricter security constraints than standard Kubernetes, requiring 
 
 ## Step 1: Check Gateway API Version
 
-OpenShift ships with Gateway API CRDs pre-installed. Check which version is installed:
+OpenShift ships with Gateway API CRDs pre-installed. To find out which version is installed, run the following command:
 
 ```bash
 kubectl get crd gateways.gateway.networking.k8s.io -o jsonpath='{.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}'
