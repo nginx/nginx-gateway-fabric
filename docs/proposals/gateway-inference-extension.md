@@ -130,7 +130,7 @@ Secure TLS gRPC connection between Endpoint Picker (EPP) and Go Shim Server is i
 
 Since NGF does not provision the EPP, is not in charge of modifying it, and the current [EPP Helm template](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/config/charts/inferencepool/templates/epp-deployment.yaml) does not support providing extra volume/volumeMounts, there is no way to mount a cert on the EPP. Even if specifying extra volume/volumeMounts are allowed through a feature request, the implementation on our side would be hacky and unconventional.
 
-Since the gateway inference project is still in Alpha, and specifically states that the project is not meant to be run in production environments, following suite with all of the other implementations and using an insecure gRPC connection to the EPP will be our current descision. In addition, having a secure gRPC connection to the EPP could be argued to be not necessary for our goal of implementing the basic solution to meet the API's core specifications.
+Given that the gateway inference project remains in `Alpha` and explicitly warns against production use, we will follow existing implementations and use an insecure gRPC connection to the EPP. For our goal of meeting the API’s core specifications with a basic solution, secure gRPC is not strictly required at this stage.
 
 At some point, there may be opportunities for attaching Policies (like a BackendTLSPolicy) to an InferenceModel to secure the NGINX -> AI workload connection, however that is not in scope for now.
 
