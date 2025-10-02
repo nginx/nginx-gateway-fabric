@@ -4,6 +4,90 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.1.4
+
+_October 1, 2025_
+
+BUG FIXES:
+
+- Update Alpine packages libcrpyto3 and libssl3 to fix cves. [3993](https://github.com/nginx/nginx-gateway-fabric/pull/3993)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.1.4
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.29.1`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.3.1`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.1.4`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.1.4`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.1.4`
+
+## Release 2.1.3
+
+_October 1, 2025_
+
+BUG FIXES:
+
+- Update Alpine packages libexpat and tiff to fix cves. [3973](https://github.com/nginx/nginx-gateway-fabric/pull/3973)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.1.3
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.29.1`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.3.1`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.1.3`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.1.3`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.1.3`
+
+## Release 2.1.2
+
+_September 25, 2025_
+
+BUG FIXES:
+
+- Fixes a bug where the subscribe method was incorrectly intercepting initial configuration operations after a ServiceAccountToken rotation and signaling broadcast completion. [3905](https://github.com/nginx/nginx-gateway-fabric/pull/3905)
+- Fixes an issue where a failed configuration reload caused all HTTPRoutes to be marked as invalid (Accepted: false). This led to external-dns removing DNS records even though the configuration had been rolled back. Routes now retain their valid state during reload failures, preventing unnecessary DNS disruptions. [3936](https://github.com/nginx/nginx-gateway-fabric/pull/3936)
+- Adds NGINX image version validation during agent connections to prevent newer config being sent to pods running previous image versions during upgrades. [3928](https://github.com/nginx/nginx-gateway-fabric/pull/3928)
+
+NGINX AGENT BUG FIXES:
+
+- The NGINX Agent v3.3.1 update fixes connection reset issues during config apply by reusing existing connections, adds rollback on failures, and improves logging for more reliable configuration updates. [1261](https://github.com/nginx/agent/pull/1261)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.1.2
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.29.1`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.3.1`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.1.2`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.1.2`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.1.2`
+
 ## Release 2.1.1
 
 _September 3, 2025_

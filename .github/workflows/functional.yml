@@ -87,7 +87,11 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
+<<<<<<< HEAD
           version: v2.12.3 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+=======
+          version: v2.12.4 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+>>>>>>> feat/openshift-support
           args: build --single-target --snapshot --clean
         env:
           TELEMETRY_ENDPOINT: otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317
