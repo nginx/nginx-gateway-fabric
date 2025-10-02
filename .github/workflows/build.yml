@@ -6,6 +6,10 @@ on:
       platforms:
         required: true
         type: string
+      build-os:
+        required: false
+        type: string
+        default: ''
       image:
         required: true
         type: string
@@ -120,12 +124,12 @@ jobs:
           flavor: |
             latest=${{ (inputs.tag != '' && 'true') || 'auto' }}
           tags: |
-            type=semver,pattern={{version}}
-            type=edge
-            type=schedule
-            type=ref,event=pr
-            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.tag == '' }}
-            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=semver,pattern={{version}},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+            type=edge,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+            type=schedule,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+            type=ref,event=pr,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+            type=ref,event=branch,suffix=-rc${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }},enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.tag == '' }}
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
           labels: |
             org.opencontainers.image.documentation=https://docs.nginx.com/nginx-gateway-fabric
             org.opencontainers.image.vendor=NGINX Inc <kubernetes@nginx.com>
@@ -143,7 +147,7 @@ jobs:
       - name: Build Docker Image
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
-          file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || '' }}
+          file: ${{ inputs.build-os != '' && format('build/{0}/Dockerfile{1}', inputs.build-os, inputs.image == 'nginx' && '.nginx' || inputs.image == 'plus' && '.nginxplus' || '') || format('build/Dockerfile{0}', inputs.image == 'nginx' && '.nginx' || inputs.image == 'plus' && '.nginxplus' || '') }}
           context: "."
           target: ${{ inputs.image == 'ngf' && 'goreleaser' || '' }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -151,8 +155,8 @@ jobs:
           annotations: ${{ steps.meta.outputs.annotations }}
           push: ${{ !inputs.dry_run }}
           platforms: ${{ inputs.platforms }}
-          cache-from: type=gha,scope=${{ inputs.image }}
-          cache-to: type=gha,scope=${{ inputs.image }},mode=max
+          cache-from: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          cache-to: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }},mode=max
           pull: true
           no-cache: ${{ github.event_name != 'pull_request' }}
           sbom: true
