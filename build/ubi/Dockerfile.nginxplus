@@ -59,7 +59,7 @@ RUN mkdir -p /usr/lib/nginx/modules /var/run/nginx /usr/lib64/nginx/modules \
     # Forward request and error logs to docker log collector
     && ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log \
-    && mv /usr/lib64/nginx/modules/ngx_* /usr/lib/nginx/modules/
+    && cp /usr/lib64/nginx/modules/ngx_* /usr/lib/nginx/modules/
 
 # Copy default html files to a writable location
 RUN mkdir -p /etc/nginx/html \
