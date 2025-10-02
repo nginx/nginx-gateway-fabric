@@ -20,6 +20,10 @@ on:
         required: false
         type: string
         default: ''
+      operator_version:
+        required: false
+        type: string
+        default: ''
       dry_run:
         required: false
         type: boolean
@@ -379,6 +383,23 @@ jobs:
       platforms: "linux/arm64, linux/amd64"
       build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
+      dry_run: ${{ inputs.dry_run || false }}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    permissions:
+      contents: read # for docker/build-push-action to read repo content
+      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+      packages: write # for docker/build-push-action to push to GHCR
+      id-token: write # for docker/login to login to NGINX registry
+    secrets: inherit
+
+  build-operator:
+    name: Build Operator images
+    needs: [vars, binary]
+    uses: ./.github/workflows/build.yml
+    with:
+      image: operator
+      platforms: "linux/arm64, linux/amd64"
+      tag: ${{ inputs.operator_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
       runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:

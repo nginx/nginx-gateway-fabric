@@ -58,6 +58,7 @@ To create a new release, follow these steps:
       - If the supported Gateway API minor version has changed since the last release, add a note to the release notes explaining if the previous version is no longer supported.
       - Merge the release PR once it has received all necessary approvals.
 6. Once you are ready to release, run the [Production Release](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/production-release.yml) workflow with the correct tag e.g. `v2.1.0`. (Note: It is also possible to do a dry run of the production release workflow for verification if required. This will not push the tag, images, and chart, and won't publish the release)
+If this release includes an updated release of our [Operator](https://github.com/nginx/nginx-gateway-fabric/tree/main/operators), include the new version as well e.g. `v1.0.1`
    As a result, the CI/CD pipeline will:
    - Create and push the tag
    - Build NGF, NGINX and NGINX Plus container images with the release tag `X.Y.Z` and push them to the registries.
