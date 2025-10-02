@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -1106,5 +1107,57 @@ func NewBackendTLSPolicyNoValidCACertificate(message string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(BackendTLSPolicyReasonNoValidCACertificate),
 		Message: message,
+	}
+}
+
+// NewInferencePoolAccepted returns a Condition that indicates that the InferencePool is accepted by the Gateway.
+func NewInferencePoolAccepted() Condition {
+	return Condition{
+		Type:    string(inference.InferencePoolConditionAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(inference.InferencePoolConditionAccepted),
+		Message: "InferencePool is accepted by the Gateway.",
+	}
+}
+
+// NewInferencePoolResolvedRefs returns a Condition that
+// indicates that all references in the InferencePool are resolved.
+func NewInferencePoolResolvedRefs() Condition {
+	return Condition{
+		Type:    string(inference.InferencePoolConditionResolvedRefs),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(inference.InferencePoolConditionResolvedRefs),
+		Message: "Inference pool references a valid ExtensionRef.",
+	}
+}
+
+// NewDefaultInferenceConditions returns the default Conditions
+// that must be present in the status of an InferencePool.
+func NewDefaultInferenceConditions() []Condition {
+	return []Condition{
+		NewInferencePoolAccepted(),
+		NewInferencePoolResolvedRefs(),
+	}
+}
+
+// NewInferencePoolInvalidHTTPRouteNotAccepted returns a Condition that indicates that the InferencePool is not
+// accepted because the associated HTTPRoute is not accepted by the Gateway.
+func NewInferencePoolInvalidHTTPRouteNotAccepted(msg string) Condition {
+	return Condition{
+		Type:    string(inference.InferencePoolConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(inference.InferencePoolReasonHTTPRouteNotAccepted),
+		Message: msg,
+	}
+}
+
+// NewInferencePoolInvalidExtensionref returns a Condition that indicates that the InferencePool is not
+// accepted because the ExtensionRef is invalid.
+func NewInferencePoolInvalidExtensionref(msg string) Condition {
+	return Condition{
+		Type:    string(inference.InferencePoolConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(inference.InferencePoolReasonInvalidExtensionRef),
+		Message: msg,
 	}
 }
