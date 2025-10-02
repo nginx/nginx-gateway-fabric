@@ -49,11 +49,7 @@ run: helm-operator ## Run against the configured Kubernetes cluster in ~/.kube/c
 
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-<<<<<<< HEAD
-	docker build -f Dockerfile -t ${IMG} ..
-=======
 	docker build --platform linux/$(ARCH) -f Dockerfile -t ${IMG} ..
->>>>>>> feat/openshift-support
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
@@ -93,11 +89,7 @@ undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/confi
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
 
 OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
-<<<<<<< HEAD
-ARCH := $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
-=======
 ARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
->>>>>>> feat/openshift-support
 
 .PHONY: kustomize
 KUSTOMIZE = $(shell pwd)/bin/kustomize
