@@ -1,0 +1,1 @@
+2025/10/01 16:19:57 [emerg] 8#8: pread() returned only 0 bytes instead of 4090 in /etc/nginx/conf.d/http.conf:379
