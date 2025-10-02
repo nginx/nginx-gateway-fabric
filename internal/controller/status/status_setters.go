@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -403,4 +404,66 @@ func snippetsStatusEqual(status1, status2 ngfAPI.ControllerStatus) bool {
 	}
 
 	return ConditionsEqual(status1.Conditions, status2.Conditions)
+}
+
+func newInferencePoolStatusSetter(status inference.InferencePoolStatus) Setter {
+	return func(obj client.Object) (wasSet bool) {
+		ip := helpers.MustCastObject[*inference.InferencePool](obj)
+
+		// we build all the parent statuses at once so we can directly
+		// compare the previous and current statuses
+		if inferencePoolStatusEqual(ip.Status.Parents, status.Parents) {
+			return false
+		}
+
+		ip.Status = status
+		return true
+	}
+}
+
+func inferencePoolStatusEqual(prevParents, curParents []inference.ParentStatus) bool {
+	// Compare the previous and current parent statuses, ignoring order
+	// Check if any previous parent status is missing in the current status
+	for _, prevParent := range prevParents {
+		exists := slices.ContainsFunc(curParents, func(curParent inference.ParentStatus) bool {
+			return parentStatusEqual(prevParent, curParent)
+		})
+
+		if !exists {
+			return false
+		}
+	}
+
+	// Check if any current parent status is missing in the previous status
+	for _, curParent := range curParents {
+		exists := slices.ContainsFunc(prevParents, func(prevParent inference.ParentStatus) bool {
+			return parentStatusEqual(curParent, prevParent)
+		})
+
+		if !exists {
+			return false
+		}
+	}
+
+	return true
+}
+
+func parentStatusEqual(p1, p2 inference.ParentStatus) bool {
+	if p1.ParentRef.Name != p2.ParentRef.Name {
+		return false
+	}
+
+	if !helpers.EqualPointers(&p1.ParentRef.Namespace, &p2.ParentRef.Namespace) {
+		return false
+	}
+
+	if !helpers.EqualPointers(&p1.ParentRef.Kind, &p2.ParentRef.Kind) {
+		return false
+	}
+
+	if !helpers.EqualPointers(&p1.ParentRef.Group, &p2.ParentRef.Group) {
+		return false
+	}
+
+	return ConditionsEqual(p1.Conditions, p2.Conditions)
 }

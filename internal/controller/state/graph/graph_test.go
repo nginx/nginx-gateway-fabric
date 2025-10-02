@@ -223,12 +223,15 @@ func TestBuildGraph(t *testing.T) {
 					Namespace: testNs,
 					Name:      controller.CreateInferencePoolServiceName("ipool"),
 				},
-				ServicePort:          v1.ServicePort{Port: 80},
-				Valid:                true,
-				Weight:               1,
-				InvalidForGateways:   map[types.NamespacedName]conditions.Condition{},
-				IsInferencePool:      true,
-				EndpointPickerConfig: &inference.EndpointPickerRef{},
+				ServicePort:        v1.ServicePort{Port: 80},
+				Valid:              true,
+				Weight:             1,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				IsInferencePool:    true,
+				EndpointPickerConfig: &inference.EndpointPickerRef{
+					Kind: kinds.Service,
+					Name: inference.ObjectName(controller.CreateInferencePoolServiceName("ipool")),
+				},
 			},
 		}
 		rbrs := []RouteBackendRef{
@@ -388,6 +391,10 @@ func TestBuildGraph(t *testing.T) {
 		Spec: inference.InferencePoolSpec{
 			TargetPorts: []inference.Port{
 				{Number: 80},
+			},
+			EndpointPickerRef: inference.EndpointPickerRef{
+				Kind: kinds.Service,
+				Name: inference.ObjectName(controller.CreateInferencePoolServiceName("ipool")),
 			},
 		},
 	}
@@ -1325,6 +1332,13 @@ func TestBuildGraph(t *testing.T) {
 			ReferencedInferencePools: map[types.NamespacedName]*ReferencedInferencePool{
 				client.ObjectKeyFromObject(inferencePool): {
 					Source: inferencePool,
+					Gateways: []*gatewayv1.Gateway{
+						gw1.Source,
+					},
+					HTTPRoutes: []*L7Route{
+						inferenceRoute,
+					},
+					Conditions: []conditions.Condition{},
 				},
 			},
 			ReferencedCaCertConfigMaps: map[types.NamespacedName]*CaCertConfigMap{
