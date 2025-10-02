@@ -51,14 +51,11 @@ func buildReferencedInferencePools(
 
 	// validate each referenced InferencePool and add conditions.
 	for _, refPool := range referencedInferencePools {
-		routeCond := validateInferencePoolRoutesAcceptance(refPool.Source, refPool.HTTPRoutes)
-
-		if routeCond != nil {
+		if routeCond := validateInferencePoolRoutesAcceptance(refPool.Source, refPool.HTTPRoutes); routeCond != nil {
 			refPool.Conditions = append(refPool.Conditions, *routeCond)
 		}
 
-		extensionRefCond := validateInferencePoolExtensionRef(refPool.Source, services)
-		if extensionRefCond != nil {
+		if extensionRefCond := validateInferencePoolExtensionRef(refPool.Source, services); extensionRefCond != nil {
 			refPool.Conditions = append(refPool.Conditions, *extensionRefCond)
 		}
 	}

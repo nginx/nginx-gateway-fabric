@@ -482,5 +482,13 @@ func parentStatusEqual(p1, p2 inference.ParentStatus) bool {
 		return false
 	}
 
+	if !helpers.EqualPointers(&p1.ParentRef.Kind, &p2.ParentRef.Kind) {
+		return false
+	}
+
+	if !helpers.EqualPointers(&p1.ParentRef.Group, &p2.ParentRef.Group) {
+		return false
+	}
+
 	return ConditionsEqual(p1.Conditions, p2.Conditions)
 }
