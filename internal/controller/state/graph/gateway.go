@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"fmt"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,6 +26,8 @@ type Gateway struct {
 	// the GatewayClass resource. This is the effective set of config that should be applied to the Gateway.
 	// If non-nil, then this config is valid.
 	EffectiveNginxProxy *EffectiveNginxProxy
+	// SecretRef is the namespaced name of the secret referenced by the Gateway for backend TLS.
+	SecretRef *types.NamespacedName
 	// DeploymentName is the name of the nginx Deployment associated with this Gateway.
 	DeploymentName types.NamespacedName
 	// Listeners include the listeners of the Gateway.
@@ -64,6 +68,7 @@ func buildGateways(
 	gc *GatewayClass,
 	refGrantResolver *referenceGrantResolver,
 	nps map[types.NamespacedName]*NginxProxy,
+	experimentalFeatures bool,
 ) map[types.NamespacedName]*Gateway {
 	if len(gws) == 0 {
 		return nil
@@ -86,7 +91,7 @@ func buildGateways(
 
 		effectiveNginxProxy := buildEffectiveNginxProxy(gcNp, np)
 
-		conds, valid := validateGateway(gw, gc, np)
+		conds, valid, secretRefNsName := validateGateway(gw, gc, np, experimentalFeatures, secretResolver, refGrantResolver)
 
 		protectedPorts := make(ProtectedPorts)
 		if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
@@ -110,6 +115,7 @@ func buildGateways(
 				EffectiveNginxProxy: effectiveNginxProxy,
 				Conditions:          conds,
 				DeploymentName:      deploymentName,
+				SecretRef:           secretRefNsName,
 			}
 		} else {
 			builtGateways[gwNsName] = &Gateway{
@@ -120,6 +126,7 @@ func buildGateways(
 				Valid:               true,
 				Conditions:          conds,
 				DeploymentName:      deploymentName,
+				SecretRef:           secretRefNsName,
 			}
 		}
 	}
@@ -170,7 +177,14 @@ func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersRefer
 	return conds
 }
 
-func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]conditions.Condition, bool) {
+func validateGateway(
+	gw *v1.Gateway,
+	gc *GatewayClass,
+	npCfg *NginxProxy,
+	experimentalFeatures bool,
+	secretResolver *secretResolver,
+	refGrantResolver *referenceGrantResolver,
+) ([]conditions.Condition, bool, *types.NamespacedName) {
 	var conds []conditions.Condition
 
 	if gc == nil {
@@ -189,8 +203,34 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]con
 		}
 	}
 
-	// we evaluate validity before validating parametersRef because an invalid parametersRef/NginxProxy does not
-	// invalidate the entire Gateway.
+	// this path will be updated to spec.tls.backend.clientCertificateRef
+	// after gateway API v1.4 release.
+	var secretRefNsName *types.NamespacedName
+	if gw.Spec.BackendTLS != nil && gw.Spec.BackendTLS.ClientCertificateRef != nil {
+		if !experimentalFeatures {
+			path := field.NewPath("spec", "tls")
+			valErr := field.Forbidden(path, "tls is not supported when experimental features are disabled")
+			conds = append(conds, conditions.NewGatewayUnsupportedValue(valErr.Error())...)
+		} else {
+			secretNsName, secretNs := getGatewayCertSecretNsName(gw)
+			if err := secretResolver.resolve(*secretNsName); err != nil {
+				path := field.NewPath("backend.clientCertificateRef")
+				valErr := field.Invalid(path, secretNsName, err.Error())
+				conds = append(conds, conditions.NewGatewaySecretRefInvalid(valErr.Error()))
+			}
+
+			if secretNs != gw.Namespace {
+				if !refGrantResolver.refAllowed(toSecret(*secretNsName), fromGateway(gw.Namespace)) {
+					msg := fmt.Sprintf("secret ref %s not permitted by any ReferenceGrant", secretNsName)
+					conds = append(conds, conditions.NewGatewaySecretRefNotPermitted(msg))
+				}
+			}
+
+			secretRefNsName = secretNsName
+		}
+	}
+
+	// Evaluate validity before validating parametersRef
 	valid := len(conds) == 0
 
 	if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
@@ -198,7 +238,19 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]con
 		conds = append(conds, paramConds...)
 	}
 
-	return conds, valid
+	return conds, valid, secretRefNsName
+}
+
+func getGatewayCertSecretNsName(gw *v1.Gateway) (*types.NamespacedName, string) {
+	gatewayCert := gw.Spec.BackendTLS.ClientCertificateRef
+	secretRefNs := gw.Namespace
+	if gatewayCert.Namespace != nil {
+		secretRefNs = string(*gatewayCert.Namespace)
+	}
+	return &types.NamespacedName{
+		Namespace: secretRefNs,
+		Name:      string(gatewayCert.Name),
+	}, secretRefNs
 }
 
 // GetReferencedSnippetsFilters returns all SnippetsFilters that are referenced by routes attached to this Gateway.
