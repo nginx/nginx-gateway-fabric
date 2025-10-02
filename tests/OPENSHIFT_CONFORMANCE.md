@@ -22,9 +22,9 @@ OpenShift has stricter security constraints than standard Kubernetes, requiring 
 
 OpenShift ships with Gateway API CRDs pre-installed. To find out which version is installed, run the following command:
 
-```bash
-kubectl get crd gateways.gateway.networking.k8s.io -o jsonpath='{.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}'
-```
+    ```bash
+    kubectl get crd gateways.gateway.networking.k8s.io -o jsonpath='{.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}'
+    ```
 
 ### Updating NGF to Match OpenShift's Gateway API Version
 
@@ -44,13 +44,13 @@ To run conformance tests that match the exact Gateway API version on OpenShift:
    cd ..
    ```
 
-   **Important:** Due to the `replace` directive in `tests/go.mod`, you must update both the parent and tests modules for the version change to take effect.
+    **Important:** Due to the `replace` directive in `tests/go.mod`, you must update both the parent and tests modules for the version change to take effect.
 
 2. Update test configuration to remove features not available in the OCP-installed Gateway API version.
 
 For **Gateway API v1.2.1**, you must update tests/conformance/conformance_test.go to eliminate references to v1beta1.GatewayStaticAddresses. This field was only introduced in Gateway API v1.3.0, and leaving it in place will cause the test to fail to compile in a v1.2.1 environment.
 
-   **Note:** This is separate from `SUPPORTED_EXTENDED_FEATURES_OPENSHIFT` in the Makefile, which controls which features are tested. This change is required because the conformance test code itself references v1.3.0+ features that don't exist in v1.2.1.
+**Note:** This is separate from `SUPPORTED_EXTENDED_FEATURES_OPENSHIFT` in the Makefile, which controls which features are tested. This change is required because the conformance test code itself references v1.3.0+ features that don't exist in v1.2.1.
 
 ## Step 2: Build and Push Conformance Test Image
 
@@ -76,7 +76,7 @@ OpenShift requires explicit permissions for pods to run with elevated privileges
    oc adm policy add-scc-to-group anyuid system:serviceaccounts:gateway-conformance-infra
    ```
 
-   **Note:** These permissions persist even if the namespace is deleted and recreated during test runs.
+**Note:** These permissions persist even if the namespace is deleted and recreated during test runs.
 
 ## Step 4: Run Conformance Tests
 
