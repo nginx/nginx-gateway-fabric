@@ -40,12 +40,12 @@ fi
 nginx_pid=$!
 
 SECONDS=0
-
-while ! ps -ef | grep "nginx: master process" | grep -v grep; do
-    if ((SECONDS > 5)); then
+while [[ ! -f /var/run/nginx.pid ]] && [[ ! -f /var/run/nginx/nginx.pid ]]; do
+    if ((SECONDS > 30)); then
         echo "couldn't find nginx master process"
         exit 1
     fi
+    sleep 1
 done
 
 # start nginx-agent, pass args

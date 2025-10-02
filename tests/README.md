@@ -56,7 +56,7 @@ All the commands below are executed from the `tests` directory. You can see all 
 
 ### Step 1 - Create a Kubernetes cluster
 
-**Important**: Functional/conformance tests can only be run on a `kind` cluster. NFR tests can only be run on a GKE cluster.
+**Important**: Functional tests can only be run on a `kind` cluster. Conformance tests can be run on `kind` or OpenShift clusters (see [OPENSHIFT_CONFORMANCE.md](OPENSHIFT_CONFORMANCE.md) for OpenShift instructions). NFR tests can only be run on a GKE cluster.
 
 To create a local `kind` cluster:
 

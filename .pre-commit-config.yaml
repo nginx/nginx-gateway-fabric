@@ -10,7 +10,6 @@ repos:
       - id: check-yaml
         args: [--allow-multiple-documents]
         exclude: (^charts/nginx-gateway-fabric/templates)
-      - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: check-vcs-permalinks

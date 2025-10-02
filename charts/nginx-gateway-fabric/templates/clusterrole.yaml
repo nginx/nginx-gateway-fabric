@@ -7,15 +7,33 @@ metadata:
 rules:
 - apiGroups:
   - ""
-  - apps
-  - autoscaling
   resources:
   - secrets
   - configmaps
   - serviceaccounts
   - services
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
+  - apps
+  resources:
   - deployments
   - daemonsets
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
   - horizontalpodautoscalers
   verbs:
   - create
