@@ -55,6 +55,16 @@ func (HTTPPathValidator) ValidatePath(path string) error {
 	return validatePath(path)
 }
 
+// ValidatePathInMatch a path used in the location directive.
+func (HTTPPathValidator) ValidatePathInMatch(path string) error {
+	return validatePathInMatch(path)
+}
+
+// ValidatePathInRegexMatch a path used in a regex location directive.
+func (HTTPPathValidator) ValidatePathInRegexMatch(path string) error {
+	return validatePathInRegexMatch(path)
+}
+
 func (HTTPHeaderValidator) ValidateFilterHeaderName(name string) error {
 	return validateHeaderName(name)
 }
