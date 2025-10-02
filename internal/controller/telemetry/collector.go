@@ -105,6 +105,8 @@ type NGFResourceCounts struct {
 	UpstreamSettingsPolicyCount int64
 	// GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway.
 	GatewayAttachedNpCount int64
+	// InferencePoolCount is the number of InferencePools that are referenced by at least one Route.
+	InferencePoolCount int64
 }
 
 // DataCollectorConfig holds configuration parameters for DataCollectorImpl.
@@ -264,6 +266,8 @@ func collectGraphResourceCount(
 	}
 
 	ngfResourceCounts.GatewayAttachedNpCount = gatewayAttachedNPCount
+
+	ngfResourceCounts.InferencePoolCount = int64(len(g.ReferencedInferencePools))
 
 	return ngfResourceCounts
 }

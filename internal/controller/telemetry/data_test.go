@@ -41,6 +41,7 @@ func TestDataAttributes(t *testing.T) {
 			SnippetsFilterCount:                      13,
 			UpstreamSettingsPolicyCount:              14,
 			GatewayAttachedNpCount:                   15,
+			InferencePoolCount:                       16,
 		},
 		SnippetsFiltersDirectives:      []string{"main-three-count", "http-two-count", "server-one-count"},
 		SnippetsFiltersDirectivesCount: []int64{3, 2, 1},
@@ -83,6 +84,7 @@ func TestDataAttributes(t *testing.T) {
 		attribute.Int64("SnippetsFilterCount", 13),
 		attribute.Int64("UpstreamSettingsPolicyCount", 14),
 		attribute.Int64("GatewayAttachedNpCount", 15),
+		attribute.Int64("InferencePoolCount", 16),
 		attribute.Int64("NginxPodCount", 3),
 		attribute.Int64("ControlPlanePodCount", 3),
 		attribute.Bool("NginxOneConnectionEnabled", true),
@@ -129,6 +131,7 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.Int64("SnippetsFilterCount", 0),
 		attribute.Int64("UpstreamSettingsPolicyCount", 0),
 		attribute.Int64("GatewayAttachedNpCount", 0),
+		attribute.Int64("InferencePoolCount", 0),
 		attribute.Int64("NginxPodCount", 0),
 		attribute.Int64("ControlPlanePodCount", 0),
 		attribute.Bool("NginxOneConnectionEnabled", false),
@@ -137,6 +140,5 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 	result := data.Attributes()
 
 	g := NewWithT(t)
-
 	g.Expect(result).To(Equal(expected))
 }
