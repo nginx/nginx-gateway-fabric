@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       operator-version:
-        description: 'Operator release version (e.g., v1.0.0). If not provided, defaults to the same as version'
+        description: 'Operator release version (e.g., v1.0.0). Optional'
         required: false
         type: string
         default: ''
