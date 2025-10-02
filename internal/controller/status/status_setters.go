@@ -410,33 +410,8 @@ func newInferencePoolStatusSetter(status inference.InferencePoolStatus) Setter {
 	return func(obj client.Object) (wasSet bool) {
 		ip := helpers.MustCastObject[*inference.InferencePool](obj)
 
-		parentStatuses := make([]inference.ParentStatus, 0, len(ip.Status.Parents)+len(status.Parents))
-		copy(parentStatuses, ip.Status.Parents)
-
-		// Helper function to find the index of a ParentRef in the list
-		findParentIndex := func(parents []inference.ParentStatus, ref inference.ParentReference) int {
-			for i, parent := range parents {
-				if parent.ParentRef.Name == ref.Name &&
-					parent.ParentRef.Namespace == ref.Namespace {
-					return i
-				}
-			}
-			return -1
-		}
-
-		// Iterate over the new ParentRefs and update their conditions
-		//  or append them as new parentRefs
-		for _, newParent := range status.Parents {
-			index := findParentIndex(parentStatuses, newParent.ParentRef)
-			if index != -1 {
-				parentStatuses[index].Conditions = newParent.Conditions
-			} else {
-				parentStatuses = append(parentStatuses, newParent)
-			}
-		}
-
-		status.Parents = parentStatuses
-
+		// we build all the parent statuses at once so we can directly
+		// compare the previous and current statuses
 		if inferencePoolStatusEqual(ip.Status.Parents, status.Parents) {
 			return false
 		}
