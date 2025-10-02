@@ -49,7 +49,7 @@ jobs:
 
           # Validate version format if operator version is provided
           if [[ -n "${INPUT_OPERATOR_VERSION}" && ! "${INPUT_OPERATOR_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Invalid operator version format: ${INPUT_OPERATOR_VERSION}"
+          echo "❌ Invalid operator version format: ${INPUT_OPERATOR_VERSION}"
             echo "Expected format: v1.2.3"
             exit 1
           fi
