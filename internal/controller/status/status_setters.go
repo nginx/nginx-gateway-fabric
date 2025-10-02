@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -403,4 +404,83 @@ func snippetsStatusEqual(status1, status2 ngfAPI.ControllerStatus) bool {
 	}
 
 	return ConditionsEqual(status1.Conditions, status2.Conditions)
+}
+
+func newInferencePoolStatusSetter(status inference.InferencePoolStatus) Setter {
+	return func(obj client.Object) (wasSet bool) {
+		ip := helpers.MustCastObject[*inference.InferencePool](obj)
+
+		parentStatuses := make([]inference.ParentStatus, 0, len(ip.Status.Parents)+len(status.Parents))
+		copy(parentStatuses, ip.Status.Parents)
+
+		// Helper function to find the index of a ParentRef in the list
+		findParentIndex := func(parents []inference.ParentStatus, ref inference.ParentReference) int {
+			for i, parent := range parents {
+				if parent.ParentRef.Name == ref.Name &&
+					parent.ParentRef.Namespace == ref.Namespace {
+					return i
+				}
+			}
+			return -1
+		}
+
+		// Iterate over the new ParentRefs and update their conditions
+		//  or append them as new parentRefs
+		for _, newParent := range status.Parents {
+			index := findParentIndex(parentStatuses, newParent.ParentRef)
+			if index != -1 {
+				parentStatuses[index].Conditions = newParent.Conditions
+			} else {
+				parentStatuses = append(parentStatuses, newParent)
+			}
+		}
+
+		status.Parents = parentStatuses
+
+		if inferencePoolStatusEqual(ip.Status.Parents, status.Parents) {
+			return false
+		}
+
+		ip.Status = status
+		return true
+	}
+}
+
+func inferencePoolStatusEqual(prevParents, curParents []inference.ParentStatus) bool {
+	// Compare the previous and current parent statuses, ignoring order
+	// Check if any previous parent status is missing in the current status
+	for _, prevParent := range prevParents {
+		exists := slices.ContainsFunc(curParents, func(curParent inference.ParentStatus) bool {
+			return parentStatusEqual(prevParent, curParent)
+		})
+
+		if !exists {
+			return false
+		}
+	}
+
+	// Check if any current parent status is missing in the previous status
+	for _, curParent := range curParents {
+		exists := slices.ContainsFunc(prevParents, func(prevParent inference.ParentStatus) bool {
+			return parentStatusEqual(curParent, prevParent)
+		})
+
+		if !exists {
+			return false
+		}
+	}
+
+	return true
+}
+
+func parentStatusEqual(p1, p2 inference.ParentStatus) bool {
+	if p1.ParentRef.Name != p2.ParentRef.Name {
+		return false
+	}
+
+	if !helpers.EqualPointers(&p1.ParentRef.Namespace, &p2.ParentRef.Namespace) {
+		return false
+	}
+
+	return ConditionsEqual(p1.Conditions, p2.Conditions)
 }

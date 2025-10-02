@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -1723,6 +1724,306 @@ func TestNewSnippetsFilterStatusSetter(t *testing.T) {
 
 			g.Expect(statusSet).To(Equal(test.expStatusSet))
 			g.Expect(sf.Status).To(Equal(test.expStatus))
+		})
+	}
+}
+
+func TestInferencePoolStatusSetter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                         string
+		status, newStatus, expStatus inference.InferencePoolStatus
+		expStatusSet                 bool
+	}{
+		{
+			name: "InferencePool has no status",
+			newStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatusSet: true,
+		},
+		{
+			name: "InferencePool updates condition of an existing parent status",
+			status: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "old condition"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			newStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatusSet: true,
+		},
+		{
+			name: "InferencePool has new parent statuses along with existing ones",
+			status: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			newStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+					{
+						Conditions: []metav1.Condition{{Message: "gateway2 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway2",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+					{
+						Conditions: []metav1.Condition{{Message: "gateway2 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway2",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatusSet: true,
+		},
+		{
+			name: "InferencePool has parent statuses and one is removed",
+			status: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+					{
+						Conditions: []metav1.Condition{{Message: "gateway2 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway2",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			newStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatusSet: true,
+		},
+		{
+			name: "InferencePool has existing multiple parent statuses, one gets changed condition",
+			status: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "parent ref gateway1 is valid"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+					{
+						Conditions: []metav1.Condition{{Message: "parent ref gateway2 is valid"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway2",
+							Namespace: "test",
+						},
+					},
+					{
+						Conditions: []metav1.Condition{{Message: "parent ref gateway3 is valid"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway3",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			newStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "parent ref gateway1 is valid"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+					{
+						Conditions: []metav1.Condition{{Message: "parent ref gateway2 is invalid"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway2",
+							Namespace: "test",
+						},
+					},
+					{
+						Conditions: []metav1.Condition{{Message: "parent ref gateway3 is valid"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway3",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "parent ref gateway1 is valid"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+					{
+						Conditions: []metav1.Condition{{Message: "parent ref gateway2 is invalid"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway2",
+							Namespace: "test",
+						},
+					},
+					{
+						Conditions: []metav1.Condition{{Message: "parent ref gateway3 is valid"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway3",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatusSet: true,
+		},
+		{
+			name: "InferencePool has same status",
+			status: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			newStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatus: inference.InferencePoolStatus{
+				Parents: []inference.ParentStatus{
+					{
+						Conditions: []metav1.Condition{{Message: "gateway1 is valid parent ref"}},
+						ParentRef: inference.ParentReference{
+							Name:      "gateway1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			expStatusSet: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			setter := newInferencePoolStatusSetter(test.newStatus)
+			obj := &inference.InferencePool{Status: test.status}
+
+			statusSet := setter(obj)
+
+			g.Expect(statusSet).To(Equal(test.expStatusSet))
+			g.Expect(obj.Status).To(Equal(test.expStatus))
 		})
 	}
 }
