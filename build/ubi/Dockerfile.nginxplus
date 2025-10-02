@@ -36,8 +36,8 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     --mount=type=bind,from=ubi9-packages,src=/,target=/ubi-bin/ \
     --mount=type=secret,id=nginx-repo.crt,dst=/etc/ssl/nginx/nginx-repo.crt,mode=0644 \
 	--mount=type=secret,id=nginx-repo.key,dst=/etc/ssl/nginx/nginx-repo.key,mode=0644 \
-    # Install shadow-utils for useradd and subscription-manager for repo access
-    microdnf --nodocs install -y shadow-utils subscription-manager \
+    # Install shadow-utils for useradd
+    microdnf --nodocs install -y shadow-utils  \
     && rpm --import /tmp/nginx_signing.key \
     # Install c-ares from the dependencies image (contains required libs)
     && rpm -Uvh /ubi-bin/c-ares-*.rpm \
@@ -50,17 +50,15 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     # Install nginx-agent
     && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
     # Clean up
-    && microdnf remove -y shadow-utils subscription-manager \
+    && microdnf remove -y shadow-utils \
     && microdnf clean all \
     && rm -rf /var/cache/yum
 
 # Configure directories and logging
-RUN mkdir -p /usr/lib/nginx/modules /var/run/nginx /usr/lib64/nginx/modules \
+RUN mkdir -p /var/run/nginx /usr/lib64/nginx/modules \
     # Forward request and error logs to docker log collector
     && ln -sf /dev/stdout /var/log/nginx/access.log \
-    && ln -sf /dev/stderr /var/log/nginx/error.log \
-    && cp /usr/lib64/nginx/modules/ngx_* /usr/lib/nginx/modules/
-
+    && ln -sf /dev/stderr /var/log/nginx/error.log
 # Copy default html files to a writable location
 RUN mkdir -p /etc/nginx/html \
     && cp /usr/share/nginx/html/* /etc/nginx/html/
@@ -70,7 +68,7 @@ RUN chown -R 101:1001 /etc/nginx /var/cache/nginx
 
 # Copy configuration files and scripts
 COPY build/entrypoint.sh /agent/entrypoint.sh
-COPY ${NJS_DIR}/ /usr/lib/nginx/modules/njs/
+COPY ${NJS_DIR}/ /usr/lib64/nginx/modules/njs/
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf
