@@ -63,7 +63,7 @@ For complete configuration options, see the [Helm Chart Documentation](https://g
 ### Building and Testing the Operator Locally
 
 ```bash
-# Build the operator image
+# Build the operator image. If building for deploying on a cluster with different architecture from your local machine, append ARCH=<targetarch> e.g. `ARCH=amd64` to the below command
 make docker-build IMG=<your-registry>/nginx-gateway-fabric-operator:<tag>
 
 # Push the image
