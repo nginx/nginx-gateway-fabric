@@ -417,6 +417,11 @@ var _ = Describe("Collector", Ordered, func() {
 							},
 						},
 					},
+					ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
+						{Namespace: "test", Name: "inferencePool-1"}: {},
+						{Namespace: "test", Name: "inferencePool-2"}: {},
+						{Namespace: "test", Name: "inferencePool-3"}: {},
+					},
 				}
 
 				configs := []*dataplane.Configuration{
@@ -487,6 +492,7 @@ var _ = Describe("Collector", Ordered, func() {
 					SnippetsFilterCount:                      3,
 					UpstreamSettingsPolicyCount:              1,
 					GatewayAttachedNpCount:                   2,
+					InferencePoolCount:                       3,
 				}
 				expData.ClusterVersion = "1.29.2"
 				expData.ClusterPlatform = "kind"
@@ -700,6 +706,9 @@ var _ = Describe("Collector", Ordered, func() {
 				BackendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
 					{Namespace: "test", Name: "BackendTLSPolicy-1"}: {},
 				},
+				ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
+					{Namespace: "test", Name: "inferencePool-1"}: {},
+				},
 			}
 
 			config1 = []*dataplane.Configuration{
@@ -781,6 +790,7 @@ var _ = Describe("Collector", Ordered, func() {
 					UpstreamSettingsPolicyCount:              1,
 					GatewayAttachedNpCount:                   1,
 					BackendTLSPolicyCount:                    1,
+					InferencePoolCount:                       1,
 				}
 				expData.NginxPodCount = 1
 
