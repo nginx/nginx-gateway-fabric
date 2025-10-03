@@ -140,5 +140,6 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 	result := data.Attributes()
 
 	g := NewWithT(t)
+
 	g.Expect(result).To(Equal(expected))
 }
