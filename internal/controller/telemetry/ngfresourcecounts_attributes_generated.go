@@ -28,7 +28,6 @@ func (d *NGFResourceCounts) Attributes() []attribute.KeyValue {
 	attrs = append(attrs, attribute.Int64("SnippetsFilterCount", d.SnippetsFilterCount))
 	attrs = append(attrs, attribute.Int64("UpstreamSettingsPolicyCount", d.UpstreamSettingsPolicyCount))
 	attrs = append(attrs, attribute.Int64("GatewayAttachedNpCount", d.GatewayAttachedNpCount))
-	attrs = append(attrs, attribute.Int64("InferencePoolCount", d.InferencePoolCount))
 
 	return attrs
 }

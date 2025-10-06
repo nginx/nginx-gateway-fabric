@@ -105,9 +105,6 @@ attached at the Gateway level. */
 		/** GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway. */
 		long? GatewayAttachedNpCount = null;
 		
-		/** InferencePoolCount is the number of InferencePools that are referenced by at least one Route. */
-		long? InferencePoolCount = null;
-		
 		/** NginxPodCount is the total number of Nginx data plane Pods. */
 		long? NginxPodCount = null;
 		
@@ -116,6 +113,9 @@ attached at the Gateway level. */
 		
 		/** NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled. */
 		boolean? NginxOneConnectionEnabled = null;
+		
+		/** InferencePoolCount is the number of InferencePools that are referenced by at least one Route. */
+		long? InferencePoolCount = null;
 		
 	}
 }

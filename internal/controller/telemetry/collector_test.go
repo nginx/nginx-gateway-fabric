@@ -492,7 +492,6 @@ var _ = Describe("Collector", Ordered, func() {
 					SnippetsFilterCount:                      3,
 					UpstreamSettingsPolicyCount:              1,
 					GatewayAttachedNpCount:                   2,
-					InferencePoolCount:                       3,
 				}
 				expData.ClusterVersion = "1.29.2"
 				expData.ClusterPlatform = "kind"
@@ -525,6 +524,8 @@ var _ = Describe("Collector", Ordered, func() {
 				expData.NginxPodCount = int64(8)
 				expData.ControlPlanePodCount = int64(2)
 				expData.NginxOneConnectionEnabled = true
+
+				expData.InferencePoolCount = 3
 
 				data, err := dataCollector.Collect(ctx)
 				Expect(err).ToNot(HaveOccurred())
@@ -790,9 +791,9 @@ var _ = Describe("Collector", Ordered, func() {
 					UpstreamSettingsPolicyCount:              1,
 					GatewayAttachedNpCount:                   1,
 					BackendTLSPolicyCount:                    1,
-					InferencePoolCount:                       1,
 				}
 				expData.NginxPodCount = 1
+				expData.InferencePoolCount = 1
 
 				data, err := dataCollector.Collect(ctx)
 
