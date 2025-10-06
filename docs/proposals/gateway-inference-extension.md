@@ -132,7 +132,11 @@ For development purposes, the [Getting started guide](https://gateway-api-infere
 
 ## Security Considerations
 
-If the Endpoint Picker (EPP) supports it, we should use a secure TLS connection. This ensures an encrypted and authenticated communication channel between the NGINX data plane and the EPP. For production environments, an integration with `cert-manager` is likely the best solution, as we recommend this for various other secure channels within the NGF ecosystem. Otherwise, our control plane may have to provision certificates in the default case (similar to NGF's startup `cert-generator` Job).
+Secure TLS gRPC connection between Endpoint Picker (EPP) and Go Shim Server is ideal. This would ensure an encrypted and authenticated communication channel between the NGINX data plane and the EPP. However, this is not possible with the current EPP implementation and is a [known issue](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/582), with a separate issue currently open to [provide further support to tls](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1556).
+
+Since NGF does not provision the EPP, is not in charge of modifying it, and the current [EPP Helm template](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/config/charts/inferencepool/templates/epp-deployment.yaml) does not support providing extra volume/volumeMounts, there is no way to mount a cert on the EPP. Even if specifying extra volume/volumeMounts are allowed through a feature request, the implementation on our side would be hacky and unconventional.
+
+Given that the gateway inference project remains in `Alpha` and explicitly warns against production use, we will follow existing implementations and use an insecure gRPC connection to the EPP. For our goal of meeting the API’s core specifications with a basic solution, secure gRPC is not strictly required at this stage.
 
 At some point, there may be opportunities for attaching Policies (like a BackendTLSPolicy) to an InferenceModel to secure the NGINX -> AI workload connection, however that is not in scope for now.
 
