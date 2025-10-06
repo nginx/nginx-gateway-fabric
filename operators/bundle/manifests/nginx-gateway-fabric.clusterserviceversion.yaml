@@ -144,7 +144,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    createdAt: "2025-09-25T13:06:47Z"
+    createdAt: "2025-10-06T09:33:54Z"
     operators.operatorframework.io/builder: operator-sdk-v1.41.1
     operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
   name: nginx-gateway-fabric.v1.0.0
@@ -433,7 +433,7 @@ spec:
                       - --leader-elect
                       - --leader-election-id=nginx-gateway-fabric
                       - --health-probe-bind-address=:8081
-                    image: nginx-gateway-fabric-operator:v1.0.0
+                    image: ghcr.io/nginx/nginx-gateway-fabric/operator:v1.0.0
                     livenessProbe:
                       httpGet:
                         path: /healthz
