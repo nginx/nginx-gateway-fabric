@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -518,4 +519,57 @@ func PrepareNginxGatewayStatus(
 			Conditions: conditions.ConvertConditions(conds, nginxGateway.Generation, transitionTime),
 		}),
 	}
+}
+
+// PrepareInferencePoolRequests prepares status UpdateRequests for the given InferencePools.
+func PrepareInferencePoolRequests(
+	inferencePools map[types.NamespacedName]*graph.ReferencedInferencePool,
+	transitionTime metav1.Time,
+) []UpdateRequest {
+	reqs := make([]UpdateRequest, 0, len(inferencePools))
+
+	for nsname, pool := range inferencePools {
+		if pool.Source == nil {
+			continue
+		}
+
+		defaultConds := conditions.NewDefaultInferenceConditions()
+		allConds := make([]conditions.Condition, 0, len(pool.Conditions)+2)
+
+		allConds = append(allConds, defaultConds...)
+
+		if len(pool.Conditions) != 0 {
+			allConds = append(allConds, pool.Conditions...)
+		}
+
+		conds := conditions.DeduplicateConditions(allConds)
+		apiConds := conditions.ConvertConditions(conds, pool.Source.GetGeneration(), transitionTime)
+
+		parents := make([]inference.ParentStatus, 0, len(pool.Gateways))
+		for _, ref := range pool.Gateways {
+			parents = append(parents, inference.ParentStatus{
+				ParentRef: inference.ParentReference{
+					Name:      inference.ObjectName(ref.GetName()),
+					Namespace: inference.Namespace(ref.GetNamespace()),
+					Group:     helpers.GetPointer(inference.Group(ref.GroupVersionKind().Group)),
+					Kind:      kinds.Gateway,
+				},
+				Conditions: apiConds,
+			})
+		}
+
+		status := inference.InferencePoolStatus{
+			Parents: parents,
+		}
+
+		req := UpdateRequest{
+			NsName:       nsname,
+			ResourceType: pool.Source,
+			Setter:       newInferencePoolStatusSetter(status),
+		}
+
+		reqs = append(reqs, req)
+	}
+
+	return reqs
 }

@@ -368,17 +368,19 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
+	inferencePoolReqs := status.PrepareInferencePoolRequests(gr.ReferencedInferencePools, transitionTime)
 
 	reqs := make(
 		[]status.UpdateRequest,
 		0,
-		len(gcReqs)+len(routeReqs)+len(polReqs)+len(ngfPolReqs)+len(snippetsFilterReqs),
+		len(gcReqs)+len(routeReqs)+len(polReqs)+len(ngfPolReqs)+len(snippetsFilterReqs)+len(inferencePoolReqs),
 	)
 	reqs = append(reqs, gcReqs...)
 	reqs = append(reqs, routeReqs...)
 	reqs = append(reqs, polReqs...)
 	reqs = append(reqs, ngfPolReqs...)
 	reqs = append(reqs, snippetsFilterReqs...)
+	reqs = append(reqs, inferencePoolReqs...)
 
 	h.cfg.statusUpdater.UpdateGroup(ctx, groupAllExceptGateways, reqs...)
 
