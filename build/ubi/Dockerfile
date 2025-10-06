@@ -17,6 +17,18 @@ COPY --from=ca-certs-provider --link /etc/ssl/certs/ca-certificates.crt /etc/ssl
 USER 101:1001
 ARG BUILD_AGENT
 ENV BUILD_AGENT=${BUILD_AGENT}
+
+LABEL name="F5 NGINX Gateway Fabric NGINX Plus" \
+	maintainer="kubernetes@nginx.com" \
+	vendor="F5 NGINX" \
+	summary="NGINX Gateway Fabric" \
+	description="NGINX Gateway Fabric provides an implementation for the Gateway API using NGINX as the data plane." \
+	org.nginx.ngf.image.build.agent="${BUILD_AGENT}" \
+	io.k8s.description="NGINX Gateway Fabric provides an implementation for the Gateway API using NGINX as the data plane." \
+	io.openshift.tags="nginx,gateway,kubernetes,openshift"
+
+COPY --link --chown=101:1001 LICENSE /licenses/
+
 ENTRYPOINT [ "/usr/bin/gateway" ]
 
 FROM ngf-ubi-minimal AS container
