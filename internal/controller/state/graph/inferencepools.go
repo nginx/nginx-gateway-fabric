@@ -158,7 +158,7 @@ func validateInferencePoolRoutesAcceptance(ip *inference.InferencePool, routes [
 		return nil
 	}
 
-	// we do not to validate that the route belongs to the gateway or not
+	// we do not need to validate that the route belongs to the gateway or not
 	// we only process routes that belong to the gateway in the first place
 	for _, route := range routes {
 		if !route.Valid {
