@@ -260,7 +260,8 @@ func BuildGraph(
 		processedSnippetsFilters,
 		state.InferencePools,
 	)
-	referencedInferencePools := buildReferencedInferencePools(routes, gws, state.InferencePools)
+
+	referencedInferencePools := buildReferencedInferencePools(routes, gws, state.InferencePools, state.Services)
 
 	l4routes := buildL4RoutesForGateways(
 		state.TLSRoutes,
