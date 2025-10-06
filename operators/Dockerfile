@@ -3,6 +3,7 @@ FROM quay.io/operator-framework/helm-operator:v1.41.1
 COPY LICENSE /licenses/LICENSE
 
 LABEL name="nginx-gateway-fabric-operator" \
+      maintainer="kubernetes@nginx.com" \
       vendor="F5 NGINX" \
       version="1.0.0" \
       release="1" \
