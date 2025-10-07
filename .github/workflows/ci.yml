@@ -9,7 +9,7 @@ on:
     branches:
       - "**"
   schedule:
-    - cron: "0 4 * * *" # run every day at 4am UTC
+    - cron: "0 4 * * *" # run every day at 4am UTC (nightly builds)
   workflow_call:
     inputs:
       is_production_release:
@@ -265,11 +265,12 @@ jobs:
           echo "Generated JSON: $json"
           echo "json=$json" >> $GITHUB_OUTPUT
 
-      - name: Cache Artifacts
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
+          name: dist-${{ github.run_id }}
           path: ${{ github.workspace }}/dist
-          key: nginx-gateway-fabric-${{ github.run_id }}-${{ github.run_number }}
+          retention-days: 1
 
   assertion:
     name: Generate and Sign Assertion Documents
@@ -307,11 +308,11 @@ jobs:
         with:
           go-version: stable
 
-      - name: Fetch Cached Artifacts
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - name: Download Artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
+          name: dist-${{ github.run_id }}
           path: ${{ github.workspace }}/dist
-          key: nginx-gateway-fabric-${{ github.run_id }}-${{ github.run_number }}
 
       - name: List Dependencies in Go Binary
         id: godeps
