@@ -48,6 +48,12 @@ server {
     }
 }
 
+{{- if $.GatewaySecretID }}
+# Gateway Certificate
+proxy_ssl_certificate /etc/nginx/secrets/{{ $.GatewaySecretID }}.pem;
+proxy_ssl_certificate_key /etc/nginx/secrets/{{ $.GatewaySecretID }}.pem;
+{{- end }}
+
 {{ range $i := .Includes -}}
 include {{ $i.Name }};
 {{ end -}}
