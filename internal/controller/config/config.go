@@ -26,6 +26,8 @@ type Config struct {
 	GatewayClassName string
 	// ImageSource is the source of the NGINX Gateway image.
 	ImageSource string
+	// BuildOS is the OS the NGF and NGINX binary was built on.
+	BuildOS string
 	// GatewayCtlrName is the name of this controller.
 	GatewayCtlrName string
 	// UsageReportConfig specifies the NGINX Plus usage reporting configuration.

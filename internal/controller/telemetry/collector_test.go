@@ -72,6 +72,64 @@ func createGetCallsFunc(objects ...client.Object) getCallsFunc {
 }
 
 var _ = Describe("Collector", Ordered, func() {
+
+	Describe("BuildOS field", func() {
+		var (
+			k8sClientReader         *kubernetesfakes.FakeReader
+			fakeGraphGetter         *telemetryfakes.FakeGraphGetter
+			fakeConfigurationGetter *telemetryfakes.FakeConfigurationGetter
+			version                 string
+			podNSName               types.NamespacedName
+			flags                   config.Flags
+		)
+
+		BeforeEach(func() {
+			version = "1.1"
+			k8sClientReader = &kubernetesfakes.FakeReader{}
+			fakeGraphGetter = &telemetryfakes.FakeGraphGetter{}
+			fakeConfigurationGetter = &telemetryfakes.FakeConfigurationGetter{}
+			podNSName = types.NamespacedName{Namespace: "nginx-gateway", Name: "ngf-pod"}
+			flags = config.Flags{}
+			fakeGraphGetter.GetLatestGraphReturns(&graph.Graph{})
+			fakeConfigurationGetter.GetLatestConfigurationReturns(nil)
+		})
+
+		It("sets BuildOS to 'alpine' when config.BuildOS is empty", func(ctx SpecContext) {
+			dataCollector := telemetry.NewDataCollectorImpl(telemetry.DataCollectorConfig{
+				K8sClientReader:           k8sClientReader,
+				GraphGetter:               fakeGraphGetter,
+				ConfigurationGetter:       fakeConfigurationGetter,
+				Version:                   version,
+				PodNSName:                 podNSName,
+				ImageSource:               "local",
+				Flags:                     flags,
+				NginxOneConsoleConnection: true,
+				BuildOS:                   "",
+			})
+
+			data, err := dataCollector.Collect(ctx)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(data.BuildOS).To(Equal("alpine"))
+		})
+
+		It("sets BuildOS to 'ubi' when config.BuildOS is 'ubi'", func(ctx SpecContext) {
+			dataCollector := telemetry.NewDataCollectorImpl(telemetry.DataCollectorConfig{
+				K8sClientReader:           k8sClientReader,
+				GraphGetter:               fakeGraphGetter,
+				ConfigurationGetter:       fakeConfigurationGetter,
+				Version:                   version,
+				PodNSName:                 podNSName,
+				ImageSource:               "local",
+				Flags:                     flags,
+				NginxOneConsoleConnection: true,
+				BuildOS:                   "ubi",
+			})
+
+			data, err := dataCollector.Collect(ctx)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(data.BuildOS).To(Equal("ubi"))
+		})
+	})
 	var (
 		k8sClientReader         *kubernetesfakes.FakeReader
 		fakeGraphGetter         *telemetryfakes.FakeGraphGetter
@@ -195,6 +253,7 @@ var _ = Describe("Collector", Ordered, func() {
 			ImageSource:               "local",
 			Flags:                     flags,
 			NginxOneConsoleConnection: true,
+			BuildOS:                   "",
 		})
 
 		baseGetCalls = createGetCallsFunc(ngfPod, ngfReplicaSet, kubeNamespace)

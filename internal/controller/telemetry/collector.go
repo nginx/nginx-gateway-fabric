@@ -66,6 +66,8 @@ type Data struct {
 	ControlPlanePodCount int64
 	// NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled.
 	NginxOneConnectionEnabled bool
+	// BuildOS is the OS the NGF and NGINX binary was built on.
+	BuildOS string
 }
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.
@@ -121,6 +123,8 @@ type DataCollectorConfig struct {
 	Version string
 	// ImageSource is the source of the NGF image.
 	ImageSource string
+	// BuildOS is the OS the NGF and NGINX binary was built on.
+	BuildOS string
 	// Flags contains the command-line NGF flag keys and values.
 	Flags config.Flags
 	// NginxOneConsoleConnection is a boolean that indicates whether the connection to the Nginx One Console is enabled.
@@ -174,6 +178,11 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 
 	nginxPodCount := getNginxPodCount(g, clusterInfo.NodeCount)
 
+	buildOS := c.cfg.BuildOS
+	if buildOS == "" {
+		buildOS = "alpine"
+	}
+
 	data := Data{
 		Data: tel.Data{
 			ProjectName:         "NGF",
@@ -187,6 +196,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		},
 		NGFResourceCounts:              graphResourceCount,
 		ImageSource:                    c.cfg.ImageSource,
+		BuildOS:                        buildOS,
 		FlagNames:                      c.cfg.Flags.Names,
 		FlagValues:                     c.cfg.Flags.Values,
 		SnippetsFiltersDirectives:      snippetsFiltersDirectives,

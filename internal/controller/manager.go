@@ -290,6 +290,7 @@ func StartManager(cfg config.Config) error {
 				Name:      cfg.GatewayPodConfig.Name,
 			},
 			ImageSource:               cfg.ImageSource,
+			BuildOS:                   cfg.BuildOS,
 			Flags:                     cfg.Flags,
 			NginxOneConsoleConnection: cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "",
 		})
