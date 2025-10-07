@@ -47,6 +47,7 @@ func TestDataAttributes(t *testing.T) {
 		NginxPodCount:                  3,
 		ControlPlanePodCount:           3,
 		NginxOneConnectionEnabled:      true,
+		InferencePoolCount:             16,
 	}
 
 	expected := []attribute.KeyValue{
@@ -86,6 +87,7 @@ func TestDataAttributes(t *testing.T) {
 		attribute.Int64("NginxPodCount", 3),
 		attribute.Int64("ControlPlanePodCount", 3),
 		attribute.Bool("NginxOneConnectionEnabled", true),
+		attribute.Int64("InferencePoolCount", 16),
 	}
 
 	result := data.Attributes()
@@ -132,6 +134,7 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.Int64("NginxPodCount", 0),
 		attribute.Int64("ControlPlanePodCount", 0),
 		attribute.Bool("NginxOneConnectionEnabled", false),
+		attribute.Int64("InferencePoolCount", 0),
 	}
 
 	result := data.Attributes()
