@@ -193,3 +193,27 @@ jobs:
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: build-${{ inputs.image }}
+
+      - name: Save NGINX OSS image as tarball
+        if: ${{ inputs.image == 'nginx' }}
+        run: |
+          docker save -o nginx-oss-image.tar localhost:5000/nginx-gateway-fabric/nginx:${{ github.run_id }}-${{ github.run_number }}
+
+      - name: Upload NGINX OSS image artifact
+        if: ${{ inputs.image == 'nginx' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nginx-oss-image
+          path: nginx-oss-image.tar
+
+      - name: Save Operator image as tarball
+        if: ${{ inputs.image == 'operator' }}
+        run: |
+          docker save -o operator-image.tar localhost:5000/nginx-gateway-fabric/operator:${{ github.run_id }}-${{ github.run_number }}
+
+      - name: Upload Operator image artifact
+        if: ${{ inputs.image == 'operator' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-image
+          path: operator-image.tar
