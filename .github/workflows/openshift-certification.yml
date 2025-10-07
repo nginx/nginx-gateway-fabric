@@ -77,7 +77,7 @@ jobs:
     - name: Run preflight for NGINX Gateway Fabric Operator
       env:
         PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
-      run: preflight check operator ngf-operator:edge > ngf-operator-preflight-result.json
+      run: preflight check container ngf-operator:edge > ngf-operator-preflight-result.json
 
     - name: Aggregate preflight results and fail if any checks failed
       run: |
