@@ -7,12 +7,14 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -644,7 +646,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grInvalidMatchesEmptyMethodFields.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRouteUnsupportedValue(
 						`All rules are invalid: ` +
 							`[spec.rules[0].matches[0].method.type: Unsupported value: "": supported values: "Exact",` +
@@ -688,7 +690,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grInvalidMatchesInvalidMethodFields.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRouteUnsupportedValue(
 						`All rules are invalid: ` +
 							`[spec.rules[0].matches[0].method.service: Invalid value: "service{}": invalid path value,` +
@@ -736,7 +738,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grOneInvalid.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRoutePartiallyInvalid(
 						`spec.rules[1].matches[0].headers[0].type: Unsupported value: "": supported values: "Exact", "RegularExpression"`,
 					),
@@ -782,7 +784,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grInvalidHeadersInvalidType.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRouteUnsupportedValue(
 						`All rules are invalid: spec.rules[0].matches[0].headers[0].type: ` +
 							`Unsupported value: "": supported values: "Exact", "RegularExpression"`,
@@ -820,7 +822,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grInvalidHeadersEmptyType.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRouteUnsupportedValue(
 						`All rules are invalid: spec.rules[0].matches[0].headers[0].type: ` +
 							`Required value: cannot be empty`,
@@ -858,7 +860,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grInvalidMatchesNilMethodType.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRouteUnsupportedValue(
 						`All rules are invalid: spec.rules[0].matches[0].method.type: Required value: cannot be empty`,
 					),
@@ -895,7 +897,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grInvalidFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRouteUnsupportedValue(
 						`All rules are invalid: spec.rules[0].filters[0].type: Unsupported value: ` +
 							`"InvalidFilter": supported values: "ResponseHeaderModifier", ` +
@@ -940,7 +942,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grInvalidHostname.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRouteUnsupportedValue(
 						`spec.hostnames[0]: Invalid value: "": cannot be empty string`,
 					),
@@ -963,7 +965,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRouteUnsupportedValue(
 						"All rules are invalid: spec.rules[0].filters[0].extensionRef: " +
 							"Unsupported value: \"wrong\": supported values: \"gateway.nginx.org\"",
@@ -1001,7 +1003,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRouteResolvedRefsInvalidFilter(
 						"spec.rules[0].filters[0].extensionRef: Not found: " +
 							`{"group":"gateway.nginx.org","kind":"SnippetsFilter",` +
@@ -1040,7 +1042,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 						SectionName: grInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewRouteUnsupportedValue(
 						"All rules are invalid: spec.rules[0].filters[1].extensionRef: " +
 							"Unsupported value: \"wrong\": supported values: \"gateway.nginx.org\"",
@@ -1373,6 +1375,136 @@ func TestConvertGRPCHeaderMatchType(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			g.Expect(convertGRPCHeaderMatchType(test.input)).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestProcessGRPCRouteRule_UnsupportedFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		specRule       v1.GRPCRouteRule
+		name           string
+		expectedErrors int
+	}{
+		{
+			name:           "No unsupported fields",
+			specRule:       v1.GRPCRouteRule{}, // Empty rule, no unsupported fields
+			expectedErrors: 0,
+		},
+		{
+			name: "One unsupported field",
+			specRule: v1.GRPCRouteRule{
+				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+			},
+			expectedErrors: 1,
+		},
+		{
+			name: "Multiple unsupported fields",
+			specRule: v1.GRPCRouteRule{
+				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+				SessionPersistence: helpers.GetPointer(
+					v1.SessionPersistence{
+						Type: helpers.GetPointer(v1.SessionPersistenceType("unsupported-session-persistence")),
+					}),
+			},
+			expectedErrors: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			rulePath := field.NewPath("spec").Child("rules")
+			var errors routeRuleErrors
+
+			// Wrap the rule in GRPCRouteRuleWrapper
+			unsupportedFieldsErrors := checkForUnsupportedGRPCFields(test.specRule, rulePath)
+			if len(unsupportedFieldsErrors) > 0 {
+				errors.warn = append(errors.warn, unsupportedFieldsErrors...)
+			}
+
+			g.Expect(errors.warn).To(HaveLen(test.expectedErrors))
+		})
+	}
+}
+
+func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		specRules     []v1.GRPCRouteRule
+		expectedConds conditions.Conditions
+		expectedWarns int
+		expectedValid bool
+	}{
+		{
+			name:          "No unsupported fields",
+			specRules:     []v1.GRPCRouteRule{{}},
+			expectedValid: true,
+			expectedConds: nil,
+			expectedWarns: 0,
+		},
+		{
+			name: "One unsupported field",
+			specRules: []v1.GRPCRouteRule{
+				{
+					Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+				},
+			},
+			expectedValid: true,
+			expectedConds: conditions.Conditions{
+				conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: spec.rules[0].name: " +
+					"Forbidden: NGINX Gateway Fabric does not support \"SectionName\" field at the moment, supported fields are: " +
+					"GRPCBackendRef, GRPCRouteMatch, GRPCRouteFilter"),
+			},
+			expectedWarns: 1,
+		},
+		{
+			name: "Multiple unsupported fields",
+			specRules: []v1.GRPCRouteRule{
+				{
+					Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
+						Type: helpers.GetPointer(v1.SessionPersistenceType("unsupported-session-persistence")),
+					}),
+				},
+			},
+			expectedValid: true,
+			expectedConds: conditions.Conditions{
+				conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: " +
+					"[spec.rules[0].name: Forbidden: NGINX Gateway Fabric does not support \"SectionName\" field at the moment, " +
+					"supported fields are: GRPCBackendRef, GRPCRouteMatch, GRPCRouteFilter, spec.rules[0].sessionPersistence: " +
+					"Forbidden: NGINX Gateway Fabric does not support \"SessionPersistence\" field at the moment, " +
+					"supported fields are: GRPCBackendRef, GRPCRouteMatch, GRPCRouteFilter]"),
+			},
+			expectedWarns: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			_, valid, conds := processGRPCRouteRules(
+				test.specRules,
+				validation.SkipValidator{},
+				nil,
+			)
+
+			g.Expect(valid).To(Equal(test.expectedValid))
+			if test.expectedConds == nil {
+				g.Expect(conds).To(BeEmpty())
+			} else {
+				g.Expect(conds).To(HaveLen(len(test.expectedConds)))
+				for i, expectedCond := range test.expectedConds {
+					g.Expect(conds[i].Message).To(Equal(expectedCond.Message))
+				}
+			}
 		})
 	}
 }

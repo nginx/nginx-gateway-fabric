@@ -44,7 +44,7 @@ type ParentRefAttachmentStatus struct {
 	// FailedConditions are the conditions that describe why the ParentRef is not attached to the Gateway, or other
 	// failures that may lead to partial attachments. For example, a backendRef could be invalid, but the route can
 	// still attach. The backendRef condition would be displayed here.
-	FailedConditions []conditions.Condition
+	FailedConditions conditions.Conditions
 	// ListenerPort is the port on the Listener that the Route is attached to.
 	// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
 	// Needs to be a map of <gatewayNamespacedName/listenerName> to port number
@@ -98,7 +98,7 @@ type L4Route struct {
 	// ParentRefs describe the references to the parents in a Route.
 	ParentRefs []ParentRef
 	// Conditions define the conditions to be reported in the status of the Route.
-	Conditions []conditions.Condition
+	Conditions conditions.Conditions
 	// Spec is the L4RouteSpec of the Route
 	Spec L4RouteSpec
 	// Valid indicates if the Route is valid.
@@ -126,7 +126,7 @@ type L7Route struct {
 	// ParentRefs describe the references to the parents in a Route.
 	ParentRefs []ParentRef
 	// Conditions define the conditions to be reported in the status of the Route.
-	Conditions []conditions.Condition
+	Conditions conditions.Conditions
 	// Policies holds the policies that are attached to the Route.
 	Policies []*Policy
 	// Valid indicates if the Route is valid.
@@ -143,16 +143,15 @@ type L7RouteSpec struct {
 }
 
 type RouteRule struct {
-	// Matches define the predicate used to match requests to a given action.
-	Matches []v1.HTTPRouteMatch
-	// RouteBackendRefs are a wrapper for v1.BackendRef and any BackendRef filters from the HTTPRoute or GRPCRoute.
-	RouteBackendRefs []RouteBackendRef
-	// BackendRefs is an internal representation of a backendRef in a Route.
-	BackendRefs []BackendRef
-	// Filters define processing steps that must be completed during the request or response lifecycle.
-	Filters RouteRuleFilters
-	// ValidMatches indicates if the matches are valid and accepted by the Route.
-	ValidMatches bool
+	Name               *v1.SectionName
+	Timeouts           *v1.HTTPRouteTimeouts
+	Retry              *v1.HTTPRouteRetry
+	SessionPersistence *v1.SessionPersistence
+	Matches            []v1.HTTPRouteMatch
+	RouteBackendRefs   []RouteBackendRef
+	BackendRefs        []BackendRef
+	Filters            RouteRuleFilters
+	ValidMatches       bool
 }
 
 // RouteBackendRef is a wrapper for v1.BackendRef and any BackendRef filters from the HTTPRoute or GRPCRoute.
@@ -200,12 +199,14 @@ func CreateGatewayListenerKey(gwNSName types.NamespacedName, listenerName string
 type routeRuleErrors struct {
 	invalid field.ErrorList
 	resolve field.ErrorList
+	warn    field.ErrorList
 }
 
 func (e routeRuleErrors) append(newErrors routeRuleErrors) routeRuleErrors {
 	return routeRuleErrors{
 		invalid: append(e.invalid, newErrors.invalid...),
 		resolve: append(e.resolve, newErrors.resolve...),
+		warn:    append(e.warn, newErrors.warn...),
 	}
 }
 

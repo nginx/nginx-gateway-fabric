@@ -24,7 +24,7 @@ func NewValidator(genericValidator validation.GenericValidator) Validator {
 }
 
 // Validate validates the spec of an UpstreamsSettingsPolicy.
-func (v Validator) Validate(policy policies.Policy) []conditions.Condition {
+func (v Validator) Validate(policy policies.Policy) conditions.Conditions {
 	usp := helpers.MustCastObject[*ngfAPI.UpstreamSettingsPolicy](policy)
 
 	targetRefsPath := field.NewPath("spec").Child("targetRefs")
@@ -34,12 +34,12 @@ func (v Validator) Validate(policy policies.Policy) []conditions.Condition {
 	for i, ref := range usp.Spec.TargetRefs {
 		indexedPath := targetRefsPath.Index(i)
 		if err := policies.ValidateTargetRef(ref, indexedPath, supportedGroups, supportedKinds); err != nil {
-			return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
+			return conditions.Conditions{conditions.NewPolicyInvalid(err.Error())}
 		}
 	}
 
 	if err := v.validateSettings(usp.Spec); err != nil {
-		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
+		return conditions.Conditions{conditions.NewPolicyInvalid(err.Error())}
 	}
 
 	return nil
@@ -49,7 +49,7 @@ func (v Validator) Validate(policy policies.Policy) []conditions.Condition {
 func (v Validator) ValidateGlobalSettings(
 	_ policies.Policy,
 	_ *policies.GlobalSettings,
-) []conditions.Condition {
+) conditions.Conditions {
 	return nil
 }
 

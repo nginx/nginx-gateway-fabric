@@ -17,7 +17,7 @@ type SnippetsFilter struct {
 	// Snippets stored as a map of nginx context to snippet value.
 	Snippets map[ngfAPI.NginxContext]string
 	// Conditions define the conditions to be reported in the status of the SnippetsFilter.
-	Conditions []conditions.Condition
+	Conditions conditions.Conditions
 	// Valid indicates whether the SnippetsFilter is semantically and syntactically valid.
 	Valid bool
 	// Referenced indicates whether the SnippetsFilter is referenced by a Route.
@@ -64,7 +64,7 @@ func processSnippetsFilters(
 		if cond := validateSnippetsFilter(sf); cond != nil {
 			processed[nsname] = &SnippetsFilter{
 				Source:     sf,
-				Conditions: []conditions.Condition{*cond},
+				Conditions: conditions.Conditions{*cond},
 				Valid:      false,
 			}
 

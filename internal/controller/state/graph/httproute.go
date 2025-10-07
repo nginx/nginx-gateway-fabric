@@ -171,6 +171,11 @@ func processHTTPRouteRule(
 
 	validMatches := true
 
+	unsupportedFieldsErrors := checkForUnsupportedHTTPFields(specRule, rulePath)
+	if len(unsupportedFieldsErrors) > 0 {
+		errors.warn = append(errors.warn, unsupportedFieldsErrors...)
+	}
+
 	for j, match := range specRule.Matches {
 		matchPath := rulePath.Child("matches").Index(j)
 
@@ -236,7 +241,7 @@ func processHTTPRouteRules(
 	specRules []v1.HTTPRouteRule,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
-) (rules []RouteRule, valid bool, conds []conditions.Condition) {
+) (rules []RouteRule, valid bool, conds conditions.Conditions) {
 	rules = make([]RouteRule, len(specRules))
 
 	var (
@@ -263,9 +268,16 @@ func processHTTPRouteRules(
 		rules[i] = rr
 	}
 
-	conds = make([]conditions.Condition, 0, 2)
+	conds = make(conditions.Conditions, 0, 2)
 
 	valid = true
+
+	// add warning condition for unsupported fields if any
+	if len(allRulesErrors.warn) > 0 {
+		msg := "There are rules with unsupported fields configurations: " + allRulesErrors.warn.ToAggregate().Error()
+		conds = append(conds, conditions.NewRouteUnsupportedField(msg))
+		valid = true
+	}
 
 	if len(allRulesErrors.invalid) > 0 {
 		msg := allRulesErrors.invalid.ToAggregate().Error()
@@ -517,4 +529,44 @@ func validateFilterRewrite(
 	}
 
 	return allErrs
+}
+
+func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) field.ErrorList {
+	supportedFields := []string{"HTTPBackendRef", "HTTPRouteMatch", "HTTPRouteFilter"}
+	var ruleErrors field.ErrorList
+
+	if rule.Name != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("name"),
+			"NGINX Gateway Fabric does not support SectionName field at the moment, supported fields are: "+
+				strings.Join(supportedFields, ", "),
+		))
+	}
+	if rule.Timeouts != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("timeouts"),
+			"NGINX Gateway Fabric does not support \"HTTPRouteTimeouts\" field at the moment, supported fields are: "+
+				strings.Join(supportedFields, ", "),
+		))
+	}
+	if rule.Retry != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("retry"),
+			"NGINX Gateway Fabric does not support \"HTTPRouteRetry\" field at the moment, supported fields are: "+
+				strings.Join(supportedFields, ", "),
+		))
+	}
+	if rule.SessionPersistence != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("sessionPersistence"),
+			"NGINX Gateway Fabric does not support \"SessionPersistence\" field at the moment, supported fields are: "+
+				strings.Join(supportedFields, ", "),
+		))
+	}
+
+	if len(ruleErrors) == 0 {
+		return nil
+	}
+
+	return ruleErrors
 }

@@ -165,6 +165,11 @@ func processGRPCRouteRule(
 
 	validMatches := true
 
+	unsupportedFieldsErrors := checkForUnsupportedGRPCFields(specRule, rulePath)
+	if len(unsupportedFieldsErrors) > 0 {
+		errors.warn = append(errors.warn, unsupportedFieldsErrors...)
+	}
+
 	for j, match := range specRule.Matches {
 		matchPath := rulePath.Child("matches").Index(j)
 
@@ -230,7 +235,7 @@ func processGRPCRouteRules(
 	specRules []v1.GRPCRouteRule,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
-) (rules []RouteRule, valid bool, conds []conditions.Condition) {
+) (rules []RouteRule, valid bool, conds conditions.Conditions) {
 	rules = make([]RouteRule, len(specRules))
 
 	var (
@@ -257,8 +262,15 @@ func processGRPCRouteRules(
 		rules[i] = rr
 	}
 
-	conds = make([]conditions.Condition, 0, 2)
+	conds = make(conditions.Conditions, 0, 2)
 	valid = true
+
+	// add warning condition for unsupported fields if any
+	if len(allRulesErrors.warn) > 0 {
+		msg := "There are rules with unsupported fields configurations: " + allRulesErrors.warn.ToAggregate().Error()
+		conds = append(conds, conditions.NewRouteUnsupportedField(msg))
+		valid = true
+	}
 
 	if len(allRulesErrors.invalid) > 0 {
 		msg := allRulesErrors.invalid.ToAggregate().Error()
@@ -443,4 +455,30 @@ func validateGRPCHeaderMatch(
 	allErrs = append(allErrs, validateHeaderMatchNameAndValue(validator, headerName, headerValue, headerPath)...)
 
 	return allErrs
+}
+
+func checkForUnsupportedGRPCFields(rule v1.GRPCRouteRule, rulePath *field.Path) field.ErrorList {
+	supportedFields := []string{"GRPCBackendRef", "GRPCRouteMatch", "GRPCRouteFilter"}
+	var ruleErrors field.ErrorList
+
+	if rule.Name != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("name"),
+			"NGINX Gateway Fabric does not support \"SectionName\" field at the moment, supported fields are: "+
+				strings.Join(supportedFields, ", "),
+		))
+	}
+	if rule.SessionPersistence != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("sessionPersistence"),
+			"NGINX Gateway Fabric does not support \"SessionPersistence\" field at the moment, supported fields are: "+
+				strings.Join(supportedFields, ", "),
+		))
+	}
+
+	if len(ruleErrors) == 0 {
+		return nil
+	}
+
+	return ruleErrors
 }

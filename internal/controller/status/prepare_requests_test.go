@@ -113,7 +113,7 @@ var (
 			SectionName: commonRouteSpecValid.ParentRefs[1].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         false,
-				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+				FailedConditions: conditions.Conditions{invalidAttachmentCondition},
 			},
 		},
 		{
@@ -122,7 +122,7 @@ var (
 			SectionName: commonRouteSpecValid.ParentRefs[2].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         true,
-				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+				FailedConditions: conditions.Conditions{invalidAttachmentCondition},
 			},
 		},
 		{
@@ -131,7 +131,7 @@ var (
 			SectionName: commonRouteSpecValid.ParentRefs[3].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         false,
-				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+				FailedConditions: conditions.Conditions{invalidAttachmentCondition},
 			},
 		},
 		{
@@ -148,7 +148,7 @@ var (
 			SectionName: commonRouteSpecValid.ParentRefs[5].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         true,
-				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+				FailedConditions: conditions.Conditions{invalidAttachmentCondition},
 			},
 		},
 		{
@@ -157,7 +157,7 @@ var (
 			SectionName: commonRouteSpecValid.ParentRefs[6].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         false,
-				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+				FailedConditions: conditions.Conditions{invalidAttachmentCondition},
 			},
 		},
 		{
@@ -166,7 +166,7 @@ var (
 			SectionName: commonRouteSpecValid.ParentRefs[7].SectionName,
 			Attachment: &graph.ParentRefAttachmentStatus{
 				Attached:         false,
-				FailedConditions: []conditions.Condition{invalidAttachmentCondition},
+				FailedConditions: conditions.Conditions{invalidAttachmentCondition},
 			},
 		},
 	}
@@ -401,7 +401,7 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 		},
 		graph.CreateRouteKey(hrInvalid): {
 			Valid:      false,
-			Conditions: []conditions.Condition{invalidRouteCondition},
+			Conditions: conditions.Conditions{invalidRouteCondition},
 			Source:     hrInvalid,
 			ParentRefs: parentRefsInvalid,
 			RouteType:  graph.RouteTypeHTTP,
@@ -479,7 +479,7 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 		},
 		graph.CreateRouteKey(grInvalid): {
 			Valid:      false,
-			Conditions: []conditions.Condition{invalidRouteCondition},
+			Conditions: conditions.Conditions{invalidRouteCondition},
 			Source:     grInvalid,
 			ParentRefs: parentRefsInvalid,
 			RouteType:  graph.RouteTypeGRPC,
@@ -556,7 +556,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 		},
 		graph.CreateRouteKeyL4(trInvalid): {
 			Valid:      false,
-			Conditions: []conditions.Condition{invalidRouteCondition},
+			Conditions: conditions.Conditions{invalidRouteCondition},
 			Source:     trInvalid,
 			ParentRefs: parentRefsInvalid,
 		},
@@ -1142,7 +1142,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 					},
 				},
 				Valid: true,
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewGatewayResolvedRefs(),
 				},
 			},
@@ -1197,7 +1197,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 					},
 				},
 				Valid: true,
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewGatewayRefNotFound(),
 					conditions.NewGatewayInvalidParameters("ParametersRef not found"),
 				},
@@ -1390,7 +1390,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 
 	type policyCfg struct {
 		Name         string
-		Conditions   []conditions.Condition
+		Conditions   conditions.Conditions
 		Gateways     []types.NamespacedName
 		Valid        bool
 		Ignored      bool
@@ -1414,8 +1414,8 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 		}
 	}
 
-	attachedConds := []conditions.Condition{conditions.NewPolicyAccepted()}
-	invalidConds := []conditions.Condition{conditions.NewPolicyInvalid("invalid backendTLSPolicy")}
+	attachedConds := conditions.Conditions{conditions.NewPolicyAccepted()}
+	invalidConds := conditions.Conditions{conditions.NewPolicyInvalid("invalid backendTLSPolicy")}
 
 	validPolicyCfg := policyCfg{
 		Name:         "valid-bt",
@@ -1744,7 +1744,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 	type policyCfg struct {
 		Ancestors  []graph.PolicyAncestor
 		Name       string
-		Conditions []conditions.Condition
+		Conditions conditions.Conditions
 	}
 
 	// We have to use a real policy here because the test makes the status update using the k8sClient.
@@ -1763,8 +1763,8 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 		}
 	}
 
-	invalidConds := []conditions.Condition{conditions.NewPolicyInvalid("invalid")}
-	targetRefNotFoundConds := []conditions.Condition{conditions.NewPolicyTargetNotFound("target not found")}
+	invalidConds := conditions.Conditions{conditions.NewPolicyInvalid("invalid")}
+	targetRefNotFoundConds := conditions.Conditions{conditions.NewPolicyTargetNotFound("target not found")}
 
 	validPolicyKey := graph.PolicyKey{
 		NsName: types.NamespacedName{Namespace: "test", Name: "valid-pol"},
@@ -2059,7 +2059,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 				Generation: 1,
 			},
 		},
-		Conditions: []conditions.Condition{conditions.NewSnippetsFilterInvalid("invalid snippetsFilter")},
+		Conditions: conditions.Conditions{conditions.NewSnippetsFilterInvalid("invalid snippetsFilter")},
 		Valid:      false,
 	}
 

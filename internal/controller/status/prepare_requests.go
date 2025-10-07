@@ -136,7 +136,7 @@ func removeDuplicateIndexParentRefs(parentRefs []graph.ParentRef) []graph.Parent
 func prepareRouteStatus(
 	gatewayCtlrName string,
 	parentRefs []graph.ParentRef,
-	conds []conditions.Condition,
+	conds conditions.Conditions,
 	transitionTime metav1.Time,
 	srcGeneration int64,
 ) v1.RouteStatus {
@@ -155,7 +155,7 @@ func prepareRouteStatus(
 		if ref.Attachment != nil {
 			failedAttachmentCondCount = len(ref.Attachment.FailedConditions)
 		}
-		allConds := make([]conditions.Condition, 0, len(conds)+len(defaultConds)+failedAttachmentCondCount)
+		allConds := make(conditions.Conditions, 0, len(conds)+len(defaultConds)+failedAttachmentCondCount)
 
 		// We add defaultConds first, so that any additional conditions will override them, which is
 		// ensured by DeduplicateConditions.
@@ -195,7 +195,7 @@ func PrepareGatewayClassRequests(
 	if gc != nil {
 		defaultConds := conditions.NewDefaultGatewayClassConditions()
 
-		conds := make([]conditions.Condition, 0, len(gc.Conditions)+len(defaultConds))
+		conds := make(conditions.Conditions, 0, len(gc.Conditions)+len(defaultConds))
 
 		// We add default conds first, so that any additional conditions will override them, which is
 		// ensured by DeduplicateConditions.
@@ -223,7 +223,7 @@ func PrepareGatewayClassRequests(
 			ResourceType: &v1.GatewayClass{},
 			Setter: newGatewayClassStatusSetter(v1.GatewayClassStatus{
 				Conditions: conditions.ConvertConditions(
-					[]conditions.Condition{conditions.NewGatewayClassConflict()},
+					conditions.Conditions{conditions.NewGatewayClassConflict()},
 					gwClass.Generation,
 					transitionTime,
 				),
@@ -370,7 +370,7 @@ func PrepareNGFPolicyRequests(
 		}
 
 		for _, ancestor := range pol.Ancestors {
-			allConds := make([]conditions.Condition, 0, len(pol.Conditions)+len(ancestor.Conditions)+1)
+			allConds := make(conditions.Conditions, 0, len(pol.Conditions)+len(ancestor.Conditions)+1)
 
 			// The order of conditions matters here.
 			// We add the default condition first, followed by the ancestor conditions, and finally the policy conditions.
@@ -455,7 +455,7 @@ func PrepareSnippetsFilterRequests(
 	reqs := make([]UpdateRequest, 0, len(snippetsFilters))
 
 	for nsname, snippetsFilter := range snippetsFilters {
-		allConds := make([]conditions.Condition, 0, len(snippetsFilter.Conditions)+1)
+		allConds := make(conditions.Conditions, 0, len(snippetsFilter.Conditions)+1)
 
 		// The order of conditions matters here.
 		// We add the default condition first, followed by the snippetsFilter conditions.
@@ -501,14 +501,14 @@ func PrepareNginxGatewayStatus(
 		return nil
 	}
 
-	var conds []conditions.Condition
+	var conds conditions.Conditions
 	if cpUpdateRes.Error != nil {
 		msg := "Failed to update control plane configuration"
-		conds = []conditions.Condition{
+		conds = conditions.Conditions{
 			conditions.NewNginxGatewayInvalid(fmt.Sprintf("%s: %v", msg, cpUpdateRes.Error)),
 		}
 	} else {
-		conds = []conditions.Condition{conditions.NewNginxGatewayValid()}
+		conds = conditions.Conditions{conditions.NewNginxGatewayValid()}
 	}
 
 	return &UpdateRequest{

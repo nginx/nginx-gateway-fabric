@@ -16,9 +16,9 @@ import (
 //counterfeiter:generate . Validator
 type Validator interface {
 	// Validate validates an NGF Policy.
-	Validate(policy Policy) []conditions.Condition
+	Validate(policy Policy) conditions.Conditions
 	// ValidateGlobalSettings validates an NGF Policy with the NginxProxy settings.
-	ValidateGlobalSettings(policy Policy, globalSettings *GlobalSettings) []conditions.Condition
+	ValidateGlobalSettings(policy Policy, globalSettings *GlobalSettings) conditions.Conditions
 	// Conflicts returns true if the two Policies conflict.
 	Conflicts(a, b Policy) bool
 }
@@ -56,7 +56,7 @@ func NewManager(
 }
 
 // Validate validates the policy.
-func (m *CompositeValidator) Validate(policy Policy) []conditions.Condition {
+func (m *CompositeValidator) Validate(policy Policy) conditions.Conditions {
 	gvk := m.mustExtractGVK(policy)
 
 	validator, ok := m.validators[gvk]
@@ -71,7 +71,7 @@ func (m *CompositeValidator) Validate(policy Policy) []conditions.Condition {
 func (m *CompositeValidator) ValidateGlobalSettings(
 	policy Policy,
 	globalSettings *GlobalSettings,
-) []conditions.Condition {
+) conditions.Conditions {
 	gvk := m.mustExtractGVK(policy)
 
 	validator, ok := m.validators[gvk]

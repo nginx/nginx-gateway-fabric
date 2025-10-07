@@ -48,11 +48,11 @@ var _ = Describe("Policy CompositeValidator", func() {
 		mustExtractGVK,
 		policies.ManagerConfig{
 			Validator: &policiesfakes.FakeValidator{
-				ValidateStub: func(_ policies.Policy) []conditions.Condition {
-					return []conditions.Condition{conditions.NewPolicyInvalid("apple error")}
+				ValidateStub: func(_ policies.Policy) conditions.Conditions {
+					return conditions.Conditions{conditions.NewPolicyInvalid("apple error")}
 				},
-				ValidateGlobalSettingsStub: func(_ policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
-					return []conditions.Condition{conditions.NewPolicyInvalid("apple global settings error")}
+				ValidateGlobalSettingsStub: func(_ policies.Policy, _ *policies.GlobalSettings) conditions.Conditions {
+					return conditions.Conditions{conditions.NewPolicyInvalid("apple global settings error")}
 				},
 				ConflictsStub: func(_ policies.Policy, _ policies.Policy) bool { return true },
 			},
@@ -60,11 +60,11 @@ var _ = Describe("Policy CompositeValidator", func() {
 		},
 		policies.ManagerConfig{
 			Validator: &policiesfakes.FakeValidator{
-				ValidateStub: func(_ policies.Policy) []conditions.Condition {
-					return []conditions.Condition{conditions.NewPolicyInvalid("orange error")}
+				ValidateStub: func(_ policies.Policy) conditions.Conditions {
+					return conditions.Conditions{conditions.NewPolicyInvalid("orange error")}
 				},
-				ValidateGlobalSettingsStub: func(_ policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
-					return []conditions.Condition{conditions.NewPolicyInvalid("orange global settings error")}
+				ValidateGlobalSettingsStub: func(_ policies.Policy, _ *policies.GlobalSettings) conditions.Conditions {
+					return conditions.Conditions{conditions.NewPolicyInvalid("orange global settings error")}
 				},
 				ConflictsStub: func(_ policies.Policy, _ policies.Policy) bool { return false },
 			},

@@ -24,7 +24,7 @@ func NewValidator(genericValidator validation.GenericValidator) *Validator {
 }
 
 // Validate validates the spec of a ClientSettingsPolicy.
-func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
+func (v *Validator) Validate(policy policies.Policy) conditions.Conditions {
 	csp := helpers.MustCastObject[*ngfAPI.ClientSettingsPolicy](policy)
 
 	targetRefPath := field.NewPath("spec").Child("targetRef")
@@ -32,11 +32,11 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 	supportedGroups := []gatewayv1.Group{gatewayv1.GroupName}
 
 	if err := policies.ValidateTargetRef(csp.Spec.TargetRef, targetRefPath, supportedGroups, supportedKinds); err != nil {
-		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
+		return conditions.Conditions{conditions.NewPolicyInvalid(err.Error())}
 	}
 
 	if err := v.validateSettings(csp.Spec); err != nil {
-		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
+		return conditions.Conditions{conditions.NewPolicyInvalid(err.Error())}
 	}
 
 	return nil
@@ -46,7 +46,7 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 func (v *Validator) ValidateGlobalSettings(
 	_ policies.Policy,
 	_ *policies.GlobalSettings,
-) []conditions.Condition {
+) conditions.Conditions {
 	return nil
 }
 

@@ -574,7 +574,7 @@ func TestBindRouteToListeners(t *testing.T) {
 		name                     string
 		expectedGatewayListeners []*Listener
 		expectedSectionNameRefs  []ParentRef
-		expectedConditions       []conditions.Condition
+		expectedConditions       conditions.Conditions
 	}{
 		{
 			route: createNormalHTTPRoute(gw),
@@ -704,7 +704,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					SectionName: hrWithEmptySectionName.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
-						FailedConditions:  []conditions.Condition{conditions.NewRouteInvalidListener()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteInvalidListener()},
 						AcceptedHostnames: map[string][]string{},
 					},
 				},
@@ -768,7 +768,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					SectionName: hrWithNonExistingListener.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
-						FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteNoMatchingParent()},
 						AcceptedHostnames: map[string][]string{},
 					},
 				},
@@ -794,7 +794,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					SectionName: hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
-						FailedConditions:  []conditions.Condition{conditions.NewRouteInvalidListener()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteInvalidListener()},
 						AcceptedHostnames: map[string][]string{},
 					},
 				},
@@ -820,7 +820,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					SectionName: hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
-						FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingListenerHostname()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteNoMatchingListenerHostname()},
 						AcceptedHostnames: map[string][]string{},
 					},
 				},
@@ -868,7 +868,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					SectionName: hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
-						FailedConditions:  []conditions.Condition{conditions.NewRouteInvalidGateway()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteInvalidGateway()},
 						AcceptedHostnames: map[string][]string{},
 					},
 				},
@@ -913,7 +913,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					}
 				}),
 			},
-			expectedConditions: []conditions.Condition{conditions.NewRouteInvalidListener()},
+			expectedConditions: conditions.Conditions{conditions.NewRouteInvalidListener()},
 			name:               "invalid attachable listener",
 		},
 		{
@@ -985,7 +985,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					}
 				}),
 			},
-			expectedConditions: []conditions.Condition{conditions.NewRouteInvalidListener()},
+			expectedConditions: conditions.Conditions{conditions.NewRouteInvalidListener()},
 			name:               "invalid attachable listener with invalid attachable route",
 		},
 		{
@@ -1012,7 +1012,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					SectionName: hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
-						FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteNotAllowedByListeners()},
 						AcceptedHostnames: map[string][]string{},
 					},
 				},
@@ -1101,7 +1101,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					SectionName: hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
-						FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteNotAllowedByListeners()},
 						AcceptedHostnames: map[string][]string{},
 					},
 				},
@@ -1230,7 +1230,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					SectionName: gr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached:          false,
-						FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteNotAllowedByListeners()},
 						AcceptedHostnames: map[string][]string{},
 					},
 				},
@@ -1275,7 +1275,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					SectionName: gr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: false,
-						FailedConditions: []conditions.Condition{
+						FailedConditions: conditions.Conditions{
 							conditions.NewRouteUnsupportedConfiguration(
 								`HTTP2 is disabled - cannot configure GRPCRoutes`,
 							),
@@ -1360,7 +1360,7 @@ func TestBindRouteToListeners(t *testing.T) {
 					SectionName: hr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
-						FailedConditions: []conditions.Condition{
+						FailedConditions: conditions.Conditions{
 							{Message: "invalid backend"},
 						},
 						AcceptedHostnames: map[string][]string{
@@ -1763,7 +1763,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 
 	noMatchingParentAttachment := ParentRefAttachmentStatus{
 		AcceptedHostnames: map[string][]string{},
-		FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+		FailedConditions:  conditions.Conditions{conditions.NewRouteNoMatchingParent()},
 	}
 
 	notAttachableRoute := &L4Route{
@@ -1810,7 +1810,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 		expectedGatewayListeners []*Listener
 		name                     string
 		expectedSectionNameRefs  []ParentRef
-		expectedConditions       []conditions.Condition
+		expectedConditions       conditions.Conditions
 	}{
 		{
 			route: createNormalRoute(gw),
@@ -1920,7 +1920,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{},
-						FailedConditions: []conditions.Condition{
+						FailedConditions: conditions.Conditions{
 							conditions.NewRouteNoMatchingParent(),
 						},
 						Attached: false,
@@ -1955,7 +1955,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				{
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{},
-						FailedConditions:  []conditions.Condition{conditions.NewRouteInvalidGateway()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteInvalidGateway()},
 						Attached:          false,
 					},
 					SectionName: tr.Spec.ParentRefs[0].SectionName,
@@ -1995,7 +1995,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					SectionName: tr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{},
-						FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteNotAllowedByListeners()},
 					},
 				},
 			},
@@ -2068,7 +2068,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					}
 				}),
 			},
-			expectedConditions: []conditions.Condition{conditions.NewRouteInvalidListener()},
+			expectedConditions: conditions.Conditions{conditions.NewRouteInvalidListener()},
 			name:               "invalid attachable listener",
 		},
 		{
@@ -2093,7 +2093,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					SectionName: tr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{},
-						FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingListenerHostname()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteNoMatchingListenerHostname()},
 					},
 				},
 			},
@@ -2266,7 +2266,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					Gateway: &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: map[string][]string{},
-						FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+						FailedConditions:  conditions.Conditions{conditions.NewRouteNotAllowedByListeners()},
 					},
 					SectionName: helpers.GetPointer[gatewayv1.SectionName]("listener-443"),
 				},
@@ -2298,7 +2298,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					SectionName: tr.Spec.ParentRefs[0].SectionName,
 					Attachment: &ParentRefAttachmentStatus{
 						Attached: true,
-						FailedConditions: []conditions.Condition{
+						FailedConditions: conditions.Conditions{
 							{Message: "invalid backend"},
 						},
 						AcceptedHostnames: map[string][]string{

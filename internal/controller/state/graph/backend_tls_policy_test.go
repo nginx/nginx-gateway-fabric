@@ -804,13 +804,13 @@ func TestAddGatewaysForBackendTLSPoliciesAncestorLimit(t *testing.T) {
 			Source: &gatewayv1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "gateway1", Namespace: "test"},
 			},
-			Conditions: []conditions.Condition{}, // Start with empty conditions
+			Conditions: conditions.Conditions{}, // Start with empty conditions
 		},
 		{Namespace: "test", Name: "gateway2"}: {
 			Source: &gatewayv1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "gateway2", Namespace: "test"},
 			},
-			Conditions: []conditions.Condition{}, // Start with empty conditions
+			Conditions: conditions.Conditions{}, // Start with empty conditions
 		},
 	}
 

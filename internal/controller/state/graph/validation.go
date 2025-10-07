@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func validateHostname(hostname string) error {
@@ -28,4 +29,13 @@ func validateHostname(hostname string) error {
 	}
 
 	return nil
+}
+
+// RuleWithUnsupportedFields defines an interface for rules with unsupported fields.
+type RuleWithUnsupportedFields interface {
+	GetName() *v1.SectionName
+	GetTimeouts() *v1.HTTPRouteTimeouts
+	GetRetry() *v1.HTTPRouteRetry
+	GetSessionPersistence() *v1.SessionPersistence
+	GetSupportedFields() []string
 }

@@ -55,9 +55,9 @@ type GenericValidator interface {
 //counterfeiter:generate . PolicyValidator
 type PolicyValidator interface {
 	// Validate validates an NGF Policy.
-	Validate(policy policies.Policy) []conditions.Condition
+	Validate(policy policies.Policy) conditions.Conditions
 	// ValidateGlobalSettings validates an NGF Policy with the NginxProxy settings.
-	ValidateGlobalSettings(policy policies.Policy, globalSettings *policies.GlobalSettings) []conditions.Condition
+	ValidateGlobalSettings(policy policies.Policy, globalSettings *policies.GlobalSettings) conditions.Conditions
 	// Conflicts returns true if the two Policies conflict.
 	Conflicts(a, b policies.Policy) bool
 }

@@ -38,6 +38,13 @@ const (
 	// Route rules has a backendRef with an unsupported value.
 	RouteReasonBackendRefUnsupportedValue v1.RouteConditionReason = "UnsupportedValue"
 
+	// RouteReasonUnsupportedField is used when a Route contains fields that are not yet supported.
+	RouteReasonUnsupportedField v1.RouteConditionReason = "UnsupportedField"
+
+	// RouteConditionUnsupportedField indicates that the Route contains fields that are not yet supported.
+	// The route is still valid and processed, but these fields are ignored.
+	RouteConditionUnsupportedField v1.RouteConditionType = "UnsupportedField"
+
 	// RouteReasonInvalidGateway is used with the "Accepted" (false) condition when the Gateway the Route
 	// references is invalid.
 	RouteReasonInvalidGateway v1.RouteConditionReason = "InvalidGateway"
@@ -61,6 +68,13 @@ const (
 	// RouteReasonInvalidFilter is used when an extension ref filter referenced by a Route cannot be resolved, or is
 	// invalid. Used with ResolvedRefs (false).
 	RouteReasonInvalidFilter v1.RouteConditionReason = "InvalidFilter"
+
+	// GatewayReasonUnsupportedField is used when a Route contains fields that are not yet supported.
+	GatewayReasonUnsupportedField v1.GatewayConditionReason = "UnsupportedField"
+
+	// GatewayConditionUnsupportedField indicates that the Gateway contains fields that are not yet supported.
+	// The gateway is still valid and processed, but these fields are ignored.
+	GatewayConditionUnsupportedField v1.GatewayConditionType = "UnsupportedField"
 
 	// GatewayReasonUnsupportedValue is used with GatewayConditionAccepted (false) when a value of a field in a Gateway
 	// is invalid or not supported.
@@ -165,9 +179,22 @@ type Condition struct {
 	Message string
 }
 
+type Conditions []Condition
+
+func (c *Conditions) CountInvalid() int {
+	var count int
+	for _, cond := range *c {
+		if cond.Status == metav1.ConditionFalse {
+			count++
+		}
+	}
+
+	return count
+}
+
 // DeduplicateConditions removes duplicate conditions based on the condition type.
 // The last condition wins. The order of conditions is preserved.
-func DeduplicateConditions(conds []Condition) []Condition {
+func DeduplicateConditions(conds Conditions) Conditions {
 	type elem struct {
 		cond       Condition
 		reverseIdx int
@@ -188,7 +215,7 @@ func DeduplicateConditions(conds []Condition) []Condition {
 		idx++
 	}
 
-	result := make([]Condition, len(uniqueElems))
+	result := make(Conditions, len(uniqueElems))
 
 	for _, el := range uniqueElems {
 		result[len(result)-el.reverseIdx-1] = el.cond
@@ -199,7 +226,7 @@ func DeduplicateConditions(conds []Condition) []Condition {
 
 // ConvertConditions converts conditions to Kubernetes API conditions.
 func ConvertConditions(
-	conds []Condition,
+	conds Conditions,
 	observedGeneration int64,
 	transitionTime metav1.Time,
 ) []metav1.Condition {
@@ -220,7 +247,7 @@ func ConvertConditions(
 }
 
 // HasMatchingCondition checks if the given condition matches any of the existing conditions.
-func HasMatchingCondition(existingConditions []Condition, cond Condition) bool {
+func HasMatchingCondition(existingConditions Conditions, cond Condition) bool {
 	for _, existing := range existingConditions {
 		if existing.Type == cond.Type &&
 			existing.Status == cond.Status &&
@@ -234,8 +261,8 @@ func HasMatchingCondition(existingConditions []Condition, cond Condition) bool {
 
 // NewDefaultGatewayClassConditions returns Conditions that indicate that the GatewayClass is accepted and that the
 // Gateway API CRD versions are supported.
-func NewDefaultGatewayClassConditions() []Condition {
-	return []Condition{
+func NewDefaultGatewayClassConditions() Conditions {
+	return Conditions{
 		{
 			Type:    string(v1.GatewayClassConditionStatusAccepted),
 			Status:  metav1.ConditionTrue,
@@ -254,8 +281,8 @@ func NewDefaultGatewayClassConditions() []Condition {
 // NewGatewayClassSupportedVersionBestEffort returns a Condition that indicates that the GatewayClass is accepted,
 // but the Gateway API CRD versions are not supported. This means NGF will attempt to generate configuration,
 // but it does not guarantee support.
-func NewGatewayClassSupportedVersionBestEffort(recommendedVersion string) []Condition {
-	return []Condition{
+func NewGatewayClassSupportedVersionBestEffort(recommendedVersion string) Conditions {
+	return Conditions{
 		{
 			Type:   string(v1.GatewayClassConditionStatusSupportedVersion),
 			Status: metav1.ConditionFalse,
@@ -270,8 +297,8 @@ func NewGatewayClassSupportedVersionBestEffort(recommendedVersion string) []Cond
 
 // NewGatewayClassUnsupportedVersion returns Conditions that indicate that the GatewayClass is not accepted because
 // the Gateway API CRD versions are not supported. NGF will not generate configuration in this case.
-func NewGatewayClassUnsupportedVersion(recommendedVersion string) []Condition {
-	return []Condition{
+func NewGatewayClassUnsupportedVersion(recommendedVersion string) Conditions {
+	return Conditions{
 		{
 			Type:   string(v1.GatewayClassConditionStatusAccepted),
 			Status: metav1.ConditionFalse,
@@ -305,8 +332,8 @@ func NewGatewayClassConflict() Condition {
 }
 
 // NewDefaultRouteConditions returns the default conditions that must be present in the status of a Route.
-func NewDefaultRouteConditions() []Condition {
-	return []Condition{
+func NewDefaultRouteConditions() Conditions {
+	return Conditions{
 		NewRouteAccepted(),
 		NewRouteResolvedRefs(),
 	}
@@ -351,6 +378,16 @@ func NewRouteUnsupportedValue(msg string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.RouteReasonUnsupportedValue),
 		Message: msg,
+	}
+}
+
+// NewRouteUnsupportedField returns a Condition that indicates that the Route includes an unsupported field.
+func NewRouteUnsupportedField(msg string) Condition {
+	return Condition{
+		Type:    string(RouteConditionUnsupportedField),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(RouteReasonUnsupportedField),
+		Message: fmt.Sprintf("Some parameters are ignored due to an error: %s", msg),
 	}
 }
 
@@ -514,8 +551,8 @@ func NewRouteResolvedRefsInvalidFilter(msg string) Condition {
 // NewDefaultListenerConditions returns the default Conditions that must be present in the status of a Listener.
 // If existingConditions contains conflict-related conditions (like OverlappingTLSConfig or Conflicted),
 // the NoConflicts condition is excluded to avoid conflicting condition states.
-func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
-	defaultConds := []Condition{
+func NewDefaultListenerConditions(existingConditions Conditions) Conditions {
+	defaultConds := Conditions{
 		NewListenerAccepted(),
 		NewListenerProgrammed(),
 		NewListenerResolvedRefs(),
@@ -530,7 +567,7 @@ func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 }
 
 // hasConflictConditions checks if the listener has any conflict-related conditions.
-func hasConflictConditions(conditions []Condition) bool {
+func hasConflictConditions(conditions Conditions) bool {
 	for _, cond := range conditions {
 		if cond.Type == string(v1.ListenerConditionConflicted) ||
 			cond.Type == string(v1.ListenerConditionOverlappingTLSConfig) {
@@ -593,8 +630,8 @@ func NewListenerNotProgrammedInvalid(msg string) Condition {
 
 // NewListenerUnsupportedValue returns Conditions that indicate that a field of a Listener has an unsupported value.
 // Unsupported means that the value is not supported by the implementation or invalid.
-func NewListenerUnsupportedValue(msg string) []Condition {
-	return []Condition{
+func NewListenerUnsupportedValue(msg string) Conditions {
+	return Conditions{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -606,8 +643,8 @@ func NewListenerUnsupportedValue(msg string) []Condition {
 }
 
 // NewListenerInvalidCertificateRef returns Conditions that indicate that a CertificateRef of a Listener is invalid.
-func NewListenerInvalidCertificateRef(msg string) []Condition {
-	return []Condition{
+func NewListenerInvalidCertificateRef(msg string) Conditions {
+	return Conditions{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -626,8 +663,8 @@ func NewListenerInvalidCertificateRef(msg string) []Condition {
 
 // NewListenerInvalidRouteKinds returns Conditions that indicate that an invalid or unsupported Route kind is
 // specified by the Listener.
-func NewListenerInvalidRouteKinds(msg string) []Condition {
-	return []Condition{
+func NewListenerInvalidRouteKinds(msg string) Conditions {
+	return Conditions{
 		{
 			Type:    string(v1.ListenerReasonResolvedRefs),
 			Status:  metav1.ConditionFalse,
@@ -640,8 +677,8 @@ func NewListenerInvalidRouteKinds(msg string) []Condition {
 
 // NewListenerProtocolConflict returns Conditions that indicate multiple Listeners are specified with the same
 // Listener port number, but have conflicting protocol specifications.
-func NewListenerProtocolConflict(msg string) []Condition {
-	return []Condition{
+func NewListenerProtocolConflict(msg string) Conditions {
+	return Conditions{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -660,8 +697,8 @@ func NewListenerProtocolConflict(msg string) []Condition {
 
 // NewListenerHostnameConflict returns Conditions that indicate multiple Listeners are specified with the same
 // Listener port, but are HTTPS and TLS and have overlapping hostnames.
-func NewListenerHostnameConflict(msg string) []Condition {
-	return []Condition{
+func NewListenerHostnameConflict(msg string) Conditions {
+	return Conditions{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -679,8 +716,8 @@ func NewListenerHostnameConflict(msg string) []Condition {
 }
 
 // NewListenerUnsupportedProtocol returns Conditions that indicate that the protocol of a Listener is unsupported.
-func NewListenerUnsupportedProtocol(msg string) []Condition {
-	return []Condition{
+func NewListenerUnsupportedProtocol(msg string) Conditions {
+	return Conditions{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -693,8 +730,8 @@ func NewListenerUnsupportedProtocol(msg string) []Condition {
 
 // NewListenerRefNotPermitted returns Conditions that indicates that the Listener references a TLS secret that is not
 // permitted by a ReferenceGrant.
-func NewListenerRefNotPermitted(msg string) []Condition {
-	return []Condition{
+func NewListenerRefNotPermitted(msg string) Conditions {
+	return Conditions{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -768,8 +805,8 @@ func NewGatewayClassInvalidParameters(msg string) Condition {
 }
 
 // NewDefaultGatewayConditions returns the default Conditions that must be present in the status of a Gateway.
-func NewDefaultGatewayConditions() []Condition {
-	return []Condition{
+func NewDefaultGatewayConditions() Conditions {
+	return Conditions{
 		NewGatewayAccepted(),
 		NewGatewayProgrammed(),
 	}
@@ -798,9 +835,9 @@ func NewGatewayAcceptedListenersNotValid() Condition {
 
 // NewGatewayNotAcceptedListenersNotValid returns Conditions that indicate the Gateway is not accepted,
 // because all listeners are invalid.
-func NewGatewayNotAcceptedListenersNotValid() []Condition {
+func NewGatewayNotAcceptedListenersNotValid() Conditions {
 	msg := "Gateway has no valid listeners"
-	return []Condition{
+	return Conditions{
 		{
 			Type:    string(v1.GatewayConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -813,8 +850,8 @@ func NewGatewayNotAcceptedListenersNotValid() []Condition {
 
 // NewGatewayInvalid returns Conditions that indicate the Gateway is not accepted and programmed because it is
 // semantically or syntactically invalid. The provided message contains the details of why the Gateway is invalid.
-func NewGatewayInvalid(msg string) []Condition {
-	return []Condition{
+func NewGatewayInvalid(msg string) Conditions {
+	return Conditions{
 		{
 			Type:    string(v1.GatewayConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -942,6 +979,17 @@ func NewGatewayInvalidParameters(msg string) Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.GatewayReasonInvalidParameters),
 		Message: fmt.Sprintf("Gateway is accepted, but ParametersRef is ignored due to an error: %s", msg),
+	}
+}
+
+// NewGatewayUnsupportedField returns a Condition that indicates the Gateway is accepted but
+// contains a field that is not supported.
+func NewGatewayUnsupportedField(msg string) Condition {
+	return Condition{
+		Type:    string(GatewayConditionUnsupportedField),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(GatewayReasonUnsupportedField),
+		Message: fmt.Sprintf("Gateway is accepted, but some parameters are ignored due to an error: %s", msg),
 	}
 }
 

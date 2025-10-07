@@ -49,7 +49,7 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
-	btpAcceptedConds := []conditions.Condition{
+	btpAcceptedConds := conditions.Conditions{
 		conditions.NewBackendTLSPolicyResolvedRefs(),
 		conditions.NewPolicyAccepted(),
 		conditions.NewPolicyAccepted(),
@@ -767,7 +767,7 @@ func TestBuildGraph(t *testing.T) {
 			Rules:     []RouteRule{createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeHTTP)},
 		},
 		Policies: []*Policy{processedRoutePolicy},
-		Conditions: []conditions.Condition{
+		Conditions: conditions.Conditions{
 			conditions.NewClientSettingsPolicyAffected(),
 		},
 	}
@@ -786,7 +786,7 @@ func TestBuildGraph(t *testing.T) {
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{},
 					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					FailedConditions:  conditions.Conditions{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[0].Name,
 			},
@@ -799,7 +799,7 @@ func TestBuildGraph(t *testing.T) {
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{},
 					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					FailedConditions:  conditions.Conditions{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[1].Name,
 			},
@@ -868,7 +868,7 @@ func TestBuildGraph(t *testing.T) {
 				Attachment: &ParentRefAttachmentStatus{
 					Attached:          false,
 					AcceptedHostnames: map[string][]string{},
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					FailedConditions:  conditions.Conditions{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[0].Name,
 			},
@@ -881,7 +881,7 @@ func TestBuildGraph(t *testing.T) {
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{},
 					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					FailedConditions:  conditions.Conditions{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[1].Name,
 			},
@@ -894,7 +894,7 @@ func TestBuildGraph(t *testing.T) {
 				Attachment: &ParentRefAttachmentStatus{
 					Attached:          false,
 					AcceptedHostnames: map[string][]string{},
-					FailedConditions:  []conditions.Condition{conditions.NewRouteHostnameConflict()},
+					FailedConditions:  conditions.Conditions{conditions.NewRouteHostnameConflict()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[2].Name,
 			},
@@ -907,7 +907,7 @@ func TestBuildGraph(t *testing.T) {
 				Attachment: &ParentRefAttachmentStatus{
 					Attached:          false,
 					AcceptedHostnames: map[string][]string{},
-					FailedConditions:  []conditions.Condition{conditions.NewRouteHostnameConflict()},
+					FailedConditions:  conditions.Conditions{conditions.NewRouteHostnameConflict()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[3].Name,
 			},
@@ -1002,7 +1002,7 @@ func TestBuildGraph(t *testing.T) {
 			GatewayClass: &GatewayClass{
 				Source:     gc,
 				Valid:      true,
-				Conditions: []conditions.Condition{conditions.NewGatewayClassResolvedRefs()},
+				Conditions: conditions.Conditions{conditions.NewGatewayClassResolvedRefs()},
 				NginxProxy: &NginxProxy{
 					Source: npGlobal,
 					Valid:  true,
@@ -1085,7 +1085,7 @@ func TestBuildGraph(t *testing.T) {
 							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
 						},
 					},
-					Conditions: []conditions.Condition{
+					Conditions: conditions.Conditions{
 						conditions.NewGatewayResolvedRefs(),
 						conditions.NewClientSettingsPolicyAffected(),
 					},
@@ -1164,7 +1164,7 @@ func TestBuildGraph(t *testing.T) {
 						},
 						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6),
 					},
-					Conditions: []conditions.Condition{conditions.NewGatewayResolvedRefs()},
+					Conditions: conditions.Conditions{conditions.NewGatewayResolvedRefs()},
 					DeploymentName: types.NamespacedName{
 						Namespace: "test",
 						Name:      "gateway-2-my-class",

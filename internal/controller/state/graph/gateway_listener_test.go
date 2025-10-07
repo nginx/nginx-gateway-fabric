@@ -20,7 +20,7 @@ func TestValidateHTTPListener(t *testing.T) {
 	tests := []struct {
 		l        v1.Listener
 		name     string
-		expected []conditions.Condition
+		expected conditions.Conditions
 	}{
 		{
 			l: v1.Listener{
@@ -101,7 +101,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 	tests := []struct {
 		l        v1.Listener
 		name     string
-		expected []conditions.Condition
+		expected conditions.Conditions
 	}{
 		{
 			l: v1.Listener{
@@ -607,7 +607,7 @@ func TestValidateTLSFieldOnTLSListener(t *testing.T) {
 	tests := []struct {
 		listener     v1.Listener
 		msg          string
-		expectedCond []conditions.Condition
+		expectedCond conditions.Conditions
 		expectValid  bool
 	}{
 		{

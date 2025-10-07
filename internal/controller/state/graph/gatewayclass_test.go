@@ -213,7 +213,7 @@ func TestBuildGatewayClass(t *testing.T) {
 			expected: &GatewayClass{
 				Source:     gcWithParams,
 				Valid:      true,
-				Conditions: []conditions.Condition{conditions.NewGatewayClassResolvedRefs()},
+				Conditions: conditions.Conditions{conditions.NewGatewayClassResolvedRefs()},
 				NginxProxy: &NginxProxy{
 					Valid:  true,
 					Source: np,
@@ -226,7 +226,7 @@ func TestBuildGatewayClass(t *testing.T) {
 			expected: &GatewayClass{
 				Source: gcWithParamsNoNamespace,
 				Valid:  true,
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewGatewayClassRefInvalid(
 						"spec.parametersRef.namespace: Required value: ParametersRef must specify Namespace",
 					),
@@ -242,7 +242,7 @@ func TestBuildGatewayClass(t *testing.T) {
 			expected: &GatewayClass{
 				Source: gcWithInvalidKind,
 				Valid:  true,
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewGatewayClassRefInvalid(
 						"spec.parametersRef.kind: Unsupported value: \"Invalid\": supported values: \"NginxProxy\"",
 					),
@@ -258,7 +258,7 @@ func TestBuildGatewayClass(t *testing.T) {
 			expected: &GatewayClass{
 				Source: gcWithParams,
 				Valid:  true,
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewGatewayClassRefNotFound(),
 					conditions.NewGatewayClassInvalidParameters(
 						"spec.parametersRef.name: Not found: \"nginx-proxy\"",
@@ -289,7 +289,7 @@ func TestBuildGatewayClass(t *testing.T) {
 			expected: &GatewayClass{
 				Source: gcWithParams,
 				Valid:  true,
-				Conditions: []conditions.Condition{
+				Conditions: conditions.Conditions{
 					conditions.NewGatewayClassRefInvalid(
 						"[spec.telemetry.serviceName: Invalid value: \"my-svc\": error" +
 							", spec.telemetry.exporter.endpoint: Invalid value: \"my-endpoint\": error]",
@@ -363,7 +363,7 @@ func TestValidateCRDVersions(t *testing.T) {
 	tests := []struct {
 		crds     map[types.NamespacedName]*metav1.PartialObjectMetadata
 		name     string
-		expConds []conditions.Condition
+		expConds conditions.Conditions
 		valid    bool
 	}{
 		{

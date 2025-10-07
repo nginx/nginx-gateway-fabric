@@ -37,7 +37,7 @@ type GatewayClass struct {
 	// NginxProxy is the NginxProxy resource referenced by this GatewayClass.
 	NginxProxy *NginxProxy
 	// Conditions include Conditions for the GatewayClass.
-	Conditions []conditions.Condition
+	Conditions conditions.Conditions
 	// Valid shows whether the GatewayClass is valid.
 	Valid bool
 }
@@ -115,7 +115,7 @@ func getNginxProxyForGatewayClass(
 	return nps[npName]
 }
 
-func validateGatewayClassParametersRef(path *field.Path, ref v1.ParametersReference) []conditions.Condition {
+func validateGatewayClassParametersRef(path *field.Path, ref v1.ParametersReference) conditions.Conditions {
 	var errs field.ErrorList
 
 	if _, ok := supportedParamKinds[string(ref.Kind)]; !ok {
@@ -131,7 +131,7 @@ func validateGatewayClassParametersRef(path *field.Path, ref v1.ParametersRefere
 
 	if len(errs) > 0 {
 		msg := errs.ToAggregate().Error()
-		return []conditions.Condition{
+		return conditions.Conditions{
 			conditions.NewGatewayClassRefInvalid(msg),
 			conditions.NewGatewayClassInvalidParameters(msg),
 		}
@@ -144,8 +144,8 @@ func validateGatewayClass(
 	gc *v1.GatewayClass,
 	npCfg *NginxProxy,
 	crdVersions map[types.NamespacedName]*metav1.PartialObjectMetadata,
-) ([]conditions.Condition, bool) {
-	var conds []conditions.Condition
+) (conditions.Conditions, bool) {
+	var conds conditions.Conditions
 
 	supportedVersionConds, versionsValid := validateCRDVersions(crdVersions)
 	conds = append(conds, supportedVersionConds...)
@@ -198,7 +198,7 @@ type apiVersion struct {
 
 func validateCRDVersions(
 	crdMetadata map[types.NamespacedName]*metav1.PartialObjectMetadata,
-) (conds []conditions.Condition, valid bool) {
+) (conds conditions.Conditions, valid bool) {
 	installedAPIVersions := getBundleVersions(crdMetadata)
 	supportedAPIVersion := parseVersionString(SupportedVersion)
 

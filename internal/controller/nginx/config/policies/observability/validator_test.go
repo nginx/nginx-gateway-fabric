@@ -57,7 +57,7 @@ func TestValidator_Validate(t *testing.T) {
 	tests := []struct {
 		name          string
 		policy        *ngfAPIv1alpha2.ObservabilityPolicy
-		expConditions []conditions.Condition
+		expConditions conditions.Conditions
 	}{
 		{
 			name: "invalid target ref; unsupported group",
@@ -65,7 +65,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.TargetRefs[0].Group = "Unsupported"
 				return p
 			}),
-			expConditions: []conditions.Condition{
+			expConditions: conditions.Conditions{
 				conditions.NewPolicyInvalid("spec.targetRefs.group: Unsupported value: \"Unsupported\": " +
 					"supported values: \"gateway.networking.k8s.io\""),
 			},
@@ -76,7 +76,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.TargetRefs[0].Kind = "Unsupported"
 				return p
 			}),
-			expConditions: []conditions.Condition{
+			expConditions: conditions.Conditions{
 				conditions.NewPolicyInvalid("spec.targetRefs.kind: Unsupported value: \"Unsupported\": " +
 					"supported values: \"HTTPRoute\", \"GRPCRoute\""),
 			},
@@ -87,7 +87,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.Tracing.Strategy = "invalid"
 				return p
 			}),
-			expConditions: []conditions.Condition{
+			expConditions: conditions.Conditions{
 				conditions.NewPolicyInvalid("spec.tracing.strategy: Unsupported value: \"invalid\": " +
 					"supported values: \"ratio\", \"parent\""),
 			},
@@ -98,7 +98,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.Tracing.Context = helpers.GetPointer[ngfAPIv1alpha2.TraceContext]("invalid")
 				return p
 			}),
-			expConditions: []conditions.Condition{
+			expConditions: conditions.Conditions{
 				conditions.NewPolicyInvalid("spec.tracing.context: Unsupported value: \"invalid\": " +
 					"supported values: \"extract\", \"inject\", \"propagate\", \"ignore\""),
 			},
@@ -109,7 +109,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.Tracing.SpanName = helpers.GetPointer("invalid$$$")
 				return p
 			}),
-			expConditions: []conditions.Condition{
+			expConditions: conditions.Conditions{
 				conditions.NewPolicyInvalid("spec.tracing.spanName: Invalid value: \"invalid$$$\": " +
 					"a valid value must have all '\"' escaped and must not contain any '$' or end with an " +
 					"unescaped '\\' (regex used for validation is '([^\"$\\\\]|\\\\[^$])*')"),
@@ -121,7 +121,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.Tracing.SpanAttributes[0].Key = "invalid$$$"
 				return p
 			}),
-			expConditions: []conditions.Condition{
+			expConditions: conditions.Conditions{
 				conditions.NewPolicyInvalid("spec.tracing.spanAttributes.key: Invalid value: \"invalid$$$\": " +
 					"a valid value must have all '\"' escaped and must not contain any '$' or end with an " +
 					"unescaped '\\' (regex used for validation is '([^\"$\\\\]|\\\\[^$])*')"),
@@ -133,7 +133,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.Tracing.SpanAttributes[0].Value = "invalid$$$"
 				return p
 			}),
-			expConditions: []conditions.Condition{
+			expConditions: conditions.Conditions{
 				conditions.NewPolicyInvalid("spec.tracing.spanAttributes.value: Invalid value: \"invalid$$$\": " +
 					"a valid value must have all '\"' escaped and must not contain any '$' or end with an " +
 					"unescaped '\\' (regex used for validation is '([^\"$\\\\]|\\\\[^$])*')"),
@@ -178,18 +178,18 @@ func TestValidator_ValidateGlobalSettings(t *testing.T) {
 	tests := []struct {
 		name           string
 		globalSettings *policies.GlobalSettings
-		expConditions  []conditions.Condition
+		expConditions  conditions.Conditions
 	}{
 		{
 			name: "global settings are nil",
-			expConditions: []conditions.Condition{
+			expConditions: conditions.Conditions{
 				conditions.NewPolicyNotAcceptedNginxProxyNotSet(conditions.PolicyMessageNginxProxyInvalid),
 			},
 		},
 		{
 			name:           "telemetry is not enabled",
 			globalSettings: &policies.GlobalSettings{TelemetryEnabled: false},
-			expConditions: []conditions.Condition{
+			expConditions: conditions.Conditions{
 				conditions.NewPolicyNotAcceptedNginxProxyNotSet(conditions.PolicyMessageTelemetryNotEnabled),
 			},
 		},

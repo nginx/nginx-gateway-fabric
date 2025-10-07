@@ -36,7 +36,7 @@ type Listener struct {
 	// Only applicable for HTTPS listeners.
 	ResolvedSecret *types.NamespacedName
 	// Conditions holds the conditions of the Listener.
-	Conditions []conditions.Condition
+	Conditions conditions.Conditions
 	// SupportedKinds is the list of RouteGroupKinds allowed by the listener.
 	SupportedKinds []v1.RouteGroupKind
 	// Valid shows whether the Listener is valid.
@@ -94,7 +94,7 @@ func newListenerConfiguratorFactory(
 	return &listenerConfiguratorFactory{
 		unsupportedProtocol: &listenerConfigurator{
 			validators: []listenerValidator{
-				func(listener v1.Listener) ([]conditions.Condition, bool) {
+				func(listener v1.Listener) (conditions.Conditions, bool) {
 					valErr := field.NotSupported(
 						field.NewPath("protocol"),
 						listener.Protocol,
@@ -148,7 +148,7 @@ func newListenerConfiguratorFactory(
 
 // listenerValidator validates a listener. If the listener is invalid, the validator will return appropriate conditions.
 // It also returns whether the listener is attachable, which is independent of whether the listener is valid.
-type listenerValidator func(v1.Listener) (conds []conditions.Condition, attachable bool)
+type listenerValidator func(v1.Listener) (conds conditions.Conditions, attachable bool)
 
 // listenerConflictResolver resolves conflicts between listeners. In case of a conflict, the resolver will make
 // the conflicting listeners invalid - i.e. it will modify the passed listener and the previously processed conflicting
@@ -173,7 +173,7 @@ type listenerConfigurator struct {
 }
 
 func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.NamespacedName) *Listener {
-	var conds []conditions.Condition
+	var conds conditions.Conditions
 
 	attachable := true
 
@@ -230,7 +230,7 @@ func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.Na
 	return l
 }
 
-func validateListenerHostname(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+func validateListenerHostname(listener v1.Listener) (conds conditions.Conditions, attachable bool) {
 	if listener.Hostname == nil {
 		return nil, true
 	}
@@ -253,10 +253,10 @@ func validateListenerHostname(listener v1.Listener) (conds []conditions.Conditio
 // The supported kinds are determined based on the listener's allowedRoutes field.
 // If the listener does not specify allowedRoutes, listener determines allowed routes based on its protocol.
 func getAndValidateListenerSupportedKinds(listener v1.Listener) (
-	[]conditions.Condition,
+	conditions.Conditions,
 	[]v1.RouteGroupKind,
 ) {
-	var conds []conditions.Condition
+	var conds conditions.Conditions
 	var supportedKinds []v1.RouteGroupKind
 
 	var validKinds []v1.RouteGroupKind
@@ -315,7 +315,7 @@ func getAndValidateListenerSupportedKinds(listener v1.Listener) (
 	return conds, validKinds
 }
 
-func validateListenerAllowedRouteKind(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+func validateListenerAllowedRouteKind(listener v1.Listener) (conds conditions.Conditions, attachable bool) {
 	conds, _ = getAndValidateListenerSupportedKinds(listener)
 	return conds, len(conds) == 0
 }
@@ -325,7 +325,7 @@ func getListenerSupportedKinds(listener v1.Listener) []v1.RouteGroupKind {
 	return sk
 }
 
-func validateListenerLabelSelector(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+func validateListenerLabelSelector(listener v1.Listener) (conds conditions.Conditions, attachable bool) {
 	if listener.AllowedRoutes != nil &&
 		listener.AllowedRoutes.Namespaces != nil &&
 		listener.AllowedRoutes.Namespaces.From != nil &&
@@ -339,7 +339,7 @@ func validateListenerLabelSelector(listener v1.Listener) (conds []conditions.Con
 }
 
 func createHTTPListenerValidator(protectedPorts ProtectedPorts) listenerValidator {
-	return func(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+	return func(listener v1.Listener) (conds conditions.Conditions, attachable bool) {
 		if err := validateListenerPort(listener.Port, protectedPorts); err != nil {
 			path := field.NewPath("port")
 			valErr := field.Invalid(path, listener.Port, err.Error())
@@ -368,7 +368,7 @@ func validateListenerPort(port v1.PortNumber, protectedPorts ProtectedPorts) err
 	return nil
 }
 
-func validateTLSFieldOnTLSListener(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+func validateTLSFieldOnTLSListener(listener v1.Listener) (conds conditions.Conditions, attachable bool) {
 	tlspath := field.NewPath("TLS")
 	if listener.TLS == nil {
 		valErr := field.Required(tlspath, "tls must be defined for TLS listener")
@@ -382,7 +382,7 @@ func validateTLSFieldOnTLSListener(listener v1.Listener) (conds []conditions.Con
 }
 
 func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidator {
-	return func(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+	return func(listener v1.Listener) (conds conditions.Conditions, attachable bool) {
 		if err := validateListenerPort(listener.Port, protectedPorts); err != nil {
 			path := field.NewPath("port")
 			valErr := field.Invalid(path, listener.Port, err.Error())

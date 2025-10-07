@@ -135,7 +135,7 @@ func createBackendRef(
 	services map[types.NamespacedName]*v1.Service,
 	refPath *field.Path,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
-) (BackendRef, []conditions.Condition) {
+) (BackendRef, conditions.Conditions) {
 	// Data plane will handle invalid ref by responding with 500.
 	// Because of that, we always need to add a BackendRef to group.Backends, even if the ref is invalid.
 	// Additionally, we always calculate the weight, even if it is invalid.
@@ -158,7 +158,7 @@ func createBackendRef(
 			InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 		}
 
-		return backendRef, []conditions.Condition{cond}
+		return backendRef, conditions.Conditions{cond}
 	}
 
 	ns := route.Source.GetNamespace()
@@ -177,10 +177,10 @@ func createBackendRef(
 			InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 		}
 
-		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
+		return backendRef, conditions.Conditions{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
 	}
 
-	var conds []conditions.Condition
+	var conds conditions.Conditions
 	invalidForGateways := make(map[types.NamespacedName]conditions.Condition)
 
 	// Check if this is an ExternalName service and validate DNS resolver configuration
