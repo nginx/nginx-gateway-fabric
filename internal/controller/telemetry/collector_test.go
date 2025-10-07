@@ -417,6 +417,11 @@ var _ = Describe("Collector", Ordered, func() {
 							},
 						},
 					},
+					ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
+						{Namespace: "test", Name: "inferencePool-1"}: {},
+						{Namespace: "test", Name: "inferencePool-2"}: {},
+						{Namespace: "test", Name: "inferencePool-3"}: {},
+					},
 				}
 
 				configs := []*dataplane.Configuration{
@@ -519,6 +524,8 @@ var _ = Describe("Collector", Ordered, func() {
 				expData.NginxPodCount = int64(8)
 				expData.ControlPlanePodCount = int64(2)
 				expData.NginxOneConnectionEnabled = true
+
+				expData.InferencePoolCount = 3
 
 				data, err := dataCollector.Collect(ctx)
 				Expect(err).ToNot(HaveOccurred())
@@ -700,6 +707,9 @@ var _ = Describe("Collector", Ordered, func() {
 				BackendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
 					{Namespace: "test", Name: "BackendTLSPolicy-1"}: {},
 				},
+				ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
+					{Namespace: "test", Name: "inferencePool-1"}: {},
+				},
 			}
 
 			config1 = []*dataplane.Configuration{
@@ -783,6 +793,7 @@ var _ = Describe("Collector", Ordered, func() {
 					BackendTLSPolicyCount:                    1,
 				}
 				expData.NginxPodCount = 1
+				expData.InferencePoolCount = 1
 
 				data, err := dataCollector.Collect(ctx)
 
