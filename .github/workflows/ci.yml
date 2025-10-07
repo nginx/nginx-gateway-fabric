@@ -412,7 +412,7 @@ jobs:
   openshift-certification:
     name: OpenShift Certification
     needs: [build-oss, build-plus, build-operator]
-    if: ${{ github.event_name == 'pull_request' && github.event_pull_request.base.ref == 'main' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (inputs.is_production_release == true) }}
+    # if: ${{ github.event_name == 'pull_request' && github.event_pull_request.base.ref == 'main' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (inputs.is_production_release == true) }}
     uses: ./.github/workflows/openshift-certification.yml
     with:
       runner: ubuntu-24.04
