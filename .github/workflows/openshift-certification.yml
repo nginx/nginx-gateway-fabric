@@ -3,14 +3,6 @@ name: OpenShift Certification
 on:
   workflow_call:
     inputs:
-      build-os:
-        required: true
-        type: string
-        default: 'ubi'
-      dry_run:
-        required: false
-        type: boolean
-        default: false
       runner:
         required: false
         type: string
@@ -20,42 +12,42 @@ jobs:
   preflight:
     runs-on: ${{ inputs.runner }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Download preflight binary
-        run: |
-          curl -LO https://github.com/redhat-openshift-ecosystem/openshift-preflight/releases/latest/download/preflight-linux-amd64
-          chmod +x preflight-linux-amd64
-          sudo mv preflight-linux-amd64 /usr/local/bin/preflight
+    - name: Download preflight binary
+      run: |
+        curl -LO https://github.com/redhat-openshift-ecosystem/openshift-preflight/releases/latest/download/preflight-linux-amd64
+        chmod +x preflight-linux-amd64
+        sudo mv preflight-linux-amd64 /usr/local/bin/preflight
 
-      - name: Run preflight for NGINX Gateway Fabric
-        env:
-          PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
-        run: preflight check container ghcr.io/nginx/nginx-gateway-fabric:edge-ubi --json > ngf-preflight-result.json
+    - name: Run preflight for NGINX Gateway Fabric
+      env:
+        PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
+      run: preflight check container ghcr.io/nginx/nginx-gateway-fabric:edge-ubi --json > ngf-preflight-result.json
 
-      - name: Run preflight for NGINX OSS
-        env:
-          PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
-        run: preflight check container ghcr.io/nginx/nginx-gateway-fabric/nginx:edge-ubi --json > ngf-oss-preflight-result.json
+    - name: Run preflight for NGINX OSS
+      env:
+        PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
+      run: preflight check container ghcr.io/nginx/nginx-gateway-fabric/nginx:edge-ubi --json > ngf-oss-preflight-result.json
 
-      - name: Run preflight for NGINX Gateway Fabric Operator
-        env:
-          PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
-        run: preflight check operator ghcr.io/nginx/nginx-gateway-fabric/operator:edge --json > ngf-operator-preflight-result.json
+    - name: Run preflight for NGINX Gateway Fabric Operator
+      env:
+        PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
+      run: preflight check operator ghcr.io/nginx/nginx-gateway-fabric/operator:edge --json > ngf-operator-preflight-result.json
 
-      - name: Aggregate preflight results and fail if any checks failed
-        run: |
-          total_failed=0
-          for result in ngf-preflight-result.json ngf-oss-preflight-result.json ngf-operator-preflight-result.json; do
-            failed_count=$(jq '.results.failed | length' "$result")
-            total_failed=$((total_failed + failed_count))
-          done
-          if [ "$total_failed" -ne 0 ]; then
-            echo "Preflight checks failed: $total_failed failed checks across all images"
-            for result in ngf-preflight-result.json ngf-oss-preflight-result.json ngf-operator-preflight-result.json; do
-              echo "Results for $result:"
-              jq '.results.failed' "$result"
-            done
-            exit 1
-          fi
+    - name: Aggregate preflight results and fail if any checks failed
+      run: |
+        total_failed=0
+        for result in ngf-preflight-result.json ngf-oss-preflight-result.json ngf-operator-preflight-result.json; do
+        failed_count=$(jq '.results.failed | length' "$result")
+        total_failed=$((total_failed + failed_count))
+        done
+        if [ "$total_failed" -ne 0 ]; then
+        echo "Preflight checks failed: $total_failed failed checks across all images"
+        for result in ngf-preflight-result.json ngf-oss-preflight-result.json ngf-operator-preflight-result.json; do
+        echo "Results for $result:"
+        jq '.results.failed' "$result"
+        done
+        exit 1
+        fi

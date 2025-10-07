@@ -411,13 +411,10 @@ jobs:
 
   openshift-certification:
     name: OpenShift Certification
-    needs: [vars, build-oss, build-plus, build-operator]
+    needs: [build-oss, build-plus, build-operator]
     if: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
     uses: ./.github/workflows/openshift-certification.yml
     with:
-      operator-version: ${{ inputs.operator_version || '' }}
-      build-os: "ubi"
-      dry_run: ${{ inputs.dry_run || false }}
       runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
       contents: read
