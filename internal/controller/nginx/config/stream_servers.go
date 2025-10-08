@@ -33,15 +33,22 @@ func (g GeneratorImpl) executeStreamServers(conf dataplane.Configuration) []exec
 }
 
 func createStreamServers(conf dataplane.Configuration) []stream.Server {
-	if len(conf.TLSPassthroughServers) == 0 {
+	totalServers := len(conf.TLSPassthroughServers) + len(conf.TCPServers) + len(conf.UDPServers)
+	if totalServers == 0 {
 		return nil
 	}
 
-	streamServers := make([]stream.Server, 0, len(conf.TLSPassthroughServers)*2)
+	streamServers := make([]stream.Server, 0, totalServers*2)
 	portSet := make(map[int32]struct{})
 	upstreams := make(map[string]dataplane.Upstream)
 
 	for _, u := range conf.StreamUpstreams {
+		upstreams[u.Name] = u
+	}
+	for _, u := range conf.TCPUpstreams {
+		upstreams[u.Name] = u
+	}
+	for _, u := range conf.UDPUpstreams {
 		upstreams[u.Name] = u
 	}
 
@@ -77,6 +84,47 @@ func createStreamServers(conf dataplane.Configuration) []stream.Server {
 		}
 		streamServers = append(streamServers, streamServer)
 	}
+
+	// Process TCP servers
+	for i, server := range conf.TCPServers {
+		if _, inPortSet := portSet[server.Port]; inPortSet {
+			continue // Skip if port already in use
+		}
+
+		if u, ok := upstreams[server.UpstreamName]; ok && server.UpstreamName != "" && len(u.Endpoints) > 0 {
+			streamServer := stream.Server{
+				Listen:     fmt.Sprint(server.Port),
+				StatusZone: fmt.Sprintf("tcp_%d", server.Port),
+				ProxyPass:  server.UpstreamName,
+			}
+			streamServers = append(streamServers, streamServer)
+			portSet[server.Port] = struct{}{}
+		} else {
+			fmt.Printf("DEBUG: createStreamServers - TCP Server %d: Skipped - upstream not found or no endpoints\n", i)
+		}
+	}
+
+	// Process UDP servers
+	for _, server := range conf.UDPServers {
+		if _, inPortSet := portSet[server.Port]; inPortSet {
+			continue // Skip if port already in use
+		}
+
+		if u, ok := upstreams[server.UpstreamName]; ok && server.UpstreamName != "" && len(u.Endpoints) > 0 {
+			streamServer := stream.Server{
+				Listen:     fmt.Sprintf("%d udp", server.Port),
+				StatusZone: fmt.Sprintf("udp_%d", server.Port),
+				ProxyPass:  server.UpstreamName,
+				Protocol:   "udp",
+				UDPConfig: &stream.UDPConfig{
+					ProxyTimeout: "1s",
+				},
+			}
+			streamServers = append(streamServers, streamServer)
+			portSet[server.Port] = struct{}{}
+		}
+	}
+
 	return streamServers
 }
 

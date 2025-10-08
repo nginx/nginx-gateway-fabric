@@ -39,6 +39,10 @@ type Configuration struct {
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
+	// TCPUpstreams holds all unique TCP Upstreams
+	TCPUpstreams []Upstream
+	// UDPUpstreams holds all unique UDP Upstreams
+	UDPUpstreams []Upstream
 	// BackendGroups holds all unique BackendGroups.
 	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
@@ -47,12 +51,16 @@ type Configuration struct {
 	Upstreams []Upstream
 	// NginxPlus specifies NGINX Plus additional settings.
 	NginxPlus NginxPlus
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
 	// StreamUpstreams holds all unique stream Upstreams
 	StreamUpstreams []Upstream
 	// SSLServers holds all SSLServers.
 	SSLServers []VirtualServer
+	// HTTPServers holds all HTTPServers.
+	HTTPServers []VirtualServer
+	// TCPServers holds all TCPServers
+	TCPServers []Layer4VirtualServer
+	// UDPServers holds all UDPServers
+	UDPServers []Layer4VirtualServer
 	// TLSPassthroughServers hold all TLSPassthroughServers
 	TLSPassthroughServers []Layer4VirtualServer
 	// Telemetry holds the Otel configuration.

@@ -66,7 +66,7 @@ func buildListeners(
 }
 
 type listenerConfiguratorFactory struct {
-	http, https, tls, unsupportedProtocol *listenerConfigurator
+	http, https, tls, tcp, udp, unsupportedProtocol *listenerConfigurator
 }
 
 func (f *listenerConfiguratorFactory) getConfiguratorForListener(l v1.Listener) *listenerConfigurator {
@@ -77,6 +77,10 @@ func (f *listenerConfiguratorFactory) getConfiguratorForListener(l v1.Listener) 
 		return f.https
 	case v1.TLSProtocolType:
 		return f.tls
+	case v1.TCPProtocolType:
+		return f.tcp
+	case v1.UDPProtocolType:
+		return f.udp
 	default:
 		return f.unsupportedProtocol
 	}
@@ -98,7 +102,7 @@ func newListenerConfiguratorFactory(
 					valErr := field.NotSupported(
 						field.NewPath("protocol"),
 						listener.Protocol,
-						[]string{string(v1.HTTPProtocolType), string(v1.HTTPSProtocolType), string(v1.TLSProtocolType)},
+						[]string{string(v1.HTTPProtocolType), string(v1.HTTPSProtocolType), string(v1.TLSProtocolType), string(v1.TCPProtocolType), string(v1.UDPProtocolType)},
 					)
 					return conditions.NewListenerUnsupportedProtocol(valErr.Error()), false /* not attachable */
 				},
@@ -142,6 +146,26 @@ func newListenerConfiguratorFactory(
 				sharedOverlappingTLSConfigResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{},
+		},
+		tcp: &listenerConfigurator{
+			validators: []listenerValidator{
+				validateListenerAllowedRouteKind,
+				validateListenerLabelSelector,
+				createTCPListenerValidator(protectedPorts),
+			},
+			conflictResolvers: []listenerConflictResolver{
+				sharedPortConflictResolver,
+			},
+		},
+		udp: &listenerConfigurator{
+			validators: []listenerValidator{
+				validateListenerAllowedRouteKind,
+				validateListenerLabelSelector,
+				createUDPListenerValidator(protectedPorts),
+			},
+			conflictResolvers: []listenerConflictResolver{
+				sharedPortConflictResolver,
+			},
 		},
 	}
 }
@@ -270,6 +294,14 @@ func getAndValidateListenerSupportedKinds(listener v1.Listener) (
 	case v1.TLSProtocolType:
 		validKinds = []v1.RouteGroupKind{
 			{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		}
+	case v1.TCPProtocolType:
+		validKinds = []v1.RouteGroupKind{
+			{Kind: v1.Kind(kinds.TCPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		}
+	case v1.UDPProtocolType:
+		validKinds = []v1.RouteGroupKind{
+			{Kind: v1.Kind(kinds.UDPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
 		}
 	}
 
@@ -602,6 +634,54 @@ func haveOverlap(hostname1, hostname2 *v1.Hostname) bool {
 		return true
 	}
 	return matchesWildcard(h1, h2)
+}
+
+func createTCPListenerValidator(protectedPorts ProtectedPorts) listenerValidator {
+	return func(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+		if err := validateListenerPort(listener.Port, protectedPorts); err != nil {
+			path := field.NewPath("port")
+			valErr := field.Invalid(path, listener.Port, err.Error())
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		if listener.TLS != nil {
+			path := field.NewPath("tls")
+			valErr := field.Forbidden(path, "tls is not supported for TCP listener")
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		if listener.Hostname != nil {
+			path := field.NewPath("hostname")
+			valErr := field.Forbidden(path, "hostname is not supported for TCP listener")
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		return conds, true
+	}
+}
+
+func createUDPListenerValidator(protectedPorts ProtectedPorts) listenerValidator {
+	return func(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+		if err := validateListenerPort(listener.Port, protectedPorts); err != nil {
+			path := field.NewPath("port")
+			valErr := field.Invalid(path, listener.Port, err.Error())
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		if listener.TLS != nil {
+			path := field.NewPath("tls")
+			valErr := field.Forbidden(path, "tls is not supported for UDP listener")
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		if listener.Hostname != nil {
+			path := field.NewPath("hostname")
+			valErr := field.Forbidden(path, "hostname is not supported for UDP listener")
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		return conds, true
+	}
 }
 
 func createOverlappingTLSConfigResolver() listenerConflictResolver {
