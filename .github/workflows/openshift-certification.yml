@@ -10,9 +10,6 @@ on:
       image:
         required: true
         type: string
-      platform:
-        required: true
-        type: string
       image_version:
         required: true
         type: string
@@ -40,12 +37,11 @@ jobs:
     - name: Download image artifact
       uses: actions/download-artifact@v4
       with:
-        name: ${{ inputs.image }}-images  # or ${{ inputs.image }}-linux-${{ inputs.platform | tr '/' '-' }}
+        name: ${{ inputs.image }}-images
 
     - name: Load image into Docker
       run: |
-        plat_tag=$(echo "${{ inputs.platform }}" | tr '/' '-')
-        docker load -i ${{ inputs.image }}-$plat_tag.tar
+        docker load -i ${{ inputs.image }}-${{ inputs.image_version }}.tar
 
     - name: Retag image for preflight
       run: |

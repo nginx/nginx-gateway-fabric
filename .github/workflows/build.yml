@@ -199,21 +199,16 @@ jobs:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: build-${{ inputs.image }}
 
-      - name: Export and upload images for all platforms
+      - name: Export and upload images
         run: |
-          # Remove spaces and split platforms by comma
-          platforms=$(echo "${{ inputs.platforms }}" | tr -d ' ' | tr ',' ' ')
-          for platform in $platforms; do
-          # Replace / with - for tarball name (e.g., linux/amd64 -> linux-amd64)
-          plat_tag=$(echo "$platform" | tr '/' '-')
           # Create a local reference for the platform
-          docker buildx imagetools create --tag tempimg-$plat_tag ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --platform $platform
+          docker buildx imagetools create --tag temp ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }}
           # Export the image as a tarball
-          docker buildx imagetools export tempimg-$plat_tag > ${{ inputs.image }}-$plat_tag.tar
+          docker buildx imagetools export temp > ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar
           done
 
       - name: Upload all image artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.image }}-images
-          path: ${{ inputs.image }}-*.tar
+          name: ${{ inputs.image }}-${{ steps.meta.outputs.version }}
+          path: ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar
