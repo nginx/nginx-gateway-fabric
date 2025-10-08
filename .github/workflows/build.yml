@@ -210,7 +210,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Export and upload images
-        if: ${{ build-os == 'ubi' && !inputs.dry_run }}
+        if: ${{ inputs.build-os == 'ubi' && !inputs.dry_run }}
         run: |
           # Create a local reference for the platform
           docker buildx imagetools create --tag temp localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }}
