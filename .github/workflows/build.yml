@@ -46,6 +46,8 @@ jobs:
         image: registry:3
         ports:
           - 5000:5000
+    outputs:
+      image_version: ${{ steps.meta.outputs.version }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -155,6 +157,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
           push: ${{ !inputs.dry_run }}
+          load: true
           platforms: ${{ inputs.platforms }}
           cache-from: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
           cache-to: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }},mode=max
@@ -194,43 +197,15 @@ jobs:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: build-${{ inputs.image }}
 
-      - name: Save NGINX Gateway Fabric image
-        if: ${{ inputs.image == 'ngf' }}
-        run: |
-          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep '^localhost:5000/nginx-gateway-fabric/ngf:' | head -n 1)
-          docker save -o ngf-image.tar $IMAGE_TAG
-
-      - name: Upload NGINX Gateway Fabric image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ngf-image
-          path: ngf-image.tar
-
       - name: Show all image tags for debugging
         run: echo "${{ steps.meta.outputs.tags }}"
 
-      - name: Save NGINX OSS image as tarball
-        if: ${{ inputs.image == 'nginx' }}
+      - name: Save the image as tarball
         run: |
-          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep '^localhost:5000/nginx-gateway-fabric/nginx:' | head -n 1)
-          docker save -o nginx-oss-image.tar $IMAGE_TAG
+          docker save -o ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }}
 
-      - name: Upload NGINX OSS image artifact
-        if: ${{ inputs.image == 'nginx' }}
+      - name: Upload the image artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nginx-oss-image
-          path: nginx-oss-image.tar
-
-      - name: Save Operator image as tarball
-        if: ${{ inputs.image == 'operator' }}
-        run: |
-          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep '^localhost:5000/nginx-gateway-fabric/operator:' | head -n 1)
-          docker save -o operator-image.tar $IMAGE_TAG
-
-      - name: Upload Operator image artifact
-        if: ${{ inputs.image == 'operator' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: operator-image
-          path: operator-image.tar
+          name: ${{ inputs.image }}-${{ steps.meta.outputs.version }}
+          path: ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar

@@ -7,6 +7,12 @@ on:
         required: false
         type: string
         default: 'ubuntu-24.04'
+      image_version:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
 
 defaults:
   run:
@@ -28,77 +34,31 @@ jobs:
         chmod +x preflight-linux-amd64
         sudo mv preflight-linux-amd64 /usr/local/bin/preflight
 
-    - name: Download NGINX Gateway Fabric image artifact
+    - name: Download image artifact
       uses: actions/download-artifact@v4
       with:
-        name: ngf-image
+        name: ${{ inputs.image }}-${{ inputs.image_version }}
 
-    - name: Load NGINX Gateway Fabric image into Docker
-      run: docker load -i ngf-image.tar
-
-    - name: Load NGINX Gateway Fabric image into Docker
-      run: docker load -i ngf-image.tar
+    - name: Load image into Docker
+      run: docker load -i ${{ inputs.image }}-${{ inputs.image_version }}.tar
 
     - name: Retag image for preflight
       run: |
-        IMAGE_ID=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep '^localhost:5000/nginx-gateway-fabric/ngf:' | head -n 1)
-        docker tag $IMAGE_ID nginx-gateway-fabric:ubi
+        loaded_tag="localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
+        preflight_tag="${{ inputs.image }}:ubi"
+        docker tag "$loaded_tag" "$preflight_tag"
 
-
-    - name: Run preflight for NGINX Gateway Fabric
+    - name: Run preflight
       env:
         PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
-      run: preflight check container nginx-gateway-fabric:ubi > ngf-preflight-result.json
+      run: preflight check container ${{ inputs.image }}:ubi > preflight-result.json
 
-    - name: Download NGINX NGINX OSS image artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: nginx-oss-image
-
-    - name: Load NGINX OSS image into Docker
-      run: docker load -i nginx-oss-image.tar
-
-    - name: Retag image for preflight
+    - name: Check preflight results
       run: |
-        IMAGE_ID=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep '^localhost:5000/nginx-gateway-fabric/nginx:' | head -n 1)
-        docker tag $IMAGE_ID nginx-oss:ubi
-
-
-    - name: Run preflight for NGINX OSS
-      env:
-        PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
-      run: preflight check container nginx:ubi > ngf-oss-preflight-result.json
-
-    - name: Download NGINX Gateway Fabric Operator image artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: operator-image
-
-    - name: Load NGINX Gateway Fabric Operator image into Docker
-      run: docker load -i operator-image.tar
-
-    - name: Retag image for preflight
-      run: |
-        IMAGE_ID=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep '^localhost:5000/nginx-gateway-fabric/operator:' | head -n 1)
-        docker tag $IMAGE_ID ngf-operator:ubi
-
-    - name: Run preflight for NGINX Gateway Fabric Operator
-      env:
-        PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
-      run: preflight check container ngf-operator:ubi > ngf-operator-preflight-result.json
-
-    - name: Aggregate preflight results and fail if any checks failed
-      run: |
-        total_failed=0
-        for result in ngf-preflight-result.json ngf-oss-preflight-result.json ngf-operator-preflight-result.json; do
-        failed_count=$(jq '.results.failed | length' "$result")
-        total_failed=$((total_failed + failed_count))
-        done
-        if [ "$total_failed" -ne 0 ]; then
-        echo "Preflight checks failed: $total_failed failed checks across all images"
-        for result in ngf-preflight-result.json ngf-oss-preflight-result.json ngf-operator-preflight-result.json; do
-        echo "Results for $result:"
-        jq '.results.failed' "$result"
-        done
+        failed_count=$(jq '.results.failed | length' preflight-result.json)
+        if [ "$failed_count" -ne 0 ]; then
+        echo "Preflight checks failed: $failed_count failed checks"
+        echo "Results for preflight-result.json:"
+        jq '.results.failed' preflight-result.json
         exit 1
         fi
