@@ -69,9 +69,15 @@ jobs:
           install: true
           version: latest
           driver-opts: network=host
-
+      
       - name: Show Buildx version
         run: docker buildx version
+
+      - name: Show Buildx help
+        run: docker buildx --help
+      
+      - name: Show Buildx export help
+        run: docker buildx imagetools export --help
 
       - name: Setup QEMU
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
