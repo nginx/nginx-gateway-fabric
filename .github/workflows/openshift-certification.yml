@@ -10,6 +10,9 @@ on:
       image:
         required: true
         type: string
+      platform:
+        required: true
+        type: string
 
 defaults:
   run:
@@ -34,14 +37,14 @@ jobs:
     - name: Download image artifact
       uses: actions/download-artifact@v4
       with:
-        name: ${{ inputs.image }}
+        name: ${{ inputs.image }}-images  # or ${{ inputs.image }}-linux-${{ inputs.platform | tr '/' '-' }}
 
     - name: Load image into Docker
-      run: docker load -i ${{ inputs.image }}.tar
+      run: docker load -i ${{ inputs.image }}-${{ inputs.platform | tr '/' '-' }}.tar
 
     - name: Retag image for preflight
       run: |
-        loaded_tag="localhost:5000/nginx-gateway-fabric/${{ inputs.image }}"
+        loaded_tag="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
         preflight_tag="${{ inputs.image }}:ubi"
         docker tag "$loaded_tag" "$preflight_tag"
 
