@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +13,7 @@ import (
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	eppMetadata "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
@@ -34,7 +35,11 @@ func endpointPickerServer(handler http.Handler) error {
 // realExtProcClientFactory returns a factory that creates a new gRPC connection and client per request.
 func realExtProcClientFactory() extProcClientFactory {
 	return func(target string) (extprocv3.ExternalProcessorClient, func() error, error) {
-		conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		creds := credentials.NewTLS(&tls.Config{
+			// add RootCAs or, if you have a self-signed server cert:
+			InsecureSkipVerify: true,
+		})
+		conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(creds))
 		if err != nil {
 			return nil, nil, err
 		}

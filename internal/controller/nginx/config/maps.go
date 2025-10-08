@@ -183,40 +183,53 @@ func createAddHeadersMap(name string) shared.Map {
 	}
 }
 
-// buildInferenceMaps creates maps for InferencePool Backends.
+// buildInferenceMaps creates maps for InferencePool back-ends.
 func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 	inferenceMaps := make([]shared.Map, 0, len(groups))
+
 	for _, group := range groups {
 		for _, backend := range group.Backends {
-			if backend.EndpointPickerConfig != nil {
-				var defaultResult string
-				switch backend.EndpointPickerConfig.FailureMode {
-				// in FailClose mode, if the EPP is unavailable or returns an error,
-				// we return an invalid backend to ensure the request fails
-				case inference.EndpointPickerFailClose:
-					defaultResult = invalidBackendRef
-				// in FailOpen mode, if the EPP is unavailable or returns an error,
-				// we fall back to the upstream
-				case inference.EndpointPickerFailOpen:
-					defaultResult = backend.UpstreamName
-				}
-				params := []shared.MapParameter{
-					{
-						Value:  "~.+",
-						Result: "$inference_workload_endpoint",
-					},
-					{
-						Value:  "default",
-						Result: defaultResult,
-					},
-				}
-				backendVarName := strings.ReplaceAll(backend.UpstreamName, "-", "_")
-				inferenceMaps = append(inferenceMaps, shared.Map{
-					Source:     "$inference_workload_endpoint",
-					Variable:   fmt.Sprintf("$inference_backend_%s", backendVarName),
-					Parameters: params,
-				})
+			if backend.EndpointPickerConfig == nil {
+				continue
 			}
+
+			// Decide what the map must return when the picker didn’t set a value.
+			var defaultResult string
+			switch backend.EndpointPickerConfig.FailureMode {
+			case inference.EndpointPickerFailClose:
+				defaultResult = invalidBackendRef // strict: 500
+			case inference.EndpointPickerFailOpen:
+				defaultResult = backend.UpstreamName // fall back
+			}
+
+			// Build the ordered parameter list.
+			params := make([]shared.MapParameter, 0, 3)
+
+			// Empty → no endpoint picked go to inference pool directlyt
+			params = append(params, shared.MapParameter{
+				Value:  `""`,
+				Result: backend.UpstreamName,
+			})
+
+			// Non-empty → use the value filled by the picker.
+			params = append(params, shared.MapParameter{
+				Value:  `~.+`,
+				Result: `$inference_workload_endpoint`,
+			})
+
+			// Fallback (Fail-Close = 500, Fail-Open = upstream).
+			params = append(params, shared.MapParameter{
+				Value:  "default",
+				Result: defaultResult,
+			})
+
+			backendVarName := strings.ReplaceAll(backend.UpstreamName, "-", "_")
+
+			inferenceMaps = append(inferenceMaps, shared.Map{
+				Source:     `$inference_workload_endpoint`,
+				Variable:   fmt.Sprintf("$inference_backend_%s", backendVarName),
+				Parameters: params,
+			})
 		}
 	}
 	return inferenceMaps

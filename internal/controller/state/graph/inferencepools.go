@@ -25,6 +25,8 @@ type ReferencedInferencePool struct {
 	HTTPRoutes []*L7Route
 	// Conditions contains the conditions that should be applied to the InferencePool.
 	Conditions []conditions.Condition
+	// Valid indicates whether the InferencePool is valid or not.
+	Valid bool
 }
 
 // buildReferencedInferencePools builds a map of InferencePools that are referenced by HTTPRoutes
@@ -58,6 +60,8 @@ func buildReferencedInferencePools(
 		if extensionRefCond := validateInferencePoolExtensionRef(refPool.Source, services); extensionRefCond != nil {
 			refPool.Conditions = append(refPool.Conditions, *extensionRefCond)
 		}
+
+		refPool.Valid = len(refPool.Conditions) == 0
 	}
 
 	return referencedInferencePools

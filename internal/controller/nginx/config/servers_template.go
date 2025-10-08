@@ -124,11 +124,17 @@ server {
         {{- end }}
 
         {{- if contains $l.Type "inference" -}}
-        js_var $inference_workload_endpoint;
-        set $epp_internal_path {{ $l.EPPInternalPath }};
-        set $epp_host {{ $l.EPPHost }};
-        set $epp_port {{ $l.EPPPort }};
-        js_content epp.getEndpoint;
+            if ($request_method = GET) {
+                set $inference_workload_endpoint "";
+                rewrite ^ {{ $l.EPPInternalPath }} last;
+            }
+
+            js_var $inference_workload_endpoint;
+            set $epp_internal_path {{ $l.EPPInternalPath }};
+            set $epp_host          {{ $l.EPPHost }};
+            set $epp_port          {{ $l.EPPPort }};
+            js_content epp.getEndpoint;
+            break;
         {{- end }}
 
         {{ $proxyOrGRPC := "proxy" }}{{ if $l.GRPC }}{{ $proxyOrGRPC = "grpc" }}{{ end }}
@@ -137,7 +143,6 @@ server {
         include /etc/nginx/grpc-error-pages.conf;
         {{- end }}
 
-        proxy_http_version 1.1;
         {{- if $l.ProxyPass -}}
             {{ range $h := $l.ProxySetHeaders }}
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";

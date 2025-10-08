@@ -400,7 +400,10 @@ func newBackendGroup(
 			Valid:                valid,
 			VerifyTLS:            convertBackendTLS(ref.BackendTLSPolicy, gatewayName),
 			EndpointPickerConfig: ref.EndpointPickerConfig,
+			EndpointPickerNsName: ref.EndpointPickerNsName,
 		})
+
+		fmt.Println("backend ref in configuration", backends)
 	}
 
 	return BackendGroup{

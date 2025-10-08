@@ -12,6 +12,9 @@ on:
       enable-experimental:
         required: true
         type: boolean
+      enable-inference-extension:
+        required: true
+        type: boolean
       production-release:
         required: false
         type: boolean
@@ -28,6 +31,7 @@ defaults:
 env:
   PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
   ENABLE_EXPERIMENTAL: ${{ inputs.enable-experimental }}
+  ENABLE_INFERENCE_EXTENSION: ${{ inputs.enable-inference-extension }}
 
 permissions:
   contents: read

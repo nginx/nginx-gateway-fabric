@@ -26,7 +26,7 @@ metadata:
   name: conformance-primary
   namespace: gateway-conformance-infra
 spec:
-  gatewayClassName: nginx
+  gatewayClassName: "{GATEWAY_CLASS_NAME}"
   listeners:
   - name: http
     port: 80
@@ -44,7 +44,7 @@ metadata:
   name: conformance-secondary
   namespace: gateway-conformance-infra
 spec:
-  gatewayClassName: nginx
+  gatewayClassName: "{GATEWAY_CLASS_NAME}"
   listeners:
   - name: http
     port: 80
