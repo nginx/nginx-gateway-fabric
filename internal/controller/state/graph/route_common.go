@@ -80,6 +80,10 @@ const (
 	RouteTypeGRPC RouteType = "grpc"
 	// RouteTypeTLS indicates that the RouteType of the L4Route is TLS.
 	RouteTypeTLS RouteType = "tls"
+	// RouteTypeTCP indicates that the RouteType of the L4Route is TCP.
+	RouteTypeTCP RouteType = "tcp"
+	// RouteTypeUDP indicates that the RouteType of the L4Route is UDP.
+	RouteTypeUDP RouteType = "udp"
 )
 
 // L4RouteKey is the unique identifier for a L4Route.
@@ -224,6 +228,8 @@ func (e routeRuleErrors) append(newErrors routeRuleErrors) routeRuleErrors {
 
 func buildL4RoutesForGateways(
 	tlsRoutes map[types.NamespacedName]*v1alpha.TLSRoute,
+	tcpRoutes map[types.NamespacedName]*v1alpha.TCPRoute,
+	udpRoutes map[types.NamespacedName]*v1alpha.UDPRoute,
 	services map[types.NamespacedName]*apiv1.Service,
 	gws map[types.NamespacedName]*Gateway,
 	resolver *referenceGrantResolver,
@@ -239,6 +245,32 @@ func buildL4RoutesForGateways(
 			gws,
 			services,
 			resolver.refAllowedFrom(fromTLSRoute(route.Namespace)),
+		)
+		if r != nil {
+			routes[CreateRouteKeyL4(route)] = r
+		}
+	}
+
+	// Process TCP routes
+	for _, route := range tcpRoutes {
+		r := buildTCPRoute(
+			route,
+			gws,
+			services,
+			resolver.refAllowedFrom(fromTCPRoute(route.Namespace)),
+		)
+		if r != nil {
+			routes[CreateRouteKeyL4(route)] = r
+		}
+	}
+
+	// Process UDP routes
+	for _, route := range udpRoutes {
+		r := buildUDPRoute(
+			route,
+			gws,
+			services,
+			resolver.refAllowedFrom(fromUDPRoute(route.Namespace)),
 		)
 		if r != nil {
 			routes[CreateRouteKeyL4(route)] = r
@@ -704,6 +736,19 @@ func tryToAttachL4RouteToListeners(
 	return conditions.Condition{}, true
 }
 
+func getL4RouteKind(route *L4Route) v1.Kind {
+	switch route.Source.(type) {
+	case *v1alpha.TLSRoute:
+		return v1.Kind(kinds.TLSRoute)
+	case *v1alpha.TCPRoute:
+		return v1.Kind(kinds.TCPRoute)
+	case *v1alpha.UDPRoute:
+		return v1.Kind(kinds.UDPRoute)
+	default:
+		return v1.Kind(kinds.TLSRoute)
+	}
+}
+
 func bindToListenerL4(
 	l *Listener,
 	route *L4Route,
@@ -716,7 +761,8 @@ func bindToListenerL4(
 		return false, false, false
 	}
 
-	if !isRouteTypeAllowedByListener(l, kinds.TLSRoute) {
+	routeKind := getL4RouteKind(route)
+	if !isRouteTypeAllowedByListener(l, routeKind) {
 		return false, false, false
 	}
 

@@ -21,6 +21,10 @@ const (
 	GRPCRoute = "GRPCRoute"
 	// TLSRoute is the TLSRoute kind.
 	TLSRoute = "TLSRoute"
+	// TCPRoute is the TCPRoute kind.
+	TCPRoute = "TCPRoute"
+	// UDPRoute is the UDPRoute kind.
+	UDPRoute = "UDPRoute"
 	// BackendTLSPolicy is the BackendTLSPolicy kind.
 	BackendTLSPolicy = "BackendTLSPolicy"
 )

@@ -14,6 +14,12 @@ type Server struct {
 	RewriteClientIP shared.RewriteClientIPSettings
 	SSLPreread      bool
 	IsSocket        bool
+	Protocol        string
+	UDPConfig       *UDPConfig
+}
+
+type UDPConfig struct {
+	ProxyTimeout string
 }
 
 // Upstream holds all configuration for a stream upstream.
