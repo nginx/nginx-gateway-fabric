@@ -423,6 +423,10 @@ jobs:
       runner: ubuntu-24.04
       image: ${{ matrix.image }}
       platform: ${{ matrix.platform }}
+      image_version: >
+        ${{ matrix.image == 'ngf' && needs.build-oss.outputs.image_version
+        || matrix.image == 'nginx' && needs.build-oss.outputs.image_version
+        || matrix.image == 'operator' && needs.build-operator.outputs.image_version }}
     permissions:
       contents: read
       packages: read

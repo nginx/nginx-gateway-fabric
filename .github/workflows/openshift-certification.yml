@@ -40,7 +40,9 @@ jobs:
         name: ${{ inputs.image }}-images  # or ${{ inputs.image }}-linux-${{ inputs.platform | tr '/' '-' }}
 
     - name: Load image into Docker
-      run: docker load -i ${{ inputs.image }}-${{ inputs.platform | tr '/' '-' }}.tar
+      run: |
+        plat_tag=$(echo "${{ inputs.platform }}" | tr '/' '-')
+        docker load -i ${{ inputs.image }}-$plat_tag.tar
 
     - name: Retag image for preflight
       run: |
