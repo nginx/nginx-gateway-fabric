@@ -143,11 +143,11 @@ type L7RouteSpec struct {
 }
 
 type RouteRule struct {
-	// SectionName is the name of a section in a Kubernetes resource.
+	// Name is the name of a section in a Kubernetes resource.
 	Name *v1.SectionName
-	// HTTPRouteTimeouts defines timeouts that can be configured for an HTTPRoute.
+	// Timeouts defines timeouts that can be configured for an HTTPRoute.
 	Timeouts *v1.HTTPRouteTimeouts
-	// HTTPRouteRetry defines retry configuration for an HTTPRoute.
+	// Retry defines retry configuration for an HTTPRoute.
 	Retry *v1.HTTPRouteRetry
 	// SessionPersistence defines the desired state of SessionPersistence.
 	SessionPersistence *v1.SessionPersistence

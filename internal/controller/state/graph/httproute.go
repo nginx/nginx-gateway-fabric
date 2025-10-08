@@ -537,7 +537,7 @@ func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) 
 	if rule.Name != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("name"),
-			"NGINX Gateway Fabric does not support SectionName field at the moment",
+			"NGINX Gateway Fabric does not support \"SectionName\" field at the moment",
 		))
 	}
 	if rule.Timeouts != nil {
