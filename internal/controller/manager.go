@@ -536,6 +536,18 @@ func registerControllers(
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
 			},
+			{
+				objectType: &gatewayv1alpha2.TCPRoute{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+			},
+			{
+				objectType: &gatewayv1alpha2.UDPRoute{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+			},
 		}
 		controllerRegCfgs = append(controllerRegCfgs, gwExpFeatures...)
 	}
@@ -774,6 +786,8 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 			&gatewayv1alpha3.BackendTLSPolicyList{},
 			&apiv1.ConfigMapList{},
 			&gatewayv1alpha2.TLSRouteList{},
+			&gatewayv1alpha2.TCPRouteList{},
+			&gatewayv1alpha2.UDPRouteList{},
 		)
 	}
 
