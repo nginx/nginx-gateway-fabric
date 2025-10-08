@@ -421,6 +421,7 @@ jobs:
     with:
       runner: ubuntu-24.04
       image_version: ${{ jobs.build.outputs.image_version }}
+      image: ${{ matrix.image }}
     permissions:
       contents: read
       packages: read
