@@ -37,7 +37,7 @@ jobs:
     - name: Download image artifact
       uses: actions/download-artifact@v4
       with:
-        name: ${{ inputs.image }}-images
+        name: ${{ inputs.image }}-${{ inputs.image_version }}
 
     - name: Load image into Docker
       run: |
@@ -63,12 +63,3 @@ jobs:
         jq '.results.failed' preflight-result.json
         exit 1
         fi
-
-  # cleanup:
-  #   runs-on: ubuntu-24.04
-  #   if: always()
-  #   steps:
-  #     - name: Delete image from registry
-  #       run: |
-  #         curl -X DELETE "https://ghcr.io/v2/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}" \
-  #         -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"

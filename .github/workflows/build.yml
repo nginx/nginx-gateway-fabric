@@ -66,18 +66,7 @@ jobs:
       - name: Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
         with:
-          install: true
-          version: latest
           driver-opts: network=host
-      
-      - name: Show Buildx version
-        run: docker buildx version
-
-      - name: Show Buildx help
-        run: docker buildx --help
-      
-      - name: Show Buildx export help
-        run: docker buildx imagetools export --help
 
       - name: Setup QEMU
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
@@ -213,17 +202,11 @@ jobs:
       - name: Show all image tags for debugging
         run: echo "${{ steps.meta.outputs.tags }}"
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Export and upload images
+      - name: Pull and save image artifact for linux/amd64
         if: ${{ inputs.build-os == 'ubi' && !inputs.dry_run }}
         run: |
-          docker buildx imagetools export localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} > ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar
+          docker pull --platform=linux/amd64 localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }}
+          docker save localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} -o ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar
 
       - name: Upload all image artifacts
         uses: actions/upload-artifact@v4
