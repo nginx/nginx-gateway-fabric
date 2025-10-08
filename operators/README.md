@@ -64,22 +64,22 @@ For complete configuration options, see the [Helm Chart Documentation](https://g
 
 ```bash
 # Build the operator image. If building for deploying on a cluster with different architecture from your local machine, append ARCH=<targetarch> e.g. `ARCH=amd64` to the below command
-make docker-build IMG=<your-registry>/nginx-gateway-fabric-operator:<tag>
+make docker-build IMG=<your-registry>/nginx-gateway-fabric/operator:<tag>
 
 # Push the image
-make docker-push IMG=<your-registry>/nginx-gateway-fabric-operator:<tag>
+make docker-push IMG=<your-registry>/nginx-gateway-fabric/operator:<tag>
 
 # Optionally load the image if running on kind
-make docker-load IMG=<your-registry>/nginx-gateway-fabric-operator:<tag>
+make docker-load IMG=<your-registry>/nginx-gateway-fabric/operator:<tag>
 
 # Generate and push bundle (must be publicly accessible remote registry, e.g. quay.io)
-make bundle-build bundle-push IMG=<your-registry>/nginx-gateway-fabric-operator:<tag> BUNDLE_IMG=<your-registry>/nginx-gateway-fabric-operator-bundle:<tag>
+make bundle-build bundle-push IMG=<your-registry>/nginx-gateway-fabric/operator:<tag> BUNDLE_IMG=<your-registry>/nginx-gateway-fabric/operator-bundle:<tag>
 
 # Install olm on local cluster if required (e.g. if running on kind)
 operator-sdk olm install
 
 # Run your bundle image
-operator-sdk run bundle <your-registry>/nginx-gateway-fabric-operator-bundle:<tag>
+operator-sdk run bundle <your-registry>/nginx-gateway-fabric/operator-bundle:<tag>
 
 # Deploy NGF operand (modify the manifest if required)
 kubectl apply -f config/samples/gateway_v1alpha1_nginxgatewayfabric.yaml
