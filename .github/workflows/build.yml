@@ -212,11 +212,7 @@ jobs:
       - name: Export and upload images
         if: ${{ inputs.build-os == 'ubi' && !inputs.dry_run }}
         run: |
-          # Create a local reference for the platform
-          docker buildx imagetools create --tag temp localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }}
-          # Export the image as a tarball
-          docker buildx imagetools export temp > ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar
-          done
+          docker buildx imagetools export localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} > ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar
 
       - name: Upload all image artifacts
         uses: actions/upload-artifact@v4
