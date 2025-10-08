@@ -537,25 +537,25 @@ func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) 
 	if rule.Name != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("name"),
-			"NGINX Gateway Fabric does not support \"SectionName\" field at the moment",
+			"rule names are not supported",
 		))
 	}
 	if rule.Timeouts != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("timeouts"),
-			"NGINX Gateway Fabric does not support \"HTTPRouteTimeouts\" field at the moment",
+			"timeouts are not supported",
 		))
 	}
 	if rule.Retry != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("retry"),
-			"NGINX Gateway Fabric does not support \"HTTPRouteRetry\" field at the moment",
+			"retry is not supported",
 		))
 	}
 	if rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),
-			"NGINX Gateway Fabric does not support \"SessionPersistence\" field at the moment",
+			"sessionPersistence is not supported",
 		))
 	}
 

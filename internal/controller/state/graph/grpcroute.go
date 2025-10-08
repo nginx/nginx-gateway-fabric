@@ -269,7 +269,6 @@ func processGRPCRouteRules(
 	if len(allRulesErrors.warn) > 0 {
 		msg := "There are rules with unsupported fields configurations: " + allRulesErrors.warn.ToAggregate().Error()
 		conds = append(conds, conditions.NewRouteUnsupportedField(msg))
-		valid = true
 	}
 
 	if len(allRulesErrors.invalid) > 0 {
@@ -463,13 +462,13 @@ func checkForUnsupportedGRPCFields(rule v1.GRPCRouteRule, rulePath *field.Path) 
 	if rule.Name != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("name"),
-			"NGINX Gateway Fabric does not support \"SectionName\" field at the moment",
+			"rule names are not supported",
 		))
 	}
 	if rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),
-			"NGINX Gateway Fabric does not support \"SessionPersistence\" field at the moment",
+			"sessionPersistence is not supported",
 		))
 	}
 

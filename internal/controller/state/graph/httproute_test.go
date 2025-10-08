@@ -979,7 +979,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 				},
 				Conditions: []conditions.Condition{
 					conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: " +
-						"spec.rules[0].name: Forbidden: NGINX Gateway Fabric does not support \"SectionName\" field at the moment"),
+						"spec.rules[0].name: Forbidden: rule names are not supported"),
 				},
 			},
 			name: "valid route with unsupported field",
@@ -1783,7 +1783,7 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
 				conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: spec.rules[0].name: " +
-					"Forbidden: NGINX Gateway Fabric does not support \"SectionName\" field at the moment"),
+					"Forbidden: rule names are not supported"),
 			},
 			expectedWarns: 1,
 		},
@@ -1804,11 +1804,9 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
 				conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: " +
-					"[spec.rules[0].name: Forbidden: NGINX Gateway Fabric does not support \"SectionName\" " +
-					"field at the moment, spec.rules[0].timeouts: Forbidden: NGINX Gateway Fabric does not support " +
-					"\"HTTPRouteTimeouts\" field at the moment, spec.rules[0].retry: Forbidden: NGINX Gateway Fabric " +
-					"does not support \"HTTPRouteRetry\" field at the moment, spec.rules[0].sessionPersistence: Forbidden: " +
-					"NGINX Gateway Fabric does not support \"SessionPersistence\" field at the moment]"),
+					"[spec.rules[0].name: Forbidden: rule names are not supported, spec.rules[0].timeouts: " +
+					"Forbidden: timeouts are not supported, spec.rules[0].retry: Forbidden: retry is not supported, " +
+					"spec.rules[0].sessionPersistence: Forbidden: sessionPersistence is not supported]"),
 			},
 			expectedWarns: 4,
 		},

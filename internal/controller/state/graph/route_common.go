@@ -143,14 +143,6 @@ type L7RouteSpec struct {
 }
 
 type RouteRule struct {
-	// Name is the name of a section in a Kubernetes resource.
-	Name *v1.SectionName
-	// Timeouts defines timeouts that can be configured for an HTTPRoute.
-	Timeouts *v1.HTTPRouteTimeouts
-	// Retry defines retry configuration for an HTTPRoute.
-	Retry *v1.HTTPRouteRetry
-	// SessionPersistence defines the desired state of SessionPersistence.
-	SessionPersistence *v1.SessionPersistence
 	// Matches define the predicate used to match requests to a given action.
 	Matches []v1.HTTPRouteMatch
 	// RouteBackendRefs are a wrapper for v1.BackendRef and any BackendRef filters from the HTTPRoute or GRPCRoute.
