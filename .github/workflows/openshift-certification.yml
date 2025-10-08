@@ -13,6 +13,9 @@ on:
       platform:
         required: true
         type: string
+      image_version:
+        required: true
+        type: string
 
 defaults:
   run:
