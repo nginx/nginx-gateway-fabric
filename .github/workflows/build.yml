@@ -198,7 +198,7 @@ jobs:
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: build-${{ inputs.image }}
-      
+
       - name: Show all image tags for debugging
         run: echo "${{ steps.meta.outputs.tags }}"
 
