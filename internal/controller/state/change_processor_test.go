@@ -736,7 +736,7 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					Valid:      true,
 					Attachable: true,
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewRouteBackendRefRefBackendNotFound(
 							"spec.rules[0].backendRefs[0].name: Not found: \"service\"",
 						),
@@ -804,7 +804,7 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					Valid:      true,
 					Attachable: true,
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewRouteBackendRefRefBackendNotFound(
 							"spec.rules[0].backendRefs[0].name: Not found: \"service\"",
 						),
@@ -872,7 +872,7 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					Valid:      true,
 					Attachable: true,
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewRouteBackendRefRefBackendNotFound(
 							"spec.rules[0].backendRefs[0].name: Not found: \"grpc-service\"",
 						),
@@ -940,7 +940,7 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					Valid:      true,
 					Attachable: true,
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewRouteBackendRefRefBackendNotFound(
 							"spec.rules[0].backendRefs[0].name: Not found: \"grpc-service\"",
 						),
@@ -976,7 +976,7 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					Valid:      true,
 					Attachable: true,
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewRouteBackendRefRefBackendNotFound(
 							"spec.rules[0].backendRefs[0].name: Not found: \"tls-service\"",
 						),
@@ -1012,7 +1012,7 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					Valid:      true,
 					Attachable: true,
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewRouteBackendRefRefBackendNotFound(
 							"spec.rules[0].backendRefs[0].name: Not found: \"tls-service\"",
 						),
@@ -1281,21 +1281,21 @@ var _ = Describe("ChangeProcessor", func() {
 							gw.Listeners = nil
 
 							// no ref grant exists yet for the routes
-							expGraph.Routes[httpRouteKey1].Conditions = conditions.Conditions{
+							expGraph.Routes[httpRouteKey1].Conditions = []conditions.Condition{
 								conditions.NewRouteBackendRefRefNotPermitted(
 									"spec.rules[0].backendRefs[0].namespace: Forbidden: " +
 										"Backend ref to Service service-ns/service not permitted by any ReferenceGrant",
 								),
 							}
 
-							expGraph.Routes[grpcRouteKey1].Conditions = conditions.Conditions{
+							expGraph.Routes[grpcRouteKey1].Conditions = []conditions.Condition{
 								conditions.NewRouteBackendRefRefNotPermitted(
 									"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 										"grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
 								),
 							}
 
-							expGraph.L4Routes[trKey1].Conditions = conditions.Conditions{
+							expGraph.L4Routes[trKey1].Conditions = []conditions.Condition{
 								conditions.NewRouteBackendRefRefNotPermitted(
 									"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 										"tls-service-ns/tls-service not permitted by any ReferenceGrant",
@@ -1305,23 +1305,23 @@ var _ = Describe("ChangeProcessor", func() {
 							// gateway class does not exist so routes cannot attach
 							expGraph.Routes[httpRouteKey1].ParentRefs[0].Attachment = &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  conditions.Conditions{conditions.NewRouteNoMatchingParent()},
+								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.Routes[httpRouteKey1].ParentRefs[1].Attachment = &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  conditions.Conditions{conditions.NewRouteNoMatchingParent()},
+								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.Routes[grpcRouteKey1].ParentRefs[0].Attachment = &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  conditions.Conditions{conditions.NewRouteNoMatchingParent()},
+								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.Routes[grpcRouteKey1].ParentRefs[1].Attachment = &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  conditions.Conditions{conditions.NewRouteNoMatchingParent()},
+								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.L4Routes[trKey1].ParentRefs[0].Attachment = &graph.ParentRefAttachmentStatus{
 								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  conditions.Conditions{conditions.NewRouteNoMatchingParent()},
+								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 
 							expGraph.ReferencedSecrets = nil
@@ -1379,7 +1379,7 @@ var _ = Describe("ChangeProcessor", func() {
 					listener443.Routes[grpcRouteKey1].ParentRefs[1].Attachment = expAttachment443
 
 					// no ref grant exists yet for hr1
-					expGraph.Routes[httpRouteKey1].Conditions = conditions.Conditions{
+					expGraph.Routes[httpRouteKey1].Conditions = []conditions.Condition{
 						conditions.NewRouteBackendRefRefNotPermitted(
 							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 								"service-ns/service not permitted by any ReferenceGrant",
@@ -1390,7 +1390,7 @@ var _ = Describe("ChangeProcessor", func() {
 					expGraph.Routes[httpRouteKey1].ParentRefs[1].Attachment = expAttachment443
 
 					// no ref grant exists yet for gr1
-					expGraph.Routes[grpcRouteKey1].Conditions = conditions.Conditions{
+					expGraph.Routes[grpcRouteKey1].Conditions = []conditions.Condition{
 						conditions.NewRouteBackendRefRefNotPermitted(
 							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 								"grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
@@ -1401,7 +1401,7 @@ var _ = Describe("ChangeProcessor", func() {
 					expGraph.Routes[grpcRouteKey1].ParentRefs[1].Attachment = expAttachment443
 
 					// no ref grant exists yet for tr1
-					expGraph.L4Routes[trKey1].Conditions = conditions.Conditions{
+					expGraph.L4Routes[trKey1].Conditions = []conditions.Condition{
 						conditions.NewRouteBackendRefRefNotPermitted(
 							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 								"tls-service-ns/tls-service not permitted by any ReferenceGrant",
@@ -1423,7 +1423,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(secretRefGrant)
 
 					// no ref grant exists yet for hr1
-					expGraph.Routes[httpRouteKey1].Conditions = conditions.Conditions{
+					expGraph.Routes[httpRouteKey1].Conditions = []conditions.Condition{
 						conditions.NewRouteBackendRefRefNotPermitted(
 							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 								"service-ns/service not permitted by any ReferenceGrant",
@@ -1431,7 +1431,7 @@ var _ = Describe("ChangeProcessor", func() {
 					}
 
 					// no ref grant exists yet for gr1
-					expGraph.Routes[grpcRouteKey1].Conditions = conditions.Conditions{
+					expGraph.Routes[grpcRouteKey1].Conditions = []conditions.Condition{
 						conditions.NewRouteBackendRefRefNotPermitted(
 							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 								"grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
@@ -1439,7 +1439,7 @@ var _ = Describe("ChangeProcessor", func() {
 					}
 
 					// no ref grant exists yet for tr1
-					expGraph.L4Routes[trKey1].Conditions = conditions.Conditions{
+					expGraph.L4Routes[trKey1].Conditions = []conditions.Condition{
 						conditions.NewRouteBackendRefRefNotPermitted(
 							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 								"tls-service-ns/tls-service not permitted by any ReferenceGrant",
@@ -1471,7 +1471,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(hrServiceRefGrant)
 
 					// no ref grant exists yet for gr1
-					expGraph.Routes[grpcRouteKey1].Conditions = conditions.Conditions{
+					expGraph.Routes[grpcRouteKey1].Conditions = []conditions.Condition{
 						conditions.NewRouteBackendRefRefNotPermitted(
 							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 								"grpc-service-ns/grpc-service not permitted by any ReferenceGrant",
@@ -1481,7 +1481,7 @@ var _ = Describe("ChangeProcessor", func() {
 					expRouteGR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
 
 					// no ref grant exists yet for tr1
-					expGraph.L4Routes[trKey1].Conditions = conditions.Conditions{
+					expGraph.L4Routes[trKey1].Conditions = []conditions.Condition{
 						conditions.NewRouteBackendRefRefNotPermitted(
 							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 								"tls-service-ns/tls-service not permitted by any ReferenceGrant",
@@ -1510,7 +1510,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(grServiceRefGrant)
 
 					// no ref grant exists yet for tr1
-					expGraph.L4Routes[trKey1].Conditions = conditions.Conditions{
+					expGraph.L4Routes[trKey1].Conditions = []conditions.Condition{
 						conditions.NewRouteBackendRefRefNotPermitted(
 							"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 								"tls-service-ns/tls-service not permitted by any ReferenceGrant",

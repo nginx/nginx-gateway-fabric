@@ -235,7 +235,7 @@ func processGRPCRouteRules(
 	specRules []v1.GRPCRouteRule,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
-) (rules []RouteRule, valid bool, conds conditions.Conditions) {
+) (rules []RouteRule, valid bool, conds []conditions.Condition) {
 	rules = make([]RouteRule, len(specRules))
 
 	var (
@@ -262,7 +262,7 @@ func processGRPCRouteRules(
 		rules[i] = rr
 	}
 
-	conds = make(conditions.Conditions, 0, 2)
+	conds = make([]conditions.Condition, 0, 2)
 	valid = true
 
 	// add warning condition for unsupported fields if any
@@ -458,21 +458,18 @@ func validateGRPCHeaderMatch(
 }
 
 func checkForUnsupportedGRPCFields(rule v1.GRPCRouteRule, rulePath *field.Path) field.ErrorList {
-	supportedFields := []string{"GRPCBackendRef", "GRPCRouteMatch", "GRPCRouteFilter"}
 	var ruleErrors field.ErrorList
 
 	if rule.Name != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("name"),
-			"NGINX Gateway Fabric does not support \"SectionName\" field at the moment, supported fields are: "+
-				strings.Join(supportedFields, ", "),
+			"NGINX Gateway Fabric does not support \"SectionName\" field at the moment",
 		))
 	}
 	if rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),
-			"NGINX Gateway Fabric does not support \"SessionPersistence\" field at the moment, supported fields are: "+
-				strings.Join(supportedFields, ", "),
+			"NGINX Gateway Fabric does not support \"SessionPersistence\" field at the moment",
 		))
 	}
 

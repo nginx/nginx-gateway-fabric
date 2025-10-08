@@ -24,7 +24,7 @@ type BackendTLSPolicy struct {
 	// Only contains gateways where the policy can be applied (not limited by ancestor status).
 	Gateways []types.NamespacedName
 	// Conditions include Conditions for the BackendTLSPolicy.
-	Conditions conditions.Conditions
+	Conditions []conditions.Condition
 	// Valid shows whether the BackendTLSPolicy is valid.
 	Valid bool
 	// IsReferenced shows whether the BackendTLSPolicy is referenced by a BackendRef.
@@ -70,7 +70,7 @@ func validateBackendTLSPolicy(
 	backendTLSPolicy *v1alpha3.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
 	secretResolver *secretResolver,
-) (valid, ignored bool, conds conditions.Conditions) {
+) (valid, ignored bool, conds []conditions.Condition) {
 	valid = true
 	ignored = false
 
@@ -132,11 +132,11 @@ func validateBackendTLSCACertRef(
 	btp *v1alpha3.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
 	secretResolver *secretResolver,
-) conditions.Conditions {
+) []conditions.Condition {
 	if len(btp.Spec.Validation.CACertificateRefs) != 1 {
 		path := field.NewPath("validation.caCertificateRefs")
 		valErr := field.TooMany(path, len(btp.Spec.Validation.CACertificateRefs), 1)
-		return conditions.Conditions{conditions.NewPolicyInvalid(valErr.Error())}
+		return []conditions.Condition{conditions.NewPolicyInvalid(valErr.Error())}
 	}
 
 	selectedCertRef := btp.Spec.Validation.CACertificateRefs[0]
@@ -145,7 +145,7 @@ func validateBackendTLSCACertRef(
 	if !slices.Contains(allowedCaCertKinds, selectedCertRef.Kind) {
 		path := field.NewPath("validation.caCertificateRefs[0].kind")
 		valErr := field.NotSupported(path, btp.Spec.Validation.CACertificateRefs[0].Kind, allowedCaCertKinds)
-		return conditions.Conditions{
+		return []conditions.Condition{
 			conditions.NewBackendTLSPolicyInvalidKind(valErr.Error()),
 			conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
 		}
@@ -154,7 +154,7 @@ func validateBackendTLSCACertRef(
 		selectedCertRef.Group != "core" {
 		path := field.NewPath("validation.caCertificateRefs[0].group")
 		valErr := field.NotSupported(path, selectedCertRef.Group, []string{"", "core"})
-		return conditions.Conditions{
+		return []conditions.Condition{
 			conditions.NewBackendTLSPolicyInvalidKind(valErr.Error()),
 			conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
 		}
@@ -169,7 +169,7 @@ func validateBackendTLSCACertRef(
 		if err := configMapResolver.resolve(nsName); err != nil {
 			path := field.NewPath("validation.caCertificateRefs[0]")
 			valErr := field.Invalid(path, selectedCertRef, err.Error())
-			return conditions.Conditions{
+			return []conditions.Condition{
 				conditions.NewBackendTLSPolicyInvalidCACertificateRef(valErr.Error()),
 				conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
 			}
@@ -178,7 +178,7 @@ func validateBackendTLSCACertRef(
 		if err := secretResolver.resolve(nsName); err != nil {
 			path := field.NewPath("validation.caCertificateRefs[0]")
 			valErr := field.Invalid(path, selectedCertRef, err.Error())
-			return conditions.Conditions{
+			return []conditions.Condition{
 				conditions.NewBackendTLSPolicyInvalidCACertificateRef(valErr.Error()),
 				conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
 			}
@@ -212,10 +212,10 @@ func countNonNGFAncestors(policy *v1alpha3.BackendTLSPolicy, ctlrName string) in
 
 // addPolicyAncestorLimitCondition adds or updates a PolicyAncestorLimitReached condition.
 func addPolicyAncestorLimitCondition(
-	conds conditions.Conditions,
+	conds []conditions.Condition,
 	policyName string,
 	policyType string,
-) conditions.Conditions {
+) []conditions.Condition {
 	for i, condition := range conds {
 		if condition.Reason == string(conditions.PolicyReasonAncestorLimitReached) {
 			if !strings.Contains(condition.Message, policyName) {

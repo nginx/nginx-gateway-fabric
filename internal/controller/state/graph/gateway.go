@@ -29,7 +29,7 @@ type Gateway struct {
 	// Listeners include the listeners of the Gateway.
 	Listeners []*Listener
 	// Conditions holds the conditions for the Gateway.
-	Conditions conditions.Conditions
+	Conditions []conditions.Condition
 	// Policies holds the policies attached to the Gateway.
 	Policies []*Policy
 	// Valid indicates whether the Gateway Spec is valid.
@@ -127,8 +127,8 @@ func buildGateways(
 	return builtGateways
 }
 
-func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersReference) conditions.Conditions {
-	var conds conditions.Conditions
+func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersReference) []conditions.Condition {
+	var conds []conditions.Condition
 
 	path := field.NewPath("spec.infrastructure.parametersRef")
 
@@ -170,17 +170,14 @@ func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersRefer
 	return conds
 }
 
-func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) (conditions.Conditions, bool) {
-	var conds conditions.Conditions
+func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]conditions.Condition, bool) {
+	var conds []conditions.Condition
 
 	if gc == nil {
 		conds = append(conds, conditions.NewGatewayInvalid("GatewayClass doesn't exist")...)
 	} else if !gc.Valid {
 		conds = append(conds, conditions.NewGatewayInvalid("GatewayClass is invalid")...)
 	}
-
-	// Validate unsupported fields Gateway fields
-	conds = append(conds, validateUnsupportedGatewayFields(gw)...)
 
 	// Set the unaccepted conditions here, because those make the gateway invalid. We set the unprogrammed conditions
 	// elsewhere, because those do not make the gateway invalid.
@@ -194,7 +191,10 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) (condi
 
 	// we evaluate validity before validating parametersRef because an invalid parametersRef/NginxProxy does not
 	// invalidate the entire Gateway.
-	valid := conds.CountInvalid() == 0
+	valid := len(conds) == 0
+
+	// Validate unsupported fields - these are warnings, don't affect validity
+	conds = append(conds, validateUnsupportedGatewayFields(gw)...)
 
 	if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
 		paramConds := validateGatewayParametersRef(npCfg, *gw.Spec.Infrastructure.ParametersRef)
@@ -271,8 +271,8 @@ func (g *Gateway) collectSnippetsFiltersFromRoute(
 	}
 }
 
-func validateUnsupportedGatewayFields(gw *v1.Gateway) conditions.Conditions {
-	var conds conditions.Conditions
+func validateUnsupportedGatewayFields(gw *v1.Gateway) []conditions.Condition {
+	var conds []conditions.Condition
 
 	if gw.Spec.AllowedListeners != nil {
 		conds = append(conds, conditions.NewGatewayUnsupportedField("AllowedListeners are not supported"))

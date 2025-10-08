@@ -299,9 +299,9 @@ func TestAttachPolicyToRoute(t *testing.T) {
 	}
 
 	validatorError := &policiesfakes.FakeValidator{
-		ValidateGlobalSettingsStub: func(_ policies.Policy, gs *policies.GlobalSettings) conditions.Conditions {
+		ValidateGlobalSettingsStub: func(_ policies.Policy, gs *policies.GlobalSettings) []conditions.Condition {
 			if !gs.TelemetryEnabled {
-				return conditions.Conditions{
+				return []conditions.Condition{
 					conditions.NewPolicyNotAcceptedNginxProxyNotSet(conditions.PolicyMessageTelemetryNotEnabled),
 				}
 			}
@@ -361,7 +361,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
-					Conditions: conditions.Conditions{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
 				},
 			},
 			expAttached: false,
@@ -374,7 +374,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
-					Conditions: conditions.Conditions{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
 				},
 			},
 			expAttached: false,
@@ -387,7 +387,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
-					Conditions: conditions.Conditions{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
 				},
 			},
 			expAttached: false,
@@ -447,7 +447,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor: createExpAncestor(kinds.HTTPRoute),
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewPolicyNotAcceptedNginxProxyNotSet(conditions.PolicyMessageTelemetryNotEnabled),
 					},
 				},
@@ -486,7 +486,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor: createExpAncestor(kinds.HTTPRoute),
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewPolicyNotAcceptedNginxProxyNotSet(conditions.PolicyMessageTelemetryNotEnabled),
 					},
 				},
@@ -596,7 +596,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   getGatewayParentRef(gateway2NsName),
-					Conditions: conditions.Conditions{conditions.NewPolicyTargetNotFound("TargetRef is not found")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is not found")},
 				},
 			},
 			expAttached: false,
@@ -617,7 +617,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   getGatewayParentRef(gatewayNsName),
-					Conditions: conditions.Conditions{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
 				},
 			},
 			expAttached: false,
@@ -811,7 +811,7 @@ func TestAttachPolicyToService(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   getGatewayParentRef(gwNsname),
-					Conditions: conditions.Conditions{conditions.NewPolicyTargetNotFound("Parent Gateway is invalid")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("Parent Gateway is invalid")},
 				},
 			},
 		},
@@ -1015,9 +1015,9 @@ func TestProcessPolicies(t *testing.T) {
 		{
 			name: "invalid and valid policies",
 			validator: &policiesfakes.FakeValidator{
-				ValidateStub: func(policy policies.Policy) conditions.Conditions {
+				ValidateStub: func(policy policies.Policy) []conditions.Condition {
 					if policy.GetName() == "pol1" {
-						return conditions.Conditions{conditions.NewPolicyInvalid("invalid error")}
+						return []conditions.Condition{conditions.NewPolicyInvalid("invalid error")}
 					}
 
 					return nil
@@ -1037,7 +1037,7 @@ func TestProcessPolicies(t *testing.T) {
 							Group:  v1.GroupName,
 						},
 					},
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewPolicyInvalid("invalid error"),
 					},
 					Ancestors:          []PolicyAncestor{},
@@ -1093,7 +1093,7 @@ func TestProcessPolicies(t *testing.T) {
 							Group:  v1.GroupName,
 						},
 					},
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewPolicyConflicted("Conflicts with another MyPolicy"),
 					},
 					Ancestors:          []PolicyAncestor{},
@@ -1174,7 +1174,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 		policies      map[PolicyKey]policies.Policy
 		routes        map[RouteKey]*L7Route
 		name          string
-		expConditions conditions.Conditions
+		expConditions []conditions.Condition
 		valid         bool
 	}{
 		{
@@ -1231,7 +1231,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 				}: createTestRouteWithPaths("hr2", "/coffee"),
 			},
 			valid: false,
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				{
 					Type:   "Accepted",
 					Status: "False",
@@ -1280,7 +1280,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 				}: createTestRouteWithPaths("hr-coffee-latte", "/coffee", "/latte"),
 			},
 			valid: false,
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				{
 					Type:   "Accepted",
 					Status: "False",
@@ -1715,7 +1715,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 		policies           map[PolicyKey]*Policy
 		gws                map[types.NamespacedName]*Gateway
 		routes             map[RouteKey]*L7Route
-		expectedConditions map[types.NamespacedName]conditions.Conditions
+		expectedConditions map[types.NamespacedName][]conditions.Condition
 		name               string
 		missingKeys        bool
 	}{
@@ -1735,7 +1735,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 			},
 			gws:    createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw1"}),
 			routes: nil,
-			expectedConditions: map[types.NamespacedName]conditions.Conditions{
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "gw1"}: {
 					conditions.NewClientSettingsPolicyAffected(),
 				},
@@ -1755,7 +1755,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 			},
 			gws:    createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw2"}),
 			routes: nil,
-			expectedConditions: map[types.NamespacedName]conditions.Conditions{
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "gw2"}: {
 					conditions.NewClientSettingsPolicyAffected(),
 					conditions.NewObservabilityPolicyAffected(),
@@ -1792,7 +1792,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					},
 				},
 			},
-			expectedConditions: map[types.NamespacedName]conditions.Conditions{
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "hr1"}: {
 					conditions.NewObservabilityPolicyAffected(),
 				},
@@ -1838,7 +1838,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					},
 				},
 			},
-			expectedConditions: map[types.NamespacedName]conditions.Conditions{
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "gw3"}: {
 					conditions.NewClientSettingsPolicyAffected(),
 					conditions.NewObservabilityPolicyAffected(),
@@ -1874,7 +1874,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					},
 				},
 			},
-			expectedConditions: map[types.NamespacedName]conditions.Conditions{
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "hr3"}: {
 					conditions.NewClientSettingsPolicyAffected(),
 				},
@@ -1898,7 +1898,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					},
 				},
 			},
-			expectedConditions: map[types.NamespacedName]conditions.Conditions{
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "invalid"}: {},
 			},
 		},
@@ -1913,7 +1913,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 			gws: createGatewayMap(
 				types.NamespacedName{Namespace: testNs, Name: "gw2"},
 			),
-			expectedConditions: map[types.NamespacedName]conditions.Conditions{
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "gw1"}: {},
 			},
 			missingKeys: true,
@@ -1929,7 +1929,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 			gws: map[types.NamespacedName]*Gateway{
 				{Namespace: testNs, Name: "gw1"}: nil,
 			},
-			expectedConditions: map[types.NamespacedName]conditions.Conditions{
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "gw1"}: {},
 			},
 			missingKeys: true,
@@ -1952,7 +1952,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					},
 				},
 			},
-			expectedConditions: map[types.NamespacedName]conditions.Conditions{
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "hr1"}: {},
 			},
 			missingKeys: true,
@@ -2225,13 +2225,13 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 			Source: &v1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "gateway1", Namespace: "test"},
 			},
-			Conditions: conditions.Conditions{}, // Start with empty conditions
+			Conditions: []conditions.Condition{}, // Start with empty conditions
 		},
 		{Namespace: "test", Name: "gateway2"}: {
 			Source: &v1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "gateway2", Namespace: "test"},
 			},
-			Conditions: conditions.Conditions{}, // Start with empty conditions
+			Conditions: []conditions.Condition{}, // Start with empty conditions
 		},
 	}
 
@@ -2249,7 +2249,7 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 
 	// Create fake validator
 	validator := &policiesfakes.FakeValidator{
-		ValidateStub: func(_ policies.Policy) conditions.Conditions {
+		ValidateStub: func(_ policies.Policy) []conditions.Condition {
 			return nil
 		},
 		ConflictsStub: func(_, _ policies.Policy) bool {

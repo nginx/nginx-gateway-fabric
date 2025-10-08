@@ -330,7 +330,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			expected: &L4Route{
 				Source:     invalidHostnameGtr,
 				ParentRefs: []ParentRef{parentRefGraph},
-				Conditions: conditions.Conditions{conditions.NewRouteUnsupportedValue(
+				Conditions: []conditions.Condition{conditions.NewRouteUnsupportedValue(
 					"spec.hostnames[0]: Invalid value: \"hi....com\": a lowercase RFC 1" +
 						"123 subdomain must consist of lower case alphanumeric characters" +
 						", '-' or '.', and must start and end with an alphanumeric charac" +
@@ -354,7 +354,7 @@ func TestBuildTLSRoute(t *testing.T) {
 						"app.example.com",
 					},
 				},
-				Conditions: conditions.Conditions{conditions.NewRouteBackendRefUnsupportedValue(
+				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(
 					"Must have exactly one Rule and BackendRef",
 				)},
 				Valid: false,
@@ -382,7 +382,7 @@ func TestBuildTLSRoute(t *testing.T) {
 				},
 				Attachable: true,
 				Valid:      true,
-				Conditions: conditions.Conditions{conditions.NewRouteBackendRefUnsupportedProtocol(
+				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(
 					"route type tls does not support service port appProtocol kubernetes.io/h2c",
 				)},
 			},
@@ -411,7 +411,7 @@ func TestBuildTLSRoute(t *testing.T) {
 				},
 				Attachable: true,
 				Valid:      true,
-				Conditions: conditions.Conditions{conditions.NewRouteBackendRefUnsupportedProtocol(
+				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(
 					"route type tls does not support service port appProtocol kubernetes.io/ws",
 				)},
 			},
@@ -440,7 +440,7 @@ func TestBuildTLSRoute(t *testing.T) {
 						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 					},
 				},
-				Conditions: conditions.Conditions{conditions.NewRouteBackendRefRefBackendNotFound(
+				Conditions: []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(
 					"spec.rules[0].backendRefs[0].name: Not found: \"hi\"",
 				)},
 				Attachable: true,
@@ -465,7 +465,7 @@ func TestBuildTLSRoute(t *testing.T) {
 						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 					},
 				},
-				Conditions: conditions.Conditions{conditions.NewRouteBackendRefInvalidKind(
+				Conditions: []conditions.Condition{conditions.NewRouteBackendRefInvalidKind(
 					"spec.rules[0].backendRefs[0].group:" +
 						" Unsupported value: \"wrong\": supported values: \"core\", \"\"",
 				)},
@@ -493,7 +493,7 @@ func TestBuildTLSRoute(t *testing.T) {
 						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 					},
 				},
-				Conditions: conditions.Conditions{conditions.NewRouteBackendRefInvalidKind(
+				Conditions: []conditions.Condition{conditions.NewRouteBackendRefInvalidKind(
 					"spec.rules[0].backendRefs[0].kind:" +
 						" Unsupported value: \"not service\": supported values: \"Service\"",
 				)},
@@ -521,7 +521,7 @@ func TestBuildTLSRoute(t *testing.T) {
 						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 					},
 				},
-				Conditions: conditions.Conditions{conditions.NewRouteBackendRefRefNotPermitted(
+				Conditions: []conditions.Condition{conditions.NewRouteBackendRefRefNotPermitted(
 					"spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service " +
 						"diff/hi not permitted by any ReferenceGrant",
 				)},
@@ -549,7 +549,7 @@ func TestBuildTLSRoute(t *testing.T) {
 						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 					},
 				},
-				Conditions: conditions.Conditions{conditions.NewRouteBackendRefUnsupportedValue(
+				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(
 					"spec.rules[0].backendRefs[0].port: Required value: port cannot be nil",
 				)},
 				Attachable: true,

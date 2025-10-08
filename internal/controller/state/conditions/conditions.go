@@ -38,7 +38,8 @@ const (
 	// Route rules has a backendRef with an unsupported value.
 	RouteReasonBackendRefUnsupportedValue v1.RouteConditionReason = "UnsupportedValue"
 
-	// RouteReasonUnsupportedField is used when a Route contains fields that are not yet supported.
+	// RouteReasonUnsupportedField is used with the "Accepted" condition when a Route contains fields that are
+	// not yet supported.
 	RouteReasonUnsupportedField v1.RouteConditionReason = "UnsupportedField"
 
 	// RouteConditionUnsupportedField indicates that the Route contains fields that are not yet supported.
@@ -69,7 +70,8 @@ const (
 	// invalid. Used with ResolvedRefs (false).
 	RouteReasonInvalidFilter v1.RouteConditionReason = "InvalidFilter"
 
-	// GatewayReasonUnsupportedField is used when a Route contains fields that are not yet supported.
+	// GatewayReasonUnsupportedField is used with the "Accepted" condition when a Gateway contains fields
+	// that are not yet supported.
 	GatewayReasonUnsupportedField v1.GatewayConditionReason = "UnsupportedField"
 
 	// GatewayConditionUnsupportedField indicates that the Gateway contains fields that are not yet supported.
@@ -179,22 +181,9 @@ type Condition struct {
 	Message string
 }
 
-type Conditions []Condition
-
-func (c *Conditions) CountInvalid() int {
-	var count int
-	for _, cond := range *c {
-		if cond.Status == metav1.ConditionFalse {
-			count++
-		}
-	}
-
-	return count
-}
-
 // DeduplicateConditions removes duplicate conditions based on the condition type.
 // The last condition wins. The order of conditions is preserved.
-func DeduplicateConditions(conds Conditions) Conditions {
+func DeduplicateConditions(conds []Condition) []Condition {
 	type elem struct {
 		cond       Condition
 		reverseIdx int
@@ -215,7 +204,7 @@ func DeduplicateConditions(conds Conditions) Conditions {
 		idx++
 	}
 
-	result := make(Conditions, len(uniqueElems))
+	result := make([]Condition, len(uniqueElems))
 
 	for _, el := range uniqueElems {
 		result[len(result)-el.reverseIdx-1] = el.cond
@@ -226,7 +215,7 @@ func DeduplicateConditions(conds Conditions) Conditions {
 
 // ConvertConditions converts conditions to Kubernetes API conditions.
 func ConvertConditions(
-	conds Conditions,
+	conds []Condition,
 	observedGeneration int64,
 	transitionTime metav1.Time,
 ) []metav1.Condition {
@@ -247,7 +236,7 @@ func ConvertConditions(
 }
 
 // HasMatchingCondition checks if the given condition matches any of the existing conditions.
-func HasMatchingCondition(existingConditions Conditions, cond Condition) bool {
+func HasMatchingCondition(existingConditions []Condition, cond Condition) bool {
 	for _, existing := range existingConditions {
 		if existing.Type == cond.Type &&
 			existing.Status == cond.Status &&
@@ -261,8 +250,8 @@ func HasMatchingCondition(existingConditions Conditions, cond Condition) bool {
 
 // NewDefaultGatewayClassConditions returns Conditions that indicate that the GatewayClass is accepted and that the
 // Gateway API CRD versions are supported.
-func NewDefaultGatewayClassConditions() Conditions {
-	return Conditions{
+func NewDefaultGatewayClassConditions() []Condition {
+	return []Condition{
 		{
 			Type:    string(v1.GatewayClassConditionStatusAccepted),
 			Status:  metav1.ConditionTrue,
@@ -281,8 +270,8 @@ func NewDefaultGatewayClassConditions() Conditions {
 // NewGatewayClassSupportedVersionBestEffort returns a Condition that indicates that the GatewayClass is accepted,
 // but the Gateway API CRD versions are not supported. This means NGF will attempt to generate configuration,
 // but it does not guarantee support.
-func NewGatewayClassSupportedVersionBestEffort(recommendedVersion string) Conditions {
-	return Conditions{
+func NewGatewayClassSupportedVersionBestEffort(recommendedVersion string) []Condition {
+	return []Condition{
 		{
 			Type:   string(v1.GatewayClassConditionStatusSupportedVersion),
 			Status: metav1.ConditionFalse,
@@ -297,8 +286,8 @@ func NewGatewayClassSupportedVersionBestEffort(recommendedVersion string) Condit
 
 // NewGatewayClassUnsupportedVersion returns Conditions that indicate that the GatewayClass is not accepted because
 // the Gateway API CRD versions are not supported. NGF will not generate configuration in this case.
-func NewGatewayClassUnsupportedVersion(recommendedVersion string) Conditions {
-	return Conditions{
+func NewGatewayClassUnsupportedVersion(recommendedVersion string) []Condition {
+	return []Condition{
 		{
 			Type:   string(v1.GatewayClassConditionStatusAccepted),
 			Status: metav1.ConditionFalse,
@@ -332,8 +321,8 @@ func NewGatewayClassConflict() Condition {
 }
 
 // NewDefaultRouteConditions returns the default conditions that must be present in the status of a Route.
-func NewDefaultRouteConditions() Conditions {
-	return Conditions{
+func NewDefaultRouteConditions() []Condition {
+	return []Condition{
 		NewRouteAccepted(),
 		NewRouteResolvedRefs(),
 	}
@@ -551,8 +540,8 @@ func NewRouteResolvedRefsInvalidFilter(msg string) Condition {
 // NewDefaultListenerConditions returns the default Conditions that must be present in the status of a Listener.
 // If existingConditions contains conflict-related conditions (like OverlappingTLSConfig or Conflicted),
 // the NoConflicts condition is excluded to avoid conflicting condition states.
-func NewDefaultListenerConditions(existingConditions Conditions) Conditions {
-	defaultConds := Conditions{
+func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
+	defaultConds := []Condition{
 		NewListenerAccepted(),
 		NewListenerProgrammed(),
 		NewListenerResolvedRefs(),
@@ -567,7 +556,7 @@ func NewDefaultListenerConditions(existingConditions Conditions) Conditions {
 }
 
 // hasConflictConditions checks if the listener has any conflict-related conditions.
-func hasConflictConditions(conditions Conditions) bool {
+func hasConflictConditions(conditions []Condition) bool {
 	for _, cond := range conditions {
 		if cond.Type == string(v1.ListenerConditionConflicted) ||
 			cond.Type == string(v1.ListenerConditionOverlappingTLSConfig) {
@@ -630,8 +619,8 @@ func NewListenerNotProgrammedInvalid(msg string) Condition {
 
 // NewListenerUnsupportedValue returns Conditions that indicate that a field of a Listener has an unsupported value.
 // Unsupported means that the value is not supported by the implementation or invalid.
-func NewListenerUnsupportedValue(msg string) Conditions {
-	return Conditions{
+func NewListenerUnsupportedValue(msg string) []Condition {
+	return []Condition{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -643,8 +632,8 @@ func NewListenerUnsupportedValue(msg string) Conditions {
 }
 
 // NewListenerInvalidCertificateRef returns Conditions that indicate that a CertificateRef of a Listener is invalid.
-func NewListenerInvalidCertificateRef(msg string) Conditions {
-	return Conditions{
+func NewListenerInvalidCertificateRef(msg string) []Condition {
+	return []Condition{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -663,8 +652,8 @@ func NewListenerInvalidCertificateRef(msg string) Conditions {
 
 // NewListenerInvalidRouteKinds returns Conditions that indicate that an invalid or unsupported Route kind is
 // specified by the Listener.
-func NewListenerInvalidRouteKinds(msg string) Conditions {
-	return Conditions{
+func NewListenerInvalidRouteKinds(msg string) []Condition {
+	return []Condition{
 		{
 			Type:    string(v1.ListenerReasonResolvedRefs),
 			Status:  metav1.ConditionFalse,
@@ -677,8 +666,8 @@ func NewListenerInvalidRouteKinds(msg string) Conditions {
 
 // NewListenerProtocolConflict returns Conditions that indicate multiple Listeners are specified with the same
 // Listener port number, but have conflicting protocol specifications.
-func NewListenerProtocolConflict(msg string) Conditions {
-	return Conditions{
+func NewListenerProtocolConflict(msg string) []Condition {
+	return []Condition{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -697,8 +686,8 @@ func NewListenerProtocolConflict(msg string) Conditions {
 
 // NewListenerHostnameConflict returns Conditions that indicate multiple Listeners are specified with the same
 // Listener port, but are HTTPS and TLS and have overlapping hostnames.
-func NewListenerHostnameConflict(msg string) Conditions {
-	return Conditions{
+func NewListenerHostnameConflict(msg string) []Condition {
+	return []Condition{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -716,8 +705,8 @@ func NewListenerHostnameConflict(msg string) Conditions {
 }
 
 // NewListenerUnsupportedProtocol returns Conditions that indicate that the protocol of a Listener is unsupported.
-func NewListenerUnsupportedProtocol(msg string) Conditions {
-	return Conditions{
+func NewListenerUnsupportedProtocol(msg string) []Condition {
+	return []Condition{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -730,8 +719,8 @@ func NewListenerUnsupportedProtocol(msg string) Conditions {
 
 // NewListenerRefNotPermitted returns Conditions that indicates that the Listener references a TLS secret that is not
 // permitted by a ReferenceGrant.
-func NewListenerRefNotPermitted(msg string) Conditions {
-	return Conditions{
+func NewListenerRefNotPermitted(msg string) []Condition {
+	return []Condition{
 		{
 			Type:    string(v1.ListenerConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -805,8 +794,8 @@ func NewGatewayClassInvalidParameters(msg string) Condition {
 }
 
 // NewDefaultGatewayConditions returns the default Conditions that must be present in the status of a Gateway.
-func NewDefaultGatewayConditions() Conditions {
-	return Conditions{
+func NewDefaultGatewayConditions() []Condition {
+	return []Condition{
 		NewGatewayAccepted(),
 		NewGatewayProgrammed(),
 	}
@@ -835,9 +824,9 @@ func NewGatewayAcceptedListenersNotValid() Condition {
 
 // NewGatewayNotAcceptedListenersNotValid returns Conditions that indicate the Gateway is not accepted,
 // because all listeners are invalid.
-func NewGatewayNotAcceptedListenersNotValid() Conditions {
+func NewGatewayNotAcceptedListenersNotValid() []Condition {
 	msg := "Gateway has no valid listeners"
-	return Conditions{
+	return []Condition{
 		{
 			Type:    string(v1.GatewayConditionAccepted),
 			Status:  metav1.ConditionFalse,
@@ -850,8 +839,8 @@ func NewGatewayNotAcceptedListenersNotValid() Conditions {
 
 // NewGatewayInvalid returns Conditions that indicate the Gateway is not accepted and programmed because it is
 // semantically or syntactically invalid. The provided message contains the details of why the Gateway is invalid.
-func NewGatewayInvalid(msg string) Conditions {
-	return Conditions{
+func NewGatewayInvalid(msg string) []Condition {
+	return []Condition{
 		{
 			Type:    string(v1.GatewayConditionAccepted),
 			Status:  metav1.ConditionFalse,

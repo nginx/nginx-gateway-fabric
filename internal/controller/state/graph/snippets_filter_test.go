@@ -100,7 +100,7 @@ func TestProcessSnippetsFilters(t *testing.T) {
 				},
 				invalidFilterNsName: {
 					Source: invalidFilter,
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewSnippetsFilterInvalid(
 							"spec.snippets[1].context: Unsupported value: \"invalid context\": " +
 								"supported values: \"main\", \"http\", \"http.server\", \"http.server.location\"",

@@ -52,7 +52,7 @@ func TestValidator_Validate(t *testing.T) {
 	tests := []struct {
 		name          string
 		policy        *ngfAPI.UpstreamSettingsPolicy
-		expConditions conditions.Conditions
+		expConditions []conditions.Condition
 	}{
 		{
 			name: "invalid target ref; unsupported group",
@@ -66,7 +66,7 @@ func TestValidator_Validate(t *testing.T) {
 					})
 				return p
 			}),
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.targetRefs[1].group: Unsupported value: \"Unsupported\": " +
 					"supported values: \"\", \"core\""),
 			},
@@ -83,7 +83,7 @@ func TestValidator_Validate(t *testing.T) {
 					})
 				return p
 			}),
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.targetRefs[1].kind: Unsupported value: \"Unsupported\": " +
 					"supported values: \"Service\""),
 			},
@@ -94,7 +94,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.ZoneSize = helpers.GetPointer[ngfAPI.Size]("invalid")
 				return p
 			}),
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.zoneSize: Invalid value: \"invalid\": ^\\d{1,4}(k|m|g)?$ " +
 					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is 'must contain a number. " +
 					"May be followed by 'k', 'm', or 'g', otherwise bytes are assumed')"),
@@ -107,7 +107,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.KeepAlive.Timeout = helpers.GetPointer[ngfAPI.Duration]("invalid")
 				return p
 			}),
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid(
 					"[spec.keepAlive.time: Invalid value: \"invalid\": ^[0-9]{1,4}(ms|s|m|h)? " +
 						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +

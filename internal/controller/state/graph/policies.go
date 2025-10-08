@@ -32,7 +32,7 @@ type Policy struct {
 	// Conditions holds the conditions for the Policy.
 	// These conditions apply to the entire Policy.
 	// The conditions in the Ancestor apply only to the Policy in regard to the Ancestor.
-	Conditions conditions.Conditions
+	Conditions []conditions.Condition
 	// Valid indicates whether the Policy is valid.
 	Valid bool
 }
@@ -42,7 +42,7 @@ type PolicyAncestor struct {
 	// Ancestor is the ancestor object.
 	Ancestor v1.ParentReference
 	// Conditions contains the list of conditions of the Policy in relation to the ancestor.
-	Conditions conditions.Conditions
+	Conditions []conditions.Condition
 }
 
 // PolicyTargetRef represents the object that the Policy is targeting.
@@ -205,7 +205,7 @@ func attachPolicyToService(
 
 		if !gw.Valid {
 			policy.InvalidForGateways[gwNsName] = struct{}{}
-			ancestor.Conditions = conditions.Conditions{conditions.NewPolicyTargetNotFound("Parent Gateway is invalid")}
+			ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("Parent Gateway is invalid")}
 			policy.Ancestors = append(policy.Ancestors, ancestor)
 			continue
 		}
@@ -254,7 +254,7 @@ func attachPolicyToRoute(
 	}
 
 	if !route.Valid || !route.Attachable || len(route.ParentRefs) == 0 {
-		ancestor.Conditions = conditions.Conditions{conditions.NewPolicyTargetNotFound("TargetRef is invalid")}
+		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}
@@ -334,14 +334,14 @@ func attachPolicyToGateway(
 
 	if !exists || (gw != nil && gw.Source == nil) {
 		policy.InvalidForGateways[ref.Nsname] = struct{}{}
-		ancestor.Conditions = conditions.Conditions{conditions.NewPolicyTargetNotFound("TargetRef is not found")}
+		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is not found")}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}
 
 	if !gw.Valid {
 		policy.InvalidForGateways[ref.Nsname] = struct{}{}
-		ancestor.Conditions = conditions.Conditions{conditions.NewPolicyTargetNotFound("TargetRef is invalid")}
+		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}
@@ -366,7 +366,7 @@ func processPolicies(
 	processedPolicies := make(map[PolicyKey]*Policy)
 
 	for key, policy := range pols {
-		var conds conditions.Conditions
+		var conds []conditions.Condition
 
 		targetRefs := make([]PolicyTargetRef, 0, len(policy.GetTargetRefs()))
 		targetedRoutes := make(map[types.NamespacedName]*L7Route)
@@ -428,8 +428,8 @@ func processPolicies(
 func checkTargetRoutesForOverlap(
 	targetedRoutes map[types.NamespacedName]*L7Route,
 	graphRoutes map[RouteKey]*L7Route,
-) conditions.Conditions {
-	var conds conditions.Conditions
+) []conditions.Condition {
+	var conds []conditions.Condition
 
 	for _, targetedRoute := range targetedRoutes {
 		// We need to check if this route referenced in the policy has an overlapping
@@ -622,7 +622,7 @@ func addPolicyAffectedStatusToTargetRefs(
 	}
 }
 
-func addStatusToTargetRefs(policyKind string, conditionsList *conditions.Conditions) {
+func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condition) {
 	if conditionsList == nil {
 		return
 	}

@@ -9,7 +9,7 @@ import (
 
 func TestDeduplicateConditions(t *testing.T) {
 	t.Parallel()
-	conds := Conditions{
+	conds := []Condition{
 		{
 			Type:    "Type1",
 			Status:  metav1.ConditionTrue,
@@ -37,7 +37,7 @@ func TestDeduplicateConditions(t *testing.T) {
 		},
 	}
 
-	expected := Conditions{
+	expected := []Condition{
 		{
 			Type:    "Type1",
 			Status:  metav1.ConditionFalse,
@@ -63,7 +63,7 @@ func TestDeduplicateConditions(t *testing.T) {
 
 func TestConvertConditions(t *testing.T) {
 	t.Parallel()
-	conds := Conditions{
+	conds := []Condition{
 		{
 			Type:    "Type1",
 			Status:  metav1.ConditionTrue,
@@ -112,7 +112,7 @@ func TestHasMatchingCondition(t *testing.T) {
 	tests := []struct {
 		condition Condition
 		name      string
-		conds     Conditions
+		conds     []Condition
 		expected  bool
 	}{
 		{
@@ -123,13 +123,13 @@ func TestHasMatchingCondition(t *testing.T) {
 		},
 		{
 			name:      "condition matches existing condition",
-			conds:     Conditions{NewClientSettingsPolicyAffected()},
+			conds:     []Condition{NewClientSettingsPolicyAffected()},
 			condition: NewClientSettingsPolicyAffected(),
 			expected:  true,
 		},
 		{
 			name:      "condition does not match existing condition",
-			conds:     Conditions{NewClientSettingsPolicyAffected()},
+			conds:     []Condition{NewClientSettingsPolicyAffected()},
 			condition: NewObservabilityPolicyAffected(),
 			expected:  false,
 		},

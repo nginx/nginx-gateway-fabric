@@ -602,7 +602,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 					},
 				},
 			},
-			Conditions: conditions.Conditions{
+			Conditions: []conditions.Condition{
 				{
 					Type:    "Accepted",
 					Status:  "True",
@@ -632,7 +632,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 		policies            map[types.NamespacedName]*BackendTLSPolicy
 		name                string
 		expectedBackendRefs []BackendRef
-		expectedConditions  conditions.Conditions
+		expectedConditions  []conditions.Condition
 	}{
 		{
 			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svc1"),
@@ -706,7 +706,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
 					"route type http does not support service port appProtocol kubernetes.io/h2c;" +
 						" nginx does not support proxying to upstreams with http2 or h2c",
@@ -758,7 +758,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
 					"route type http does not support service port appProtocol kubernetes.io/wss;" +
 						" missing corresponding BackendTLSPolicy",
@@ -793,7 +793,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
 					"route type grpc does not support service port appProtocol kubernetes.io/ws",
 				),
@@ -812,7 +812,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
 					"route type grpc does not support service port appProtocol kubernetes.io/wss",
 				),
@@ -890,7 +890,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefInvalidKind(
 					`spec.rules[0].backendRefs[0].kind: Unsupported value: "NotService": supported values: "Service"`,
 				),
@@ -921,7 +921,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
 			},
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedValue(
 					`Backend TLS policies do not match for all backends`,
 				),
@@ -1084,7 +1084,7 @@ func TestCreateBackend(t *testing.T) {
 			},
 		},
 		Valid: false,
-		Conditions: conditions.Conditions{
+		Conditions: []conditions.Condition{
 			conditions.NewPolicyInvalid("unsupported value"),
 		},
 	}
@@ -1094,7 +1094,7 @@ func TestCreateBackend(t *testing.T) {
 		name                         string
 		expectedServicePortReference string
 		ref                          gatewayv1.HTTPBackendRef
-		expectedConditions           conditions.Conditions
+		expectedConditions           []conditions.Condition
 		expectedBackend              BackendRef
 	}{
 		{
@@ -1145,7 +1145,7 @@ func TestCreateBackend(t *testing.T) {
 				Valid:              false,
 			},
 			expectedServicePortReference: "",
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedValue(
 					"test.weight: Invalid value: -1: must be in the range [0, 1000000]",
 				),
@@ -1167,7 +1167,7 @@ func TestCreateBackend(t *testing.T) {
 				Valid:              false,
 			},
 			expectedServicePortReference: "",
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefInvalidKind(
 					`test.kind: Unsupported value: "NotService": supported values: "Service"`,
 				),
@@ -1191,7 +1191,7 @@ func TestCreateBackend(t *testing.T) {
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedServicePortReference: "",
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefRefBackendNotFound(`test.name: Not found: "not-exist"`),
 			},
 			name: "service doesn't exist",
@@ -1250,7 +1250,7 @@ func TestCreateBackend(t *testing.T) {
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedServicePortReference: "",
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedValue(
 					"the backend TLS policy is invalid: unsupported value",
 				),
@@ -1345,7 +1345,7 @@ func TestCreateBackend(t *testing.T) {
 				},
 			},
 			expectedServicePortReference: "",
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedValue(
 					"ExternalName service has empty or invalid externalName field",
 				),
@@ -1371,7 +1371,7 @@ func TestCreateBackend(t *testing.T) {
 				},
 			},
 			expectedServicePortReference: "",
-			expectedConditions: conditions.Conditions{
+			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedValue(
 					"ExternalName service has empty or invalid externalName field",
 				),

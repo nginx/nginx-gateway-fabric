@@ -288,6 +288,10 @@ func TestBuildHTTPRoute(t *testing.T) {
 	}
 	gatewayNsName := client.ObjectKeyFromObject(gw.Source)
 
+	// Valid HTTPRoute with unsupported rule fields
+	hrValidWithUnsupportedField := createHTTPRoute("hr-valid-unsupported", gatewayNsName.Name, "example.com", "/")
+	hrValidWithUnsupportedField.Spec.Rules[0].Name = helpers.GetPointer[gatewayv1.SectionName]("unsupported-name")
+
 	// route with valid filter
 	validFilter := gatewayv1.HTTPRouteFilter{
 		Type:            gatewayv1.HTTPRouteFilterRequestRedirect,
@@ -455,7 +459,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrInvalidMatchesEmptyPathType.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRouteUnsupportedValue(
 						`All rules are invalid: spec.rules[0].matches[0].path.type: Required value: path type cannot be nil`,
 					),
@@ -501,7 +505,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrInvalidMatchesEmptyPathValue.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRouteUnsupportedValue(
 						`All rules are invalid: spec.rules[0].matches[0].path.value: Required value: path value cannot be nil`,
 					),
@@ -544,7 +548,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrInvalidHostname.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRouteUnsupportedValue(
 						`spec.hostnames[0]: Invalid value: "": cannot be empty string`,
 					),
@@ -567,7 +571,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrInvalidMatches.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRouteUnsupportedValue(
 						`All rules are invalid: spec.rules[0].matches[0].path.value: Invalid value: "/invalid": invalid path`,
 					),
@@ -604,7 +608,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrInvalidFilters.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRouteUnsupportedValue(
 						`All rules are invalid: spec.rules[0].filters[0].requestRedirect.hostname: ` +
 							`Invalid value: "invalid.example.com": invalid hostname`,
@@ -642,7 +646,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrDroppedInvalidMatches.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRoutePartiallyInvalid(
 						`spec.rules[0].matches[0].path.value: Invalid value: "/invalid": invalid path`,
 					),
@@ -689,7 +693,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrDroppedInvalidMatchesAndInvalidFilters.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRoutePartiallyInvalid(
 						`[spec.rules[0].matches[0].path.value: Invalid value: "/invalid": invalid path, ` +
 							`spec.rules[1].filters[0].requestRedirect.hostname: Invalid value: ` +
@@ -748,7 +752,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrDroppedInvalidFilters.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRoutePartiallyInvalid(
 						`spec.rules[1].filters[0].requestRedirect.hostname: Invalid value: ` +
 							`"invalid.example.com": invalid hostname`,
@@ -837,7 +841,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrInvalidSnippetsFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRouteUnsupportedValue(
 						"All rules are invalid: spec.rules[0].filters[0].extensionRef: " +
 							"Unsupported value: \"wrong\": supported values: \"gateway.nginx.org\"",
@@ -875,7 +879,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRouteResolvedRefsInvalidFilter(
 						"spec.rules[0].filters[0].extensionRef: Not found: " +
 							`{"group":"gateway.nginx.org","kind":"SnippetsFilter",` +
@@ -914,7 +918,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 						SectionName: hrInvalidAndUnresolvableSnippetsFilter.Spec.ParentRefs[0].SectionName,
 					},
 				},
-				Conditions: conditions.Conditions{
+				Conditions: []conditions.Condition{
 					conditions.NewRouteUnsupportedValue(
 						"All rules are invalid: spec.rules[0].filters[0].extensionRef: " +
 							"Unsupported value: \"wrong\": supported values: \"gateway.nginx.org\"",
@@ -943,6 +947,42 @@ func TestBuildHTTPRoute(t *testing.T) {
 				},
 			},
 			name: "rule with one invalid and one unresolvable snippets filter extension ref filter",
+		},
+		{
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			hr:        hrValidWithUnsupportedField,
+			expected: &L7Route{
+				RouteType: RouteTypeHTTP,
+				Source:    hrValidWithUnsupportedField,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Valid:      true,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: hrValidWithUnsupportedField.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   true,
+								Filters: []Filter{},
+							},
+							Matches:          hrValidWithUnsupportedField.Spec.Rules[0].Matches,
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: " +
+						"spec.rules[0].name: Forbidden: NGINX Gateway Fabric does not support SectionName field at the moment"),
+				},
+			},
+			name: "valid route with unsupported field",
 		},
 	}
 
@@ -1722,7 +1762,7 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 	tests := []struct {
 		name          string
 		specRules     []gatewayv1.HTTPRouteRule
-		expectedConds conditions.Conditions
+		expectedConds []conditions.Condition
 		expectedWarns int
 		expectedValid bool
 	}{
@@ -1741,10 +1781,9 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 				},
 			},
 			expectedValid: true,
-			expectedConds: conditions.Conditions{
+			expectedConds: []conditions.Condition{
 				conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: spec.rules[0].name: " +
-					"Forbidden: NGINX Gateway Fabric does not support SectionName field at the moment, supported fields are: " +
-					"HTTPBackendRef, HTTPRouteMatch, HTTPRouteFilter"),
+					"Forbidden: NGINX Gateway Fabric does not support SectionName field at the moment"),
 			},
 			expectedWarns: 1,
 		},
@@ -1763,16 +1802,13 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 				},
 			},
 			expectedValid: true,
-			expectedConds: conditions.Conditions{
+			expectedConds: []conditions.Condition{
 				conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: " +
 					"[spec.rules[0].name: Forbidden: NGINX Gateway Fabric does not support SectionName field at the moment, " +
-					"supported fields are: HTTPBackendRef, HTTPRouteMatch, HTTPRouteFilter, spec.rules[0].timeouts: Forbidden: " +
-					"NGINX Gateway Fabric does not support \"HTTPRouteTimeouts\" field at the moment, supported fields are: " +
-					"HTTPBackendRef, HTTPRouteMatch, HTTPRouteFilter, spec.rules[0].retry: Forbidden: NGINX Gateway Fabric " +
-					"does not support \"HTTPRouteRetry\" field at the moment, supported fields are: HTTPBackendRef, " +
-					"HTTPRouteMatch, HTTPRouteFilter, spec.rules[0].sessionPersistence: Forbidden: NGINX Gateway Fabric " +
-					"does not support \"SessionPersistence\" field at the moment, supported fields are: HTTPBackendRef, " +
-					"HTTPRouteMatch, HTTPRouteFilter]"),
+					"spec.rules[0].timeouts: Forbidden: NGINX Gateway Fabric does not support \"HTTPRouteTimeouts\" " +
+					"field at the moment, spec.rules[0].retry: Forbidden: NGINX Gateway Fabric does not support " +
+					"\"HTTPRouteRetry\" field at the moment, spec.rules[0].sessionPersistence: Forbidden: NGINX Gateway " +
+					"Fabric does not support \"SessionPersistence\" field at the moment]"),
 			},
 			expectedWarns: 4,
 		},

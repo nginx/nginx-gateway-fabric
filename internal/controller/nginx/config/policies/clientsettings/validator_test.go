@@ -56,7 +56,7 @@ func TestValidator_Validate(t *testing.T) {
 	tests := []struct {
 		name          string
 		policy        *ngfAPI.ClientSettingsPolicy
-		expConditions conditions.Conditions
+		expConditions []conditions.Condition
 	}{
 		{
 			name: "invalid target ref; unsupported group",
@@ -64,7 +64,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.TargetRef.Group = "Unsupported"
 				return p
 			}),
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.targetRef.group: Unsupported value: \"Unsupported\": " +
 					"supported values: \"gateway.networking.k8s.io\""),
 			},
@@ -75,7 +75,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.TargetRef.Kind = "Unsupported"
 				return p
 			}),
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.targetRef.kind: Unsupported value: \"Unsupported\": " +
 					"supported values: \"Gateway\", \"HTTPRoute\", \"GRPCRoute\""),
 			},
@@ -86,7 +86,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.Body.MaxSize = helpers.GetPointer[ngfAPI.Size]("invalid")
 				return p
 			}),
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.body.maxSize: Invalid value: \"invalid\": ^\\d{1,4}(k|m|g)?$ " +
 					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is 'must contain a number. " +
 					"May be followed by 'k', 'm', or 'g', otherwise bytes are assumed')"),
@@ -101,7 +101,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.KeepAlive.Timeout.Header = helpers.GetPointer[ngfAPI.Duration]("invalid")
 				return p
 			}),
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid(
 					"[spec.body.timeout: Invalid value: \"invalid\": ^[0-9]{1,4}(ms|s|m|h)? " +
 						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
@@ -123,7 +123,7 @@ func TestValidator_Validate(t *testing.T) {
 				p.Spec.KeepAlive.Timeout.Server = nil
 				return p
 			}),
-			expConditions: conditions.Conditions{
+			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.keepAlive.timeout: Invalid value: null: " +
 					"server timeout must be set if header timeout is set"),
 			},

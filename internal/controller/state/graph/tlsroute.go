@@ -69,7 +69,7 @@ func validateBackendRefTLSRoute(
 	services map[types.NamespacedName]*apiv1.Service,
 	parentRefs []ParentRef,
 	refGrantResolver func(resource toResource) bool,
-) (BackendRef, conditions.Conditions) {
+) (BackendRef, []conditions.Condition) {
 	// Length of BackendRefs and Rules is guaranteed to be one due to earlier check in buildTLSRoute
 	refPath := field.NewPath("spec").Child("rules").Index(0).Child("backendRefs").Index(0)
 
@@ -86,7 +86,7 @@ func validateBackendRefTLSRoute(
 			InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 		}
 
-		return backendRef, conditions.Conditions{cond}
+		return backendRef, []conditions.Condition{cond}
 	}
 
 	ns := gtr.Namespace
@@ -116,7 +116,7 @@ func validateBackendRefTLSRoute(
 	if err != nil {
 		backendRef.Valid = false
 
-		return backendRef, conditions.Conditions{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
+		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
 	}
 
 	if svcPort.AppProtocol != nil {
@@ -124,11 +124,11 @@ func validateBackendRefTLSRoute(
 		if err != nil {
 			backendRef.Valid = false
 
-			return backendRef, conditions.Conditions{conditions.NewRouteBackendRefUnsupportedProtocol(err.Error())}
+			return backendRef, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(err.Error())}
 		}
 	}
 
-	var conds conditions.Conditions
+	var conds []conditions.Condition
 	for _, parentRef := range parentRefs {
 		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
 			backendRef.Valid = backendRef.Valid || false

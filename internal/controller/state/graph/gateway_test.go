@@ -605,7 +605,7 @@ func TestBuildGateway(t *testing.T) {
 							Port:    helpers.GetPointer(int32(90)),
 						},
 					},
-					Conditions: conditions.Conditions{conditions.NewGatewayResolvedRefs()},
+					Conditions: []conditions.Condition{conditions.NewGatewayResolvedRefs()},
 				},
 			},
 			name: "valid http listener with valid NginxProxy; GatewayClass has no NginxProxy",
@@ -651,7 +651,7 @@ func TestBuildGateway(t *testing.T) {
 							Port:    helpers.GetPointer(int32(90)),
 						},
 					},
-					Conditions: conditions.Conditions{conditions.NewGatewayResolvedRefs()},
+					Conditions: []conditions.Condition{conditions.NewGatewayResolvedRefs()},
 				},
 			},
 			name: "valid http listener with valid NginxProxy; GatewayClass has valid NginxProxy too",
@@ -1335,7 +1335,7 @@ func TestBuildGateway(t *testing.T) {
 						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true, // invalid parametersRef does not invalidate Gateway.
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewGatewayRefInvalid(
 							"spec.infrastructure.parametersRef.kind: Unsupported value: \"Invalid\": " +
 								"supported values: \"NginxProxy\"",
@@ -1378,7 +1378,7 @@ func TestBuildGateway(t *testing.T) {
 						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid: true, // invalid parametersRef does not invalidate Gateway.
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewGatewayRefNotFound(),
 						conditions.NewGatewayInvalidParameters(
 							"spec.infrastructure.parametersRef.name: Not found: \"does-not-exist\"",
@@ -1424,7 +1424,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 						Valid: false,
 					},
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewGatewayRefInvalid("somePath: Required value: someField"),
 						conditions.NewGatewayInvalidParameters("somePath: Required value: someField"),
 					},
@@ -1484,7 +1484,7 @@ func TestBuildGateway(t *testing.T) {
 						Name:      controller.CreateNginxResourceName("gateway-addr-unspecified", gcName),
 					},
 					Valid: false,
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewGatewayUnsupportedAddress("AddressType must be specified"),
 					},
 				},
@@ -1511,7 +1511,7 @@ func TestBuildGateway(t *testing.T) {
 						Name:      controller.CreateNginxResourceName("gateway-addr-unsupported", gcName),
 					},
 					Valid: false,
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewGatewayUnsupportedAddress("Only AddressType IPAddress is supported"),
 					},
 				},
@@ -1560,7 +1560,7 @@ func TestBuildGateway(t *testing.T) {
 							Port:    helpers.GetPointer(int32(90)),
 						},
 					},
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewGatewayUnsupportedField("AllowedListeners are not supported"),
 						conditions.NewGatewayResolvedRefs(),
 					},
@@ -1602,7 +1602,7 @@ func TestBuildGateway(t *testing.T) {
 					EffectiveNginxProxy: &EffectiveNginxProxy{
 						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
 					},
-					Conditions: conditions.Conditions{
+					Conditions: []conditions.Condition{
 						conditions.NewGatewayUnsupportedField("BackendTLS is not supported"),
 						conditions.NewGatewayRefInvalid(
 							"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
@@ -1649,14 +1649,14 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 		name     string
 		np       *NginxProxy
 		ref      v1.LocalParametersReference
-		expConds conditions.Conditions
+		expConds []conditions.Condition
 	}{
 		{
 			name: "unsupported parameter ref kind",
 			ref: v1.LocalParametersReference{
 				Kind: "wrong-kind",
 			},
-			expConds: conditions.Conditions{
+			expConds: []conditions.Condition{
 				conditions.NewGatewayRefInvalid(
 					"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": " +
 						"supported values: \"NginxProxy\"",
@@ -1674,7 +1674,7 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 				Kind:  kinds.NginxProxy,
 				Name:  "np",
 			},
-			expConds: conditions.Conditions{
+			expConds: []conditions.Condition{
 				conditions.NewGatewayRefNotFound(),
 				conditions.NewGatewayInvalidParameters("spec.infrastructure.parametersRef.name: Not found: \"np\""),
 			},
@@ -1693,7 +1693,7 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 				Kind:  kinds.NginxProxy,
 				Name:  "np",
 			},
-			expConds: conditions.Conditions{
+			expConds: []conditions.Condition{
 				conditions.NewGatewayRefInvalid("somePath: Required value: someField"),
 				conditions.NewGatewayInvalidParameters("somePath: Required value: someField"),
 			},
@@ -1709,7 +1709,7 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 				Kind:  kinds.NginxProxy,
 				Name:  "np",
 			},
-			expConds: conditions.Conditions{
+			expConds: []conditions.Condition{
 				conditions.NewGatewayResolvedRefs(),
 			},
 		},
@@ -1929,7 +1929,7 @@ func TestValidateUnsupportedGatewayFields(t *testing.T) {
 	tests := []struct {
 		name          string
 		gateway       *v1.Gateway
-		expectedConds conditions.Conditions
+		expectedConds []conditions.Condition
 	}{
 		{
 			name: "No unsupported fields",
@@ -1945,7 +1945,7 @@ func TestValidateUnsupportedGatewayFields(t *testing.T) {
 					AllowedListeners: &v1.AllowedListeners{},
 				},
 			},
-			expectedConds: conditions.Conditions{
+			expectedConds: []conditions.Condition{
 				conditions.NewGatewayUnsupportedField("AllowedListeners are not supported"),
 			},
 		},
@@ -1957,7 +1957,7 @@ func TestValidateUnsupportedGatewayFields(t *testing.T) {
 					BackendTLS:       &v1.GatewayBackendTLS{},
 				},
 			},
-			expectedConds: conditions.Conditions{
+			expectedConds: []conditions.Condition{
 				conditions.NewGatewayUnsupportedField("AllowedListeners are not supported"),
 				conditions.NewGatewayUnsupportedField("BackendTLS is not supported"),
 			},
