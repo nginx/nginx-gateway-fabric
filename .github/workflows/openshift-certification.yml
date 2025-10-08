@@ -82,7 +82,6 @@ jobs:
         IMAGE_ID=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep '^localhost:5000/nginx-gateway-fabric/operator:' | head -n 1)
         docker tag $IMAGE_ID ngf-operator:ubi
 
-
     - name: Run preflight for NGINX Gateway Fabric Operator
       env:
         PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}

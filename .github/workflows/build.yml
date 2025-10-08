@@ -193,7 +193,7 @@ jobs:
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: build-${{ inputs.image }}
-      
+
       - name: Save NGINX Gateway Fabric image
         if: ${{ inputs.image == 'ngf' }}
         run: |
