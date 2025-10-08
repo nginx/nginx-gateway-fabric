@@ -72,7 +72,13 @@ func executeUpstreams(upstreams []http.Upstream) []executeResult {
 }
 
 func (g GeneratorImpl) executeStreamUpstreams(conf dataplane.Configuration) []executeResult {
-	upstreams := g.createStreamUpstreams(conf.StreamUpstreams)
+	// Combine all stream upstreams: TLS, TCP, and UDP
+	allUpstreams := make([]dataplane.Upstream, 0, len(conf.StreamUpstreams)+len(conf.TCPUpstreams)+len(conf.UDPUpstreams))
+	allUpstreams = append(allUpstreams, conf.StreamUpstreams...)
+	allUpstreams = append(allUpstreams, conf.TCPUpstreams...)
+	allUpstreams = append(allUpstreams, conf.UDPUpstreams...)
+
+	upstreams := g.createStreamUpstreams(allUpstreams)
 
 	result := executeResult{
 		dest: streamConfigFile,

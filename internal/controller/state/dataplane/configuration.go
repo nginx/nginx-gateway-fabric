@@ -78,6 +78,8 @@ func BuildConfiguration(
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
 		TLSPassthroughServers: buildPassthroughServers(gateway),
+		TCPServers:            buildTCPServers(gateway),
+		UDPServers:            buildUDPServers(gateway),
 		Upstreams:             upstreams,
 		StreamUpstreams: buildStreamUpstreams(
 			ctx,
@@ -89,6 +91,8 @@ func BuildConfiguration(
 		),
 		BackendGroups: backendGroups,
 		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway),
+		TCPUpstreams:          buildTCPUpstreams(ctx, gateway, serviceResolver, baseHTTPConfig.IPFamily),
+		UDPUpstreams:          buildUDPUpstreams(ctx, gateway, serviceResolver, baseHTTPConfig.IPFamily),
 		CertBundles: buildCertBundles(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
@@ -176,6 +180,79 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 	return passthroughServers
 }
 
+// buildTCPServers builds TCPServers from TCPRoutes attached to listeners.
+func buildTCPServers(gateway *graph.Gateway) []Layer4VirtualServer {
+	var tcpServers []Layer4VirtualServer
+
+	for _, l := range gateway.Listeners {
+		if !l.Valid || l.Source.Protocol != v1.TCPProtocolType {
+			continue
+		}
+
+		if len(l.L4Routes) > 1 {
+			fmt.Printf(
+				"WARN: Listener %s has %d TCPRoutes, which is not supported. Skipping.",
+				l.Name,
+				len(l.L4Routes),
+			)
+			continue
+		}
+
+		for _, r := range l.L4Routes {
+			if !r.Valid {
+				continue
+			}
+
+			upstreamName := r.Spec.BackendRef.ServicePortReference()
+			tcpServer := Layer4VirtualServer{
+				Hostname:     "", // TCP doesn't use hostnames
+				UpstreamName: upstreamName,
+				Port:         int32(l.Source.Port),
+			}
+
+			tcpServers = append(tcpServers, tcpServer)
+		}
+	}
+
+	return tcpServers
+}
+
+// buildUDPServers builds UDPServers from UDPRoutes attached to listeners.
+func buildUDPServers(gateway *graph.Gateway) []Layer4VirtualServer {
+	var udpServers []Layer4VirtualServer
+
+	for _, l := range gateway.Listeners {
+		if !l.Valid || l.Source.Protocol != v1.UDPProtocolType {
+			continue
+		}
+
+		if len(l.L4Routes) > 1 {
+			fmt.Printf(
+				"WARN: Listener %s has %d UDPRoutes, which is not supported. Skipping.",
+				l.Name,
+				len(l.L4Routes),
+			)
+			continue
+		}
+
+		for _, r := range l.L4Routes {
+			if !r.Valid {
+				continue
+			}
+
+			udpServer := Layer4VirtualServer{
+				Hostname:     "", // UDP doesn't use hostnames
+				UpstreamName: r.Spec.BackendRef.ServicePortReference(),
+				Port:         int32(l.Source.Port),
+			}
+
+			udpServers = append(udpServers, udpServer)
+		}
+	}
+
+	return udpServers
+}
+
 // buildStreamUpstreams builds all stream upstreams.
 func buildStreamUpstreams(
 	ctx context.Context,
@@ -228,6 +305,137 @@ func buildStreamUpstreams(
 				referencedServices,
 				allowedAddressType,
 			)
+			if err != nil {
+				errMsg = err.Error()
+			}
+
+			uniqueUpstreams[upstreamName] = Upstream{
+				Name:      upstreamName,
+				Endpoints: eps,
+				ErrorMsg:  errMsg,
+			}
+		}
+	}
+
+	if len(uniqueUpstreams) == 0 {
+		return nil
+	}
+
+	upstreams := make([]Upstream, 0, len(uniqueUpstreams))
+
+	for _, up := range uniqueUpstreams {
+		upstreams = append(upstreams, up)
+	}
+	return upstreams
+}
+
+// buildTCPUpstreams builds all TCP upstreams.
+func buildTCPUpstreams(
+	ctx context.Context,
+	gateway *graph.Gateway,
+	serviceResolver resolver.ServiceResolver,
+	ipFamily IPFamilyType,
+) []Upstream {
+	uniqueUpstreams := make(map[string]Upstream)
+
+	for _, l := range gateway.Listeners {
+		if !l.Valid || l.Source.Protocol != v1.TCPProtocolType {
+			continue
+		}
+
+		for _, route := range l.L4Routes {
+			if !route.Valid {
+				continue
+			}
+
+			br := route.Spec.BackendRef
+
+			if !br.Valid {
+				continue
+			}
+
+			gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
+			if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+				continue
+			}
+
+			upstreamName := br.ServicePortReference()
+
+			if _, exist := uniqueUpstreams[upstreamName]; exist {
+				continue
+			}
+
+			var errMsg string
+
+			allowedAddressType := getAllowedAddressType(ipFamily)
+
+			eps, err := serviceResolver.Resolve(ctx, br.SvcNsName, br.ServicePort, allowedAddressType)
+			if err != nil {
+				errMsg = err.Error()
+			}
+
+			uniqueUpstreams[upstreamName] = Upstream{
+				Name:      upstreamName,
+				Endpoints: eps,
+				ErrorMsg:  errMsg,
+			}
+		}
+	}
+
+	if len(uniqueUpstreams) == 0 {
+		return nil
+	}
+
+	upstreams := make([]Upstream, 0, len(uniqueUpstreams))
+
+	for _, up := range uniqueUpstreams {
+		upstreams = append(upstreams, up)
+	}
+
+	return upstreams
+}
+
+// buildUDPUpstreams builds all UDP upstreams.
+func buildUDPUpstreams(
+	ctx context.Context,
+	gateway *graph.Gateway,
+	serviceResolver resolver.ServiceResolver,
+	ipFamily IPFamilyType,
+) []Upstream {
+	uniqueUpstreams := make(map[string]Upstream)
+
+	for _, l := range gateway.Listeners {
+		if !l.Valid || l.Source.Protocol != v1.UDPProtocolType {
+			continue
+		}
+
+		for _, route := range l.L4Routes {
+			if !route.Valid {
+				continue
+			}
+
+			br := route.Spec.BackendRef
+
+			if !br.Valid {
+				continue
+			}
+
+			gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
+			if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+				continue
+			}
+
+			upstreamName := br.ServicePortReference()
+
+			if _, exist := uniqueUpstreams[upstreamName]; exist {
+				continue
+			}
+
+			var errMsg string
+
+			allowedAddressType := getAllowedAddressType(ipFamily)
+
+			eps, err := serviceResolver.Resolve(ctx, br.SvcNsName, br.ServicePort, allowedAddressType)
 			if err != nil {
 				errMsg = err.Error()
 			}
@@ -469,6 +677,9 @@ func buildServers(
 
 	for _, l := range gateway.Listeners {
 		if l.Source.Protocol == v1.TLSProtocolType {
+			continue
+		}
+		if l.Source.Protocol == v1.TCPProtocolType || l.Source.Protocol == v1.UDPProtocolType {
 			continue
 		}
 		if l.Valid {

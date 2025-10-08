@@ -29,6 +29,8 @@ type ClusterState struct {
 	Gateways           map[types.NamespacedName]*gatewayv1.Gateway
 	HTTPRoutes         map[types.NamespacedName]*gatewayv1.HTTPRoute
 	TLSRoutes          map[types.NamespacedName]*v1alpha2.TLSRoute
+	TCPRoutes          map[types.NamespacedName]*v1alpha2.TCPRoute
+	UDPRoutes          map[types.NamespacedName]*v1alpha2.UDPRoute
 	Services           map[types.NamespacedName]*v1.Service
 	Namespaces         map[types.NamespacedName]*v1.Namespace
 	ReferenceGrants    map[types.NamespacedName]*v1beta1.ReferenceGrant
@@ -276,6 +278,8 @@ func BuildGraph(
 
 	l4routes := buildL4RoutesForGateways(
 		state.TLSRoutes,
+		state.TCPRoutes,
+		state.UDPRoutes,
 		state.Services,
 		gws,
 		refGrantResolver,

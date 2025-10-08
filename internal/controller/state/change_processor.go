@@ -99,6 +99,8 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		NginxProxies:       make(map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy),
 		GRPCRoutes:         make(map[types.NamespacedName]*v1.GRPCRoute),
 		TLSRoutes:          make(map[types.NamespacedName]*v1alpha2.TLSRoute),
+		TCPRoutes:          make(map[types.NamespacedName]*v1alpha2.TCPRoute),
+		UDPRoutes:          make(map[types.NamespacedName]*v1alpha2.UDPRoute),
 		NGFPolicies:        make(map[graph.PolicyKey]policies.Policy),
 		SnippetsFilters:    make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
 		InferencePools:     make(map[types.NamespacedName]*inference.InferencePool),
@@ -218,6 +220,16 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			{
 				gvk:       cfg.MustExtractGVK(&v1alpha2.TLSRoute{}),
 				store:     newObjectStoreMapAdapter(clusterStore.TLSRoutes),
+				predicate: nil,
+			},
+			{
+				gvk:       cfg.MustExtractGVK(&v1alpha2.TCPRoute{}),
+				store:     newObjectStoreMapAdapter(clusterStore.TCPRoutes),
+				predicate: nil,
+			},
+			{
+				gvk:       cfg.MustExtractGVK(&v1alpha2.UDPRoute{}),
+				store:     newObjectStoreMapAdapter(clusterStore.UDPRoutes),
 				predicate: nil,
 			},
 			{

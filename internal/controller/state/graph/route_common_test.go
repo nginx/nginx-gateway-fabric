@@ -2375,8 +2375,10 @@ func TestBuildL4RoutesForGateways_NoGateways(t *testing.T) {
 
 	g.Expect(buildL4RoutesForGateways(
 		tlsRoutes,
+		nil, // tcpRoutes
+		nil, // udpRoutes
 		services,
-		nil,
+		nil, // gateways
 		refGrantResolver,
 	)).To(BeNil())
 }
