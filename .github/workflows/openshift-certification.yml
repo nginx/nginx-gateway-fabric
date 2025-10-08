@@ -45,7 +45,7 @@ jobs:
 
     - name: Retag image for preflight
       run: |
-        loaded_tag="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
+        loaded_tag="localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
         preflight_tag="${{ inputs.image }}:ubi"
         docker tag "$loaded_tag" "$preflight_tag"
 
@@ -64,11 +64,11 @@ jobs:
         exit 1
         fi
 
-  cleanup:
-    runs-on: ubuntu-24.04
-    if: always()
-    steps:
-      - name: Delete image from registry
-        run: |
-          curl -X DELETE "https://ghcr.io/v2/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}" \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"
+  # cleanup:
+  #   runs-on: ubuntu-24.04
+  #   if: always()
+  #   steps:
+  #     - name: Delete image from registry
+  #       run: |
+  #         curl -X DELETE "https://ghcr.io/v2/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}" \
+  #         -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"
