@@ -458,7 +458,11 @@ func createInternalLocationsForRule(
 						portNum = int(b.EndpointPickerConfig.Port.Number)
 					}
 					intInfLocation.EPPInternalPath = intLocation.Path
-					intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name)
+					if b.EndpointPickerNsName != "" {
+						intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name) + "." + b.EndpointPickerNsName
+					} else {
+						intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name)
+					}
 					intInfLocation.EPPPort = portNum
 				}
 			}

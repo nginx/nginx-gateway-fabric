@@ -33,6 +33,8 @@ type BackendRef struct {
 	BackendTLSPolicy *BackendTLSPolicy
 	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
 	EndpointPickerConfig *inference.EndpointPickerRef
+	// EndpointPickerNsName is the namespace where the EndpointPicker is deployed, if this backendRef is for an InferencePool.
+	EndpointPickerNsName string
 	// InvalidForGateways is a map of Gateways for which this BackendRef is invalid for, with the corresponding
 	// condition. Certain NginxProxy configurations may result in a backend not being valid for some Gateways,
 	// but not others.
@@ -124,6 +126,7 @@ func addBackendRefsToRules(
 					port := gatewayv1.PortNumber(pool.Source.Spec.TargetPorts[0].Number)
 					ref.Port = helpers.GetPointer(port)
 					ref.EndpointPickerConfig = &pool.Source.Spec.EndpointPickerRef
+					ref.EndpointPickerNsName = poolName.Namespace
 				}
 			}
 
@@ -193,6 +196,7 @@ func createBackendRef(
 			IsInferencePool:      ref.IsInferencePool,
 			InvalidForGateways:   make(map[types.NamespacedName]conditions.Condition),
 			EndpointPickerConfig: ref.EndpointPickerConfig,
+			EndpointPickerNsName: ref.EndpointPickerNsName,
 		}
 
 		return backendRef, []conditions.Condition{cond}
@@ -214,6 +218,7 @@ func createBackendRef(
 			IsInferencePool:      ref.IsInferencePool,
 			InvalidForGateways:   make(map[types.NamespacedName]conditions.Condition),
 			EndpointPickerConfig: ref.EndpointPickerConfig,
+			EndpointPickerNsName: ref.EndpointPickerNsName,
 		}
 
 		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
@@ -238,6 +243,7 @@ func createBackendRef(
 				IsInferencePool:      ref.IsInferencePool,
 				InvalidForGateways:   invalidForGateways,
 				EndpointPickerConfig: ref.EndpointPickerConfig,
+				EndpointPickerNsName: ref.EndpointPickerNsName,
 			}
 
 			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(
@@ -269,6 +275,7 @@ func createBackendRef(
 			IsInferencePool:      ref.IsInferencePool,
 			InvalidForGateways:   invalidForGateways,
 			EndpointPickerConfig: ref.EndpointPickerConfig,
+			EndpointPickerNsName: ref.EndpointPickerNsName,
 		}
 
 		return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(err.Error()))
@@ -287,6 +294,7 @@ func createBackendRef(
 				IsInferencePool:      ref.IsInferencePool,
 				InvalidForGateways:   invalidForGateways,
 				EndpointPickerConfig: ref.EndpointPickerConfig,
+				EndpointPickerNsName: ref.EndpointPickerNsName,
 			}
 
 			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedProtocol(err.Error()))
@@ -303,7 +311,10 @@ func createBackendRef(
 		IsInferencePool:      ref.IsInferencePool,
 		InvalidForGateways:   invalidForGateways,
 		EndpointPickerConfig: ref.EndpointPickerConfig,
+		EndpointPickerNsName: ref.EndpointPickerNsName,
 	}
+
+	fmt.Println("backend ref in graph", backendRef)
 
 	return backendRef, conds
 }

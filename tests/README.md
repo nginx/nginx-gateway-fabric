@@ -20,7 +20,9 @@ This directory contains the tests for NGINX Gateway Fabric. The tests are divide
     - [Option 1 - Build and install NGINX Gateway Fabric from local to configured kind cluster](#option-1---build-and-install-nginx-gateway-fabric-from-local-to-configured-kind-cluster)
     - [Option 2 - Install NGINX Gateway Fabric from local already built image to configured kind cluster](#option-2---install-nginx-gateway-fabric-from-local-already-built-image-to-configured-kind-cluster)
   - [Step 2 - Build conformance test runner image](#step-2---build-conformance-test-runner-image)
-  - [Step 3 - Run Gateway conformance tests](#step-3---run-gateway-conformance-tests)
+  - [Step 3 - Run Conformance tests](#step-3---run-conformance-tests)
+    - [To run Gateway conformance tests](#to-run-gateway-conformance-tests)
+    - [To run Inference conformance tests](#to-run-inference-conformance-tests)
   - [Step 4 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric](#step-4---cleanup-the-conformance-test-fixtures-and-uninstall-nginx-gateway-fabric)
   - [Step 5 - Revert changes to Go modules](#step-5---revert-changes-to-go-modules)
   - [Step 6 - Delete kind cluster](#step-6---delete-kind-cluster)
@@ -138,6 +140,12 @@ TELEMETRY_ENDPOINT=otel-collector-opentelemetry-collector.collector.svc.cluster.
  export ENABLE_EXPERIMENTAL=true
 ```
 
+> If you want to run the Inference conformance tests, set the following environment variable before deploying NGF:
+
+```bash
+export ENABLE_INFERENCE_EXTENSION=true
+```
+
 #### Option 1 - Build and install NGINX Gateway Fabric from local to configured kind cluster
 
 ```makefile
@@ -188,10 +196,18 @@ go mod tidy
 make build-test-runner-image
 ```
 
-### Step 3 - Run Gateway conformance tests
+### Step 3 - Run Conformance tests
+
+#### To run Gateway conformance tests
 
 ```makefile
 make run-conformance-tests
+```
+
+#### To run Inference conformance tests
+
+```makefile
+make run-inference-conformance-tests
 ```
 
 ### Step 4 - Cleanup the conformance test fixtures and uninstall NGINX Gateway Fabric

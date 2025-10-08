@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-conformance-infra
+  labels:
+    gateway-conformance: infra
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-conformance-app-backend
+  labels:
+    gateway-conformance: backend
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-infra-to-backend
+  namespace: gateway-conformance-app-backend
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    namespace: gateway-conformance-infra
+  to:
+  - group: ""
+    kind: Service
+
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-backend-to-infra
+  namespace: gateway-conformance-infra
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    namespace: gateway-conformance-app-backend
+  to:
+  - group: ""
+    kind: Service

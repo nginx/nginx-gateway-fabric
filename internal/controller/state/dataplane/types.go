@@ -329,6 +329,7 @@ type Backend struct {
 	// EndpointPickerConfig holds the configuration for the EndpointPicker for this backend.
 	// This is set if this backend is for an inference workload.
 	EndpointPickerConfig *inference.EndpointPickerRef
+	EndpointPickerNsName string
 	// UpstreamName is the name of the upstream for this backend.
 	UpstreamName string
 	// Weight is the weight of the BackendRef.
