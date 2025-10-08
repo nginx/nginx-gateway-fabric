@@ -38,6 +38,10 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: ${{ inputs.image }}-${{ inputs.image_version }}
+    
+    - name: List files after artifact download
+      run: ls -lR ${{ inputs.image }}-${{ inputs.image_version }}
+
 
     - name: Move tarball to workspace root
       run: mv ${{ inputs.image }}-${{ inputs.image_version }}/*.tar ${{ inputs.image }}-${{ inputs.image_version }}.tar
