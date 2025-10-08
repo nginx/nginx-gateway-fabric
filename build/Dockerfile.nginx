@@ -5,9 +5,6 @@ FROM scratch AS nginx-files
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
 FROM nginx:1.29.2-alpine-otel
-# the following apk update and add are to address CVE-2025-59375, CVE-2025-8961/CVE-2025-9165, CVE-2025-9230, and CVE-2025-9231/CVE-2025-9232 respectively.
-# once a new base image is available with these package updates, they can be removed.
-RUN apk update && apk add --no-cache 'libexpat>=2.7.2-r0' 'tiff>=4.7.1-r0' 'libcrypto3>=3.5.4-r0' 'libssl3>=3.5.4-r0'
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.3.2
