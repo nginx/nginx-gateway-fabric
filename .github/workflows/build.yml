@@ -46,8 +46,6 @@ jobs:
         image: registry:3
         ports:
           - 5000:5000
-    outputs:
-      image_version: ${{ steps.meta.outputs.version }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -202,10 +200,10 @@ jobs:
 
       - name: Save the image as tarball
         run: |
-          docker save -o ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }}
+          docker save -o ${{ inputs.image }}.tar localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }}
 
       - name: Upload the image artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.image }}-${{ steps.meta.outputs.version }}
-          path: ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar
+          name: ${{ inputs.image }}
+          path: ${{ inputs.image }}.tar

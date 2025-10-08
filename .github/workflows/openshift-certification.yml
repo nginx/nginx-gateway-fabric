@@ -7,9 +7,6 @@ on:
         required: false
         type: string
         default: 'ubuntu-24.04'
-      image_version:
-        required: true
-        type: string
       image:
         required: true
         type: string
@@ -37,14 +34,14 @@ jobs:
     - name: Download image artifact
       uses: actions/download-artifact@v4
       with:
-        name: ${{ inputs.image }}-${{ inputs.image_version }}
+        name: ${{ inputs.image }}
 
     - name: Load image into Docker
-      run: docker load -i ${{ inputs.image }}-${{ inputs.image_version }}.tar
+      run: docker load -i ${{ inputs.image }}.tar
 
     - name: Retag image for preflight
       run: |
-        loaded_tag="localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
+        loaded_tag="localhost:5000/nginx-gateway-fabric/${{ inputs.image }}"
         preflight_tag="${{ inputs.image }}:ubi"
         docker tag "$loaded_tag" "$preflight_tag"
 
