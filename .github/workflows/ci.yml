@@ -271,15 +271,6 @@ jobs:
           path: ${{ github.workspace }}/dist
           key: nginx-gateway-fabric-${{ github.run_id }}-${{ github.run_number }}
 
-      - name: Save NGINX Gateway Fabric image
-        run: docker save -o ngf-image.tar localhost:5000/nginx/nginx-gateway-fabric:${{ github.run_id }}-${{ github.run_number }}
-
-      - name: Upload NGINX Gateway Fabric image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ngf-image
-          path: ngf-image.tar
-
   assertion:
     name: Generate and Sign Assertion Documents
     needs: [vars, binary]
