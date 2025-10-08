@@ -203,7 +203,7 @@ jobs:
         run: echo "${{ steps.meta.outputs.tags }}"
 
       - name: Pull and save image artifact for linux/amd64
-        if: ${{ inputs.build-os == 'ubi' && !inputs.dry_run }}
+        if: ${{ (inputs.build-os == 'ubi'|| inputs.image == 'operator') && !inputs.dry_run }}
         run: |
           docker pull --platform=linux/amd64 localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }}
           docker save localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} -o ${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar

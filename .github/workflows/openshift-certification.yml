@@ -41,7 +41,7 @@ jobs:
 
     - name: Load image into Docker
       run: |
-        docker load -i ${{ inputs.image }}-${{ inputs.image_version }}.tar
+        docker load -i ${{ inputs.image }}-${{ inputs.image_version }}/${{ inputs.image }}-${{ inputs.image_version }}.tar
 
     - name: Retag image for preflight
       run: |
