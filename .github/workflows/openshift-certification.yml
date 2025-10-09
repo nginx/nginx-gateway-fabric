@@ -3,10 +3,6 @@ name: OpenShift Certification
 on:
   workflow_call:
     inputs:
-      runner:
-        required: false
-        type: string
-        default: 'ubuntu-24.04'
       image:
         required: true
         type: string
@@ -31,7 +27,7 @@ permissions:
 
 jobs:
   preflight:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ubuntu-24.04
     steps:
     - name: Checkout Repository
       uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -57,9 +53,9 @@ jobs:
         PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
       run: |
         if [[ "${{ inputs.image }}" == "ngf" ]]; then
-        IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image_version }}"
+        IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric:${{ inputs.image_version }}"
         else
-        IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}/${{ inputs.image_version }}"
+        IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
         fi
         preflight check container "$IMAGE_PATH" > preflight-result.json
 

@@ -425,7 +425,6 @@ jobs:
     # if: ${{ github.event_name == 'pull_request' && github.event_pull_request.base.ref == 'main' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (inputs.is_production_release == true) }}
     uses: ./.github/workflows/openshift-certification.yml
     with:
-      runner: ubuntu-24.04
       image: ${{ matrix.image }}
       image_version: >
         ${{ matrix.image == 'ngf' && needs.build-oss.outputs.image_version
