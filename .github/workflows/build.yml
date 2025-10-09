@@ -127,6 +127,9 @@ jobs:
             name=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
+            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/ngf,enable=${{ inputs.image == 'ngf' && github.event_name != 'pull_request' }}
+            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx,enable=${{ inputs.image == 'nginx' && github.event_name != 'pull_request' }}
+            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' && github.event_name != 'pull_request' }}
           flavor: |
             latest=${{ (inputs.tag != '' && 'true') || 'auto' }}
           tags: |
@@ -198,33 +201,3 @@ jobs:
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: build-${{ inputs.image }}
-
-          # - name: Show all image tags for debugging
-          #   run: echo "${{ steps.meta.outputs.tags }}"
-
-      - name: Pull and save image artifact for linux/amd64
-        if: ${{ (inputs.build-os == 'ubi'|| inputs.image == 'operator') && !inputs.dry_run }}
-        run: |
-          docker pull --platform=linux/amd64 localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }}
-          docker save localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} -o ${{ github.workspace }}/dist/${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar
-
-      - name: Upload all image artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ format('{0}-{1}', inputs.image, steps.meta.outputs.version) }}
-          path: ${{ github.workspace }}/dist/${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar
-
-          # - name: Run preflight
-          #   env:
-          #     PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
-          #   run: preflight check container ${{ inputs.image }}:ubi > preflight-result.json
-
-          # - name: Check preflight results
-          #   run: |
-          #     failed_count=$(jq '.results.failed | length' preflight-result.json)
-          #     if [ "$failed_count" -ne 0 ]; then
-          #     echo "Preflight checks failed: $failed_count failed checks"
-          #     echo "Results for preflight-result.json:"
-          #     jq '.results.failed' preflight-result.json
-          #     exit 1
-          #     fi

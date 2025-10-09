@@ -38,35 +38,24 @@ jobs:
       with:
         ref: ${{ (inputs.tag != '' && !inputs.dry_run ) && format('refs/tags/v{0}', inputs.tag) || github.ref }}
 
+    - name: Login to Quay.io
+      uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+      with:
+        registry: quay.io
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_ROBOT_TOKEN }}
+      if: ${{ ! inputs.dry_run }}
+
     - name: Download preflight binary
       run: |
         curl -LO https://github.com/redhat-openshift-ecosystem/openshift-preflight/releases/latest/download/preflight-linux-amd64
         chmod +x preflight-linux-amd64
         sudo mv preflight-linux-amd64 /usr/local/bin/preflight
 
-    - name: Download Artifacts
-      uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
-      with:
-        name: ${{ format('{0}-{1}', inputs.image, inputs.image_version) }}
-        path: ${{ github.workspace }}/dist
-
-    - name: List files after artifact download
-      run: ls -l ${{ github.workspace }}/dist
-
-    - name: Load image into Docker
-      run: |
-        docker load -i ${{ inputs.image }}-${{ inputs.image_version }}.tar
-
-    - name: Retag image for preflight
-      run: |
-        loaded_tag="localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
-        preflight_tag="${{ inputs.image }}:ubi"
-        docker tag "$loaded_tag" "$preflight_tag"
-
     - name: Run preflight
       env:
         PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
-      run: preflight check container ${{ inputs.image }}:ubi > preflight-result.json
+      run: preflight check container quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image_version }} > preflight-result.json
 
     - name: Check preflight results
       run: |
