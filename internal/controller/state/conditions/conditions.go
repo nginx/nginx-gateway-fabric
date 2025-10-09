@@ -38,6 +38,10 @@ const (
 	// Route rules has a backendRef with an unsupported value.
 	RouteReasonBackendRefUnsupportedValue v1.RouteConditionReason = "UnsupportedValue"
 
+	// RouteReasonUnsupportedField is used with the "Accepted" condition when a Route contains fields that are
+	// not yet supported.
+	RouteReasonUnsupportedField v1.RouteConditionReason = "UnsupportedField"
+
 	// RouteReasonInvalidGateway is used with the "Accepted" (false) condition when the Gateway the Route
 	// references is invalid.
 	RouteReasonInvalidGateway v1.RouteConditionReason = "InvalidGateway"
@@ -61,6 +65,10 @@ const (
 	// RouteReasonInvalidFilter is used when an extension ref filter referenced by a Route cannot be resolved, or is
 	// invalid. Used with ResolvedRefs (false).
 	RouteReasonInvalidFilter v1.RouteConditionReason = "InvalidFilter"
+
+	// GatewayReasonUnsupportedField is used with the "Accepted" condition when a Gateway contains fields
+	// that are not yet supported.
+	GatewayReasonUnsupportedField v1.GatewayConditionReason = "UnsupportedField"
 
 	// GatewayReasonUnsupportedValue is used with GatewayConditionAccepted (false) when a value of a field in a Gateway
 	// is invalid or not supported.
@@ -351,6 +359,17 @@ func NewRouteUnsupportedValue(msg string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.RouteReasonUnsupportedValue),
 		Message: msg,
+	}
+}
+
+// NewRouteAcceptedUnsupportedField returns a Condition that indicates that the Route is accepted but
+// includes an unsupported field.
+func NewRouteAcceptedUnsupportedField(msg string) Condition {
+	return Condition{
+		Type:    string(v1.RouteConditionAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(RouteReasonUnsupportedField),
+		Message: fmt.Sprintf("The following unsupported parameters were ignored: %s", msg),
 	}
 }
 
@@ -942,6 +961,17 @@ func NewGatewayInvalidParameters(msg string) Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.GatewayReasonInvalidParameters),
 		Message: fmt.Sprintf("Gateway is accepted, but ParametersRef is ignored due to an error: %s", msg),
+	}
+}
+
+// NewGatewayAcceptedUnsupportedField returns a Condition that indicates the Gateway is accepted but
+// contains a field that is not supported.
+func NewGatewayAcceptedUnsupportedField(msg string) Condition {
+	return Condition{
+		Type:    string(v1.GatewayConditionAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(GatewayReasonUnsupportedField),
+		Message: fmt.Sprintf("Gateway accepted but the following unsupported parameters were ignored: %s", msg),
 	}
 }
 

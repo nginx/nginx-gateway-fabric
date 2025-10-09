@@ -165,6 +165,11 @@ func processGRPCRouteRule(
 
 	validMatches := true
 
+	unsupportedFieldsErrors := checkForUnsupportedGRPCFields(specRule, rulePath)
+	if len(unsupportedFieldsErrors) > 0 {
+		errors.warn = append(errors.warn, unsupportedFieldsErrors...)
+	}
+
 	for j, match := range specRule.Matches {
 		matchPath := rulePath.Child("matches").Index(j)
 
@@ -259,6 +264,11 @@ func processGRPCRouteRules(
 
 	conds = make([]conditions.Condition, 0, 2)
 	valid = true
+
+	// add warning condition for unsupported fields if any
+	if len(allRulesErrors.warn) > 0 {
+		conds = append(conds, conditions.NewRouteAcceptedUnsupportedField(allRulesErrors.warn.ToAggregate().Error()))
+	}
 
 	if len(allRulesErrors.invalid) > 0 {
 		msg := allRulesErrors.invalid.ToAggregate().Error()
@@ -443,4 +453,27 @@ func validateGRPCHeaderMatch(
 	allErrs = append(allErrs, validateHeaderMatchNameAndValue(validator, headerName, headerValue, headerPath)...)
 
 	return allErrs
+}
+
+func checkForUnsupportedGRPCFields(rule v1.GRPCRouteRule, rulePath *field.Path) field.ErrorList {
+	var ruleErrors field.ErrorList
+
+	if rule.Name != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("name"),
+			"Name",
+		))
+	}
+	if rule.SessionPersistence != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("sessionPersistence"),
+			"SessionPersistence",
+		))
+	}
+
+	if len(ruleErrors) == 0 {
+		return nil
+	}
+
+	return ruleErrors
 }
