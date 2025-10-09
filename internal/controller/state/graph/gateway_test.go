@@ -286,10 +286,12 @@ func TestBuildGateway(t *testing.T) {
 	)
 
 	type gatewayCfg struct {
-		name      string
-		ref       *v1.LocalParametersReference
-		listeners []v1.Listener
-		addresses []v1.GatewaySpecAddress
+		ref              *v1.LocalParametersReference
+		allowedListeners *v1.AllowedListeners
+		backendTLS       *v1.GatewayBackendTLS
+		name             string
+		listeners        []v1.Listener
+		addresses        []v1.GatewaySpecAddress
 	}
 
 	var lastCreatedGateway *v1.Gateway
@@ -304,6 +306,8 @@ func TestBuildGateway(t *testing.T) {
 				GatewayClassName: gcName,
 				Listeners:        cfg.listeners,
 				Addresses:        cfg.addresses,
+				AllowedListeners: cfg.allowedListeners,
+				BackendTLS:       cfg.backendTLS,
 			},
 		}
 
@@ -1513,6 +1517,103 @@ func TestBuildGateway(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "One unsupported field + supported fields (valid)",
+			gateway: createGateway(gatewayCfg{
+				name:             "gateway-valid-np",
+				listeners:        []v1.Listener{foo80Listener1},
+				ref:              validGwNpRef,
+				allowedListeners: &v1.AllowedListeners{},
+			}),
+			gatewayClass: validGCWithNp,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: validGwNp.Namespace, Name: "gateway-valid-np"}: {
+					Source: getLastCreatedGateway(),
+					Listeners: []*Listener{
+						{
+							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:         foo80Listener1,
+							Valid:          true,
+							Attachable:     true,
+							Routes:         map[RouteKey]*L7Route{},
+							L4Routes:       map[L4RouteKey]*L4Route{},
+							SupportedKinds: supportedKindsForListeners,
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway-valid-np", gcName),
+					},
+					Valid: true,
+					NginxProxy: &NginxProxy{
+						Source: validGwNp,
+						Valid:  true,
+					},
+					EffectiveNginxProxy: &EffectiveNginxProxy{
+						Logging: &ngfAPIv1alpha2.NginxLogging{
+							ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelError),
+						},
+						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
+						Metrics: &ngfAPIv1alpha2.Metrics{
+							Disable: helpers.GetPointer(false),
+							Port:    helpers.GetPointer(int32(90)),
+						},
+					},
+					Conditions: []conditions.Condition{
+						conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
+						conditions.NewGatewayResolvedRefs(),
+					},
+				},
+			},
+		},
+		{
+			name: "One unsupported field + NewGatewayRefInvalid (invalid)",
+			gateway: createGateway(gatewayCfg{
+				name:      "gateway-valid-np",
+				listeners: []v1.Listener{foo80Listener1},
+				ref: &v1.LocalParametersReference{
+					Kind: "wrong-kind", // Invalid reference
+					Name: "invalid-ref",
+				},
+				backendTLS: &v1.GatewayBackendTLS{},
+			}),
+			gatewayClass: validGCWithNp,
+			expected: map[types.NamespacedName]*Gateway{
+				{Namespace: validGwNp.Namespace, Name: "gateway-valid-np"}: {
+					Source: getLastCreatedGateway(),
+					Listeners: []*Listener{
+						{
+							Name:           "foo-80-1",
+							GatewayName:    client.ObjectKeyFromObject(getLastCreatedGateway()),
+							Source:         foo80Listener1,
+							Valid:          true,
+							Attachable:     true,
+							Routes:         map[RouteKey]*L7Route{},
+							L4Routes:       map[L4RouteKey]*L4Route{},
+							SupportedKinds: supportedKindsForListeners,
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway-valid-np", gcName),
+					},
+					Valid: true,
+					EffectiveNginxProxy: &EffectiveNginxProxy{
+						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
+					},
+					Conditions: []conditions.Condition{
+						conditions.NewGatewayAcceptedUnsupportedField("BackendTLS"),
+						conditions.NewGatewayRefInvalid(
+							"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
+						),
+						conditions.NewGatewayInvalidParameters(
+							"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
+						),
+					},
+				},
+			},
+		},
 	}
 
 	secretResolver := newSecretResolver(
@@ -1820,4 +1921,56 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 	// Test with routes but no snippets filters
 	emptyFilterResult := gw.GetReferencedSnippetsFilters(routes, map[types.NamespacedName]*SnippetsFilter{})
 	g.Expect(emptyFilterResult).To(BeEmpty())
+}
+
+func TestValidateUnsupportedGatewayFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		gateway       *v1.Gateway
+		expectedConds []conditions.Condition
+	}{
+		{
+			name: "No unsupported fields",
+			gateway: &v1.Gateway{
+				Spec: v1.GatewaySpec{},
+			},
+			expectedConds: nil,
+		},
+		{
+			name: "One unsupported field: AllowedListeners",
+			gateway: &v1.Gateway{
+				Spec: v1.GatewaySpec{
+					AllowedListeners: &v1.AllowedListeners{},
+				},
+			},
+			expectedConds: []conditions.Condition{
+				conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
+			},
+		},
+		{
+			name: "Multiple unsupported fields: AllowedListeners and BackendTLS",
+			gateway: &v1.Gateway{
+				Spec: v1.GatewaySpec{
+					AllowedListeners: &v1.AllowedListeners{},
+					BackendTLS:       &v1.GatewayBackendTLS{},
+				},
+			},
+			expectedConds: []conditions.Condition{
+				conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
+				conditions.NewGatewayAcceptedUnsupportedField("BackendTLS"),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conds := validateUnsupportedGatewayFields(test.gateway)
+			g.Expect(conds).To(Equal(test.expectedConds))
+		})
+	}
 }

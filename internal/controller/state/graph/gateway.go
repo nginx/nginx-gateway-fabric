@@ -193,6 +193,9 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]con
 	// invalidate the entire Gateway.
 	valid := len(conds) == 0
 
+	// Validate unsupported fields - these are warnings, don't affect validity
+	conds = append(conds, validateUnsupportedGatewayFields(gw)...)
+
 	if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.ParametersRef != nil {
 		paramConds := validateGatewayParametersRef(npCfg, *gw.Spec.Infrastructure.ParametersRef)
 		conds = append(conds, paramConds...)
@@ -266,4 +269,18 @@ func (g *Gateway) collectSnippetsFiltersFromRoute(
 			}
 		}
 	}
+}
+
+func validateUnsupportedGatewayFields(gw *v1.Gateway) []conditions.Condition {
+	var conds []conditions.Condition
+
+	if gw.Spec.AllowedListeners != nil {
+		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"))
+	}
+
+	if gw.Spec.BackendTLS != nil {
+		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("BackendTLS"))
+	}
+
+	return conds
 }

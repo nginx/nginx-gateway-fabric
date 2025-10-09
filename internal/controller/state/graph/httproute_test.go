@@ -14,6 +14,7 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -286,6 +287,10 @@ func TestBuildHTTPRoute(t *testing.T) {
 		Valid: true,
 	}
 	gatewayNsName := client.ObjectKeyFromObject(gw.Source)
+
+	// Valid HTTPRoute with unsupported rule fields
+	hrValidWithUnsupportedField := createHTTPRoute("hr-valid-unsupported", gatewayNsName.Name, "example.com", "/")
+	hrValidWithUnsupportedField.Spec.Rules[0].Name = helpers.GetPointer[gatewayv1.SectionName]("unsupported-name")
 
 	// route with valid filter
 	validFilter := gatewayv1.HTTPRouteFilter{
@@ -943,6 +948,41 @@ func TestBuildHTTPRoute(t *testing.T) {
 			},
 			name: "rule with one invalid and one unresolvable snippets filter extension ref filter",
 		},
+		{
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			hr:        hrValidWithUnsupportedField,
+			expected: &L7Route{
+				RouteType: RouteTypeHTTP,
+				Source:    hrValidWithUnsupportedField,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Valid:      true,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: hrValidWithUnsupportedField.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   true,
+								Filters: []Filter{},
+							},
+							Matches:          hrValidWithUnsupportedField.Spec.Rules[0].Matches,
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].name: Forbidden: Name"),
+				},
+			},
+			name: "valid route with unsupported field",
+		},
 	}
 
 	gws := map[types.NamespacedName]*Gateway{
@@ -1161,11 +1201,26 @@ func TestValidateMatch(t *testing.T) {
 			match: gatewayv1.HTTPRouteMatch{
 				Path: &gatewayv1.HTTPPathMatch{
 					Type:  helpers.GetPointer(gatewayv1.PathMatchRegularExpression),
-					Value: helpers.GetPointer("/"),
+					Value: helpers.GetPointer("/foo/(.*)$"),
+				},
+			},
+			expectErrCount: 0,
+			name:           "valid regex match",
+		},
+		{
+			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+				validator := createAllValidValidator()
+				validator.ValidatePathInRegexMatchReturns(errors.New("invalid path value"))
+				return validator
+			}(),
+			match: gatewayv1.HTTPRouteMatch{
+				Path: &gatewayv1.HTTPPathMatch{
+					Type:  helpers.GetPointer(gatewayv1.PathMatchRegularExpression),
+					Value: helpers.GetPointer("(foo"),
 				},
 			},
 			expectErrCount: 1,
-			name:           "wrong path type",
+			name:           "bad path regex",
 		},
 		{
 			validator: createAllValidValidator(),
@@ -1337,8 +1392,8 @@ func TestValidateMatch(t *testing.T) {
 			validator: createAllValidValidator(),
 			match: gatewayv1.HTTPRouteMatch{
 				Path: &gatewayv1.HTTPPathMatch{
-					Type:  helpers.GetPointer(gatewayv1.PathMatchRegularExpression), // invalid
-					Value: helpers.GetPointer("/"),
+					Type:  helpers.GetPointer(gatewayv1.PathMatchRegularExpression),
+					Value: helpers.GetPointer("/foo/(.*)$"),
 				},
 				Headers: []gatewayv1.HTTPHeaderMatch{
 					{
@@ -1355,7 +1410,7 @@ func TestValidateMatch(t *testing.T) {
 					},
 				},
 			},
-			expectErrCount: 3,
+			expectErrCount: 2,
 			name:           "multiple errors",
 		},
 		{
@@ -1657,6 +1712,138 @@ func TestValidateFilterRewrite(t *testing.T) {
 			g := NewWithT(t)
 			allErrs := validateFilterRewrite(test.validator, test.urlRewrite, filterPath)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
+		})
+	}
+}
+
+func TestUnsupportedFieldsErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		specRule       gatewayv1.HTTPRouteRule
+		name           string
+		expectedErrors int
+	}{
+		{
+			name:           "No unsupported fields",
+			specRule:       gatewayv1.HTTPRouteRule{}, // Empty rule, no unsupported fields
+			expectedErrors: 0,
+		},
+		{
+			name: "One unsupported field",
+			specRule: gatewayv1.HTTPRouteRule{
+				Name: helpers.GetPointer[gatewayv1.SectionName]("unsupported-name"),
+			},
+			expectedErrors: 1,
+		},
+		{
+			name: "Multiple unsupported fields",
+			specRule: gatewayv1.HTTPRouteRule{
+				Name: helpers.GetPointer[gatewayv1.SectionName]("unsupported-name"),
+				Timeouts: helpers.GetPointer(gatewayv1.HTTPRouteTimeouts{
+					Request: (*gatewayv1.Duration)(helpers.GetPointer("unsupported-timeouts")),
+				}),
+				Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: helpers.GetPointer(3)}),
+				SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
+					Type: helpers.GetPointer(gatewayv1.SessionPersistenceType("unsupported-session-persistence")),
+				}),
+			},
+			expectedErrors: 4,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			rulePath := field.NewPath("spec").Child("rules")
+			var errors routeRuleErrors
+
+			unsupportedFieldsErrors := checkForUnsupportedHTTPFields(test.specRule, rulePath)
+			if len(unsupportedFieldsErrors) > 0 {
+				errors.warn = append(errors.warn, unsupportedFieldsErrors...)
+			}
+
+			g.Expect(errors.warn).To(HaveLen(test.expectedErrors))
+		})
+	}
+}
+
+func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		specRules     []gatewayv1.HTTPRouteRule
+		expectedConds []conditions.Condition
+		expectedWarns int
+		expectedValid bool
+	}{
+		{
+			name:          "No unsupported fields",
+			specRules:     []gatewayv1.HTTPRouteRule{{}},
+			expectedValid: true,
+			expectedConds: nil,
+			expectedWarns: 0,
+		},
+		{
+			name: "One unsupported field",
+			specRules: []gatewayv1.HTTPRouteRule{
+				{
+					Name: helpers.GetPointer[gatewayv1.SectionName]("unsupported-name"),
+				},
+			},
+			expectedValid: true,
+			expectedConds: []conditions.Condition{
+				conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].name: Forbidden: Name"),
+			},
+			expectedWarns: 1,
+		},
+		{
+			name: "Multiple unsupported fields",
+			specRules: []gatewayv1.HTTPRouteRule{
+				{
+					Name: helpers.GetPointer[gatewayv1.SectionName]("unsupported-name"),
+					Timeouts: helpers.GetPointer(gatewayv1.HTTPRouteTimeouts{
+						Request: (*gatewayv1.Duration)(helpers.GetPointer("unsupported-timeouts")),
+					}),
+					Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: helpers.GetPointer(3)}),
+					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
+						Type: helpers.GetPointer(gatewayv1.SessionPersistenceType("unsupported-session-persistence")),
+					}),
+				},
+			},
+			expectedValid: true,
+			expectedConds: []conditions.Condition{
+				conditions.NewRouteAcceptedUnsupportedField("[spec.rules[0].name: Forbidden: Name, spec.rules[0].timeouts: " +
+					"Forbidden: Timeouts, spec.rules[0].retry: Forbidden: Retry, " +
+					"spec.rules[0].sessionPersistence: Forbidden: SessionPersistence]"),
+			},
+			expectedWarns: 4,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			_, valid, conds := processHTTPRouteRules(
+				test.specRules,
+				validation.SkipValidator{},
+				nil,
+			)
+
+			g.Expect(valid).To(Equal(test.expectedValid))
+			if test.expectedConds == nil {
+				g.Expect(conds).To(BeEmpty())
+			} else {
+				g.Expect(conds).To(HaveLen(len(test.expectedConds)))
+				for i, expectedCond := range test.expectedConds {
+					g.Expect(conds[i].Message).To(Equal(expectedCond.Message))
+				}
+			}
 		})
 	}
 }

@@ -7,12 +7,14 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -340,6 +342,46 @@ func TestBuildGRPCRoute(t *testing.T) {
 		gatewayNsName.Name,
 		"example.com",
 		[]v1.GRPCRouteRule{methodMatchRule, headersMatchInvalid},
+	)
+
+	grValidWithUnsupportedField := createGRPCRoute(
+		"gr-valid-unsupported",
+		gatewayNsName.Name,
+		"example.com",
+		[]v1.GRPCRouteRule{
+			{
+				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+				Matches: []v1.GRPCRouteMatch{
+					{
+						Method: &v1.GRPCMethodMatch{
+							Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
+							Service: helpers.GetPointer("myService"),
+							Method:  helpers.GetPointer("myMethod"),
+						},
+					},
+				},
+			},
+		},
+	)
+
+	grInvalidWithUnsupportedField := createGRPCRoute(
+		"gr-invalid-unsupported",
+		gatewayNsName.Name,
+		"example.com",
+		[]v1.GRPCRouteRule{
+			{
+				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+				Matches: []v1.GRPCRouteMatch{
+					{
+						Method: &v1.GRPCMethodMatch{
+							Type:    helpers.GetPointer(v1.GRPCMethodMatchExact),
+							Service: helpers.GetPointer(""),
+							Method:  helpers.GetPointer(""),
+						},
+					},
+				},
+			},
+		},
 	)
 
 	grDuplicateSectionName := createGRPCRoute(
@@ -1068,6 +1110,80 @@ func TestBuildGRPCRoute(t *testing.T) {
 			},
 			name: "one invalid and one unresolvable snippet filter extension ref",
 		},
+		{
+			validator: createAllValidValidator(),
+			gr:        grValidWithUnsupportedField,
+			expected: &L7Route{
+				RouteType: RouteTypeGRPC,
+				Source:    grValidWithUnsupportedField,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: grValidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Valid:      true,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: grValidWithUnsupportedField.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   true,
+								Filters: []Filter{},
+							},
+							Matches:          ConvertGRPCMatches(grValidWithUnsupportedField.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].name: Forbidden: Name"),
+				},
+			},
+			name: "valid route with unsupported field",
+		},
+		{
+			validator: createAllValidValidator(),
+			gr:        grInvalidWithUnsupportedField,
+			expected: &L7Route{
+				RouteType: RouteTypeGRPC,
+				Source:    grInvalidWithUnsupportedField,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: grInvalidWithUnsupportedField.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Valid:      false,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: grInvalidWithUnsupportedField.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: false,
+							Filters: RouteRuleFilters{
+								Valid:   true,
+								Filters: []Filter{},
+							},
+							Matches:          ConvertGRPCMatches(grInvalidWithUnsupportedField.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].name: Forbidden: Name"),
+					conditions.NewRouteUnsupportedValue(
+						"All rules are invalid: [spec.rules[0].matches[0].method.service: Required value: service is required, " +
+							"spec.rules[0].matches[0].method.method: Required value: method is required]",
+					),
+				},
+			},
+			name: "invalid route with unsupported field",
+		},
 	}
 
 	gws := map[types.NamespacedName]*Gateway{
@@ -1373,6 +1489,131 @@ func TestConvertGRPCHeaderMatchType(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			g.Expect(convertGRPCHeaderMatchType(test.input)).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestProcessGRPCRouteRule_UnsupportedFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		specRule       v1.GRPCRouteRule
+		name           string
+		expectedErrors int
+	}{
+		{
+			name:           "No unsupported fields",
+			specRule:       v1.GRPCRouteRule{}, // Empty rule, no unsupported fields
+			expectedErrors: 0,
+		},
+		{
+			name: "One unsupported field",
+			specRule: v1.GRPCRouteRule{
+				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+			},
+			expectedErrors: 1,
+		},
+		{
+			name: "Multiple unsupported fields",
+			specRule: v1.GRPCRouteRule{
+				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+				SessionPersistence: helpers.GetPointer(
+					v1.SessionPersistence{
+						Type: helpers.GetPointer(v1.SessionPersistenceType("unsupported-session-persistence")),
+					}),
+			},
+			expectedErrors: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			rulePath := field.NewPath("spec").Child("rules")
+			var errors routeRuleErrors
+
+			// Wrap the rule in GRPCRouteRuleWrapper
+			unsupportedFieldsErrors := checkForUnsupportedGRPCFields(test.specRule, rulePath)
+			if len(unsupportedFieldsErrors) > 0 {
+				errors.warn = append(errors.warn, unsupportedFieldsErrors...)
+			}
+
+			g.Expect(errors.warn).To(HaveLen(test.expectedErrors))
+		})
+	}
+}
+
+func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		specRules     []v1.GRPCRouteRule
+		expectedConds []conditions.Condition
+		expectedWarns int
+		expectedValid bool
+	}{
+		{
+			name:          "No unsupported fields",
+			specRules:     []v1.GRPCRouteRule{{}},
+			expectedValid: true,
+			expectedConds: nil,
+			expectedWarns: 0,
+		},
+		{
+			name: "One unsupported field",
+			specRules: []v1.GRPCRouteRule{
+				{
+					Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+				},
+			},
+			expectedValid: true,
+			expectedConds: []conditions.Condition{
+				conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].name: Forbidden: Name"),
+			},
+			expectedWarns: 1,
+		},
+		{
+			name: "Multiple unsupported fields",
+			specRules: []v1.GRPCRouteRule{
+				{
+					Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
+						Type: helpers.GetPointer(v1.SessionPersistenceType("unsupported-session-persistence")),
+					}),
+				},
+			},
+			expectedValid: true,
+			expectedConds: []conditions.Condition{
+				conditions.NewRouteAcceptedUnsupportedField("[spec.rules[0].name: Forbidden: Name, " +
+					"spec.rules[0].sessionPersistence: Forbidden: SessionPersistence]"),
+			},
+			expectedWarns: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			_, valid, conds := processGRPCRouteRules(
+				test.specRules,
+				validation.SkipValidator{},
+				nil,
+			)
+
+			g.Expect(valid).To(Equal(test.expectedValid))
+			if test.expectedConds == nil {
+				g.Expect(conds).To(BeEmpty())
+			} else {
+				g.Expect(conds).To(HaveLen(len(test.expectedConds)))
+				for i, expectedCond := range test.expectedConds {
+					g.Expect(conds[i].Message).To(Equal(expectedCond.Message))
+				}
+			}
 		})
 	}
 }
