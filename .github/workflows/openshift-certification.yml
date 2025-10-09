@@ -25,8 +25,10 @@ jobs:
   preflight:
     runs-on: ${{ inputs.runner }}
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      with:
+        ref: ${{ (inputs.tag != '' && !inputs.dry_run ) && format('refs/tags/v{0}', inputs.tag) || github.ref }}
 
     - name: Download preflight binary
       run: |
@@ -38,7 +40,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: ${{ inputs.image }}-${{ inputs.image_version }}
-    
+
     - name: List files after artifact download
       run: ls -l ${{ inputs.image }}-${{ inputs.image_version }}.tar
 
