@@ -428,8 +428,7 @@ jobs:
       image: ${{ matrix.image }}
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
-      image_version: ${{ (matrix.image == 'ngf' && endsWith(needs.build-oss.outputs.image_version, '-ubi')) && needs.build-oss.outputs.image_version || (matrix.image == 'nginx' && endsWith(needs.build-oss.outputs.image_version, '-ubi')) && needs.build-oss.outputs.image_version || '' }}
-
+      image_version: ${{ (matrix.image == 'ngf' && endsWith(needs.build-oss.outputs.image_version, '-ubi')) && needs.build-oss.outputs.image_version || (matrix.image == 'nginx' && endsWith(needs.build-oss.outputs.image_version, '-ubi')) && needs.build-oss.outputs.image_version || (matrix.image == 'operator' && needs.build-operator.outputs.image_version) }}
     permissions:
       contents: read
       packages: read
