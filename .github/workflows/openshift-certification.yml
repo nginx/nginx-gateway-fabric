@@ -56,12 +56,7 @@ jobs:
       env:
         PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
       run: |
-        if [[ "${{ inputs.image }}" == "ngf" ]]; then
-        IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image_version }}"
-        else
-        IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}/${{ inputs.image_version }}"
-        fi
-        preflight check container "$IMAGE_PATH" > preflight-result.json
+        preflight check container quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}/${{ inputs.image_version }}" > preflight-result.json
 
     - name: Check preflight results
       run: |
