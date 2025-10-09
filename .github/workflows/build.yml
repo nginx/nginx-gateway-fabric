@@ -211,7 +211,7 @@ jobs:
       - name: Upload all image artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.image }}-${{ steps.meta.outputs.version }}
+          name: ${{ format('{0}-{1}', inputs.image, inputs.image_version) }}
           path: ${{ github.workspace }}/dist/${{ inputs.image }}-${{ steps.meta.outputs.version }}.tar
 
           # - name: Run preflight
