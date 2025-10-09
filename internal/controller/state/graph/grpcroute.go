@@ -267,7 +267,7 @@ func processGRPCRouteRules(
 
 	// add warning condition for unsupported fields if any
 	if len(allRulesErrors.warn) > 0 {
-		conds = append(conds, conditions.NewRouteUnsupportedField(allRulesErrors.warn.ToAggregate().Error()))
+		conds = append(conds, conditions.NewRouteAcceptedUnsupportedField(allRulesErrors.warn.ToAggregate().Error()))
 	}
 
 	if len(allRulesErrors.invalid) > 0 {

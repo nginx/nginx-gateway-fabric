@@ -1140,7 +1140,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 					},
 				},
 				Conditions: []conditions.Condition{
-					conditions.NewRouteUnsupportedField("spec.rules[0].name: Forbidden: Name"),
+					conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].name: Forbidden: Name"),
 				},
 			},
 			name: "valid route with unsupported field",
@@ -1175,7 +1175,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 					},
 				},
 				Conditions: []conditions.Condition{
-					conditions.NewRouteUnsupportedField("spec.rules[0].name: Forbidden: Name"),
+					conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].name: Forbidden: Name"),
 					conditions.NewRouteUnsupportedValue(
 						"All rules are invalid: [spec.rules[0].matches[0].method.service: Required value: service is required, " +
 							"spec.rules[0].matches[0].method.method: Required value: method is required]",
@@ -1571,7 +1571,7 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteUnsupportedField("spec.rules[0].name: Forbidden: Name"),
+				conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].name: Forbidden: Name"),
 			},
 			expectedWarns: 1,
 		},
@@ -1587,7 +1587,7 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteUnsupportedField("[spec.rules[0].name: Forbidden: Name, " +
+				conditions.NewRouteAcceptedUnsupportedField("[spec.rules[0].name: Forbidden: Name, " +
 					"spec.rules[0].sessionPersistence: Forbidden: SessionPersistence]"),
 			},
 			expectedWarns: 2,
