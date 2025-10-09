@@ -209,11 +209,6 @@ func createControllerCommand() *cobra.Command {
 				imageSource = "unknown"
 			}
 
-			buildOs := os.Getenv("BUILD_OS")
-			if buildOs == "" {
-				buildOs = "alpine"
-			}
-
 			period, err := time.ParseDuration(telemetryReportPeriod)
 			if err != nil {
 				return fmt.Errorf("error parsing telemetry report period: %w", err)
@@ -276,7 +271,6 @@ func createControllerCommand() *cobra.Command {
 				Plus:                 plus,
 				ExperimentalFeatures: gwExperimentalFeatures,
 				ImageSource:          imageSource,
-				BuildOS:              buildOs,
 				Flags: config.Flags{
 					Names:  flagKeys,
 					Values: flagValues,

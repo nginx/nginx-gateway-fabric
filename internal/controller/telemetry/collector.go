@@ -178,11 +178,6 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 
 	nginxPodCount := getNginxPodCount(g, clusterInfo.NodeCount)
 
-	buildOS := c.cfg.BuildOS
-	if buildOS == "" {
-		buildOS = "alpine"
-	}
-
 	data := Data{
 		Data: tel.Data{
 			ProjectName:         "NGF",
@@ -196,7 +191,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		},
 		NGFResourceCounts:              graphResourceCount,
 		ImageSource:                    c.cfg.ImageSource,
-		BuildOS:                        buildOS,
+		BuildOS:                        c.cfg.BuildOS,
 		FlagNames:                      c.cfg.Flags.Names,
 		FlagValues:                     c.cfg.Flags.Values,
 		SnippetsFiltersDirectives:      snippetsFiltersDirectives,

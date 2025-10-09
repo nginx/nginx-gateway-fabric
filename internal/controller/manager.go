@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -290,7 +291,7 @@ func StartManager(cfg config.Config) error {
 				Name:      cfg.GatewayPodConfig.Name,
 			},
 			ImageSource:               cfg.ImageSource,
-			BuildOS:                   cfg.BuildOS,
+			BuildOS:                   os.Getenv("BUILD_OS"),
 			Flags:                     cfg.Flags,
 			NginxOneConsoleConnection: cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "",
 		})
