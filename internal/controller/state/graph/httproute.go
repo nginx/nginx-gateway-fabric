@@ -397,17 +397,23 @@ func validatePathMatch(
 		return field.ErrorList{field.Invalid(fieldPath.Child("value"), *path.Value, msg)}
 	}
 
-	if *path.Type != v1.PathMatchPathPrefix && *path.Type != v1.PathMatchExact {
+	switch *path.Type {
+	case v1.PathMatchExact, v1.PathMatchPathPrefix:
+		if err := validator.ValidatePathInMatch(*path.Value); err != nil {
+			valErr := field.Invalid(fieldPath.Child("value"), *path.Value, err.Error())
+			allErrs = append(allErrs, valErr)
+		}
+	case v1.PathMatchRegularExpression:
+		if err := validator.ValidatePathInRegexMatch(*path.Value); err != nil {
+			valErr := field.Invalid(fieldPath.Child("value"), *path.Value, err.Error())
+			allErrs = append(allErrs, valErr)
+		}
+	default:
 		valErr := field.NotSupported(
 			fieldPath.Child("type"),
 			*path.Type,
-			[]string{string(v1.PathMatchExact), string(v1.PathMatchPathPrefix)},
+			[]string{string(v1.PathMatchExact), string(v1.PathMatchPathPrefix), string(v1.PathMatchRegularExpression)},
 		)
-		allErrs = append(allErrs, valErr)
-	}
-
-	if err := validator.ValidatePathInMatch(*path.Value); err != nil {
-		valErr := field.Invalid(fieldPath.Child("value"), *path.Value, err.Error())
 		allErrs = append(allErrs, valErr)
 	}
 

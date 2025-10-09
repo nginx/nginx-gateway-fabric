@@ -15,10 +15,12 @@ import (
 type PathType string
 
 const (
-	// PathTypePrefix indicates that the path is a prefix.
-	PathTypePrefix PathType = "prefix"
 	// PathTypeExact indicates that the path is exact.
 	PathTypeExact PathType = "exact"
+	// PathTypePrefix indicates that the path is a prefix.
+	PathTypePrefix PathType = "prefix"
+	// PathTypeRegularExpression indicates that the path is a regular expression.
+	PathTypeRegularExpression PathType = "regularExpression"
 )
 
 // Configuration is an intermediate representation of dataplane configuration.
