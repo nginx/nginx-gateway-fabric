@@ -121,6 +121,7 @@ jobs:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_ROBOT_TOKEN }}
+          logout: false
         if: ${{ ! inputs.dry_run }}
 
       - name: Docker meta
