@@ -1,5 +1,10 @@
 FROM quay.io/operator-framework/helm-operator:v1.41.1
 
+# Update system packages to fix vulnerabilities
+USER root
+RUN microdnf update -y && microdnf clean all
+USER 1001
+
 COPY LICENSE /licenses/LICENSE
 
 LABEL name="nginx-gateway-fabric-operator" \
