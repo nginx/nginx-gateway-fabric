@@ -425,6 +425,8 @@ jobs:
         ${{ matrix.image == 'ngf' && needs.build-oss.outputs.image_version
         || matrix.image == 'nginx' && needs.build-oss.outputs.image_version
         || matrix.image == 'operator' && needs.build-operator.outputs.image_version }}
+      tag: ${{ inputs.release_version || '' }}
+      dry_run: ${{ inputs.dry_run || false }}
     permissions:
       contents: read
       packages: read

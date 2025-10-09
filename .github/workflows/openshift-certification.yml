@@ -13,6 +13,14 @@ on:
       image_version:
         required: true
         type: string
+      tag:
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
