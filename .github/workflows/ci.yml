@@ -238,9 +238,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
-          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-          AZURE_BUCKET_NAME: ${{ secrets.AZURE_BUCKET_NAME }}
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_COMMUNITY }}
           TELEMETRY_ENDPOINT: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release-') && 'oss-dev.edge.df.f5.com:443' || 'oss.edge.df.f5.com:443' }}
           TELEMETRY_ENDPOINT_INSECURE: "false"
