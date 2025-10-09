@@ -53,27 +53,27 @@ jobs:
     - name: List files after artifact download
       run: ls -l ${{ github.workspace }}/dist
 
-    # - name: Load image into Docker
-    #   run: |
-    #     docker load -i ${{ inputs.image }}-${{ inputs.image_version }}.tar
+      # - name: Load image into Docker
+      #   run: |
+      #     docker load -i ${{ inputs.image }}-${{ inputs.image_version }}.tar
 
-    # - name: Retag image for preflight
-    #   run: |
-    #     loaded_tag="localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
-    #     preflight_tag="${{ inputs.image }}:ubi"
-    #     docker tag "$loaded_tag" "$preflight_tag"
+      # - name: Retag image for preflight
+      #   run: |
+      #     loaded_tag="localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
+      #     preflight_tag="${{ inputs.image }}:ubi"
+      #     docker tag "$loaded_tag" "$preflight_tag"
 
-    # - name: Run preflight
-    #   env:
-    #     PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
-    #   run: preflight check container ${{ inputs.image }}:ubi > preflight-result.json
+      # - name: Run preflight
+      #   env:
+      #     PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
+      #   run: preflight check container ${{ inputs.image }}:ubi > preflight-result.json
 
-    # - name: Check preflight results
-    #   run: |
-    #     failed_count=$(jq '.results.failed | length' preflight-result.json)
-    #     if [ "$failed_count" -ne 0 ]; then
-    #     echo "Preflight checks failed: $failed_count failed checks"
-    #     echo "Results for preflight-result.json:"
-    #     jq '.results.failed' preflight-result.json
-    #     exit 1
-    #     fi
+      # - name: Check preflight results
+      #   run: |
+      #     failed_count=$(jq '.results.failed | length' preflight-result.json)
+      #     if [ "$failed_count" -ne 0 ]; then
+      #     echo "Preflight checks failed: $failed_count failed checks"
+      #     echo "Results for preflight-result.json:"
+      #     jq '.results.failed' preflight-result.json
+      #     exit 1
+      #     fi
