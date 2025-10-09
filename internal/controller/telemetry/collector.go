@@ -41,33 +41,17 @@ type ConfigurationGetter interface {
 //
 //go:generate go run -tags generator github.com/nginx/telemetry-exporter/cmd/generator -type=Data -scheme -scheme-protocol=NGFProductTelemetry -scheme-df-datatype=ngf-product-telemetry
 type Data struct {
-	// ImageSource tells whether the image was built by GitHub or locally (values are 'gha', 'local', or 'unknown')
 	ImageSource string
-	tel.Data    // embedding is required by the generator.
-	// FlagNames contains the command-line flag names.
-	FlagNames []string
-	// FlagValues contains the values of the command-line flags, where each value corresponds to the flag from FlagNames
-	// at the same index.
-	// Each value is either 'true' or 'false' for boolean flags and 'default' or 'user-defined' for non-boolean flags.
-	FlagValues []string
-	// SnippetsFiltersDirectives contains the directive-context strings of all applied SnippetsFilters.
-	// Both lists are ordered first by count, then by lexicographical order of the context string,
-	// then lastly by directive string.
-	SnippetsFiltersDirectives []string
-	// SnippetsFiltersDirectivesCount contains the count of the directive-context strings, where each count
-	// corresponds to the string from SnippetsFiltersDirectives at the same index.
-	// Both lists are ordered first by count, then by lexicographical order of the context string,
-	// then lastly by directive string.
+	BuildOS     string
+	tel.Data
+	FlagNames                      []string
+	FlagValues                     []string
+	SnippetsFiltersDirectives      []string
 	SnippetsFiltersDirectivesCount []int64
-	NGFResourceCounts              // embedding is required by the generator.
-	// NginxPodCount is the total number of Nginx data plane Pods.
-	NginxPodCount int64
-	// ControlPlanePodCount is the total number of NGF control plane Pods.
-	ControlPlanePodCount int64
-	// NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled.
+	NGFResourceCounts
+	NginxPodCount             int64
+	ControlPlanePodCount      int64
 	NginxOneConnectionEnabled bool
-	// BuildOS is the OS the NGF and NGINX binary was built on.
-	BuildOS string
 }
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.

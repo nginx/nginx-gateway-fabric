@@ -172,6 +172,7 @@ var _ = Describe("Collector", Ordered, func() {
 			NGFResourceCounts:              telemetry.NGFResourceCounts{},
 			ControlPlanePodCount:           1,
 			ImageSource:                    "local",
+			BuildOS:                        "ubi",
 			FlagNames:                      flags.Names,
 			FlagValues:                     flags.Values,
 			SnippetsFiltersDirectives:      []string{},
@@ -193,9 +194,9 @@ var _ = Describe("Collector", Ordered, func() {
 			Version:                   version,
 			PodNSName:                 podNSName,
 			ImageSource:               "local",
+			BuildOS:                   "ubi",
 			Flags:                     flags,
 			NginxOneConsoleConnection: true,
-			BuildOS:                   "",
 		})
 
 		baseGetCalls = createGetCallsFunc(ngfPod, ngfReplicaSet, kubeNamespace)

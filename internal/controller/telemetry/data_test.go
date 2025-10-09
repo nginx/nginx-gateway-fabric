@@ -86,6 +86,7 @@ func TestDataAttributes(t *testing.T) {
 		attribute.Int64("NginxPodCount", 3),
 		attribute.Int64("ControlPlanePodCount", 3),
 		attribute.Bool("NginxOneConnectionEnabled", true),
+		attribute.String("BuildOS", ""),
 	}
 
 	result := data.Attributes()
@@ -132,6 +133,7 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.Int64("NginxPodCount", 0),
 		attribute.Int64("ControlPlanePodCount", 0),
 		attribute.Bool("NginxOneConnectionEnabled", false),
+		attribute.String("BuildOS", ""),
 	}
 
 	result := data.Attributes()
