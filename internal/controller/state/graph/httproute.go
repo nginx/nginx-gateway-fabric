@@ -274,8 +274,7 @@ func processHTTPRouteRules(
 
 	// add warning condition for unsupported fields if any
 	if len(allRulesErrors.warn) > 0 {
-		msg := "There are rules with unsupported fields configurations: " + allRulesErrors.warn.ToAggregate().Error()
-		conds = append(conds, conditions.NewRouteUnsupportedField(msg))
+		conds = append(conds, conditions.NewRouteUnsupportedField(allRulesErrors.warn.ToAggregate().Error()))
 		valid = true
 	}
 
@@ -537,25 +536,25 @@ func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) 
 	if rule.Name != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("name"),
-			"rule names are not supported",
+			"Name",
 		))
 	}
 	if rule.Timeouts != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("timeouts"),
-			"timeouts are not supported",
+			"Timeouts",
 		))
 	}
 	if rule.Retry != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("retry"),
-			"retry is not supported",
+			"Retry",
 		))
 	}
 	if rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),
-			"sessionPersistence is not supported",
+			"SessionPersistence",
 		))
 	}
 

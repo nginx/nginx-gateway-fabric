@@ -376,7 +376,7 @@ func NewRouteUnsupportedField(msg string) Condition {
 		Type:    string(RouteConditionUnsupportedField),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(RouteReasonUnsupportedField),
-		Message: fmt.Sprintf("Some parameters are ignored because they are not supported: %s", msg),
+		Message: fmt.Sprintf("The following unsupported parameters were ignored: %s", msg),
 	}
 }
 
@@ -978,7 +978,7 @@ func NewGatewayUnsupportedField(msg string) Condition {
 		Type:    string(GatewayConditionUnsupportedField),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(GatewayReasonUnsupportedField),
-		Message: fmt.Sprintf("Gateway is accepted, but some parameters are ignored because they are not supported: %s", msg),
+		Message: fmt.Sprintf("Gateway accepted but the following unsupported parameters were ignored: %s", msg),
 	}
 }
 

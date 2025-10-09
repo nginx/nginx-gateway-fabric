@@ -978,8 +978,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 					},
 				},
 				Conditions: []conditions.Condition{
-					conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: " +
-						"spec.rules[0].name: Forbidden: rule names are not supported"),
+					conditions.NewRouteUnsupportedField("spec.rules[0].name: Forbidden: Name"),
 				},
 			},
 			name: "valid route with unsupported field",
@@ -1782,8 +1781,7 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: spec.rules[0].name: " +
-					"Forbidden: rule names are not supported"),
+				conditions.NewRouteUnsupportedField("spec.rules[0].name: Forbidden: Name"),
 			},
 			expectedWarns: 1,
 		},
@@ -1803,10 +1801,9 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteUnsupportedField("There are rules with unsupported fields configurations: " +
-					"[spec.rules[0].name: Forbidden: rule names are not supported, spec.rules[0].timeouts: " +
-					"Forbidden: timeouts are not supported, spec.rules[0].retry: Forbidden: retry is not supported, " +
-					"spec.rules[0].sessionPersistence: Forbidden: sessionPersistence is not supported]"),
+				conditions.NewRouteUnsupportedField("[spec.rules[0].name: Forbidden: Name, spec.rules[0].timeouts: " +
+					"Forbidden: Timeouts, spec.rules[0].retry: Forbidden: Retry, " +
+					"spec.rules[0].sessionPersistence: Forbidden: SessionPersistence]"),
 			},
 			expectedWarns: 4,
 		},

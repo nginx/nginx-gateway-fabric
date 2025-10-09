@@ -1561,7 +1561,7 @@ func TestBuildGateway(t *testing.T) {
 						},
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayUnsupportedField("AllowedListeners are not supported"),
+						conditions.NewGatewayUnsupportedField("AllowedListeners"),
 						conditions.NewGatewayResolvedRefs(),
 					},
 				},
@@ -1603,7 +1603,7 @@ func TestBuildGateway(t *testing.T) {
 						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayUnsupportedField("BackendTLS is not supported"),
+						conditions.NewGatewayUnsupportedField("BackendTLS"),
 						conditions.NewGatewayRefInvalid(
 							"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
 						),
@@ -1946,7 +1946,7 @@ func TestValidateUnsupportedGatewayFields(t *testing.T) {
 				},
 			},
 			expectedConds: []conditions.Condition{
-				conditions.NewGatewayUnsupportedField("AllowedListeners are not supported"),
+				conditions.NewGatewayUnsupportedField("AllowedListeners"),
 			},
 		},
 		{
@@ -1958,8 +1958,8 @@ func TestValidateUnsupportedGatewayFields(t *testing.T) {
 				},
 			},
 			expectedConds: []conditions.Condition{
-				conditions.NewGatewayUnsupportedField("AllowedListeners are not supported"),
-				conditions.NewGatewayUnsupportedField("BackendTLS is not supported"),
+				conditions.NewGatewayUnsupportedField("AllowedListeners"),
+				conditions.NewGatewayUnsupportedField("BackendTLS"),
 			},
 		},
 	}
