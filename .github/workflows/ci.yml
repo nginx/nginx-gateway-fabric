@@ -423,16 +423,17 @@ jobs:
       matrix:
         image: [ngf, nginx, operator]
     # if: ${{ github.event_name == 'pull_request' && github.event_pull_request.base.ref == 'main' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (inputs.is_production_release == true) }}
+    if: |
+      ${{ matrix.image == 'operator' || (
+      (matrix.image == 'ngf' || matrix.image == 'nginx') &&
+      contains(
+      (matrix.image == 'ngf' && needs.build-oss.outputs.image_version || matrix.image == 'nginx' && needs.build-oss.outputs.image_version),
+      '-ubi'
+      )
+      ) }}
     uses: ./.github/workflows/openshift-certification.yml
     with:
       image: ${{ matrix.image }}
-      if: |
-          (matrix.image == 'operator') ||
-          ((matrix.image == 'ngf' || matrix.image == 'nginx') && contains(
-            matrix.image == 'ngf' && needs.build-oss.outputs.image_version ||
-            matrix.image == 'nginx' && needs.build-oss.outputs.image_version,
-            '-ubi'
-          ))
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
     permissions:
