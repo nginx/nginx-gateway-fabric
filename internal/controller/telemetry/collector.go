@@ -40,7 +40,7 @@ type ConfigurationGetter interface {
 // Data is telemetry data.
 //
 //go:generate go run -tags generator github.com/nginx/telemetry-exporter/cmd/generator -type=Data -scheme -scheme-protocol=NGFProductTelemetry -scheme-df-datatype=ngf-product-telemetry
-type Data struct { //nolint
+type Data struct { //nolint //required to skip golangci-lint-full fieldalignment
 	// ImageSource tells whether the image was built by GitHub or locally (values are 'gha', 'local', or 'unknown')
 	ImageSource string
 	tel.Data    // embedding is required by the generator.
