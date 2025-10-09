@@ -426,10 +426,13 @@ jobs:
     uses: ./.github/workflows/openshift-certification.yml
     with:
       image: ${{ matrix.image }}
-      image_version: >
-        ${{ matrix.image == 'ngf' && needs.build-oss.outputs.image_version
-        || matrix.image == 'nginx' && needs.build-oss.outputs.image_version
-        || matrix.image == 'operator' && needs.build-operator.outputs.image_version }}
+      if: |
+          (matrix.image == 'operator') ||
+          ((matrix.image == 'ngf' || matrix.image == 'nginx') && contains(
+            matrix.image == 'ngf' && needs.build-oss.outputs.image_version ||
+            matrix.image == 'nginx' && needs.build-oss.outputs.image_version,
+            '-ubi'
+          ))
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
     permissions:
