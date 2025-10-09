@@ -115,14 +115,6 @@ jobs:
           password: ${{ steps.auth.outputs.access_token }}
         if: ${{ github.event_name != 'pull_request' && contains(inputs.image, 'plus') }}
 
-      - name: Login to Quay.io
-        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_ROBOT_TOKEN }}
-        if: ${{ ! inputs.dry_run }}
-
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
@@ -135,9 +127,6 @@ jobs:
             name=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
-            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric,enable=${{ inputs.image == 'ngf' && inputs.build-os == 'ubi'}}
-            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx,enable=${{ inputs.image == 'nginx' && inputs.build-os == 'ubi' }}
-            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' && inputs.build-os == 'ubi'}}
           flavor: |
             latest=${{ (inputs.tag != '' && 'true') || 'auto' }}
           tags: |

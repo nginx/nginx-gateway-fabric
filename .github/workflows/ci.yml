@@ -422,7 +422,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [ngf, nginx, operator]
-    # if: ${{ github.event_name == 'pull_request' && github.event_pull_request.base.ref == 'main' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (inputs.is_production_release == true) }}
+    if: ${{ github.event_name != 'pull_request' && github.event_pull_request.base.ref == 'main' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (inputs.is_production_release == true) }}
     uses: ./.github/workflows/openshift-certification.yml
     with:
       image: ${{ matrix.image }}
