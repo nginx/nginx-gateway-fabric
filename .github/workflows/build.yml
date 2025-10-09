@@ -135,9 +135,9 @@ jobs:
             name=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
-            name=quay.io/nginx/nginx-gateway-fabric/ngf,enable=${{ inputs.image == 'ngf' }}
-            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx,enable=${{ inputs.image == 'nginx' }}
-            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' }}
+            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/ngf,enable=${{ inputs.image == 'ngf' && inputs.build-os == 'ubi'}}
+            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx,enable=${{ inputs.image == 'nginx' && inputs.build-os == 'ubi' }}
+            name=quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' && inputs.build-os == 'ubi'}}
           flavor: |
             latest=${{ (inputs.tag != '' && 'true') || 'auto' }}
           tags: |
