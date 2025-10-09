@@ -24,6 +24,7 @@ type Validators struct {
 type HTTPFieldsValidator interface {
 	SkipValidation() bool
 	ValidatePathInMatch(path string) error
+	ValidatePathInRegexMatch(path string) error
 	ValidateHeaderNameInMatch(name string) error
 	ValidateHeaderValueInMatch(value string) error
 	ValidateQueryParamNameInMatch(name string) error
@@ -68,6 +69,7 @@ type SkipValidator struct{}
 func (SkipValidator) SkipValidation() bool { return true }
 
 func (SkipValidator) ValidatePathInMatch(string) error                { return nil }
+func (SkipValidator) ValidatePathInRegexMatch(string) error           { return nil }
 func (SkipValidator) ValidateHeaderNameInMatch(string) error          { return nil }
 func (SkipValidator) ValidateHeaderValueInMatch(string) error         { return nil }
 func (SkipValidator) ValidateQueryParamNameInMatch(string) error      { return nil }
