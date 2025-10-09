@@ -275,7 +275,6 @@ func processHTTPRouteRules(
 	// add warning condition for unsupported fields if any
 	if len(allRulesErrors.warn) > 0 {
 		conds = append(conds, conditions.NewRouteAcceptedUnsupportedField(allRulesErrors.warn.ToAggregate().Error()))
-		valid = true
 	}
 
 	if len(allRulesErrors.invalid) > 0 {
