@@ -34,20 +34,43 @@ jobs:
       with:
         ref: ${{ (inputs.tag != '' && !inputs.dry_run ) && format('refs/tags/v{0}', inputs.tag) || github.ref }}
 
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+      if: ${{ github.event_name != 'pull_request' && ! contains(inputs.image, 'plus') }}
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Download preflight binary
       run: |
         curl -LO https://github.com/redhat-openshift-ecosystem/openshift-preflight/releases/latest/download/preflight-linux-amd64
         chmod +x preflight-linux-amd64
         sudo mv preflight-linux-amd64 /usr/local/bin/preflight
 
-    - name: Run preflight
+    # - name: Run preflight
+    #   env:
+    #     PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
+    #   run: |
+    #     if [[ "${{ inputs.image }}" == "ngf" ]]; then
+    #     IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric:${{ inputs.image_version }}"
+    #     else
+    #     IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
+    #     fi
+    #     preflight check container "$IMAGE_PATH" > preflight-result.json
+
+    - name: Test run preflight on exiting edge images
       env:
         PYXIS_API_TOKEN: ${{ secrets.PYXIS_API_TOKEN }}
       run: |
         if [[ "${{ inputs.image }}" == "ngf" ]]; then
-        IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric:${{ inputs.image_version }}"
+        # IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric:${{ inputs.image_version }}"
+        IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric:edge-ubi"
+        elif [[ "${{ inputs.image }}" == "nginx" ]]; then
+        # IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
+        IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx:edge-ubi"
         else
-        IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
+        IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator:edge
         fi
         preflight check container "$IMAGE_PATH" > preflight-result.json
 
