@@ -57,7 +57,7 @@ jobs:
     #     else
     #     IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
     #     fi
-    #     preflight check container "$IMAGE_PAT H" > preflight-result.json
+    #     preflight check container "$IMAGE_PATH" > preflight-result.json
 
     - name: Test run preflight on exiting edge images
       env:
@@ -65,10 +65,10 @@ jobs:
       run: |
         if [[ "${{ inputs.image }}" == "ngf" ]]; then
         # IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric:${{ inputs.image_version }}"
-        IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric:edge-ubi"
+        IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric:edge-ubi"
         elif [[ "${{ inputs.image }}" == "nginx" ]]; then
         # IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
-        IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx:edge-ubi"
+        IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx:edge-ubi"
         else
         IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator:edge"
         fi
