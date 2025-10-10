@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -178,6 +179,11 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 
 	nginxPodCount := getNginxPodCount(g, clusterInfo.NodeCount)
 
+	buildOs := os.Getenv("BUILD_OS")
+	if buildOs == "" {
+		buildOs = "alpine"
+	}
+
 	data := Data{
 		Data: tel.Data{
 			ProjectName:         "NGF",
@@ -191,7 +197,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		},
 		NGFResourceCounts:              graphResourceCount,
 		ImageSource:                    c.cfg.ImageSource,
-		BuildOS:                        c.cfg.BuildOS,
+		BuildOS:                        buildOs,
 		FlagNames:                      c.cfg.Flags.Names,
 		FlagValues:                     c.cfg.Flags.Values,
 		SnippetsFiltersDirectives:      snippetsFiltersDirectives,
