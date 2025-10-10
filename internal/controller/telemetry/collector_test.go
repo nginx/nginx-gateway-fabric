@@ -172,6 +172,7 @@ var _ = Describe("Collector", Ordered, func() {
 			NGFResourceCounts:              telemetry.NGFResourceCounts{},
 			ControlPlanePodCount:           1,
 			ImageSource:                    "local",
+			BuildOS:                        "alpine",
 			FlagNames:                      flags.Names,
 			FlagValues:                     flags.Values,
 			SnippetsFiltersDirectives:      []string{},
@@ -193,6 +194,7 @@ var _ = Describe("Collector", Ordered, func() {
 			Version:                   version,
 			PodNSName:                 podNSName,
 			ImageSource:               "local",
+			BuildOS:                   "alpine",
 			Flags:                     flags,
 			NginxOneConsoleConnection: true,
 		})
@@ -519,6 +521,7 @@ var _ = Describe("Collector", Ordered, func() {
 				expData.NginxPodCount = int64(8)
 				expData.ControlPlanePodCount = int64(2)
 				expData.NginxOneConnectionEnabled = true
+				expData.BuildOS = "alpine"
 
 				data, err := dataCollector.Collect(ctx)
 				Expect(err).ToNot(HaveOccurred())

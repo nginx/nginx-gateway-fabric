@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -40,7 +41,7 @@ type ConfigurationGetter interface {
 // Data is telemetry data.
 //
 //go:generate go run -tags generator github.com/nginx/telemetry-exporter/cmd/generator -type=Data -scheme -scheme-protocol=NGFProductTelemetry -scheme-df-datatype=ngf-product-telemetry
-type Data struct {
+type Data struct { //nolint //required to skip golangci-lint-full fieldalignment
 	// ImageSource tells whether the image was built by GitHub or locally (values are 'gha', 'local', or 'unknown')
 	ImageSource string
 	tel.Data    // embedding is required by the generator.
@@ -66,6 +67,8 @@ type Data struct {
 	ControlPlanePodCount int64
 	// NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled.
 	NginxOneConnectionEnabled bool
+	// BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi).
+	BuildOS string
 }
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.
@@ -121,6 +124,8 @@ type DataCollectorConfig struct {
 	Version string
 	// ImageSource is the source of the NGF image.
 	ImageSource string
+	// BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi).
+	BuildOS string
 	// Flags contains the command-line NGF flag keys and values.
 	Flags config.Flags
 	// NginxOneConsoleConnection is a boolean that indicates whether the connection to the Nginx One Console is enabled.
@@ -174,6 +179,11 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 
 	nginxPodCount := getNginxPodCount(g, clusterInfo.NodeCount)
 
+	buildOs := os.Getenv("BUILD_OS")
+	if buildOs == "" {
+		buildOs = "alpine"
+	}
+
 	data := Data{
 		Data: tel.Data{
 			ProjectName:         "NGF",
@@ -187,6 +197,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		},
 		NGFResourceCounts:              graphResourceCount,
 		ImageSource:                    c.cfg.ImageSource,
+		BuildOS:                        buildOs,
 		FlagNames:                      c.cfg.Flags.Names,
 		FlagValues:                     c.cfg.Flags.Values,
 		SnippetsFiltersDirectives:      snippetsFiltersDirectives,

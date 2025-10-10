@@ -23,6 +23,7 @@ func (d *Data) Attributes() []attribute.KeyValue {
 	attrs = append(attrs, attribute.Int64("NginxPodCount", d.NginxPodCount))
 	attrs = append(attrs, attribute.Int64("ControlPlanePodCount", d.ControlPlanePodCount))
 	attrs = append(attrs, attribute.Bool("NginxOneConnectionEnabled", d.NginxOneConnectionEnabled))
+	attrs = append(attrs, attribute.String("BuildOS", d.BuildOS))
 
 	return attrs
 }
