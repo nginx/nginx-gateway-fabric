@@ -269,12 +269,6 @@ jobs:
           path: ${{ github.workspace }}/dist
           retention-days: 1
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: dist-${{ github.run_id }}
-          path: ${{ github.workspace }}/dist
-
   assertion:
     name: Generate and Sign Assertion Documents
     needs: [vars, binary]
