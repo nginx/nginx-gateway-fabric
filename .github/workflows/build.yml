@@ -25,6 +25,9 @@ on:
         required: false
         type: string
         default: 'ubuntu-24.04'
+    outputs:
+      image_version:
+        value: ${{ jobs.build.outputs.image_version }}
 
 defaults:
   run:
@@ -41,6 +44,8 @@ jobs:
       packages: write # for docker/build-push-action to push to GHCR
       id-token: write # for docker/login to login to NGINX registry
     runs-on: ${{ inputs.runner }}
+    outputs:
+      image_version: ${{ steps.meta.outputs.version }}
     services:
       registry:
         image: registry:3
