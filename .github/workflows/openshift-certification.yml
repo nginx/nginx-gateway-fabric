@@ -70,7 +70,7 @@ jobs:
         # IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/${{ inputs.image }}:${{ inputs.image_version }}"
         IMAGE_PATH="quay.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx:edge-ubi"
         else
-        IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator:edge
+        IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator:edge"
         fi
         preflight check container "$IMAGE_PATH" > preflight-result.json
 
