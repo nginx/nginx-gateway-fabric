@@ -9,7 +9,7 @@ on:
     branches:
       - "**"
   schedule:
-    - cron: "0 4 * * *" # run every day at 4am UTC (nightly builds)
+    - cron: "0 3 * * *" # run every day at 3am UTC (nightly builds)
   workflow_call:
     inputs:
       is_production_release:
