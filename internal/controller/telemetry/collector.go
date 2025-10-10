@@ -67,7 +67,7 @@ type Data struct { //nolint //required to skip golangci-lint-full fieldalignment
 	ControlPlanePodCount int64
 	// NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled.
 	NginxOneConnectionEnabled bool
-	// BuildOS is the OS the NGF and NGINX binary was built on.
+	// BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi).
 	BuildOS string
 }
 
@@ -124,7 +124,7 @@ type DataCollectorConfig struct {
 	Version string
 	// ImageSource is the source of the NGF image.
 	ImageSource string
-	// BuildOS is the OS the NGF and NGINX binary was built on.
+	// BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi).
 	BuildOS string
 	// Flags contains the command-line NGF flag keys and values.
 	Flags config.Flags

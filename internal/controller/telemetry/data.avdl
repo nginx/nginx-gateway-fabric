@@ -114,7 +114,7 @@ attached at the Gateway level. */
 		/** NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled. */
 		boolean? NginxOneConnectionEnabled = null;
 		
-		/** BuildOS is the OS the NGF and NGINX binary was built on. */
+		/** BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi). */
 		string? BuildOS = null;
 		
 	}
