@@ -273,6 +273,7 @@ func TestBuildGateway(t *testing.T) {
 	foo443TLSListener := createTLSListener("foo-443-tls", "foo.example.com", 443)
 
 	// invalid listeners
+	// TCP listener with hostname is invalid because TCP doesn't support hostname
 	invalidProtocolListener := createTCPListener("invalid-protocol", "bar.example.com", 80)
 	invalidPortListener := createHTTPListener("invalid-port", "invalid-port", 0)
 	invalidProtectedPortListener := createHTTPListener("invalid-protected-port", "invalid-protected-port", 9113)
@@ -787,10 +788,13 @@ func TestBuildGateway(t *testing.T) {
 							GatewayName: client.ObjectKeyFromObject(getLastCreatedGateway()),
 							Source:      invalidProtocolListener,
 							Valid:       false,
-							Attachable:  false,
-							Conditions: conditions.NewListenerUnsupportedProtocol(
-								`protocol: Unsupported value: "TCP": supported values: "HTTP", "HTTPS", "TLS"`,
+							Attachable:  true,
+							Conditions: conditions.NewListenerUnsupportedValue(
+								`hostname: Forbidden: hostname is not supported for TCP listener`,
 							),
+							SupportedKinds: []v1.RouteGroupKind{
+								{Kind: kinds.TCPRoute, Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+							},
 							Routes:   map[RouteKey]*L7Route{},
 							L4Routes: map[L4RouteKey]*L4Route{},
 						},
@@ -802,7 +806,7 @@ func TestBuildGateway(t *testing.T) {
 					Valid: true,
 				},
 			},
-			name: "invalid listener protocol",
+			name: "invalid listener protocol", // Actually tests TCP listener with invalid hostname
 		},
 		{
 			gateway: createGateway(
