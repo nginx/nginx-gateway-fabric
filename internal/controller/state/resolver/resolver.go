@@ -40,6 +40,8 @@ type Endpoint struct {
 	IPv6 bool
 	// Resolve is true if the address is a DNS name that needs to be resolved (e.g., for ExternalName services).
 	Resolve bool
+	// Weight is the weight for load balancing, used for TCPRoute/UDPRoute multi-backend support.
+	Weight int32
 }
 
 // ServiceResolverImpl implements ServiceResolver.
