@@ -34,6 +34,7 @@ type Upstream struct {
 type UpstreamServer struct {
 	Address string
 	Resolve bool
+	Weight  int32 // Weight for load balancing, default 1
 }
 
 // ServerConfig holds configuration for a stream server and IP family to be used by NGINX.

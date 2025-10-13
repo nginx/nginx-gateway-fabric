@@ -478,6 +478,11 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 	}
 }
 
+// isL4Protocol checks if the protocol is a Layer 4 protocol (TCP or UDP)
+func isL4Protocol(protocol v1.ProtocolType) bool {
+	return protocol == v1.TCPProtocolType || protocol == v1.UDPProtocolType
+}
+
 func createPortConflictResolver() listenerConflictResolver {
 	const (
 		secureProtocolGroup   int = 0
@@ -487,6 +492,8 @@ func createPortConflictResolver() listenerConflictResolver {
 		v1.TLSProtocolType:   secureProtocolGroup,
 		v1.HTTPProtocolType:  insecureProtocolGroup,
 		v1.HTTPSProtocolType: secureProtocolGroup,
+		v1.TCPProtocolType:   insecureProtocolGroup,
+		v1.UDPProtocolType:   insecureProtocolGroup,
 	}
 	conflictedPorts := make(map[v1.PortNumber]bool)
 	portProtocolOwner := make(map[v1.PortNumber]int)
@@ -536,6 +543,7 @@ func createPortConflictResolver() listenerConflictResolver {
 			foundConflict := false
 			for _, listener := range listenersByPort[port] {
 				if listener.Source.Protocol != l.Source.Protocol &&
+					!isL4Protocol(listener.Source.Protocol) && !isL4Protocol(l.Source.Protocol) &&
 					haveOverlap(l.Source.Hostname, listener.Source.Hostname) {
 					listener.Valid = false
 					conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
@@ -636,7 +644,7 @@ func haveOverlap(hostname1, hostname2 *v1.Hostname) bool {
 	return matchesWildcard(h1, h2)
 }
 
-func createTCPListenerValidator(protectedPorts ProtectedPorts) listenerValidator {
+func createL4ListenerValidator(protocol v1.ProtocolType, protectedPorts ProtectedPorts) listenerValidator {
 	return func(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
 		if err := validateListenerPort(listener.Port, protectedPorts); err != nil {
 			path := field.NewPath("port")
@@ -646,13 +654,13 @@ func createTCPListenerValidator(protectedPorts ProtectedPorts) listenerValidator
 
 		if listener.TLS != nil {
 			path := field.NewPath("tls")
-			valErr := field.Forbidden(path, "tls is not supported for TCP listener")
+			valErr := field.Forbidden(path, fmt.Sprintf("tls is not supported for %s listener", protocol))
 			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
 		}
 
 		if listener.Hostname != nil {
 			path := field.NewPath("hostname")
-			valErr := field.Forbidden(path, "hostname is not supported for TCP listener")
+			valErr := field.Forbidden(path, fmt.Sprintf("hostname is not supported for %s listener", protocol))
 			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
 		}
 
@@ -660,28 +668,12 @@ func createTCPListenerValidator(protectedPorts ProtectedPorts) listenerValidator
 	}
 }
 
+func createTCPListenerValidator(protectedPorts ProtectedPorts) listenerValidator {
+	return createL4ListenerValidator(v1.TCPProtocolType, protectedPorts)
+}
+
 func createUDPListenerValidator(protectedPorts ProtectedPorts) listenerValidator {
-	return func(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
-		if err := validateListenerPort(listener.Port, protectedPorts); err != nil {
-			path := field.NewPath("port")
-			valErr := field.Invalid(path, listener.Port, err.Error())
-			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
-		}
-
-		if listener.TLS != nil {
-			path := field.NewPath("tls")
-			valErr := field.Forbidden(path, "tls is not supported for UDP listener")
-			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
-		}
-
-		if listener.Hostname != nil {
-			path := field.NewPath("hostname")
-			valErr := field.Forbidden(path, "hostname is not supported for UDP listener")
-			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
-		}
-
-		return conds, true
-	}
+	return createL4ListenerValidator(v1.UDPProtocolType, protectedPorts)
 }
 
 func createOverlappingTLSConfigResolver() listenerConflictResolver {
