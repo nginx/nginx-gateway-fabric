@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
@@ -174,7 +175,8 @@ func TestCreateStreamServers(t *testing.T) {
 		},
 	}
 
-	streamServers := createStreamServers(conf)
+	logger := logr.Discard()
+	streamServers := createStreamServers(logger, conf)
 
 	g := NewWithT(t)
 
@@ -405,7 +407,8 @@ func TestCreateStreamServersWithNone(t *testing.T) {
 		TLSPassthroughServers: nil,
 	}
 
-	streamServers := createStreamServers(conf)
+	logger := logr.Discard()
+	streamServers := createStreamServers(logger, conf)
 
 	g := NewWithT(t)
 
