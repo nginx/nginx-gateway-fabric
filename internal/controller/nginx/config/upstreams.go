@@ -118,9 +118,15 @@ func (g GeneratorImpl) createStreamUpstream(up dataplane.Upstream) stream.Upstre
 		if ep.IPv6 {
 			format = "[%s]:%d"
 		}
+		// Default weight to 1 if not specified
+		weight := ep.Weight
+		if weight == 0 {
+			weight = 1
+		}
 		upstreamServers[idx] = stream.UpstreamServer{
 			Address: fmt.Sprintf(format, ep.Address, ep.Port),
 			Resolve: ep.Resolve,
+			Weight:  weight,
 		}
 	}
 
