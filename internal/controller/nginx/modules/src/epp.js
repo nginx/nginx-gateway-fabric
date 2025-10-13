@@ -55,5 +55,4 @@ async function getEndpoint(r) {
 
 	r.internalRedirect(r.variables[EPP_INTERNAL_PATH_VAR] + args);
 }
-
 export default { getEndpoint };

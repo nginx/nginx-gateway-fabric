@@ -453,21 +453,16 @@ func createInternalLocationsForRule(
 			intInfLocation := initializeInternalInferenceRedirectLocation(pathRuleIdx, matchRuleIdx)
 			for _, b := range r.BackendGroup.Backends {
 				if b.EndpointPickerConfig != nil {
-					fmt.Println("backend with endpoint picker found", b.EndpointPickerConfig)
 					var portNum int
 					if b.EndpointPickerConfig.Port != nil {
 						portNum = int(b.EndpointPickerConfig.Port.Number)
 					}
 					intInfLocation.EPPInternalPath = intLocation.Path
-					fmt.Println("ns name in createInternalLocationsForRule", b.EndpointPickerNsName)
 					if b.EndpointPickerNsName != "" {
-						fmt.Println("sets the right thing", b.EndpointPickerNsName)
 						intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name) + "." + b.EndpointPickerNsName
 					} else {
-						fmt.Println("sets the wrong thing")
 						intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name)
 					}
-					fmt.Println("epp host set to", intInfLocation.EPPHost)
 					intInfLocation.EPPPort = portNum
 				}
 			}

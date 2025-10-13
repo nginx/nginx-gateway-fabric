@@ -169,7 +169,8 @@ type RouteBackendRef struct {
 	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
 	EndpointPickerConfig *inference.EndpointPickerRef
 
-	// EndpointPickerNsName is the namespace where the EndpointPicker is deployed, if this backendRef is for an InferencePool.
+	// EndpointPickerNsName is the namespace where the EndpointPicker is deployed,
+	// if this backendRef is for an InferencePool.
 	EndpointPickerNsName string
 
 	Filters []any

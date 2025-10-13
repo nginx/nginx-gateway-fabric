@@ -33,7 +33,8 @@ type BackendRef struct {
 	BackendTLSPolicy *BackendTLSPolicy
 	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
 	EndpointPickerConfig *inference.EndpointPickerRef
-	// EndpointPickerNsName is the namespace where the EndpointPicker is deployed, if this backendRef is for an InferencePool.
+	// EndpointPickerNsName is the namespace where the EndpointPicker is deployed,
+	// if this backendRef is for an InferencePool.
 	EndpointPickerNsName string
 	// InvalidForGateways is a map of Gateways for which this BackendRef is invalid for, with the corresponding
 	// condition. Certain NginxProxy configurations may result in a backend not being valid for some Gateways,
@@ -123,8 +124,6 @@ func addBackendRefsToRules(
 				}
 
 				if pool, exists := referencedInferencePools[poolName]; exists {
-					// if the InferencePool is invalid, add a condition and skip creating the BackendRef
-					fmt.Println("Checking validity for InferencePool:", poolName, "Valid:", pool.Valid)
 					if !pool.Valid {
 						route.Conditions = append(route.Conditions, conditions.NewRouteBackendRefUnsupportedValue(
 							fmt.Sprintf("Referenced InferencePool %s/%s is invalid",
@@ -324,8 +323,6 @@ func createBackendRef(
 		EndpointPickerConfig: ref.EndpointPickerConfig,
 		EndpointPickerNsName: ref.EndpointPickerNsName,
 	}
-
-	fmt.Println("ns name in graph", backendRef.EndpointPickerNsName)
 
 	return backendRef, conds
 }

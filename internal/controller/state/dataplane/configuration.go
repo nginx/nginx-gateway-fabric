@@ -402,8 +402,6 @@ func newBackendGroup(
 			EndpointPickerConfig: ref.EndpointPickerConfig,
 			EndpointPickerNsName: ref.EndpointPickerNsName,
 		})
-
-		fmt.Println("backend ref in configuration", backends)
 	}
 
 	return BackendGroup{

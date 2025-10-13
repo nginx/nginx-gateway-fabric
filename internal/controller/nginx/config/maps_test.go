@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -419,7 +418,6 @@ func TestBuildInferenceMaps(t *testing.T) {
 	}
 
 	maps := buildInferenceMaps([]dataplane.BackendGroup{group})
-	fmt.Println("maps", maps)
 	g.Expect(maps).To(HaveLen(2))
 	g.Expect(maps[0].Source).To(Equal("$inference_workload_endpoint"))
 	g.Expect(maps[0].Variable).To(Equal("$inference_backend_upstream1"))
