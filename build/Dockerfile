@@ -17,6 +17,7 @@ COPY --from=ca-certs-provider --link /etc/ssl/certs/ca-certificates.crt /etc/ssl
 USER 101:1001
 ARG BUILD_AGENT
 ENV BUILD_AGENT=${BUILD_AGENT}
+ENV BUILD_OS=alpine
 ENTRYPOINT [ "/usr/bin/gateway" ]
 
 FROM common AS container
