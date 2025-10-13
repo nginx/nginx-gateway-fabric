@@ -4,6 +4,7 @@ import (
 	"fmt"
 	gotemplate "text/template"
 
+	"github.com/go-logr/logr"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -13,7 +14,7 @@ import (
 var streamServersTemplate = gotemplate.Must(gotemplate.New("streamServers").Parse(streamServersTemplateText))
 
 func (g GeneratorImpl) executeStreamServers(conf dataplane.Configuration) []executeResult {
-	streamServers := createStreamServers(conf)
+	streamServers := createStreamServers(g.logger, conf)
 
 	streamServerConfig := stream.ServerConfig{
 		Servers:     streamServers,
@@ -32,7 +33,7 @@ func (g GeneratorImpl) executeStreamServers(conf dataplane.Configuration) []exec
 	}
 }
 
-func createStreamServers(conf dataplane.Configuration) []stream.Server {
+func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []stream.Server {
 	totalServers := len(conf.TLSPassthroughServers) + len(conf.TCPServers) + len(conf.UDPServers)
 	if totalServers == 0 {
 		return nil
@@ -85,8 +86,23 @@ func createStreamServers(conf dataplane.Configuration) []stream.Server {
 		streamServers = append(streamServers, streamServer)
 	}
 
+	// Process Layer4 servers (TCP and UDP)
+	processLayer4Servers(logger, conf.TCPServers, conf.UDPServers, upstreams, portSet, &streamServers)
+
+	return streamServers
+}
+
+// processLayer4Servers processes TCP and UDP servers to create stream servers.
+func processLayer4Servers(
+	logger logr.Logger,
+	tcpServers []dataplane.Layer4VirtualServer,
+	udpServers []dataplane.Layer4VirtualServer,
+	upstreams map[string]dataplane.Upstream,
+	portSet map[int32]struct{},
+	streamServers *[]stream.Server,
+) {
 	// Process TCP servers
-	for i, server := range conf.TCPServers {
+	for i, server := range tcpServers {
 		if _, inPortSet := portSet[server.Port]; inPortSet {
 			continue // Skip if port already in use
 		}
@@ -97,15 +113,19 @@ func createStreamServers(conf dataplane.Configuration) []stream.Server {
 				StatusZone: fmt.Sprintf("tcp_%d", server.Port),
 				ProxyPass:  server.UpstreamName,
 			}
-			streamServers = append(streamServers, streamServer)
+			*streamServers = append(*streamServers, streamServer)
 			portSet[server.Port] = struct{}{}
 		} else {
-			fmt.Printf("DEBUG: createStreamServers - TCP Server %d: Skipped - upstream not found or no endpoints\n", i)
+			logger.V(1).Info("TCP Server skipped - upstream not found or no endpoints",
+				"serverIndex", i,
+				"port", server.Port,
+				"upstreamName", server.UpstreamName,
+			)
 		}
 	}
 
 	// Process UDP servers
-	for _, server := range conf.UDPServers {
+	for _, server := range udpServers {
 		if _, inPortSet := portSet[server.Port]; inPortSet {
 			continue // Skip if port already in use
 		}
@@ -120,12 +140,10 @@ func createStreamServers(conf dataplane.Configuration) []stream.Server {
 					ProxyTimeout: "1s",
 				},
 			}
-			streamServers = append(streamServers, streamServer)
+			*streamServers = append(*streamServers, streamServer)
 			portSet[server.Port] = struct{}{}
 		}
 	}
-
-	return streamServers
 }
 
 func getRewriteClientIPSettingsForStream(

@@ -74,8 +74,8 @@ func BuildConfiguration(
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
 		TLSPassthroughServers: buildPassthroughServers(gateway),
-		TCPServers:            buildTCPServers(gateway),
-		UDPServers:            buildUDPServers(gateway),
+		TCPServers:            buildTCPServers(logger, gateway),
+		UDPServers:            buildUDPServers(logger, gateway),
 		Upstreams:             upstreams,
 		StreamUpstreams: buildStreamUpstreams(
 			ctx,
@@ -84,10 +84,10 @@ func BuildConfiguration(
 			serviceResolver,
 			g.ReferencedServices,
 			baseHTTPConfig.IPFamily),
+		TCPUpstreams:  buildTCPUpstreams(ctx, logger, gateway, serviceResolver, baseHTTPConfig.IPFamily),
+		UDPUpstreams:  buildUDPUpstreams(ctx, logger, gateway, serviceResolver, baseHTTPConfig.IPFamily),
 		BackendGroups: backendGroups,
 		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway.Listeners),
-		TCPUpstreams:          buildTCPUpstreams(ctx, gateway, serviceResolver, baseHTTPConfig.IPFamily),
-		UDPUpstreams:          buildUDPUpstreams(ctx, gateway, serviceResolver, baseHTTPConfig.IPFamily),
 		CertBundles: buildCertBundles(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
@@ -175,20 +175,21 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 	return passthroughServers
 }
 
-// buildTCPServers builds TCPServers from TCPRoutes attached to listeners.
-func buildTCPServers(gateway *graph.Gateway) []Layer4VirtualServer {
-	var tcpServers []Layer4VirtualServer
+// buildL4Servers builds Layer4 servers (TCP or UDP) from routes attached to listeners.
+func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.ProtocolType) []Layer4VirtualServer {
+	var servers []Layer4VirtualServer
+	protocolName := string(protocol)
 
 	for _, l := range gateway.Listeners {
-		if !l.Valid || l.Source.Protocol != v1.TCPProtocolType {
+		if !l.Valid || l.Source.Protocol != protocol {
 			continue
 		}
 
 		if len(l.L4Routes) > 1 {
-			fmt.Printf(
-				"WARN: Listener %s has %d TCPRoutes, which is not supported. Skipping.",
-				l.Name,
-				len(l.L4Routes),
+			logger.V(1).Info("Listener has multiple routes, which is not supported, skipping",
+				"listener", l.Name,
+				"protocol", protocolName,
+				"routeCount", len(l.L4Routes),
 			)
 			continue
 		}
@@ -198,54 +199,53 @@ func buildTCPServers(gateway *graph.Gateway) []Layer4VirtualServer {
 				continue
 			}
 
-			upstreamName := r.Spec.BackendRef.ServicePortReference()
-			tcpServer := Layer4VirtualServer{
-				Hostname:     "", // TCP doesn't use hostnames
+			// Use helper method to get all backend references
+			backendRefs := r.Spec.GetBackendRefs()
+
+			if len(backendRefs) == 0 {
+				logger.V(1).Info("Route has no valid backend references, skipping",
+					"route", r.Source.GetName(),
+					"protocol", protocolName,
+				)
+				continue
+			}
+
+			// For single backend, use direct upstream name
+			// For multiple backends, we'll create a combined upstream name based on the route
+			var upstreamName string
+			if len(backendRefs) == 1 {
+				upstreamName = backendRefs[0].ServicePortReference()
+			} else {
+				// For multiple backends, create a group upstream name
+				// Format: protocol_namespace_routename
+				upstreamName = fmt.Sprintf("%s_%s_%s",
+					protocolName,
+					r.Source.GetNamespace(),
+					r.Source.GetName(),
+				)
+			}
+
+			server := Layer4VirtualServer{
+				Hostname:     "", // Layer4 doesn't use hostnames
 				UpstreamName: upstreamName,
 				Port:         int32(l.Source.Port),
 			}
 
-			tcpServers = append(tcpServers, tcpServer)
+			servers = append(servers, server)
 		}
 	}
 
-	return tcpServers
+	return servers
+}
+
+// buildTCPServers builds TCPServers from TCPRoutes attached to listeners.
+func buildTCPServers(logger logr.Logger, gateway *graph.Gateway) []Layer4VirtualServer {
+	return buildL4Servers(logger, gateway, v1.TCPProtocolType)
 }
 
 // buildUDPServers builds UDPServers from UDPRoutes attached to listeners.
-func buildUDPServers(gateway *graph.Gateway) []Layer4VirtualServer {
-	var udpServers []Layer4VirtualServer
-
-	for _, l := range gateway.Listeners {
-		if !l.Valid || l.Source.Protocol != v1.UDPProtocolType {
-			continue
-		}
-
-		if len(l.L4Routes) > 1 {
-			fmt.Printf(
-				"WARN: Listener %s has %d UDPRoutes, which is not supported. Skipping.",
-				l.Name,
-				len(l.L4Routes),
-			)
-			continue
-		}
-
-		for _, r := range l.L4Routes {
-			if !r.Valid {
-				continue
-			}
-
-			udpServer := Layer4VirtualServer{
-				Hostname:     "", // UDP doesn't use hostnames
-				UpstreamName: r.Spec.BackendRef.ServicePortReference(),
-				Port:         int32(l.Source.Port),
-			}
-
-			udpServers = append(udpServers, udpServer)
-		}
-	}
-
-	return udpServers
+func buildUDPServers(logger logr.Logger, gateway *graph.Gateway) []Layer4VirtualServer {
+	return buildL4Servers(logger, gateway, v1.UDPProtocolType)
 }
 
 // buildStreamUpstreams builds all stream upstreams.
@@ -324,17 +324,22 @@ func buildStreamUpstreams(
 	return upstreams
 }
 
-// buildTCPUpstreams builds all TCP upstreams.
-func buildTCPUpstreams(
+// buildL4Upstreams builds Layer4 upstreams (TCP or UDP) from routes attached to listeners.
+func buildL4Upstreams(
 	ctx context.Context,
+	logger logr.Logger,
 	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
 	ipFamily IPFamilyType,
+	protocol v1.ProtocolType,
 ) []Upstream {
 	uniqueUpstreams := make(map[string]Upstream)
 
+	protocolName := string(protocol)
+	gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
+
 	for _, l := range gateway.Listeners {
-		if !l.Valid || l.Source.Protocol != v1.TCPProtocolType {
+		if !l.Valid || l.Source.Protocol != protocol {
 			continue
 		}
 
@@ -343,36 +348,93 @@ func buildTCPUpstreams(
 				continue
 			}
 
-			br := route.Spec.BackendRef
+			// Use helper method to get all backend references
+			backendRefs := route.Spec.GetBackendRefs()
 
-			if !br.Valid {
+			if len(backendRefs) == 0 {
 				continue
 			}
 
-			gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
-			if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
-				continue
-			}
+			// For single backend: create one upstream with service name
+			// For multiple backends: create individual upstreams + one combined upstream with weighted endpoints
+			if len(backendRefs) == 1 {
+				br := backendRefs[0]
+				if !br.Valid {
+					continue
+				}
 
-			upstreamName := br.ServicePortReference()
+				if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+					continue
+				}
 
-			if _, exist := uniqueUpstreams[upstreamName]; exist {
-				continue
-			}
+				upstreamName := br.ServicePortReference()
 
-			var errMsg string
+				if _, exist := uniqueUpstreams[upstreamName]; exist {
+					continue
+				}
 
-			allowedAddressType := getAllowedAddressType(ipFamily)
+				var errMsg string
+				allowedAddressType := getAllowedAddressType(ipFamily)
 
-			eps, err := serviceResolver.Resolve(ctx, br.SvcNsName, br.ServicePort, allowedAddressType)
-			if err != nil {
-				errMsg = err.Error()
-			}
+				eps, err := serviceResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
+				if err != nil {
+					errMsg = err.Error()
+				}
 
-			uniqueUpstreams[upstreamName] = Upstream{
-				Name:      upstreamName,
-				Endpoints: eps,
-				ErrorMsg:  errMsg,
+				uniqueUpstreams[upstreamName] = Upstream{
+					Name:      upstreamName,
+					Endpoints: eps,
+					ErrorMsg:  errMsg,
+				}
+			} else {
+				// Multiple backends: create a combined upstream with weighted endpoints
+				combinedUpstreamName := fmt.Sprintf("%s_%s_%s",
+					protocolName,
+					route.Source.GetNamespace(),
+					route.Source.GetName(),
+				)
+
+				if _, exist := uniqueUpstreams[combinedUpstreamName]; exist {
+					continue
+				}
+
+				var combinedEndpoints []resolver.Endpoint
+				var errMsgs []string
+				allowedAddressType := getAllowedAddressType(ipFamily)
+
+				// Collect endpoints from all backends with their weights
+				for _, br := range backendRefs {
+					if !br.Valid {
+						continue
+					}
+
+					if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+						continue
+					}
+
+					eps, err := serviceResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
+					if err != nil {
+						errMsgs = append(errMsgs, err.Error())
+						continue
+					}
+
+					// Add weight to each endpoint
+					for _, ep := range eps {
+						ep.Weight = br.Weight
+						combinedEndpoints = append(combinedEndpoints, ep)
+					}
+				}
+
+				var errMsg string
+				if len(errMsgs) > 0 {
+					errMsg = fmt.Sprintf("some backends failed: %v", errMsgs)
+				}
+
+				uniqueUpstreams[combinedUpstreamName] = Upstream{
+					Name:      combinedUpstreamName,
+					Endpoints: combinedEndpoints,
+					ErrorMsg:  errMsg,
+				}
 			}
 		}
 	}
@@ -390,69 +452,26 @@ func buildTCPUpstreams(
 	return upstreams
 }
 
-// buildUDPUpstreams builds all UDP upstreams.
-func buildUDPUpstreams(
+// buildTCPUpstreams builds all TCP upstreams.
+func buildTCPUpstreams(
 	ctx context.Context,
+	logger logr.Logger,
 	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
 	ipFamily IPFamilyType,
 ) []Upstream {
-	uniqueUpstreams := make(map[string]Upstream)
+	return buildL4Upstreams(ctx, logger, gateway, serviceResolver, ipFamily, v1.TCPProtocolType)
+}
 
-	for _, l := range gateway.Listeners {
-		if !l.Valid || l.Source.Protocol != v1.UDPProtocolType {
-			continue
-		}
-
-		for _, route := range l.L4Routes {
-			if !route.Valid {
-				continue
-			}
-
-			br := route.Spec.BackendRef
-
-			if !br.Valid {
-				continue
-			}
-
-			gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
-			if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
-				continue
-			}
-
-			upstreamName := br.ServicePortReference()
-
-			if _, exist := uniqueUpstreams[upstreamName]; exist {
-				continue
-			}
-
-			var errMsg string
-
-			allowedAddressType := getAllowedAddressType(ipFamily)
-
-			eps, err := serviceResolver.Resolve(ctx, br.SvcNsName, br.ServicePort, allowedAddressType)
-			if err != nil {
-				errMsg = err.Error()
-			}
-
-			uniqueUpstreams[upstreamName] = Upstream{
-				Name:      upstreamName,
-				Endpoints: eps,
-				ErrorMsg:  errMsg,
-			}
-		}
-	}
-
-	if len(uniqueUpstreams) == 0 {
-		return nil
-	}
-
-	upstreams := make([]Upstream, 0, len(uniqueUpstreams))
-
-	for _, up := range uniqueUpstreams {
-		upstreams = append(upstreams, up)
-	}
-	return upstreams
+// buildUDPUpstreams builds all UDP upstreams.
+func buildUDPUpstreams(
+	ctx context.Context,
+	logger logr.Logger,
+	gateway *graph.Gateway,
+	serviceResolver resolver.ServiceResolver,
+	ipFamily IPFamilyType,
+) []Upstream {
+	return buildL4Upstreams(ctx, logger, gateway, serviceResolver, ipFamily, v1.UDPProtocolType)
 }
 
 // buildSSLKeyPairs builds the SSLKeyPairs from the Secrets. It will only include Secrets that are referenced by
