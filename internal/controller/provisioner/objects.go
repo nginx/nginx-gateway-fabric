@@ -45,11 +45,6 @@ const (
 	defaultInitialDelaySeconds = int32(3)
 )
 
-type PortInfo struct {
-	Port     int32
-	Protocol corev1.Protocol
-}
-
 var emptyDirVolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
 
 //nolint:gocyclo // will refactor at some point
@@ -158,7 +153,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		openshiftObjs = p.buildOpenshiftObjects(objectMeta)
 	}
 
-	ports := make(map[int32]PortInfo)
+	ports := make(map[int32]corev1.Protocol)
 	for _, listener := range gateway.Spec.Listeners {
 		var protocol corev1.Protocol
 		switch listener.Protocol {
@@ -169,7 +164,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		default:
 			protocol = corev1.ProtocolTCP
 		}
-		ports[int32(listener.Port)] = PortInfo{Port: int32(listener.Port), Protocol: protocol}
+		ports[int32(listener.Port)] = protocol
 	}
 
 	// Create separate copies of objectMeta for service and deployment to avoid shared map references
@@ -543,7 +538,7 @@ func (p *NginxProvisioner) buildOpenshiftObjects(objectMeta metav1.ObjectMeta) [
 func buildNginxService(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
-	ports map[int32]PortInfo,
+	ports map[int32]corev1.Protocol,
 	selectorLabels map[string]string,
 	addresses []gatewayv1.GatewaySpecAddress,
 ) (*corev1.Service, error) {
@@ -566,17 +561,17 @@ func buildNginxService(
 	}
 
 	servicePorts := make([]corev1.ServicePort, 0, len(ports))
-	for _, portInfo := range ports {
+	for port, protocol := range ports {
 		servicePort := corev1.ServicePort{
-			Name:       fmt.Sprintf("port-%d", portInfo.Port),
-			Port:       portInfo.Port,
-			TargetPort: intstr.FromInt32(portInfo.Port),
-			Protocol:   portInfo.Protocol,
+			Name:       fmt.Sprintf("port-%d", port),
+			Port:       port,
+			TargetPort: intstr.FromInt32(port),
+			Protocol:   protocol,
 		}
 
 		if serviceType != corev1.ServiceTypeClusterIP {
 			for _, nodePort := range serviceCfg.NodePorts {
-				if nodePort.ListenerPort == portInfo.Port {
+				if nodePort.ListenerPort == port {
 					servicePort.NodePort = nodePort.Port
 				}
 			}
@@ -654,7 +649,7 @@ func (p *NginxProvisioner) buildNginxDeployment(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ngxIncludesConfigMapName string,
 	ngxAgentConfigMapName string,
-	ports map[int32]PortInfo,
+	ports map[int32]corev1.Protocol,
 	selectorLabels map[string]string,
 	agentTLSSecretName string,
 	dockerSecretNames map[string]string,
@@ -844,7 +839,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ngxIncludesConfigMapName string,
 	ngxAgentConfigMapName string,
-	ports map[int32]PortInfo,
+	ports map[int32]corev1.Protocol,
 	agentTLSSecretName string,
 	dockerSecretNames map[string]string,
 	jwtSecretName string,
@@ -853,11 +848,11 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	dataplaneKeySecretName string,
 ) corev1.PodTemplateSpec {
 	containerPorts := make([]corev1.ContainerPort, 0, len(ports))
-	for _, portInfo := range ports {
+	for port, protocol := range ports {
 		containerPort := corev1.ContainerPort{
-			Name:          fmt.Sprintf("port-%d", portInfo.Port),
-			ContainerPort: portInfo.Port,
-			Protocol:      portInfo.Protocol,
+			Name:          fmt.Sprintf("port-%d", port),
+			ContainerPort: port,
+			Protocol:      protocol,
 		}
 		containerPorts = append(containerPorts, containerPort)
 	}
