@@ -10,40 +10,48 @@ const WORKLOAD_ENDPOINT_VAR = 'inference_workload_endpoint';
 const SHIM_URI = 'http://127.0.0.1:54800';
 
 async function getEndpoint(r) {
-	if (!r.variables[EPP_HOST_HEADER_VAR] || !r.variables[EPP_PORT_HEADER_VAR]) {
-		throw Error(
-			`Missing required variables: ${EPP_HOST_HEADER_VAR} and/or ${EPP_PORT_HEADER_VAR}`,
-		);
-	}
-	if (!r.variables[EPP_INTERNAL_PATH_VAR]) {
-		throw Error(`Missing required variable: ${EPP_INTERNAL_PATH_VAR}`);
-	}
-
-	let headers = Object.assign({}, r.headersIn);
-	headers[EPP_HOST_HEADER] = r.variables[EPP_HOST_HEADER_VAR];
-	headers[EPP_PORT_HEADER] = r.variables[EPP_PORT_HEADER_VAR];
-
-	try {
-		const response = await ngx.fetch(SHIM_URI, {
-			method: r.method,
-			headers: headers,
-			body: r.requestText,
-		});
-		const endpointHeader = response.headers.get(ENDPOINT_HEADER);
-		if (response.status === 200 && endpointHeader) {
-			r.variables[WORKLOAD_ENDPOINT_VAR] = endpointHeader;
-			r.log(
-				`found inference endpoint from EndpointPicker: ${r.variables[WORKLOAD_ENDPOINT_VAR]}`,
-			);
-		} else {
-			const body = await response.text();
-			r.error(
-				`could not get specific inference endpoint from EndpointPicker; ` +
-					`status: ${response.status}; body: ${body}`,
+	const headerEndpoint = r.headersIn['test-epp-endpoint-selection'];
+	if (headerEndpoint) {
+		// Header is provided: Use endpoints directly and bypass Shim server
+		const endpoints = headerEndpoint.split(',').map(e => e.trim());
+		r.variables[WORKLOAD_ENDPOINT_VAR] = endpoints.join(',');
+		r.log(`Using header-specified endpoints: ${r.variables[WORKLOAD_ENDPOINT_VAR]}`);
+	} else {
+		if (!r.variables[EPP_HOST_HEADER_VAR] || !r.variables[EPP_PORT_HEADER_VAR]) {
+			throw Error(
+				`Missing required variables: ${EPP_HOST_HEADER_VAR} and/or ${EPP_PORT_HEADER_VAR}`,
 			);
 		}
-	} catch (err) {
-		r.error(`Error in ngx.fetch: ${err}`);
+		if (!r.variables[EPP_INTERNAL_PATH_VAR]) {
+			throw Error(`Missing required variable: ${EPP_INTERNAL_PATH_VAR}`);
+		}
+
+		let headers = Object.assign({}, r.headersIn);
+		headers[EPP_HOST_HEADER] = r.variables[EPP_HOST_HEADER_VAR];
+		headers[EPP_PORT_HEADER] = r.variables[EPP_PORT_HEADER_VAR];
+
+		try {
+			const response = await ngx.fetch(SHIM_URI, {
+				method: r.method,
+				headers: headers,
+				body: r.requestText,
+			});
+			const endpointHeader = response.headers.get(ENDPOINT_HEADER);
+			if (response.status === 200 && endpointHeader) {
+				r.variables[WORKLOAD_ENDPOINT_VAR] = endpointHeader;
+				r.log(
+					`found inference endpoint from EndpointPicker: ${r.variables[WORKLOAD_ENDPOINT_VAR]}`,
+				);
+			} else {
+				const body = await response.text();
+				r.error(
+					`could not get specific inference endpoint from EndpointPicker; ` +
+						`status: ${response.status}; body: ${body}`,
+				);
+			}
+		} catch (err) {
+			r.error(`Error in ngx.fetch: ${err}`);
+		}
 	}
 
 	// If performing a rewrite, $request_uri won't be used,

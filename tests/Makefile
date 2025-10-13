@@ -18,9 +18,8 @@ EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
 SKIP_TESTS =
 CEL_TEST_TARGET =
-INFERENCE_SUPPORTED_FEATURES = EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService
-# InferencePoolResolvedRefsCondition -- checks if deleting the route removes the condition. Only fails for that part, known bug in NGF
-INFERENCE_SKIP_TESTS = GatewayFollowingEPPRouting,InferencePoolResolvedRefsCondition
+INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting
+INFERENCE_SKIP_TESTS = InferencePoolResolvedRefsCondition, EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService
 
 # Check if ENABLE_EXPERIMENTAL is true
 ifeq ($(ENABLE_EXPERIMENTAL),true)

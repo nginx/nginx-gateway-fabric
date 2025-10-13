@@ -103,4 +103,15 @@ describe('getEndpoint', () => {
 		await epp.getEndpoint(r);
 		expect(r.internalRedirect).toHaveBeenCalledWith('/foo?a=1&b=2');
 	});
+	it('returns the header-specified endpoints if provided', async () => {
+		const r = makeRequest({
+			variables: {},
+			headersIn: { 'X-Endpoint-Selector': '10.1.2.3, 10.1.2.4' },
+		});
+		await epp.getEndpoint(r);
+		expect(r.variables.inference_workload_endpoint).toBe('10.1.2.3,10.1.2.4');
+		expect(r.log).toHaveBeenCalledWith(
+			expect.stringContaining('Using header-specified endpoints'),
+		);
+	});
 });
