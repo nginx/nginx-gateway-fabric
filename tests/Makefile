@@ -18,8 +18,8 @@ EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
 SKIP_TESTS =
 CEL_TEST_TARGET =
-INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting,EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService
-INFERENCE_SKIP_TESTS = InferencePoolResolvedRefsCondition
+INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting,EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService,InferencePoolResolvedRefsCondition
+INFERENCE_SKIP_TESTS = 
 
 # Check if ENABLE_EXPERIMENTAL is true
 ifeq ($(ENABLE_EXPERIMENTAL),true)

@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -361,7 +362,28 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
-	inferencePoolReqs := status.PrepareInferencePoolRequests(gr.ReferencedInferencePools, transitionTime)
+
+	// unfortunately, status is not on clusterState stored by the change processor, so we need to make a k8sAPI call here
+	ipList := &inference.InferencePoolList{}
+	err = h.cfg.k8sClient.List(ctx, ipList)
+	if err != nil {
+		msg := "error listing InferencePools for status update"
+		h.cfg.logger.Error(err, msg)
+		h.cfg.eventRecorder.Eventf(
+			&inference.InferencePoolList{},
+			v1.EventTypeWarning,
+			"ListInferencePoolsFailed",
+			msg+": %s",
+			err.Error(),
+		)
+		ipList = &inference.InferencePoolList{} // reset to empty list to avoid nil pointer dereference
+	}
+	inferencePoolReqs := status.PrepareInferencePoolRequests(
+		gr.ReferencedInferencePools,
+		ipList,
+		gr.Gateways,
+		transitionTime,
+	)
 
 	reqs := make(
 		[]status.UpdateRequest,
