@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -37,7 +38,7 @@ func realExtProcClientFactory() extProcClientFactory {
 	return func(target string) (extprocv3.ExternalProcessorClient, func() error, error) {
 		creds := credentials.NewTLS(&tls.Config{
 			// add RootCAs or, if you have a self-signed server cert:
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: true, //nolint:gosec
 		})
 		conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(creds))
 		if err != nil {
@@ -153,8 +154,13 @@ func buildHeaderRequest(r *http.Request) *extprocv3.ProcessingRequest {
 
 	for key, values := range r.Header {
 		for _, value := range values {
+			// Normalize header keys to lowercase for case-insensitive matching
+			// This fixes the issue where Go's HTTP header normalization (Title-Case)
+			// doesn't match EPP's expected lowercase header keys
+			normalizedKey := strings.ToLower(key)
+
 			headerMap.Headers = append(headerMap.Headers, &corev3.HeaderValue{
-				Key:   key,
+				Key:   normalizedKey,
 				Value: value,
 			})
 		}

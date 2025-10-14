@@ -40,7 +40,7 @@ describe('getEndpoint', () => {
 	});
 
 	it('sets endpoint and logs on 200 with endpoint header', async () => {
-		const endpoint = 'http://endpoint';
+		const endpoint = '10.0.0.1:8080';
 		globalThis.ngx = {
 			fetch: vi.fn().mockResolvedValue({
 				status: 200,
@@ -49,7 +49,11 @@ describe('getEndpoint', () => {
 			}),
 		};
 		const r = makeRequest({
-			variables: { epp_host: 'host', epp_port: '1234', epp_internal_path: '/foo' },
+			variables: {
+				epp_host: 'host',
+				epp_port: '1234',
+				epp_internal_path: '/foo',
+			},
 		});
 		await epp.getEndpoint(r);
 		expect(r.variables.inference_workload_endpoint).toBe(endpoint);
@@ -66,7 +70,11 @@ describe('getEndpoint', () => {
 			}),
 		};
 		const r = makeRequest({
-			variables: { epp_host: 'host', epp_port: '1234', epp_internal_path: '/foo' },
+			variables: {
+				epp_host: 'host',
+				epp_port: '1234',
+				epp_internal_path: '/foo',
+			},
 		});
 		await epp.getEndpoint(r);
 		expect(r.error).toHaveBeenCalledWith(
@@ -80,7 +88,11 @@ describe('getEndpoint', () => {
 			fetch: vi.fn().mockRejectedValue(new Error('network fail')),
 		};
 		const r = makeRequest({
-			variables: { epp_host: 'host', epp_port: '1234', epp_internal_path: '/foo' },
+			variables: {
+				epp_host: 'host',
+				epp_port: '1234',
+				epp_internal_path: '/foo',
+			},
 		});
 		await epp.getEndpoint(r);
 		expect(r.error).toHaveBeenCalledWith(expect.stringContaining('Error in ngx.fetch'));
@@ -88,7 +100,7 @@ describe('getEndpoint', () => {
 	});
 
 	it('preserves args in internal redirect when args are present', async () => {
-		const endpoint = 'http://endpoint';
+		const endpoint = '10.0.0.1:8080';
 		globalThis.ngx = {
 			fetch: vi.fn().mockResolvedValue({
 				status: 200,
@@ -97,21 +109,51 @@ describe('getEndpoint', () => {
 			}),
 		};
 		const r = makeRequest({
-			variables: { epp_host: 'host', epp_port: '1234', epp_internal_path: '/foo' },
+			variables: {
+				epp_host: 'host',
+				epp_port: '1234',
+				epp_internal_path: '/foo',
+			},
 			args: { a: '1', b: '2' },
 		});
 		await epp.getEndpoint(r);
 		expect(r.internalRedirect).toHaveBeenCalledWith('/foo?a=1&b=2');
 	});
-	it('returns the header-specified endpoints if provided', async () => {
+
+	it('forwards all headers including test headers to EPP', async () => {
+		const endpoint = '10.0.0.1:8080';
+		const fetchMock = vi.fn().mockResolvedValue({
+			status: 200,
+			headers: { get: () => endpoint },
+			text: vi.fn(),
+		});
+		globalThis.ngx = {
+			fetch: fetchMock,
+		};
 		const r = makeRequest({
-			variables: {},
-			headersIn: { 'X-Endpoint-Selector': '10.1.2.3, 10.1.2.4' },
+			variables: {
+				epp_host: 'host',
+				epp_port: '1234',
+				epp_internal_path: '/foo',
+			},
+			headersIn: {
+				'test-epp-endpoint-selection': '10.0.0.1:8080,10.0.0.2:8080',
+				'content-type': 'application/json',
+			},
 		});
 		await epp.getEndpoint(r);
-		expect(r.variables.inference_workload_endpoint).toBe('10.1.2.3,10.1.2.4');
-		expect(r.log).toHaveBeenCalledWith(
-			expect.stringContaining('Using header-specified endpoints'),
+
+		// Verify that all headers (including test header) were forwarded to EPP
+		expect(fetchMock).toHaveBeenCalledWith(
+			'http://127.0.0.1:54800',
+			expect.objectContaining({
+				headers: expect.objectContaining({
+					'test-epp-endpoint-selection': '10.0.0.1:8080,10.0.0.2:8080',
+					'content-type': 'application/json',
+					'X-EPP-Host': 'host',
+					'X-EPP-Port': '1234',
+				}),
+			}),
 		);
 	});
 });

@@ -18,8 +18,8 @@ EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
 SKIP_TESTS =
 CEL_TEST_TARGET =
-INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting
-INFERENCE_SKIP_TESTS = InferencePoolResolvedRefsCondition, EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService
+INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting,EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService
+INFERENCE_SKIP_TESTS = InferencePoolResolvedRefsCondition
 
 # Check if ENABLE_EXPERIMENTAL is true
 ifeq ($(ENABLE_EXPERIMENTAL),true)
@@ -188,7 +188,7 @@ add-local-ip-to-cluster: ## Add local IP to the GKE cluster master-authorized-ne
 update-firewall-with-local-ip: ## Update the firewall rule with local IP address
 	./scripts/update-firewall-with-local-ip.sh
 
-HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.type=ClusterIP --skip-schema-validation --set nginxGateway.gwAPIInferenceExtension.enable=$(ENABLE_INFERENCE_EXTENSION) --set nginxGateway.config.logging.level=debug
+HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.type=ClusterIP --set nginxGateway.gwAPIInferenceExtension.enable=$(ENABLE_INFERENCE_EXTENSION) --set nginxGateway.config.logging.level=debug
 
 # this target is used to install the gateway-api CRDs from the main branch (only used in the nightly CI job)
 # it overrides the target in the main Makefile when the GW_API_VERSION is set to main

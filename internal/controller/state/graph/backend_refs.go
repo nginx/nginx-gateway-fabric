@@ -77,6 +77,8 @@ func addBackendRefsToRouteRules(
 
 // addHTTPBackendRefsToRules iterates over the rules of a Route and adds a list of BackendRef to each rule.
 // If a reference in a rule is invalid, the function will add a condition to the rule.
+//
+//nolint:gocyclo
 func addBackendRefsToRules(
 	route *L7Route,
 	refGrantResolver *referenceGrantResolver,

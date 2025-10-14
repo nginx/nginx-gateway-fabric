@@ -18,7 +18,6 @@ limitations under the License.
 package conformance
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -96,7 +95,6 @@ func TestConformance(t *testing.T) {
 }
 
 func TestInferenceExtensionConformance(t *testing.T) {
-	g := NewWithT(t)
 
 	t.Logf(`Running inference conformance tests with %s GatewayClass\n cleanup: %t\n`+
 		`debug: %t\n enable all features: %t \n supported extended features: [%v]\n exempt features: [%v]\n`+
@@ -106,9 +104,6 @@ func TestInferenceExtensionConformance(t *testing.T) {
 	)
 
 	opts := inference_conformance.DefaultOptions(t)
-	ipaddressType := v1.IPAddressType
-	opts.UnusableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: unusableGatewayIPAddress}}
-	opts.UsableNetworkAddresses = []v1beta1.GatewaySpecAddress{{Type: &ipaddressType, Value: "192.0.2.1"}}
 
 	opts.Implementation = conf_v1.Implementation{
 		Organization: "nginx",
@@ -119,12 +114,6 @@ func TestInferenceExtensionConformance(t *testing.T) {
 			"https://github.com/nginx/nginx-gateway-fabric/discussions/new/choose",
 		},
 	}
-
-	_, err := os.Stat(inferenceBaseManifest)
-	g.Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("base manifest file %s not found", inferenceBaseManifest))
-
-	opts.ManifestFS = append(opts.ManifestFS, os.DirFS("."))
-	opts.BaseManifests = inferenceBaseManifest
 
 	opts.ConformanceProfiles.Insert(inference_conformance.GatewayLayerProfileName)
 	inference_conformance.RunConformanceWithOptions(t, opts)

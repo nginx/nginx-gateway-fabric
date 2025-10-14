@@ -459,7 +459,7 @@ func createInternalLocationsForRule(
 					}
 					intInfLocation.EPPInternalPath = intLocation.Path
 					if b.EndpointPickerNsName != "" {
-						intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name) + "." + b.EndpointPickerNsName
+						intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name) + "." + b.EndpointPickerNsName + ".svc.cluster.local"
 					} else {
 						intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name)
 					}
@@ -517,7 +517,11 @@ func createInferenceLocationsForRule(
 						portNum = int(b.EndpointPickerConfig.Port.Number)
 					}
 					extLocations[i].EPPInternalPath = intLocation.Path
-					extLocations[i].EPPHost = string(b.EndpointPickerConfig.Name)
+					if b.EndpointPickerNsName != "" {
+						extLocations[i].EPPHost = (string(b.EndpointPickerConfig.Name) + "." + b.EndpointPickerNsName + ".svc.cluster.local") //nolint:lll
+					} else {
+						extLocations[i].EPPHost = string(b.EndpointPickerConfig.Name)
+					}
 					extLocations[i].EPPPort = portNum
 				}
 			}
