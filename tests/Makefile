@@ -85,6 +85,12 @@ run-inference-conformance-tests: ## Run inference conformance tests
 	./scripts/check-pod-exit-code.sh
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile-inference.yaml
 	rm output.txt
+	core_result=`yq '.profiles[0].core.result' conformance-profile-inference.yaml`; \
+	if [ "$$core_result" != "failure" ] ; then \
+		exit 0; \
+	else \
+		exit 2; \
+	fi
 
 .PHONY: cleanup-conformance-tests
 cleanup-conformance-tests: ## Clean up conformance tests fixtures

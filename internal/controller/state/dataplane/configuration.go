@@ -395,12 +395,14 @@ func newBackendGroup(
 		inferencePoolBackendExists = inferencePoolBackendExists || ref.IsInferencePool
 
 		backends = append(backends, Backend{
-			UpstreamName:         ref.ServicePortReference(),
-			Weight:               ref.Weight,
-			Valid:                valid,
-			VerifyTLS:            convertBackendTLS(ref.BackendTLSPolicy, gatewayName),
-			EndpointPickerConfig: ref.EndpointPickerConfig,
-			EndpointPickerNsName: ref.EndpointPickerNsName,
+			UpstreamName: ref.ServicePortReference(),
+			Weight:       ref.Weight,
+			Valid:        valid,
+			VerifyTLS:    convertBackendTLS(ref.BackendTLSPolicy, gatewayName),
+			EndpointPickerConfig: &EndpointPickerConfig{
+				NsName:            ref.EndpointPickerConfig.NsName,
+				EndpointPickerRef: ref.EndpointPickerConfig.EndpointPickerRef,
+			},
 		})
 	}
 

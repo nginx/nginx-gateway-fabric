@@ -9,7 +9,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
@@ -31,11 +30,8 @@ const (
 type BackendRef struct {
 	// BackendTLSPolicy is the BackendTLSPolicy of the Service which is referenced by the backendRef.
 	BackendTLSPolicy *BackendTLSPolicy
-	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
-	EndpointPickerConfig *inference.EndpointPickerRef
-	// EndpointPickerNsName is the namespace where the EndpointPicker is deployed,
-	// if this backendRef is for an InferencePool.
-	EndpointPickerNsName string
+	// EndpointPickerConfig holds the configuration for the EndpointPicker for this backend.
+	EndpointPickerConfig EndpointPickerConfig
 	// InvalidForGateways is a map of Gateways for which this BackendRef is invalid for, with the corresponding
 	// condition. Certain NginxProxy configurations may result in a backend not being valid for some Gateways,
 	// but not others.
@@ -126,8 +122,10 @@ func addBackendRefsToRules(
 				}
 
 				if pool, exists := referencedInferencePools[poolName]; exists {
+					// If the InferencePool is invalid, add a condition to the route
+					// and set the port to nil to avoid generating backendRefs for it.
 					if !pool.Valid {
-						route.Conditions = append(route.Conditions, conditions.NewRouteBackendRefUnsupportedValue(
+						route.Conditions = append(route.Conditions, conditions.NewRouteBackendRefInvalidInferencePool(
 							fmt.Sprintf("Referenced InferencePool %s/%s is invalid",
 								poolName.Namespace,
 								poolName.Name,
@@ -135,10 +133,11 @@ func addBackendRefsToRules(
 						))
 						continue
 					}
+
 					port := gatewayv1.PortNumber(pool.Source.Spec.TargetPorts[0].Number)
 					ref.Port = helpers.GetPointer(port)
-					ref.EndpointPickerConfig = &pool.Source.Spec.EndpointPickerRef
-					ref.EndpointPickerNsName = poolName.Namespace
+					ref.EndpointPickerConfig.EndpointPickerRef = &pool.Source.Spec.EndpointPickerRef
+					ref.EndpointPickerConfig.NsName = poolName.Namespace
 				}
 			}
 
@@ -208,7 +207,6 @@ func createBackendRef(
 			IsInferencePool:      ref.IsInferencePool,
 			InvalidForGateways:   make(map[types.NamespacedName]conditions.Condition),
 			EndpointPickerConfig: ref.EndpointPickerConfig,
-			EndpointPickerNsName: ref.EndpointPickerNsName,
 		}
 
 		return backendRef, []conditions.Condition{cond}
@@ -230,7 +228,6 @@ func createBackendRef(
 			IsInferencePool:      ref.IsInferencePool,
 			InvalidForGateways:   make(map[types.NamespacedName]conditions.Condition),
 			EndpointPickerConfig: ref.EndpointPickerConfig,
-			EndpointPickerNsName: ref.EndpointPickerNsName,
 		}
 
 		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
@@ -255,7 +252,6 @@ func createBackendRef(
 				IsInferencePool:      ref.IsInferencePool,
 				InvalidForGateways:   invalidForGateways,
 				EndpointPickerConfig: ref.EndpointPickerConfig,
-				EndpointPickerNsName: ref.EndpointPickerNsName,
 			}
 
 			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(
@@ -287,7 +283,6 @@ func createBackendRef(
 			IsInferencePool:      ref.IsInferencePool,
 			InvalidForGateways:   invalidForGateways,
 			EndpointPickerConfig: ref.EndpointPickerConfig,
-			EndpointPickerNsName: ref.EndpointPickerNsName,
 		}
 
 		return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(err.Error()))
@@ -306,7 +301,6 @@ func createBackendRef(
 				IsInferencePool:      ref.IsInferencePool,
 				InvalidForGateways:   invalidForGateways,
 				EndpointPickerConfig: ref.EndpointPickerConfig,
-				EndpointPickerNsName: ref.EndpointPickerNsName,
 			}
 
 			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedProtocol(err.Error()))
@@ -323,7 +317,6 @@ func createBackendRef(
 		IsInferencePool:      ref.IsInferencePool,
 		InvalidForGateways:   invalidForGateways,
 		EndpointPickerConfig: ref.EndpointPickerConfig,
-		EndpointPickerNsName: ref.EndpointPickerNsName,
 	}
 
 	return backendRef, conds

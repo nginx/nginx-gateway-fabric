@@ -28,6 +28,7 @@ const (
 	// HeaderMatchSeparator is the separator for constructing header-based match for NJS.
 	HeaderMatchSeparator = ":"
 	rootPath             = "/"
+	svcClusterLocal      = ".svc.cluster.local"
 )
 
 var grpcAuthorityHeader = http.Header{
@@ -453,16 +454,13 @@ func createInternalLocationsForRule(
 			intInfLocation := initializeInternalInferenceRedirectLocation(pathRuleIdx, matchRuleIdx)
 			for _, b := range r.BackendGroup.Backends {
 				if b.EndpointPickerConfig != nil {
+					eppRef := b.EndpointPickerConfig.EndpointPickerRef
 					var portNum int
-					if b.EndpointPickerConfig.Port != nil {
-						portNum = int(b.EndpointPickerConfig.Port.Number)
+					if eppRef.Port != nil {
+						portNum = int(eppRef.Port.Number)
 					}
 					intInfLocation.EPPInternalPath = intLocation.Path
-					if b.EndpointPickerNsName != "" {
-						intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name) + "." + b.EndpointPickerNsName + ".svc.cluster.local"
-					} else {
-						intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name)
-					}
+					intInfLocation.EPPHost = string(eppRef.Name) + "." + b.EndpointPickerConfig.NsName + svcClusterLocal
 					intInfLocation.EPPPort = portNum
 				}
 			}
@@ -510,18 +508,15 @@ func createInferenceLocationsForRule(
 			mirrorPercentage,
 		)
 		for _, b := range r.BackendGroup.Backends {
-			if b.EndpointPickerConfig != nil {
+			if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
 				for i := range extLocations {
+					eppRef := b.EndpointPickerConfig.EndpointPickerRef
 					var portNum int
-					if b.EndpointPickerConfig.Port != nil {
-						portNum = int(b.EndpointPickerConfig.Port.Number)
+					if eppRef.Port != nil {
+						portNum = int(eppRef.Port.Number)
 					}
 					extLocations[i].EPPInternalPath = intLocation.Path
-					if b.EndpointPickerNsName != "" {
-						extLocations[i].EPPHost = (string(b.EndpointPickerConfig.Name) + "." + b.EndpointPickerNsName + ".svc.cluster.local") //nolint:lll
-					} else {
-						extLocations[i].EPPHost = string(b.EndpointPickerConfig.Name)
-					}
+					extLocations[i].EPPHost = string(eppRef.Name) + "." + b.EndpointPickerConfig.NsName + svcClusterLocal
 					extLocations[i].EPPPort = portNum
 				}
 			}

@@ -195,7 +195,7 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 
 			// Decide what the map must return when the picker didn’t set a value.
 			var defaultResult string
-			switch backend.EndpointPickerConfig.FailureMode {
+			switch backend.EndpointPickerConfig.EndpointPickerRef.FailureMode {
 			case inference.EndpointPickerFailClose:
 				defaultResult = invalidBackendRef
 			case inference.EndpointPickerFailOpen:

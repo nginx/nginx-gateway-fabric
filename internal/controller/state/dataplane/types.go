@@ -328,8 +328,7 @@ type Backend struct {
 	VerifyTLS *VerifyTLS
 	// EndpointPickerConfig holds the configuration for the EndpointPicker for this backend.
 	// This is set if this backend is for an inference workload.
-	EndpointPickerConfig *inference.EndpointPickerRef
-	EndpointPickerNsName string
+	EndpointPickerConfig *EndpointPickerConfig
 	// UpstreamName is the name of the upstream for this backend.
 	UpstreamName string
 	// Weight is the weight of the BackendRef.
@@ -338,6 +337,12 @@ type Backend struct {
 	Weight int32
 	// Valid indicates whether the Backend is valid.
 	Valid bool
+}
+
+// EndpointPickerConfig represents the configuration for the EndpointPicker extension.
+type EndpointPickerConfig struct {
+	EndpointPickerRef *inference.EndpointPickerRef
+	NsName            string
 }
 
 // VerifyTLS holds the backend TLS verification configuration.

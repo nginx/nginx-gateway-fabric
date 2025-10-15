@@ -167,16 +167,18 @@ type RouteBackendRef struct {
 	MirrorBackendIdx *int
 
 	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
-	EndpointPickerConfig *inference.EndpointPickerRef
-
-	// EndpointPickerNsName is the namespace where the EndpointPicker is deployed,
-	// if this backendRef is for an InferencePool.
-	EndpointPickerNsName string
+	EndpointPickerConfig EndpointPickerConfig
 
 	Filters []any
 
 	// IsInferencePool indicates if this backend is an InferencePool disguised as a Service.
 	IsInferencePool bool
+}
+
+// EndpointPickerConfig specifies the namespace and reference to the EndpointPicker extension.
+type EndpointPickerConfig struct {
+	EndpointPickerRef *inference.EndpointPickerRef
+	NsName            string
 }
 
 // CreateRouteKey takes a client.Object and creates a RouteKey.

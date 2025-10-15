@@ -219,6 +219,10 @@ func TestBuildConfiguration(t *testing.T) {
 		UpstreamName: fooUpstreamName,
 		Weight:       1,
 		Valid:        true,
+		EndpointPickerConfig: &EndpointPickerConfig{
+			NsName:            "",
+			EndpointPickerRef: nil,
+		},
 	}
 
 	createBackendRefs := func(validRule bool) []graph.BackendRef {

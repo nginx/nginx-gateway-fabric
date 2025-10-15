@@ -38,9 +38,6 @@ const (
 	// unusableGatewayIPAddress 198.51.100.0 is a publicly reserved IP address specifically for documentation.
 	// This is needed to give the conformance tests an example valid ip unusable address.
 	unusableGatewayIPAddress = "198.51.100.0"
-
-	// inferenceBaseManifest is the base manifest used to deploy the resources needed for inference conformance tests.
-	inferenceBaseManifest = "manifests/base.yaml"
 )
 
 func TestConformance(t *testing.T) {

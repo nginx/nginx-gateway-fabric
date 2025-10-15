@@ -143,6 +143,7 @@ server {
         include /etc/nginx/grpc-error-pages.conf;
         {{- end }}
 
+        proxy_http_version 1.1;
         {{- if $l.ProxyPass -}}
             {{ range $h := $l.ProxySetHeaders }}
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";
