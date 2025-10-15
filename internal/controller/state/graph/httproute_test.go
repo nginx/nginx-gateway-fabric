@@ -1301,11 +1301,11 @@ func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T)
 
 	routeRule, errs := processHTTPRouteRule(
 		specRule,
-		routeNamespace,
 		rulePath,
 		validator,
 		nil,
 		inferencePools,
+		routeNamespace,
 	)
 
 	g.Expect(routeRule.RouteBackendRefs).To(BeEmpty())
