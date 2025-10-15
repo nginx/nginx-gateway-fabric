@@ -189,7 +189,7 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 
 	for _, group := range groups {
 		for _, backend := range group.Backends {
-			if backend.EndpointPickerConfig == nil {
+			if backend.EndpointPickerConfig == nil || backend.EndpointPickerConfig.EndpointPickerRef == nil {
 				continue
 			}
 

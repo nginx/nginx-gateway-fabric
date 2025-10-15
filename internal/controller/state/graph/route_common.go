@@ -177,8 +177,10 @@ type RouteBackendRef struct {
 
 // EndpointPickerConfig specifies the namespace and reference to the EndpointPicker extension.
 type EndpointPickerConfig struct {
+	// EndpointPickerRef is the reference to the EndpointPicker.
 	EndpointPickerRef *inference.EndpointPickerRef
-	NsName            string
+	// NsName is the namespace of the EndpointPicker.
+	NsName string
 }
 
 // CreateRouteKey takes a client.Object and creates a RouteKey.

@@ -123,7 +123,6 @@ func addBackendRefsToRules(
 
 				if pool, exists := referencedInferencePools[poolName]; exists {
 					// If the InferencePool is invalid, add a condition to the route
-					// and set the port to nil to avoid generating backendRefs for it.
 					if !pool.Valid {
 						route.Conditions = append(route.Conditions, conditions.NewRouteBackendRefInvalidInferencePool(
 							fmt.Sprintf("Referenced InferencePool %s/%s is invalid",
@@ -133,7 +132,6 @@ func addBackendRefsToRules(
 						))
 						continue
 					}
-
 					port := gatewayv1.PortNumber(pool.Source.Spec.TargetPorts[0].Number)
 					ref.Port = helpers.GetPointer(port)
 					ref.EndpointPickerConfig.EndpointPickerRef = &pool.Source.Spec.EndpointPickerRef
@@ -199,7 +197,9 @@ func createBackendRef(
 		refPath,
 	)
 
-	if !valid {
+	validBackendRef := valid && len(route.Conditions) == 0
+
+	if !validBackendRef {
 		backendRef := BackendRef{
 			Weight:               weight,
 			Valid:                false,

@@ -39,10 +39,6 @@ const (
 	// Route rules has a backendRef with an unsupported value.
 	RouteReasonBackendRefUnsupportedValue v1.RouteConditionReason = "UnsupportedValue"
 
-	// RouteReasonBackendRefInvalidInferencePool is used with the "ResolvedRefs" condition when
-	// the InferencePool backendRef is invalid.
-	RouteReasonBackendRefInvalidInferencePool v1.RouteConditionReason = "InvalidInferencePool"
-
 	// RouteReasonInvalidGateway is used with the "Accepted" (false) condition when the Gateway the Route
 	// references is invalid.
 	RouteReasonInvalidGateway v1.RouteConditionReason = "InvalidGateway"
@@ -66,6 +62,9 @@ const (
 	// RouteReasonInvalidFilter is used when an extension ref filter referenced by a Route cannot be resolved, or is
 	// invalid. Used with ResolvedRefs (false).
 	RouteReasonInvalidFilter v1.RouteConditionReason = "InvalidFilter"
+
+	// RouteReasonInvalidInferencePool is used when a InferencePool backendRef referenced by a Route is invalid.
+	RouteReasonInvalidInferencePool v1.RouteConditionReason = "InvalidInferencePool"
 
 	// GatewayReasonUnsupportedValue is used with GatewayConditionAccepted (false) when a value of a field in a Gateway
 	// is invalid or not supported.
@@ -456,7 +455,7 @@ func NewRouteBackendRefInvalidInferencePool(msg string) Condition {
 	return Condition{
 		Type:    string(v1.RouteConditionResolvedRefs),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(RouteReasonBackendRefInvalidInferencePool),
+		Reason:  string(RouteReasonInvalidInferencePool),
 		Message: msg,
 	}
 }
