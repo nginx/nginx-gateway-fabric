@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	inference_conformance "sigs.k8s.io/gateway-api-inference-extension/conformance"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/conformance"
@@ -32,9 +33,11 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// unusableGatewayIPAddress 198.51.100.0 is a publicly reserved IP address specifically for documentation.
-// This is needed to give the conformance tests an example valid ip unusable address.
-const unusableGatewayIPAddress = "198.51.100.0"
+const (
+	// unusableGatewayIPAddress 198.51.100.0 is a publicly reserved IP address specifically for documentation.
+	// This is needed to give the conformance tests an example valid ip unusable address.
+	unusableGatewayIPAddress = "198.51.100.0"
+)
 
 func TestConformance(t *testing.T) {
 	g := NewWithT(t)
@@ -85,4 +88,28 @@ func TestConformance(t *testing.T) {
 
 	_, err = f.Write(yamlReport)
 	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestInferenceExtensionConformance(t *testing.T) {
+	t.Logf(`Running inference conformance tests with %s GatewayClass\n cleanup: %t\n`+
+		`debug: %t\n enable all features: %t \n supported extended features: [%v]\n exempt features: [%v]\n`+
+		`skip tests: [%v]`,
+		*flags.GatewayClassName, *flags.CleanupBaseResources, *flags.ShowDebug,
+		*flags.EnableAllSupportedFeatures, *flags.SupportedFeatures, *flags.ExemptFeatures, *flags.SkipTests,
+	)
+
+	opts := inference_conformance.DefaultOptions(t)
+
+	opts.Implementation = conf_v1.Implementation{
+		Organization: "nginx",
+		Project:      "nginx-gateway-fabric",
+		URL:          "https://github.com/nginx/nginx-gateway-fabric",
+		Version:      *flags.ImplementationVersion,
+		Contact: []string{
+			"https://github.com/nginx/nginx-gateway-fabric/discussions/new/choose",
+		},
+	}
+
+	opts.ConformanceProfiles.Insert(inference_conformance.GatewayLayerProfileName)
+	inference_conformance.RunConformanceWithOptions(t, opts)
 }

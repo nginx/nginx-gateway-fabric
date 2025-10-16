@@ -16,6 +16,9 @@ on:
       enable-experimental:
         required: true
         type: boolean
+      enable-inference-extension:
+        required: true
+        type: boolean
       production-release:
         required: false
         type: boolean
@@ -32,6 +35,7 @@ defaults:
 env:
   PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
   ENABLE_EXPERIMENTAL: ${{ inputs.enable-experimental }}
+  ENABLE_INFERENCE_EXTENSION: ${{ inputs.enable-inference-extension }}
 
 permissions:
   contents: read
@@ -193,4 +197,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ github.ref_name }} conformance-profile.yaml --clobber
+        working-directory: ./tests
+
+      # The same setup works for inference conformance tests
+      # and inference extension flag is enabled
+      - name: Run inference conformance tests
+        run: |
+          make run-inference-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ github.ref_name }} CLUSTER_NAME=${{ github.run_id }}
+          core_result=$(cat conformance-inference-profile.yaml | yq '.profiles[0].core.result')
+          if [ "${core_result}" == "failure" ] ]; then echo "Inference Conformance test failed, see above for details." && exit 2; fi
+        working-directory: ./tests
+
+      - name: Upload profile to GitHub
+        if: ${{ inputs.enable-inference-extension }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: conformance-profile-inference-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}
+          path: ./tests/conformance-profile-inference.yaml
+
+      - name: Upload profile to release
+        if: ${{ inputs.production-release && inputs.enable-inference-extension }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ github.ref_name }} conformance-profile-inference.yaml --clobber
         working-directory: ./tests

@@ -452,13 +452,18 @@ func createInternalLocationsForRule(
 			intLocation, match = initializeInternalMatchLocationWithInference(pathRuleIdx, matchRuleIdx, r.Match)
 			intInfLocation := initializeInternalInferenceRedirectLocation(pathRuleIdx, matchRuleIdx)
 			for _, b := range r.BackendGroup.Backends {
-				if b.EndpointPickerConfig != nil {
+				if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
+					eppRef := b.EndpointPickerConfig.EndpointPickerRef
 					var portNum int
-					if b.EndpointPickerConfig.Port != nil {
-						portNum = int(b.EndpointPickerConfig.Port.Number)
+					if eppRef.Port != nil {
+						portNum = int(eppRef.Port.Number)
 					}
 					intInfLocation.EPPInternalPath = intLocation.Path
-					intInfLocation.EPPHost = string(b.EndpointPickerConfig.Name)
+					if b.EndpointPickerConfig.NsName != "" {
+						intInfLocation.EPPHost = string(eppRef.Name) + "." + b.EndpointPickerConfig.NsName
+					} else {
+						intInfLocation.EPPHost = string(eppRef.Name)
+					}
 					intInfLocation.EPPPort = portNum
 				}
 			}
@@ -506,14 +511,19 @@ func createInferenceLocationsForRule(
 			mirrorPercentage,
 		)
 		for _, b := range r.BackendGroup.Backends {
-			if b.EndpointPickerConfig != nil {
+			if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
 				for i := range extLocations {
+					eppRef := b.EndpointPickerConfig.EndpointPickerRef
 					var portNum int
-					if b.EndpointPickerConfig.Port != nil {
-						portNum = int(b.EndpointPickerConfig.Port.Number)
+					if eppRef.Port != nil {
+						portNum = int(eppRef.Port.Number)
 					}
 					extLocations[i].EPPInternalPath = intLocation.Path
-					extLocations[i].EPPHost = string(b.EndpointPickerConfig.Name)
+					if b.EndpointPickerConfig.NsName != "" {
+						extLocations[i].EPPHost = string(eppRef.Name) + "." + b.EndpointPickerConfig.NsName
+					} else {
+						extLocations[i].EPPHost = string(eppRef.Name)
+					}
 					extLocations[i].EPPPort = portNum
 				}
 			}

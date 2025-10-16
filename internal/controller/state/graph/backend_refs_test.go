@@ -1231,11 +1231,14 @@ func TestAddBackendRefsToRules(t *testing.T) {
 					ServicePort: v1.ServicePort{
 						Port: 80,
 					},
-					Valid:                true,
-					Weight:               1,
-					InvalidForGateways:   map[types.NamespacedName]conditions.Condition{},
-					IsInferencePool:      true,
-					EndpointPickerConfig: &inference.EndpointPickerRef{},
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					IsInferencePool:    true,
+					EndpointPickerConfig: EndpointPickerConfig{
+						NsName:            svcInferenceNsName.Namespace,
+						EndpointPickerRef: &inference.EndpointPickerRef{},
+					},
 				},
 			},
 			expectedConditions: nil,
@@ -1262,6 +1265,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 							},
 						},
 					},
+					Valid: true,
 				},
 			}
 
