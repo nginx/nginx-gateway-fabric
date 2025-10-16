@@ -184,7 +184,7 @@ jobs:
       - name: Scan SBOM
         id: scan
         if: ${{ !inputs.dry_run }}
-        uses: anchore/scan-action@f6601287cdb1efc985d6b765bbf99cb4c0ac29d8 # v7.0.0
+        uses: anchore/scan-action@9e8428812aebf5a6a5fc3fdd55de39d1c79b8b12 # v7.0.1
         with:
           sbom: "sbom-${{ inputs.image }}.json"
           only-fixed: true
