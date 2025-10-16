@@ -443,6 +443,7 @@ jobs:
             "${{ needs.vars.outputs.k8s_latest }}",
           ]
         enable-experimental: [true, false]
+        enable-inference-extension: true
     uses: ./.github/workflows/conformance.yml
     with:
       image: ${{ matrix.image }}
