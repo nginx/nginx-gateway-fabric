@@ -595,7 +595,7 @@ func initializeExternalLocations(
 		}
 		if !exactPathExists {
 			externalLocExact := http.Location{
-				Path: exactPath(externalLocPath),
+				Path: exactPath(rule.Path),
 				Type: locType,
 			}
 			extLocations = append(extLocations, externalLocExact)
@@ -684,7 +684,6 @@ func updateLocation(
 	mirrorPercentage *float64,
 ) http.Location {
 	filters := matchRule.Filters
-	path := pathRule.Path
 	grpc := pathRule.GRPC
 	inferenceBackend := pathRule.HasInferenceBackends
 
@@ -693,15 +692,15 @@ func updateLocation(
 		return location
 	}
 
-	location = updateLocationMirrorRoute(location, path, grpc)
+	location = updateLocationMirrorRoute(location, pathRule.Path, grpc)
 	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
 
 	if filters.RequestRedirect != nil {
-		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, path)
+		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
 	}
 
-	location = updateLocationRewriteFilter(location, filters.RequestURLRewrite, path)
-	location = updateLocationMirrorFilters(location, filters.RequestMirrors, path, mirrorPercentage)
+	location = updateLocationRewriteFilter(location, filters.RequestURLRewrite, pathRule)
+	location = updateLocationMirrorFilters(location, filters.RequestMirrors, pathRule.Path, mirrorPercentage)
 	location = updateLocationProxySettings(location, matchRule, grpc, inferenceBackend, keepAliveCheck)
 
 	return location
@@ -722,9 +721,9 @@ func updateLocationRedirectFilter(
 	location http.Location,
 	redirectFilter *dataplane.HTTPRequestRedirectFilter,
 	listenerPort int32,
-	path string,
+	pathRule dataplane.PathRule,
 ) http.Location {
-	ret, rewrite := createReturnAndRewriteConfigForRedirectFilter(redirectFilter, listenerPort, path)
+	ret, rewrite := createReturnAndRewriteConfigForRedirectFilter(redirectFilter, listenerPort, pathRule)
 	if rewrite.MainRewrite != "" {
 		location.Rewrites = append(location.Rewrites, rewrite.MainRewrite)
 	}
@@ -736,9 +735,9 @@ func updateLocationRedirectFilter(
 func updateLocationRewriteFilter(
 	location http.Location,
 	rewriteFilter *dataplane.HTTPURLRewriteFilter,
-	path string,
+	pathRule dataplane.PathRule,
 ) http.Location {
-	rewrites := createRewritesValForRewriteFilter(rewriteFilter, path)
+	rewrites := createRewritesValForRewriteFilter(rewriteFilter, pathRule)
 	if rewrites != nil {
 		if location.Type == http.InternalLocationType && rewrites.InternalRewrite != "" {
 			location.Rewrites = append(location.Rewrites, rewrites.InternalRewrite)
@@ -887,7 +886,7 @@ func createProxySSLVerify(v *dataplane.VerifyTLS) *http.ProxySSLVerify {
 func createReturnAndRewriteConfigForRedirectFilter(
 	filter *dataplane.HTTPRequestRedirectFilter,
 	listenerPort int32,
-	path string,
+	pathRule dataplane.PathRule,
 ) (*http.Return, *rewriteConfig) {
 	if filter == nil {
 		return nil, nil
@@ -931,7 +930,12 @@ func createReturnAndRewriteConfigForRedirectFilter(
 
 	rewrites := &rewriteConfig{}
 	if filter.Path != nil {
-		rewrites.MainRewrite = createMainRewriteForFilters(filter.Path, path)
+		mainRewrite := createMainRewriteForFilters(filter.Path, pathRule)
+		if mainRewrite == "" {
+			// Invalid configuration for the rewrite filter
+			return nil, nil
+		}
+		rewrites.MainRewrite = mainRewrite
 		body = fmt.Sprintf("%s://%s$uri$is_args$args", scheme, hostnamePort)
 	}
 
@@ -941,19 +945,26 @@ func createReturnAndRewriteConfigForRedirectFilter(
 	}, rewrites
 }
 
-func createMainRewriteForFilters(pathModifier *dataplane.HTTPPathModifier, path string) string {
+func createMainRewriteForFilters(pathModifier *dataplane.HTTPPathModifier, pathRule dataplane.PathRule) string {
 	var mainRewrite string
 	switch pathModifier.Type {
 	case dataplane.ReplaceFullPath:
 		mainRewrite = fmt.Sprintf("^ %s", pathModifier.Replacement)
 	case dataplane.ReplacePrefixMatch:
+		// ReplacePrefixMatch is only compatible with a PathPrefix HTTPRouteMatch.
+		// ReplaceFullPath is compatible with PathTypeExact/PathTypePrefix/PathTypeRegularExpression HTTPRouteMatch.
+		// see https://gateway-api.sigs.k8s.io/reference/spec/?h=replaceprefixmatch#httppathmodifier
+		if pathRule.PathType != dataplane.PathTypePrefix {
+			return ""
+		}
+
 		filterPrefix := pathModifier.Replacement
 		if filterPrefix == "" {
 			filterPrefix = "/"
 		}
 
 		// capture everything following the configured prefix up to the first ?, if present.
-		regex := fmt.Sprintf("^%s([^?]*)?", path)
+		regex := fmt.Sprintf("^%s([^?]*)?", pathRule.Path)
 		// replace the configured prefix with the filter prefix, append the captured segment,
 		// and include the request arguments stored in nginx variable $args.
 		// https://nginx.org/en/docs/http/ngx_http_core_module.html#var_args
@@ -962,13 +973,13 @@ func createMainRewriteForFilters(pathModifier *dataplane.HTTPPathModifier, path 
 		// if configured prefix does not end in /, but replacement prefix does end in /,
 		// then make sure that we *require* but *don't capture* a trailing slash in the request,
 		// otherwise we'll get duplicate slashes in the full replacement
-		if strings.HasSuffix(filterPrefix, "/") && !strings.HasSuffix(path, "/") {
-			regex = fmt.Sprintf("^%s(?:/([^?]*))?", path)
+		if strings.HasSuffix(filterPrefix, "/") && !strings.HasSuffix(pathRule.Path, "/") {
+			regex = fmt.Sprintf("^%s(?:/([^?]*))?", pathRule.Path)
 		}
 
 		// if configured prefix ends in / we won't capture it for a request (since it's not in the regex),
 		// so append it to the replacement prefix if the replacement prefix doesn't already end in /
-		if strings.HasSuffix(path, "/") && !strings.HasSuffix(filterPrefix, "/") {
+		if strings.HasSuffix(pathRule.Path, "/") && !strings.HasSuffix(filterPrefix, "/") {
 			replacement = fmt.Sprintf("%s/$1?$args?", filterPrefix)
 		}
 
@@ -978,7 +989,10 @@ func createMainRewriteForFilters(pathModifier *dataplane.HTTPPathModifier, path 
 	return mainRewrite
 }
 
-func createRewritesValForRewriteFilter(filter *dataplane.HTTPURLRewriteFilter, path string) *rewriteConfig {
+func createRewritesValForRewriteFilter(
+	filter *dataplane.HTTPURLRewriteFilter,
+	pathRule dataplane.PathRule,
+) *rewriteConfig {
 	if filter == nil {
 		return nil
 	}
@@ -987,8 +1001,13 @@ func createRewritesValForRewriteFilter(filter *dataplane.HTTPURLRewriteFilter, p
 	if filter.Path != nil {
 		rewrites.InternalRewrite = "^ $request_uri"
 
-		// for URLRewriteFilter, we add a break to the rewrite to prevent further processing of the request.
-		rewrites.MainRewrite = fmt.Sprintf("%s break", createMainRewriteForFilters(filter.Path, path))
+		mainRewrite := createMainRewriteForFilters(filter.Path, pathRule)
+		if mainRewrite == "" {
+			// Invalid configuration for the rewrite filter
+			return nil
+		}
+		// For URLRewriteFilter, add "break" to prevent further processing of the request.
+		rewrites.MainRewrite = fmt.Sprintf("%s break", mainRewrite)
 	}
 
 	return rewrites
@@ -1218,14 +1237,18 @@ func createPath(rule dataplane.PathRule) string {
 	switch rule.PathType {
 	case dataplane.PathTypeExact:
 		return exactPath(rule.Path)
+	case dataplane.PathTypePrefix:
+		return fmt.Sprintf("^~ %s", rule.Path)
+	case dataplane.PathTypeRegularExpression:
+		return fmt.Sprintf("~ %s", rule.Path)
 	default:
-		return rule.Path
+		panic(fmt.Errorf("unknown path type %q for path %q", rule.PathType, rule.Path))
 	}
 }
 
 func createDefaultRootLocation() http.Location {
 	return http.Location{
-		Path:   "/",
+		Path:   "= /",
 		Return: &http.Return{Code: http.StatusNotFound},
 	}
 }

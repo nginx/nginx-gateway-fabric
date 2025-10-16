@@ -23,7 +23,7 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION = v2.4.0
+GOLANGCI_LINT_VERSION = v2.5.0
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.34.0
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
@@ -35,7 +35,7 @@ CONTROLLER_TOOLS_VERSION = v0.19.0
 # renovate: datasource=docker depName=node
 NODE_VERSION = 24
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
-CHART_TESTING_VERSION = v3.13.0
+CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
 HELM_SCHEMA_VERSION = 0.18.1
 
@@ -43,6 +43,9 @@ HELM_SCHEMA_VERSION = 0.18.1
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
 NGINX_PREFIX ?= $(PREFIX)/nginx## The name of the nginx image. For example: nginx-gateway-fabric/nginx
 NGINX_PLUS_PREFIX ?= $(PREFIX)/nginx-plus## The name of the nginx plus image. For example: nginx-gateway-fabric/nginx-plus
+BUILD_OS ?= ## The OS of the nginx image. Possible values: ubi and empty string, which defaults to alpine.
+NGINX_SERVICE_TYPE ?= NodePort## The type of the nginx service. Possible values: NodePort, LoadBalancer, ClusterIP
+PULL_POLICY ?= Never## The pull policy of the images. Possible values: Always, IfNotPresent, Never
 TAG ?= $(VERSION:v%=%)## The tag of the image. For example, 1.1.0
 TARGET ?= local## The target of the build. Possible values: local and container
 OUT_DIR ?= build/out## The folder where the binary will be stored
@@ -83,21 +86,21 @@ build-prod-ngf-image: build-ngf-image ## Build the NGF docker image for producti
 
 .PHONY: build-ngf-image
 build-ngf-image: check-for-docker build ## Build the NGF docker image
-	docker build --platform linux/$(GOARCH) --build-arg BUILD_AGENT=$(BUILD_AGENT) --target $(strip $(TARGET)) -f $(SELF_DIR)build/Dockerfile -t $(strip $(PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/$(GOARCH) --build-arg BUILD_AGENT=$(BUILD_AGENT) --target $(strip $(TARGET)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile -t $(strip $(PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-prod-nginx-image
 build-prod-nginx-image: build-nginx-image ## Build the custom nginx image for production
 
 .PHONY: build-nginx-image
 build-nginx-image: check-for-docker ## Build the custom nginx image
-	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) -f $(SELF_DIR)build/Dockerfile.nginx -t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginx -t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-prod-nginx-plus-image
 build-prod-nginx-plus-image: build-nginx-plus-image ## Build the custom nginx plus image for production
 
 .PHONY: build-nginx-plus-image
 build-nginx-plus-image: check-for-docker ## Build the custom nginx plus image
-	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS))  -f $(SELF_DIR)build/Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS))  -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: check-for-docker
 check-for-docker: ## Check if Docker is installed
@@ -234,13 +237,13 @@ install-ngf-local-build-with-plus: check-for-plus-usage-endpoint build-images-wi
 
 .PHONY: helm-install-local
 helm-install-local: install-gateway-crds ## Helm install NGF on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build.
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=Never --set nginx.service.type=NodePort --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=Never --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway $(HELM_PARAMETERS)
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway $(HELM_PARAMETERS)
 
 .PHONY: helm-install-local-with-plus
 helm-install-local-with-plus: check-for-plus-usage-endpoint install-gateway-crds ## Helm install NGF with NGINX Plus on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build-with-plus.
 	kubectl create namespace nginx-gateway || true
 	kubectl -n nginx-gateway create secret generic nplus-license --from-file $(PLUS_LICENSE_FILE) || true
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=Never --set nginx.service.type=NodePort --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=Never --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_PARAMETERS)
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_PARAMETERS)
 
 .PHONY: check-for-plus-usage-endpoint
 check-for-plus-usage-endpoint: ## Checks that the PLUS_USAGE_ENDPOINT is set in the environment. This env var is required when deploying or testing with N+.

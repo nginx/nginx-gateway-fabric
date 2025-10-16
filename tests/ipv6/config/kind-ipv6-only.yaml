@@ -1,0 +1,8 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  ipFamily: ipv6 # Explicitly set the cluster to use IPv6
+  apiServerAddress: "::1"
+  disableDefaultCNI: false # Use Kind's default CNI
+nodes:
+- role: control-plane

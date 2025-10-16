@@ -4,30 +4,6 @@ import (
 	"testing"
 )
 
-func TestValidatePathInMatch(t *testing.T) {
-	t.Parallel()
-	validator := HTTPNJSMatchValidator{}
-
-	testValidValuesForSimpleValidator(
-		t,
-		validator.ValidatePathInMatch,
-		"/",
-		"/path",
-		"/path/subpath-123",
-		"/_ngf-internal-route0-rule0",
-	)
-	testInvalidValuesForSimpleValidator(
-		t,
-		validator.ValidatePathInMatch,
-		"/ ",
-		"/path{",
-		"/path}",
-		"/path;",
-		"path",
-		"",
-	)
-}
-
 func TestValidateHeaderNameInMatch(t *testing.T) {
 	t.Parallel()
 	validator := HTTPNJSMatchValidator{}

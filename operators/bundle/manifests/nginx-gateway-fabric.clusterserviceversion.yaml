@@ -1,0 +1,528 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "gateway.nginx.org/v1alpha1",
+          "kind": "NginxGatewayFabric",
+          "metadata": {
+            "name": "nginxgatewayfabric-sample"
+          },
+          "spec": {
+            "certGenerator": {
+              "affinity": {},
+              "agentTLSSecretName": "agent-tls",
+              "annotations": {},
+              "nodeSelector": {},
+              "overwrite": false,
+              "serverTLSSecretName": "server-tls",
+              "tolerations": [],
+              "topologySpreadConstraints": [],
+              "ttlSecondsAfterFinished": 30
+            },
+            "clusterDomain": "cluster.local",
+            "gateways": [],
+            "nginx": {
+              "autoscaling": {
+                "enable": false
+              },
+              "config": {},
+              "container": {
+                "hostPorts": [],
+                "lifecycle": {},
+                "readinessProbe": {},
+                "resources": {},
+                "volumeMounts": []
+              },
+              "debug": false,
+              "image": {
+                "pullPolicy": "IfNotPresent",
+                "repository": "ghcr.io/nginx/nginx-gateway-fabric/nginx",
+                "tag": "2.2.0-ubi"
+              },
+              "imagePullSecret": "",
+              "imagePullSecrets": [],
+              "kind": "deployment",
+              "nginxOneConsole": {
+                "dataplaneKeySecretName": "",
+                "endpointHost": "agent.connect.nginx.com",
+                "endpointPort": 443,
+                "skipVerify": false
+              },
+              "patches": [],
+              "plus": false,
+              "pod": {},
+              "replicas": 1,
+              "service": {
+                "externalTrafficPolicy": "Local",
+                "loadBalancerClass": "",
+                "loadBalancerIP": "",
+                "loadBalancerSourceRanges": [],
+                "nodePorts": [],
+                "patches": [],
+                "type": "LoadBalancer"
+              },
+              "usage": {
+                "caSecretName": "",
+                "clientSSLSecretName": "",
+                "endpoint": "",
+                "enforceInitialReport": true,
+                "resolver": "",
+                "secretName": "nplus-license",
+                "skipVerify": false
+              }
+            },
+            "nginxGateway": {
+              "affinity": {},
+              "autoscaling": {
+                "enable": false
+              },
+              "config": {
+                "logging": {
+                  "level": "info"
+                }
+              },
+              "configAnnotations": {},
+              "extraVolumeMounts": [],
+              "extraVolumes": [],
+              "gatewayClassAnnotations": {},
+              "gatewayClassName": "nginx",
+              "gatewayControllerName": "gateway.nginx.org/nginx-gateway-controller",
+              "gwAPIExperimentalFeatures": {
+                "enable": false
+              },
+              "image": {
+                "pullPolicy": "IfNotPresent",
+                "repository": "ghcr.io/nginx/nginx-gateway-fabric",
+                "tag": "2.2.0-ubi"
+              },
+              "kind": "deployment",
+              "labels": {},
+              "leaderElection": {
+                "enable": true,
+                "lockName": ""
+              },
+              "lifecycle": {},
+              "metrics": {
+                "enable": true,
+                "port": 9113,
+                "secure": false
+              },
+              "name": "",
+              "nodeSelector": {},
+              "podAnnotations": {},
+              "productTelemetry": {
+                "enable": true
+              },
+              "readinessProbe": {
+                "enable": true,
+                "initialDelaySeconds": 3,
+                "port": 8081
+              },
+              "replicas": 1,
+              "resources": {},
+              "service": {
+                "annotations": {},
+                "labels": {}
+              },
+              "serviceAccount": {
+                "annotations": {},
+                "imagePullSecret": "",
+                "imagePullSecrets": [],
+                "name": ""
+              },
+              "snippetsFilters": {
+                "enable": false
+              },
+              "terminationGracePeriodSeconds": 30,
+              "tolerations": [],
+              "topologySpreadConstraints": []
+            }
+          }
+        }
+      ]
+    capabilities: Basic Install
+    createdAt: "2025-10-06T09:33:54Z"
+    operators.operatorframework.io/builder: operator-sdk-v1.41.1
+    operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
+  name: nginx-gateway-fabric.v1.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+      - kind: NginxGatewayFabric
+        name: nginxgatewayfabrics.gateway.nginx.org
+        version: v1alpha1
+        resources:
+          - kind: Deployment
+            name: ""
+            version: v1
+          - kind: Service
+            name: ""
+            version: v1
+          - kind: ConfigMap
+            name: ""
+            version: v1
+          - kind: Secret
+            name: ""
+            version: v1
+          - kind: ServiceAccount
+            name: ""
+            version: v1
+          - kind: ClusterRole
+            name: ""
+            version: v1
+          - kind: ClusterRoleBinding
+            name: ""
+            version: v1
+        specDescriptors:
+          - path: clusterDomain
+            displayName: Cluster Domain
+            description: The DNS cluster domain of your Kubernetes cluster
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:text
+          - path: nginxGateway
+            displayName: NGINX Gateway Configuration
+            description: Configuration for the NGINX Gateway Fabric control plane
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:fieldGroup:NGINX Gateway
+          - path: nginx
+            displayName: NGINX Configuration
+            description: Configuration for NGINX data plane deployments
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:fieldGroup:NGINX
+          - path: gateways
+            displayName: Gateways
+            description: List of Gateway objects to create
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Gateways
+          - path: certGenerator
+            displayName: Certificate Generator
+            description: Configuration for TLS certificate generation
+            x-descriptors:
+              - urn:alm:descriptor:com.tectonic.ui:fieldGroup:Certificate Generator
+  description: NGINX Gateway Fabric provides an implementation of the Gateway API using NGINX as the data plane
+  displayName: NGINX Gateway Fabric
+  icon:
+    - base64data: ""
+      mediatype: ""
+  install:
+    spec:
+      clusterPermissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - namespaces
+                - nodes
+                - pods
+                - services
+                - services/finalizers
+                - endpoints
+                - persistentvolumeclaims
+                - events
+                - configmaps
+                - secrets
+                - serviceaccounts
+              verbs:
+                - '*'
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - daemonsets
+                - replicasets
+                - statefulsets
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - autoscaling
+              resources:
+                - horizontalpodautoscalers
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - batch
+              resources:
+                - jobs
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - apiextensions.k8s.io
+              resources:
+                - customresourcedefinitions
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - clusterroles
+                - clusterrolebindings
+                - roles
+                - rolebindings
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gatewayclasses
+                - gateways
+                - httproutes
+                - referencegrants
+                - grpcroutes
+                - backendtlspolicies
+                - tlsroutes
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - httproutes/status
+                - gateways/status
+                - gatewayclasses/status
+                - grpcroutes/status
+                - backendtlspolicies/status
+                - tlsroutes/status
+              verbs:
+                - update
+            - apiGroups:
+                - gateway.nginx.org
+              resources:
+                - nginxgatewayfabrics
+                - nginxgatewayfabrics/status
+                - nginxgatewayfabrics/finalizers
+                - nginxgateways
+                - nginxgateways/status
+                - nginxgateways/finalizers
+                - nginxproxies
+                - nginxproxies/status
+                - nginxproxies/finalizers
+                - clientsettingspolicies
+                - observabilitypolicies
+                - upstreamsettingspolicies
+                - snippetsfilters
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - gateway.nginx.org
+              resources:
+                - clientsettingspolicies/status
+                - observabilitypolicies/status
+                - upstreamsettingspolicies/status
+                - snippetsfilters/status
+              verbs:
+                - update
+            - apiGroups:
+                - discovery.k8s.io
+              resources:
+                - endpointslices
+              verbs:
+                - list
+                - watch
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - create
+                - get
+                - update
+            - apiGroups:
+                - security.openshift.io
+              resources:
+                - securitycontextconstraints
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - use
+                - watch
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - authorization.k8s.io
+              resources:
+                - subjectaccessreviews
+              verbs:
+                - create
+          serviceAccountName: nginx-gateway-fabric-controller-manager
+      deployments:
+        - label:
+            app.kubernetes.io/managed-by: kustomize
+            app.kubernetes.io/name: nginx-gateway-fabric
+            control-plane: controller-manager
+          name: nginx-gateway-fabric-controller-manager
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: nginx-gateway-fabric
+                control-plane: controller-manager
+            strategy: {}
+            template:
+              metadata:
+                annotations:
+                  kubectl.kubernetes.io/default-container: manager
+                labels:
+                  app.kubernetes.io/name: nginx-gateway-fabric
+                  control-plane: controller-manager
+              spec:
+                containers:
+                  - args:
+                      - --metrics-require-rbac
+                      - --metrics-secure
+                      - --metrics-bind-address=:8443
+                      - --leader-elect
+                      - --leader-election-id=nginx-gateway-fabric
+                      - --health-probe-bind-address=:8081
+                    image: ghcr.io/nginx/nginx-gateway-fabric/operator:v1.0.0
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+                    name: manager
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 128Mi
+                      requests:
+                        cpu: 50m
+                        memory: 64Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                serviceAccountName: nginx-gateway-fabric-controller-manager
+                terminationGracePeriodSeconds: 10
+      permissions:
+        - rules:
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+          serviceAccountName: nginx-gateway-fabric-controller-manager
+    strategy: deployment
+  installModes:
+    - supported: false
+      type: OwnNamespace
+    - supported: false
+      type: SingleNamespace
+    - supported: false
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
+  keywords:
+    - nginx
+    - gateway
+    - kubernetes
+    - networking
+  links:
+    - name: Nginx Gateway Fabric
+      url: https://nginx-gateway-fabric.domain
+  maintainers:
+    - email: kubernetes@nginx.com
+      name: F5NGINX
+  maturity: alpha
+  minKubeVersion: 1.25.0
+  provider:
+    name: F5 NGINX
+    url: https://www.f5.com/go/product/welcome-to-nginx
+  version: 1.0.0

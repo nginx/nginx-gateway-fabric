@@ -1,0 +1,79 @@
+# syntax=docker/dockerfile:1.19
+FROM scratch AS nginx-files
+
+# NGINX Plus repo and key files (must be provided at build time)
+ADD --link --chown=101:1001 https://cs.nginx.com/static/files/plus-9.repo nginx-plus.repo
+ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
+ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
+
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:46e38dc6d8a9151f28f6dd775c528425ca4dfbc2a39055da08f653c12f959d27 AS ubi9-packages
+
+FROM redhat/ubi9-minimal:9.6 AS ubi-nginx-plus
+
+ARG NGINX_PLUS_VERSION=R35
+
+# renovate: datasource=github-tags depName=nginx/agent
+ARG NGINX_AGENT_VERSION=v3.3.2
+ARG NJS_DIR
+ARG NGINX_CONF_DIR
+ARG BUILD_AGENT
+
+LABEL name="F5 NGINX Gateway Fabric NGINX Plus" \
+	maintainer="kubernetes@nginx.com" \
+	vendor="F5 NGINX" \
+	summary="NGINX Gateway Fabric" \
+	description="NGINX Gateway Fabric provides an implementation for the Gateway API using NGINX as the data plane." \
+	org.nginx.ngf.image.build.agent="${BUILD_AGENT}" \
+	io.k8s.description="NGINX Gateway Fabric provides an implementation for the Gateway API using NGINX as the data plane." \
+	io.openshift.tags="nginx,gateway,kubernetes,openshift"
+
+COPY --link --chown=101:1001 LICENSE /licenses/
+
+# Install NGINX Plus and modules
+RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos.d/nginx-plus.repo \
+    --mount=type=bind,from=nginx-files,src=agent.repo,target=/etc/yum.repos.d/agent.repo \
+    --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_signing.key \
+    --mount=type=bind,from=ubi9-packages,src=/,target=/ubi-bin/ \
+    --mount=type=secret,id=nginx-repo.crt,dst=/etc/ssl/nginx/nginx-repo.crt,mode=0644 \
+	--mount=type=secret,id=nginx-repo.key,dst=/etc/ssl/nginx/nginx-repo.key,mode=0644 \
+    # Install shadow-utils for useradd
+    microdnf --nodocs install -y shadow-utils  \
+    && rpm --import /tmp/nginx_signing.key \
+    # Install c-ares from the dependencies image (contains required libs)
+    && rpm -Uvh /ubi-bin/c-ares-*.rpm \
+    # Create nginx user with consistent UID/GID
+    && groupadd -g 1001 nginx \
+    && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
+    # Install NGINX Plus and modules (njs, otel)
+    && microdnf --nodocs install -y nginx-plus-${NGINX_PLUS_VERSION,,} \
+    && microdnf --nodocs install -y nginx-plus-module-njs-${NGINX_PLUS_VERSION,,} nginx-plus-module-otel-${NGINX_PLUS_VERSION,,} \
+    # Install nginx-agent
+    && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
+    # Clean up
+    && microdnf remove -y shadow-utils \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+# Configure directories and logging
+RUN mkdir -p /var/run/nginx /usr/lib64/nginx/modules \
+    # Forward request and error logs to docker log collector
+    && ln -sf /dev/stdout /var/log/nginx/access.log \
+    && ln -sf /dev/stderr /var/log/nginx/error.log
+# Copy default html files to a writable location
+RUN mkdir -p /etc/nginx/html \
+    && cp /usr/share/nginx/html/* /etc/nginx/html/
+
+# Set proper permissions for nginx user
+RUN chown -R 101:1001 /etc/nginx /var/cache/nginx
+
+# Copy configuration files and scripts
+COPY build/entrypoint.sh /agent/entrypoint.sh
+COPY ${NJS_DIR}/ /usr/lib64/nginx/modules/njs/
+COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
+COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
+COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf
+
+# Switch to non-root user
+USER 101:1001
+
+ENTRYPOINT ["/agent/entrypoint.sh"]

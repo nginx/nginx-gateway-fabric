@@ -1,0 +1,47 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: nginx-gateway-fabric.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions: {}
+  description: NGINX Gateway Fabric provides an implementation of the Gateway API
+    using NGINX as the data plane
+  displayName: NGINX Gateway Fabric
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - nginx
+  - gateway
+  - kubernetes
+  - networking
+  links:
+  - name: Nginx Gateway Fabric
+    url: https://nginx-gateway-fabric.domain
+  maintainers:
+  - email: kubernetes@nginx.com
+    name: F5NGINX
+  maturity: alpha
+  minKubeVersion: 1.25.0
+  provider:
+    name: F5 NGINX
+    url: https://www.f5.com/go/product/welcome-to-nginx
+  version: 0.0.0

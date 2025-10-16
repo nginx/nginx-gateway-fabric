@@ -1399,7 +1399,7 @@ func TestCreateServers(t *testing.T) {
 
 		return []http.Location{
 			{
-				Path:         "/",
+				Path:         "^~ /",
 				HTTPMatchKey: ssl + "1_0",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
@@ -1426,7 +1426,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        internalIncludes,
 			},
 			{
-				Path:         "/test/",
+				Path:         "^~ /test/",
 				HTTPMatchKey: ssl + "1_1",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
@@ -1439,7 +1439,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        internalIncludes,
 			},
 			{
-				Path:            "/path-only/",
+				Path:            "^~ /path-only/",
 				ProxyPass:       "http://invalid-backend-ref$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
 				Type:            http.ExternalLocationType,
@@ -1453,7 +1453,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        externalIncludes,
 			},
 			{
-				Path:            "/backend-tls-policy/",
+				Path:            "^~ /backend-tls-policy/",
 				ProxyPass:       "https://test_btp_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
 				ProxySSLVerify: &http.ProxySSLVerify{
@@ -1475,7 +1475,7 @@ func TestCreateServers(t *testing.T) {
 				Includes: externalIncludes,
 			},
 			{
-				Path: "/redirect-implicit-port/",
+				Path: "^~ /redirect-implicit-port/",
 				Return: &http.Return{
 					Code: 302,
 					Body: fmt.Sprintf("$scheme://foo.example.com:%d$request_uri", port),
@@ -1493,7 +1493,7 @@ func TestCreateServers(t *testing.T) {
 				Includes: externalIncludes,
 			},
 			{
-				Path: "/redirect-explicit-port/",
+				Path: "^~ /redirect-explicit-port/",
 				Return: &http.Return{
 					Code: 302,
 					Body: "$scheme://bar.example.com:8080$request_uri",
@@ -1511,7 +1511,7 @@ func TestCreateServers(t *testing.T) {
 				Includes: externalIncludes,
 			},
 			{
-				Path:         "/redirect-with-headers/",
+				Path:         "^~ /redirect-with-headers/",
 				HTTPMatchKey: ssl + "1_6",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
@@ -1532,7 +1532,7 @@ func TestCreateServers(t *testing.T) {
 				Includes: internalIncludes,
 			},
 			{
-				Path:            "/rewrite/",
+				Path:            "^~ /rewrite/",
 				Rewrites:        []string{"^ /replacement break"},
 				ProxyPass:       "http://test_foo_80",
 				ProxySetHeaders: rewriteProxySetHeaders,
@@ -1548,7 +1548,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        externalIncludes,
 			},
 			{
-				Path:         "/rewrite-with-headers/",
+				Path:         "^~ /rewrite-with-headers/",
 				HTTPMatchKey: ssl + "1_8",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
@@ -1568,7 +1568,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        internalIncludes,
 			},
 			{
-				Path:            "/mirror/",
+				Path:            "^~ /mirror/",
 				ProxyPass:       "http://test_foo_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
 				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-0"},
@@ -1672,7 +1672,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        externalIncludes,
 			},
 			{
-				Path: "/invalid-filter/",
+				Path: "^~ /invalid-filter/",
 				Return: &http.Return{
 					Code: http.StatusInternalServerError,
 				},
@@ -1688,7 +1688,7 @@ func TestCreateServers(t *testing.T) {
 				Includes: externalIncludes,
 			},
 			{
-				Path:         "/invalid-filter-with-headers/",
+				Path:         "^~ /invalid-filter-with-headers/",
 				HTTPMatchKey: ssl + "1_22",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
@@ -1728,7 +1728,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        internalIncludes,
 			},
 			{
-				Path:      "/proxy-set-headers/",
+				Path:      "^~ /proxy-set-headers/",
 				ProxyPass: "http://test_foo_80$request_uri",
 				ProxySetHeaders: append([]http.Header{
 					{
@@ -1819,7 +1819,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        externalIncludes,
 			},
 			{
-				Path: "/redirect-with-path/",
+				Path: "^~ /redirect-with-path/",
 				Type: http.ExternalLocationType,
 				Return: &http.Return{
 					Code: 301,
@@ -1982,7 +1982,7 @@ func TestCreateServersConflicts(t *testing.T) {
 			},
 			expLocs: []http.Location{
 				{
-					Path:            "/coffee/",
+					Path:            "^~ /coffee/",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
@@ -2028,7 +2028,7 @@ func TestCreateServersConflicts(t *testing.T) {
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path:            "/coffee/",
+					Path:            "^~ /coffee/",
 					ProxyPass:       "http://test_bar_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
@@ -2072,7 +2072,7 @@ func TestCreateServersConflicts(t *testing.T) {
 			},
 			expLocs: []http.Location{
 				{
-					Path:            "/coffee/",
+					Path:            "^~ /coffee/",
 					ProxyPass:       "http://test_bar_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
@@ -2383,7 +2383,7 @@ func TestCreateLocations_Includes(t *testing.T) {
 			},
 		},
 		{
-			Path: "/snippets-prefix-path/",
+			Path: "^~ /snippets-prefix-path/",
 			Includes: []shared.Include{
 				{
 					Name:    includesFolder + "/prefix-path-location-snippet.conf",
@@ -2611,7 +2611,8 @@ func TestCreateLocationsRootPath(t *testing.T) {
 	getPathRules := func(rootPath bool, grpc bool) []dataplane.PathRule {
 		rules := []dataplane.PathRule{
 			{
-				Path: "/path-1",
+				Path:     "/path-1",
+				PathType: dataplane.PathTypeExact,
 				MatchRules: []dataplane.MatchRule{
 					{
 						Match:        dataplane.Match{},
@@ -2620,7 +2621,8 @@ func TestCreateLocationsRootPath(t *testing.T) {
 				},
 			},
 			{
-				Path: "/path-2",
+				Path:     "/path-2",
+				PathType: dataplane.PathTypeExact,
 				MatchRules: []dataplane.MatchRule{
 					{
 						Match:        dataplane.Match{},
@@ -2632,7 +2634,8 @@ func TestCreateLocationsRootPath(t *testing.T) {
 
 		if rootPath {
 			rules = append(rules, dataplane.PathRule{
-				Path: "/",
+				Path:     "/",
+				PathType: dataplane.PathTypeExact,
 				MatchRules: []dataplane.MatchRule{
 					{
 						Match:        dataplane.Match{},
@@ -2644,8 +2647,9 @@ func TestCreateLocationsRootPath(t *testing.T) {
 
 		if grpc {
 			rules = append(rules, dataplane.PathRule{
-				Path: "/grpc",
-				GRPC: true,
+				Path:     "/grpc",
+				PathType: dataplane.PathTypeExact,
+				GRPC:     true,
 				MatchRules: []dataplane.MatchRule{
 					{
 						Match:        dataplane.Match{},
@@ -2669,19 +2673,19 @@ func TestCreateLocationsRootPath(t *testing.T) {
 			pathRules: getPathRules(false /* rootPath */, false /* grpc */),
 			expLocations: []http.Location{
 				{
-					Path:            "/path-1",
+					Path:            "= /path-1",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path:            "/path-2",
+					Path:            "= /path-2",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path: "/",
+					Path: "= /",
 					Return: &http.Return{
 						Code: http.StatusNotFound,
 					},
@@ -2694,26 +2698,26 @@ func TestCreateLocationsRootPath(t *testing.T) {
 			grpc:      true,
 			expLocations: []http.Location{
 				{
-					Path:            "/path-1",
+					Path:            "= /path-1",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path:            "/path-2",
+					Path:            "= /path-2",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path:            "/grpc",
+					Path:            "= /grpc",
 					ProxyPass:       "grpc://test_foo_80",
 					GRPC:            true,
 					ProxySetHeaders: grpcBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path: "/",
+					Path: "= /",
 					Return: &http.Return{
 						Code: http.StatusNotFound,
 					},
@@ -2725,19 +2729,19 @@ func TestCreateLocationsRootPath(t *testing.T) {
 			pathRules: getPathRules(true /* rootPath */, false /* grpc */),
 			expLocations: []http.Location{
 				{
-					Path:            "/path-1",
+					Path:            "= /path-1",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path:            "/path-2",
+					Path:            "= /path-2",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path:            "/",
+					Path:            "= /",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
@@ -2749,7 +2753,137 @@ func TestCreateLocationsRootPath(t *testing.T) {
 			pathRules: nil,
 			expLocations: []http.Location{
 				{
-					Path: "/",
+					Path: "= /",
+					Return: &http.Return{
+						Code: http.StatusNotFound,
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			locs, httpMatchPair, grpc := createLocations(
+				&dataplane.VirtualServer{
+					PathRules: test.pathRules,
+					Port:      80,
+				},
+				"1",
+				&policiesfakes.FakeGenerator{},
+				alwaysFalseKeepAliveChecker,
+			)
+			g.Expect(locs).To(Equal(test.expLocations))
+			g.Expect(httpMatchPair).To(BeEmpty())
+			g.Expect(grpc).To(Equal(test.grpc))
+		})
+	}
+}
+
+func TestCreateLocationsPath(t *testing.T) {
+	t.Parallel()
+	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
+
+	fooGroup := dataplane.BackendGroup{
+		Source:  hrNsName,
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{
+				UpstreamName: "test_foo_80",
+				Valid:        true,
+				Weight:       1,
+			},
+		},
+	}
+
+	pathRules := []dataplane.PathRule{
+		{
+			Path:     "/exact-path",
+			PathType: dataplane.PathTypeExact,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     "/prefix-path-with-trailing-slash/",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     "/prefix-path-without-trailing-slash",
+			PathType: dataplane.PathTypePrefix,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+		{
+			Path:     "^/regular-expression-path/(.*)$",
+			PathType: dataplane.PathTypeRegularExpression,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		pathRules    []dataplane.PathRule
+		expLocations []http.Location
+		grpc         bool
+	}{
+		{
+			name:      "path rules with pathType.Exact/pathType.Prefix/pathType.RegularExpression",
+			pathRules: pathRules,
+			expLocations: []http.Location{
+				{
+					Path:            "= /exact-path",
+					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxySetHeaders: httpBaseHeaders,
+					Type:            http.ExternalLocationType,
+				},
+				{
+					Path:            "^~ /prefix-path-with-trailing-slash/",
+					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxySetHeaders: httpBaseHeaders,
+					Type:            http.ExternalLocationType,
+				},
+				{
+					Path:            "^~ /prefix-path-without-trailing-slash/",
+					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxySetHeaders: httpBaseHeaders,
+					Type:            http.ExternalLocationType,
+				},
+				{
+					Path:            "= /prefix-path-without-trailing-slash",
+					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxySetHeaders: httpBaseHeaders,
+					Type:            http.ExternalLocationType,
+				},
+				{
+					Path:            "~ ^/regular-expression-path/(.*)$",
+					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxySetHeaders: httpBaseHeaders,
+					Type:            http.ExternalLocationType,
+				},
+				{
+					Path: "= /",
 					Return: &http.Return{
 						Code: http.StatusNotFound,
 					},
@@ -2806,7 +2940,7 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 		expectedReturn  *http.Return
 		expectedRewrite *rewriteConfig
 		msg             string
-		path            string
+		pathRule        dataplane.PathRule
 		listenerPort    int32
 	}{
 		{
@@ -2904,6 +3038,84 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 			filter: modifiedHTTPRequestRedirectFilter(func(
 				filter *dataplane.HTTPRequestRedirectFilter,
 			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Scheme = helpers.GetPointer("https")
+				filter.Port = helpers.GetPointer[int32](2022)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplaceFullPath,
+					Replacement: "/full-path",
+				}
+				return filter
+			}),
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypeExact,
+			},
+			listenerPort: listenerPortCustom,
+			expectedReturn: &http.Return{
+				Code: 301,
+				Body: "https://foo.example.com:2022$uri$is_args$args",
+			},
+			expectedRewrite: &rewriteConfig{
+				MainRewrite: "^ /full-path",
+			},
+			msg: "exact path with ReplaceFullPath",
+		},
+		{
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Scheme = helpers.GetPointer("https")
+				filter.Port = helpers.GetPointer[int32](2022)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplaceFullPath,
+					Replacement: "/full-path",
+				}
+				return filter
+			}),
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypePrefix,
+			},
+			listenerPort: listenerPortCustom,
+			expectedReturn: &http.Return{
+				Code: 301,
+				Body: "https://foo.example.com:2022$uri$is_args$args",
+			},
+			expectedRewrite: &rewriteConfig{
+				MainRewrite: "^ /full-path",
+			},
+			msg: "prefix path with ReplaceFullPath",
+		},
+		{
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Scheme = helpers.GetPointer("https")
+				filter.Port = helpers.GetPointer[int32](2022)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplaceFullPath,
+					Replacement: "/full-path",
+				}
+				return filter
+			}),
+			pathRule: dataplane.PathRule{
+				Path:     "/original/v[0-9]+",
+				PathType: dataplane.PathTypeRegularExpression,
+			},
+			listenerPort: listenerPortCustom,
+			expectedReturn: &http.Return{
+				Code: 301,
+				Body: "https://foo.example.com:2022$uri$is_args$args",
+			},
+			expectedRewrite: &rewriteConfig{
+				MainRewrite: "^ /full-path",
+			},
+			msg: "regex path with ReplaceFullPath",
+		},
+		{
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
 				filter.Port = helpers.GetPointer[int32](80)
 				filter.Path = &dataplane.HTTPPathModifier{
 					Type:        dataplane.ReplacePrefixMatch,
@@ -2911,7 +3123,50 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 				}
 				return filter
 			}),
-			path:         "/original",
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypeExact,
+			},
+			listenerPort:    listenerPortCustom,
+			expectedReturn:  nil,
+			expectedRewrite: nil,
+			msg:             "exact path with ReplacePrefixMatch will be ignored",
+		},
+		{
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Port = helpers.GetPointer[int32](80)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "",
+				}
+				return filter
+			}),
+			pathRule: dataplane.PathRule{
+				Path:     "/original/v[0-9]+",
+				PathType: dataplane.PathTypeRegularExpression,
+			},
+			listenerPort:    listenerPortCustom,
+			expectedReturn:  nil,
+			expectedRewrite: nil,
+			msg:             "regex path with ReplacePrefixMatch will be ignored",
+		},
+		{
+			filter: modifiedHTTPRequestRedirectFilter(func(
+				filter *dataplane.HTTPRequestRedirectFilter,
+			) *dataplane.HTTPRequestRedirectFilter {
+				filter.Port = helpers.GetPointer[int32](80)
+				filter.Path = &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "",
+				}
+				return filter
+			}),
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypePrefix,
+			},
 			listenerPort: listenerPortCustom,
 			expectedReturn: &http.Return{
 				Code: 301,
@@ -2934,7 +3189,10 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 				}
 				return filter
 			}),
-			path:         "/original",
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypePrefix,
+			},
 			listenerPort: listenerPortCustom,
 			expectedReturn: &http.Return{
 				Code: 301,
@@ -2956,7 +3214,10 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 				}
 				return filter
 			}),
-			path:         "/original",
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypePrefix,
+			},
 			listenerPort: listenerPortCustom,
 			expectedReturn: &http.Return{
 				Code: 301,
@@ -2979,7 +3240,10 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 				}
 				return filter
 			}),
-			path:         "/original",
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypePrefix,
+			},
 			listenerPort: listenerPortCustom,
 			expectedReturn: &http.Return{
 				Code: 302,
@@ -3002,7 +3266,10 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 				}
 				return filter
 			}),
-			path:         "/original/",
+			pathRule: dataplane.PathRule{
+				Path:     "/original/",
+				PathType: dataplane.PathTypePrefix,
+			},
 			listenerPort: listenerPortCustom,
 			expectedReturn: &http.Return{
 				Code: 301,
@@ -3025,7 +3292,10 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 				}
 				return filter
 			}),
-			path:         "/original/",
+			pathRule: dataplane.PathRule{
+				Path:     "/original/",
+				PathType: dataplane.PathTypePrefix,
+			},
 			listenerPort: listenerPortCustom,
 			expectedReturn: &http.Return{
 				Code: 301,
@@ -3043,7 +3313,7 @@ func TestCreateReturnValForRedirectFilter(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result, rewriteConfig := createReturnAndRewriteConfigForRedirectFilter(test.filter, test.listenerPort, test.path)
+			result, rewriteConfig := createReturnAndRewriteConfigForRedirectFilter(test.filter, test.listenerPort, test.pathRule)
 			g.Expect(helpers.Diff(test.expectedReturn, result)).To(BeEmpty())
 			g.Expect(helpers.Diff(test.expectedRewrite, rewriteConfig)).To(BeEmpty())
 		})
@@ -3056,7 +3326,7 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 		filter   *dataplane.HTTPURLRewriteFilter
 		expected *rewriteConfig
 		msg      string
-		path     string
+		pathRule dataplane.PathRule
 	}{
 		{
 			filter:   nil,
@@ -3069,6 +3339,10 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 			msg:      "all fields are empty",
 		},
 		{
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypeExact,
+			},
 			filter: &dataplane.HTTPURLRewriteFilter{
 				Path: &dataplane.HTTPPathModifier{
 					Type:        dataplane.ReplaceFullPath,
@@ -3079,10 +3353,75 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 				InternalRewrite: "^ $request_uri",
 				MainRewrite:     "^ /full-path break",
 			},
-			msg: "full path",
+			msg: "exact path with full replacement",
 		},
 		{
-			path: "/original",
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypePrefix,
+			},
+			filter: &dataplane.HTTPURLRewriteFilter{
+				Path: &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplaceFullPath,
+					Replacement: "/full-path",
+				},
+			},
+			expected: &rewriteConfig{
+				InternalRewrite: "^ $request_uri",
+				MainRewrite:     "^ /full-path break",
+			},
+			msg: "prefix path with full replacement",
+		},
+		{
+			pathRule: dataplane.PathRule{
+				Path:     "/original/v[0-9]+",
+				PathType: dataplane.PathTypeRegularExpression,
+			},
+			filter: &dataplane.HTTPURLRewriteFilter{
+				Path: &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplaceFullPath,
+					Replacement: "/full-path",
+				},
+			},
+			expected: &rewriteConfig{
+				InternalRewrite: "^ $request_uri",
+				MainRewrite:     "^ /full-path break",
+			},
+			msg: "regex path with full replacement",
+		},
+		{
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypeExact,
+			},
+			filter: &dataplane.HTTPURLRewriteFilter{
+				Path: &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "/prefix-path",
+				},
+			},
+			expected: nil,
+			msg:      "exact path with prefix replacement should be ignored",
+		},
+		{
+			pathRule: dataplane.PathRule{
+				Path:     "/original/v[0-9]+",
+				PathType: dataplane.PathTypeRegularExpression,
+			},
+			filter: &dataplane.HTTPURLRewriteFilter{
+				Path: &dataplane.HTTPPathModifier{
+					Type:        dataplane.ReplacePrefixMatch,
+					Replacement: "/prefix-path",
+				},
+			},
+			expected: nil,
+			msg:      "regex path with prefix replacement should be ignored",
+		},
+		{
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypePrefix,
+			},
 			filter: &dataplane.HTTPURLRewriteFilter{
 				Path: &dataplane.HTTPPathModifier{
 					Type:        dataplane.ReplacePrefixMatch,
@@ -3096,7 +3435,10 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 			msg: "prefix path no trailing slashes",
 		},
 		{
-			path: "/original",
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypePrefix,
+			},
 			filter: &dataplane.HTTPURLRewriteFilter{
 				Path: &dataplane.HTTPPathModifier{
 					Type:        dataplane.ReplacePrefixMatch,
@@ -3110,7 +3452,10 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 			msg: "prefix path empty string",
 		},
 		{
-			path: "/original",
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypePrefix,
+			},
 			filter: &dataplane.HTTPURLRewriteFilter{
 				Path: &dataplane.HTTPPathModifier{
 					Type:        dataplane.ReplacePrefixMatch,
@@ -3124,7 +3469,10 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 			msg: "prefix path /",
 		},
 		{
-			path: "/original",
+			pathRule: dataplane.PathRule{
+				Path:     "/original",
+				PathType: dataplane.PathTypePrefix,
+			},
 			filter: &dataplane.HTTPURLRewriteFilter{
 				Path: &dataplane.HTTPPathModifier{
 					Type:        dataplane.ReplacePrefixMatch,
@@ -3138,7 +3486,10 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 			msg: "prefix path replacement with trailing /",
 		},
 		{
-			path: "/original/",
+			pathRule: dataplane.PathRule{
+				Path:     "/original/",
+				PathType: dataplane.PathTypePrefix,
+			},
 			filter: &dataplane.HTTPURLRewriteFilter{
 				Path: &dataplane.HTTPPathModifier{
 					Type:        dataplane.ReplacePrefixMatch,
@@ -3152,7 +3503,10 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 			msg: "prefix path original with trailing /",
 		},
 		{
-			path: "/original/",
+			pathRule: dataplane.PathRule{
+				Path:     "/original/",
+				PathType: dataplane.PathTypePrefix,
+			},
 			filter: &dataplane.HTTPURLRewriteFilter{
 				Path: &dataplane.HTTPPathModifier{
 					Type:        dataplane.ReplacePrefixMatch,
@@ -3172,7 +3526,7 @@ func TestCreateRewritesValForRewriteFilter(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := createRewritesValForRewriteFilter(test.filter, test.path)
+			result := createRewritesValForRewriteFilter(test.filter, test.pathRule)
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}

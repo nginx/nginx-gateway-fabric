@@ -66,7 +66,7 @@ func GetBuildInfo() (commitHash string, commitTime string, dirtyBuild string) {
 
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return
+		return commitHash, commitTime, dirtyBuild
 	}
 
 	for _, kv := range info.Settings {
@@ -80,7 +80,7 @@ func GetBuildInfo() (commitHash string, commitTime string, dirtyBuild string) {
 		}
 	}
 
-	return
+	return commitHash, commitTime, dirtyBuild
 }
 
 // AddNginxLogsAndEventsToReport adds nginx logs and events from the namespace to the report if the spec failed.

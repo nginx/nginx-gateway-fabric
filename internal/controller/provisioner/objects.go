@@ -1148,38 +1148,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 }
 
 func (p *NginxProvisioner) buildImage(nProxyCfg *graph.EffectiveNginxProxy) (string, corev1.PullPolicy) {
-	image := defaultNginxImagePath
-	if p.cfg.Plus {
-		image = defaultNginxPlusImagePath
-	}
-	tag := p.cfg.GatewayPodConfig.Version
-	pullPolicy := defaultImagePullPolicy
-
-	getImageAndPullPolicy := func(container ngfAPIv1alpha2.ContainerSpec) (string, string, corev1.PullPolicy) {
-		if container.Image != nil {
-			if container.Image.Repository != nil {
-				image = *container.Image.Repository
-			}
-			if container.Image.Tag != nil {
-				tag = *container.Image.Tag
-			}
-			if container.Image.PullPolicy != nil {
-				pullPolicy = corev1.PullPolicy(*container.Image.PullPolicy)
-			}
-		}
-
-		return image, tag, pullPolicy
-	}
-
-	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
-		if nProxyCfg.Kubernetes.Deployment != nil {
-			image, tag, pullPolicy = getImageAndPullPolicy(nProxyCfg.Kubernetes.Deployment.Container)
-		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
-			image, tag, pullPolicy = getImageAndPullPolicy(nProxyCfg.Kubernetes.DaemonSet.Container)
-		}
-	}
-
-	return fmt.Sprintf("%s:%s", image, tag), pullPolicy
+	return DetermineNginxImageName(nProxyCfg, p.cfg.Plus, p.cfg.GatewayPodConfig.Version)
 }
 
 func buildNginxDeploymentHPA(
@@ -1419,4 +1388,42 @@ func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxPr
 	}
 
 	return probe
+}
+
+func DetermineNginxImageName(
+	nProxyCfg *graph.EffectiveNginxProxy,
+	isPlus bool, version string,
+) (string, corev1.PullPolicy) {
+	image := defaultNginxImagePath
+	if isPlus {
+		image = defaultNginxPlusImagePath
+	}
+	tag := version
+	pullPolicy := defaultImagePullPolicy
+
+	getImageAndPullPolicy := func(container ngfAPIv1alpha2.ContainerSpec) (string, string, corev1.PullPolicy) {
+		if container.Image != nil {
+			if container.Image.Repository != nil {
+				image = *container.Image.Repository
+			}
+			if container.Image.Tag != nil {
+				tag = *container.Image.Tag
+			}
+			if container.Image.PullPolicy != nil {
+				pullPolicy = corev1.PullPolicy(*container.Image.PullPolicy)
+			}
+		}
+
+		return image, tag, pullPolicy
+	}
+
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
+		if nProxyCfg.Kubernetes.Deployment != nil {
+			image, tag, pullPolicy = getImageAndPullPolicy(nProxyCfg.Kubernetes.Deployment.Container)
+		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
+			image, tag, pullPolicy = getImageAndPullPolicy(nProxyCfg.Kubernetes.DaemonSet.Container)
+		}
+	}
+
+	return fmt.Sprintf("%s:%s", image, tag), pullPolicy
 }

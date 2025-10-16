@@ -15,6 +15,7 @@ metadata:
   namespace: nginx-gateway
 ---
 apiVersion: v1
+automountServiceAccountToken: false
 kind: ServiceAccount
 metadata:
   labels:
@@ -54,15 +55,33 @@ metadata:
 rules:
 - apiGroups:
   - ""
-  - apps
-  - autoscaling
   resources:
   - secrets
   - configmaps
   - serviceaccounts
   - services
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
+  - apps
+  resources:
   - deployments
   - daemonsets
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
   - horizontalpodautoscalers
   verbs:
   - create
@@ -342,6 +361,7 @@ spec:
     metadata:
       annotations: null
     spec:
+      automountServiceAccountToken: true
       containers:
       - args:
         - generate-certs

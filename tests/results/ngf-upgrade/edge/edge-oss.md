@@ -6,16 +6,16 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 635b3fcd6e643f4bd24ebbd4c901619a030c4bc0
-- Date: 2025-09-15T17:56:13Z
+- Commit: 9010072ecd34a8fa99bfdd3d7580c9d725fb063e
+- Date: 2025-10-01T09:39:27Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.33.4-gke.1036000
+- k8s version: v1.33.4-gke.1172000
 - vCPUs per node: 16
-- RAM per node: 65851528Ki
+- RAM per node: 65851524Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -23,10 +23,10 @@ GKE Cluster:
 ## Test: Send https /tea traffic
 
 ```text
-Requests      [total, rate, throughput]         6000, 100.02, 100.02
-Duration      [total, attack, wait]             59.991s, 59.99s, 1.188ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  897.354µs, 1.237ms, 1.21ms, 1.357ms, 1.41ms, 1.536ms, 14.359ms
-Bytes In      [total, mean]                     924000, 154.00
+Requests      [total, rate, throughput]         6000, 100.02, 100.01
+Duration      [total, attack, wait]             59.992s, 59.99s, 1.359ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  905.822µs, 1.251ms, 1.226ms, 1.407ms, 1.468ms, 1.64ms, 16.559ms
+Bytes In      [total, mean]                     926023, 154.34
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:6000  
@@ -39,8 +39,8 @@ Error Set:
 
 ```text
 Requests      [total, rate, throughput]         6000, 100.02, 100.01
-Duration      [total, attack, wait]             59.991s, 59.99s, 1.398ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  897.295µs, 1.211ms, 1.204ms, 1.356ms, 1.401ms, 1.541ms, 9.367ms
+Duration      [total, attack, wait]             59.991s, 59.99s, 1.078ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  842.735µs, 1.162ms, 1.139ms, 1.31ms, 1.361ms, 1.52ms, 14.201ms
 Bytes In      [total, mean]                     960000, 160.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%

@@ -27,6 +27,8 @@ rules:
     spaces: consistent
     indent-sequences: consistent
     check-multi-line-strings: true
+    ignore: |
+      operators/**/*
   key-duplicates: enable
   key-ordering: disable
   line-length:
@@ -38,6 +40,7 @@ rules:
       tests/suite/manifests/longevity/cronjob.yaml
       .goreleaser.yml
       charts/nginx-gateway-fabric/
+      operators/config/crd/bases/gateway.nginx.org_nginxgatewayfabrics.yaml
   new-line-at-end-of-file: enable
   new-lines: enable
   octal-values: disable

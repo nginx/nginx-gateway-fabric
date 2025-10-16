@@ -36,7 +36,7 @@ You can find the comprehensive NGINX Gateway Fabric user documentation on the [N
 We publish NGINX Gateway Fabric releases on GitHub. See
 our [releases page](https://github.com/nginx/nginx-gateway-fabric/releases).
 
-The latest release is [2.1.1](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.1.1).
+The latest release is [2.1.4](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.1.4).
 
 The edge version is useful for experimenting with new features that are not yet published in a release. To use, choose
 the _edge_ version built from the [latest commit](https://github.com/nginx/nginx-gateway-fabric/commits/main)
@@ -47,7 +47,7 @@ to the correct versions:
 
 | Version        | Description                              | Installation Manifests                                                         | Documentation and Examples                                                                                                                                           |
 |----------------|------------------------------------------|--------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Latest release | For production use                       | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.1.1/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.1.1/examples).                        |
+| Latest release | For production use                       | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.1.4/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.1.4/examples).                        |
 | Edge           | For experimental use and latest features | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/main/deploy).   | [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/main/examples). |
 
 ### Versioning
@@ -68,7 +68,10 @@ The following table lists the software versions NGINX Gateway Fabric supports.
 
 | NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS | NGINX Plus | NGINX Agent |
 |----------------------|-------------|------------|-----------|------------|-------------|
-| Edge                 | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.3.1      |
+| Edge                 | 1.3.0       | 1.25+      | 1.29.2    | R35        | v3.3.2      |
+| 2.1.4                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.3.1      |
+| 2.1.3                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.3.1      |
+| 2.1.2                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.3.1      |
 | 2.1.1                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.2.1      |
 | 2.1.0                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.2.1      |
 | 2.0.2                | 1.3.0       | 1.25+      | 1.28.0    | R34        | v3.0.1      |
@@ -128,7 +131,7 @@ Every Tuesday at 9:30AM Pacific / 5:30PM GMT
 
 For the meeting link, updates, agenda, and meeting notes, check the calendar below:
 
-[NGINX Gateway Fabric Meeting Calendar](https://calendar.google.com/calendar/embed?src=a82aa06dc698b4271fb562d43f38e5bf7676585e581057bde026ddd1c71f84e9%40group.calendar.google.com)
+[NGINX Gateway Fabric Meeting Calendar](https://calendar.google.com/calendar/embed?src=901278554a5187740a1cef8c6fd92351eb592550cb5936ba04d318f8859888f4%40group.calendar.google.com&ctz=America%2FLos_Angeles)
 
 If you have a use case for NGINX Gateway Fabric that the project can't quite meet yet, bugs, problems, success stories, or just want to be more involved with the project, come by and say hi!
 

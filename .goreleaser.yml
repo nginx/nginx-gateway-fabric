@@ -35,10 +35,6 @@ sboms:
     documents:
       - "${artifact}.spdx.json"
 
-blobs:
-  - provider: azblob
-    bucket: "{{.Env.AZURE_BUCKET_NAME}}"
-
 signs:
   - cmd: cosign
     artifacts: checksum

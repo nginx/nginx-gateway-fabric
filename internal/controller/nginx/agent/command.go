@@ -86,7 +86,7 @@ func (cs *commandService) CreateConnection(
 	podName := resource.GetContainerInfo().GetHostname()
 	cs.logger.Info(fmt.Sprintf("Creating connection for nginx pod: %s", podName))
 
-	owner, err := cs.getPodOwner(podName)
+	owner, _, err := cs.getPodOwner(podName)
 	if err != nil {
 		response := &pb.CreateConnectionResponse{
 			Response: &pb.CommandResponse{
@@ -281,6 +281,17 @@ func (cs *commandService) setInitialConfig(
 	deployment.FileLock.Lock()
 	defer deployment.FileLock.Unlock()
 
+	_, pod, err := cs.getPodOwner(conn.PodName)
+	if err != nil {
+		cs.logAndSendErrorStatus(deployment, conn, err)
+
+		return grpcStatus.Error(codes.Internal, err.Error())
+	}
+	if err := cs.validatePodImageVersion(pod, deployment.imageVersion); err != nil {
+		cs.logAndSendErrorStatus(deployment, conn, err)
+		return grpcStatus.Errorf(codes.FailedPrecondition, "nginx image version validation failed: %s", err.Error())
+	}
+
 	fileOverviews, configVersion := deployment.GetFileOverviews()
 
 	cs.logger.Info("Sending initial configuration to agent", "pod", conn.PodName, "configVersion", configVersion)
@@ -443,7 +454,7 @@ func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.Mana
 	}
 }
 
-func (cs *commandService) getPodOwner(podName string) (types.NamespacedName, error) {
+func (cs *commandService) getPodOwner(podName string) (types.NamespacedName, *v1.Pod, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -452,30 +463,31 @@ func (cs *commandService) getPodOwner(podName string) (types.NamespacedName, err
 		FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": podName}),
 	}
 	if err := cs.k8sReader.List(ctx, &pods, listOpts); err != nil {
-		return types.NamespacedName{}, fmt.Errorf("error listing pods: %w", err)
+		return types.NamespacedName{}, nil, fmt.Errorf("error listing pods: %w", err)
 	}
 
 	if len(pods.Items) == 0 {
-		return types.NamespacedName{}, fmt.Errorf("no pods found with name %q", podName)
+		return types.NamespacedName{}, nil, fmt.Errorf("no pods found with name %q", podName)
 	}
 
 	if len(pods.Items) > 1 {
-		return types.NamespacedName{}, fmt.Errorf("should only be one pod with name %q", podName)
+		return types.NamespacedName{}, nil, fmt.Errorf("should only be one pod with name %q", podName)
 	}
-	pod := pods.Items[0]
+	pod := &pods.Items[0]
 
 	podOwnerRefs := pod.GetOwnerReferences()
 	if len(podOwnerRefs) != 1 {
-		return types.NamespacedName{}, fmt.Errorf("expected one owner reference of the nginx Pod, got %d", len(podOwnerRefs))
+		tooManyOwnersError := "expected one owner reference of the nginx Pod, got %d"
+		return types.NamespacedName{}, nil, fmt.Errorf(tooManyOwnersError, len(podOwnerRefs))
 	}
 
 	if podOwnerRefs[0].Kind != "ReplicaSet" && podOwnerRefs[0].Kind != "DaemonSet" {
 		err := fmt.Errorf("expected pod owner reference to be ReplicaSet or DaemonSet, got %s", podOwnerRefs[0].Kind)
-		return types.NamespacedName{}, err
+		return types.NamespacedName{}, nil, err
 	}
 
 	if podOwnerRefs[0].Kind == "DaemonSet" {
-		return types.NamespacedName{Namespace: pod.Namespace, Name: podOwnerRefs[0].Name}, nil
+		return types.NamespacedName{Namespace: pod.Namespace, Name: podOwnerRefs[0].Name}, pod, nil
 	}
 
 	var replicaSet appsv1.ReplicaSet
@@ -497,16 +509,46 @@ func (cs *commandService) getPodOwner(podName string) (types.NamespacedName, err
 			return true, nil
 		},
 	); err != nil {
-		return types.NamespacedName{}, fmt.Errorf("failed to get nginx Pod's ReplicaSet: %w", replicaSetErr)
+		return types.NamespacedName{}, nil, fmt.Errorf("failed to get nginx Pod's ReplicaSet: %w", replicaSetErr)
 	}
 
 	replicaOwnerRefs := replicaSet.GetOwnerReferences()
 	if len(replicaOwnerRefs) != 1 {
 		err := fmt.Errorf("expected one owner reference of the nginx ReplicaSet, got %d", len(replicaOwnerRefs))
-		return types.NamespacedName{}, err
+		return types.NamespacedName{}, nil, err
 	}
 
-	return types.NamespacedName{Namespace: pod.Namespace, Name: replicaOwnerRefs[0].Name}, nil
+	return types.NamespacedName{Namespace: pod.Namespace, Name: replicaOwnerRefs[0].Name}, pod, nil
+}
+
+// validatePodImageVersion checks if the pod's nginx container image version matches the expected version
+// from its deployment. Returns an error if versions don't match.
+func (cs *commandService) validatePodImageVersion(
+	pod *v1.Pod,
+	expectedImage string,
+) error {
+	var podNginxImage string
+
+	for _, container := range pod.Spec.Containers {
+		if container.Name == "nginx" {
+			podNginxImage = container.Image
+			break
+		}
+	}
+	if podNginxImage == "" {
+		return fmt.Errorf("nginx container not found in pod %q", pod.Name)
+	}
+
+	// Compare images
+	if podNginxImage != expectedImage {
+		return fmt.Errorf("nginx image version mismatch: pod has %q but expected %q", podNginxImage, expectedImage)
+	}
+
+	cs.logger.V(1).Info("Pod nginx image version validated successfully",
+		"podName", pod.Name,
+		"image", podNginxImage)
+
+	return nil
 }
 
 // UpdateDataPlaneStatus is called by agent on startup and upon any change in agent metadata,

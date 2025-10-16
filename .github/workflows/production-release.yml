@@ -7,6 +7,11 @@ on:
         description: 'Release version (e.g., v2.0.3)'
         required: true
         type: string
+      operator-version:
+        description: 'Operator release version (e.g., v1.0.0). Optional'
+        required: false
+        type: string
+        default: ''
       dry_run:
         description: 'If true, does a dry run of the production workflow'
         required: false
@@ -33,6 +38,7 @@ jobs:
           echo "Validating release from: ${GITHUB_REF}"
 
           INPUT_VERSION="${{ github.event.inputs.version }}"
+          INPUT_OPERATOR_VERSION="${{ github.event.inputs.operator-version }}"
 
           # Validate version format
           if [[ ! "${INPUT_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -41,8 +47,17 @@ jobs:
           exit 1
           fi
 
+          # Validate version format if operator version is provided
+          if [[ -n "${INPUT_OPERATOR_VERSION}" && ! "${INPUT_OPERATOR_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid operator version format: ${INPUT_OPERATOR_VERSION}"
+          echo "Expected format: v1.2.3"
+          exit 1
+          fi
+
+
           echo "✅ Valid release branch: ${GITHUB_REF}"
           echo "✅ Valid version format: ${INPUT_VERSION}"
+          [[ -n "${INPUT_OPERATOR_VERSION}" ]] && echo "✅ Valid operator version format: ${INPUT_OPERATOR_VERSION}"
 
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -62,7 +77,7 @@ jobs:
           git tag -a "${VERSION}" -m "Release ${VERSION}"
 
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-          echo "DRY RUN: Would push tag ${VERSION}"
+          echo "DRY RUN: Would push tag ${VERSION} and operator tag ${{ github.event.inputs.operator-version || '' }}"
           git push --dry-run origin "${VERSION}"
           else
           git push origin "${VERSION}"
@@ -76,6 +91,7 @@ jobs:
     with:
       is_production_release: true
       release_version: ${{ github.event.inputs.version }}
+      operator_version: ${{ github.event.inputs.operator-version }}
       dry_run: ${{ github.event.inputs.dry_run }}
     secrets: inherit
     permissions:

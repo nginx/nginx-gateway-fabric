@@ -67,6 +67,7 @@ func buildHTTPRoute(
 		validator,
 		getSnippetsFilterResolverForNamespace(snippetsFilters, r.Source.GetNamespace()),
 		inferencePools,
+		r.Source.GetNamespace(),
 	)
 
 	r.Spec.Rules = rules
@@ -174,8 +175,14 @@ func processHTTPRouteRule(
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	routeNamespace string,
 ) (RouteRule, routeRuleErrors) {
 	var errors routeRuleErrors
+
+	unsupportedFieldsErrors := checkForUnsupportedHTTPFields(specRule, rulePath)
+	if len(unsupportedFieldsErrors) > 0 {
+		errors.warn = append(errors.warn, unsupportedFieldsErrors...)
+	}
 
 	validMatches := true
 
@@ -278,6 +285,7 @@ func processHTTPRouteRules(
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	routeNamespace string,
 ) (rules []RouteRule, valid bool, conds []conditions.Condition) {
 	rules = make([]RouteRule, len(route.Spec.Rules))
 
@@ -296,6 +304,7 @@ func processHTTPRouteRules(
 			validator,
 			resolveExtRefFunc,
 			inferencePools,
+			routeNamespace,
 		)
 
 		if rr.ValidMatches && rr.Filters.Valid {
@@ -310,6 +319,11 @@ func processHTTPRouteRules(
 	conds = make([]conditions.Condition, 0, 2)
 
 	valid = true
+
+	// add warning condition for unsupported fields if any
+	if len(allRulesErrors.warn) > 0 {
+		conds = append(conds, conditions.NewRouteAcceptedUnsupportedField(allRulesErrors.warn.ToAggregate().Error()))
+	}
 
 	if len(allRulesErrors.invalid) > 0 {
 		msg := allRulesErrors.invalid.ToAggregate().Error()
@@ -467,17 +481,23 @@ func validatePathMatch(
 		return field.ErrorList{field.Invalid(fieldPath.Child("value"), *path.Value, msg)}
 	}
 
-	if *path.Type != v1.PathMatchPathPrefix && *path.Type != v1.PathMatchExact {
+	switch *path.Type {
+	case v1.PathMatchExact, v1.PathMatchPathPrefix:
+		if err := validator.ValidatePathInMatch(*path.Value); err != nil {
+			valErr := field.Invalid(fieldPath.Child("value"), *path.Value, err.Error())
+			allErrs = append(allErrs, valErr)
+		}
+	case v1.PathMatchRegularExpression:
+		if err := validator.ValidatePathInRegexMatch(*path.Value); err != nil {
+			valErr := field.Invalid(fieldPath.Child("value"), *path.Value, err.Error())
+			allErrs = append(allErrs, valErr)
+		}
+	default:
 		valErr := field.NotSupported(
 			fieldPath.Child("type"),
 			*path.Type,
-			[]string{string(v1.PathMatchExact), string(v1.PathMatchPathPrefix)},
+			[]string{string(v1.PathMatchExact), string(v1.PathMatchPathPrefix), string(v1.PathMatchRegularExpression)},
 		)
-		allErrs = append(allErrs, valErr)
-	}
-
-	if err := validator.ValidatePathInMatch(*path.Value); err != nil {
-		valErr := field.Invalid(fieldPath.Child("value"), *path.Value, err.Error())
 		allErrs = append(allErrs, valErr)
 	}
 
@@ -587,4 +607,39 @@ func validateFilterRewrite(
 	}
 
 	return allErrs
+}
+
+func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) field.ErrorList {
+	var ruleErrors field.ErrorList
+
+	if rule.Name != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("name"),
+			"Name",
+		))
+	}
+	if rule.Timeouts != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("timeouts"),
+			"Timeouts",
+		))
+	}
+	if rule.Retry != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("retry"),
+			"Retry",
+		))
+	}
+	if rule.SessionPersistence != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("sessionPersistence"),
+			"SessionPersistence",
+		))
+	}
+
+	if len(ruleErrors) == 0 {
+		return nil
+	}
+
+	return ruleErrors
 }

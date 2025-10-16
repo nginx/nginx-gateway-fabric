@@ -9,7 +9,7 @@ on:
     branches:
       - "**"
   schedule:
-    - cron: "0 4 * * *" # run every day at 4am UTC
+    - cron: "0 3 * * *" # run every day at 3am UTC (nightly builds)
   workflow_call:
     inputs:
       is_production_release:
@@ -17,6 +17,10 @@ on:
         type: boolean
         default: false
       release_version:
+        required: false
+        type: string
+        default: ''
+      operator_version:
         required: false
         type: string
         default: ''
@@ -45,7 +49,6 @@ jobs:
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
       k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
       helm_changes: ${{ steps.filter.outputs.charts }}
-      goproxy: ${{ steps.goproxy.outputs.goproxy }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -64,7 +67,6 @@ jobs:
           echo "Development mode - using dev Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
-          echo "goproxy=${GOPROXY_VALUE}" >> $GITHUB_OUTPUT
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
@@ -105,11 +107,19 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-24.04
     needs: vars
-    env:
-      GOPROXY: ${{ needs.vars.outputs.goproxy }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          GOPROXY_VALUE="direct"
+          else
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
@@ -159,8 +169,8 @@ jobs:
     name: Build Binary
     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, unit-tests, njs-unit-tests]
-    env:
-      GOPROXY: ${{ needs.vars.outputs.goproxy }}
+    outputs:
+      json: ${{ steps.gateway_binaries.outputs.json }}
     permissions:
       contents: write # for goreleaser/goreleaser-action and lucacome/draft-release to create/update releases
       id-token: write # for goreleaser/goreleaser-action to sign artifacts
@@ -170,6 +180,21 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
+
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          echo "No Artifactory secrets available - using direct GOPROXY"
+          GOPROXY_VALUE="direct"
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Production mode - using production Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
+          else
+          echo "Development mode - using dev Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
@@ -208,23 +233,116 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
-          version: v2.12.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.12.5 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || 'build --snapshot' }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
-          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-          AZURE_BUCKET_NAME: ${{ secrets.AZURE_BUCKET_NAME }}
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_COMMUNITY }}
           TELEMETRY_ENDPOINT: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release-') && 'oss-dev.edge.df.f5.com:443' || 'oss.edge.df.f5.com:443' }}
           TELEMETRY_ENDPOINT_INSECURE: "false"
 
-      - name: Cache Artifacts
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      - name: Extract gateway binaries info
+        id: gateway_binaries
+        run: |
+          set -e
+          binaries=()
+          for bin in $(find ${{ github.workspace }}/dist -type f -name "gateway"); do
+          dir=$(basename $(dirname "$bin"))
+          if [[ "$dir" =~ gateway_([a-zA-Z0-9]+)_([a-zA-Z0-9]+) ]]; then
+          os="${BASH_REMATCH[1]}"
+          arch="${BASH_REMATCH[2]}"
+          digest=$(sha256sum "$bin" | cut -d' ' -f1)
+          binaries+=("{\"path\":\"$bin\",\"os\":\"$os\",\"arch\":\"$arch\",\"digest\":\"$digest\"}")
+          fi
+          done
+          # Join array elements with commas
+          IFS=','
+          json="[${binaries[*]}]"
+          echo "Generated JSON: $json"
+          echo "json=$json" >> $GITHUB_OUTPUT
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
+          name: dist-${{ github.run_id }}
           path: ${{ github.workspace }}/dist
-          key: nginx-gateway-fabric-${{ github.run_id }}-${{ github.run_number }}
+          retention-days: 1
+
+  assertion:
+    name: Generate and Sign Assertion Documents
+    needs: [vars, binary]
+    if: ${{ inputs.is_production_release }}
+    permissions:
+      contents: read
+      id-token: write # for compliance-rules action to sign assertion doc
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        gateway: ${{ fromJson(needs.binary.outputs.json) }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          echo "No Artifactory secrets available - using direct GOPROXY"
+          GOPROXY_VALUE="direct"
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "Production mode - using production Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
+          else
+          echo "Development mode - using dev Artifactory"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
+
+      - name: Setup Golang Environment
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: stable
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: dist-${{ github.run_id }}
+          path: ${{ github.workspace }}/dist
+
+      - name: List Dependencies in Go Binary
+        id: godeps
+        run: |
+          go version -m dist/gateway_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}*/gateway > goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.txt
+          echo "goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)" >> $GITHUB_OUTPUT
+          goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)
+          cat $goversionm
+
+      - name: Generate Assertion Document
+        id: assertiondoc
+        uses: nginxinc/compliance-rules/.github/actions/assertion@83e452166aaf0ad8f07caf91a4f1f903b3dea1e6
+        with:
+          artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
+          artifact-digest: ${{ matrix.gateway.digest }}
+          build-type: 'github'
+          builder-id: 'github.com'
+          builder-version: '0.1.0-xyz'
+          invocation-id: ${{ github.run_id }}.${{ github.run_number }}.${{ strategy.job-index }}
+          started-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
+          finished-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
+          artifactory-user: ${{ secrets.ARTIFACTORY_USER }}
+          artifactory-api-token: ${{ secrets.ARTIFACTORY_TOKEN }}
+          artifactory-url: ${{ secrets.ARTIFACTORY_URL }}
+          artifactory-repo: 'f5-nginx-go-local-approved-dependency'
+          build-content-path: ${{ steps.godeps.outputs.goversionm }}
+          assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
+
+      - name: Sign and Store Assertion Document
+        id: sign
+        uses: nginxinc/compliance-rules/.github/actions/sign@83e452166aaf0ad8f07caf91a4f1f903b3dea1e6
+        with:
+          assertion-doc: ${{ steps.assertiondoc.outputs.assertion-document-path }}
 
   build-oss:
     name: Build OSS images
@@ -234,10 +352,12 @@ jobs:
       matrix:
         image: [ngf, nginx]
         platforms: ["linux/arm64, linux/amd64"]
+        build-os: ["", ubi]
     uses: ./.github/workflows/build.yml
     with:
       image: ${{ matrix.image }}
       platforms: ${{ matrix.platforms }}
+      build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false}}
       runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
@@ -252,10 +372,32 @@ jobs:
     name: Build Plus images
     needs: [vars, binary]
     uses: ./.github/workflows/build.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        build-os: ["", ubi]
     with:
       image: plus
       platforms: "linux/arm64, linux/amd64"
+      build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
+      dry_run: ${{ inputs.dry_run || false }}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    permissions:
+      contents: read # for docker/build-push-action to read repo content
+      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+      packages: write # for docker/build-push-action to push to GHCR
+      id-token: write # for docker/login to login to NGINX registry
+    secrets: inherit
+
+  build-operator:
+    name: Build Operator images
+    needs: [vars, binary]
+    uses: ./.github/workflows/build.yml
+    with:
+      image: operator
+      platforms: "linux/arm64, linux/amd64"
+      tag: ${{ inputs.operator_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
       runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
@@ -272,6 +414,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [nginx, plus]
+        build-os: ["", ubi]
         k8s-version:
           [
             "${{ needs.vars.outputs.min_k8s_version }}",
@@ -281,6 +424,7 @@ jobs:
     with:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
+      build-os: ${{ matrix.build-os }}
     secrets: inherit
     permissions:
       contents: read
@@ -292,6 +436,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [nginx, plus]
+        build-os: ["", ubi]
         k8s-version:
           [
             "${{ needs.vars.outputs.min_k8s_version }}",
@@ -303,6 +448,7 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       enable-experimental: ${{ matrix.enable-experimental }}
+      build-os: ${{ matrix.build-os }}
       production-release: ${{ inputs.is_production_release == true && (inputs.dry_run == false || inputs.dry_run == null) }}
       release_version: ${{ inputs.release_version }}
     secrets: inherit
@@ -341,7 +487,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -362,11 +508,19 @@ jobs:
     name: CEL Tests
     runs-on: ubuntu-24.04
     needs: vars
-    env:
-      GOPROXY: ${{ needs.vars.outputs.goproxy }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Configure GOPROXY
+        id: goproxy
+        run: |
+          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
+          GOPROXY_VALUE="direct"
+          else
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          fi
+          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0

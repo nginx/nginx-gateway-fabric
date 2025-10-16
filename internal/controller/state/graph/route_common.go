@@ -211,12 +211,14 @@ func CreateGatewayListenerKey(gwNSName types.NamespacedName, listenerName string
 type routeRuleErrors struct {
 	invalid field.ErrorList
 	resolve field.ErrorList
+	warn    field.ErrorList
 }
 
 func (e routeRuleErrors) append(newErrors routeRuleErrors) routeRuleErrors {
 	return routeRuleErrors{
 		invalid: append(e.invalid, newErrors.invalid...),
 		resolve: append(e.resolve, newErrors.resolve...),
+		warn:    append(e.warn, newErrors.warn...),
 	}
 }
 

@@ -225,10 +225,16 @@ func (p *NginxProvisioner) provisionNginx(
 		return nil
 	}
 
+	objNames := make([]string, 0, len(objects))
+	for _, obj := range objects {
+		objNames = append(objNames, obj.GetName())
+	}
+
 	p.cfg.Logger.Info(
 		"Creating/Updating nginx resources",
 		"namespace", gateway.GetNamespace(),
-		"name", resourceName,
+		"nginx resource name", resourceName,
+		"resource names", objNames,
 	)
 
 	var agentConfigMapUpdated, deploymentCreated bool
