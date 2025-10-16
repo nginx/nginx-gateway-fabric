@@ -13,6 +13,7 @@
 cover.html
 cmd-cover.html
 conformance-profile.yaml
+conformance-profile-inference.yaml
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
