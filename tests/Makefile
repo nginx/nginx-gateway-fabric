@@ -60,7 +60,7 @@ run-conformance-tests: ## Run conformance tests
 		--restart=Never -- sh -c "go test -v . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--report-output=output.txt; cat output.txt" | tee output.txt
-	./scripts/check-pod-exit-code.sh
+	./scripts/check-pod-exit-code.sh conformance
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml
 	grpc_core_result=`yq '.profiles[0].core.result' conformance-profile.yaml`; \
 	http_core_result=`yq '.profiles[1].core.result' conformance-profile.yaml`; \
@@ -80,7 +80,7 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 		--restart=Never -- sh -c "go test -v . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES_OPENSHIFT) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS_OPENSHIFT) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--service-type=$(GW_SERVICE_TYPE) --report-output=output.txt; cat output.txt" | tee output.txt
-	./scripts/check-pod-exit-code.sh
+	./scripts/check-pod-exit-code.sh conformance
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml
 	rm output.txt
 	grpc_core_result=`yq '.profiles[0].core.result' conformance-profile.yaml`; \
@@ -96,7 +96,7 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 run-inference-conformance-tests: ## Run inference conformance tests
 	kind load docker-image $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --name $(CLUSTER_NAME)
 	kubectl apply -f conformance/conformance-rbac.yaml
-	kubectl run -i conformance \
+	kubectl run -i conformance-inference \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
 		--restart=Never -- sh -c "go test -v . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
@@ -104,7 +104,7 @@ run-inference-conformance-tests: ## Run inference conformance tests
 		--skip-tests=$(INFERENCE_SKIP_TESTS) \
 		--supported-features=$(INFERENCE_SUPPORTED_FEATURES) \
 		--report-output=output.txt; cat output.txt" | tee output.txt
-	./scripts/check-pod-exit-code.sh
+	./scripts/check-pod-exit-code.sh conformance-inference
 	sed -e '1,/GatewayAPIInferenceExtensionVersion/d' output.txt > conformance-profile-inference.yaml
 	rm output.txt
 	core_result=`yq '.profiles[0].core.result' conformance-profile-inference.yaml`; \

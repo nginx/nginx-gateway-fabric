@@ -199,12 +199,10 @@ jobs:
         run: gh release upload ${{ github.ref_name }} conformance-profile.yaml --clobber
         working-directory: ./tests
 
-      # The same setup works for inference conformance tests
-      # and inference extension flag is enabled
       - name: Run inference conformance tests
         run: |
           make run-inference-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ github.ref_name }} CLUSTER_NAME=${{ github.run_id }}
-          core_result=$(cat conformance-inference-profile.yaml | yq '.profiles[0].core.result')
+          core_result=$(cat conformance-profile-inference.yaml | yq '.profiles[0].core.result')
           if [ "${core_result}" == "failure" ] ]; then echo "Inference Conformance test failed, see above for details." && exit 2; fi
         working-directory: ./tests
 
