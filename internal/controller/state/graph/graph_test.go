@@ -228,9 +228,12 @@ func TestBuildGraph(t *testing.T) {
 				Weight:             1,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				IsInferencePool:    true,
-				EndpointPickerConfig: &inference.EndpointPickerRef{
-					Kind: kinds.Service,
-					Name: inference.ObjectName(controller.CreateInferencePoolServiceName("ipool")),
+				EndpointPickerConfig: EndpointPickerConfig{
+					NsName: testNs,
+					EndpointPickerRef: &inference.EndpointPickerRef{
+						Kind: kinds.Service,
+						Name: inference.ObjectName(controller.CreateInferencePoolServiceName("ipool")),
+					},
 				},
 			},
 		}
@@ -1339,6 +1342,7 @@ func TestBuildGraph(t *testing.T) {
 						inferenceRoute,
 					},
 					Conditions: []conditions.Condition{},
+					Valid:      true,
 				},
 			},
 			ReferencedCaCertConfigMaps: map[types.NamespacedName]*CaCertConfigMap{

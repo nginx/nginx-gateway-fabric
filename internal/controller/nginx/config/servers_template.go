@@ -126,8 +126,8 @@ server {
         {{- if contains $l.Type "inference" -}}
         js_var $inference_workload_endpoint;
         set $epp_internal_path {{ $l.EPPInternalPath }};
-        set $epp_host {{ $l.EPPHost }};
-        set $epp_port {{ $l.EPPPort }};
+        set $epp_host          {{ $l.EPPHost }};
+        set $epp_port          {{ $l.EPPPort }};
         js_content epp.getEndpoint;
         {{- end }}
 

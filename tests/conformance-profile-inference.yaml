@@ -1,0 +1,24 @@
+apiVersion: gateway.networking.k8s.io/v1
+date: "2025-10-16T01:03:45Z"
+gatewayAPIChannel: experimental
+gatewayAPIVersion: v1.3.0
+implementation:
+  contact:
+  - https://github.com/nginx/nginx-gateway-fabric/discussions/new/choose
+  organization: nginx
+  project: nginx-gateway-fabric
+  url: https://github.com/nginx/nginx-gateway-fabric
+  version: edge
+kind: ConformanceReport
+mode: default
+profiles:
+- core:
+    result: partial
+    skippedTests:
+    - InferencePoolResolvedRefsCondition
+    statistics:
+      Failed: 0
+      Passed: 8
+      Skipped: 1
+  name: Gateway
+  summary: Core tests partially succeeded with 1 test skips.

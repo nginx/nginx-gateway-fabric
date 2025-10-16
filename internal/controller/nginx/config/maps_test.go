@@ -73,8 +73,11 @@ func TestExecuteMaps(t *testing.T) {
 				Backends: []dataplane.Backend{
 					{
 						UpstreamName: "upstream1",
-						EndpointPickerConfig: &inference.EndpointPickerRef{
-							FailureMode: inference.EndpointPickerFailClose,
+						EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+							NsName: "default",
+							EndpointPickerRef: &inference.EndpointPickerRef{
+								FailureMode: inference.EndpointPickerFailClose,
+							},
 						},
 					},
 				},
@@ -400,14 +403,20 @@ func TestBuildInferenceMaps(t *testing.T) {
 		Backends: []dataplane.Backend{
 			{
 				UpstreamName: "upstream1",
-				EndpointPickerConfig: &inference.EndpointPickerRef{
-					FailureMode: inference.EndpointPickerFailClose,
+				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+					NsName: "default",
+					EndpointPickerRef: &inference.EndpointPickerRef{
+						FailureMode: inference.EndpointPickerFailClose,
+					},
 				},
 			},
 			{
 				UpstreamName: "upstream2",
-				EndpointPickerConfig: &inference.EndpointPickerRef{
-					FailureMode: inference.EndpointPickerFailOpen,
+				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+					NsName: "default",
+					EndpointPickerRef: &inference.EndpointPickerRef{
+						FailureMode: inference.EndpointPickerFailOpen,
+					},
 				},
 			},
 			{
@@ -421,6 +430,22 @@ func TestBuildInferenceMaps(t *testing.T) {
 	g.Expect(maps).To(HaveLen(2))
 	g.Expect(maps[0].Source).To(Equal("$inference_workload_endpoint"))
 	g.Expect(maps[0].Variable).To(Equal("$inference_backend_upstream1"))
-	g.Expect(maps[0].Parameters[1].Result).To(Equal("invalid-backend-ref"))
-	g.Expect(maps[1].Parameters[1].Result).To(Equal("upstream2"))
+	g.Expect(maps[0].Parameters).To(HaveLen(3))
+	g.Expect(maps[0].Parameters[0].Value).To(Equal("\"\""))
+	g.Expect(maps[0].Parameters[0].Result).To(Equal("upstream1"))
+	g.Expect(maps[0].Parameters[1].Value).To(Equal("~.+"))
+	g.Expect(maps[0].Parameters[1].Result).To(Equal("$inference_workload_endpoint"))
+	g.Expect(maps[0].Parameters[2].Value).To(Equal("default"))
+	g.Expect(maps[0].Parameters[2].Result).To(Equal("invalid-backend-ref"))
+
+	// Check the second map
+	g.Expect(maps[1].Source).To(Equal("$inference_workload_endpoint"))
+	g.Expect(maps[1].Variable).To(Equal("$inference_backend_upstream2"))
+	g.Expect(maps[1].Parameters).To(HaveLen(3))
+	g.Expect(maps[1].Parameters[0].Value).To(Equal("\"\""))
+	g.Expect(maps[1].Parameters[0].Result).To(Equal("upstream2"))
+	g.Expect(maps[1].Parameters[1].Value).To(Equal("~.+"))
+	g.Expect(maps[1].Parameters[1].Result).To(Equal("$inference_workload_endpoint"))
+	g.Expect(maps[1].Parameters[2].Value).To(Equal("default"))
+	g.Expect(maps[1].Parameters[2].Result).To(Equal("upstream2"))
 }

@@ -20,6 +20,8 @@ CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the 
 SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes # Doesn't work on OpenShift due to security restrictions
 SKIP_TESTS =
 CEL_TEST_TARGET =
+INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting,EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService
+INFERENCE_SKIP_TESTS = InferencePoolResolvedRefsCondition
 
 # Check if ENABLE_EXPERIMENTAL is true
 ifeq ($(ENABLE_EXPERIMENTAL),true)
@@ -85,6 +87,28 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 	http_core_result=`yq '.profiles[1].core.result' conformance-profile.yaml`; \
 	http_extended_result=`yq '.profiles[1].extended.result' conformance-profile.yaml`; \
 	if [ "$$grpc_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
+		exit 0; \
+	else \
+		exit 2; \
+	fi
+
+.PHONY: run-inference-conformance-tests
+run-inference-conformance-tests: ## Run inference conformance tests
+	kind load docker-image $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --name $(CLUSTER_NAME)
+	kubectl apply -f conformance/conformance-rbac.yaml
+	kubectl run -i conformance \
+		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
+		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
+		--restart=Never -- sh -c "go test -v . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
+		--version=$(NGF_VERSION) \
+		--skip-tests=$(INFERENCE_SKIP_TESTS) \
+		--supported-features=$(INFERENCE_SUPPORTED_FEATURES) \
+		--report-output=output.txt; cat output.txt" | tee output.txt
+	./scripts/check-pod-exit-code.sh
+	sed -e '1,/GatewayAPIInferenceExtensionVersion/d' output.txt > conformance-profile-inference.yaml
+	rm output.txt
+	core_result=`yq '.profiles[0].core.result' conformance-profile-inference.yaml`; \
+	if [ "$$core_result" != "failure" ] ; then \
 		exit 0; \
 	else \
 		exit 2; \
@@ -197,7 +221,7 @@ add-local-ip-to-cluster: ## Add local IP to the GKE cluster master-authorized-ne
 update-firewall-with-local-ip: ## Update the firewall rule with local IP address
 	./scripts/update-firewall-with-local-ip.sh
 
-HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.type=ClusterIP --skip-schema-validation
+HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.type=ClusterIP --set nginxGateway.gwAPIInferenceExtension.enable=$(ENABLE_INFERENCE_EXTENSION) --set nginxGateway.config.logging.level=debug
 
 # this target is used to install the gateway-api CRDs from the main branch (only used in the nightly CI job)
 # it overrides the target in the main Makefile when the GW_API_VERSION is set to main
@@ -218,6 +242,9 @@ uninstall-ngf: ## Uninstall NGF on configured kind cluster
 	-make uninstall-gateway-crds
 	-kubectl delete namespace nginx-gateway
 	-kubectl kustomize ../config/crd | kubectl delete -f -
+	@if [ "$(ENABLE_INFERENCE_EXTENSION)" = "true" ]; then \
+		$(MAKE) uninstall-inference-crds; \
+	fi
 
 # Run CEL validation integration tests against a real cluster
 .PHONY: test-cel-validation
