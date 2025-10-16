@@ -8,7 +8,7 @@ ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:46e38dc6d8a9151f28f6dd775c528425ca4dfbc2a39055da08f653c12f959d27 AS ubi9-packages
 
-FROM redhat/ubi9-minimal:9.6 AS ubi-nginx
+FROM redhat/ubi9-minimal:9.6-1760515502 AS ubi-nginx
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.3.2
