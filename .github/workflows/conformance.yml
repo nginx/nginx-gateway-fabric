@@ -207,10 +207,10 @@ jobs:
         working-directory: ./tests
 
       - name: Upload profile to GitHub
-        if: ${{ inputs.enable-inference-extension }} && ${{ inputs.enable-experimental }}
+        if: ${{ inputs.enable-inference-extension }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: conformance-profile-inference-${{ github.run_id }}-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}
+          name: conformance-profile-inference-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}-${{ github.run_id }}
           path: ./tests/conformance-profile-inference.yaml
 
       - name: Upload profile to release
