@@ -197,7 +197,9 @@ func createBackendRef(
 		refPath,
 	)
 
-	if !valid {
+	validBackendRef := valid && len(route.Conditions) == 0
+
+	if !validBackendRef {
 		backendRef := BackendRef{
 			Weight:               weight,
 			Valid:                false,
