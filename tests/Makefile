@@ -117,6 +117,7 @@ run-inference-conformance-tests: ## Run inference conformance tests
 .PHONY: cleanup-conformance-tests
 cleanup-conformance-tests: ## Clean up conformance tests fixtures
 	kubectl delete pod conformance
+	kubectl delete pod conformance-inference --ignore-not-found
 	kubectl delete -f conformance/conformance-rbac.yaml
 
 .PHONY: reset-go-modules
