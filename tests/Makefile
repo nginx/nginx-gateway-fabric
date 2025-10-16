@@ -221,7 +221,7 @@ add-local-ip-to-cluster: ## Add local IP to the GKE cluster master-authorized-ne
 update-firewall-with-local-ip: ## Update the firewall rule with local IP address
 	./scripts/update-firewall-with-local-ip.sh
 
-HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.type=ClusterIP --set nginxGateway.gwAPIInferenceExtension.enable=$(ENABLE_INFERENCE_EXTENSION) --set nginxGateway.config.logging.level=debug
+HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.type=ClusterIP --set nginxGateway.gwAPIInferenceExtension.enable=$(ENABLE_INFERENCE_EXTENSION)
 
 # this target is used to install the gateway-api CRDs from the main branch (only used in the nightly CI job)
 # it overrides the target in the main Makefile when the GW_API_VERSION is set to main
