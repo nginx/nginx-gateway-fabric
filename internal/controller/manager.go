@@ -259,6 +259,7 @@ func StartManager(cfg config.Config) error {
 		plus:                    cfg.Plus,
 		statusQueue:             statusQueue,
 		nginxDeployments:        nginxUpdater.NginxDeployments,
+		inferenceExtension:      cfg.InferenceExtension,
 	})
 
 	objects, objectLists := prepareFirstEventBatchPreparerArgs(cfg)
