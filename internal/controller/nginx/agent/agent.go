@@ -119,7 +119,10 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 
 	var errs []error
 	var applied bool
-	actions := make([]*pb.NGINXPlusAction, 0, len(conf.Upstreams)+len(conf.StreamUpstreams))
+	actions := make([]*pb.NGINXPlusAction, 0,
+		len(conf.Upstreams)+len(conf.StreamUpstreams)+len(conf.TCPUpstreams)+len(conf.UDPUpstreams))
+
+	// HTTP/GRPC Upstreams
 	for _, upstream := range conf.Upstreams {
 		// Skip upstreams that have resolve servers to avoid "UpstreamServerImmutable" errors
 		if upstreamHasResolveServers(upstream) {
@@ -133,7 +136,36 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 		actions = append(actions, action)
 	}
 
+	// TLS Passthrough Upstreams
 	for _, upstream := range conf.StreamUpstreams {
+		// Skip upstreams that have resolve servers to avoid "UpstreamServerImmutable" errors
+		if upstreamHasResolveServers(upstream) {
+			continue
+		}
+		action := &pb.NGINXPlusAction{
+			Action: &pb.NGINXPlusAction_UpdateStreamServers{
+				UpdateStreamServers: buildStreamUpstreamServers(upstream),
+			},
+		}
+		actions = append(actions, action)
+	}
+
+	// TCP Upstreams
+	for _, upstream := range conf.TCPUpstreams {
+		// Skip upstreams that have resolve servers to avoid "UpstreamServerImmutable" errors
+		if upstreamHasResolveServers(upstream) {
+			continue
+		}
+		action := &pb.NGINXPlusAction{
+			Action: &pb.NGINXPlusAction_UpdateStreamServers{
+				UpdateStreamServers: buildStreamUpstreamServers(upstream),
+			},
+		}
+		actions = append(actions, action)
+	}
+
+	// UDP Upstreams
+	for _, upstream := range conf.UDPUpstreams {
 		// Skip upstreams that have resolve servers to avoid "UpstreamServerImmutable" errors
 		if upstreamHasResolveServers(upstream) {
 			continue
