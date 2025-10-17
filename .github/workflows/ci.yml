@@ -215,7 +215,7 @@ jobs:
         with:
           minor-label: "enhancement"
           major-label: "change"
-          publish: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
+          publish: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) && true || false }}
           collapse-after: 20
           notes-header: |
             *Below is the auto-generated changelog, which includes all PRs that went into the release.
