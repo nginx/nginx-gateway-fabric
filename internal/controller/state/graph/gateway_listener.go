@@ -151,7 +151,7 @@ func newListenerConfiguratorFactory(
 			validators: []listenerValidator{
 				validateListenerAllowedRouteKind,
 				validateListenerLabelSelector,
-				createTCPListenerValidator(protectedPorts),
+				createL4ListenerValidator(v1.TCPProtocolType, protectedPorts),
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
@@ -161,7 +161,7 @@ func newListenerConfiguratorFactory(
 			validators: []listenerValidator{
 				validateListenerAllowedRouteKind,
 				validateListenerLabelSelector,
-				createUDPListenerValidator(protectedPorts),
+				createL4ListenerValidator(v1.UDPProtocolType, protectedPorts),
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
@@ -487,13 +487,14 @@ func createPortConflictResolver() listenerConflictResolver {
 	const (
 		secureProtocolGroup   int = 0
 		insecureProtocolGroup int = 1
+		l4ProtocolGroup       int = 2
 	)
 	protocolGroups := map[v1.ProtocolType]int{
 		v1.TLSProtocolType:   secureProtocolGroup,
 		v1.HTTPProtocolType:  insecureProtocolGroup,
 		v1.HTTPSProtocolType: secureProtocolGroup,
-		v1.TCPProtocolType:   insecureProtocolGroup,
-		v1.UDPProtocolType:   insecureProtocolGroup,
+		v1.TCPProtocolType:   l4ProtocolGroup,
+		v1.UDPProtocolType:   l4ProtocolGroup,
 	}
 	conflictedPorts := make(map[v1.PortNumber]bool)
 	portProtocolOwner := make(map[v1.PortNumber]int)
@@ -504,6 +505,8 @@ func createPortConflictResolver() listenerConflictResolver {
 
 	formatHostname := "HTTPS and TLS listeners for the same port %d specify overlapping hostnames; " +
 		"ensure no overlapping hostnames for HTTPS and TLS listeners for the same port"
+
+	formatL4SameProtocol := "Multiple %s listeners cannot share the same port %d"
 
 	return func(l *Listener) {
 		port := l.Source.Port
@@ -542,6 +545,14 @@ func createPortConflictResolver() listenerConflictResolver {
 		} else {
 			foundConflict := false
 			for _, listener := range listenersByPort[port] {
+				if isL4Protocol(l.Source.Protocol) &&
+					listener.Source.Protocol == l.Source.Protocol {
+					listener.Valid = false
+					conflictedConds := conditions.NewListenerProtocolConflict(
+						fmt.Sprintf(formatL4SameProtocol, l.Source.Protocol, port))
+					listener.Conditions = append(listener.Conditions, conflictedConds...)
+					foundConflict = true
+				}
 				if listener.Source.Protocol != l.Source.Protocol &&
 					!isL4Protocol(listener.Source.Protocol) && !isL4Protocol(l.Source.Protocol) &&
 					haveOverlap(l.Source.Hostname, listener.Source.Hostname) {
@@ -554,8 +565,14 @@ func createPortConflictResolver() listenerConflictResolver {
 
 			if foundConflict {
 				l.Valid = false
-				conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
-				l.Conditions = append(l.Conditions, conflictedConds...)
+				if isL4Protocol(l.Source.Protocol) {
+					conflictedConds := conditions.NewListenerProtocolConflict(
+						fmt.Sprintf(formatL4SameProtocol, l.Source.Protocol, port))
+					l.Conditions = append(l.Conditions, conflictedConds...)
+				} else {
+					conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
+					l.Conditions = append(l.Conditions, conflictedConds...)
+				}
 			}
 		}
 
@@ -666,14 +683,6 @@ func createL4ListenerValidator(protocol v1.ProtocolType, protectedPorts Protecte
 
 		return conds, true
 	}
-}
-
-func createTCPListenerValidator(protectedPorts ProtectedPorts) listenerValidator {
-	return createL4ListenerValidator(v1.TCPProtocolType, protectedPorts)
-}
-
-func createUDPListenerValidator(protectedPorts ProtectedPorts) listenerValidator {
-	return createL4ListenerValidator(v1.UDPProtocolType, protectedPorts)
 }
 
 func createOverlappingTLSConfigResolver() listenerConflictResolver {

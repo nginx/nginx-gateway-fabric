@@ -78,8 +78,8 @@ func BuildConfiguration(
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
 		TLSPassthroughServers: buildPassthroughServers(gateway),
-		TCPServers:            buildTCPServers(logger, gateway),
-		UDPServers:            buildUDPServers(logger, gateway),
+		TCPServers:            buildL4Servers(logger, gateway, v1.TCPProtocolType),
+		UDPServers:            buildL4Servers(logger, gateway, v1.UDPProtocolType),
 		Upstreams:             upstreams,
 		StreamUpstreams: buildStreamUpstreams(
 			ctx,
@@ -89,8 +89,8 @@ func BuildConfiguration(
 			g.ReferencedServices,
 			baseHTTPConfig.IPFamily,
 		),
-		TCPUpstreams:  buildTCPUpstreams(ctx, logger, gateway, serviceResolver, baseHTTPConfig.IPFamily),
-		UDPUpstreams:  buildUDPUpstreams(ctx, logger, gateway, serviceResolver, baseHTTPConfig.IPFamily),
+		TCPUpstreams:  buildL4Upstreams(ctx, logger, gateway, serviceResolver, baseHTTPConfig.IPFamily, v1.TCPProtocolType),
+		UDPUpstreams:  buildL4Upstreams(ctx, logger, gateway, serviceResolver, baseHTTPConfig.IPFamily, v1.UDPProtocolType),
 		BackendGroups: backendGroups,
 		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway),
 		CertBundles: buildCertBundles(
@@ -241,16 +241,6 @@ func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.Prot
 	}
 
 	return servers
-}
-
-// buildTCPServers builds TCPServers from TCPRoutes attached to listeners.
-func buildTCPServers(logger logr.Logger, gateway *graph.Gateway) []Layer4VirtualServer {
-	return buildL4Servers(logger, gateway, v1.TCPProtocolType)
-}
-
-// buildUDPServers builds UDPServers from UDPRoutes attached to listeners.
-func buildUDPServers(logger logr.Logger, gateway *graph.Gateway) []Layer4VirtualServer {
-	return buildL4Servers(logger, gateway, v1.UDPProtocolType)
 }
 
 // buildStreamUpstreams builds all stream upstreams.
@@ -455,28 +445,6 @@ func buildL4Upstreams(
 	}
 
 	return upstreams
-}
-
-// buildTCPUpstreams builds all TCP upstreams.
-func buildTCPUpstreams(
-	ctx context.Context,
-	logger logr.Logger,
-	gateway *graph.Gateway,
-	serviceResolver resolver.ServiceResolver,
-	ipFamily IPFamilyType,
-) []Upstream {
-	return buildL4Upstreams(ctx, logger, gateway, serviceResolver, ipFamily, v1.TCPProtocolType)
-}
-
-// buildUDPUpstreams builds all UDP upstreams.
-func buildUDPUpstreams(
-	ctx context.Context,
-	logger logr.Logger,
-	gateway *graph.Gateway,
-	serviceResolver resolver.ServiceResolver,
-	ipFamily IPFamilyType,
-) []Upstream {
-	return buildL4Upstreams(ctx, logger, gateway, serviceResolver, ipFamily, v1.UDPProtocolType)
 }
 
 // buildSSLKeyPairs builds the SSLKeyPairs from the Secrets. It will only include Secrets that are referenced by
