@@ -74,6 +74,8 @@ func BuildConfiguration(
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
 		TLSPassthroughServers: buildPassthroughServers(gateway),
+		TCPServers:            buildL4Servers(logger, gateway, v1.TCPProtocolType),
+		UDPServers:            buildL4Servers(logger, gateway, v1.UDPProtocolType),
 		Upstreams:             upstreams,
 		StreamUpstreams: buildStreamUpstreams(
 			ctx,
@@ -82,6 +84,8 @@ func BuildConfiguration(
 			serviceResolver,
 			g.ReferencedServices,
 			baseHTTPConfig.IPFamily),
+		TCPUpstreams:  buildL4Upstreams(ctx, logger, gateway, serviceResolver, baseHTTPConfig.IPFamily, v1.TCPProtocolType),
+		UDPUpstreams:  buildL4Upstreams(ctx, logger, gateway, serviceResolver, baseHTTPConfig.IPFamily, v1.UDPProtocolType),
 		BackendGroups: backendGroups,
 		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway.Listeners),
 		CertBundles: buildCertBundles(
@@ -171,6 +175,69 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 	return passthroughServers
 }
 
+// buildL4Servers builds Layer4 servers (TCP or UDP) from routes attached to listeners.
+func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.ProtocolType) []Layer4VirtualServer {
+	var servers []Layer4VirtualServer
+	protocolName := string(protocol)
+
+	for _, l := range gateway.Listeners {
+		if !l.Valid || l.Source.Protocol != protocol {
+			continue
+		}
+
+		if len(l.L4Routes) > 1 {
+			logger.V(1).Info("Listener has multiple routes, which is not supported, skipping",
+				"listener", l.Name,
+				"protocol", protocolName,
+				"routeCount", len(l.L4Routes),
+			)
+			continue
+		}
+
+		for _, r := range l.L4Routes {
+			if !r.Valid {
+				continue
+			}
+
+			// Use helper method to get all backend references
+			backendRefs := r.Spec.GetBackendRefs()
+
+			if len(backendRefs) == 0 {
+				logger.V(1).Info("Route has no valid backend references, skipping",
+					"route", r.Source.GetName(),
+					"protocol", protocolName,
+				)
+				continue
+			}
+
+			// For single backend, use direct upstream name
+			// For multiple backends, we'll create a combined upstream name based on the route
+			var upstreamName string
+			if len(backendRefs) == 1 {
+				upstreamName = backendRefs[0].ServicePortReference()
+			} else {
+				// For multiple backends, create a group upstream name
+				// Format: protocol_namespace_routename
+				upstreamName = fmt.Sprintf("%s_%s_%s",
+					protocolName,
+					r.Source.GetNamespace(),
+					r.Source.GetName(),
+				)
+			}
+
+			server := Layer4VirtualServer{
+				Hostname:     "", // Layer4 doesn't use hostnames
+				UpstreamName: upstreamName,
+				Port:         int32(l.Source.Port),
+			}
+
+			servers = append(servers, server)
+		}
+	}
+
+	return servers
+}
+
 // buildStreamUpstreams builds all stream upstreams.
 func buildStreamUpstreams(
 	ctx context.Context,
@@ -244,6 +311,134 @@ func buildStreamUpstreams(
 	for _, up := range uniqueUpstreams {
 		upstreams = append(upstreams, up)
 	}
+	return upstreams
+}
+
+// buildL4Upstreams builds Layer4 upstreams (TCP or UDP) from routes attached to listeners.
+func buildL4Upstreams(
+	ctx context.Context,
+	logger logr.Logger,
+	gateway *graph.Gateway,
+	serviceResolver resolver.ServiceResolver,
+	ipFamily IPFamilyType,
+	protocol v1.ProtocolType,
+) []Upstream {
+	uniqueUpstreams := make(map[string]Upstream)
+
+	protocolName := string(protocol)
+	gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
+
+	for _, l := range gateway.Listeners {
+		if !l.Valid || l.Source.Protocol != protocol {
+			continue
+		}
+
+		for _, route := range l.L4Routes {
+			if !route.Valid {
+				continue
+			}
+
+			// Use helper method to get all backend references
+			backendRefs := route.Spec.GetBackendRefs()
+
+			if len(backendRefs) == 0 {
+				continue
+			}
+
+			// For single backend: create one upstream with service name
+			// For multiple backends: create individual upstreams + one combined upstream with weighted endpoints
+			if len(backendRefs) == 1 {
+				br := backendRefs[0]
+				if !br.Valid {
+					continue
+				}
+
+				if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+					continue
+				}
+
+				upstreamName := br.ServicePortReference()
+
+				if _, exist := uniqueUpstreams[upstreamName]; exist {
+					continue
+				}
+
+				var errMsg string
+				allowedAddressType := getAllowedAddressType(ipFamily)
+
+				eps, err := serviceResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
+				if err != nil {
+					errMsg = err.Error()
+				}
+
+				uniqueUpstreams[upstreamName] = Upstream{
+					Name:      upstreamName,
+					Endpoints: eps,
+					ErrorMsg:  errMsg,
+				}
+			} else {
+				// Multiple backends: create a combined upstream with weighted endpoints
+				combinedUpstreamName := fmt.Sprintf("%s_%s_%s",
+					protocolName,
+					route.Source.GetNamespace(),
+					route.Source.GetName(),
+				)
+
+				if _, exist := uniqueUpstreams[combinedUpstreamName]; exist {
+					continue
+				}
+
+				var combinedEndpoints []resolver.Endpoint
+				var errMsgs []string
+				allowedAddressType := getAllowedAddressType(ipFamily)
+
+				// Collect endpoints from all backends with their weights
+				for _, br := range backendRefs {
+					if !br.Valid {
+						continue
+					}
+
+					if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+						continue
+					}
+
+					eps, err := serviceResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
+					if err != nil {
+						errMsgs = append(errMsgs, err.Error())
+						continue
+					}
+
+					// Add weight to each endpoint
+					for _, ep := range eps {
+						ep.Weight = br.Weight
+						combinedEndpoints = append(combinedEndpoints, ep)
+					}
+				}
+
+				var errMsg string
+				if len(errMsgs) > 0 {
+					errMsg = fmt.Sprintf("some backends failed: %v", errMsgs)
+				}
+
+				uniqueUpstreams[combinedUpstreamName] = Upstream{
+					Name:      combinedUpstreamName,
+					Endpoints: combinedEndpoints,
+					ErrorMsg:  errMsg,
+				}
+			}
+		}
+	}
+
+	if len(uniqueUpstreams) == 0 {
+		return nil
+	}
+
+	upstreams := make([]Upstream, 0, len(uniqueUpstreams))
+
+	for _, up := range uniqueUpstreams {
+		upstreams = append(upstreams, up)
+	}
+
 	return upstreams
 }
 
@@ -445,6 +640,9 @@ func buildServers(gateway *graph.Gateway) (http, ssl []VirtualServer) {
 
 	for _, l := range gateway.Listeners {
 		if l.Source.Protocol == v1.TLSProtocolType {
+			continue
+		}
+		if l.Source.Protocol == v1.TCPProtocolType || l.Source.Protocol == v1.UDPProtocolType {
 			continue
 		}
 		if l.Valid {

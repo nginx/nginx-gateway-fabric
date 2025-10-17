@@ -323,8 +323,24 @@ func TestGetAndValidateListenerSupportedKinds(t *testing.T) {
 		{
 			protocol:  v1.TCPProtocolType,
 			expectErr: false,
-			name:      "unsupported protocol is ignored",
-			expected:  nil,
+			name:      "valid TCP protocol",
+			expected: []v1.RouteGroupKind{
+				{
+					Kind:  kinds.TCPRoute,
+					Group: helpers.GetPointer[v1.Group](v1.GroupName),
+				},
+			},
+		},
+		{
+			protocol:  v1.UDPProtocolType,
+			expectErr: false,
+			name:      "valid UDP protocol",
+			expected: []v1.RouteGroupKind{
+				{
+					Kind:  kinds.UDPRoute,
+					Group: helpers.GetPointer[v1.Group](v1.GroupName),
+				},
+			},
 		},
 		{
 			protocol: v1.HTTPProtocolType,

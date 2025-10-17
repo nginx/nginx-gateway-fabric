@@ -80,6 +80,10 @@ const (
 	RouteTypeGRPC RouteType = "grpc"
 	// RouteTypeTLS indicates that the RouteType of the L4Route is TLS.
 	RouteTypeTLS RouteType = "tls"
+	// RouteTypeTCP indicates that the RouteType of the L4Route is TCP.
+	RouteTypeTCP RouteType = "tcp"
+	// RouteTypeUDP indicates that the RouteType of the L4Route is UDP.
+	RouteTypeUDP RouteType = "udp"
 )
 
 // L4RouteKey is the unique identifier for a L4Route.
@@ -114,9 +118,38 @@ type L4Route struct {
 type L4RouteSpec struct {
 	// Hostnames defines a set of hostnames used to select a Route used to process the request.
 	Hostnames []v1.Hostname
-	// FIXME (sarthyparty): change to slice of BackendRef, as for now we are only supporting one BackendRef.
-	// We will eventually support multiple BackendRef https://github.com/nginx/nginx-gateway-fabric/issues/2184
+	// BackendRef is the single backend reference (deprecated, kept for TLSRoute compatibility).
+	// For TCPRoute/UDPRoute, use BackendRefs instead.
 	BackendRef BackendRef
+	// BackendRefs is a list of backend references for TCPRoute/UDPRoute multi-backend support.
+	// Each BackendRef can have a weight for load balancing.
+	BackendRefs []BackendRef
+}
+
+// GetBackendRefs returns all backend references for this L4Route.
+// For TCPRoute/UDPRoute with multiple backends, it returns BackendRefs.
+// For TLSRoute or single backend routes, it returns a slice containing BackendRef.
+// Note: Returns BackendRef even if not Valid, as we need to check InvalidForGateways.
+func (spec *L4RouteSpec) GetBackendRefs() []BackendRef {
+	if len(spec.BackendRefs) > 0 {
+		return spec.BackendRefs
+	}
+	// Check if BackendRef has been set (even if invalid)
+	// An unset BackendRef will have empty SvcNsName and InvalidForGateways
+	if spec.BackendRef.SvcNsName.Name != "" || len(spec.BackendRef.InvalidForGateways) > 0 {
+		return []BackendRef{spec.BackendRef}
+	}
+	return []BackendRef{}
+}
+
+// GetPrimaryBackendRef returns the primary backend reference.
+// For multi-backend routes, it returns the first BackendRef.
+// For single backend routes, it returns BackendRef.
+func (spec *L4RouteSpec) GetPrimaryBackendRef() BackendRef {
+	if len(spec.BackendRefs) > 0 {
+		return spec.BackendRefs[0]
+	}
+	return spec.BackendRef
 }
 
 // L7Route is the generic type for the layer 7 routes, HTTPRoute and GRPCRoute.
@@ -224,6 +257,8 @@ func (e routeRuleErrors) append(newErrors routeRuleErrors) routeRuleErrors {
 
 func buildL4RoutesForGateways(
 	tlsRoutes map[types.NamespacedName]*v1alpha.TLSRoute,
+	tcpRoutes map[types.NamespacedName]*v1alpha.TCPRoute,
+	udpRoutes map[types.NamespacedName]*v1alpha.UDPRoute,
 	services map[types.NamespacedName]*apiv1.Service,
 	gws map[types.NamespacedName]*Gateway,
 	resolver *referenceGrantResolver,
@@ -239,6 +274,32 @@ func buildL4RoutesForGateways(
 			gws,
 			services,
 			resolver.refAllowedFrom(fromTLSRoute(route.Namespace)),
+		)
+		if r != nil {
+			routes[CreateRouteKeyL4(route)] = r
+		}
+	}
+
+	// Process TCP routes
+	for _, route := range tcpRoutes {
+		r := buildTCPRoute(
+			route,
+			gws,
+			services,
+			resolver.refAllowedFrom(fromTCPRoute(route.Namespace)),
+		)
+		if r != nil {
+			routes[CreateRouteKeyL4(route)] = r
+		}
+	}
+
+	// Process UDP routes
+	for _, route := range udpRoutes {
+		r := buildUDPRoute(
+			route,
+			gws,
+			services,
+			resolver.refAllowedFrom(fromUDPRoute(route.Namespace)),
 		)
 		if r != nil {
 			routes[CreateRouteKeyL4(route)] = r
@@ -607,12 +668,10 @@ func bindL4RouteToListeners(
 
 		attachment, attachableListeners := validateParentRef(ref, gw)
 
+		// If there are validation failures (e.g., invalid gateway, wrong namespace),
+		// we should not try to attach
 		if len(attachment.FailedConditions) > 0 {
 			continue
-		}
-
-		if cond, ok := route.Spec.BackendRef.InvalidForGateways[gwNsName]; ok {
-			attachment.FailedConditions = append(attachment.FailedConditions, cond)
 		}
 
 		// Try to attach Route to all matching listeners
@@ -634,6 +693,16 @@ func bindL4RouteToListeners(
 		}
 
 		attachment.Attached = true
+
+		// Check if any BackendRef is invalid for this Gateway and add conditions
+		// This is done after attachment so the route can still be attached even with invalid backends
+		backendRefs := route.Spec.GetBackendRefs()
+		for _, br := range backendRefs {
+			if cond, ok := br.InvalidForGateways[gwNsName]; ok {
+				attachment.FailedConditions = append(attachment.FailedConditions, cond)
+				break // Only need to add the condition once
+			}
+		}
 	}
 }
 
@@ -704,6 +773,19 @@ func tryToAttachL4RouteToListeners(
 	return conditions.Condition{}, true
 }
 
+func getL4RouteKind(route *L4Route) v1.Kind {
+	switch route.Source.(type) {
+	case *v1alpha.TLSRoute:
+		return v1.Kind(kinds.TLSRoute)
+	case *v1alpha.TCPRoute:
+		return v1.Kind(kinds.TCPRoute)
+	case *v1alpha.UDPRoute:
+		return v1.Kind(kinds.UDPRoute)
+	default:
+		return v1.Kind(kinds.TLSRoute)
+	}
+}
+
 func bindToListenerL4(
 	l *Listener,
 	route *L4Route,
@@ -716,7 +798,8 @@ func bindToListenerL4(
 		return false, false, false
 	}
 
-	if !isRouteTypeAllowedByListener(l, kinds.TLSRoute) {
+	routeKind := getL4RouteKind(route)
+	if !isRouteTypeAllowedByListener(l, routeKind) {
 		return false, false, false
 	}
 
@@ -1149,4 +1232,169 @@ func routeKeyForKind(kind v1.Kind, nsname types.NamespacedName) RouteKey {
 	}
 
 	return key
+}
+
+// l4RouteConfig holds the configuration needed to build an L4Route generically.
+type l4RouteConfig struct {
+	source           client.Object
+	namespace        string
+	parentRefs       []v1.ParentReference
+	rules            []l4RouteRule
+	routeType        string // "TCP" or "UDP"
+	refGrantResolver func(resource toResource) bool
+}
+
+// l4RouteRule represents a rule in TCPRoute or UDPRoute.
+type l4RouteRule struct {
+	backendRefs []v1alpha.BackendRef
+}
+
+// buildGenericL4Route is a generic function to build L4Route for both TCP and UDP routes.
+// This eliminates code duplication between buildTCPRoute and buildUDPRoute.
+func buildGenericL4Route(
+	config l4RouteConfig,
+	gws map[types.NamespacedName]*Gateway,
+	services map[types.NamespacedName]*apiv1.Service,
+) *L4Route {
+	r := &L4Route{
+		Source: config.source,
+	}
+
+	sectionNameRefs, err := buildSectionNameRefs(config.parentRefs, config.namespace, gws)
+	if err != nil {
+		r.Valid = false
+		return r
+	}
+
+	// route doesn't belong to any of the Gateways
+	if len(sectionNameRefs) == 0 {
+		return nil
+	}
+	r.ParentRefs = sectionNameRefs
+
+	// TCPRoute/UDPRoute don't have hostnames like TLSRoute, so we skip hostname validation
+
+	// Validate that we have at least one rule
+	if len(config.rules) == 0 {
+		r.Valid = false
+		cond := conditions.NewRouteBackendRefUnsupportedValue(
+			"Must have at least one Rule",
+		)
+		r.Conditions = append(r.Conditions, cond)
+		return r
+	}
+
+	// Process all BackendRefs from all rules
+	var allBackendRefs []BackendRef
+	var allConditions []conditions.Condition
+
+	for ruleIdx, rule := range config.rules {
+		if len(rule.backendRefs) == 0 {
+			continue
+		}
+
+		for refIdx, ref := range rule.backendRefs {
+			br, conds := validateBackendRefL4RouteMulti(
+				config.namespace, ref, services, r.ParentRefs,
+				config.refGrantResolver, ruleIdx, refIdx,
+			)
+			allBackendRefs = append(allBackendRefs, br)
+			allConditions = append(allConditions, conds...)
+		}
+	}
+
+	// Set BackendRefs for multi-backend support
+	r.Spec.BackendRefs = allBackendRefs
+	r.Valid = true
+	r.Attachable = true
+
+	if len(allConditions) > 0 {
+		r.Conditions = append(r.Conditions, allConditions...)
+	}
+
+	return r
+}
+
+// validateBackendRefL4RouteMulti is a generic function to validate BackendRef for both TCP and UDP routes.
+// This eliminates code duplication between validateBackendRefTCPRouteMulti and validateBackendRefUDPRouteMulti.
+func validateBackendRefL4RouteMulti(
+	namespace string,
+	ref v1alpha.BackendRef,
+	services map[types.NamespacedName]*apiv1.Service,
+	parentRefs []ParentRef,
+	refGrantResolver func(resource toResource) bool,
+	ruleIdx int,
+	refIdx int,
+) (BackendRef, []conditions.Condition) {
+	refPath := field.NewPath("spec").Child("rules").Index(ruleIdx).Child("backendRefs").Index(refIdx)
+
+	if valid, cond := validateBackendRef(
+		ref,
+		namespace,
+		refGrantResolver,
+		refPath,
+	); !valid {
+		backendRef := BackendRef{
+			Valid: false,
+		}
+
+		return backendRef, []conditions.Condition{cond}
+	}
+
+	ns := namespace
+	if ref.Namespace != nil {
+		ns = string(*ref.Namespace)
+	}
+
+	svcNsName := types.NamespacedName{
+		Namespace: ns,
+		Name:      string(ref.Name),
+	}
+
+	svcIPFamily, svcPort, err := getIPFamilyAndPortFromRef(
+		ref,
+		svcNsName,
+		services,
+		refPath,
+	)
+
+	// Handle weight - default to 1 if not specified
+	weight := int32(1)
+	if ref.Weight != nil {
+		if validateWeight(*ref.Weight) != nil {
+			weight = 0 // Invalid weight set to 0 (no traffic)
+		} else {
+			weight = *ref.Weight
+		}
+	}
+
+	backendRef := BackendRef{
+		SvcNsName:   svcNsName,
+		ServicePort: svcPort,
+		Weight:      weight,
+		Valid:       true,
+	}
+
+	if err != nil {
+		backendRef.Valid = false
+
+		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
+	}
+
+	// For TCP/UDPRoute, we don't need to validate app protocol compatibility
+	// as TCP/UDP are protocol-agnostic at the application layer
+
+	var conds []conditions.Condition
+	for _, parentRef := range parentRefs {
+		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
+			backendRef.Valid = backendRef.Valid || false
+			// Initialize the map only when needed
+			if backendRef.InvalidForGateways == nil {
+				backendRef.InvalidForGateways = make(map[types.NamespacedName]conditions.Condition)
+			}
+			backendRef.InvalidForGateways[parentRef.Gateway.NamespacedName] = conditions.NewRouteInvalidIPFamily(err.Error())
+		}
+	}
+
+	return backendRef, conds
 }

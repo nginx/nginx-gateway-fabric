@@ -69,7 +69,13 @@ func executeUpstreams(upstreams []http.Upstream) []executeResult {
 }
 
 func (g GeneratorImpl) executeStreamUpstreams(conf dataplane.Configuration) []executeResult {
-	upstreams := g.createStreamUpstreams(conf.StreamUpstreams)
+	// Combine all stream upstreams: TLS, TCP, and UDP
+	allUpstreams := make([]dataplane.Upstream, 0, len(conf.StreamUpstreams)+len(conf.TCPUpstreams)+len(conf.UDPUpstreams))
+	allUpstreams = append(allUpstreams, conf.StreamUpstreams...)
+	allUpstreams = append(allUpstreams, conf.TCPUpstreams...)
+	allUpstreams = append(allUpstreams, conf.UDPUpstreams...)
+
+	upstreams := g.createStreamUpstreams(allUpstreams)
 
 	result := executeResult{
 		dest: streamConfigFile,
@@ -109,9 +115,13 @@ func (g GeneratorImpl) createStreamUpstream(up dataplane.Upstream) stream.Upstre
 		if ep.IPv6 {
 			format = "[%s]:%d"
 		}
+		// Keep the original weight from endpoint
+		// For single backend: Weight is 0 (template won't output weight directive)
+		// For multi-backend: Weight is set from BackendRef.Weight (template outputs weight=X if > 1)
 		upstreamServers[idx] = stream.UpstreamServer{
 			Address: fmt.Sprintf(format, ep.Address, ep.Port),
 			Resolve: ep.Resolve,
+			Weight:  ep.Weight,
 		}
 	}
 
