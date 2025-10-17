@@ -60,7 +60,7 @@ jobs:
           if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
           echo "No Artifactory secrets available - using direct GOPROXY"
           GOPROXY_VALUE="direct"
-          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "Production mode - using production Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
           else
@@ -167,7 +167,7 @@ jobs:
 
   binary:
     name: Build Binary
-    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, unit-tests, njs-unit-tests]
     outputs:
       json: ${{ steps.gateway_binaries.outputs.json }}
@@ -187,7 +187,7 @@ jobs:
           if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
           echo "No Artifactory secrets available - using direct GOPROXY"
           GOPROXY_VALUE="direct"
-          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "Production mode - using production Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
           else
@@ -288,16 +288,8 @@ jobs:
       - name: Configure GOPROXY
         id: goproxy
         run: |
-          if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
-          echo "No Artifactory secrets available - using direct GOPROXY"
-          GOPROXY_VALUE="direct"
-          elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "Production mode - using production Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
-          else
-          echo "Development mode - using dev Artifactory"
-          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
-          fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
@@ -359,8 +351,8 @@ jobs:
       platforms: ${{ matrix.platforms }}
       build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
-      dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      dry_run: ${{ inputs.dry_run || false}}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -382,7 +374,7 @@ jobs:
       build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -399,7 +391,7 @@ jobs:
       platforms: "linux/arm64, linux/amd64"
       tag: ${{ inputs.operator_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -497,7 +489,7 @@ jobs:
 
   publish-helm:
     name: Package and Publish Helm Chart
-    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main')) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     needs: [vars, helm-tests]
     if: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) || (github.event_name == 'push' && ! startsWith(github.ref, 'refs/heads/release-')) }}
     permissions:
