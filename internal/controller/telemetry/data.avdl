@@ -114,9 +114,9 @@ attached at the Gateway level. */
 		/** NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled. */
 		boolean? NginxOneConnectionEnabled = null;
 		
-    /** InferencePoolCount is the number of InferencePools that are referenced by at least one Route. */
+		/** InferencePoolCount is the number of InferencePools that are referenced by at least one Route. */
 		long? InferencePoolCount = null;
-    
+		
 		/** BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi). */
 		string? BuildOS = null;
 		
