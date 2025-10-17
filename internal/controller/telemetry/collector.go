@@ -67,7 +67,7 @@ type Data struct { //nolint //required to skip golangci-lint-full fieldalignment
 	ControlPlanePodCount int64
 	// NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled.
 	NginxOneConnectionEnabled bool
-  // InferencePoolCount is the number of InferencePools that are referenced by at least one Route.
+	// InferencePoolCount is the number of InferencePools that are referenced by at least one Route.
 	InferencePoolCount int64
 	// BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi).
 	BuildOS string
