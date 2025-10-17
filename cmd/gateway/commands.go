@@ -37,9 +37,17 @@ const (
 		`The controller name must be of the form: DOMAIN/PATH. The controller's domain is '%s'`
 	plusFlag = "nginx-plus"
 
-	serverTLSSecret               = "server-tls"
-	agentTLSSecret                = "agent-tls"
-	nginxOneTelemetryEndpointHost = "agent.connect.nginx.com"
+	serverTLSSecret                    = "server-tls"
+	agentTLSSecret                     = "agent-tls"
+	nginxOneTelemetryEndpointHost      = "agent.connect.nginx.com"
+	endpointPickerEnableTLSFlag        = "endpoint-picker-enable-tls"
+	endpointPickerSkipSecureVerifyFlag = "endpoint-picker-skip-secure-verify"
+)
+
+// common flags.
+var (
+	endpointPickerEnableTLS        bool
+	endpointPickerSkipSecureVerify bool
 )
 
 // usageReportParams holds the parameters for building the usage report configuration for PLUS.
@@ -288,6 +296,8 @@ func createControllerCommand() *cobra.Command {
 					EndpointPort:           nginxOneConsoleTelemetryEndpointPort.value,
 					EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
 				},
+				EndpointPickerEnableTLS:        endpointPickerEnableTLS,
+				EndpointPickerSkipSecureVerify: endpointPickerSkipSecureVerify,
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -318,6 +328,20 @@ func createControllerCommand() *cobra.Command {
 		"c",
 		`The name of the NginxGateway resource to be used for this controller's dynamic configuration.`+
 			` Lives in the same Namespace as the controller.`,
+	)
+
+	cmd.Flags().BoolVar(
+		&endpointPickerEnableTLS,
+		endpointPickerEnableTLSFlag,
+		true,
+		"Enables TLS when connecting to the endpoint picker.",
+	)
+
+	cmd.Flags().BoolVar(
+		&endpointPickerSkipSecureVerify,
+		endpointPickerSkipSecureVerifyFlag,
+		true,
+		"Disables server certificate verification when connecting to the endpoint picker, if TLS is enabled",
 	)
 
 	cmd.Flags().Var(
@@ -763,10 +787,27 @@ func createEndpointPickerCommand() *cobra.Command {
 		Short: "Shim server for communication between NGINX and the Gateway API Inference Extension Endpoint Picker",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			logger := ctlrZap.New().WithName("endpoint-picker-shim")
-			handler := createEndpointPickerHandler(realExtProcClientFactory(), logger)
+			handler := createEndpointPickerHandler(
+				realExtProcClientFactory(endpointPickerEnableTLS, endpointPickerSkipSecureVerify),
+				logger,
+			)
 			return endpointPickerServer(handler)
 		},
 	}
+
+	cmd.Flags().BoolVar(
+		&endpointPickerEnableTLS,
+		endpointPickerEnableTLSFlag,
+		true,
+		"Enables TLS when connecting to the endpoint picker.",
+	)
+
+	cmd.Flags().BoolVar(
+		&endpointPickerSkipSecureVerify,
+		endpointPickerSkipSecureVerifyFlag,
+		true,
+		"Disables server certificate verification when connecting to the endpoint picker, if TLS is enabled",
+	)
 
 	return cmd
 }

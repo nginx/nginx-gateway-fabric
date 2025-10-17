@@ -161,6 +161,8 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-telemetry-endpoint-host=telemetry-endpoint-host",
 				"--nginx-one-telemetry-endpoint-port=443",
 				"--nginx-one-tls-skip-verify",
+				"--endpoint-picker-enable-tls",
+				"--endpoint-picker-skip-secure-verify",
 			},
 			wantErr: false,
 		},
@@ -921,6 +923,46 @@ func TestUsageReportConfig(t *testing.T) {
 					t.Errorf("expected result %+v, but got %+v", tc.expected, result)
 				}
 			}
+		})
+	}
+}
+
+func TestEndpointPickerFlags(t *testing.T) {
+	t.Parallel()
+	tests := []flagTestCase{
+		{
+			name: "valid flags",
+			args: []string{
+				"--endpoint-picker-enable-tls=true",
+				"--endpoint-picker-skip-secure-verify=false",
+			},
+			wantErr: false,
+		},
+		{
+			name: "endpoint-picker-enable-tls is not a bool",
+			args: []string{
+				"--endpoint-picker-enable-tls=not-a-bool",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--endpoint-picker-enable-tls" flag:` +
+				` strconv.ParseBool: parsing "not-a-bool": invalid syntax`,
+		},
+		{
+			name: "endpoint-picker-skip-secure-verify is not a bool",
+			args: []string{
+				"--endpoint-picker-skip-secure-verify=not-a-bool",
+			},
+			wantErr: true,
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--endpoint-picker-skip-secure-verify" flag:` +
+				` strconv.ParseBool: parsing "not-a-bool": invalid syntax`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cmd := createEndpointPickerCommand()
+			testFlag(t, cmd, test)
 		})
 	}
 }

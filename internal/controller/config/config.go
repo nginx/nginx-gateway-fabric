@@ -52,6 +52,10 @@ type Config struct {
 	InferenceExtension bool
 	// SnippetsFilters indicates if SnippetsFilters are enabled.
 	SnippetsFilters bool
+	// EndpointPickerEnableTLS indicates if TLS is enabled for EndpointPicker communication.
+	EndpointPickerEnableTLS bool
+	// EndpointPickerSkipSecureVerify indicates if secure verification is skipped for EndpointPicker communication.
+	EndpointPickerSkipSecureVerify bool
 }
 
 // GatewayPodConfig contains information about this Pod.
