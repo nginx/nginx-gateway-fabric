@@ -1295,7 +1295,7 @@ func buildGenericL4Route(
 
 		for refIdx, ref := range rule.backendRefs {
 			br, conds := validateBackendRefL4RouteMulti(
-				config.namespace, config.routeType, ref, services, r.ParentRefs,
+				config.namespace, ref, services, r.ParentRefs,
 				config.refGrantResolver, ruleIdx, refIdx,
 			)
 			allBackendRefs = append(allBackendRefs, br)
@@ -1319,7 +1319,6 @@ func buildGenericL4Route(
 // This eliminates code duplication between validateBackendRefTCPRouteMulti and validateBackendRefUDPRouteMulti.
 func validateBackendRefL4RouteMulti(
 	namespace string,
-	routeType string, // "TCP" or "UDP"
 	ref v1alpha.BackendRef,
 	services map[types.NamespacedName]*apiv1.Service,
 	parentRefs []ParentRef,
