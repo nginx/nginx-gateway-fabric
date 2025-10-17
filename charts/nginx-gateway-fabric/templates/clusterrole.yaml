@@ -147,6 +147,22 @@ rules:
   {{- end }}
   verbs:
   - update
+{{- if .Values.nginxGateway.gwAPIInferenceExtension.enable }}
+- apiGroups:
+  - inference.networking.k8s.io
+  resources:
+  - inferencepools
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - inference.networking.k8s.io
+  resources:
+  - inferencepools/status
+  verbs:
+  - update
+{{- end }}
 {{- if .Values.nginxGateway.leaderElection.enable }}
 - apiGroups:
   - coordination.k8s.io

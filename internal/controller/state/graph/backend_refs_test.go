@@ -11,13 +11,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func getNormalRef() gatewayv1.BackendRef {
@@ -36,16 +39,37 @@ func getModifiedRef(mod func(ref gatewayv1.BackendRef) gatewayv1.BackendRef) gat
 	return mod(getNormalRef())
 }
 
+func getNormalRouteBackendRef() RouteBackendRef {
+	return RouteBackendRef{
+		BackendRef: gatewayv1.BackendRef{
+			BackendObjectReference: gatewayv1.BackendObjectReference{
+				Kind:      helpers.GetPointer[gatewayv1.Kind]("Service"),
+				Name:      "service1",
+				Namespace: helpers.GetPointer[gatewayv1.Namespace]("test"),
+				Port:      helpers.GetPointer[gatewayv1.PortNumber](80),
+			},
+			Weight: helpers.GetPointer[int32](5),
+		},
+	}
+}
+
+func getModifiedRouteBackendRef(mod func(ref RouteBackendRef) RouteBackendRef) RouteBackendRef {
+	return mod(getNormalRouteBackendRef())
+}
+
 func TestValidateRouteBackendRef(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
+		routeType         RouteType
 		expectedCondition conditions.Condition
 		name              string
 		ref               RouteBackendRef
 		expectedValid     bool
 	}{
 		{
-			name: "normal case",
+			name:      "normal case",
+			routeType: RouteTypeHTTP,
 			ref: RouteBackendRef{
 				BackendRef: getNormalRef(),
 				Filters:    nil,
@@ -53,7 +77,44 @@ func TestValidateRouteBackendRef(t *testing.T) {
 			expectedValid: true,
 		},
 		{
-			name: "filters not supported",
+			name:      "normal case grpc",
+			routeType: RouteTypeGRPC,
+			ref: RouteBackendRef{
+				BackendRef: getNormalRef(),
+				Filters:    nil,
+			},
+			expectedValid: true,
+		},
+		{
+			name:      "normal case; inferencepool backend",
+			routeType: RouteTypeHTTP,
+			ref: RouteBackendRef{
+				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+					backend.BackendObjectReference = gatewayv1.BackendObjectReference{
+						Group: helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
+						Kind:  helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+						Name:  "ipool",
+					}
+					return backend
+				}),
+			},
+			expectedValid: true,
+		},
+		{
+			name:      "normal case; headless Service inferencepool backend",
+			routeType: RouteTypeHTTP,
+			ref: RouteBackendRef{
+				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+					backend.Name = gatewayv1.ObjectName(controller.CreateInferencePoolServiceName("ipool"))
+					return backend
+				}),
+				IsInferencePool: true,
+			},
+			expectedValid: true,
+		},
+		{
+			name:      "filters not supported",
+			routeType: RouteTypeHTTP,
 			ref: RouteBackendRef{
 				BackendRef: getNormalRef(),
 				Filters: []any{
@@ -70,7 +131,8 @@ func TestValidateRouteBackendRef(t *testing.T) {
 			),
 		},
 		{
-			name: "invalid base ref",
+			name:      "invalid base ref",
+			routeType: RouteTypeHTTP,
 			ref: RouteBackendRef{
 				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
 					backend.Kind = helpers.GetPointer[gatewayv1.Kind]("NotService")
@@ -79,7 +141,7 @@ func TestValidateRouteBackendRef(t *testing.T) {
 			},
 			expectedValid: false,
 			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
-				`test.kind: Unsupported value: "NotService": supported values: "Service"`,
+				`test.kind: Unsupported value: "NotService": supported values: "Service", "InferencePool"`,
 			),
 		},
 	}
@@ -90,7 +152,13 @@ func TestValidateRouteBackendRef(t *testing.T) {
 			g := NewWithT(t)
 			alwaysTrueRefGrantResolver := func(_ toResource) bool { return true }
 
-			valid, cond := validateRouteBackendRef(test.ref, "test", alwaysTrueRefGrantResolver, field.NewPath("test"))
+			valid, cond := validateRouteBackendRef(
+				test.routeType,
+				test.ref,
+				"test",
+				alwaysTrueRefGrantResolver,
+				field.NewPath("test"),
+			)
 
 			g.Expect(valid).To(Equal(test.expectedValid))
 			g.Expect(cond).To(Equal(test.expectedCondition))
@@ -156,7 +224,7 @@ func TestValidateBackendRef(t *testing.T) {
 			),
 		},
 		{
-			name: "not a service kind",
+			name: "invalid kind",
 			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
 				backend.Kind = helpers.GetPointer[gatewayv1.Kind]("NotService")
 				return backend
@@ -211,6 +279,209 @@ func TestValidateBackendRef(t *testing.T) {
 			g := NewWithT(t)
 
 			valid, cond := validateBackendRef(test.ref, "test", test.refGrantResolver, field.NewPath("test"))
+
+			g.Expect(valid).To(Equal(test.expectedValid))
+			g.Expect(cond).To(Equal(test.expectedCondition))
+		})
+	}
+}
+
+func TestValidateBackendRefHTTPRoute(t *testing.T) {
+	t.Parallel()
+
+	alwaysFalseRefGrantResolver := func(_ toResource) bool { return false }
+	alwaysTrueRefGrantResolver := func(_ toResource) bool { return true }
+
+	tests := []struct {
+		refGrantResolver  func(resource toResource) bool
+		expectedCondition conditions.Condition
+		name              string
+		ref               RouteBackendRef
+		expectedValid     bool
+	}{
+		{
+			name:             "normal case",
+			ref:              getNormalRouteBackendRef(),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    true,
+		},
+		{
+			name: "normal case with implicit namespace",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Namespace = nil
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    true,
+		},
+		{
+			name: "normal case with implicit kind Service",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Kind = nil
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    true,
+		},
+		{
+			name: "normal case with InferencePool",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Group = helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup)
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool)
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    true,
+		},
+		{
+			name: "group is inference group but kind is not InferencePool",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Group = helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup)
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.Service)
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				`test.kind: Invalid value: "Service": kind must be InferencePool when group is inference.networking.k8s.io`,
+			),
+		},
+		{
+			name: "kind is InferencePool but group is not inference",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool)
+				backend.Group = helpers.GetPointer[gatewayv1.Group]("core")
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				`test.group: Invalid value: "core": group must be inference.networking.k8s.io when kind is InferencePool`,
+			),
+		},
+		{
+			name: "normal case with backend ref allowed by reference grant",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Namespace = helpers.GetPointer[gatewayv1.Namespace]("cross-ns")
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    true,
+		},
+		{
+			name: "inferencepool backend ref not allowed by reference grant",
+			ref: RouteBackendRef{
+				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+					backend.BackendObjectReference = gatewayv1.BackendObjectReference{
+						Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
+						Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+						Name:      "ipool",
+						Namespace: helpers.GetPointer[gatewayv1.Namespace]("invalid"),
+					}
+					return backend
+				}),
+			},
+			refGrantResolver: alwaysFalseRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefRefNotPermitted(
+				"test.namespace: Forbidden: Backend ref to InferencePool invalid/ipool not permitted by any ReferenceGrant",
+			),
+		},
+		{
+			name: "headless Service inferencepool backend ref not allowed by reference grant",
+			ref: RouteBackendRef{
+				BackendRef: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+					backend.Name = gatewayv1.ObjectName(controller.CreateInferencePoolServiceName("ipool"))
+					backend.Namespace = helpers.GetPointer[gatewayv1.Namespace]("invalid")
+					return backend
+				}),
+				IsInferencePool: true,
+			},
+			refGrantResolver: alwaysFalseRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefRefNotPermitted(
+				"test.namespace: Forbidden: Backend ref to InferencePool invalid/ipool not permitted by any ReferenceGrant",
+			),
+		},
+		{
+			name: "invalid group",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Group = helpers.GetPointer[gatewayv1.Group]("invalid")
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				`test.group: Unsupported value: "invalid": supported values: "core", "", "inference.networking.k8s.io"`,
+			),
+		},
+		{
+			name: "invalid kind",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind]("NotService")
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				`test.kind: Unsupported value: "NotService": supported values: "Service", "InferencePool"`,
+			),
+		},
+		{
+			name: "backend ref not allowed by reference grant",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Namespace = helpers.GetPointer[gatewayv1.Namespace]("invalid")
+				return backend
+			}),
+			refGrantResolver: alwaysFalseRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefRefNotPermitted(
+				"test.namespace: Forbidden: Backend ref to Service invalid/service1 not permitted by any ReferenceGrant",
+			),
+		},
+		{
+			name: "invalid weight",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Weight = helpers.GetPointer[int32](-1)
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefUnsupportedValue(
+				"test.weight: Invalid value: -1: must be in the range [0, 1000000]",
+			),
+		},
+		{
+			name: "nil port",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Port = nil
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefUnsupportedValue(
+				"test.port: Required value: port cannot be nil",
+			),
+		},
+		{
+			name: "nil port allowed for InferencePool kind",
+			ref: getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool)
+				backend.Group = helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup)
+				backend.Port = nil
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			valid, cond := validateBackendRefHTTPRoute(test.ref, "test", test.refGrantResolver, field.NewPath("test"))
 
 			g.Expect(valid).To(Equal(test.expectedValid))
 			g.Expect(cond).To(Equal(test.expectedCondition))
@@ -523,13 +794,21 @@ func TestAddBackendRefsToRules(t *testing.T) {
 		Name:      "svcGRPC",
 	}
 
+	svcInferenceName := controller.CreateInferencePoolServiceName("ipool")
+	svcInference := getSvc(svcInferenceName)
+	svcInferenceNsName := types.NamespacedName{
+		Namespace: "test",
+		Name:      svcInferenceName,
+	}
+
 	services := map[types.NamespacedName]*v1.Service{
-		{Namespace: "test", Name: "svc1"}:    svc1,
-		{Namespace: "test", Name: "svc2"}:    svc2,
-		{Namespace: "test", Name: "svcH2c"}:  svcH2c,
-		{Namespace: "test", Name: "svcWS"}:   svcWS,
-		{Namespace: "test", Name: "svcWSS"}:  svcWSS,
-		{Namespace: "test", Name: "svcGRPC"}: svcGRPC,
+		svc1NsName:         svc1,
+		svc2NsName:         svc2,
+		svcH2cNsName:       svcH2c,
+		svcWSNsName:        svcWS,
+		svcWSSNsName:       svcWSS,
+		svcGRPCNsName:      svcGRPC,
+		svcInferenceNsName: svcInference,
 	}
 	emptyPolicies := map[types.NamespacedName]*BackendTLSPolicy{}
 
@@ -892,7 +1171,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefInvalidKind(
-					`spec.rules[0].backendRefs[0].kind: Unsupported value: "NotService": supported values: "Service"`,
+					`spec.rules[0].backendRefs[0].kind: Unsupported value: "NotService": supported values: "Service", "InferencePool"`,
 				),
 			},
 			policies: emptyPolicies,
@@ -938,6 +1217,34 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			expectedConditions:  nil,
 			name:                "zero backendRefs",
 		},
+		{
+			route: func() *L7Route {
+				route := createRoute("hr-inference", RouteTypeHTTP, "Service", 1, svcInferenceName)
+				// Mark the backend ref as IsInferencePool and set the port to nil (simulate InferencePool logic)
+				route.Spec.Rules[0].RouteBackendRefs[0].IsInferencePool = true
+				route.Spec.Rules[0].RouteBackendRefs[0].Port = nil
+				return route
+			}(),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName: types.NamespacedName{Namespace: "test", Name: svcInferenceName},
+					ServicePort: v1.ServicePort{
+						Port: 80,
+					},
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					IsInferencePool:    true,
+					EndpointPickerConfig: EndpointPickerConfig{
+						NsName:            svcInferenceNsName.Namespace,
+						EndpointPickerRef: &inference.EndpointPickerRef{},
+					},
+				},
+			},
+			expectedConditions: nil,
+			policies:           emptyPolicies,
+			name:               "headless Service for InferencePool gets port set correctly",
+		},
 	}
 
 	for _, test := range tests {
@@ -946,7 +1253,23 @@ func TestAddBackendRefsToRules(t *testing.T) {
 
 			g := NewWithT(t)
 			resolver := newReferenceGrantResolver(nil)
-			addBackendRefsToRules(test.route, resolver, services, test.policies)
+
+			referencedInferencePools := map[types.NamespacedName]*ReferencedInferencePool{
+				{Namespace: "test", Name: "ipool"}: {
+					Source: &inference.InferencePool{
+						Spec: inference.InferencePoolSpec{
+							TargetPorts: []inference.Port{
+								{
+									Number: 80,
+								},
+							},
+						},
+					},
+					Valid: true,
+				},
+			}
+
+			addBackendRefsToRules(test.route, resolver, services, referencedInferencePools, test.policies)
 
 			var actual []BackendRef
 			if test.route.Spec.Rules != nil {
@@ -1169,7 +1492,7 @@ func TestCreateBackend(t *testing.T) {
 			expectedServicePortReference: "",
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefInvalidKind(
-					`test.kind: Unsupported value: "NotService": supported values: "Service"`,
+					`test.kind: Unsupported value: "NotService": supported values: "Service", "InferencePool"`,
 				),
 			},
 			name: "invalid kind",
@@ -1403,11 +1726,13 @@ func TestCreateBackend(t *testing.T) {
 			g := NewWithT(t)
 
 			rbr := RouteBackendRef{
-				nil,
-				test.ref.BackendRef,
-				[]any{},
+				MirrorBackendIdx: nil,
+				IsInferencePool:  false,
+				BackendRef:       test.ref.BackendRef,
+				Filters:          []any{},
 			}
 			route := &L7Route{
+				RouteType: RouteTypeHTTP,
 				Source: &gatewayv1.HTTPRoute{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "test",
@@ -1467,12 +1792,14 @@ func TestCreateBackend(t *testing.T) {
 	// test mirror backend case
 	g := NewWithT(t)
 	ref := RouteBackendRef{
-		helpers.GetPointer(0), // mirrorFilterIdx
-		getNormalRef(),
-		[]any{},
+		MirrorBackendIdx: helpers.GetPointer(0),
+		IsInferencePool:  false,
+		BackendRef:       getNormalRef(),
+		Filters:          []any{},
 	}
 
 	route := &L7Route{
+		RouteType: RouteTypeHTTP,
 		Source: &gatewayv1.HTTPRoute{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "test",

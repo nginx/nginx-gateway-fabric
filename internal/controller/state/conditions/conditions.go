@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -65,6 +66,9 @@ const (
 	// RouteReasonInvalidFilter is used when an extension ref filter referenced by a Route cannot be resolved, or is
 	// invalid. Used with ResolvedRefs (false).
 	RouteReasonInvalidFilter v1.RouteConditionReason = "InvalidFilter"
+
+	// RouteReasonInvalidInferencePool is used when a InferencePool backendRef referenced by a Route is invalid.
+	RouteReasonInvalidInferencePool v1.RouteConditionReason = "InvalidInferencePool"
 
 	// GatewayReasonUnsupportedField is used with the "Accepted" condition when a Gateway contains fields
 	// that are not yet supported.
@@ -460,6 +464,17 @@ func NewRouteBackendRefUnsupportedValue(msg string) Condition {
 		Type:    string(v1.RouteConditionResolvedRefs),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonBackendRefUnsupportedValue),
+		Message: msg,
+	}
+}
+
+// NewRouteBackendRefInvalidInferencePool returns a Condition that indicates that the Route has a InferencePool
+// backendRef that is invalid.
+func NewRouteBackendRefInvalidInferencePool(msg string) Condition {
+	return Condition{
+		Type:    string(v1.RouteConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(RouteReasonInvalidInferencePool),
 		Message: msg,
 	}
 }
@@ -1136,5 +1151,57 @@ func NewBackendTLSPolicyNoValidCACertificate(message string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(BackendTLSPolicyReasonNoValidCACertificate),
 		Message: message,
+	}
+}
+
+// NewInferencePoolAccepted returns a Condition that indicates that the InferencePool is accepted by the Gateway.
+func NewInferencePoolAccepted() Condition {
+	return Condition{
+		Type:    string(inference.InferencePoolConditionAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(inference.InferencePoolConditionAccepted),
+		Message: "InferencePool is accepted by the Gateway.",
+	}
+}
+
+// NewInferencePoolResolvedRefs returns a Condition that
+// indicates that all references in the InferencePool are resolved.
+func NewInferencePoolResolvedRefs() Condition {
+	return Condition{
+		Type:    string(inference.InferencePoolConditionResolvedRefs),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(inference.InferencePoolConditionResolvedRefs),
+		Message: "Inference pool references a valid ExtensionRef.",
+	}
+}
+
+// NewDefaultInferenceConditions returns the default Conditions
+// that must be present in the status of an InferencePool.
+func NewDefaultInferenceConditions() []Condition {
+	return []Condition{
+		NewInferencePoolAccepted(),
+		NewInferencePoolResolvedRefs(),
+	}
+}
+
+// NewInferencePoolInvalidHTTPRouteNotAccepted returns a Condition that indicates that the InferencePool is not
+// accepted because the associated HTTPRoute is not accepted by the Gateway.
+func NewInferencePoolInvalidHTTPRouteNotAccepted(msg string) Condition {
+	return Condition{
+		Type:    string(inference.InferencePoolConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(inference.InferencePoolReasonHTTPRouteNotAccepted),
+		Message: msg,
+	}
+}
+
+// NewInferencePoolInvalidExtensionref returns a Condition that indicates that the InferencePool is not
+// accepted because the ExtensionRef is invalid.
+func NewInferencePoolInvalidExtensionref(msg string) Condition {
+	return Condition{
+		Type:    string(inference.InferencePoolConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(inference.InferencePoolReasonInvalidExtensionRef),
+		Message: msg,
 	}
 }

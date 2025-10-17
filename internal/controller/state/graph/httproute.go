@@ -7,13 +7,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 var (
@@ -27,6 +30,7 @@ func buildHTTPRoute(
 	ghr *v1.HTTPRoute,
 	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
 ) *L7Route {
 	r := &L7Route{
 		Source:    ghr,
@@ -62,6 +66,8 @@ func buildHTTPRoute(
 		ghr.Spec.Rules,
 		validator,
 		getSnippetsFilterResolverForNamespace(snippetsFilters, r.Source.GetNamespace()),
+		inferencePools,
+		r.Source.GetNamespace(),
 	)
 
 	r.Spec.Rules = rules
@@ -113,6 +119,7 @@ func buildHTTPMirrorRoutes(
 					tmpMirrorRoute,
 					gateways,
 					snippetsFilters,
+					nil,
 				)
 
 				if mirrorRoute != nil {
@@ -166,6 +173,8 @@ func processHTTPRouteRule(
 	rulePath *field.Path,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	routeNamespace string,
 ) (RouteRule, routeRuleErrors) {
 	var errors routeRuleErrors
 
@@ -206,10 +215,43 @@ func processHTTPRouteRule(
 				interfaceFilters = append(interfaceFilters, filter)
 			}
 		}
+
 		rbr := RouteBackendRef{
 			BackendRef: b.BackendRef,
-			Filters:    interfaceFilters,
 		}
+
+		// If route specifies an InferencePool backend, we need to convert it to its associated
+		// headless Service backend (that we created), so nginx config can be built properly.
+		// Only do this if the InferencePool actually exists.
+		if inferencePoolBackend(b, routeNamespace, inferencePools) {
+			// We don't support traffic splitting at the Route level for
+			// InferencePool backends, so if there's more than one backendRef, and one of them
+			// is an InferencePool, we mark the rule as invalid.
+			if len(specRule.BackendRefs) > 1 {
+				err := field.Forbidden(
+					rulePath.Child("backendRefs"),
+					"cannot use InferencePool backend when multiple backendRefs are specified in a single rule",
+				)
+				errors.invalid = append(errors.invalid, err)
+				break
+			}
+
+			svcName := controller.CreateInferencePoolServiceName(string(b.Name))
+			rbr = RouteBackendRef{
+				IsInferencePool: true,
+				BackendRef: v1.BackendRef{
+					BackendObjectReference: v1.BackendObjectReference{
+						Group:     helpers.GetPointer[v1.Group](""),
+						Kind:      helpers.GetPointer[v1.Kind](kinds.Service),
+						Name:      v1.ObjectName(svcName),
+						Namespace: b.Namespace,
+					},
+					Weight: b.Weight,
+				},
+			}
+		}
+
+		rbr.Filters = interfaceFilters
 		backendRefs = append(backendRefs, rbr)
 	}
 
@@ -241,6 +283,8 @@ func processHTTPRouteRules(
 	specRules []v1.HTTPRouteRule,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	routeNamespace string,
 ) (rules []RouteRule, valid bool, conds []conditions.Condition) {
 	rules = make([]RouteRule, len(specRules))
 
@@ -257,6 +301,8 @@ func processHTTPRouteRules(
 			rulePath,
 			validator,
 			resolveExtRefFunc,
+			inferencePools,
+			routeNamespace,
 		)
 
 		if rr.ValidMatches && rr.Filters.Valid {
@@ -296,6 +342,32 @@ func processHTTPRouteRules(
 	}
 
 	return rules, valid, conds
+}
+
+// inferencePoolBackend returns if a Route references an InferencePool backend
+// and that InferencePool exists.
+func inferencePoolBackend(
+	backendRef v1.HTTPBackendRef,
+	routeNamespace string,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
+) bool {
+	if backendRef.Group != nil &&
+		*backendRef.Group == inferenceAPIGroup &&
+		*backendRef.Kind == kinds.InferencePool {
+		namespace := routeNamespace
+		if backendRef.Namespace != nil {
+			namespace = string(*backendRef.Namespace)
+		}
+		key := types.NamespacedName{
+			Name:      string(backendRef.Name),
+			Namespace: namespace,
+		}
+		if _, exists := inferencePools[key]; exists {
+			return true
+		}
+	}
+
+	return false
 }
 
 func validateMatch(

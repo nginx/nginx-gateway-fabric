@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -59,22 +60,27 @@ func TestExecuteMaps(t *testing.T) {
 
 	conf := dataplane.Configuration{
 		HTTPServers: []dataplane.VirtualServer{
-			{
-				PathRules: pathRules,
-			},
-			{
-				PathRules: pathRules,
-			},
-			{
-				IsDefault: true,
-			},
+			{PathRules: pathRules},
+			{PathRules: pathRules},
+			{IsDefault: true},
 		},
 		SSLServers: []dataplane.VirtualServer{
+			{PathRules: pathRules},
+			{IsDefault: true},
+		},
+		BackendGroups: []dataplane.BackendGroup{
 			{
-				PathRules: pathRules,
-			},
-			{
-				IsDefault: true,
+				Backends: []dataplane.Backend{
+					{
+						UpstreamName: "upstream1",
+						EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+							NsName: "default",
+							EndpointPickerRef: &inference.EndpointPickerRef{
+								FailureMode: inference.EndpointPickerFailClose,
+							},
+						},
+					},
+				},
 			},
 		},
 	}
@@ -86,6 +92,9 @@ func TestExecuteMaps(t *testing.T) {
 		"map ${http_my_second_add_header} $my_second_add_header_header_var {": 1,
 		"~.* ${http_my_second_add_header},;":                                  1,
 		"map ${http_my_set_header} $my_set_header_header_var {":               0,
+		"$inference_workload_endpoint":                                        2,
+		"$inference_backend":                                                  1,
+		"invalid-backend-ref":                                                 1,
 	}
 
 	mapResult := executeMaps(conf)
@@ -384,4 +393,59 @@ func TestCreateStreamMapsWithEmpty(t *testing.T) {
 	maps := createStreamMaps(conf)
 
 	g.Expect(maps).To(BeNil())
+}
+
+func TestBuildInferenceMaps(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	group := dataplane.BackendGroup{
+		Backends: []dataplane.Backend{
+			{
+				UpstreamName: "upstream1",
+				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+					NsName: "default",
+					EndpointPickerRef: &inference.EndpointPickerRef{
+						FailureMode: inference.EndpointPickerFailClose,
+					},
+				},
+			},
+			{
+				UpstreamName: "upstream2",
+				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+					NsName: "default",
+					EndpointPickerRef: &inference.EndpointPickerRef{
+						FailureMode: inference.EndpointPickerFailOpen,
+					},
+				},
+			},
+			{
+				UpstreamName:         "upstream3",
+				EndpointPickerConfig: nil,
+			},
+		},
+	}
+
+	maps := buildInferenceMaps([]dataplane.BackendGroup{group})
+	g.Expect(maps).To(HaveLen(2))
+	g.Expect(maps[0].Source).To(Equal("$inference_workload_endpoint"))
+	g.Expect(maps[0].Variable).To(Equal("$inference_backend_upstream1"))
+	g.Expect(maps[0].Parameters).To(HaveLen(3))
+	g.Expect(maps[0].Parameters[0].Value).To(Equal("\"\""))
+	g.Expect(maps[0].Parameters[0].Result).To(Equal("upstream1"))
+	g.Expect(maps[0].Parameters[1].Value).To(Equal("~.+"))
+	g.Expect(maps[0].Parameters[1].Result).To(Equal("$inference_workload_endpoint"))
+	g.Expect(maps[0].Parameters[2].Value).To(Equal("default"))
+	g.Expect(maps[0].Parameters[2].Result).To(Equal("invalid-backend-ref"))
+
+	// Check the second map
+	g.Expect(maps[1].Source).To(Equal("$inference_workload_endpoint"))
+	g.Expect(maps[1].Variable).To(Equal("$inference_backend_upstream2"))
+	g.Expect(maps[1].Parameters).To(HaveLen(3))
+	g.Expect(maps[1].Parameters[0].Value).To(Equal("\"\""))
+	g.Expect(maps[1].Parameters[0].Result).To(Equal("upstream2"))
+	g.Expect(maps[1].Parameters[1].Value).To(Equal("~.+"))
+	g.Expect(maps[1].Parameters[1].Result).To(Equal("$inference_workload_endpoint"))
+	g.Expect(maps[1].Parameters[2].Value).To(Equal("default"))
+	g.Expect(maps[1].Parameters[2].Result).To(Equal("upstream2"))
 }

@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -518,4 +519,123 @@ func PrepareNginxGatewayStatus(
 			Conditions: conditions.ConvertConditions(conds, nginxGateway.Generation, transitionTime),
 		}),
 	}
+}
+
+// PrepareInferencePoolRequests prepares status UpdateRequests for the given InferencePools.
+func PrepareInferencePoolRequests(
+	referencedInferencePools map[types.NamespacedName]*graph.ReferencedInferencePool,
+	clusterInferencePoolList *inference.InferencePoolList,
+	referencedGateways map[types.NamespacedName]*graph.Gateway,
+	transitionTime metav1.Time,
+) []UpdateRequest {
+	reqs := make([]UpdateRequest, 0, len(referencedInferencePools))
+
+	// Create parent references from referenced gateways
+	nginxGatewayParentRefs := make([]inference.ParentReference, 0, len(referencedGateways))
+	for _, gateway := range referencedGateways {
+		parentRef := inference.ParentReference{
+			Name:      inference.ObjectName(gateway.Source.GetName()),
+			Namespace: inference.Namespace(gateway.Source.GetNamespace()),
+			Group:     helpers.GetPointer(inference.Group(gateway.Source.GroupVersionKind().Group)),
+			Kind:      kinds.Gateway,
+		}
+		nginxGatewayParentRefs = append(nginxGatewayParentRefs, parentRef)
+	}
+
+	if clusterInferencePoolList != nil {
+		for _, pool := range clusterInferencePoolList.Items {
+			nsname := types.NamespacedName{
+				Namespace: pool.Namespace,
+				Name:      pool.Name,
+			}
+
+			// If the pool is in the cluster, but not referenced, we need to check
+			// if any of its parents are an nginx Gateway, if so, we need to remove them.
+			if referencedInferencePools[nsname] == nil {
+				// represents parentRefs that are NOT nginx gateways
+				filteredParents := make([]inference.ParentStatus, 0, len(pool.Status.Parents))
+				for _, parent := range pool.Status.Parents {
+					// if the parent.ParentRef is not in the list of nginx gateways, keep it
+					// otherwise, we are removing it from the status
+					if !containsParentReference(nginxGatewayParentRefs, parent.ParentRef) {
+						filteredParents = append(filteredParents, parent)
+					}
+				}
+
+				// Create an update request to set the filtered parents
+				if len(filteredParents) != len(pool.Status.Parents) {
+					status := inference.InferencePoolStatus{
+						Parents: filteredParents,
+					}
+
+					req := UpdateRequest{
+						NsName:       nsname,
+						ResourceType: &inference.InferencePool{},
+						Setter:       newInferencePoolStatusSetter(status),
+					}
+
+					reqs = append(reqs, req)
+				}
+			}
+		}
+	}
+
+	for nsname, pool := range referencedInferencePools {
+		if pool.Source == nil {
+			continue
+		}
+
+		defaultConds := conditions.NewDefaultInferenceConditions()
+		allConds := make([]conditions.Condition, 0, len(pool.Conditions)+2)
+
+		allConds = append(allConds, defaultConds...)
+
+		if len(pool.Conditions) != 0 {
+			allConds = append(allConds, pool.Conditions...)
+		}
+
+		conds := conditions.DeduplicateConditions(allConds)
+		apiConds := conditions.ConvertConditions(conds, pool.Source.GetGeneration(), transitionTime)
+
+		parents := make([]inference.ParentStatus, 0, len(pool.Gateways))
+		for _, ref := range pool.Gateways {
+			parents = append(parents, inference.ParentStatus{
+				ParentRef: inference.ParentReference{
+					Name:      inference.ObjectName(ref.GetName()),
+					Namespace: inference.Namespace(ref.GetNamespace()),
+					Group:     helpers.GetPointer(inference.Group(ref.GroupVersionKind().Group)),
+					Kind:      kinds.Gateway,
+				},
+				Conditions: apiConds,
+			})
+		}
+
+		status := inference.InferencePoolStatus{
+			Parents: parents,
+		}
+
+		req := UpdateRequest{
+			NsName:       nsname,
+			ResourceType: pool.Source,
+			Setter:       newInferencePoolStatusSetter(status),
+		}
+
+		reqs = append(reqs, req)
+	}
+
+	return reqs
+}
+
+// containsParentReference checks if a ParentReference exists in a slice of ParentReferences
+// by comparing Name, Namespace, and Kind fields.
+func containsParentReference(parentRefs []inference.ParentReference, target inference.ParentReference) bool {
+	for _, ref := range parentRefs {
+		if ref.Name == target.Name &&
+			ref.Namespace == target.Namespace &&
+			ref.Kind == target.Kind {
+			return true
+		}
+	}
+
+	return false
 }

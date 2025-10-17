@@ -374,12 +374,13 @@ func newBackendGroup(
 	gatewayName types.NamespacedName,
 	sourceNsName types.NamespacedName,
 	ruleIdx int,
-) BackendGroup {
+) (BackendGroup, bool) {
 	var backends []Backend
 
 	if len(refs) > 0 {
 		backends = make([]Backend, 0, len(refs))
 	}
+	var inferencePoolBackendExists bool
 
 	for _, ref := range refs {
 		if ref.IsMirrorBackend {
@@ -391,11 +392,22 @@ func newBackendGroup(
 			valid = false
 		}
 
+		inferencePoolBackendExists = inferencePoolBackendExists || ref.IsInferencePool
+
+		var eppRef *EndpointPickerConfig
+		if ref.EndpointPickerConfig.EndpointPickerRef != nil {
+			eppRef = &EndpointPickerConfig{
+				EndpointPickerRef: ref.EndpointPickerConfig.EndpointPickerRef,
+				NsName:            ref.EndpointPickerConfig.NsName,
+			}
+		}
+
 		backends = append(backends, Backend{
-			UpstreamName: ref.ServicePortReference(),
-			Weight:       ref.Weight,
-			Valid:        valid,
-			VerifyTLS:    convertBackendTLS(ref.BackendTLSPolicy, gatewayName),
+			UpstreamName:         ref.ServicePortReference(),
+			Weight:               ref.Weight,
+			Valid:                valid,
+			VerifyTLS:            convertBackendTLS(ref.BackendTLSPolicy, gatewayName),
+			EndpointPickerConfig: eppRef,
 		})
 	}
 
@@ -403,7 +415,7 @@ func newBackendGroup(
 		Backends: backends,
 		Source:   sourceNsName,
 		RuleIdx:  ruleIdx,
-	}
+	}, inferencePoolBackendExists
 }
 
 func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedName) *VerifyTLS {
@@ -595,10 +607,19 @@ func (hpr *hostPathRules) upsertRoute(
 				}
 
 				hostRule.GRPC = GRPC
+				backendGroup, inferencePoolBackendExists := newBackendGroup(
+					rule.BackendRefs,
+					listener.GatewayName,
+					routeNsName,
+					idx,
+				)
+				if inferencePoolBackendExists {
+					hostRule.HasInferenceBackends = true
+				}
 
 				hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
 					Source:       objectSrc,
-					BackendGroup: newBackendGroup(rule.BackendRefs, listener.GatewayName, routeNsName, idx),
+					BackendGroup: backendGroup,
 					Filters:      filters,
 					Match:        convertMatch(m),
 				})

@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -116,6 +117,17 @@ var expRouteBackendRef = RouteBackendRef{
 			Type: gatewayv1.HTTPRouteFilterExtensionRef,
 		},
 	},
+}
+
+func createInferencePoolBackend(name, namespace string) gatewayv1.BackendRef {
+	return gatewayv1.BackendRef{
+		BackendObjectReference: gatewayv1.BackendObjectReference{
+			Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
+			Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+			Name:      gatewayv1.ObjectName(name),
+			Namespace: helpers.GetPointer(gatewayv1.Namespace(namespace)),
+		},
+	}
 }
 
 func TestBuildHTTPRoutes(t *testing.T) {
@@ -264,6 +276,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 				map[types.NamespacedName]*gatewayv1.GRPCRoute{},
 				test.gateways,
 				snippetsFilters,
+				nil,
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
 		})
@@ -381,6 +394,21 @@ func TestBuildHTTPRoute(t *testing.T) {
 	hrInvalidAndUnresolvableSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
 	addFilterToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", invalidSnippetsFilterExtRef)
 	addFilterToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef)
+
+	// routes with an inference pool backend
+	hrInferencePool := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
+	hrInferencePool.Spec.Rules[0].BackendRefs = []gatewayv1.HTTPBackendRef{
+		{
+			BackendRef: createInferencePoolBackend("ipool", gatewayNsName.Namespace),
+		},
+	}
+	// route with an inference pool backend that does not exist
+	hrInferencePoolDoesNotExist := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
+	hrInferencePoolDoesNotExist.Spec.Rules[0].BackendRefs = []gatewayv1.HTTPBackendRef{
+		{
+			BackendRef: createInferencePoolBackend("ipool-does-not-exist", gatewayNsName.Namespace),
+		},
+	}
 
 	validatorInvalidFieldsInRule := &validationfakes.FakeHTTPFieldsValidator{
 		ValidatePathInMatchStub: func(path string) error {
@@ -983,6 +1011,86 @@ func TestBuildHTTPRoute(t *testing.T) {
 			},
 			name: "valid route with unsupported field",
 		},
+		{
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			hr:        hrInferencePool,
+			expected: &L7Route{
+				RouteType: RouteTypeHTTP,
+				Source:    hrInferencePool,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrInferencePool.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Valid:      true,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: hrInferencePool.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   true,
+								Filters: []Filter{},
+							},
+							Matches: hrInferencePool.Spec.Rules[0].Matches,
+							RouteBackendRefs: []RouteBackendRef{
+								{
+									IsInferencePool: true,
+									BackendRef: gatewayv1.BackendRef{
+										BackendObjectReference: gatewayv1.BackendObjectReference{
+											Group:     helpers.GetPointer[gatewayv1.Group](""),
+											Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.Service),
+											Name:      "ipool-pool-svc",
+											Namespace: helpers.GetPointer[gatewayv1.Namespace]("test"),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			name: "route with an inference pool backend gets converted to service",
+		},
+		{
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			hr:        hrInferencePoolDoesNotExist,
+			expected: &L7Route{
+				RouteType: RouteTypeHTTP,
+				Source:    hrInferencePoolDoesNotExist,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrInferencePoolDoesNotExist.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Valid:      true,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: hrInferencePoolDoesNotExist.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   true,
+								Filters: []Filter{},
+							},
+							Matches: hrInferencePoolDoesNotExist.Spec.Rules[0].Matches,
+							RouteBackendRefs: []RouteBackendRef{
+								{
+									BackendRef: createInferencePoolBackend("ipool-does-not-exist", gatewayNsName.Namespace),
+								},
+							},
+						},
+					},
+				},
+			},
+			name: "route with an inference pool backend that doesn't exist",
+		},
 	}
 
 	gws := map[types.NamespacedName]*Gateway{
@@ -997,8 +1105,11 @@ func TestBuildHTTPRoute(t *testing.T) {
 			snippetsFilters := map[types.NamespacedName]*SnippetsFilter{
 				{Namespace: "test", Name: "sf"}: {Valid: true},
 			}
+			inferencePools := map[types.NamespacedName]*inference.InferencePool{
+				{Namespace: "test", Name: "ipool"}: {},
+			}
 
-			route := buildHTTPRoute(test.validator, test.hr, gws, snippetsFilters)
+			route := buildHTTPRoute(test.validator, test.hr, gws, snippetsFilters, inferencePools)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
 	}
@@ -1130,7 +1241,7 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 	g := NewWithT(t)
 
 	routes := map[RouteKey]*L7Route{}
-	l7route := buildHTTPRoute(validator, hr, gateways, snippetsFilters)
+	l7route := buildHTTPRoute(validator, hr, gateways, snippetsFilters, nil)
 	g.Expect(l7route).NotTo(BeNil())
 
 	buildHTTPMirrorRoutes(routes, l7route, hr, gateways, snippetsFilters)
@@ -1140,6 +1251,67 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 	mirrorRouteKey := CreateRouteKey(obj)
 	g.Expect(routes).To(HaveKey(mirrorRouteKey))
 	g.Expect(helpers.Diff(expectedMirrorRoute, routes[mirrorRouteKey])).To(BeEmpty())
+}
+
+func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	inferencePoolName := "ipool"
+	routeNamespace := "test"
+	inferencePools := map[types.NamespacedName]*inference.InferencePool{
+		{Namespace: routeNamespace, Name: inferencePoolName}: {},
+	}
+
+	// BackendRef 1: InferencePool
+	backendRef1 := gatewayv1.HTTPBackendRef{
+		BackendRef: gatewayv1.BackendRef{
+			BackendObjectReference: gatewayv1.BackendObjectReference{
+				Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
+				Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+				Name:      gatewayv1.ObjectName(inferencePoolName),
+				Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNamespace)),
+			},
+		},
+	}
+	// BackendRef 2: Service
+	backendRef2 := gatewayv1.HTTPBackendRef{
+		BackendRef: gatewayv1.BackendRef{
+			BackendObjectReference: gatewayv1.BackendObjectReference{
+				Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
+				Name: "backend",
+			},
+		},
+	}
+
+	specRule := gatewayv1.HTTPRouteRule{
+		Matches: []gatewayv1.HTTPRouteMatch{
+			{
+				Path: &gatewayv1.HTTPPathMatch{
+					Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
+					Value: helpers.GetPointer("/"),
+				},
+			},
+		},
+		BackendRefs: []gatewayv1.HTTPBackendRef{backendRef1, backendRef2},
+	}
+
+	rulePath := field.NewPath("spec").Child("rules").Index(0)
+
+	routeRule, errs := processHTTPRouteRule(
+		specRule,
+		rulePath,
+		validator,
+		nil,
+		inferencePools,
+		routeNamespace,
+	)
+
+	g.Expect(routeRule.RouteBackendRefs).To(BeEmpty())
+	g.Expect(errs.invalid).To(HaveLen(1))
+	errMsg := "cannot use InferencePool backend when multiple backendRefs are specified in a single rule"
+	g.Expect(errs.invalid[0].Error()).To(ContainSubstring(errMsg))
 }
 
 func TestValidateMatch(t *testing.T) {
@@ -1772,6 +1944,7 @@ func TestUnsupportedFieldsErrors(t *testing.T) {
 
 func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 	t.Parallel()
+	routeNamespace := "test"
 
 	tests := []struct {
 		name          string
@@ -1833,6 +2006,8 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 				test.specRules,
 				validation.SkipValidator{},
 				nil,
+				nil,
+				routeNamespace,
 			)
 
 			g.Expect(valid).To(Equal(test.expectedValid))

@@ -66,6 +66,8 @@ type Data struct {
 	ControlPlanePodCount int64
 	// NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled.
 	NginxOneConnectionEnabled bool
+	// InferencePoolCount is the number of InferencePools that are referenced by at least one Route.
+	InferencePoolCount int64
 }
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.
@@ -174,6 +176,8 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 
 	nginxPodCount := getNginxPodCount(g, clusterInfo.NodeCount)
 
+	inferencePoolCount := int64(len(g.ReferencedInferencePools))
+
 	data := Data{
 		Data: tel.Data{
 			ProjectName:         "NGF",
@@ -194,6 +198,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		NginxPodCount:                  nginxPodCount,
 		ControlPlanePodCount:           int64(replicaCount),
 		NginxOneConnectionEnabled:      c.cfg.NginxOneConsoleConnection,
+		InferencePoolCount:             inferencePoolCount,
 	}
 
 	return data, nil
