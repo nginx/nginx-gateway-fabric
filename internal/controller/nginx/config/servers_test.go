@@ -2457,11 +2457,14 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				UpstreamName: "test_foo_80",
 				Valid:        true,
 				Weight:       1,
-				EndpointPickerConfig: &inference.EndpointPickerRef{
-					Name: "test-epp",
-					Port: &inference.Port{
-						Number: 80,
+				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+					EndpointPickerRef: &inference.EndpointPickerRef{
+						Name: "test-epp",
+						Port: &inference.Port{
+							Number: 80,
+						},
 					},
+					NsName: hrNsName.Namespace,
 				},
 			},
 		},
@@ -2522,7 +2525,7 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 					Path:            "= /inference",
 					Type:            http.InferenceExternalLocationType,
 					EPPInternalPath: "/_ngf-internal-rule0-route0-inference",
-					EPPHost:         "test-epp",
+					EPPHost:         "test-epp.test",
 					EPPPort:         80,
 				},
 				createDefaultRootLocation(),
@@ -2542,7 +2545,7 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 					Path:            "/_ngf-internal-rule0-route0-inference",
 					Type:            http.InferenceInternalLocationType,
 					EPPInternalPath: "/_ngf-internal-rule0-route0",
-					EPPHost:         "test-epp",
+					EPPHost:         "test-epp.test",
 					EPPPort:         80,
 				},
 				{

@@ -1,17 +1,20 @@
 package main
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	eppMetadata "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 
@@ -34,7 +37,19 @@ func endpointPickerServer(handler http.Handler) error {
 // realExtProcClientFactory returns a factory that creates a new gRPC connection and client per request.
 func realExtProcClientFactory() extProcClientFactory {
 	return func(target string) (extprocv3.ExternalProcessorClient, func() error, error) {
-		conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		var opts []grpc.DialOption
+		enableTLS := true
+		insecureSkipVerify := true
+
+		if !enableTLS {
+			opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		} else {
+			creds := credentials.NewTLS(&tls.Config{
+				InsecureSkipVerify: insecureSkipVerify, //nolint:gosec
+			})
+			opts = append(opts, grpc.WithTransportCredentials(creds))
+		}
+		conn, err := grpc.NewClient(target, opts...)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -148,8 +163,15 @@ func buildHeaderRequest(r *http.Request) *extprocv3.ProcessingRequest {
 
 	for key, values := range r.Header {
 		for _, value := range values {
+			// Normalize header keys to lowercase for case-insensitive matching.
+			// This addresses the mismatch between Go's default HTTP header normalization (Title-Case)
+			// and EPP's expectation of lowercase header keys. Additionally, HTTP/2 — which gRPC uses —
+			// requires all header field names to be lowercase as specified in RFC 7540, Section 8.1.2:
+			// https://datatracker.ietf.org/doc/html/rfc7540#section-8.1.2
+			normalizedKey := strings.ToLower(key)
+
 			headerMap.Headers = append(headerMap.Headers, &corev3.HeaderValue{
-				Key:   key,
+				Key:   normalizedKey,
 				Value: value,
 			})
 		}

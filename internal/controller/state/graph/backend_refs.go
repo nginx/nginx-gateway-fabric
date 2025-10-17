@@ -9,7 +9,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
@@ -31,8 +30,8 @@ const (
 type BackendRef struct {
 	// BackendTLSPolicy is the BackendTLSPolicy of the Service which is referenced by the backendRef.
 	BackendTLSPolicy *BackendTLSPolicy
-	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
-	EndpointPickerConfig *inference.EndpointPickerRef
+	// EndpointPickerConfig holds the configuration for the EndpointPicker for this backend.
+	EndpointPickerConfig EndpointPickerConfig
 	// InvalidForGateways is a map of Gateways for which this BackendRef is invalid for, with the corresponding
 	// condition. Certain NginxProxy configurations may result in a backend not being valid for some Gateways,
 	// but not others.
@@ -74,6 +73,8 @@ func addBackendRefsToRouteRules(
 
 // addHTTPBackendRefsToRules iterates over the rules of a Route and adds a list of BackendRef to each rule.
 // If a reference in a rule is invalid, the function will add a condition to the rule.
+//
+//nolint:gocyclo
 func addBackendRefsToRules(
 	route *L7Route,
 	refGrantResolver *referenceGrantResolver,
@@ -121,9 +122,20 @@ func addBackendRefsToRules(
 				}
 
 				if pool, exists := referencedInferencePools[poolName]; exists {
+					// If the InferencePool is invalid, add a condition to the route
+					if !pool.Valid {
+						route.Conditions = append(route.Conditions, conditions.NewRouteBackendRefInvalidInferencePool(
+							fmt.Sprintf("Referenced InferencePool %s/%s is invalid",
+								poolName.Namespace,
+								poolName.Name,
+							),
+						))
+						continue
+					}
 					port := gatewayv1.PortNumber(pool.Source.Spec.TargetPorts[0].Number)
 					ref.Port = helpers.GetPointer(port)
-					ref.EndpointPickerConfig = &pool.Source.Spec.EndpointPickerRef
+					ref.EndpointPickerConfig.EndpointPickerRef = &pool.Source.Spec.EndpointPickerRef
+					ref.EndpointPickerConfig.NsName = poolName.Namespace
 				}
 			}
 

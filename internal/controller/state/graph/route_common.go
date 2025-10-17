@@ -167,7 +167,7 @@ type RouteBackendRef struct {
 	MirrorBackendIdx *int
 
 	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
-	EndpointPickerConfig *inference.EndpointPickerRef
+	EndpointPickerConfig EndpointPickerConfig
 
 	Filters []any
 

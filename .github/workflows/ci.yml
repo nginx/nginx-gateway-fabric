@@ -443,6 +443,7 @@ jobs:
       build-os: ${{ matrix.build-os }}
       production-release: ${{ inputs.is_production_release == true && (inputs.dry_run == false || inputs.dry_run == null) }}
       release_version: ${{ inputs.release_version }}
+      enable-inference-extension: true
     secrets: inherit
     permissions:
       contents: write
