@@ -297,6 +297,17 @@ type NginxLogging struct {
 	// +optional
 	// +kubebuilder:default=info
 	AgentLevel *AgentLogLevel `json:"agentLevel,omitempty"`
+
+	// LogFormats defines custom log formats that can be used in access logs.
+	// Each log format must have a unique name.
+	//
+	// +optional
+	LogFormats []LogFormat `json:"logFormats,omitempty"`
+
+	// AccessLogs defines the access log settings, including the log file path, format, and optional parameters.
+	//
+	// +optional
+	AccessLogs []AccessLog `json:"accessLogs,omitempty"`
 }
 
 // NginxErrorLogLevel type defines the log level of error logs for NGINX.
@@ -351,6 +362,21 @@ const (
 	// AgentLogLevelFatal is the fatal level NGINX agent logs.
 	AgentLogLevelFatal AgentLogLevel = "fatal"
 )
+
+// LogFormat defines a custom log format for NGINX.
+type LogFormat struct {
+	Name   string `json:"name"`
+	Format string `json:"format"`
+}
+
+// AccessLog defines the configuration for an NGINX access log.
+type AccessLog struct {
+	Path      string `json:"path"`
+	Format    string `json:"format"`
+	Buffer    string `json:"buffer,omitempty"`
+	Condition string `json:"condition,omitempty"`
+	Gzip      bool   `json:"gzip,omitempty"`
+}
 
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.
 type NginxPlus struct {
