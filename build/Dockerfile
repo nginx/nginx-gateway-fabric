@@ -21,11 +21,11 @@ ENV BUILD_OS=alpine
 ENTRYPOINT [ "/usr/bin/gateway" ]
 
 FROM common AS container
-COPY --from=builder /go/src/github.com/nginxinc/nginx-gateway-fabric/build/out/gateway /usr/bin/
+COPY --chmod=0755 --from=builder /go/src/github.com/nginx/nginx-gateway-fabric/build/out/gateway /usr/bin/
 
 FROM common AS local
-COPY ./build/out/gateway /usr/bin/
+COPY --chmod=0755 ./build/out/gateway /usr/bin/
 
 FROM common AS goreleaser
 ARG TARGETARCH
-COPY dist/gateway_linux_$TARGETARCH*/gateway /usr/bin/
+COPY --chmod=0755 dist/gateway_linux_$TARGETARCH*/gateway /usr/bin/
