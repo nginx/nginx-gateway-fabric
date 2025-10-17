@@ -224,6 +224,18 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 		Logging: &ngfAPIv1alpha2.NginxLogging{
 			ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
 			AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelDebug),
+			LogFormats: []ngfAPIv1alpha2.LogFormat{
+				{
+					Name:   "custom_format",
+					Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
+				},
+			},
+			AccessLogs: []ngfAPIv1alpha2.AccessLog{
+				{
+					Path:   "/var/log/nginx/access.log",
+					Format: "custom_format",
+				},
+			},
 		},
 	})
 
@@ -335,6 +347,18 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 							Logging: &ngfAPIv1alpha2.NginxLogging{
 								ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
 								AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelDebug),
+								LogFormats: []ngfAPIv1alpha2.LogFormat{
+									{
+										Name:   "custom_format",
+										Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
+									},
+								},
+								AccessLogs: []ngfAPIv1alpha2.AccessLog{
+									{
+										Path:   "/var/log/nginx/access.log",
+										Format: "custom_format",
+									},
+								},
 							},
 							DisableHTTP2: helpers.GetPointer(true),
 						},
