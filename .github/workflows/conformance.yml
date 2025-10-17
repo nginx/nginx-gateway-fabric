@@ -207,14 +207,14 @@ jobs:
         working-directory: ./tests
 
       - name: Upload profile to GitHub
-        if: ${{ inputs.enable-inference-extension }} && ${{ inputs.enable-experimental }} # add experimental flag to filter result upload
+        if: ${{ inputs.enable-experimental }} # add experimental flag to filter result upload
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: conformance-profile-inference-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.ngf-meta.outputs.version }}-${{ github.run_id }}
           path: ./tests/conformance-profile-inference.yaml
 
       - name: Upload profile to release
-        if: ${{ inputs.production-release && inputs.enable-inference-extension }}
+        if: ${{ inputs.production-release && inputs.enable-experimental }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ github.ref_name }} conformance-profile-inference.yaml --clobber
