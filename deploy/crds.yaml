@@ -8603,6 +8603,28 @@ spec:
               logging:
                 description: Logging defines logging related settings for NGINX.
                 properties:
+                  accessLogs:
+                    description: AccessLogs defines the access log settings, including
+                      the log file path, format, and optional parameters.
+                    items:
+                      description: AccessLog defines the configuration for an NGINX
+                        access log.
+                      properties:
+                        buffer:
+                          type: string
+                        condition:
+                          type: string
+                        format:
+                          type: string
+                        gzip:
+                          type: boolean
+                        path:
+                          type: string
+                      required:
+                      - format
+                      - path
+                      type: object
+                    type: array
                   agentLevel:
                     default: info
                     description: |-
@@ -8632,6 +8654,22 @@ spec:
                     - alert
                     - emerg
                     type: string
+                  logFormats:
+                    description: |-
+                      LogFormats defines custom log formats that can be used in access logs.
+                      Each log format must have a unique name.
+                    items:
+                      description: LogFormat defines a custom log format for NGINX.
+                      properties:
+                        format:
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - format
+                      - name
+                      type: object
+                    type: array
                 type: object
               metrics:
                 description: |-
