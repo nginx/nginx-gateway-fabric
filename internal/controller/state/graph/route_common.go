@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	v1alpha "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -19,7 +20,10 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-const wildcardHostname = "~^"
+const (
+	wildcardHostname  = "~^"
+	inferenceAPIGroup = "inference.networking.k8s.io"
+)
 
 // ParentRef describes a reference to a parent in a Route.
 type ParentRef struct {
@@ -157,11 +161,18 @@ type RouteRule struct {
 
 // RouteBackendRef is a wrapper for v1.BackendRef and any BackendRef filters from the HTTPRoute or GRPCRoute.
 type RouteBackendRef struct {
+	v1.BackendRef
+
 	// If this backend is defined in a RequestMirror filter, this value will indicate the filter's index.
 	MirrorBackendIdx *int
 
-	v1.BackendRef
+	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
+	EndpointPickerConfig EndpointPickerConfig
+
 	Filters []any
+
+	// IsInferencePool indicates if this backend is an InferencePool disguised as a Service.
+	IsInferencePool bool
 }
 
 // CreateRouteKey takes a client.Object and creates a RouteKey.
@@ -244,6 +255,7 @@ func buildRoutesForGateways(
 	grpcRoutes map[types.NamespacedName]*v1.GRPCRoute,
 	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
 ) map[RouteKey]*L7Route {
 	if len(gateways) == 0 {
 		return nil
@@ -252,7 +264,7 @@ func buildRoutesForGateways(
 	routes := make(map[RouteKey]*L7Route)
 
 	for _, route := range httpRoutes {
-		r := buildHTTPRoute(validator, route, gateways, snippetsFilters)
+		r := buildHTTPRoute(validator, route, gateways, snippetsFilters, inferencePools)
 		if r == nil {
 			continue
 		}

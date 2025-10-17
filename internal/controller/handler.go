@@ -13,9 +13,12 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -79,6 +82,8 @@ type eventHandlerConfig struct {
 	controlConfigNSName types.NamespacedName
 	// gatewayCtlrName is the name of the NGF controller.
 	gatewayCtlrName string
+	// gatewayInstanceName is the name of the NGINX Gateway instance.
+	gatewayInstanceName string
 	// gatewayClassName is the name of the GatewayClass.
 	gatewayClassName string
 	// plus is whether or not we are running NGINX Plus.
@@ -116,8 +121,10 @@ type eventHandlerImpl struct {
 	// objectFilters contains all created objectFilters, with the key being a filterKey
 	objectFilters map[filterKey]objectFilter
 
-	cfg  eventHandlerConfig
-	lock sync.Mutex
+	cfg        eventHandlerConfig
+	lock       sync.RWMutex
+	leaderLock sync.RWMutex
+	leader     bool
 }
 
 // newEventHandlerImpl creates a new eventHandlerImpl.
@@ -170,6 +177,10 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 // enable is called when the pod becomes leader to ensure the provisioner has
 // the latest configuration.
 func (h *eventHandlerImpl) enable(ctx context.Context) {
+	h.leaderLock.Lock()
+	h.leader = true
+	h.leaderLock.Unlock()
+
 	h.sendNginxConfig(ctx, h.cfg.logger, h.cfg.processor.GetLatestGraph())
 }
 
@@ -186,6 +197,9 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		h.cfg.statusQueue.Enqueue(obj)
 		return
 	}
+
+	// ensure headless "shadow" Services are created for any referenced InferencePools
+	h.ensureInferencePoolServices(ctx, gr.ReferencedInferencePools)
 
 	for _, gw := range gr.Gateways {
 		go func() {
@@ -356,16 +370,39 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		h.cfg.gatewayCtlrName,
 	)
 
+	// unfortunately, status is not on clusterState stored by the change processor, so we need to make a k8sAPI call here
+	ipList := &inference.InferencePoolList{}
+	err = h.cfg.k8sClient.List(ctx, ipList)
+	if err != nil {
+		msg := "error listing InferencePools for status update"
+		h.cfg.logger.Error(err, msg)
+		h.cfg.eventRecorder.Eventf(
+			&inference.InferencePoolList{},
+			v1.EventTypeWarning,
+			"ListInferencePoolsFailed",
+			msg+": %s",
+			err.Error(),
+		)
+		ipList = &inference.InferencePoolList{} // reset to empty list to avoid nil pointer dereference
+	}
+	inferencePoolReqs := status.PrepareInferencePoolRequests(
+		gr.ReferencedInferencePools,
+		ipList,
+		gr.Gateways,
+		transitionTime,
+	)
+
 	reqs := make(
 		[]status.UpdateRequest,
 		0,
-		len(gcReqs)+len(routeReqs)+len(polReqs)+len(ngfPolReqs)+len(snippetsFilterReqs),
+		len(gcReqs)+len(routeReqs)+len(polReqs)+len(ngfPolReqs)+len(snippetsFilterReqs)+len(inferencePoolReqs),
 	)
 	reqs = append(reqs, gcReqs...)
 	reqs = append(reqs, routeReqs...)
 	reqs = append(reqs, polReqs...)
 	reqs = append(reqs, ngfPolReqs...)
 	reqs = append(reqs, snippetsFilterReqs...)
+	reqs = append(reqs, inferencePoolReqs...)
 
 	h.cfg.statusUpdater.UpdateGroup(ctx, groupAllExceptGateways, reqs...)
 
@@ -554,8 +591,8 @@ func (h *eventHandlerImpl) getDeploymentContext(ctx context.Context) (dataplane.
 
 // GetLatestConfiguration gets the latest configuration.
 func (h *eventHandlerImpl) GetLatestConfiguration() []*dataplane.Configuration {
-	h.lock.Lock()
-	defer h.lock.Unlock()
+	h.lock.RLock()
+	defer h.lock.RUnlock()
 
 	configs := make([]*dataplane.Configuration, 0, len(h.latestConfigurations))
 	for _, cfg := range h.latestConfigurations {
@@ -579,6 +616,111 @@ func (h *eventHandlerImpl) setLatestConfiguration(gateway *graph.Gateway, cfg *d
 
 func objectFilterKey(obj client.Object, nsName types.NamespacedName) filterKey {
 	return filterKey(fmt.Sprintf("%T_%s_%s", obj, nsName.Namespace, nsName.Name))
+}
+
+// ensureInferencePoolServices ensures a headless Service exists and is up to date for each InferencePool.
+func (h *eventHandlerImpl) ensureInferencePoolServices(
+	ctx context.Context,
+	pools map[types.NamespacedName]*graph.ReferencedInferencePool,
+) {
+	if !h.isLeader() {
+		return
+	}
+
+	for _, pool := range pools {
+		if pool.Source == nil {
+			continue
+		}
+
+		selectors := make(map[string]string)
+		for k, v := range pool.Source.Spec.Selector.MatchLabels {
+			selectors[string(k)] = string(v)
+		}
+
+		// v1 of InferencePool only supports a single port right now
+		ports := []v1.ServicePort{
+			{
+				Port:       int32(pool.Source.Spec.TargetPorts[0].Number),
+				TargetPort: intstr.FromInt32(int32(pool.Source.Spec.TargetPorts[0].Number)),
+			},
+		}
+
+		labels := map[string]string{
+			controller.AppManagedByLabel: controller.CreateNginxResourceName(
+				h.cfg.gatewayInstanceName,
+				h.cfg.gatewayClassName,
+			),
+		}
+
+		svc := &v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      controller.CreateInferencePoolServiceName(pool.Source.Name),
+				Namespace: pool.Source.Namespace,
+				Labels:    labels,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: pool.Source.APIVersion,
+						Kind:       pool.Source.Kind,
+						Name:       pool.Source.Name,
+						UID:        pool.Source.UID,
+					},
+				},
+			},
+			Spec: v1.ServiceSpec{
+				ClusterIP: v1.ClusterIPNone, // headless
+				Selector:  selectors,
+				Ports:     ports,
+			},
+		}
+
+		svcCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		res, err := controllerutil.CreateOrUpdate(
+			svcCtx,
+			h.cfg.k8sClient,
+			svc,
+			serviceSpecSetter(svc, svc.Spec, svc.ObjectMeta),
+		)
+		if err != nil {
+			cancel()
+			msg := "Failed to upsert headless Service for InferencePool"
+			h.cfg.logger.Error(err, msg, "Service", svc.Name, "InferencePool", pool.Source.Name)
+			h.cfg.eventRecorder.Eventf(
+				svc,
+				v1.EventTypeWarning,
+				"ServiceCreateOrUpdateFailed",
+				"%s %q: %v", msg, pool.Source.Name, err,
+			)
+			continue
+		}
+		cancel()
+
+		if res == controllerutil.OperationResultCreated || res == controllerutil.OperationResultUpdated {
+			h.cfg.logger.Info(
+				fmt.Sprintf("Successfully %s headless Service for InferencePool", res),
+				"Service", svc.Name, "InferencePool", pool.Source.Name,
+			)
+		}
+	}
+}
+
+func serviceSpecSetter(
+	service *v1.Service,
+	spec v1.ServiceSpec,
+	objectMeta metav1.ObjectMeta,
+) controllerutil.MutateFn {
+	return func() error {
+		service.Labels = objectMeta.Labels
+		service.Spec = spec
+		return nil
+	}
+}
+
+// isLeader returns whether or not this handler is the leader.
+func (h *eventHandlerImpl) isLeader() bool {
+	h.leaderLock.RLock()
+	defer h.leaderLock.RUnlock()
+
+	return h.leader
 }
 
 /*

@@ -23,7 +23,7 @@ RUN apk add --no-cache bash \
     && ln -sf /dev/stderr /var/log/nginx/error.log
 
 COPY build/entrypoint.sh /agent/entrypoint.sh
-COPY ${NJS_DIR}/httpmatches.js /usr/lib/nginx/modules/njs/httpmatches.js
+COPY ${NJS_DIR}/ /usr/lib/nginx/modules/njs/
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf

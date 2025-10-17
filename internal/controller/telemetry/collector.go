@@ -67,6 +67,8 @@ type Data struct { //nolint //required to skip golangci-lint-full fieldalignment
 	ControlPlanePodCount int64
 	// NginxOneConnectionEnabled is a boolean that indicates whether the connection to the Nginx One Console is enabled.
 	NginxOneConnectionEnabled bool
+  // InferencePoolCount is the number of InferencePools that are referenced by at least one Route.
+	InferencePoolCount int64
 	// BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi).
 	BuildOS string
 }
@@ -183,6 +185,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 	if buildOs == "" {
 		buildOs = "alpine"
 	}
+	inferencePoolCount := int64(len(g.ReferencedInferencePools))
 
 	data := Data{
 		Data: tel.Data{
@@ -205,6 +208,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		NginxPodCount:                  nginxPodCount,
 		ControlPlanePodCount:           int64(replicaCount),
 		NginxOneConnectionEnabled:      c.cfg.NginxOneConsoleConnection,
+		InferencePoolCount:             inferencePoolCount,
 	}
 
 	return data, nil

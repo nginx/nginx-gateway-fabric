@@ -15,6 +15,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -35,6 +36,7 @@ func createK8sClientFor(resourceType ngftypes.ObjectType) client.Client {
 	utilruntime.Must(v1alpha2.Install(scheme))
 	utilruntime.Must(v1alpha3.Install(scheme))
 	utilruntime.Must(ngfAPI.AddToScheme(scheme))
+	utilruntime.Must(inference.Install(scheme))
 
 	k8sClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -2153,6 +2155,321 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 				err := k8sClient.Get(context.Background(), nsname, &snippetsFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(expected, snippetsFilter.Status)).To(BeEmpty())
+			}
+		})
+	}
+}
+
+func TestBuildInferencePoolStatuses(t *testing.T) {
+	t.Parallel()
+	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
+	group := ""
+
+	validAcceptedCondition := metav1.Condition{
+		Type:               string(inference.InferencePoolConditionAccepted),
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: 1,
+		LastTransitionTime: transitionTime,
+		Reason:             string(inference.InferencePoolReasonAccepted),
+		Message:            "InferencePool is accepted by the Gateway.",
+	}
+
+	validResolvedRefsCondition := metav1.Condition{
+		Type:               string(inference.InferencePoolConditionResolvedRefs),
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: 1,
+		LastTransitionTime: transitionTime,
+		Reason:             string(inference.InferencePoolConditionResolvedRefs),
+		Message:            "Inference pool references a valid ExtensionRef.",
+	}
+
+	referencedGateways := map[types.NamespacedName]*graph.Gateway{
+		{Namespace: "test", Name: "gateway-1"}: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway-1",
+					Namespace: "test",
+				},
+			},
+			Valid: true,
+		},
+		{Namespace: "test", Name: "gateway-2"}: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway-2",
+					Namespace: "test",
+				},
+			},
+			Valid: true,
+		},
+	}
+
+	validInferencePool := &inference.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "valid-inference-pool",
+			Namespace:  "test",
+			Generation: 1,
+		},
+	}
+
+	validInferencePoolWithInvalidExtensionRef := &inference.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "valid-inference-pool",
+			Namespace:  "test",
+			Generation: 1,
+		},
+		Spec: inference.InferencePoolSpec{
+			EndpointPickerRef: inference.EndpointPickerRef{
+				Name: inference.ObjectName("invalid-extension-ref"),
+			},
+		},
+	}
+
+	validInferencePoolWithStatus := &inference.InferencePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "valid-inference-pool-with-status",
+			Namespace:  "test",
+			Generation: 1,
+		},
+		Status: inference.InferencePoolStatus{
+			Parents: []inference.ParentStatus{
+				{
+					Conditions: []metav1.Condition{
+						validAcceptedCondition,
+						validResolvedRefsCondition,
+					},
+					ParentRef: inference.ParentReference{
+						Namespace: inference.Namespace("test"),
+						Name:      "gateway-1",
+						Kind:      kinds.Gateway,
+						Group:     helpers.GetPointer(inference.Group(group)),
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		referencedInferencePool map[types.NamespacedName]*graph.ReferencedInferencePool
+		expectedPoolWithStatus  map[types.NamespacedName]inference.InferencePoolStatus
+		name                    string
+		clusterInferencePools   inference.InferencePoolList
+		expectedReqs            int
+	}{
+		{
+			name:         "no referenced inferencePools",
+			expectedReqs: 0,
+		},
+		{
+			name: "an inference pool has valid status for multiple gateways",
+			referencedInferencePool: map[types.NamespacedName]*graph.ReferencedInferencePool{
+				{Namespace: "test", Name: "valid-inference-pool"}: {
+					Source: validInferencePool,
+					Gateways: []*v1.Gateway{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "gateway-1",
+								Namespace: "test",
+							},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "gateway-2",
+								Namespace: "test",
+							},
+						},
+					},
+				},
+			},
+			clusterInferencePools: inference.InferencePoolList{
+				Items: []inference.InferencePool{
+					*validInferencePool,
+				},
+			},
+			expectedReqs: 1,
+			expectedPoolWithStatus: map[types.NamespacedName]inference.InferencePoolStatus{
+				{Namespace: "test", Name: "valid-inference-pool"}: {
+					Parents: []inference.ParentStatus{
+						{
+							Conditions: []metav1.Condition{
+								validAcceptedCondition,
+								validResolvedRefsCondition,
+							},
+							ParentRef: inference.ParentReference{
+								Namespace: inference.Namespace("test"),
+								Name:      "gateway-1",
+								Kind:      kinds.Gateway,
+								Group:     helpers.GetPointer(inference.Group(group)),
+							},
+						},
+						{
+							Conditions: []metav1.Condition{
+								validAcceptedCondition,
+								validResolvedRefsCondition,
+							},
+							ParentRef: inference.ParentReference{
+								Namespace: inference.Namespace("test"),
+								Name:      "gateway-2",
+								Kind:      kinds.Gateway,
+								Group:     helpers.GetPointer(inference.Group(group)),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "an inference pool has accepted valid status and is referenced by invalid extension ref",
+			referencedInferencePool: map[types.NamespacedName]*graph.ReferencedInferencePool{
+				{Namespace: "test", Name: "valid-inference-pool"}: {
+					Source: validInferencePoolWithInvalidExtensionRef,
+					Gateways: []*v1.Gateway{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "gateway-1",
+								Namespace: "test",
+							},
+						},
+					},
+					Conditions: []conditions.Condition{
+						conditions.NewInferencePoolInvalidExtensionref("Invalid extension ref: test/invalid-extension-ref"),
+					},
+				},
+			},
+			clusterInferencePools: inference.InferencePoolList{
+				Items: []inference.InferencePool{
+					*validInferencePoolWithInvalidExtensionRef,
+				},
+			},
+			expectedReqs: 1,
+			expectedPoolWithStatus: map[types.NamespacedName]inference.InferencePoolStatus{
+				{Namespace: "test", Name: "valid-inference-pool"}: {
+					Parents: []inference.ParentStatus{
+						{
+							Conditions: []metav1.Condition{
+								validAcceptedCondition,
+								{
+									Type:               string(inference.InferencePoolConditionResolvedRefs),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(inference.InferencePoolReasonInvalidExtensionRef),
+									Message:            "Invalid extension ref: test/invalid-extension-ref",
+								},
+							},
+							ParentRef: inference.ParentReference{
+								Namespace: inference.Namespace("test"),
+								Name:      "gateway-1",
+								Kind:      kinds.Gateway,
+								Group:     helpers.GetPointer(inference.Group(group)),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "an inference pool is referencing an invalid route and is referenced by invalid extension ref",
+			referencedInferencePool: map[types.NamespacedName]*graph.ReferencedInferencePool{
+				{Namespace: "test", Name: "valid-inference-pool"}: {
+					Source: validInferencePool,
+					Gateways: []*v1.Gateway{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "gateway-1",
+								Namespace: "test",
+							},
+						},
+					},
+					Conditions: []conditions.Condition{
+						conditions.NewInferencePoolInvalidHTTPRouteNotAccepted("Invalid HTTPRoute: test/invalid-route not accepted"),
+						conditions.NewInferencePoolInvalidExtensionref("Invalid extension ref: test/invalid-extension-ref"),
+					},
+				},
+			},
+			clusterInferencePools: inference.InferencePoolList{
+				Items: []inference.InferencePool{
+					*validInferencePool,
+				},
+			},
+			expectedReqs: 1,
+			expectedPoolWithStatus: map[types.NamespacedName]inference.InferencePoolStatus{
+				{Namespace: "test", Name: "valid-inference-pool"}: {
+					Parents: []inference.ParentStatus{
+						{
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(inference.InferencePoolConditionAccepted),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(inference.InferencePoolReasonHTTPRouteNotAccepted),
+									Message:            "Invalid HTTPRoute: test/invalid-route not accepted",
+								},
+								{
+									Type:               string(inference.InferencePoolConditionResolvedRefs),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(inference.InferencePoolReasonInvalidExtensionRef),
+									Message:            "Invalid extension ref: test/invalid-extension-ref",
+								},
+							},
+							ParentRef: inference.ParentReference{
+								Namespace: inference.Namespace("test"),
+								Name:      "gateway-1",
+								Kind:      kinds.Gateway,
+								Group:     helpers.GetPointer(inference.Group(group)),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:                    "inference pool status gets removed if no longer referenced",
+			referencedInferencePool: map[types.NamespacedName]*graph.ReferencedInferencePool{},
+			clusterInferencePools: inference.InferencePoolList{
+				Items: []inference.InferencePool{
+					*validInferencePoolWithStatus,
+				},
+			},
+			expectedReqs: 1,
+			expectedPoolWithStatus: map[types.NamespacedName]inference.InferencePoolStatus{
+				{Namespace: "test", Name: "valid-inference-pool-with-status"}: {
+					Parents: nil,
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			k8sClient := createK8sClientFor(&inference.InferencePool{})
+			for _, ip := range test.clusterInferencePools.Items {
+				err := k8sClient.Create(context.Background(), &ip)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			updater := NewUpdater(k8sClient, logr.Discard())
+			reqs := PrepareInferencePoolRequests(
+				test.referencedInferencePool,
+				&test.clusterInferencePools,
+				referencedGateways,
+				transitionTime,
+			)
+			g.Expect(reqs).To(HaveLen(test.expectedReqs))
+			updater.Update(context.Background(), reqs...)
+
+			for nsname, expected := range test.expectedPoolWithStatus {
+				var inferencePool inference.InferencePool
+
+				err := k8sClient.Get(context.Background(), nsname, &inferencePool)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(helpers.Diff(expected, inferencePool.Status)).To(BeEmpty())
 			}
 		})
 	}

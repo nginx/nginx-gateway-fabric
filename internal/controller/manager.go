@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	k8spredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
@@ -95,6 +96,7 @@ func init() {
 	utilruntime.Must(autoscalingv2.AddToScheme(scheme))
 	utilruntime.Must(authv1.AddToScheme(scheme))
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
+	utilruntime.Must(inference.Install(scheme))
 }
 
 func StartManager(cfg config.Config) error {
@@ -218,6 +220,7 @@ func StartManager(cfg config.Config) error {
 			NginxDockerSecretNames:         cfg.NginxDockerSecretNames,
 			PlusUsageConfig:                &cfg.UsageReportConfig,
 			NginxOneConsoleTelemetryConfig: cfg.NginxOneConsoleTelemetryConfig,
+			InferenceExtension:             cfg.InferenceExtension,
 		},
 	)
 	if err != nil {
@@ -251,6 +254,7 @@ func StartManager(cfg config.Config) error {
 		gatewayPodConfig:        cfg.GatewayPodConfig,
 		controlConfigNSName:     controlConfigNSName,
 		gatewayCtlrName:         cfg.GatewayCtlrName,
+		gatewayInstanceName:     cfg.GatewayPodConfig.InstanceName,
 		gatewayClassName:        cfg.GatewayClassName,
 		plus:                    cfg.Plus,
 		statusQueue:             statusQueue,
@@ -536,6 +540,18 @@ func registerControllers(
 		controllerRegCfgs = append(controllerRegCfgs, gwExpFeatures...)
 	}
 
+	if cfg.InferenceExtension {
+		inferenceExt := []ctlrCfg{
+			{
+				objectType: &inference.InferencePool{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+			},
+		}
+		controllerRegCfgs = append(controllerRegCfgs, inferenceExt...)
+	}
+
 	if cfg.ConfigName != "" {
 		controllerRegCfgs = append(controllerRegCfgs,
 			ctlrCfg{
@@ -759,6 +775,10 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 			&apiv1.ConfigMapList{},
 			&gatewayv1alpha2.TLSRouteList{},
 		)
+	}
+
+	if cfg.InferenceExtension {
+		objectLists = append(objectLists, &inference.InferencePoolList{})
 	}
 
 	if cfg.SnippetsFilters {
