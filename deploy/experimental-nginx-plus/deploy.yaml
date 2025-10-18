@@ -142,6 +142,8 @@ rules:
   - grpcroutes
   - backendtlspolicies
   - tlsroutes
+  - tcproutes
+  - udproutes
   verbs:
   - list
   - watch
@@ -154,6 +156,8 @@ rules:
   - grpcroutes/status
   - backendtlspolicies/status
   - tlsroutes/status
+  - tcproutes/status
+  - udproutes/status
   verbs:
   - update
 - apiGroups:
