@@ -124,6 +124,35 @@ type L4RouteSpec struct {
 	// FIXME (sarthyparty): change to slice of BackendRef, as for now we are only supporting one BackendRef.
 	// We will eventually support multiple BackendRef https://github.com/nginx/nginx-gateway-fabric/issues/2184
 	BackendRef BackendRef
+	// BackendRefs is a list of backend references for TCPRoute/UDPRoute multi-backend support.
+	// Each BackendRef can have a weight for load balancing.
+	BackendRefs []BackendRef
+}
+
+// GetBackendRefs returns all backend references for this L4Route.
+// For TCPRoute/UDPRoute with multiple backends, it returns BackendRefs.
+// For TLSRoute or single backend routes, it returns a slice containing BackendRef.
+// Note: Returns BackendRef even if not Valid, as we need to check InvalidForGateways.
+func (spec *L4RouteSpec) GetBackendRefs() []BackendRef {
+	if len(spec.BackendRefs) > 0 {
+		return spec.BackendRefs
+	}
+	// Check if BackendRef has been set (even if invalid)
+	// An unset BackendRef will have empty SvcNsName and InvalidForGateways
+	if spec.BackendRef.SvcNsName.Name != "" || len(spec.BackendRef.InvalidForGateways) > 0 {
+		return []BackendRef{spec.BackendRef}
+	}
+	return []BackendRef{}
+}
+
+// GetPrimaryBackendRef returns the primary backend reference.
+// For multi-backend routes, it returns the first BackendRef.
+// For single backend routes, it returns BackendRef.
+func (spec *L4RouteSpec) GetPrimaryBackendRef() BackendRef {
+	if len(spec.BackendRefs) > 0 {
+		return spec.BackendRefs[0]
+	}
+	return spec.BackendRef
 }
 
 // L7Route is the generic type for the layer 7 routes, HTTPRoute and GRPCRoute.
@@ -1396,11 +1425,11 @@ func getCookiePath(match v1.HTTPRouteMatch) string {
 // l4RouteConfig holds the configuration needed to build an L4Route generically.
 type l4RouteConfig struct {
 	source           client.Object
+	refGrantResolver func(resource toResource) bool
 	namespace        string
+	routeType        string // "TCP" or "UDP"
 	parentRefs       []v1.ParentReference
 	rules            []l4RouteRule
-	routeType        string // "TCP" or "UDP"
-	refGrantResolver func(resource toResource) bool
 }
 
 // l4RouteRule represents a rule in TCPRoute or UDPRoute.

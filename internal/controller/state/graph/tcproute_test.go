@@ -296,11 +296,11 @@ func TestBuildTCPRoute(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		route    *v1alpha2.TCPRoute
 		gateways map[types.NamespacedName]*Gateway
 		services map[types.NamespacedName]*apiv1.Service
+		route    *v1alpha2.TCPRoute
 		expected *L4Route
+		name     string
 	}{
 		{
 			name:  "duplicate parent refs",
@@ -447,7 +447,8 @@ func TestBuildTCPRoute(t *testing.T) {
 				},
 				Conditions: []conditions.Condition{
 					conditions.NewRouteBackendRefRefNotPermitted(
-						`spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service diff/svc1 not permitted by any ReferenceGrant`,
+						`spec.rules[0].backendRefs[0].namespace: Forbidden: ` +
+							`Backend ref to Service diff/svc1 not permitted by any ReferenceGrant`,
 					),
 				},
 			},
@@ -634,7 +635,7 @@ func TestBuildTCPRoute(t *testing.T) {
 		},
 	}
 
-	refGrantResolver := func(resource toResource) bool {
+	refGrantResolver := func(_ toResource) bool {
 		return false
 	}
 
