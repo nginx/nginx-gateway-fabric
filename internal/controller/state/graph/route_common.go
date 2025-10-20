@@ -118,12 +118,12 @@ type L4Route struct {
 type L4RouteSpec struct {
 	// Hostnames defines a set of hostnames used to select a Route used to process the request.
 	Hostnames []v1.Hostname
-	// BackendRef is the single backend reference (deprecated, kept for TLSRoute compatibility).
-	// For TCPRoute/UDPRoute, use BackendRefs instead.
-	BackendRef BackendRef
 	// BackendRefs is a list of backend references for TCPRoute/UDPRoute multi-backend support.
 	// Each BackendRef can have a weight for load balancing.
 	BackendRefs []BackendRef
+	// BackendRef is the single backend reference (deprecated, kept for TLSRoute compatibility).
+	// For TCPRoute/UDPRoute, use BackendRefs instead.
+	BackendRef BackendRef
 }
 
 // GetBackendRefs returns all backend references for this L4Route.
@@ -1237,11 +1237,11 @@ func routeKeyForKind(kind v1.Kind, nsname types.NamespacedName) RouteKey {
 // l4RouteConfig holds the configuration needed to build an L4Route generically.
 type l4RouteConfig struct {
 	source           client.Object
+	refGrantResolver func(resource toResource) bool
 	namespace        string
+	routeType        string
 	parentRefs       []v1.ParentReference
 	rules            []l4RouteRule
-	routeType        string // "TCP" or "UDP"
-	refGrantResolver func(resource toResource) bool
 }
 
 // l4RouteRule represents a rule in TCPRoute or UDPRoute.

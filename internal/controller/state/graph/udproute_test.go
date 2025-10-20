@@ -296,11 +296,11 @@ func TestBuildUDPRoute(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		route    *v1alpha2.UDPRoute
 		gateways map[types.NamespacedName]*Gateway
 		services map[types.NamespacedName]*apiv1.Service
+		route    *v1alpha2.UDPRoute
 		expected *L4Route
+		name     string
 	}{
 		{
 			name:  "duplicate parent refs",
@@ -382,7 +382,6 @@ func TestBuildUDPRoute(t *testing.T) {
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
-
 							Valid: false,
 						},
 					},
@@ -411,7 +410,6 @@ func TestBuildUDPRoute(t *testing.T) {
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
-
 							Valid: false,
 						},
 					},
@@ -443,14 +441,14 @@ func TestBuildUDPRoute(t *testing.T) {
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
-
 							Valid: false,
 						},
 					},
 				},
 				Conditions: []conditions.Condition{
 					conditions.NewRouteBackendRefRefNotPermitted(
-						`spec.rules[0].backendRefs[0].namespace: Forbidden: Backend ref to Service diff/svc1 not permitted by any ReferenceGrant`,
+						`spec.rules[0].backendRefs[0].namespace: Forbidden: ` +
+							`Backend ref to Service diff/svc1 not permitted by any ReferenceGrant`,
 					),
 				},
 			},
@@ -472,7 +470,6 @@ func TestBuildUDPRoute(t *testing.T) {
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
-
 							Valid: false,
 						},
 					},
@@ -638,7 +635,7 @@ func TestBuildUDPRoute(t *testing.T) {
 		},
 	}
 
-	refGrantResolver := func(resource toResource) bool {
+	refGrantResolver := func(_ toResource) bool {
 		return false
 	}
 
