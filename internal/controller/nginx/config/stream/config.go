@@ -7,15 +7,15 @@ import (
 
 // Server holds all configuration for a stream server.
 type Server struct {
+	UDPConfig       *UDPConfig
 	Listen          string
 	StatusZone      string
 	ProxyPass       string
 	Pass            string
+	Protocol        string
 	RewriteClientIP shared.RewriteClientIPSettings
 	SSLPreread      bool
 	IsSocket        bool
-	Protocol        string
-	UDPConfig       *UDPConfig
 }
 
 type UDPConfig struct {

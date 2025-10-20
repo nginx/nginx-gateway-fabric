@@ -215,20 +215,12 @@ func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.Prot
 				continue
 			}
 
-			// For single backend, use direct upstream name
-			// For multiple backends, we'll create a combined upstream name based on the route
-			var upstreamName string
-			if len(backendRefs) == 1 {
-				upstreamName = backendRefs[0].ServicePortReference()
-			} else {
-				// For multiple backends, create a group upstream name
-				// Format: protocol_namespace_routename
-				upstreamName = fmt.Sprintf("%s_%s_%s",
-					protocolName,
-					r.Source.GetNamespace(),
-					r.Source.GetName(),
-				)
-			}
+			// Use unified upstream naming: protocol_namespace_routename
+			upstreamName := fmt.Sprintf("%s_%s_%s",
+				protocolName,
+				r.Source.GetNamespace(),
+				r.Source.GetName(),
+			)
 
 			server := Layer4VirtualServer{
 				Hostname:     "", // Layer4 doesn't use hostnames
@@ -329,122 +321,96 @@ func buildL4Upstreams(
 	protocol v1.ProtocolType,
 ) []Upstream {
 	uniqueUpstreams := make(map[string]Upstream)
-
 	protocolName := string(protocol)
 	gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
+	allowedAddressType := getAllowedAddressType(ipFamily)
 
 	for _, l := range gateway.Listeners {
 		if !l.Valid || l.Source.Protocol != protocol {
 			continue
 		}
-
-		for _, route := range l.L4Routes {
-			if !route.Valid {
-				continue
-			}
-
-			// Use helper method to get all backend references
-			backendRefs := route.Spec.GetBackendRefs()
-
-			if len(backendRefs) == 0 {
-				continue
-			}
-
-			// For single backend: create one upstream with service name
-			// For multiple backends: create individual upstreams + one combined upstream with weighted endpoints
-			if len(backendRefs) == 1 {
-				br := backendRefs[0]
-				if !br.Valid {
-					continue
-				}
-
-				if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
-					continue
-				}
-
-				upstreamName := br.ServicePortReference()
-
-				if _, exist := uniqueUpstreams[upstreamName]; exist {
-					continue
-				}
-
-				var errMsg string
-				allowedAddressType := getAllowedAddressType(ipFamily)
-
-				eps, err := serviceResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
-				if err != nil {
-					errMsg = err.Error()
-				}
-
-				uniqueUpstreams[upstreamName] = Upstream{
-					Name:      upstreamName,
-					Endpoints: eps,
-					ErrorMsg:  errMsg,
-				}
-			} else {
-				// Multiple backends: create a combined upstream with weighted endpoints
-				combinedUpstreamName := fmt.Sprintf("%s_%s_%s",
-					protocolName,
-					route.Source.GetNamespace(),
-					route.Source.GetName(),
-				)
-
-				if _, exist := uniqueUpstreams[combinedUpstreamName]; exist {
-					continue
-				}
-
-				var combinedEndpoints []resolver.Endpoint
-				var errMsgs []string
-				allowedAddressType := getAllowedAddressType(ipFamily)
-
-				// Collect endpoints from all backends with their weights
-				for _, br := range backendRefs {
-					if !br.Valid {
-						continue
-					}
-
-					if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
-						continue
-					}
-
-					eps, err := serviceResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
-					if err != nil {
-						errMsgs = append(errMsgs, err.Error())
-						continue
-					}
-
-					// Add weight to each endpoint
-					for _, ep := range eps {
-						ep.Weight = br.Weight
-						combinedEndpoints = append(combinedEndpoints, ep)
-					}
-				}
-
-				var errMsg string
-				if len(errMsgs) > 0 {
-					errMsg = fmt.Sprintf("some backends failed: %v", errMsgs)
-				}
-
-				uniqueUpstreams[combinedUpstreamName] = Upstream{
-					Name:      combinedUpstreamName,
-					Endpoints: combinedEndpoints,
-					ErrorMsg:  errMsg,
-				}
-			}
-		}
+		processListenerRoutes(ctx, logger, l.L4Routes, protocolName, gatewayNSName,
+			allowedAddressType, serviceResolver, uniqueUpstreams)
 	}
 
 	if len(uniqueUpstreams) == 0 {
 		return nil
 	}
-
 	upstreams := make([]Upstream, 0, len(uniqueUpstreams))
-
 	for _, up := range uniqueUpstreams {
 		upstreams = append(upstreams, up)
 	}
 
 	return upstreams
+}
+
+func processListenerRoutes(
+	ctx context.Context,
+	logger logr.Logger,
+	routes map[graph.L4RouteKey]*graph.L4Route,
+	protocolName string,
+	gatewayNSName types.NamespacedName,
+	allowedAddressType []discoveryV1.AddressType,
+	serviceResolver resolver.ServiceResolver,
+	uniqueUpstreams map[string]Upstream,
+) {
+	for _, route := range routes {
+		if !route.Valid {
+			continue
+		}
+
+		backendRefs := route.Spec.GetBackendRefs()
+		if len(backendRefs) == 0 {
+			continue
+		}
+
+		upstreamName := fmt.Sprintf("%s_%s_%s",
+			protocolName,
+			route.Source.GetNamespace(),
+			route.Source.GetName(),
+		)
+
+		if _, exist := uniqueUpstreams[upstreamName]; exist {
+			continue
+		}
+
+		var endpoints []resolver.Endpoint
+		var errMsgs []string
+
+		// Collect endpoints from all backends with their weights
+		for _, br := range backendRefs {
+			if !br.Valid {
+				continue
+			}
+
+			if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+				continue
+			}
+
+			eps, err := serviceResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
+			if err != nil {
+				errMsgs = append(errMsgs, err.Error())
+				continue
+			}
+
+			// Add weight to each endpoint
+			for _, ep := range eps {
+				ep.Weight = br.Weight
+				endpoints = append(endpoints, ep)
+			}
+		}
+
+		var errMsg string
+		if len(errMsgs) > 0 {
+			errMsg = fmt.Sprintf("some backends failed: %v", errMsgs)
+		}
+
+		uniqueUpstreams[upstreamName] = Upstream{
+			Name:      upstreamName,
+			Endpoints: endpoints,
+			ErrorMsg:  errMsg,
+		}
+	}
 }
 
 // buildSSLKeyPairs builds the SSLKeyPairs from the Secrets. It will only include Secrets that are referenced by

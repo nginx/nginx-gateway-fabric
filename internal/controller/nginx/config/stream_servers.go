@@ -5,6 +5,7 @@ import (
 	gotemplate "text/template"
 
 	"github.com/go-logr/logr"
+
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"

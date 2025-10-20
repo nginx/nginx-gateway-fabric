@@ -102,7 +102,10 @@ func newListenerConfiguratorFactory(
 					valErr := field.NotSupported(
 						field.NewPath("protocol"),
 						listener.Protocol,
-						[]string{string(v1.HTTPProtocolType), string(v1.HTTPSProtocolType), string(v1.TLSProtocolType), string(v1.TCPProtocolType), string(v1.UDPProtocolType)},
+						[]string{
+							string(v1.HTTPProtocolType), string(v1.HTTPSProtocolType), string(v1.TLSProtocolType),
+							string(v1.TCPProtocolType), string(v1.UDPProtocolType),
+						},
 					)
 					return conditions.NewListenerUnsupportedProtocol(valErr.Error()), false /* not attachable */
 				},
@@ -283,27 +286,7 @@ func getAndValidateListenerSupportedKinds(listener v1.Listener) (
 	var conds []conditions.Condition
 	var supportedKinds []v1.RouteGroupKind
 
-	var validKinds []v1.RouteGroupKind
-
-	switch listener.Protocol {
-	case v1.HTTPProtocolType, v1.HTTPSProtocolType:
-		validKinds = []v1.RouteGroupKind{
-			{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
-			{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
-		}
-	case v1.TLSProtocolType:
-		validKinds = []v1.RouteGroupKind{
-			{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
-		}
-	case v1.TCPProtocolType:
-		validKinds = []v1.RouteGroupKind{
-			{Kind: v1.Kind(kinds.TCPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
-		}
-	case v1.UDPProtocolType:
-		validKinds = []v1.RouteGroupKind{
-			{Kind: v1.Kind(kinds.UDPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
-		}
-	}
+	validKinds := getValidKindsForProtocol(listener.Protocol)
 
 	validProtocolRouteKind := func(kind v1.RouteGroupKind) bool {
 		if kind.Group != nil && *kind.Group != v1.GroupName {
@@ -345,6 +328,31 @@ func getAndValidateListenerSupportedKinds(listener v1.Listener) (
 	}
 
 	return conds, validKinds
+}
+
+// getValidKindsForProtocol returns the valid route kinds for a given protocol.
+func getValidKindsForProtocol(protocol v1.ProtocolType) []v1.RouteGroupKind {
+	switch protocol {
+	case v1.HTTPProtocolType, v1.HTTPSProtocolType:
+		return []v1.RouteGroupKind{
+			{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+			{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		}
+	case v1.TLSProtocolType:
+		return []v1.RouteGroupKind{
+			{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		}
+	case v1.TCPProtocolType:
+		return []v1.RouteGroupKind{
+			{Kind: v1.Kind(kinds.TCPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		}
+	case v1.UDPProtocolType:
+		return []v1.RouteGroupKind{
+			{Kind: v1.Kind(kinds.UDPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		}
+	default:
+		return nil
+	}
 }
 
 func validateListenerAllowedRouteKind(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
@@ -478,7 +486,7 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 	}
 }
 
-// isL4Protocol checks if the protocol is a Layer 4 protocol (TCP or UDP)
+// isL4Protocol checks if the protocol is a Layer 4 protocol (TCP or UDP).
 func isL4Protocol(protocol v1.ProtocolType) bool {
 	return protocol == v1.TCPProtocolType || protocol == v1.UDPProtocolType
 }
