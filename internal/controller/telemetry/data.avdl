@@ -117,5 +117,8 @@ attached at the Gateway level. */
 		/** InferencePoolCount is the number of InferencePools that are referenced by at least one Route. */
 		long? InferencePoolCount = null;
 		
+		/** BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi). */
+		string? BuildOS = null;
+		
 	}
 }

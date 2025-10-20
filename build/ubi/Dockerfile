@@ -17,6 +17,7 @@ COPY --from=ca-certs-provider --link /etc/ssl/certs/ca-certificates.crt /etc/ssl
 USER 101:1001
 ARG BUILD_AGENT
 ENV BUILD_AGENT=${BUILD_AGENT}
+ENV BUILD_OS=ubi
 
 LABEL name="F5 NGINX Gateway Fabric NGINX Plus" \
 	maintainer="kubernetes@nginx.com" \

@@ -3,7 +3,7 @@ module github.com/nginx/nginx-gateway-fabric/v2
 go 1.24.2
 
 require (
-	github.com/envoyproxy/go-control-plane/envoy v1.32.4
+	github.com/envoyproxy/go-control-plane/envoy v1.35.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
@@ -29,7 +29,7 @@ require (
 	k8s.io/klog/v2 v2.130.1
 	sigs.k8s.io/controller-runtime v0.22.3
 	sigs.k8s.io/gateway-api v1.3.0
-	sigs.k8s.io/gateway-api-inference-extension v1.0.0
+	sigs.k8s.io/gateway-api-inference-extension v1.0.1
 )
 
 require (
