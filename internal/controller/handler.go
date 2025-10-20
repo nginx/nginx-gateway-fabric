@@ -88,6 +88,8 @@ type eventHandlerConfig struct {
 	gatewayClassName string
 	// plus is whether or not we are running NGINX Plus.
 	plus bool
+	// InferenceExtension indicates if Gateway API Inference Extension support is enabled.
+	inferenceExtension bool
 }
 
 const (
@@ -372,18 +374,20 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 
 	// unfortunately, status is not on clusterState stored by the change processor, so we need to make a k8sAPI call here
 	ipList := &inference.InferencePoolList{}
-	err = h.cfg.k8sClient.List(ctx, ipList)
-	if err != nil {
-		msg := "error listing InferencePools for status update"
-		h.cfg.logger.Error(err, msg)
-		h.cfg.eventRecorder.Eventf(
-			&inference.InferencePoolList{},
-			v1.EventTypeWarning,
-			"ListInferencePoolsFailed",
-			msg+": %s",
-			err.Error(),
-		)
-		ipList = &inference.InferencePoolList{} // reset to empty list to avoid nil pointer dereference
+	if h.cfg.inferenceExtension {
+		err = h.cfg.k8sClient.List(ctx, ipList)
+		if err != nil {
+			msg := "error listing InferencePools for status update"
+			h.cfg.logger.Error(err, msg)
+			h.cfg.eventRecorder.Eventf(
+				&inference.InferencePoolList{},
+				v1.EventTypeWarning,
+				"ListInferencePoolsFailed",
+				msg+": %s",
+				err.Error(),
+			)
+			ipList = &inference.InferencePoolList{} // reset to empty list to avoid nil pointer dereference
+		}
 	}
 	inferencePoolReqs := status.PrepareInferencePoolRequests(
 		gr.ReferencedInferencePools,
