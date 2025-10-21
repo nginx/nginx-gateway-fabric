@@ -448,7 +448,7 @@ func createControllerCommand() *cobra.Command {
 			"traffic to AI workloads.",
 	)
 
-	addEPPConnectionFlags(cmd, endpointPickerDisableTLS, endpointPickerTLSSkipVerifyFlag)
+	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerifyFlag)
 
 	cmd.Flags().Var(
 		&nginxDockerSecrets,
@@ -782,14 +782,14 @@ func createEndpointPickerCommand() *cobra.Command {
 		},
 	}
 
-	addEPPConnectionFlags(cmd, endpointPickerDisableTLS, endpointPickerTLSSkipVerifyFlag)
+	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerifyFlag)
 
 	return cmd
 }
 
-func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify bool) {
+func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify *bool) {
 	cmd.Flags().BoolVar(
-		&disableTLS,
+		disableTLS,
 		endpointPickerDisableTLSFlag,
 		false,
 		"Disables TLS when connecting to the EndpointPicker. "+
@@ -797,7 +797,7 @@ func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify bool) {
 	)
 
 	cmd.Flags().BoolVar(
-		&tlsSkipVerify,
+		tlsSkipVerify,
 		endpointPickerTLSSkipVerifyFlag,
 		true,
 		"Disables server certificate verification when connecting to the EndpointPicker, if TLS is enabled. "+
