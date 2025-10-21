@@ -39,6 +39,7 @@ func realExtProcClientFactory(disableTLS, tlsSkipVerify bool) extProcClientFacto
 	return func(target string) (extprocv3.ExternalProcessorClient, func() error, error) {
 		var opts []grpc.DialOption
 
+		fmt.Println("EPP flag values in factory:", disableTLS, tlsSkipVerify)
 		if disableTLS {
 			opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		} else {

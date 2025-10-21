@@ -1133,6 +1133,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			command = append(command, "--endpoint-picker-tls-skip-verify")
 		}
 
+		fmt.Println("commands field for EPP configuration:", command)
 		spec.Spec.Containers = append(spec.Spec.Containers, corev1.Container{
 			Name:            "endpoint-picker-shim",
 			Image:           p.cfg.GatewayPodConfig.Image,
