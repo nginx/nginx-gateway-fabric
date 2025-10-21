@@ -1,0 +1,2 @@
+2025/10/21 14:26:51 [emerg] 8#8: unexpected end of file, expecting ";" or "}" in /etc/nginx/conf.d/http.conf:2671
+2025/10/21 14:26:52 [emerg] 8#8: unexpected end of file, expecting ";" or "}" in /etc/nginx/conf.d/http.conf:2878
