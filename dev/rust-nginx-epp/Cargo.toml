@@ -1,0 +1,36 @@
+[package]
+name = "ngx_http_rust_epp"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Rust library for NGINX Endpoint Picker (EPP) integration (ext_proc gRPC) - POC"
+repository = "https://github.com/nginx/nginx-gateway-fabric"
+
+[lib]
+# Build a C-compatible dynamic library to be callable from a thin NGINX C module.
+crate-type = ["cdylib"]
+
+[dependencies]
+# gRPC client stack (to be wired to ext_proc in a subsequent iteration)
+tonic = { version = "0.12", default-features = false, features = ["codegen", "transport"] }
+prost = "0.13"
+prost-types = "0.13"
+
+# Tokio runtime for driving async gRPC calls; we will spin a runtime per call for POC simplicity.
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros"] }
+
+# Serde for header/body handling convenience
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging (optional)
+log = "0.4"
+
+[build-dependencies]
+# Will be used to generate gRPC client from ext_proc protos in a follow-up iteration.
+# prost-build = "0.13"
+
+[features]
+# Placeholder features, e.g., enable TLS once EPP supports it.
+default = []
+tls = []

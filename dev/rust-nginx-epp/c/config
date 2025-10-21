@@ -1,0 +1,24 @@
+# NGINX dynamic module build configuration for ngx_http_rust_epp_module
+# This file is consumed by NGINX's ./configure when using --add-dynamic-module=<this dir>.
+#
+# It declares a DSO (shared object) for the HTTP module and links against the Rust FFI cdylib.
+# The Rust library directory should be provided via NGX_RUST_EPP_LIB_DIR (set in Dockerfile build stage).
+
+# If NGX_RUST_EPP_LIB_DIR is not set, default to /usr/local/lib (runtime will override LD_LIBRARY_PATH).
+if test -n "$NGX_RUST_EPP_LIB_DIR"; then
+    RUST_EPP_LIB_DIR="$NGX_RUST_EPP_LIB_DIR"
+else
+    RUST_EPP_LIB_DIR="/usr/local/lib"
+fi
+
+# Dynamic module metadata
+ngx_module_type=HTTP
+ngx_module_name=ngx_http_rust_epp_module
+ngx_module_srcs="$ngx_addon_dir/ngx_http_rust_epp_module.c"
+ngx_module_libs="-L$RUST_EPP_LIB_DIR -lngx_http_rust_epp -ldl -lpthread"
+
+# Ensure position-independent code
+CFLAGS="$CFLAGS -fPIC"
+
+# Register as a dynamic module
+. auto/module
