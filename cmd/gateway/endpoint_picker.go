@@ -35,20 +35,19 @@ func endpointPickerServer(handler http.Handler) error {
 }
 
 // realExtProcClientFactory returns a factory that creates a new gRPC connection and client per request.
-func realExtProcClientFactory() extProcClientFactory {
+func realExtProcClientFactory(disableTLS, tlsSkipVerify bool) extProcClientFactory {
 	return func(target string) (extprocv3.ExternalProcessorClient, func() error, error) {
 		var opts []grpc.DialOption
-		enableTLS := true
-		insecureSkipVerify := true
 
-		if !enableTLS {
+		if disableTLS {
 			opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		} else {
 			creds := credentials.NewTLS(&tls.Config{
-				InsecureSkipVerify: insecureSkipVerify, //nolint:gosec
+				InsecureSkipVerify: tlsSkipVerify, //nolint:gosec
 			})
 			opts = append(opts, grpc.WithTransportCredentials(creds))
 		}
+
 		conn, err := grpc.NewClient(target, opts...)
 		if err != nil {
 			return nil, nil, err

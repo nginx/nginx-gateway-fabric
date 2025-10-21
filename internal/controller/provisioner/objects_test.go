@@ -1784,8 +1784,10 @@ func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
 			GatewayPodConfig: &config.GatewayPodConfig{
 				Namespace: ngfNamespace,
 			},
-			AgentTLSSecretName: agentTLSTestSecretName,
-			InferenceExtension: true,
+			AgentTLSSecretName:          agentTLSTestSecretName,
+			InferenceExtension:          true,
+			EndpointPickerDisableTLS:    true,
+			EndpointPickerTLSSkipVerify: true,
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
@@ -1814,8 +1816,17 @@ func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
 			break
 		}
 	}
+
+	expectedCommands := []string{
+		"/usr/bin/gateway",
+		"endpoint-picker",
+		"--endpoint-picker-disable-tls",
+		"--endpoint-picker-tls-skip-verify",
+	}
+
 	g.Expect(deployment).ToNot(BeNil())
 	containers := deployment.Spec.Template.Spec.Containers
 	g.Expect(containers).To(HaveLen(2))
 	g.Expect(containers[1].Name).To(Equal("endpoint-picker-shim"))
+	g.Expect(containers[1].Command).To(Equal(expectedCommands))
 }
