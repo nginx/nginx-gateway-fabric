@@ -10,11 +10,12 @@ _October 21, 2025_
 
 FEATURES:
 
-- Add first class OpenShift support. [4001](https://github.com/nginx/nginx-gateway-fabric/pull/4001)
+- Add first class OpenShift support, including UBI based images and an Operator. [4001](https://github.com/nginx/nginx-gateway-fabric/pull/4001)
 - Add regex for path matching. [3874](https://github.com/nginx/nginx-gateway-fabric/pull/3874). Thanks to [fabian4](https://github.com/fabian4)
 - Add support for Inference Extension. [4091](https://github.com/nginx/nginx-gateway-fabric/pull/4091)
 - Support ExternalName Services. [3759](https://github.com/nginx/nginx-gateway-fabric/pull/3759)
 - Add support for Gateway addresses field. [3896](https://github.com/nginx/nginx-gateway-fabric/pull/3896)
+- Add support for Port in ParentReference. [3778](https://github.com/nginx/nginx-gateway-fabric/pull/3778)
 
 BUG FIXES:
 
@@ -39,6 +40,7 @@ CONTAINER IMAGES:
 - Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.2.0`
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.2.0`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.2.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.0.0`
 
 ## Release 2.1.4
 
