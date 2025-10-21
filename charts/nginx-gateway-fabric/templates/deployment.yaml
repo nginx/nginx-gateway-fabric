@@ -103,6 +103,10 @@ spec:
         {{- if .Values.nginxGateway.gwAPIInferenceExtension.enable }}
         - --gateway-api-inference-extension
         {{- end }}
+        {{- if .Values.nginxGateway.gwAPIInferenceExtension.endpointPicker.disableTLS }}
+        - --endpoint-picker-disable-tls
+        {{- end }}
+        - --endpoint-picker-tls-skip-verify={{ .Values.nginxGateway.gwAPIInferenceExtension.endpointPicker.skipVerify }}
         {{- if .Values.nginxGateway.snippetsFilters.enable }}
         - --snippets-filters
         {{- end }}

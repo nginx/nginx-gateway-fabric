@@ -290,6 +290,7 @@ spec:
         - --metrics-port=9113
         - --health-port=8081
         - --leader-election-lock-name=nginx-gateway-leader-election
+        - --endpoint-picker-tls-skip-verify=true
         env:
         - name: POD_NAMESPACE
           valueFrom:

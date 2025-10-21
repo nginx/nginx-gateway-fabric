@@ -221,6 +221,8 @@ func StartManager(cfg config.Config) error {
 			PlusUsageConfig:                &cfg.UsageReportConfig,
 			NginxOneConsoleTelemetryConfig: cfg.NginxOneConsoleTelemetryConfig,
 			InferenceExtension:             cfg.InferenceExtension,
+			EndpointPickerDisableTLS:       cfg.EndpointPickerDisableTLS,
+			EndpointPickerTLSSkipVerify:    cfg.EndpointPickerTLSSkipVerify,
 		},
 	)
 	if err != nil {

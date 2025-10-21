@@ -37,9 +37,11 @@ const (
 		`The controller name must be of the form: DOMAIN/PATH. The controller's domain is '%s'`
 	plusFlag = "nginx-plus"
 
-	serverTLSSecret               = "server-tls"
-	agentTLSSecret                = "agent-tls"
-	nginxOneTelemetryEndpointHost = "agent.connect.nginx.com"
+	serverTLSSecret                 = "server-tls"
+	agentTLSSecret                  = "agent-tls"
+	nginxOneTelemetryEndpointHost   = "agent.connect.nginx.com"
+	endpointPickerDisableTLSFlag    = "endpoint-picker-disable-tls"
+	endpointPickerTLSSkipVerifyFlag = "endpoint-picker-tls-skip-verify"
 )
 
 // usageReportParams holds the parameters for building the usage report configuration for PLUS.
@@ -162,6 +164,9 @@ func createControllerCommand() *cobra.Command {
 		nginxDockerSecrets = stringSliceValidatingValue{
 			validator: validateResourceName,
 		}
+
+		endpointPickerDisableTLS        bool
+		endpointPickerTLSSkipVerifyFlag = true
 	)
 
 	usageReportParams := usageReportParams{
@@ -288,6 +293,8 @@ func createControllerCommand() *cobra.Command {
 					EndpointPort:           nginxOneConsoleTelemetryEndpointPort.value,
 					EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
 				},
+				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
+				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerifyFlag,
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -440,6 +447,8 @@ func createControllerCommand() *cobra.Command {
 		"Enable Gateway API Inference Extension support. Allows for configuring InferencePools to route "+
 			"traffic to AI workloads.",
 	)
+
+	addEPPConnectionFlags(cmd, endpointPickerDisableTLS, endpointPickerTLSSkipVerifyFlag)
 
 	cmd.Flags().Var(
 		&nginxDockerSecrets,
@@ -758,17 +767,42 @@ func createSleepCommand() *cobra.Command {
 }
 
 func createEndpointPickerCommand() *cobra.Command {
+	var endpointPickerDisableTLS bool
+	endpointPickerTLSSkipVerifyFlag := true
 	cmd := &cobra.Command{
 		Use:   "endpoint-picker",
 		Short: "Shim server for communication between NGINX and the Gateway API Inference Extension Endpoint Picker",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			logger := ctlrZap.New().WithName("endpoint-picker-shim")
-			handler := createEndpointPickerHandler(realExtProcClientFactory(), logger)
+			handler := createEndpointPickerHandler(
+				realExtProcClientFactory(endpointPickerDisableTLS, endpointPickerTLSSkipVerifyFlag),
+				logger,
+			)
 			return endpointPickerServer(handler)
 		},
 	}
 
+	addEPPConnectionFlags(cmd, endpointPickerDisableTLS, endpointPickerTLSSkipVerifyFlag)
+
 	return cmd
+}
+
+func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify bool) {
+	cmd.Flags().BoolVar(
+		&disableTLS,
+		endpointPickerDisableTLSFlag,
+		false,
+		"Disables TLS when connecting to the EndpointPicker. "+
+			"Set to true only for development/testing or when using a service mesh for encryption.",
+	)
+
+	cmd.Flags().BoolVar(
+		&tlsSkipVerify,
+		endpointPickerTLSSkipVerifyFlag,
+		true,
+		"Disables server certificate verification when connecting to the EndpointPicker, if TLS is enabled. "+
+			"REQUIRED: Must be true until Gateway API Inference Extension EndpointPicker supports mounting certificates.",
+	)
 }
 
 func parseFlags(flags *pflag.FlagSet) ([]string, []string) {
