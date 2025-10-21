@@ -4,6 +4,44 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.2.0
+
+_October 21, 2025_
+
+FEATURES:
+
+- Add first class OpenShift support, including UBI based images and an Operator. [4001](https://github.com/nginx/nginx-gateway-fabric/pull/4001)
+- Add regex for path matching. [3874](https://github.com/nginx/nginx-gateway-fabric/pull/3874). Thanks to [fabian4](https://github.com/fabian4)
+- Add support for Inference Extension. [4091](https://github.com/nginx/nginx-gateway-fabric/pull/4091)
+- Support ExternalName Services. [3759](https://github.com/nginx/nginx-gateway-fabric/pull/3759)
+- Add support for Gateway addresses field. [3896](https://github.com/nginx/nginx-gateway-fabric/pull/3896)
+- Add support for Port in ParentReference. [3778](https://github.com/nginx/nginx-gateway-fabric/pull/3778)
+
+BUG FIXES:
+
+- Handle duplicate kinds in listener allowed kinds. [3810](https://github.com/nginx/nginx-gateway-fabric/pull/3810)
+- Align with BackendTLSPolicy validation. [3871](https://github.com/nginx/nginx-gateway-fabric/pull/3871)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.2.0
+- Set NGINX Plus default image. [3919](https://github.com/nginx/nginx-gateway-fabric/pull/3919)
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.29.2`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.3.2`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.2.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.2.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.2.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.0.0`
+
 ## Release 2.1.4
 
 _October 1, 2025_
