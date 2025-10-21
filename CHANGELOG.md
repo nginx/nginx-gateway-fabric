@@ -6,63 +6,40 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.2.0
 
-* fix: remove patch label/ annotation cross contamination by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/3754
-* fix: host readiness probe on ipv6 in addition to ipv4 by @lucasl0st in https://github.com/nginx/nginx-gateway-fabric/pull/3765
-* feat: Support ExternalName Services by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/3759
-* Add patches to helm chart spec  by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/3773
-* Prevent policy  duplication in advanced routing configuration by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/3799
-* Handle duplicate kinds in listener allowed kinds by @fabian4 in https://github.com/nginx/nginx-gateway-fabric/pull/3810
-* Align with BackendTLSPolicy validation by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/3871
-* Set NGINX Plus default image by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/3919
-* Improve connection reset handling during ServiceAccountToken rotation by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/3905
-* Add support for gateway addresses field by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/3896
-* Remove false condition on Routes when nginx reload fails by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/3936
-* add nginx image version validation during agent connections by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/3928
-* Add First Class OpenShift support by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4001
-* Add regex for path matching by @fabian4 in https://github.com/nginx/nginx-gateway-fabric/pull/3874
-* Implement Inference Extension by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4091
-* OpenShift Support: Product Telemetry by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/4038
-
-%%DATE%%
+_October 21, 2025_
 
 FEATURES:
 
--
+- Add first class OpenShift support. [4001](https://github.com/nginx/nginx-gateway-fabric/pull/4001)
+- Add regex for path matching. [3874](https://github.com/nginx/nginx-gateway-fabric/pull/3874). Thanks to [fabian4](https://github.com/fabian4)
+- Add support for Inference Extension. [4091](https://github.com/nginx/nginx-gateway-fabric/pull/4091)
+- Support ExternalName Services. [3759](https://github.com/nginx/nginx-gateway-fabric/pull/3759)
+- Add support for Gateway addresses field. [3896](https://github.com/nginx/nginx-gateway-fabric/pull/3896)
 
 BUG FIXES:
 
--
-
-DOCUMENTATION:
-
--
+- Handle duplicate kinds in listener allowed kinds. [3810](https://github.com/nginx/nginx-gateway-fabric/pull/3810)
+- Align with BackendTLSPolicy validation. [3871](https://github.com/nginx/nginx-gateway-fabric/pull/3871)
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.2.0
--
-
-UPGRADE:
-
--
-
-KNOWN ISSUES:
-
--
+- Set NGINX Plus default image. [3919](https://github.com/nginx/nginx-gateway-fabric/pull/3919)
 
 COMPATIBILITY:
 
-- Gateway API version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- NGINX Agent version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.3.0`
+- NGINX version: `1.29.2`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.3.2`
+- Kubernetes version: `1.25+`
 
 CONTAINER IMAGES:
 
 - Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.2.0`
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.2.0`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.2.0`
+
 ## Release 2.1.4
 
 _October 1, 2025_
