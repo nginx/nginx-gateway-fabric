@@ -24,7 +24,12 @@ defaults:
     shell: bash
 
 permissions:
-  contents: read
+  contents: write
+  packages: write
+  id-token: write
+  security-events: write
+  issues: write
+  actions: write
 
 jobs:
   create-tag-and-release:
@@ -94,10 +99,3 @@ jobs:
       operator_version: ${{ github.event.inputs.operator-version }}
       dry_run: ${{ github.event.inputs.dry_run }}
     secrets: inherit
-    permissions:
-      contents: write
-      packages: write
-      id-token: write
-      security-events: write
-      issues: write
-      actions: write
