@@ -44,6 +44,7 @@ signs:
       - sign-blob
       - "--output-signature=${signature}"
       - "--output-certificate=${certificate}"
+      - "--bundle=${signature}.bundle"
       - "${artifact}"
       - "--yes"
 
