@@ -559,6 +559,38 @@ jobs:
         run: |
           helm push ${{ steps.package.outputs.path }} oci://ghcr.io/nginx/charts
 
+  retag-operator:
+    name: Retag Images
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag images
+        run: |
+          # NGF image - add latest tag
+          docker pull ghcr.io/nginx/nginx-gateway-fabric:2.2.0
+          docker tag ghcr.io/nginx/nginx-gateway-fabric:2.2.0 ghcr.io/nginx/nginx-gateway-fabric:latest
+          docker push ghcr.io/nginx/nginx-gateway-fabric:latest
+
+          # NGINX image - add latest tag
+          docker pull ghcr.io/nginx/nginx-gateway-fabric/nginx:2.2.0
+          docker tag ghcr.io/nginx/nginx-gateway-fabric/nginx:2.2.0 ghcr.io/nginx/nginx-gateway-fabric/nginx:latest
+          docker push ghcr.io/nginx/nginx-gateway-fabric/nginx:latest
+
+          # Operator image - retag from RC
+          docker pull ghcr.io/nginx/nginx-gateway-fabric/operator:release-2.2-rc
+          docker tag ghcr.io/nginx/nginx-gateway-fabric/operator:release-2.2-rc ghcr.io/nginx/nginx-gateway-fabric/operator:1.0.0
+          docker tag ghcr.io/nginx/nginx-gateway-fabric/operator:release-2.2-rc ghcr.io/nginx/nginx-gateway-fabric/operator:latest
+          docker push ghcr.io/nginx/nginx-gateway-fabric/operator:1.0.0
+          docker push ghcr.io/nginx/nginx-gateway-fabric/operator:latest
+
   cel-tests:
     name: CEL Tests
     runs-on: ubuntu-24.04
