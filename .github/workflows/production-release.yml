@@ -100,3 +100,4 @@ jobs:
       id-token: write
       security-events: write
       issues: write
+      actions: write
