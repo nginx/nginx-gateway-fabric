@@ -9,6 +9,10 @@ on:
       k8s-version:
         required: true
         type: string
+      tag:
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -40,10 +44,11 @@ jobs:
           images: |
             name=ghcr.io/nginx/nginx-gateway-fabric
           tags: |
-            type=semver,pattern={{version}}
+            type=semver,pattern={{version}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
             type=edge
             type=schedule
             type=ref,event=pr
+            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.tag == '' }}
 
       - name: NGINX Docker meta
         id: nginx-meta
@@ -52,10 +57,11 @@ jobs:
           images: |
             name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
           tags: |
-            type=semver,pattern={{version}}
+            type=semver,pattern={{version}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
             type=edge
             type=schedule
             type=ref,event=pr
+            type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.tag == '' }}
 
       - name: Build NGF Docker Image
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0

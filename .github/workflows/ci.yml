@@ -464,6 +464,7 @@ jobs:
     with:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
+      tag: ${{ inputs.release_version || '' }}
     secrets: inherit
     if: ${{ needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' }}
 
