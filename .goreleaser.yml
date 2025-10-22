@@ -27,6 +27,11 @@ builds:
 changelog:
   disable: true
 
+release:
+  mode: keep-existing
+  draft: false
+  prerelease: auto
+
 archives:
   - id: gateway
 

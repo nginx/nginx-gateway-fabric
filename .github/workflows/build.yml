@@ -50,7 +50,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          ref: ${{ (inputs.tag != '' && !inputs.dry_run ) && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          ref: ${{ (inputs.tag != '' && !inputs.dry_run && inputs.image != 'operator') && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
       - name: Download Artifacts
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
@@ -130,7 +130,7 @@ jobs:
             name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
           flavor: |
-            latest=${{ (inputs.tag != '' && 'true') || 'auto' }}
+            latest=${{ inputs.build-os != '' && 'false' || (inputs.tag != '' && 'true') || 'auto' }}
           tags: |
             type=semver,pattern={{version}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
             type=edge,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
