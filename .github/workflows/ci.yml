@@ -531,9 +531,7 @@ jobs:
 
   publish-helm:
     name: Package and Publish Helm Chart
-    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-    needs: [vars, helm-tests]
-    if: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) || (github.event_name == 'push' && ! startsWith(github.ref, 'refs/heads/release-')) }}
+    runs-on: 'ubuntu-24.04'
     permissions:
       contents: read
       packages: write # for helm to push to GHCR
@@ -551,11 +549,10 @@ jobs:
       - name: Package
         id: package
         run: |
-          output=$(helm package ${{ !inputs.is_production_release && '--app-version edge --version 0.0.0-edge' || '' }} charts/nginx-gateway-fabric)
+          output=$(helm package charts/nginx-gateway-fabric)
           echo "path=$(basename -- $(echo $output | cut -d: -f2))" >> $GITHUB_OUTPUT
 
       - name: Push to GitHub Container Registry
-        if: ${{ inputs.dry_run == false || inputs.dry_run == null }}
         run: |
           helm push ${{ steps.package.outputs.path }} oci://ghcr.io/nginx/charts
 
