@@ -3,22 +3,6 @@
 - Issue: https://github.com/nginx/nginx-gateway-fabric/issues/4052
 - Status: Provisional
 
-## Preface
-
-The Gatewy API currently has an `implementable` HTTP Auth mechanism exposed using the `ExternalAuth` field in the `HTTPRoute` resource. This uses Envoy's `ext_authz` protocol to reach out to an External Service to both `Authenticate` and `Authorize` requests.
-
-See https://gateway-api.sigs.k8s.io/geps/gep-1494/ for more details
-
-This GEP also describes a [two phased approach](https://gateway-api.sigs.k8s.io/geps/gep-1494/#why-two-phases), which includes starting first with a Filter at the `rule` level, and then providing a top level Policy attachment that can be overridden by lower level Auth Filters.
-
-From initial discussion, we decided to go forward with exposing our own authentication filter.
-
-This was decided for the following reasons:
-- Given the timeline of `ExternalAuth` eventually being supported and implented by all other Gateway API implementations, it may be many months before this enchancement is available on the main channel within the Gateway API
-- Exposing our own form of authentication through an authenticaiton filter does not exclude the possibility of eventually supporting the `ExternalAuth` field
-- Given the expressed complexity of the [two phased approach](https://gateway-api.sigs.k8s.io/geps/gep-1494/#why-two-phases), `ExternalAuth` has the potential to go through may iterations before becoming stable
-- Recent conversations with the Gateway API maintainers suggest that implementation of `ExternalAuth` is still speculative
-
 ## Summary
 
 Design and implement a means for users of NGINX Gateway Fabric to enable authenticaiton on requests to their backend applications.
@@ -32,6 +16,10 @@ This new filter should eventually expose all forms of authentication avaialbe th
 - Authentication failures return appropriate status by default (e.g., 401/403)
 - Ensure response codes are configurable
 
+## Non-Goals
+
+- Design for all forms of authentication
+- An Auth filter for GRPC, TCP and UDP routes
 
 ## Introduction
 
@@ -53,7 +41,7 @@ This document also focus on Basic Authentication. Other authentication methods s
 | **JWT (JSON Web Token)**     | ❌           | ✅             | [ngx_http_auth_jwt_module](https://docs.nginx.com/nginx/admin-guide/security-controls/authentication/#jwt-authentication) | Tokens are used for stateless authentication between client and server. |
 | **OpenID Connect**            | ❌           | ✅             | [ngx_http_oidc_module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html)| Allows authentication through third-party providers like Google.   |
 
-## Design and Proposal
+## API, Customer Driven Interfaces, and User Experience
 
 When designing a means of configuring authentication for NGF, we can consider these approaches:
 1. An `AuthenticationFilter` CRD which is responsible for providing a specification for each form of authentication within a single resource.
@@ -203,11 +191,89 @@ http {
 }
 ```
 
-## Reference Flow Diagram
-
 ![reference-1](/docs/images/authentication-filter/basic-auth-filter/reference-1.png)
 
-## Path Type Behaviour
+## Testing
+
+- Unit tests
+- Functional tests to validate behavioural scenarios when referncing filters in different combinations. The details of these tests are out of scope for this document.
+
+## Security Considerations
+
+### Validation
+
+If we chose to go forward with creation of our own `AuthenticationFilter`, it is important that we ensure all configurable fields are validated, and that the resulting NGINX configuration is correct and secure
+
+All fields in the `AuthenticationFilter` will be validated with Open API Schema.
+We should also include [CEL](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules) validation where required.
+
+
+## Alternatives
+
+The Gatewy API currently has an `implementable` HTTP Auth mechanism exposed using the `ExternalAuth` filter in the `HTTPRoute` resource using the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/?h=externalauth#httpexternalauthfilter). This uses Envoy's `ext_authz` protocol to reach out to an External Service to both `Authenticate` and `Authorize` requests.
+
+See https://gateway-api.sigs.k8s.io/geps/gep-1494/ for more details
+
+This GEP also describes a [two phased approach](https://gateway-api.sigs.k8s.io/geps/gep-1494/#why-two-phases), which includes starting first with a Filter at the `rule` level, and then providing a top level Policy attachment that can be overridden by lower level Auth Filters.
+
+From initial discussion, we decided to go forward with exposing our own authentication filter.
+
+This was decided for the following reasons:
+- Given the timeline of `ExternalAuth` eventually being supported and implented by all other Gateway API implementations, it may be many months before this enchancement is available on the main channel within the Gateway API
+- Exposing our own form of authentication through an authenticaiton filter does not exclude the possibility of eventually supporting the `ExternalAuth` field
+- Given the expressed complexity of the [two phased approach](https://gateway-api.sigs.k8s.io/geps/gep-1494/#why-two-phases), `ExternalAuth` has the potential to go through may iterations before becoming stable
+- Recent conversations with the Gateway API maintainers suggest that implementation of `ExternalAuth` is still speculative
+
+Example HTTPRoute using [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/?h=externalauth#httpexternalauthfilter)
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-with-external-auth
+  namespace: default
+spec:
+  parentRefs:
+  - name: gateway
+  hostnames:
+  - api.example.com
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    filters:
+    - type: ExternalAuth
+      externalAuth:
+        protocol: HTTP
+        backendRef:
+          # BackendObjectReference: defaults to core group and kind=Service if omitted
+          name: ext-authz-svc
+          port: 8080
+        http:
+          # Prepend a prefix when forwarding the client path to the auth server
+          path: /authorize
+          # Additional request headers to send to the auth server (core headers are always sent)
+          allowedHeaders:
+            - X-Request-Id
+            - X-User-Agent
+            - X-Correlation-Id
+          # Headers from the auth server response to copy into the backend request
+          allowedResponseHeaders:
+            - X-Authz-Trace
+            - WWW-Authenticate
+            - Set-Cookie
+        forwardBody:
+          # Buffer and forward up to 16 KiB of the client request body to the auth server
+          maxSize: 16384
+    backendRefs:
+    - name: backend-svc
+      port: 80
+```
+
+## Additional considerations
+
+### Path Type Behaviour
 
 The `auth_basic` directive can be applied at the `http`, `server` and `location` contexts in NGINX.
 As the intention is to provide this capabilitiy as a filter, which is attached at the `rules[].filters` level, this implementation aims to keep this behaviour at the `location` level.
@@ -218,6 +284,9 @@ If a match uses `PathPrefix`, the filter applies to the entire prefix subtree (t
 Given this behaviour, we may need to consider to construct the final `http.conf` file given combinations of `Exact` and `PathPrefix` path types.
 
 Example HTTPRoute
+<details>
+  <summary> >> (click to expand) << </summary> 
+
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -278,9 +347,9 @@ spec:
     - name: reports-svc
       port: 8080
 ```
+</details>
 
-
-## Potential HTTPRoute behaviour
+### Potential HTTPRoute behaviour
 
 An authentication based filter may be referenced by multiple HTTPRoutes, and multiple rules within those routes.
 
