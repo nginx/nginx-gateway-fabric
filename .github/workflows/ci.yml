@@ -105,8 +105,6 @@ jobs:
   vars:
     name: Checks and variables
     runs-on: ubuntu-24.04
-    needs: [create-tag-and-release]
-    if: always() && (needs.create-tag-and-release.result == 'success' || needs.create-tag-and-release.result == 'skipped')
     outputs:
       go_path: ${{ steps.vars.outputs.go_path }}
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
