@@ -39,12 +39,10 @@ signs:
   - cmd: cosign
     artifacts: checksum
     output: true
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sig.bundle"
     args:
       - sign-blob
-      - "--output-signature=${signature}"
-      - "--output-certificate=${certificate}"
-      - "--bundle=${signature}.bundle"
+      - "--bundle=${signature}"
       - "${artifact}"
       - "--yes"
 
