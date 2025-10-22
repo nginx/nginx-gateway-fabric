@@ -99,3 +99,4 @@ jobs:
       packages: write
       id-token: write
       security-events: write
+      issues: write
