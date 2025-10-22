@@ -38,8 +38,8 @@ defaults:
     shell: bash
 
 concurrency:
-  group: ${{ github.ref_name }}-ci
-  cancel-in-progress: true
+  group: ${{ inputs.is_production_release && format('prod-{0}', inputs.release_version) || format('{0}-ci', github.ref_name) }}
+  cancel-in-progress: ${{ !inputs.is_production_release }}
 
 permissions:
   contents: read
