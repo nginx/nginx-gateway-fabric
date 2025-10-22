@@ -80,10 +80,10 @@ spec:
       responseBody: 'Unauthorized'
 ```
 
-| **Pros**     | **Cons**      | 
+| **Pros**     | **Cons**      |
 |-------------------------------|--------------|
-| Single Resource to manage    | Resource updates may be difficult | 
-|                              | May require lots of internal logic | 
+| Single Resource to manage    | Resource updates may be difficult |
+|                              | May require lots of internal logic |
 
 ### 2. Individual Filter for each Auth method
 
@@ -102,10 +102,10 @@ spec:
     responseBody: 'Unauthorized'
 ```
 
-| **Pros**     | **Cons**      | 
+| **Pros**     | **Cons**      |
 |-------------------------------|--------------|
-| Versioning per-resource is much easier    | Multiple resources to manage | 
-| Easier to map to `graph` in go code    | | 
+| Versioning per-resource is much easier    | Multiple resources to manage |
+| Easier to map to `graph` in go code    | |
 
 ### Example integration
 
