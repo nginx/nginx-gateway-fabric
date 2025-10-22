@@ -10,21 +10,25 @@ on:
       - "**"
   schedule:
     - cron: "0 3 * * *" # run every day at 3am UTC (nightly builds)
-  workflow_call:
+  workflow_dispatch:
     inputs:
       is_production_release:
+        description: 'Is this a production release?'
         required: false
         type: boolean
         default: false
       release_version:
+        description: 'Release version (e.g., v2.0.3)'
         required: false
         type: string
         default: ''
       operator_version:
+        description: 'Operator release version (e.g., v1.0.0). Optional'
         required: false
         type: string
         default: ''
       dry_run:
+        description: 'If true, does a dry run of the production workflow'
         required: false
         type: boolean
         default: false
@@ -35,12 +39,69 @@ defaults:
 
 concurrency:
   group: ${{ inputs.is_production_release && format('prod-{0}', inputs.release_version) || format('{0}-ci', github.ref_name) }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !inputs.is_production_release }}
 
 permissions:
   contents: read
 
 jobs:
+  create-tag-and-release:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch' && inputs.release_version != '' && startsWith(github.ref, 'refs/heads/release-')
+    permissions:
+      contents: write
+    steps:
+      - name: Validate Release Branch and Version
+        run: |
+          echo "Validating release from: ${GITHUB_REF}"
+
+          INPUT_VERSION="${{ inputs.release_version }}"
+          INPUT_OPERATOR_VERSION="${{ inputs.operator_version }}"
+
+          # Validate version format
+          if [[ ! "${INPUT_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid version format: ${INPUT_VERSION}"
+          echo "Expected format: v1.2.3"
+          exit 1
+          fi
+
+          # Validate version format if operator version is provided
+          if [[ -n "${INPUT_OPERATOR_VERSION}" && ! "${INPUT_OPERATOR_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid operator version format: ${INPUT_OPERATOR_VERSION}"
+          echo "Expected format: v1.2.3"
+          exit 1
+          fi
+
+          echo "✅ Valid release branch: ${GITHUB_REF}"
+          echo "✅ Valid version format: ${INPUT_VERSION}"
+          [[ -n "${INPUT_OPERATOR_VERSION}" ]] && echo "✅ Valid operator version format: ${INPUT_OPERATOR_VERSION}"
+
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Create Release Tag
+        run: |
+          VERSION="${{ inputs.release_version }}"
+          git config user.name "NGF Release Bot"
+          git config user.email "integrations@nginx.com"
+
+          if git rev-parse --verify "refs/tags/${VERSION}" >/dev/null 2>&1; then
+          echo "Tag ${VERSION} already exists - skipping tag creation"
+          else
+          echo "Creating annotated tag ${VERSION}"
+          git tag -a "${VERSION}" -m "Release ${VERSION}"
+
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+          echo "DRY RUN: Would push tag ${VERSION} and operator tag ${{ inputs.operator_version || '' }}"
+          git push --dry-run origin "${VERSION}"
+          else
+          git push origin "${VERSION}"
+          echo "Created and pushed tag: ${VERSION}"
+          fi
+          fi
+
   vars:
     name: Checks and variables
     runs-on: ubuntu-24.04

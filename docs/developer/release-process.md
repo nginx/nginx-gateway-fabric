@@ -57,8 +57,13 @@ To create a new release, follow these steps:
       created. If included, use the Release Notes specified in a PR.
       - If the supported Gateway API minor version has changed since the last release, add a note to the release notes explaining if the previous version is no longer supported.
       - Merge the release PR once it has received all necessary approvals.
-6. Once you are ready to release, run the [Production Release](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/production-release.yml) workflow with the correct tag e.g. `v2.1.0`. (Note: It is also possible to do a dry run of the production release workflow for verification if required. This will not push the tag, images, and chart, and won't publish the release)
-If this release includes an updated release of our [Operator](https://github.com/nginx/nginx-gateway-fabric/tree/main/operators), include the new version as well e.g. `v1.0.1`
+6. Once you are ready to release, trigger a production release by running the [CI workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/ci.yml) with the following inputs:
+   - Select the release branch (e.g., `release-2.2`)
+   - Set `is_production_release` to `true` (checked)
+   - Set `release_version` to the release tag (e.g., `v2.2.0`)
+   - If this release includes an updated release of our [Operator](https://github.com/nginx/nginx-gateway-fabric/tree/main/operators), set `operator_version` to the new version (e.g., `v1.0.1`)
+   - Set `dry_run` to `false` (unchecked) for a real release, or `true` for a dry run (Note: A dry run will not push the tag, images, and chart, and won't publish the release)
+
    As a result, the CI/CD pipeline will:
    - Create and push the tag
    - Build NGF, NGINX and NGINX Plus container images with the release tag `X.Y.Z` and push them to the registries.
