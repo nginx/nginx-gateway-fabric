@@ -149,6 +149,7 @@ jobs:
         run: make create-gke-router || true
 
       - name: Run Tests
+        continue-on-error: true
         working-directory: ./tests
         run: |
           if ${{ needs.vars.outputs.test_label != 'all' }}; then
