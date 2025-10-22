@@ -559,6 +559,38 @@ jobs:
         run: |
           helm push ${{ steps.package.outputs.path }} oci://ghcr.io/nginx/charts
 
+  retag-images:
+    name: Retag Multi-arch Images with Latest
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    steps:
+      - name: Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag multi-arch images with latest
+        run: |
+          # NGF image - add latest tag (multi-arch manifest)
+          docker buildx imagetools create --tag ghcr.io/nginx/nginx-gateway-fabric:latest \
+            ghcr.io/nginx/nginx-gateway-fabric:2.2.0
+
+          # NGINX image - add latest tag (multi-arch manifest)
+          docker buildx imagetools create --tag ghcr.io/nginx/nginx-gateway-fabric/nginx:latest \
+            ghcr.io/nginx/nginx-gateway-fabric/nginx:2.2.0
+
+          # Operator image - create 1.0.0 tag and latest from RC (multi-arch manifest)
+          docker buildx imagetools create --tag ghcr.io/nginx/nginx-gateway-fabric/operator:1.0.0 \
+            ghcr.io/nginx/nginx-gateway-fabric/operator:release-2.2-rc
+          docker buildx imagetools create --tag ghcr.io/nginx/nginx-gateway-fabric/operator:latest \
+            ghcr.io/nginx/nginx-gateway-fabric/operator:release-2.2-rc
+
   cel-tests:
     name: CEL Tests
     runs-on: ubuntu-24.04
