@@ -44,6 +44,7 @@ This document also focus on Basic Authentication. Other authentication methods s
 ## API, Customer Driven Interfaces, and User Experience
 
 When designing a means of configuring authentication for NGF, we can consider these approaches:
+
 1. An `AuthenticationFilter` CRD which is responsible for providing a specification for each form of authentication within a single resource.
 2. Indvidual CRDs responsbile for each authentication method. e.g. `BasicAuthFilter`, `JWTAuthFIlter`, etc...
 
@@ -226,7 +227,7 @@ Given this behaviour, we may need to consider to construct the final `http.conf`
 
 Example HTTPRoute
 <details>
-  <summary> >> (click to expand) << </summary> 
+  <summary> >> (click to expand) << </summary>
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -288,6 +289,7 @@ spec:
     - name: reports-svc
       port: 8080
 ```
+
 </details>
 
 ### Potential HTTPRoute behaviour
