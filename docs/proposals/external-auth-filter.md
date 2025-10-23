@@ -83,7 +83,7 @@ spec:
 
 ### Configuration flow
 
-Configuration flow with one HTTPRoute with a single path rule referencing an externalAuth service. In this case the NGINX Auth Service. This service could be Keycloak and any other IdP.  
+Configuration flow with one HTTPRoute with a single path rule referencing an externalAuth service. In this case the NGINX Auth Service. This service could be Keycloak and any other IdP.
 
 ![configuration-flow](/docs/images/external-auth-filter/configuration-flow.png)
 
@@ -105,8 +105,8 @@ Configuration flow with one HTTPRoute with a single path rule referencing an ext
 
 - Unit tests
 - Functional tests to validate behaviour of the external auth service.
-    - In cases where users choose to deploy and manage our NGINX Auth Service, we will want to ensure any configurations applied to NGINX are robust and secure.
-    - In cases where users choose to reference a seperate IdP such as Keycloak, we will want to ensure NGF responds accordingly to the appropriate response code returned. This will also be the case for responses returned from the NGINX Auth Service.
+  - In cases where users choose to deploy and manage our NGINX Auth Service, we will want to ensure any configurations applied to NGINX are robust and secure.
+  - In cases where users choose to reference a seperate IdP such as Keycloak, we will want to ensure NGF responds accordingly to the appropriate response code returned. This will also be the case for responses returned from the NGINX Auth Service.
 
 ## Security Considerations
 
@@ -141,7 +141,7 @@ The [Authentication Filter](docs/proposals/authentication-filter.md) document pr
 
 ## References
 
-- [Authentication Filter Proposal](docs/proposals/authentication-filter.md) 
+- [Authentication Filter Proposal](docs/proposals/authentication-filter.md)
 - [NGINX External Auth Service](https://github.com/nginx/nginx-external-auth-service)
 - [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter)
 - [HTTPAuthConfig](https://gateway-api.sigs.k8s.io/reference/spec/#httpauthconfig)
@@ -149,4 +149,3 @@ The [Authentication Filter](docs/proposals/authentication-filter.md) document pr
 - [ngx_http_auth_basic](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html)
 - [ngx_http_auth_jwt_module](https://docs.nginx.com/nginx/admin-guide/security-controls/authentication/#jwt-authentication)
 - [ngx_http_oidc_module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html)
-
