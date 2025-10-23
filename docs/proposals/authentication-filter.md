@@ -207,69 +207,10 @@ If we chose to go forward with creation of our own `AuthenticationFilter`, it is
 All fields in the `AuthenticationFilter` will be validated with Open API Schema.
 We should also include [CEL](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules) validation where required.
 
-
 ## Alternatives
 
-The Gatewy API currently has an `implementable` HTTP Auth mechanism exposed using the `ExternalAuth` filter in the `HTTPRoute` resource using the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/?h=externalauth#httpexternalauthfilter). This uses Envoy's `ext_authz` protocol to reach out to an External Service to both `Authenticate` and `Authorize` requests.
-
-See https://gateway-api.sigs.k8s.io/geps/gep-1494/ for more details
-
-This GEP also describes a [two phased approach](https://gateway-api.sigs.k8s.io/geps/gep-1494/#why-two-phases), which includes starting first with a Filter at the `rule` level, and then providing a top level Policy attachment that can be overridden by lower level Auth Filters.
-
-From initial discussion, we decided to go forward with exposing our own authentication filter.
-
-This was decided for the following reasons:
-- Given the timeline of `ExternalAuth` eventually being supported and implented by all other Gateway API implementations, it may be many months before this enchancement is available on the main channel within the Gateway API
-- Exposing our own form of authentication through an authenticaiton filter does not exclude the possibility of eventually supporting the `ExternalAuth` field
-- Given the expressed complexity of the [two phased approach](https://gateway-api.sigs.k8s.io/geps/gep-1494/#why-two-phases), `ExternalAuth` has the potential to go through may iterations before becoming stable
-- Recent conversations with the Gateway API maintainers suggest that implementation of `ExternalAuth` is still speculative
-
-Example HTTPRoute using [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/?h=externalauth#httpexternalauthfilter)
-
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: api-with-external-auth
-  namespace: default
-spec:
-  parentRefs:
-  - name: gateway
-  hostnames:
-  - api.example.com
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /api
-    filters:
-    - type: ExternalAuth
-      externalAuth:
-        protocol: HTTP
-        backendRef:
-          # BackendObjectReference: defaults to core group and kind=Service if omitted
-          name: ext-authz-svc
-          port: 8080
-        http:
-          # Prepend a prefix when forwarding the client path to the auth server
-          path: /authorize
-          # Additional request headers to send to the auth server (core headers are always sent)
-          allowedHeaders:
-            - X-Request-Id
-            - X-User-Agent
-            - X-Correlation-Id
-          # Headers from the auth server response to copy into the backend request
-          allowedResponseHeaders:
-            - X-Authz-Trace
-            - WWW-Authenticate
-            - Set-Cookie
-        forwardBody:
-          # Buffer and forward up to 16 KiB of the client request body to the auth server
-          maxSize: 16384
-    backendRefs:
-    - name: backend-svc
-      port: 80
-```
+The [External AuthFilter](docs/proposals/external-auth-filter.md) document proposes a means to integrate with the expermintal feature [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter) available in the HTTPRoute specification.
+Please refer to that proposal for details on how that approach may be implemented.
 
 ## Additional considerations
 
