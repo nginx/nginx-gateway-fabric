@@ -13,6 +13,7 @@ This proposal aim to provider users of the Gateway API with a native form of Aut
 ## Goals
 
 - Integrate with the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter) for HTTPRoute in the Gateway API
+- Ensure this capability is available only when users enable experimental features in NGF
 - Support only [HTTPAuthConfig](https://gateway-api.sigs.k8s.io/reference/spec/#httpauthconfig)
 - Provide users with a helm chart to deploy, manage and configure NGINX for Authentication use cases. i.e. the External Service
 - Allow users to configure an exteranl IdP such as Keycloak or AzureAD
@@ -23,8 +24,10 @@ This proposal aim to provider users of the Gateway API with a native form of Aut
 
 ## Introduction
 
-This document focus on an approach to have NGF integate with the HTTPExternalAuthFilter in the Gateway APi.
+This document focus on an approach to have NGF integate with the HTTPExternalAuthFilter in the Gateway API.
 This filter defines a mean to communicate with an external authentication services that can be responsible for both Authenticaiton and Authroization of requests to a backend application.
+
+> ⚠️ This filter is currently part of the Gateway API experimental channel. The API is subject to changes that may break implementations.
 
 ## API, Customer Driven Interfaces, and User Experience
 
