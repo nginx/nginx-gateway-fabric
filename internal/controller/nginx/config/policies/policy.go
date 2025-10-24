@@ -6,7 +6,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -15,9 +14,9 @@ import (
 //
 //counterfeiter:generate . Policy
 type Policy interface {
-	GetTargetRefs() []v1alpha2.LocalPolicyTargetReference
-	GetPolicyStatus() v1alpha2.PolicyStatus
-	SetPolicyStatus(status v1alpha2.PolicyStatus)
+	GetTargetRefs() []gatewayv1.LocalPolicyTargetReference
+	GetPolicyStatus() gatewayv1.PolicyStatus
+	SetPolicyStatus(status gatewayv1.PolicyStatus)
 	client.Object
 }
 
@@ -30,7 +29,7 @@ type GlobalSettings struct {
 
 // ValidateTargetRef validates a policy's targetRef for the proper group and kind.
 func ValidateTargetRef(
-	ref v1alpha2.LocalPolicyTargetReference,
+	ref gatewayv1.LocalPolicyTargetReference,
 	basePath *field.Path,
 	groups []gatewayv1.Group,
 	supportedKinds []gatewayv1.Kind,

@@ -136,7 +136,7 @@ func TestBuildGateway(t *testing.T) {
 		Type: apiv1.SecretTypeTLS,
 	}
 
-	gatewayTLSConfigSameNs := &v1.GatewayTLSConfig{
+	gatewayTLSConfigSameNs := &v1.ListenerTLSConfig{
 		Mode: helpers.GetPointer(v1.TLSModeTerminate),
 		CertificateRefs: []v1.SecretObjectReference{
 			{
@@ -147,7 +147,7 @@ func TestBuildGateway(t *testing.T) {
 		},
 	}
 
-	tlsConfigInvalidSecret := &v1.GatewayTLSConfig{
+	tlsConfigInvalidSecret := &v1.ListenerTLSConfig{
 		Mode: helpers.GetPointer(v1.TLSModeTerminate),
 		CertificateRefs: []v1.SecretObjectReference{
 			{
@@ -170,7 +170,7 @@ func TestBuildGateway(t *testing.T) {
 		Type: apiv1.SecretTypeTLS,
 	}
 
-	gatewayTLSConfigDiffNs := &v1.GatewayTLSConfig{
+	gatewayTLSConfigDiffNs := &v1.ListenerTLSConfig{
 		Mode: helpers.GetPointer(v1.TLSModeTerminate),
 		CertificateRefs: []v1.SecretObjectReference{
 			{
@@ -186,7 +186,7 @@ func TestBuildGateway(t *testing.T) {
 		hostname string,
 		port int,
 		protocol v1.ProtocolType,
-		tls *v1.GatewayTLSConfig,
+		tls *v1.ListenerTLSConfig,
 	) v1.Listener {
 		return v1.Listener{
 			Name:     v1.SectionName(name),
@@ -208,10 +208,10 @@ func TestBuildGateway(t *testing.T) {
 			hostname,
 			port,
 			v1.TLSProtocolType,
-			&v1.GatewayTLSConfig{Mode: helpers.GetPointer(v1.TLSModePassthrough)},
+			&v1.ListenerTLSConfig{Mode: helpers.GetPointer(v1.TLSModePassthrough)},
 		)
 	}
-	createHTTPSListener := func(name, hostname string, port int, tls *v1.GatewayTLSConfig) v1.Listener {
+	createHTTPSListener := func(name, hostname string, port int, tls *v1.ListenerTLSConfig) v1.Listener {
 		return createListener(name, hostname, port, v1.HTTPSProtocolType, tls)
 	}
 
@@ -288,7 +288,7 @@ func TestBuildGateway(t *testing.T) {
 	type gatewayCfg struct {
 		ref              *v1.LocalParametersReference
 		allowedListeners *v1.AllowedListeners
-		backendTLS       *v1.GatewayBackendTLS
+		TLS              *v1.GatewayTLSConfig
 		name             string
 		listeners        []v1.Listener
 		addresses        []v1.GatewaySpecAddress
@@ -307,7 +307,7 @@ func TestBuildGateway(t *testing.T) {
 				Listeners:        cfg.listeners,
 				Addresses:        cfg.addresses,
 				AllowedListeners: cfg.allowedListeners,
-				BackendTLS:       cfg.backendTLS,
+				TLS:              cfg.TLS,
 			},
 		}
 
@@ -1576,7 +1576,9 @@ func TestBuildGateway(t *testing.T) {
 					Kind: "wrong-kind", // Invalid reference
 					Name: "invalid-ref",
 				},
-				backendTLS: &v1.GatewayBackendTLS{},
+				TLS: &v1.GatewayTLSConfig{
+					Backend: &v1.GatewayBackendTLS{},
+				},
 			}),
 			gatewayClass: validGCWithNp,
 			expected: map[types.NamespacedName]*Gateway{
@@ -1603,7 +1605,7 @@ func TestBuildGateway(t *testing.T) {
 						IPFamily: helpers.GetPointer(ngfAPIv1alpha2.Dual),
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayAcceptedUnsupportedField("BackendTLS"),
+						conditions.NewGatewayAcceptedUnsupportedField("TLS"),
 						conditions.NewGatewayRefInvalid(
 							"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
 						),
@@ -1950,16 +1952,18 @@ func TestValidateUnsupportedGatewayFields(t *testing.T) {
 			},
 		},
 		{
-			name: "Multiple unsupported fields: AllowedListeners and BackendTLS",
+			name: "Multiple unsupported fields: AllowedListeners and TLS",
 			gateway: &v1.Gateway{
 				Spec: v1.GatewaySpec{
 					AllowedListeners: &v1.AllowedListeners{},
-					BackendTLS:       &v1.GatewayBackendTLS{},
+					TLS: &v1.GatewayTLSConfig{
+						Backend: &v1.GatewayBackendTLS{},
+					},
 				},
 			},
 			expectedConds: []conditions.Condition{
 				conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"),
-				conditions.NewGatewayAcceptedUnsupportedField("BackendTLS"),
+				conditions.NewGatewayAcceptedUnsupportedField("TLS"),
 			},
 		},
 	}

@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -23,7 +22,7 @@ func TestMustCastObject(t *testing.T) {
 	}).ToNot(Panic())
 
 	g.Expect(func() {
-		_ = helpers.MustCastObject[*gatewayv1alpha3.BackendTLSPolicy](obj)
+		_ = helpers.MustCastObject[*gatewayv1.BackendTLSPolicy](obj)
 	}).To(Panic())
 }
 

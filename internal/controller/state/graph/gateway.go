@@ -278,8 +278,8 @@ func validateUnsupportedGatewayFields(gw *v1.Gateway) []conditions.Condition {
 		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("AllowedListeners"))
 	}
 
-	if gw.Spec.BackendTLS != nil {
-		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("BackendTLS"))
+	if gw.Spec.TLS != nil {
+		conds = append(conds, conditions.NewGatewayAcceptedUnsupportedField("TLS"))
 	}
 
 	return conds
