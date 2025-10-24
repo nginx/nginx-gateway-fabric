@@ -11,15 +11,11 @@ var (
 
 const mainTemplateText = `
 error_log stderr {{ .ErrorLevel }};
-{{- if .LogFormats }}
-{{- range .LogFormats }}
-log_format {{ .Name }} '{{ .Format }}';
+{{- if .LogFormat }}
+log_format {{ .LogFormat.Name }} '{{ .LogFormat.Format }}';
 {{- end }}
-{{- end }}
-{{- if .AccessLogs }}
-{{- range .AccessLogs }}
-access_log {{ .Path }} {{ .Format }};
-{{- end }}
+{{- if .AccessLog }}
+access_log {{ .AccessLog.Path }} {{ .AccessLog.Format }};
 {{- end }}`
 
 const eventsTemplateText = `
