@@ -285,7 +285,7 @@ jobs:
 
       - name: Download Syft
         if: ${{ inputs.is_production_release }}
-        uses: anchore/sbom-action/download-syft@aa0e114b2e19480f157109b9922bda359bd98b90 # v0.20.8
+        uses: anchore/sbom-action/download-syft@8e94d75ddd33f69f691467e42275782e4bfefe84 # v0.20.9
 
       - name: Install Cosign
         if: ${{ inputs.is_production_release }}
@@ -542,7 +542,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
       - name: Setup Helm
-        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814 # v4.2.0
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
