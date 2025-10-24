@@ -15,17 +15,19 @@ gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" usern
         bash -s" <"${SCRIPT_DIR}"/remote-scripts/run-nfr-tests.sh
 retcode=$?
 
-if [ ${retcode} -ne 0 ]; then
-    echo "Error running tests on VM"
-    exit 1
-fi
-
+## Download results regardless of test outcome (needed for debugging failures)
 ## Use rsync if running locally (faster); otherwise if in the pipeline don't download an SSH config
 if [ "${CI}" = "false" ]; then
     gcloud compute config-ssh --ssh-config-file ngf-gcp.ssh >/dev/null
     rsync -ave 'ssh -F ngf-gcp.ssh' username@"${RESOURCE_NAME}"."${GKE_CLUSTER_ZONE}"."${GKE_PROJECT}":~/nginx-gateway-fabric/tests/results .
 else
     gcloud compute scp --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" --recurse username@"${RESOURCE_NAME}":~/nginx-gateway-fabric/tests/results .
+fi
+
+## Exit with error code after downloading results if tests failed
+if [ ${retcode} -ne 0 ]; then
+    echo "Error running tests on VM"
+    exit 1
 fi
 
 ## If tearing down the longevity test, we need to collect logs from gcloud and add to the results
