@@ -10,6 +10,89 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
+func TestLoggingSettingsTemplate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		loggingSettings   *dataplane.LoggingSettings
+		expectedOutputs   []string
+		unexpectedOutputs []string
+	}{
+		{
+			name: "Log format and access log with custom path",
+			loggingSettings: &dataplane.LoggingSettings{
+				LogFormat: dataplane.LogFormat{
+					Name:   "custom_format",
+					Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
+				},
+				AccessLog: dataplane.AccessLog{Path: "/path/to/log.gz", Format: "custom_format"},
+			},
+			expectedOutputs: []string{
+				`log_format custom_format '$remote_addr - [$time_local] "$request" $status $body_bytes_sent';`,
+				`access_log dev/stdout custom_format;`,
+			},
+		},
+		{
+			name: "Empty log format name and format",
+			loggingSettings: &dataplane.LoggingSettings{
+				LogFormat: dataplane.LogFormat{
+					Name:   "",
+					Format: "",
+				},
+				AccessLog: dataplane.AccessLog{Path: "", Format: ""},
+			},
+			unexpectedOutputs: []string{
+				`log_format custom_format`,
+				`access_log dev/stdout`,
+			},
+		},
+		{
+			name: "Access log off while format presented",
+			loggingSettings: &dataplane.LoggingSettings{
+				LogFormat: dataplane.LogFormat{
+					Name:   "custom_format",
+					Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
+				},
+				AccessLog: dataplane.AccessLog{Path: "off"},
+			},
+			expectedOutputs: []string{
+				`access_log off;`,
+			},
+		},
+		{
+			name: "Access log off",
+			loggingSettings: &dataplane.LoggingSettings{
+				AccessLog: dataplane.AccessLog{Path: "off"},
+			},
+			expectedOutputs: []string{
+				`access_log off;`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conf := dataplane.Configuration{
+				Logging: dataplane.Logging{LoggingSettings: tt.loggingSettings},
+			}
+
+			res := executeBaseHTTPConfig(conf)
+			g.Expect(res).To(HaveLen(1))
+			httpConfig := string(res[0].data)
+			for _, expectedOutput := range tt.expectedOutputs {
+				g.Expect(httpConfig).To(ContainSubstring(expectedOutput))
+			}
+			for _, unexpectedOutput := range tt.unexpectedOutputs {
+				g.Expect(httpConfig).ToNot(ContainSubstring(unexpectedOutput))
+			}
+		})
+	}
+}
+
 func TestExecuteBaseHttp_HTTP2(t *testing.T) {
 	t.Parallel()
 	confOn := dataplane.Configuration{

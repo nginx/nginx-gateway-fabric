@@ -334,10 +334,6 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.Data).To(HaveKey("main.conf"))
 	g.Expect(cm.Data["main.conf"]).To(ContainSubstring("debug"))
-	// check default log_format and access_log are added
-	g.Expect(cm.Data["main.conf"]).
-		To(ContainSubstring("log_format default '$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent';"))
-	g.Expect(cm.Data["main.conf"]).To(ContainSubstring("access_log /var/log/nginx/access.log default;"))
 
 	cmObj = objects[2]
 	cm, ok = cmObj.(*corev1.ConfigMap)
@@ -1960,25 +1956,13 @@ func TestBuildNginxResourceObjects_NginxProxyConfigWithAccesslog(t *testing.T) {
 		Logging: &ngfAPIv1alpha2.NginxLogging{
 			ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
 			AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelDebug),
-			LogFormats: []ngfAPIv1alpha2.LogFormat{
-				{
-					Name:   "custom_format",
-					Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
-				},
-				{
-					Name:   "minimal",
-					Format: "$remote_addr $status $body_bytes_sent",
-				},
+			LogFormat: &ngfAPIv1alpha2.LogFormat{
+				Name:   helpers.GetPointer("custom_format"),
+				Format: helpers.GetPointer("$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent"),
 			},
-			AccessLogs: []ngfAPIv1alpha2.AccessLog{
-				{
-					Path:   "/var/log/nginx/access.log",
-					Format: "custom_format",
-				},
-				{
-					Path:   "/var/log/nginx/minimal.log",
-					Format: "minimal",
-				},
+			AccessLog: &ngfAPIv1alpha2.AccessLog{
+				Path:   helpers.GetPointer("/var/log/nginx/access.log"),
+				Format: helpers.GetPointer("custom_format"),
 			},
 		},
 		Metrics: &ngfAPIv1alpha2.Metrics{
@@ -2036,7 +2020,5 @@ func TestBuildNginxResourceObjects_NginxProxyConfigWithAccesslog(t *testing.T) {
 	g.Expect(cm.Data["main.conf"]).To(ContainSubstring("debug"))
 	g.Expect(cm.Data["main.conf"]).
 		To(ContainSubstring("log_format custom_format '$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent';"))
-	g.Expect(cm.Data["main.conf"]).To(ContainSubstring("log_format minimal '$remote_addr $status $body_bytes_sent';"))
 	g.Expect(cm.Data["main.conf"]).To(ContainSubstring("access_log /var/log/nginx/access.log custom_format;"))
-	g.Expect(cm.Data["main.conf"]).To(ContainSubstring("access_log /var/log/nginx/minimal.log minimal;"))
 }

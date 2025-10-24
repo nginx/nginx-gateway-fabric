@@ -407,14 +407,19 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 	}
 
 	// Add LogFormats and AccessLogs to mainFields
-	logFormats := addLogFormatToNginxConfig(logging)
-	accessLogs := addAccessLogsToNginxConfig(logging)
+	logFormat := addLogFormatToNginxConfig(logging)
+	accessLog := addAccessLogsToNginxConfig(logging)
 
 	mainFields := map[string]interface{}{
 		"ErrorLevel":        logLevel,
 		"WorkerConnections": workerConnections,
-		"LogFormats":        logFormats,
-		"AccessLogs":        accessLogs,
+	}
+
+	if logFormat != nil {
+		mainFields["LogFormat"] = logFormat
+	}
+	if accessLog != nil {
+		mainFields["AccessLog"] = accessLog
 	}
 
 	// Create events ConfigMap data using template
@@ -1479,48 +1484,34 @@ func DetermineNginxImageName(
 	return fmt.Sprintf("%s:%s", image, tag), pullPolicy
 }
 
-func addLogFormatToNginxConfig(logging *ngfAPIv1alpha2.NginxLogging) []ngfAPIv1alpha2.LogFormat {
-	logFormats := []ngfAPIv1alpha2.LogFormat{}
+func addLogFormatToNginxConfig(logging *ngfAPIv1alpha2.NginxLogging) *ngfAPIv1alpha2.LogFormat {
+	logFormat := &ngfAPIv1alpha2.LogFormat{}
 	if logging == nil {
-		return logFormats
+		return logFormat
 	}
 
-	for _, lf := range logging.LogFormats {
-		logFormats = append(logFormats, ngfAPIv1alpha2.LogFormat{
-			Name:   lf.Name,
-			Format: lf.Format,
-		})
+	if logging.LogFormat != nil {
+		logFormat = &ngfAPIv1alpha2.LogFormat{
+			Name:   logging.LogFormat.Name,
+			Format: logging.LogFormat.Format,
+		}
 	}
 
-	if len(logFormats) == 0 {
-		logFormats = append(logFormats, ngfAPIv1alpha2.LogFormat{
-			Name:   "default",
-			Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
-		})
-	}
-
-	return logFormats
+	return logFormat
 }
 
-func addAccessLogsToNginxConfig(logging *ngfAPIv1alpha2.NginxLogging) []ngfAPIv1alpha2.AccessLog {
-	accessLogs := []ngfAPIv1alpha2.AccessLog{}
+func addAccessLogsToNginxConfig(logging *ngfAPIv1alpha2.NginxLogging) *ngfAPIv1alpha2.AccessLog {
+	accessLog := &ngfAPIv1alpha2.AccessLog{}
 	if logging == nil {
-		return accessLogs
+		return accessLog
 	}
 
-	for _, al := range logging.AccessLogs {
-		accessLogs = append(accessLogs, ngfAPIv1alpha2.AccessLog{
-			Path:   al.Path,
-			Format: al.Format,
-		})
+	if logging.AccessLog != nil {
+		accessLog = &ngfAPIv1alpha2.AccessLog{
+			Path:   logging.AccessLog.Path,
+			Format: logging.AccessLog.Format,
+		}
 	}
 
-	if len(accessLogs) == 0 {
-		accessLogs = append(accessLogs, ngfAPIv1alpha2.AccessLog{
-			Path:   "/var/log/nginx/access.log",
-			Format: "default",
-		})
-	}
-
-	return accessLogs
+	return accessLog
 }

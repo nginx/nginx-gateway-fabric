@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/go-logr/logr"
 	discoveryV1 "k8s.io/api/discovery/v1"
@@ -1206,6 +1207,8 @@ func convertAddresses(addresses []ngfAPIv1alpha2.RewriteClientIPAddress) []strin
 	return trustedAddresses
 }
 
+// buildLogging converts the API logging spec (currently singular LogFormat / AccessLog fields
+// in v1alpha2) into internal slice-based representation used by templates.
 func buildLogging(gateway *graph.Gateway) Logging {
 	logSettings := Logging{ErrorLevel: defaultErrorLogLevel}
 
@@ -1218,9 +1221,66 @@ func buildLogging(gateway *graph.Gateway) Logging {
 		if ngfProxy.Logging.ErrorLevel != nil {
 			logSettings.ErrorLevel = string(*ngfProxy.Logging.ErrorLevel)
 		}
+
+		srcLogSettings := ngfProxy.Logging
+		ls := LoggingSettings{}
+		ls.LogFormat = buildLogFormat(srcLogSettings)
+		ls.AccessLog = buildAccessLog(srcLogSettings)
+
+		if ls.AccessLog.Path == "off" {
+			logSettings.LoggingSettings = &LoggingSettings{AccessLog: AccessLog{Path: "off"}}
+
+			return logSettings
+		}
+
+		if ls.LogFormat.Format != "" || ls.AccessLog.Path != "" {
+			// only set LoggingSettings if at least one of LogFormat or AccessLog is configured
+			logSettings.LoggingSettings = &ls
+		}
 	}
 
 	return logSettings
+}
+
+func buildLogFormat(srcLogSettings *ngfAPIv1alpha2.NginxLogging) LogFormat {
+	var logFormat LogFormat
+	// Current API exposes a single LogFormat value whose fields are pointers; include only if both set and non-empty.
+	if srcLogSettings.LogFormat != nil &&
+		srcLogSettings.LogFormat.Name != nil &&
+		srcLogSettings.LogFormat.Format != nil &&
+		*srcLogSettings.LogFormat.Name != "" &&
+		*srcLogSettings.LogFormat.Format != "" {
+		logFormat = LogFormat{
+			Name:   *srcLogSettings.LogFormat.Name,
+			Format: *srcLogSettings.LogFormat.Format,
+		}
+	}
+
+	return logFormat
+}
+
+func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) AccessLog {
+	var accessLog AccessLog
+	// Current API exposes a singular *string AccessLog path (no format yet) – only dev/stdout or "off".
+	if srcLogSettings.AccessLog != nil &&
+		srcLogSettings.AccessLog.Path != nil &&
+		*srcLogSettings.AccessLog.Path != "" {
+		if strings.ToLower(*srcLogSettings.AccessLog.Path) == "off" {
+			accessLog = AccessLog{Path: "off"}
+		} else {
+			// only "dev/stdout" is supported for now
+			defaultPath := "dev/stdout"
+			if srcLogSettings.AccessLog.Format != nil &&
+				*srcLogSettings.AccessLog.Format != "" {
+				accessLog = AccessLog{
+					Path:   defaultPath,
+					Format: *srcLogSettings.AccessLog.Format,
+				}
+			}
+		}
+	}
+
+	return accessLog
 }
 
 func buildWorkerConnections(gateway *graph.Gateway) int32 {

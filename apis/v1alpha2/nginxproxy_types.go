@@ -302,12 +302,12 @@ type NginxLogging struct {
 	// Each log format must have a unique name.
 	//
 	// +optional
-	LogFormats []LogFormat `json:"logFormats,omitempty"`
+	LogFormat *LogFormat `json:"logFormat,omitempty"`
 
 	// AccessLogs defines the access log settings, including the log file path, format, and optional parameters.
 	//
 	// +optional
-	AccessLogs []AccessLog `json:"accessLogs,omitempty"`
+	AccessLog *AccessLog `json:"accessLog,omitempty"`
 }
 
 // NginxErrorLogLevel type defines the log level of error logs for NGINX.
@@ -365,17 +365,14 @@ const (
 
 // LogFormat defines a custom log format for NGINX.
 type LogFormat struct {
-	Name   string `json:"name"`
-	Format string `json:"format"`
+	Name   *string `json:"name"`
+	Format *string `json:"format"`
 }
 
-// AccessLog defines the configuration for an NGINX access log.
+// AccessLog defines the configuration for an NGINX access log. For now only path dev/stdout is used.
 type AccessLog struct {
-	Path      string `json:"path"`
-	Format    string `json:"format"`
-	Buffer    string `json:"buffer,omitempty"`
-	Condition string `json:"condition,omitempty"`
-	Gzip      bool   `json:"gzip,omitempty"`
+	Path   *string `json:"path"`
+	Format *string `json:"format"`
 }
 
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.
