@@ -2,7 +2,7 @@
 set -e
 
 # Get NGF version from Chart.yaml
-NGF_VERSION=$(grep "^appVersion:" ../charts/nginx-gateway-fabric/Chart.yaml | sed 's/appVersion: *//g' | tr -d '"')
+NGF_VERSION=$(grep "^appVersion:" ../charts/nginx-gateway-fabric/Chart.yaml | sed 's/appVersion: *//g' | tr -d '"')-ubi
 
 echo "Using NGF version: $NGF_VERSION"
 

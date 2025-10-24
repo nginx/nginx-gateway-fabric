@@ -8,9 +8,9 @@ OPERATOR_SDK_VERSION ?= v1.41.1
 # renovate: datasource=github-tags depName=kubernetes-sigs/kustomize
 KUSTOMIZE_VERSION ?= v5.6.0
 
-IMAGE_TAG_BASE ?= nginx-gateway-fabric/operator
+IMAGE_TAG_BASE ?= ghcr.io/nginx/nginx-gateway-fabric/operator
 
-IMG ?= $(IMAGE_TAG_BASE):v$(VERSION)
+IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
 
 ## Bundle config
 
