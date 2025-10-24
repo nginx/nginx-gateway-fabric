@@ -218,7 +218,7 @@ nginxGateway:
     endpointPicker:
       # -- Disable TLS for EndpointPicker communication. By default, TLS is enabled.
       # Set to true only for development/testing or when using a service mesh for encryption.
-      disableTLS: true
+      disableTLS: false
 
       # -- Disables TLS certificate verification when connecting to the EndpointPicker.
       # By default, certificate verification is disabled.
