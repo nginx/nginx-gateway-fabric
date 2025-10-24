@@ -10,8 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
-	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -20,22 +18,22 @@ import (
 
 func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 	t.Parallel()
-	backendTLSPolicies := map[types.NamespacedName]*v1alpha3.BackendTLSPolicy{
+	backendTLSPolicies := map[types.NamespacedName]*gatewayv1.BackendTLSPolicy{
 		{Namespace: "test", Name: "tls-policy"}: {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "tls-policy",
 				Namespace: "test",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 							Kind: "Service",
 							Name: "service1",
 						},
 					},
 				},
-				Validation: v1alpha3.BackendTLSPolicyValidation{
+				Validation: gatewayv1.BackendTLSPolicyValidation{
 					CACertificateRefs: []gatewayv1.LocalObjectReference{
 						{
 							Kind:  "ConfigMap",
@@ -58,7 +56,7 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 	tests := []struct {
 		expected           map[types.NamespacedName]*BackendTLSPolicy
 		gateways           map[types.NamespacedName]*Gateway
-		backendTLSPolicies map[types.NamespacedName]*v1alpha3.BackendTLSPolicy
+		backendTLSPolicies map[types.NamespacedName]*gatewayv1.BackendTLSPolicy
 		name               string
 	}{
 		{
@@ -89,18 +87,18 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 
 func TestValidateBackendTLSPolicy(t *testing.T) {
 	const testSecretName string = "test-secret"
-	targetRefNormalCase := []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+	targetRefNormalCase := []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 		{
-			LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+			LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 				Kind: "Service",
 				Name: "service1",
 			},
 		},
 	}
 
-	targetRefInvalidKind := []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+	targetRefInvalidKind := []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 		{
-			LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+			LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 				Kind: "Invalid",
 				Name: "service1",
 			},
@@ -160,8 +158,8 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 	}
 
-	getAncestorRef := func(ctlrName, parentName string) v1alpha2.PolicyAncestorStatus {
-		return v1alpha2.PolicyAncestorStatus{
+	getAncestorRef := func(ctlrName, parentName string) gatewayv1.PolicyAncestorStatus {
+		return gatewayv1.PolicyAncestorStatus{
 			ControllerName: gatewayv1.GatewayController(ctlrName),
 			AncestorRef: gatewayv1.ParentReference{
 				Name:      gatewayv1.ObjectName(parentName),
@@ -172,7 +170,7 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		}
 	}
 
-	ancestors := []v1alpha2.PolicyAncestorStatus{
+	ancestors := []gatewayv1.PolicyAncestorStatus{
 		getAncestorRef("not-us", "not-us"),
 		getAncestorRef("not-us", "not-us"),
 		getAncestorRef("not-us", "not-us"),
@@ -191,12 +189,12 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		getAncestorRef("not-us", "not-us"),
 	}
 
-	ancestorsWithUs := make([]v1alpha2.PolicyAncestorStatus, len(ancestors))
+	ancestorsWithUs := make([]gatewayv1.PolicyAncestorStatus, len(ancestors))
 	copy(ancestorsWithUs, ancestors)
 	ancestorsWithUs[0] = getAncestorRef("test", "gateway")
 
 	tests := []struct {
-		tlsPolicy *v1alpha3.BackendTLSPolicy
+		tlsPolicy *gatewayv1.BackendTLSPolicy
 		gateway   *Gateway
 		name      string
 		isValid   bool
@@ -204,14 +202,14 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 	}{
 		{
 			name: "normal case with ca cert refs",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefNormalCase,
 						Hostname:          "foo.test.com",
 					},
@@ -221,14 +219,14 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "normal case with ca cert ref secrets",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefSecretNormalCase,
 						Hostname:          "foo.test.com",
 					},
@@ -238,19 +236,19 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "normal case with ca cert refs and 16 ancestors including us",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefNormalCase,
 						Hostname:          "foo.test.com",
 					},
 				},
-				Status: v1alpha2.PolicyStatus{
+				Status: gatewayv1.PolicyStatus{
 					Ancestors: ancestorsWithUs,
 				},
 			},
@@ -258,15 +256,15 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "normal case with well known certs",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
-						WellKnownCACertificates: (helpers.GetPointer(v1alpha3.WellKnownCACertificatesSystem)),
+					Validation: gatewayv1.BackendTLSPolicyValidation{
+						WellKnownCACertificates: (helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem)),
 						Hostname:                "foo.test.com",
 					},
 				},
@@ -275,14 +273,14 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "no hostname invalid case",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefNormalCase,
 						Hostname:          "",
 					},
@@ -291,14 +289,14 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "invalid ca cert ref name",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefInvalidName,
 						Hostname:          "foo.test.com",
 					},
@@ -307,14 +305,14 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "invalid ca cert ref kind",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefInvalidKind,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefInvalidKind,
 						Hostname:          "foo.test.com",
 					},
@@ -323,14 +321,14 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "invalid ca cert ref group",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefInvalidGroup,
 						Hostname:          "foo.test.com",
 					},
@@ -339,15 +337,15 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "invalid case with well known certs",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
-						WellKnownCACertificates: (helpers.GetPointer(v1alpha3.WellKnownCACertificatesType("unknown"))),
+					Validation: gatewayv1.BackendTLSPolicyValidation{
+						WellKnownCACertificates: (helpers.GetPointer(gatewayv1.WellKnownCACertificatesType("unknown"))),
 						Hostname:                "foo.test.com",
 					},
 				},
@@ -355,14 +353,14 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "invalid case neither TLS config option chosen",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						Hostname: "foo.test.com",
 					},
 				},
@@ -370,14 +368,14 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "invalid case with too many ca cert refs",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefTooManyCerts,
 						Hostname:          "foo.test.com",
 					},
@@ -386,36 +384,36 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 		{
 			name: "invalid case with too both ca cert refs and wellknowncerts",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs:       localObjectRefNormalCase,
 						Hostname:                "foo.test.com",
-						WellKnownCACertificates: (helpers.GetPointer(v1alpha3.WellKnownCACertificatesSystem)),
+						WellKnownCACertificates: (helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem)),
 					},
 				},
 			},
 		},
 		{
 			name: "valid case with many ancestors",
-			tlsPolicy: &v1alpha3.BackendTLSPolicy{
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-policy",
 					Namespace: "test",
 				},
-				Spec: v1alpha3.BackendTLSPolicySpec{
+				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
-					Validation: v1alpha3.BackendTLSPolicyValidation{
+					Validation: gatewayv1.BackendTLSPolicyValidation{
 						CACertificateRefs: localObjectRefNormalCase,
 						Hostname:          "foo.test.com",
 					},
 				},
-				Status: v1alpha2.PolicyStatus{
+				Status: gatewayv1.PolicyStatus{
 					Ancestors: ancestors,
 				},
 			},
@@ -503,32 +501,32 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 					g.Expect(conds).To(HaveLen(2))
 					g.Expect(conds[0].Type).To(Equal(string(conditions.GatewayResolvedRefs)))
 					g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
-					g.Expect(conds[0].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonInvalidKind)))
-					g.Expect(conds[1].Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+					g.Expect(conds[0].Reason).To(Equal(string(gatewayv1.BackendTLSPolicyReasonInvalidKind)))
+					g.Expect(conds[1].Type).To(Equal(string(gatewayv1.PolicyConditionAccepted)))
 					g.Expect(conds[1].Status).To(Equal(metav1.ConditionFalse))
-					g.Expect(conds[1].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonNoValidCACertificate)))
+					g.Expect(conds[1].Reason).To(Equal(string(gatewayv1.BackendTLSPolicyReasonNoValidCACertificate)))
 				case "invalid ca cert ref name":
 					// Should have InvalidCACertificateRef condition and NoValidCACertificate condition
 					g.Expect(conds).To(HaveLen(2))
 					g.Expect(conds[0].Type).To(Equal(string(conditions.GatewayResolvedRefs)))
 					g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
-					g.Expect(conds[0].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonInvalidCACertificateRef)))
-					g.Expect(conds[1].Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+					g.Expect(conds[0].Reason).To(Equal(string(gatewayv1.BackendTLSPolicyReasonInvalidCACertificateRef)))
+					g.Expect(conds[1].Type).To(Equal(string(gatewayv1.PolicyConditionAccepted)))
 					g.Expect(conds[1].Status).To(Equal(metav1.ConditionFalse))
-					g.Expect(conds[1].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonNoValidCACertificate)))
+					g.Expect(conds[1].Reason).To(Equal(string(gatewayv1.BackendTLSPolicyReasonNoValidCACertificate)))
 				case "invalid ca cert ref group":
 					// Should have InvalidKind condition and NoValidCACertificate condition
 					g.Expect(conds).To(HaveLen(2))
 					g.Expect(conds[0].Type).To(Equal(string(conditions.GatewayResolvedRefs)))
 					g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
-					g.Expect(conds[0].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonInvalidKind)))
-					g.Expect(conds[1].Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+					g.Expect(conds[0].Reason).To(Equal(string(gatewayv1.BackendTLSPolicyReasonInvalidKind)))
+					g.Expect(conds[1].Type).To(Equal(string(gatewayv1.PolicyConditionAccepted)))
 					g.Expect(conds[1].Status).To(Equal(metav1.ConditionFalse))
-					g.Expect(conds[1].Reason).To(Equal(string(conditions.BackendTLSPolicyReasonNoValidCACertificate)))
+					g.Expect(conds[1].Reason).To(Equal(string(gatewayv1.BackendTLSPolicyReasonNoValidCACertificate)))
 				default:
 					// Other invalid cases should have generic PolicyInvalid condition
 					g.Expect(conds).To(HaveLen(1))
-					g.Expect(conds[0].Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+					g.Expect(conds[0].Type).To(Equal(string(gatewayv1.PolicyConditionAccepted)))
 					g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
 				}
 			}
@@ -540,21 +538,21 @@ func TestAddGatewaysForBackendTLSPolicies(t *testing.T) {
 	t.Parallel()
 
 	btp1 := &BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
+		Source: &gatewayv1.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "btp1",
 				Namespace: "test",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 							Kind: "Service",
 							Name: "service1",
 						},
 					},
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 							Kind: "Service",
 							Name: "service2",
 						},
@@ -572,21 +570,21 @@ func TestAddGatewaysForBackendTLSPolicies(t *testing.T) {
 	}
 
 	btp2 := &BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
+		Source: &gatewayv1.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "btp2",
 				Namespace: "test",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 							Kind: "Service",
 							Name: "service3",
 						},
 					},
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 							Kind: "Service",
 							Name: "service4",
 						},
@@ -602,15 +600,15 @@ func TestAddGatewaysForBackendTLSPolicies(t *testing.T) {
 	}
 
 	btp3 := &BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
+		Source: &gatewayv1.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "btp3",
 				Namespace: "test",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 							Kind: "Service",
 							Name: "service-does-not-exist",
 						},
@@ -621,15 +619,15 @@ func TestAddGatewaysForBackendTLSPolicies(t *testing.T) {
 	}
 
 	btp4 := &BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
+		Source: &gatewayv1.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "btp4",
 				Namespace: "test",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 							Kind: "Gateway",
 							Name: "gateway",
 						},
@@ -723,8 +721,8 @@ func TestAddGatewaysForBackendTLSPoliciesAncestorLimit(t *testing.T) {
 	testLogger := logr.New(&testNGFLogSink{buffer: &logBuf})
 
 	// Helper function to create ancestor references
-	getAncestorRef := func(ctlrName, parentName string) v1alpha2.PolicyAncestorStatus {
-		return v1alpha2.PolicyAncestorStatus{
+	getAncestorRef := func(ctlrName, parentName string) gatewayv1.PolicyAncestorStatus {
+		return gatewayv1.PolicyAncestorStatus{
 			ControllerName: gatewayv1.GatewayController(ctlrName),
 			AncestorRef: gatewayv1.ParentReference{
 				Name:      gatewayv1.ObjectName(parentName),
@@ -736,51 +734,51 @@ func TestAddGatewaysForBackendTLSPoliciesAncestorLimit(t *testing.T) {
 	}
 
 	// Create 16 ancestors from different controllers to simulate full list
-	fullAncestors := make([]v1alpha2.PolicyAncestorStatus, 16)
+	fullAncestors := make([]gatewayv1.PolicyAncestorStatus, 16)
 	for i := range 16 {
 		fullAncestors[i] = getAncestorRef("other-controller", "other-gateway")
 	}
 
 	btpWithFullAncestors := &BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
+		Source: &gatewayv1.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "btp-full-ancestors",
 				Namespace: "test",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 							Kind: "Service",
 							Name: "service1",
 						},
 					},
 				},
 			},
-			Status: v1alpha2.PolicyStatus{
+			Status: gatewayv1.PolicyStatus{
 				Ancestors: fullAncestors,
 			},
 		},
 	}
 
 	btpNormal := &BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
+		Source: &gatewayv1.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "btp-normal",
 				Namespace: "test",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 							Kind: "Service",
 							Name: "service2",
 						},
 					},
 				},
 			},
-			Status: v1alpha2.PolicyStatus{
-				Ancestors: []v1alpha2.PolicyAncestorStatus{}, // Empty ancestors list
+			Status: gatewayv1.PolicyStatus{
+				Ancestors: []gatewayv1.PolicyAncestorStatus{}, // Empty ancestors list
 			},
 		},
 	}
@@ -836,7 +834,7 @@ func TestAddGatewaysForBackendTLSPoliciesAncestorLimit(t *testing.T) {
 	g.Expect(gateway1.Conditions).To(HaveLen(1), "Gateway should have received ancestor limit condition")
 
 	condition := gateway1.Conditions[0]
-	g.Expect(condition.Type).To(Equal(string(v1alpha2.PolicyConditionAccepted)))
+	g.Expect(condition.Type).To(Equal(string(gatewayv1.PolicyConditionAccepted)))
 	g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 	g.Expect(condition.Reason).To(Equal(string(conditions.PolicyReasonAncestorLimitReached)))
 	g.Expect(condition.Message).To(ContainSubstring("ancestor status list has reached the maximum size"))

@@ -17,8 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
-	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -578,22 +576,22 @@ func TestBuildConfiguration(t *testing.T) {
 	)
 
 	httpsRouteHR8.Spec.Rules[0].BackendRefs[0].BackendTLSPolicy = &graph.BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
+		Source: &v1.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "btp",
 				Namespace: "test",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			Spec: v1.BackendTLSPolicySpec{
+				TargetRefs: []v1.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
 							Group: "",
 							Kind:  "Service",
 							Name:  "foo",
 						},
 					},
 				},
-				Validation: v1alpha3.BackendTLSPolicyValidation{
+				Validation: v1.BackendTLSPolicyValidation{
 					Hostname: "foo.example.com",
 					CACertificateRefs: []v1.LocalObjectReference{
 						{
@@ -633,22 +631,22 @@ func TestBuildConfiguration(t *testing.T) {
 	expGRGroups := createExpBackendGroupsForRoute(routeGR)
 
 	httpsRouteHR9.Spec.Rules[0].BackendRefs[0].BackendTLSPolicy = &graph.BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
+		Source: &v1.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "btp2",
 				Namespace: "test",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				TargetRefs: []v1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			Spec: v1.BackendTLSPolicySpec{
+				TargetRefs: []v1.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: v1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
 							Group: "",
 							Kind:  "Service",
 							Name:  "foo",
 						},
 					},
 				},
-				Validation: v1alpha3.BackendTLSPolicyValidation{
+				Validation: v1.BackendTLSPolicyValidation{
 					Hostname: "foo.example.com",
 					CACertificateRefs: []v1.LocalObjectReference{
 						{
@@ -835,7 +833,7 @@ func TestBuildConfiguration(t *testing.T) {
 		Hostname: nil,
 		Port:     443,
 		Protocol: v1.HTTPSProtocolType,
-		TLS: &v1.GatewayTLSConfig{
+		TLS: &v1.ListenerTLSConfig{
 			Mode: helpers.GetPointer(v1.TLSModeTerminate),
 			CertificateRefs: []v1.SecretObjectReference{
 				{
@@ -872,7 +870,7 @@ func TestBuildConfiguration(t *testing.T) {
 		Hostname: nil,
 		Port:     8443,
 		Protocol: v1.HTTPSProtocolType,
-		TLS: &v1.GatewayTLSConfig{
+		TLS: &v1.ListenerTLSConfig{
 			Mode: helpers.GetPointer(v1.TLSModeTerminate),
 			CertificateRefs: []v1.SecretObjectReference{
 				{
@@ -891,7 +889,7 @@ func TestBuildConfiguration(t *testing.T) {
 		Hostname: &hostname,
 		Port:     443,
 		Protocol: v1.HTTPSProtocolType,
-		TLS: &v1.GatewayTLSConfig{
+		TLS: &v1.ListenerTLSConfig{
 			Mode: helpers.GetPointer(v1.TLSModeTerminate),
 			CertificateRefs: []v1.SecretObjectReference{
 				{
@@ -908,7 +906,7 @@ func TestBuildConfiguration(t *testing.T) {
 		Hostname: nil,
 		Port:     443,
 		Protocol: v1.HTTPSProtocolType,
-		TLS: &v1.GatewayTLSConfig{
+		TLS: &v1.ListenerTLSConfig{
 			// Mode is missing, that's why invalid
 			CertificateRefs: []v1.SecretObjectReference{
 				{
@@ -3761,13 +3759,13 @@ func TestConvertBackendTLS(t *testing.T) {
 	testGateway := types.NamespacedName{Namespace: "test", Name: "gateway"}
 
 	btpCaCertRefs := &graph.BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
+		Source: &v1.BackendTLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "btp",
 				Namespace: "test",
 			},
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				Validation: v1alpha3.BackendTLSPolicyValidation{
+			Spec: v1.BackendTLSPolicySpec{
+				Validation: v1.BackendTLSPolicyValidation{
 					CACertificateRefs: []v1.LocalObjectReference{
 						{
 							Name: "ca-cert",
@@ -3783,9 +3781,9 @@ func TestConvertBackendTLS(t *testing.T) {
 	}
 
 	btpWellKnownCerts := &graph.BackendTLSPolicy{
-		Source: &v1alpha3.BackendTLSPolicy{
-			Spec: v1alpha3.BackendTLSPolicySpec{
-				Validation: v1alpha3.BackendTLSPolicyValidation{
+		Source: &v1.BackendTLSPolicy{
+			Spec: v1.BackendTLSPolicySpec{
+				Validation: v1.BackendTLSPolicyValidation{
 					Hostname: "example.com",
 				},
 			},

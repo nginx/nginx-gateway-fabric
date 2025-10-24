@@ -2,7 +2,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // +genclient
@@ -23,7 +23,7 @@ type UpstreamSettingsPolicy struct {
 	Spec UpstreamSettingsPolicySpec `json:"spec"`
 
 	// Status defines the state of the UpstreamSettingsPolicy.
-	Status gatewayv1alpha2.PolicyStatus `json:"status,omitempty"`
+	Status gatewayv1.PolicyStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -63,7 +63,7 @@ type UpstreamSettingsPolicySpec struct {
 	// +kubebuilder:validation:XValidation:message="TargetRefs Group must be core",rule="self.exists(t, t.group=='') || self.exists(t, t.group=='core')"
 	// +kubebuilder:validation:XValidation:message="TargetRef Name must be unique",rule="self.all(p1, self.exists_one(p2, p1.name == p2.name))"
 	//nolint:lll
-	TargetRefs []gatewayv1alpha2.LocalPolicyTargetReference `json:"targetRefs"`
+	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 }
 
 // UpstreamKeepAlive defines the keep-alive settings for upstreams.

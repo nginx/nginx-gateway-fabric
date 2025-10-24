@@ -170,13 +170,13 @@ func createListener(
 	name, hostname string,
 	port int32,
 	protocol gatewayv1.ProtocolType,
-	tlsConfig *gatewayv1.GatewayTLSConfig,
+	tlsConfig *gatewayv1.ListenerTLSConfig,
 	allowedRoutes *gatewayv1.AllowedRoutes,
 ) gatewayv1.Listener {
 	listener := gatewayv1.Listener{
 		Name:          gatewayv1.SectionName(name),
 		Hostname:      (*gatewayv1.Hostname)(helpers.GetPointer(hostname)),
-		Port:          gatewayv1.PortNumber(port),
+		Port:          port,
 		Protocol:      protocol,
 		AllowedRoutes: allowedRoutes,
 	}
@@ -452,7 +452,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 		},
 	}
 
-	tlsConfigDiffNsSecret := &gatewayv1.GatewayTLSConfig{
+	tlsConfigDiffNsSecret := &gatewayv1.ListenerTLSConfig{
 		Mode: helpers.GetPointer(gatewayv1.TLSModeTerminate),
 		CertificateRefs: []gatewayv1.SecretObjectReference{
 			{
@@ -484,7 +484,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 		),
 	})
 
-	tlsConfigPassthrough := &gatewayv1.GatewayTLSConfig{
+	tlsConfigPassthrough := &gatewayv1.ListenerTLSConfig{
 		Mode: helpers.GetPointer(gatewayv1.TLSModePassthrough),
 	}
 
@@ -500,7 +500,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 		Type: v1.SecretTypeTLS,
 	}
 
-	gatewayTLSConfigSameNs := &gatewayv1.GatewayTLSConfig{
+	gatewayTLSConfigSameNs := &gatewayv1.ListenerTLSConfig{
 		Mode: helpers.GetPointer(gatewayv1.TLSModeTerminate),
 		CertificateRefs: []gatewayv1.SecretObjectReference{
 			{

@@ -5,8 +5,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -27,9 +26,9 @@ func createValidPolicy() *ngfAPIv1alpha2.ObservabilityPolicy {
 			Namespace: "default",
 		},
 		Spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-			TargetRefs: []v1alpha2.LocalPolicyTargetReference{
+			TargetRefs: []v1.LocalPolicyTargetReference{
 				{
-					Group: gatewayv1.GroupName,
+					Group: v1.GroupName,
 					Kind:  kinds.HTTPRoute,
 					Name:  "route",
 				},
@@ -43,7 +42,7 @@ func createValidPolicy() *ngfAPIv1alpha2.ObservabilityPolicy {
 				},
 			},
 		},
-		Status: v1alpha2.PolicyStatus{},
+		Status: v1.PolicyStatus{},
 	}
 }
 
