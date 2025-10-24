@@ -530,7 +530,7 @@ func validateFilterRedirect(
 	}
 
 	if redirect.Port != nil {
-		if err := validator.ValidateRedirectPort(int32(*redirect.Port)); err != nil {
+		if err := validator.ValidateRedirectPort(*redirect.Port); err != nil {
 			valErr := field.Invalid(redirectPath.Child("port"), *redirect.Port, err.Error())
 			allErrs = append(allErrs, valErr)
 		}

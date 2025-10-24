@@ -141,7 +141,7 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 				passthroughServersMap[key] = append(passthroughServersMap[key], Layer4VirtualServer{
 					Hostname:     h,
 					UpstreamName: r.Spec.BackendRef.ServicePortReference(),
-					Port:         int32(l.Source.Port),
+					Port:         l.Source.Port,
 				})
 			}
 		}
@@ -150,12 +150,12 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 				listenerPassthroughServers = append(listenerPassthroughServers, Layer4VirtualServer{
 					Hostname:  string(*l.Source.Hostname),
 					IsDefault: true,
-					Port:      int32(l.Source.Port),
+					Port:      l.Source.Port,
 				})
 			} else {
 				listenerPassthroughServers = append(listenerPassthroughServers, Layer4VirtualServer{
 					Hostname: "",
-					Port:     int32(l.Source.Port),
+					Port:     l.Source.Port,
 				})
 			}
 		}
@@ -529,7 +529,7 @@ func (hpr *hostPathRules) upsertListener(
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 ) {
 	hpr.listenersExist = true
-	hpr.port = int32(l.Source.Port)
+	hpr.port = l.Source.Port
 
 	if l.Source.Protocol == v1.HTTPSProtocolType {
 		hpr.httpsListeners = append(hpr.httpsListeners, l)

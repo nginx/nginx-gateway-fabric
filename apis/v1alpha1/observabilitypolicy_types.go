@@ -2,7 +2,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // +genclient
@@ -25,7 +25,7 @@ type ObservabilityPolicy struct {
 	Spec ObservabilityPolicySpec `json:"spec"`
 
 	// Status defines the state of the ObservabilityPolicy.
-	Status gatewayv1alpha2.PolicyStatus `json:"status,omitempty"`
+	Status gatewayv1.PolicyStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -53,7 +53,7 @@ type ObservabilityPolicySpec struct {
 	// +kubebuilder:validation:XValidation:message="TargetRef Kind must be: HTTPRoute or GRPCRoute",rule="(self.exists(t, t.kind=='HTTPRoute') || self.exists(t, t.kind=='GRPCRoute'))"
 	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.all(t, t.group=='gateway.networking.k8s.io')"
 	//nolint:lll
-	TargetRefs []gatewayv1alpha2.LocalPolicyTargetReference `json:"targetRefs"`
+	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 }
 
 // Tracing allows for enabling and configuring OpenTelemetry tracing.

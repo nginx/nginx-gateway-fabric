@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
@@ -25,7 +24,7 @@ func createValidPolicy() *ngfAPI.ClientSettingsPolicy {
 			Namespace: "default",
 		},
 		Spec: ngfAPI.ClientSettingsPolicySpec{
-			TargetRef: v1alpha2.LocalPolicyTargetReference{
+			TargetRef: v1.LocalPolicyTargetReference{
 				Group: v1.GroupName,
 				Kind:  kinds.Gateway,
 				Name:  "gateway",
@@ -43,7 +42,7 @@ func createValidPolicy() *ngfAPI.ClientSettingsPolicy {
 				},
 			},
 		},
-		Status: v1alpha2.PolicyStatus{},
+		Status: v1.PolicyStatus{},
 	}
 }
 

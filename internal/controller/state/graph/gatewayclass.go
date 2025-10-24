@@ -17,7 +17,7 @@ const (
 	// BundleVersionAnnotation is the annotation on Gateway API CRDs that contains the installed version.
 	BundleVersionAnnotation = "gateway.networking.k8s.io/bundle-version"
 	// SupportedVersion is the supported version of the Gateway API CRDs.
-	SupportedVersion = "v1.3.0"
+	SupportedVersion = "v1.4.0"
 )
 
 var gatewayCRDs = map[string]apiVersion{
@@ -225,15 +225,23 @@ func validateCRDVersions(
 
 func parseVersionString(version string) apiVersion {
 	versionBits := strings.Split(version, ".")
-	if len(versionBits) != 3 {
+	if len(versionBits) < 3 {
 		return apiVersion{}
 	}
 
 	major, _ := strings.CutPrefix(versionBits[0], "v")
 
+	// Handle pre-release versions like "v1.4.0-rc.2" by stripping anything after the minor version
+	minor := versionBits[1]
+	// For pre-release versions like "0-rc", we just want "0"
+	if idx := strings.Index(versionBits[2], "-"); idx != -1 {
+		// This is a pre-release version, minor is in versionBits[1]
+		minor = versionBits[1]
+	}
+
 	return apiVersion{
 		major: major,
-		minor: versionBits[1],
+		minor: minor,
 	}
 }
 
