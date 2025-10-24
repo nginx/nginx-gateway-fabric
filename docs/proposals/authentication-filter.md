@@ -5,12 +5,12 @@
 
 ## Summary
 
-Design and implement a means for users of NGINX Gateway Fabric to enable authenticaiton on requests to their backend applications.
-This new filter should eventually expose all forms of authentication avaialbe through NGINX, both Open Source and Plus.
+Design and implement a means for users of NGINX Gateway Fabric to enable authentication on requests to their backend applications.
+This new filter should eventually expose all forms of authentication available through NGINX, both Open Source and Plus.
 
 ## Goals
 
-- Design a means of configuring authenticaiton for NGF
+- Design a means of configuring authentication for NGF
 - Determine initial resource specification
 - Evaluate filter early in request processing, occurring before URLRewrite, header modifiers and backend selection
 - Authentication failures return appropriate status by default (e.g., 401/403)
