@@ -35,6 +35,10 @@ server {
 	{{- if $s.SSLPreread }}
     ssl_preread on;
 	{{- end }}
+
+    {{- if and (eq $s.Protocol "udp") $s.UDPConfig }}
+    proxy_timeout {{ $s.UDPConfig.ProxyTimeout }};
+    {{- end }}
 }
 {{- end }}
 
