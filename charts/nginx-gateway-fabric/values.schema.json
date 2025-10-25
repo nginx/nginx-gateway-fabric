@@ -846,6 +846,28 @@
               "required": [],
               "title": "enable",
               "type": "boolean"
+            },
+            "endpointPicker": {
+              "description": "EndpointPicker TLS configuration.",
+              "properties": {
+                "disableTLS": {
+                  "default": false,
+                  "description": "Disable TLS for EndpointPicker communication. By default, TLS is enabled.\nSet to true only for development/testing or when using a service mesh for encryption.",
+                  "required": [],
+                  "title": "disableTLS",
+                  "type": "boolean"
+                },
+                "skipVerify": {
+                  "default": true,
+                  "description": "Disables TLS certificate verification when connecting to the EndpointPicker.\nBy default, certificate verification is disabled.\nREQUIRED: Must be true until Gateway API Inference Extension EndpointPicker supports mounting certificates.\nSee: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1556",
+                  "required": [],
+                  "title": "skipVerify",
+                  "type": "boolean"
+                }
+              },
+              "required": [],
+              "title": "endpointPicker",
+              "type": "object"
             }
           },
           "required": [],
