@@ -1670,7 +1670,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				Name:     gatewayv1.SectionName(name),
 				Hostname: (*gatewayv1.Hostname)(helpers.GetPointer("foo.example.com")),
 				Protocol: gatewayv1.TLSProtocolType,
-				TLS: helpers.GetPointer(gatewayv1.GatewayTLSConfig{
+				TLS: helpers.GetPointer(gatewayv1.ListenerTLSConfig{
 					Mode: helpers.GetPointer(gatewayv1.TLSModeTerminate),
 				}),
 			},
@@ -2541,7 +2541,7 @@ func TestIsolateL4Listeners(t *testing.T) {
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: acceptedHostnames,
 						Attached:          true,
-						ListenerPort:      gatewayv1.PortNumber(listenerPort),
+						ListenerPort:      listenerPort,
 					},
 				},
 			},
@@ -3084,7 +3084,7 @@ func TestIsolateL7Listeners(t *testing.T) {
 					Attachment: &ParentRefAttachmentStatus{
 						AcceptedHostnames: acceptedHostnames,
 						Attached:          true,
-						ListenerPort:      gatewayv1.PortNumber(listenerPort),
+						ListenerPort:      listenerPort,
 					},
 				},
 			},

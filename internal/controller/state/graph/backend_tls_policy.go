@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -17,7 +16,7 @@ import (
 
 type BackendTLSPolicy struct {
 	// Source is the source resource.
-	Source *v1alpha3.BackendTLSPolicy
+	Source *v1.BackendTLSPolicy
 	// CaCertRef is the name of the ConfigMap that contains the CA certificate.
 	CaCertRef types.NamespacedName
 	// Gateways are the names of the Gateways for which this BackendTLSPolicy is effectively applied.
@@ -34,7 +33,7 @@ type BackendTLSPolicy struct {
 }
 
 func processBackendTLSPolicies(
-	backendTLSPolicies map[types.NamespacedName]*v1alpha3.BackendTLSPolicy,
+	backendTLSPolicies map[types.NamespacedName]*v1.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
 	secretResolver *secretResolver,
 	gateways map[types.NamespacedName]*Gateway,
@@ -67,7 +66,7 @@ func processBackendTLSPolicies(
 }
 
 func validateBackendTLSPolicy(
-	backendTLSPolicy *v1alpha3.BackendTLSPolicy,
+	backendTLSPolicy *v1.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
 	secretResolver *secretResolver,
 ) (valid, ignored bool, conds []conditions.Condition) {
@@ -117,7 +116,7 @@ func validateBackendTLSPolicy(
 	return valid, ignored, conds
 }
 
-func validateBackendTLSHostname(btp *v1alpha3.BackendTLSPolicy) error {
+func validateBackendTLSHostname(btp *v1.BackendTLSPolicy) error {
 	h := string(btp.Spec.Validation.Hostname)
 
 	if err := validateHostname(h); err != nil {
@@ -129,7 +128,7 @@ func validateBackendTLSHostname(btp *v1alpha3.BackendTLSPolicy) error {
 }
 
 func validateBackendTLSCACertRef(
-	btp *v1alpha3.BackendTLSPolicy,
+	btp *v1.BackendTLSPolicy,
 	configMapResolver *configMapResolver,
 	secretResolver *secretResolver,
 ) []conditions.Condition {
@@ -187,20 +186,20 @@ func validateBackendTLSCACertRef(
 	return nil
 }
 
-func validateBackendTLSWellKnownCACerts(btp *v1alpha3.BackendTLSPolicy) error {
-	if *btp.Spec.Validation.WellKnownCACertificates != v1alpha3.WellKnownCACertificatesSystem {
+func validateBackendTLSWellKnownCACerts(btp *v1.BackendTLSPolicy) error {
+	if *btp.Spec.Validation.WellKnownCACertificates != v1.WellKnownCACertificatesSystem {
 		path := field.NewPath("tls.wellknowncacertificates")
 		return field.NotSupported(
 			path,
 			btp.Spec.Validation.WellKnownCACertificates,
-			[]string{string(v1alpha3.WellKnownCACertificatesSystem)},
+			[]string{string(v1.WellKnownCACertificatesSystem)},
 		)
 	}
 	return nil
 }
 
 // countNonNGFAncestors counts the number of non-NGF ancestors in policy status.
-func countNonNGFAncestors(policy *v1alpha3.BackendTLSPolicy, ctlrName string) int {
+func countNonNGFAncestors(policy *v1.BackendTLSPolicy, ctlrName string) int {
 	nonNGFCount := 0
 	for _, ancestor := range policy.Status.Ancestors {
 		if string(ancestor.ControllerName) != ctlrName {
@@ -231,7 +230,7 @@ func addPolicyAncestorLimitCondition(
 
 // collectOrderedGateways collects gateways in spec order (services) then creation time order (gateways within service).
 func collectOrderedGateways(
-	policy *v1alpha3.BackendTLSPolicy,
+	policy *v1.BackendTLSPolicy,
 	services map[types.NamespacedName]*ReferencedService,
 	gateways map[types.NamespacedName]*Gateway,
 	existingNGFGatewayAncestors map[types.NamespacedName]struct{},
@@ -277,7 +276,7 @@ func collectOrderedGateways(
 }
 
 func extractExistingNGFGatewayAncestors(
-	backendTLSPolicy *v1alpha3.BackendTLSPolicy,
+	backendTLSPolicy *v1.BackendTLSPolicy,
 	ctlrName string,
 ) map[types.NamespacedName]struct{} {
 	existingNGFGatewayAncestors := make(map[types.NamespacedName]struct{})
