@@ -116,11 +116,11 @@ However, there are a few items that need to be kept in sync manually:
 3. Operator version:
     Update the VERSION in the Makefile to reflect the version of the Operator being released.
 
-When you are ready to release the bundle, run `make release-bundle`. This will update the NGF image version tags, and create the bundle manifests.
+When you are ready to release the bundle, run `make bundle-release`. This will update the NGF image version tags, and create the bundle manifests.
 
 To test the bundle locally, follow the `Building and Testing the Operator Locally` above.
 
-To submit the bundle for certification, follow TBD.
+To submit the bundle for certification, open a PR in the [RedHat Certified Operators repo](https://github.com/redhat-openshift-ecosystem/certified-operators) using your a branch from your own fork (Note: must have RedHat Portal access) following the guidelines in the repo.
 
 ## License
 

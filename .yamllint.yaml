@@ -41,6 +41,7 @@ rules:
       .goreleaser.yml
       charts/nginx-gateway-fabric/
       operators/config/crd/bases/gateway.nginx.org_nginxgatewayfabrics.yaml
+      operators/bundle/manifests/nginx-gateway-fabric.clusterserviceversion.yaml
   new-line-at-end-of-file: enable
   new-lines: enable
   octal-values: disable
