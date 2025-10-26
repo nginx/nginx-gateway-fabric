@@ -41,7 +41,7 @@ func newGatewayStatusSetter(status gatewayv1.GatewayStatus) Setter {
 
 func gwStatusEqual(prev, cur gatewayv1.GatewayStatus) bool {
 	addressesEqual := slices.EqualFunc(prev.Addresses, cur.Addresses, func(a1, a2 gatewayv1.GatewayStatusAddress) bool {
-		if !helpers.EqualPointers[gatewayv1.AddressType](a1.Type, a2.Type) {
+		if !helpers.EqualPointers(a1.Type, a2.Type) {
 			return false
 		}
 
@@ -217,13 +217,23 @@ func newGatewayClassStatusSetter(status gatewayv1.GatewayClassStatus) Setter {
 	return func(obj client.Object) (wasSet bool) {
 		gc := helpers.MustCastObject[*gatewayv1.GatewayClass](obj)
 
-		if ConditionsEqual(gc.Status.Conditions, status.Conditions) {
+		if gcStatusEqual(gc.Status, status) {
 			return false
 		}
 
 		gc.Status = status
 		return true
 	}
+}
+
+func gcStatusEqual(prev, cur gatewayv1.GatewayClassStatus) bool {
+	if !ConditionsEqual(prev.Conditions, cur.Conditions) {
+		return false
+	}
+
+	return slices.EqualFunc(prev.SupportedFeatures, cur.SupportedFeatures, func(f1, f2 gatewayv1.SupportedFeature) bool {
+		return f1.Name == f2.Name
+	})
 }
 
 func newBackendTLSPolicyStatusSetter(

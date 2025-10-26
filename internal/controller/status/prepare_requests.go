@@ -210,7 +210,8 @@ func PrepareGatewayClassRequests(
 			NsName:       client.ObjectKeyFromObject(gc.Source),
 			ResourceType: &v1.GatewayClass{},
 			Setter: newGatewayClassStatusSetter(v1.GatewayClassStatus{
-				Conditions: apiConds,
+				Conditions:        apiConds,
+				SupportedFeatures: SupportedFeatures(),
 			}),
 		}
 
@@ -227,6 +228,7 @@ func PrepareGatewayClassRequests(
 					gwClass.Generation,
 					transitionTime,
 				),
+				SupportedFeatures: SupportedFeatures(),
 			}),
 		}
 

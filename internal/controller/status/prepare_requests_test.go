@@ -644,6 +644,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            conditions.GatewayClassMessageGatewayClassConflict,
 						},
 					},
+					SupportedFeatures: SupportedFeatures(),
 				},
 				{Name: "ignored-2"}: {
 					Conditions: []metav1.Condition{
@@ -656,6 +657,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            conditions.GatewayClassMessageGatewayClassConflict,
 						},
 					},
+					SupportedFeatures: SupportedFeatures(),
 				},
 			},
 		},
@@ -689,6 +691,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            "The Gateway API CRD versions are supported",
 						},
 					},
+					SupportedFeatures: SupportedFeatures(),
 				},
 			},
 		},
