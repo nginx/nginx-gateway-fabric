@@ -48,6 +48,28 @@ server {
     }
 }
 
+{{- if .LoggingSettings }}
+  {{- /* Define custom log format */ -}}
+  {{- if .LoggingSettings.LogFormat.Name }}
+  log_format {{ .LoggingSettings.LogFormat.Name }} '{{ .LoggingSettings.LogFormat.Format }}';
+  {{- end }}
+
+  {{- /* Access log directives for AccessLog. If path is "off" we disable logging. If Format set, use dev/stdout with that format. Otherwise use the given path. */ -}}
+  {{- $disable := false -}}
+  {{- if .LoggingSettings.AccessLog.Path }}
+    {{- if eq .LoggingSettings.AccessLog.Path "off" -}}
+      {{- $disable = true -}}
+    {{- end -}}
+  {{- end }}
+  {{- if $disable }}
+  access_log off;
+  {{- else }}
+    {{- if and .LoggingSettings.AccessLog.Path .LoggingSettings.AccessLog.Format }}
+      access_log dev/stdout {{ .LoggingSettings.AccessLog.Format }};
+    {{- end }}
+  {{- end }}
+{{- end }}
+
 {{ range $i := .Includes -}}
 include {{ $i.Name }};
 {{ end -}}
