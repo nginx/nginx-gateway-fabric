@@ -126,6 +126,7 @@ generate: ## Run go generate
 .PHONY: generate-crds
 generate-crds: ## Generate CRDs and Go types using kubebuilder
 	go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION) crd object paths=./apis/... output:crd:artifacts:config=config/crd/bases
+	./scripts/strip-crd-excludes.sh config/crd/bases
 	kubectl kustomize config/crd >deploy/crds.yaml
 
 .PHONY: install-crds
