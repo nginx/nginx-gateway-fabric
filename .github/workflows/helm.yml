@@ -90,7 +90,7 @@ jobs:
 
       - name: Install cloud-provider-kind
         run: |
-          CLOUD_PROVIDER_KIND_VERSION=v0.8.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
+          CLOUD_PROVIDER_KIND_VERSION=v0.9.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
           go install sigs.k8s.io/cloud-provider-kind@${CLOUD_PROVIDER_KIND_VERSION}
 
       - name: Run cloud-provider-kind
@@ -143,7 +143,7 @@ jobs:
 
       - name: Install cloud-provider-kind
         run: |
-          CLOUD_PROVIDER_KIND_VERSION=v0.8.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
+          CLOUD_PROVIDER_KIND_VERSION=v0.9.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
           go install sigs.k8s.io/cloud-provider-kind@${CLOUD_PROVIDER_KIND_VERSION}
 
       - name: Run cloud-provider-kind
