@@ -66,7 +66,7 @@ var _ = Describe("eventHandler", func() {
 		Expect(fakeGenerator.GenerateArgsForCall(0)).Should(Equal(expectedConf))
 
 		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
-		_, files := fakeNginxUpdater.UpdateConfigArgsForCall(0)
+		_, files, _ := fakeNginxUpdater.UpdateConfigArgsForCall(0)
 		Expect(expectedFiles).To(Equal(files))
 
 		Eventually(
