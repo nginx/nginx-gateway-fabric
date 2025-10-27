@@ -15,19 +15,18 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		loggingSettings   *dataplane.LoggingSettings
+		accessLog         *dataplane.AccessLog
+		logFormat         *dataplane.LogFormat
 		expectedOutputs   []string
 		unexpectedOutputs []string
 	}{
 		{
 			name: "Log format and access log with custom path",
-			loggingSettings: &dataplane.LoggingSettings{
-				LogFormat: dataplane.LogFormat{
-					Name:   "custom_format",
-					Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
-				},
-				AccessLog: dataplane.AccessLog{Path: "/path/to/log.gz", Format: "custom_format"},
+			logFormat: &dataplane.LogFormat{
+				Name:   "custom_format",
+				Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
 			},
+			accessLog: &dataplane.AccessLog{Path: "/path/to/log.gz", Format: "custom_format"},
 			expectedOutputs: []string{
 				`log_format custom_format '$remote_addr - [$time_local] "$request" $status $body_bytes_sent';`,
 				`access_log dev/stdout custom_format;`,
@@ -35,13 +34,11 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 		},
 		{
 			name: "Empty log format name and format",
-			loggingSettings: &dataplane.LoggingSettings{
-				LogFormat: dataplane.LogFormat{
-					Name:   "",
-					Format: "",
-				},
-				AccessLog: dataplane.AccessLog{Path: "", Format: ""},
+			logFormat: &dataplane.LogFormat{
+				Name:   "",
+				Format: "",
 			},
+			accessLog: &dataplane.AccessLog{Path: "", Format: ""},
 			unexpectedOutputs: []string{
 				`log_format custom_format`,
 				`access_log dev/stdout`,
@@ -49,22 +46,22 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 		},
 		{
 			name: "Access log off while format presented",
-			loggingSettings: &dataplane.LoggingSettings{
-				LogFormat: dataplane.LogFormat{
-					Name:   "custom_format",
-					Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
-				},
-				AccessLog: dataplane.AccessLog{Path: "off"},
+			logFormat: &dataplane.LogFormat{
+				Name:   "custom_format",
+				Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
 			},
+			accessLog: &dataplane.AccessLog{Path: "off", Format: "custom_format"},
 			expectedOutputs: []string{
 				`access_log off;`,
+				`log_format custom_format`,
+			},
+			unexpectedOutputs: []string{
+				`access_log off custom_format`,
 			},
 		},
 		{
-			name: "Access log off",
-			loggingSettings: &dataplane.LoggingSettings{
-				AccessLog: dataplane.AccessLog{Path: "off"},
-			},
+			name:      "Access log off",
+			accessLog: &dataplane.AccessLog{Path: "off"},
 			expectedOutputs: []string{
 				`access_log off;`,
 			},
@@ -77,7 +74,7 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 			g := NewWithT(t)
 
 			conf := dataplane.Configuration{
-				Logging: dataplane.Logging{LoggingSettings: tt.loggingSettings},
+				Logging: dataplane.Logging{AccessLog: tt.accessLog, LogFormat: tt.logFormat},
 			}
 
 			res := executeBaseHTTPConfig(conf)

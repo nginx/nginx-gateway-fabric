@@ -365,14 +365,14 @@ const (
 
 // LogFormat defines a custom log format for NGINX.
 type LogFormat struct {
-	Name   *string `json:"name"`
-	Format *string `json:"format"`
+	Name   *string `json:"name,omitempty"`
+	Format *string `json:"format,omitempty"`
 }
 
 // AccessLog defines the configuration for an NGINX access log. For now only path dev/stdout is used.
 type AccessLog struct {
-	Path   *string `json:"path"`
-	Format *string `json:"format"`
+	Path   *string `json:"path,omitempty"`
+	Format *string `json:"format,omitempty"`
 }
 
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.

@@ -1223,26 +1223,26 @@ func buildLogging(gateway *graph.Gateway) Logging {
 		}
 
 		srcLogSettings := ngfProxy.Logging
-		ls := LoggingSettings{}
-		ls.LogFormat = buildLogFormat(srcLogSettings)
-		ls.AccessLog = buildAccessLog(srcLogSettings)
+		logFormat := buildLogFormat(srcLogSettings)
+		accessLog := buildAccessLog(srcLogSettings)
 
-		if ls.AccessLog.Path == "off" {
-			logSettings.LoggingSettings = &LoggingSettings{AccessLog: AccessLog{Path: "off"}}
+		if accessLog.Path == "off" {
+			logSettings.AccessLog = &AccessLog{Path: "off"}
 
 			return logSettings
 		}
 
-		if ls.LogFormat.Format != "" || ls.AccessLog.Path != "" {
-			// only set LoggingSettings if at least one of LogFormat or AccessLog is configured
-			logSettings.LoggingSettings = &ls
+		if logFormat != nil && logFormat.Format != "" && accessLog != nil && accessLog.Path != "" {
+			// only update logSettings if both LogFormat and AccessLog path are configured
+			logSettings.LogFormat = logFormat
+			logSettings.AccessLog = accessLog
 		}
 	}
 
 	return logSettings
 }
 
-func buildLogFormat(srcLogSettings *ngfAPIv1alpha2.NginxLogging) LogFormat {
+func buildLogFormat(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *LogFormat {
 	var logFormat LogFormat
 	// Current API exposes a single LogFormat value whose fields are pointers; include only if both set and non-empty.
 	if srcLogSettings.LogFormat != nil &&
@@ -1256,10 +1256,10 @@ func buildLogFormat(srcLogSettings *ngfAPIv1alpha2.NginxLogging) LogFormat {
 		}
 	}
 
-	return logFormat
+	return &logFormat
 }
 
-func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) AccessLog {
+func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 	var accessLog AccessLog
 	// Current API exposes a singular *string AccessLog path (no format yet) – only dev/stdout or "off".
 	if srcLogSettings.AccessLog != nil &&
@@ -1280,7 +1280,7 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) AccessLog {
 		}
 	}
 
-	return accessLog
+	return &accessLog
 }
 
 func buildWorkerConnections(gateway *graph.Gateway) int32 {
