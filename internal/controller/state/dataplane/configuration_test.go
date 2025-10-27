@@ -4899,7 +4899,7 @@ func TestBuildLogging(t *testing.T) {
 							'"$http_referer" "$http_user_agent" '`),
 						},
 						AccessLog: &ngfAPIv1alpha2.AccessLog{
-							Path:   helpers.GetPointer("logs/access.log"),
+							Path:   helpers.GetPointer("dev/stdout"),
 							Format: helpers.GetPointer("custom_format"),
 						},
 					},
@@ -4907,22 +4907,20 @@ func TestBuildLogging(t *testing.T) {
 			},
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
-				LoggingSettings: &LoggingSettings{
-					LogFormat: LogFormat{
-						Name: "custom_format",
-						Format: `'$remote_addr - $remote_user [$time_local] '
+				LogFormat: &LogFormat{
+					Name: "custom_format",
+					Format: `'$remote_addr - $remote_user [$time_local] '
 							'"$request" $status $body_bytes_sent '
 							'"$http_referer" "$http_user_agent" '`,
-					},
-					AccessLog: AccessLog{
-						Path:   "dev/stdout",
-						Format: "custom_format",
-					},
+				},
+				AccessLog: &AccessLog{
+					Path:   "dev/stdout",
+					Format: "custom_format",
 				},
 			},
 		},
 		{
-			msg: "Only AccessLog set if LogFormat is not configured properly (no name given)",
+			msg: "No AccessLog setting if LogFormat is not configured properly (no name given)",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
@@ -4941,12 +4939,6 @@ func TestBuildLogging(t *testing.T) {
 			},
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
-				LoggingSettings: &LoggingSettings{
-					AccessLog: AccessLog{
-						Path:   "dev/stdout",
-						Format: "custom_format",
-					},
-				},
 			},
 		},
 		{
@@ -4964,10 +4956,8 @@ func TestBuildLogging(t *testing.T) {
 			},
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
-				LoggingSettings: &LoggingSettings{
-					AccessLog: AccessLog{
-						Path: "off",
-					},
+				AccessLog: &AccessLog{
+					Path: "off",
 				},
 			},
 		},
@@ -4977,6 +4967,12 @@ func TestBuildLogging(t *testing.T) {
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						LogFormat: &ngfAPIv1alpha2.LogFormat{
+							Name: helpers.GetPointer("custom_format"),
+							Format: helpers.GetPointer(`'$remote_addr - $remote_user [$time_local] '
+							'"$request" $status $body_bytes_sent '
+							'"$http_referer" "$http_user_agent" '`),
+						},
 						AccessLog: &ngfAPIv1alpha2.AccessLog{
 							Path:   helpers.GetPointer("logs/access.log"),
 							Format: helpers.GetPointer("custom_format"),
@@ -4986,11 +4982,15 @@ func TestBuildLogging(t *testing.T) {
 			},
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
-				LoggingSettings: &LoggingSettings{
-					AccessLog: AccessLog{
-						Path:   "dev/stdout",
-						Format: "custom_format",
-					},
+				LogFormat: &LogFormat{
+					Name: "custom_format",
+					Format: `'$remote_addr - $remote_user [$time_local] '
+							'"$request" $status $body_bytes_sent '
+							'"$http_referer" "$http_user_agent" '`,
+				},
+				AccessLog: &AccessLog{
+					Path:   "dev/stdout",
+					Format: "custom_format",
 				},
 			},
 		},

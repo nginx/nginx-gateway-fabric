@@ -12,7 +12,8 @@ var baseHTTPTemplate = gotemplate.Must(gotemplate.New("baseHttp").Parse(baseHTTP
 
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
-	LoggingSettings         *dataplane.LoggingSettings
+	LogFormat               *dataplane.LogFormat
+	AccessLog               *dataplane.AccessLog
 	Includes                []shared.Include
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
@@ -28,7 +29,8 @@ func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
 		NginxReadinessProbePort: conf.BaseHTTPConfig.NginxReadinessProbePort,
 		IPFamily:                getIPFamily(conf.BaseHTTPConfig),
 		DNSResolver:             conf.BaseHTTPConfig.DNSResolver,
-		LoggingSettings:         conf.Logging.LoggingSettings,
+		LogFormat:               conf.Logging.LogFormat,
+		AccessLog:               conf.Logging.AccessLog,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)

@@ -8609,9 +8609,6 @@ spec:
                         type: string
                       path:
                         type: string
-                    required:
-                    - format
-                    - path
                     type: object
                   agentLevel:
                     default: info
@@ -8651,9 +8648,6 @@ spec:
                         type: string
                       name:
                         type: string
-                    required:
-                    - format
-                    - name
                     type: object
                 type: object
               metrics:
