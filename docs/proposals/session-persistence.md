@@ -5,27 +5,21 @@
 
 ## Summary
 
-This enhancement proposal extends the Upstream Settings Policy API to support session persistence for both NGINX Plus and NGINX OSS. It enables application developers to configure basic session persistence using `ip_hash` for OSS and cookie-based session persistence for NGINX Plus.
+Enable NGINX Gateway Fabric to support session persistence for both NGINX Plus and NGINX OSS, allowing application developers to configure basic session persistence using the `ip_hash` load balancing method in OSS and cookie-based session persistence in NGINX Plus.
 
 ## Goals
 
-- Extend Upstream Settings Policy API to support session persistence.
+- Extend the Upstream Settings Policy API to allow specifying a load balancing method to support basic session persistence.
+- Design the translation of the Gateway API `sessionPersistence` specification, which can be configured on both HTTPRoute and GRPCRoute, into NGINX Plus cookie-based session persistence directives with `secure` and `httpOnly` mode enforced by default.
 
 ## Non-Goals
 
-- Provide implementation details for enabling session persistence.
-- Support session persistence for TLSRoute or other Layer 4 routes.
+- Describe or implement low-level configuration details for enabling session persistence.
+- Extend session persistence support to TLSRoutes or other Layer 4 route types.
+- Supporting the `sameSite` cookie directive for NGINX Plus session persistence, which may be considered in the future as the Gateway API `sessionPersistence` specification evolves.
 
-## Introduction
+## Useful Links
 
-### Extension of Upstream Settings Policy API
-
-
-- explain API
-- How it works for OSS and Plus
-- Describe directives
-- directive contraints
-- sample config
-
-Apps using session persistence must account for aspects like load shedding, draining, and session migration as a part of their application design.
-
+- Session Persistence [specification](https://gateway-api.sigs.k8s.io/reference/spec/#sessionpersistence).
+- Extended Session Persistence [GEP](https://gateway-api.sigs.k8s.io/geps/gep-1619).
+- RFC standard for [Set-Cookie](https://datatracker.ietf.org/doc/html/rfc6265#section-4.1) header.
