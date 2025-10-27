@@ -441,6 +441,100 @@ func TestUpdateOverview(t *testing.T) {
 	g.Expect(resp).To(Equal(&pb.UpdateOverviewResponse{}))
 }
 
+func TestUpdateOverview_InvalidConnection(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fs := newFileService(logr.Discard(), nil, nil)
+
+	req := &pb.UpdateOverviewRequest{
+		Overview: &pb.FileOverview{
+			Files: []*pb.File{
+				{
+					FileMeta: &pb.FileMeta{
+						Name: "nginx.conf",
+						Hash: "abc123",
+					},
+				},
+			},
+		},
+	}
+
+	// Use regular context without GrpcInfo to trigger invalid connection
+	resp, err := fs.UpdateOverview(t.Context(), req)
+
+	g.Expect(err).To(Equal(agentgrpc.ErrStatusInvalidConnection))
+	g.Expect(resp).To(Equal(&pb.UpdateOverviewResponse{}))
+}
+
+func TestUpdateOverview_ConnectionNotFound(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fs := newFileService(logr.Discard(), nil, &agentgrpcfakes.FakeConnectionsTracker{})
+
+	req := &pb.UpdateOverviewRequest{
+		Overview: &pb.FileOverview{
+			Files: []*pb.File{
+				{
+					FileMeta: &pb.FileMeta{
+						Name: "nginx.conf",
+						Hash: "abc123",
+					},
+				},
+			},
+		},
+	}
+
+	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
+		IPAddress: "127.0.0.1",
+	})
+
+	resp, err := fs.UpdateOverview(ctx, req)
+
+	g.Expect(err).To(Equal(status.Errorf(codes.NotFound, "connection not found")))
+	g.Expect(resp).To(Equal(&pb.UpdateOverviewResponse{}))
+}
+
+func TestUpdateOverview_DeploymentNotFound(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
+
+	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	conn := agentgrpc.Connection{
+		PodName:    "nginx-pod",
+		InstanceID: "12345",
+		Parent:     deploymentName,
+	}
+	connTracker.GetConnectionReturns(conn)
+
+	fs := newFileService(logr.Discard(), NewDeploymentStore(connTracker), connTracker)
+
+	req := &pb.UpdateOverviewRequest{
+		Overview: &pb.FileOverview{
+			Files: []*pb.File{
+				{
+					FileMeta: &pb.FileMeta{
+						Name: "nginx.conf",
+						Hash: "abc123",
+					},
+				},
+			},
+		},
+	}
+
+	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
+		IPAddress: "127.0.0.1",
+	})
+
+	resp, err := fs.UpdateOverview(ctx, req)
+
+	g.Expect(err).To(Equal(status.Errorf(codes.NotFound, "deployment not found in store")))
+	g.Expect(resp).To(Equal(&pb.UpdateOverviewResponse{}))
+}
+
 func TestUpdateFile(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
