@@ -9,7 +9,7 @@ Enable NGINX Gateway Fabric to support session persistence for both NGINX Plus a
 
 ## Goals
 
-- Extend the Upstream Settings Policy API to allow specifying a load balancing method to support basic session persistence.
+- Extend the Upstream Settings Policy API to allow specifying `ip_hash` load balancing method to support basic session persistence.
 - Design the translation of the Gateway API `sessionPersistence` specification, which can be configured on both HTTPRoute and GRPCRoute, into NGINX Plus cookie-based session persistence directives with `secure` and `httpOnly` mode enforced by default.
 
 ## Non-Goals
