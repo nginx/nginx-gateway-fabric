@@ -202,14 +202,16 @@ func (fs *fileService) UpdateOverview(
 		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "deployment not found in store")
 	}
 
-	if req != nil && req.Overview != nil && req.Overview.Files != nil {
-		fileNames := make([]string, 0, len(req.Overview.Files))
-		for _, f := range req.Overview.Files {
-			fileNames = append(fileNames, f.FileMeta.GetName())
-		}
+	requestFiles := req.GetOverview().GetFiles()
 
-		deployment.latestFileNames = fileNames
+	fileNames := make([]string, 0, len(requestFiles))
+	for _, f := range requestFiles {
+		fileNames = append(fileNames, f.GetFileMeta().GetName())
 	}
+
+	deployment.FileLock.Lock()
+	deployment.latestFileNames = fileNames
+	deployment.FileLock.Unlock()
 
 	return &pb.UpdateOverviewResponse{}, nil
 }

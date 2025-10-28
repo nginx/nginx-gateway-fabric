@@ -199,13 +199,19 @@ func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broa
 		fileOverviews = append(fileOverviews, &pb.File{FileMeta: file.Meta})
 	}
 
-	volumeIgnoreFiles := make([]string, 0, len(d.latestFileNames))
-	for _, f := range d.latestFileNames {
-		for _, vm := range volumeMounts {
+	// To avoid duplicates, use a set for volume ignore files
+	volumeIgnoreSet := make(map[string]struct{}, len(d.latestFileNames))
+	for _, vm := range volumeMounts {
+		for _, f := range d.latestFileNames {
 			if strings.HasPrefix(f, vm.MountPath) {
-				volumeIgnoreFiles = append(volumeIgnoreFiles, f)
+				volumeIgnoreSet[f] = struct{}{}
 			}
 		}
+	}
+
+	volumeIgnoreFiles := make([]string, 0, len(volumeIgnoreSet))
+	for f := range volumeIgnoreSet {
+		volumeIgnoreFiles = append(volumeIgnoreFiles, f)
 	}
 
 	// add ignored files to the overview as 'unmanaged' so agent doesn't touch them
