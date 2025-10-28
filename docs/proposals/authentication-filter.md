@@ -20,3 +20,4 @@ This new filter should eventually expose all forms of authentication available t
 ## Non-Goals
 
 - Design for OIDC Auth
+- An Auth filter for TCP and UDP routes
