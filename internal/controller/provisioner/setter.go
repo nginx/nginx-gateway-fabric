@@ -83,8 +83,23 @@ func serviceSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		// Preserve all existing annotations from the service, then overwrite with NGF-managed ones
+		// This allows external controllers (MetalLB, external-dns, cloud providers) to add
+		// annotations without NGF removing them during reconciliation.
+		// See: https://github.com/nginx/nginx-gateway-fabric/issues/4012
+		mergedAnnotations := make(map[string]string)
+
+		// Start with all existing annotations
+		if service.Annotations != nil {
+			maps.Copy(mergedAnnotations, service.Annotations)
+		}
+
+		// Overwrite with NGF-managed annotations (from Gateway Infrastructure or NginxProxy)
+		// NGF-managed annotations take precedence
+		maps.Copy(mergedAnnotations, objectMeta.Annotations)
+
 		service.Labels = objectMeta.Labels
-		service.Annotations = objectMeta.Annotations
+		service.Annotations = mergedAnnotations
 		service.Spec = spec
 		return nil
 	}

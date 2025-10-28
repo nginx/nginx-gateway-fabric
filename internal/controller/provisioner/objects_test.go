@@ -462,8 +462,8 @@ func TestBuildNginxResourceObjects_DeploymentReplicasFromHPA(t *testing.T) {
 		}
 	}
 	g.Expect(deployment).ToNot(BeNil())
-	g.Expect(deployment.Spec.Replicas).ToNot(BeNil())
-	g.Expect(*deployment.Spec.Replicas).To(Equal(int32(7)))
+	g.Expect(deployment.Spec.Replicas).To(BeNil(),
+		"Deployment replicas should be nil when HPA exists to allow HPA exclusive control")
 }
 
 func TestBuildNginxResourceObjects_Plus(t *testing.T) {
