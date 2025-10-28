@@ -11,6 +11,7 @@ This new filter should eventually expose all forms of authentication available t
 ## Goals
 
 - Design a means of configuring authentication for NGF
+- Design Authentication CRD with Basic Auth and JWT Auth in mind
 - Determine initial resource specification
 - Evaluate filter early in request processing, occurring before URLRewrite, header modifiers and backend selection
 - Authentication failures return appropriate status by default (e.g., 401/403)
@@ -18,5 +19,4 @@ This new filter should eventually expose all forms of authentication available t
 
 ## Non-Goals
 
-- Design for all forms of authentication
-- An Auth filter for GRPC, TCP and UDP routes
+- Design for OIDC Auth
