@@ -691,9 +691,6 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		replicas = deploymentCfg.Replicas
 	}
 
-	// When HPA is enabled, we should not set the replicas field to allow HPA exclusive control.
-	// Setting replicas causes a race condition where NGF and HPA fight over the replica count.
-	// See: https://github.com/nginx/nginx-gateway-fabric/issues/4007
 	if isAutoscalingEnabled(&deploymentCfg) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -703,14 +700,9 @@ func (p *NginxProvisioner) buildNginxDeployment(
 			Namespace: objectMeta.Namespace,
 			Name:      objectMeta.Name,
 		}, hpa)
-		if err == nil {
-			// HPA exists - do not set replicas field, let HPA manage it
-			replicas = nil
-		} else if replicas == nil && deploymentCfg.Autoscaling.MinReplicas != nil {
-			// HPA doesn't exist yet - set initial replicas
-			// This handles the initial deployment before HPA takes over
-			// Use minReplicas as the initial value
-			replicas = deploymentCfg.Autoscaling.MinReplicas
+		if err == nil && hpa.Status.DesiredReplicas > 0 {
+			// overwrite with HPA's desiredReplicas
+			replicas = helpers.GetPointer(hpa.Status.DesiredReplicas)
 		}
 	}
 
