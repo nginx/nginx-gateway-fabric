@@ -1251,7 +1251,8 @@ func (rm *ResourceManager) Get(
 ) error {
 	options := LogOptions(opts...)
 	if err := rm.K8sClient.Get(ctx, key, obj); err != nil {
-		if options.logEnabled {
+		// Don't log NotFound errors - they're often expected (e.g., when checking if resource was deleted)
+		if options.logEnabled && !apierrors.IsNotFound(err) {
 			GinkgoWriter.Printf("Could not get k8s resource %q error: %v\n", obj.GetName(), err)
 		}
 
