@@ -202,7 +202,7 @@ func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broa
 	volumeIgnoreFiles := make([]string, 0, len(d.latestFileNames))
 	for _, f := range d.latestFileNames {
 		for _, vm := range volumeMounts {
-			if strings.Contains(f, vm.MountPath) {
+			if strings.HasPrefix(f, vm.MountPath) {
 				volumeIgnoreFiles = append(volumeIgnoreFiles, f)
 			}
 		}
