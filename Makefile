@@ -241,7 +241,7 @@ helm-install-local: install-gateway-crds ## Helm install NGF on configured kind 
 	@if [ "$(ENABLE_INFERENCE_EXTENSION)" = "true" ]; then \
 		$(MAKE) install-inference-crds; \
 	fi
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=Never --set nginx.service.type=NodePort --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=Never --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway $(HELM_PARAMETERS)
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway $(HELM_PARAMETERS)
 
 .PHONY: helm-install-local-with-plus
 helm-install-local-with-plus: check-for-plus-usage-endpoint install-gateway-crds ## Helm install NGF with NGINX Plus on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build-with-plus.

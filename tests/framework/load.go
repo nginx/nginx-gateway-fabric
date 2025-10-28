@@ -64,10 +64,6 @@ func RunLoadTest(cfg LoadTestConfig) (vegeta.Results, Metrics) {
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 				conn, err := dialer.DialContext(ctx, network, cfg.Proxy)
-				if err != nil {
-					GinkgoWriter.Printf("ERROR occurred during dialing %q in %q network, error: %s\n", cfg.Proxy, network, err)
-				}
-
 				return conn, err
 			},
 			TLSClientConfig: &tls.Config{
