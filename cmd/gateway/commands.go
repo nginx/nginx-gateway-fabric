@@ -165,8 +165,8 @@ func createControllerCommand() *cobra.Command {
 			validator: validateResourceName,
 		}
 
-		endpointPickerDisableTLS        bool
-		endpointPickerTLSSkipVerifyFlag = true
+		endpointPickerDisableTLS    bool
+		endpointPickerTLSSkipVerify = true
 	)
 
 	usageReportParams := usageReportParams{
@@ -294,7 +294,7 @@ func createControllerCommand() *cobra.Command {
 					EndpointTLSSkipVerify:  nginxOneConsoleTLSSkipVerify,
 				},
 				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
-				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerifyFlag,
+				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -448,7 +448,7 @@ func createControllerCommand() *cobra.Command {
 			"traffic to AI workloads.",
 	)
 
-	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerifyFlag)
+	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerify)
 
 	cmd.Flags().Var(
 		&nginxDockerSecrets,
@@ -768,21 +768,21 @@ func createSleepCommand() *cobra.Command {
 
 func createEndpointPickerCommand() *cobra.Command {
 	var endpointPickerDisableTLS bool
-	endpointPickerTLSSkipVerifyFlag := true
+	endpointPickerTLSSkipVerify := true
 	cmd := &cobra.Command{
 		Use:   "endpoint-picker",
 		Short: "Shim server for communication between NGINX and the Gateway API Inference Extension Endpoint Picker",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			logger := ctlrZap.New().WithName("endpoint-picker-shim")
 			handler := createEndpointPickerHandler(
-				realExtProcClientFactory(endpointPickerDisableTLS, endpointPickerTLSSkipVerifyFlag),
+				realExtProcClientFactory(endpointPickerDisableTLS, endpointPickerTLSSkipVerify),
 				logger,
 			)
 			return endpointPickerServer(handler)
 		},
 	}
 
-	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerifyFlag)
+	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerify)
 
 	return cmd
 }
