@@ -2849,7 +2849,7 @@ func TestUpsertRoute_PathRuleHasInferenceBackend(t *testing.T) {
 	}
 
 	hpr := newHostPathRules()
-	hpr.upsertRoute(route, listener, gateway)
+	hpr.upsertRoute(route, listener, gateway, nil)
 
 	// Find the PathRule for "/infer"
 	found := false
@@ -2875,7 +2875,7 @@ func TestNewBackendGroup_Mirror(t *testing.T) {
 		IsMirrorBackend: true,
 	}
 
-	group, _ := newBackendGroup([]graph.BackendRef{backendRef}, types.NamespacedName{}, types.NamespacedName{}, 0)
+	group, _ := newBackendGroup([]graph.BackendRef{backendRef}, types.NamespacedName{}, types.NamespacedName{}, 0, nil)
 
 	g.Expect(group.Backends).To(BeEmpty())
 }

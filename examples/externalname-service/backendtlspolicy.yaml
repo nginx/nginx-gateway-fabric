@@ -1,0 +1,12 @@
+apiVersion: gateway.networking.k8s.io/v1alpha3
+kind: BackendTLSPolicy
+metadata:
+  name: httpbin-tls
+spec:
+  targetRefs:
+  - group: ""
+    kind: Service
+    name: httpbin
+  validation:
+    hostname: httpbin.org
+    wellKnownCACertificates: System

@@ -802,7 +802,19 @@ func updateLocationProxySettings(
 		extraHeaders = append(extraHeaders, getConnectionHeader(keepAliveCheck, matchRule.BackendGroup.Backends))
 	}
 
-	proxySetHeaders := generateProxySetHeaders(&matchRule.Filters, createBaseProxySetHeaders(extraHeaders...))
+	// Check if we have an ExternalName service backend
+	var externalHostname string
+	for _, backend := range matchRule.BackendGroup.Backends {
+		if backend.ExternalHostname != "" {
+			externalHostname = backend.ExternalHostname
+			break
+		}
+	}
+
+	proxySetHeaders := generateProxySetHeaders(
+		&matchRule.Filters,
+		createBaseProxySetHeaders(externalHostname, extraHeaders...),
+	)
 	responseHeaders := generateResponseHeaders(&matchRule.Filters)
 
 	location.ProxySetHeaders = proxySetHeaders
@@ -1283,11 +1295,18 @@ func getRewriteClientIPSettings(rewriteIPConfig dataplane.RewriteClientIPSetting
 	}
 }
 
-func createBaseProxySetHeaders(extraHeaders ...http.Header) []http.Header {
+func createBaseProxySetHeaders(externalHostname string, extraHeaders ...http.Header) []http.Header {
+	// For ExternalName services, use the external hostname as the Host header
+	// For regular services, use the Gateway API compliant host header
+	hostValue := "$gw_api_compliant_host"
+	if externalHostname != "" {
+		hostValue = externalHostname
+	}
+
 	baseHeaders := []http.Header{
 		{
 			Name:  "Host",
-			Value: "$gw_api_compliant_host",
+			Value: hostValue,
 		},
 		{
 			Name:  "X-Forwarded-For",
