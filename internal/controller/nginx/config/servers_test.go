@@ -20,8 +20,8 @@ import (
 )
 
 var (
-	httpBaseHeaders             = createBaseProxySetHeaders(httpUpgradeHeader, httpConnectionHeader)
-	grpcBaseHeaders             = createBaseProxySetHeaders(grpcAuthorityHeader)
+	httpBaseHeaders             = createBaseProxySetHeaders("", httpUpgradeHeader, httpConnectionHeader)
+	grpcBaseHeaders             = createBaseProxySetHeaders("", grpcAuthorityHeader)
 	alwaysFalseKeepAliveChecker = func(_ string) bool { return false }
 )
 
@@ -1814,7 +1814,7 @@ func TestCreateServers(t *testing.T) {
 			{
 				Path:            "= /keep-alive-enabled",
 				ProxyPass:       "http://test_keep_alive_80$request_uri",
-				ProxySetHeaders: createBaseProxySetHeaders(httpUpgradeHeader, unsetHTTPConnectionHeader),
+				ProxySetHeaders: createBaseProxySetHeaders("", httpUpgradeHeader, unsetHTTPConnectionHeader),
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
 			},
@@ -4102,7 +4102,7 @@ func TestGenerateProxySetHeaders(t *testing.T) {
 					Value: "$connection_upgrade",
 				},
 			},
-			baseHeaders: createBaseProxySetHeaders(httpUpgradeHeader, httpConnectionHeader),
+			baseHeaders: createBaseProxySetHeaders("", httpUpgradeHeader, httpConnectionHeader),
 		},
 		{
 			msg: "header filter with gRPC",
@@ -4222,7 +4222,7 @@ func TestCreateBaseProxySetHeaders(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := createBaseProxySetHeaders(test.additionalHeaders...)
+			result := createBaseProxySetHeaders("", test.additionalHeaders...)
 			g.Expect(result).To(Equal(test.expBaseHeaders))
 		})
 	}
@@ -4588,4 +4588,48 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 	serverConf = string(results[0].data)
 	g.Expect(serverConf).NotTo(ContainSubstring("if ($ssl_server_name != $host)"),
 		"Expected SNI host validation block to be absent when DisableSNIHostValidation is true")
+}
+
+func TestCreateBaseProxySetHeadersWithExternalName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		msg                string
+		externalHostname   string
+		expectedHostHeader string
+		additionalHeaders  []http.Header
+	}{
+		{
+			msg:                "ExternalName service with httpbin.org",
+			externalHostname:   "httpbin.org",
+			additionalHeaders:  []http.Header{httpUpgradeHeader, httpConnectionHeader},
+			expectedHostHeader: "httpbin.org",
+		},
+		{
+			msg:                "Regular service (no ExternalName)",
+			externalHostname:   "",
+			additionalHeaders:  []http.Header{httpUpgradeHeader, httpConnectionHeader},
+			expectedHostHeader: "$gw_api_compliant_host",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := createBaseProxySetHeaders(test.externalHostname, test.additionalHeaders...)
+
+			// Find the Host header and verify it has the expected value
+			var hostHeaderFound bool
+			for _, header := range result {
+				if header.Name == "Host" {
+					hostHeaderFound = true
+					g.Expect(header.Value).To(Equal(test.expectedHostHeader))
+					break
+				}
+			}
+			g.Expect(hostHeaderFound).To(BeTrue(), "Host header should be present")
+		})
+	}
 }
