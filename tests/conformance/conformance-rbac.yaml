@@ -44,6 +44,7 @@ rules:
   - referencegrants
   - gatewayclasses
   - tlsroutes
+  - backendtlspolicies
   verbs:
   - create
   - delete

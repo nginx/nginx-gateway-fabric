@@ -353,8 +353,9 @@ spec:
                       - name
                       type: object
                     conditions:
-                      description: Conditions describes the status of the Policy with
-                        respect to the given Ancestor.
+                      description: |-
+                        Conditions describes the status of the Policy with respect to the given Ancestor.
+
                       items:
                         description: Condition contains details for one aspect of
                           the current state of this API Resource.
@@ -437,10 +438,12 @@ spec:
                       type: string
                   required:
                   - ancestorRef
+                  - conditions
                   - controllerName
                   type: object
                 maxItems: 16
                 type: array
+                x-kubernetes-list-type: atomic
             required:
             - ancestors
             type: object

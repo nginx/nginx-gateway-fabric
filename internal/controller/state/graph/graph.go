@@ -12,7 +12,6 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
-	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -35,7 +34,7 @@ type ClusterState struct {
 	ReferenceGrants    map[types.NamespacedName]*v1beta1.ReferenceGrant
 	Secrets            map[types.NamespacedName]*v1.Secret
 	CRDMetadata        map[types.NamespacedName]*metav1.PartialObjectMetadata
-	BackendTLSPolicies map[types.NamespacedName]*v1alpha3.BackendTLSPolicy
+	BackendTLSPolicies map[types.NamespacedName]*gatewayv1.BackendTLSPolicy
 	ConfigMaps         map[types.NamespacedName]*v1.ConfigMap
 	NginxProxies       map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy
 	GRPCRoutes         map[types.NamespacedName]*gatewayv1.GRPCRoute
@@ -182,7 +181,7 @@ func (g *Graph) IsNGFPolicyRelevant(
 	return false
 }
 
-func (g *Graph) gatewayAPIResourceExist(ref v1alpha2.LocalPolicyTargetReference, policyNs string) bool {
+func (g *Graph) gatewayAPIResourceExist(ref gatewayv1.LocalPolicyTargetReference, policyNs string) bool {
 	refNsName := types.NamespacedName{Name: string(ref.Name), Namespace: policyNs}
 
 	switch kind := ref.Kind; kind {

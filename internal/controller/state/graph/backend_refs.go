@@ -10,7 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/sort"
@@ -330,7 +329,7 @@ func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *cond
 	var mismatch bool
 	var referencePolicy *BackendTLSPolicy
 
-	checkPoliciesEqual := func(p1, p2 *v1alpha3.BackendTLSPolicy) bool {
+	checkPoliciesEqual := func(p1, p2 *gatewayv1.BackendTLSPolicy) bool {
 		return !slices.Equal(p1.Spec.Validation.CACertificateRefs, p2.Spec.Validation.CACertificateRefs) ||
 			p1.Spec.Validation.WellKnownCACertificates != p2.Spec.Validation.WellKnownCACertificates ||
 			p1.Spec.Validation.Hostname != p2.Spec.Validation.Hostname
@@ -445,7 +444,7 @@ func getIPFamilyAndPortFromRef(
 	}
 
 	// safe to dereference port here because we already validated that the port is not nil in validateBackendRef.
-	svcPort, err := getServicePort(svc, int32(*ref.Port))
+	svcPort, err := getServicePort(svc, *ref.Port)
 	if err != nil {
 		return []v1.IPFamily{}, v1.ServicePort{}, err
 	}

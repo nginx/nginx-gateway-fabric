@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
@@ -21,7 +21,7 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 		{
 			name: "Validate TargetRef of kind Service is allowed",
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -32,7 +32,7 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 		{
 			name: "Validate multiple TargetRefs of kind Service are allowed",
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -48,7 +48,7 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 			name:       "Validate TargetRef of kind Gateway is not allowed",
 			wantErrors: []string{expectedTargetRefKindServiceError},
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  gatewayKind,
 						Group: coreGroup,
@@ -60,7 +60,7 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 			name:       "Validate TargetRef of kind HTTPRoute is not allowed",
 			wantErrors: []string{expectedTargetRefKindServiceError},
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
 						Group: coreGroup,
@@ -72,7 +72,7 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 			name:       "Validate invalid TargetRef Kind is not allowed",
 			wantErrors: []string{expectedTargetRefKindServiceError},
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  invalidKind,
 						Group: coreGroup,
@@ -84,7 +84,7 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 			name:       "Validate mixed TargetRef kinds - one valid, one invalid",
 			wantErrors: []string{expectedTargetRefKindServiceError},
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -103,7 +103,7 @@ func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
 			t.Parallel()
 
 			for i := range tt.spec.TargetRefs {
-				tt.spec.TargetRefs[i].Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+				tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 			}
 
 			upstreamSettingsPolicy := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
@@ -130,7 +130,7 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 		{
 			name: "Validate TargetRef with core group is allowed",
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -141,7 +141,7 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 		{
 			name: "Validate TargetRef with empty group is allowed",
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: emptyGroup,
@@ -152,7 +152,7 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 		{
 			name: "Validate multiple TargetRefs with valid groups are allowed",
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -168,7 +168,7 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 			name:       "Validate TargetRef with gateway group is not allowed",
 			wantErrors: []string{expectedTargetRefGroupCoreError},
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: gatewayGroup,
@@ -180,7 +180,7 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 			name:       "Validate TargetRef with invalid group is not allowed",
 			wantErrors: []string{expectedTargetRefGroupCoreError},
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: invalidGroup,
@@ -191,7 +191,7 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 		{
 			name: "Validate mixed TargetRef groups with valid core group passes due to current CEL rule",
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -207,7 +207,7 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 			name:       "Validate all TargetRef groups are invalid",
 			wantErrors: []string{expectedTargetRefGroupCoreError},
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: gatewayGroup,
@@ -226,7 +226,7 @@ func TestUpstreamSettingsPolicyTargetRefGroup(t *testing.T) {
 			t.Parallel()
 
 			for i := range tt.spec.TargetRefs {
-				tt.spec.TargetRefs[i].Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+				tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 			}
 
 			upstreamSettingsPolicy := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
@@ -253,7 +253,7 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 		{
 			name: "Validate single TargetRef with unique name is allowed",
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -264,7 +264,7 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 		{
 			name: "Validate multiple TargetRefs with unique names are allowed",
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -284,7 +284,7 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 			name:       "Validate duplicate TargetRef names are not allowed",
 			wantErrors: []string{expectedTargetRefNameUniqueError},
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -302,7 +302,7 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 			name:       "Validate three TargetRefs with one duplicate name are not allowed",
 			wantErrors: []string{expectedTargetRefNameUniqueError},
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -325,7 +325,7 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 			name:       "Validate multiple duplicates are not allowed",
 			wantErrors: []string{expectedTargetRefNameUniqueError},
 			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  serviceKind,
 						Group: coreGroup,
@@ -357,7 +357,7 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 
 			for i := range tt.spec.TargetRefs {
 				if tt.spec.TargetRefs[i].Name == "" {
-					tt.spec.TargetRefs[i].Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+					tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 				}
 			}
 

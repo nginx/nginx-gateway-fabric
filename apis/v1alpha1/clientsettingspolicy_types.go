@@ -2,7 +2,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // +genclient
@@ -23,7 +23,7 @@ type ClientSettingsPolicy struct {
 	Spec ClientSettingsPolicySpec `json:"spec"`
 
 	// Status defines the state of the ClientSettingsPolicy.
-	Status gatewayv1alpha2.PolicyStatus `json:"status,omitempty"`
+	Status gatewayv1.PolicyStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -54,7 +54,7 @@ type ClientSettingsPolicySpec struct {
 	// +kubebuilder:validation:XValidation:message="TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute",rule="(self.kind=='Gateway' || self.kind=='HTTPRoute' || self.kind=='GRPCRoute')"
 	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io.",rule="(self.group=='gateway.networking.k8s.io')"
 	//nolint:lll
-	TargetRef gatewayv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
+	TargetRef gatewayv1.LocalPolicyTargetReference `json:"targetRef"`
 }
 
 // ClientBody contains the settings for the client request body.
