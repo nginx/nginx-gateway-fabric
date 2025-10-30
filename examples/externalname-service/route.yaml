@@ -6,27 +6,39 @@ spec:
   parentRefs:
   - name: external-gateway
   hostnames:
-  - httpbin.example.com
+  - cafe.example.com
   rules:
   - matches:
     - path:
         type: PathPrefix
-        value: /
+        value: /external
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /
     backendRefs:
     - name: httpbin
       port: 80
-
----
-apiVersion: gateway.networking.k8s.io/v1alpha2
-kind: TLSRoute
-metadata:
-  name: httpbin-tls-route
-spec:
-  parentRefs:
-  - name: external-gateway
-  hostnames:
-  - httpbin.example.com
-  rules:
-  - backendRefs:
-    - name: httpbin
-      port: 443
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /coffee
+    backendRefs:
+    - name: coffee
+      port: 80
+# ---
+# apiVersion: gateway.networking.k8s.io/v1alpha2
+# kind: TLSRoute
+# metadata:
+#   name: httpbin-tls-route
+# spec:
+#   parentRefs:
+#   - name: external-gateway
+#   hostnames:
+#   - httpbin.example.com
+#   rules:
+#   - backendRefs:
+#     - name: httpbin
+#       port: 443
