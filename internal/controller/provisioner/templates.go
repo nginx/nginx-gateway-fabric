@@ -10,7 +10,13 @@ var (
 )
 
 const mainTemplateText = `
-error_log stderr {{ .ErrorLevel }};`
+error_log stderr {{ .ErrorLevel }};
+{{- if .LogFormat }}
+log_format {{ .LogFormat.Name }} '{{ .LogFormat.Format }}';
+{{- end }}
+{{- if .AccessLog }}
+access_log {{ .AccessLog.Path }} {{ .AccessLog.Format }};
+{{- end }}`
 
 const eventsTemplateText = `
 worker_connections {{ .WorkerConnections }};`
