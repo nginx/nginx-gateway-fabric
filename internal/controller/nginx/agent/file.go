@@ -180,8 +180,39 @@ func (*fileService) GetOverview(context.Context, *pb.GetOverviewRequest) (*pb.Ge
 }
 
 // UpdateOverview is called by agent on startup and whenever any files change on the instance.
-// Since directly changing nginx configuration on the instance is not supported, this is a no-op for NGF.
-func (*fileService) UpdateOverview(context.Context, *pb.UpdateOverviewRequest) (*pb.UpdateOverviewResponse, error) {
+// Since directly changing nginx configuration on the instance is not supported, NGF will send back an empty response.
+// However, we do use this call to gather the list of referenced files in the nginx configuration in order to
+// mark user mounted files as unmanaged so the agent does not attempt to modify them.
+func (fs *fileService) UpdateOverview(
+	ctx context.Context,
+	req *pb.UpdateOverviewRequest,
+) (*pb.UpdateOverviewResponse, error) {
+	gi, ok := grpcContext.GrpcInfoFromContext(ctx)
+	if !ok {
+		return &pb.UpdateOverviewResponse{}, agentgrpc.ErrStatusInvalidConnection
+	}
+
+	conn := fs.connTracker.GetConnection(gi.IPAddress)
+	if conn.PodName == "" {
+		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "connection not found")
+	}
+
+	deployment := fs.nginxDeployments.Get(conn.Parent)
+	if deployment == nil {
+		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "deployment not found in store")
+	}
+
+	requestFiles := req.GetOverview().GetFiles()
+
+	fileNames := make([]string, 0, len(requestFiles))
+	for _, f := range requestFiles {
+		fileNames = append(fileNames, f.GetFileMeta().GetName())
+	}
+
+	deployment.FileLock.Lock()
+	deployment.latestFileNames = fileNames
+	deployment.FileLock.Unlock()
+
 	return &pb.UpdateOverviewResponse{}, nil
 }
 
