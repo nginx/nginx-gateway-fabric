@@ -6,16 +6,16 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 9010072ecd34a8fa99bfdd3d7580c9d725fb063e
-- Date: 2025-10-01T09:39:27Z
+- Commit: b41c973c8399458984def3c2a8a268a237c864c8
+- Date: 2025-10-30T03:04:40Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.33.4-gke.1172000
+- k8s version: v1.33.5-gke.1162000
 - vCPUs per node: 16
-- RAM per node: 65851524Ki
+- RAM per node: 65851520Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -24,9 +24,9 @@ GKE Cluster:
 
 ```text
 Requests      [total, rate, throughput]         6000, 100.02, 100.01
-Duration      [total, attack, wait]             59.992s, 59.99s, 1.359ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  905.822µs, 1.251ms, 1.226ms, 1.407ms, 1.468ms, 1.64ms, 16.559ms
-Bytes In      [total, mean]                     926023, 154.34
+Duration      [total, attack, wait]             59.991s, 59.99s, 1.098ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  852.123µs, 1.151ms, 1.127ms, 1.302ms, 1.363ms, 1.583ms, 11.026ms
+Bytes In      [total, mean]                     925971, 154.33
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:6000  
@@ -39,9 +39,9 @@ Error Set:
 
 ```text
 Requests      [total, rate, throughput]         6000, 100.02, 100.01
-Duration      [total, attack, wait]             59.991s, 59.99s, 1.078ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  842.735µs, 1.162ms, 1.139ms, 1.31ms, 1.361ms, 1.52ms, 14.201ms
-Bytes In      [total, mean]                     960000, 160.00
+Duration      [total, attack, wait]             59.991s, 59.99s, 1.195ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  616.849µs, 976.017µs, 987.768µs, 1.167ms, 1.223ms, 1.342ms, 12.457ms
+Bytes In      [total, mean]                     961988, 160.33
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:6000  
