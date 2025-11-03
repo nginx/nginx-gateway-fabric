@@ -333,6 +333,11 @@ type Backend struct {
 	EndpointPickerConfig *EndpointPickerConfig
 	// UpstreamName is the name of the upstream for this backend.
 	UpstreamName string
+	// ExternalHostname is the external hostname for ExternalName type services.
+	// This is used to set the Host header when proxying to external services.
+	// Note: The upstream address is also set to this hostname (see resolveUpstreamEndpoints).
+	// Both the Host header and upstream address use the same external hostname to ensure consistency.
+	ExternalHostname string
 	// Weight is the weight of the BackendRef.
 	// The possible values of weight are 0-1,000,000.
 	// If weight is 0, no traffic should be forwarded for this entry.
