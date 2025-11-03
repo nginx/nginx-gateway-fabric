@@ -29,7 +29,7 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 			accessLog: &dataplane.AccessLog{Path: "/path/to/log.gz", Format: "custom_format"},
 			expectedOutputs: []string{
 				`log_format custom_format '$remote_addr - [$time_local] "$request" $status $body_bytes_sent';`,
-				`access_log dev/stdout custom_format;`,
+				`access_log /dev/stdout custom_format;`,
 			},
 		},
 		{
@@ -41,7 +41,7 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 			accessLog: &dataplane.AccessLog{Path: "", Format: ""},
 			unexpectedOutputs: []string{
 				`log_format custom_format`,
-				`access_log dev/stdout`,
+				`access_log /dev/stdout`,
 			},
 		},
 		{

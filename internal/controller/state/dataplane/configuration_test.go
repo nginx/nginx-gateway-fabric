@@ -4897,7 +4897,7 @@ func TestBuildLogging(t *testing.T) {
 							'"$http_referer" "$http_user_agent" '`),
 						},
 						AccessLog: &ngfAPIv1alpha2.AccessLog{
-							Path:   helpers.GetPointer("dev/stdout"),
+							Path:   helpers.GetPointer("/dev/stdout"),
 							Format: helpers.GetPointer("custom_format"),
 						},
 					},
@@ -4912,7 +4912,7 @@ func TestBuildLogging(t *testing.T) {
 							'"$http_referer" "$http_user_agent" '`,
 				},
 				AccessLog: &AccessLog{
-					Path:   "dev/stdout",
+					Path:   "/dev/stdout",
 					Format: "custom_format",
 				},
 			},
@@ -4929,7 +4929,7 @@ func TestBuildLogging(t *testing.T) {
 							'"$http_referer" "$http_user_agent" '`),
 						},
 						AccessLog: &ngfAPIv1alpha2.AccessLog{
-							Path:   helpers.GetPointer("dev/stdout"),
+							Path:   helpers.GetPointer("/dev/stdout"),
 							Format: helpers.GetPointer("custom_format"),
 						},
 					},
@@ -4960,7 +4960,7 @@ func TestBuildLogging(t *testing.T) {
 			},
 		},
 		{
-			msg: "AccessLog path replaced with dev/stdout",
+			msg: "AccessLog path replaced with /dev/stdout",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
@@ -4987,7 +4987,7 @@ func TestBuildLogging(t *testing.T) {
 							'"$http_referer" "$http_user_agent" '`,
 				},
 				AccessLog: &AccessLog{
-					Path:   "dev/stdout",
+					Path:   "/dev/stdout",
 					Format: "custom_format",
 				},
 			},

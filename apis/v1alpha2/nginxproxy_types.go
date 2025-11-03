@@ -369,7 +369,7 @@ type LogFormat struct {
 	Format *string `json:"format,omitempty"`
 }
 
-// AccessLog defines the configuration for an NGINX access log. For now only path dev/stdout is used.
+// AccessLog defines the configuration for an NGINX access log. For now only path /dev/stdout is used.
 type AccessLog struct {
 	Path   *string `json:"path,omitempty"`
 	Format *string `json:"format,omitempty"`

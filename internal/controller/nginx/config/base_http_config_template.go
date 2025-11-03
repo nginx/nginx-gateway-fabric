@@ -48,23 +48,23 @@ server {
     }
 }
 
-  {{- /* Define custom log format */ -}}
-  {{- if .LogFormat }}
-    {{- if .LogFormat.Name }}
+{{- /* Define custom log format */ -}}
+{{- if .LogFormat }}
+  {{- if .LogFormat.Name }}
 log_format {{ .LogFormat.Name }} '{{ .LogFormat.Format }}';
-    {{- end }}
   {{- end }}
+{{- end }}
 
-  {{- /* Access log directives for AccessLog. If path is "off" we disable logging. If Format set, use dev/stdout with that format. Otherwise use the given path. */ -}}
-  {{- if .AccessLog }}
-    {{- if eq .AccessLog.Path "off" }}
-  access_log off;
-    {{- else }}
-      {{- if .AccessLog.Format }}
-  access_log dev/stdout {{ .AccessLog.Format }};
-      {{- end }}
-    {{- end }}
+{{- /* Access log directives for AccessLog. If path is "off" we disable logging. If Format set, use /dev/stdout with that format. Otherwise use the given path. */ -}}
+{{- if .AccessLog }}
+  {{- if eq .AccessLog.Path "off" }}
+access_log off;
+  {{- else }}
+  {{- if .AccessLog.Format }}
+access_log /dev/stdout {{ .AccessLog.Format }};
   {{- end }}
+  {{- end }}
+{{- end }}
 
 {{ range $i := .Includes -}}
 include {{ $i.Name }};
