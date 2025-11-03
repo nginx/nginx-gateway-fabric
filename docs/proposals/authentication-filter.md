@@ -14,10 +14,11 @@ This new filter should eventually expose all forms of authentication available t
 - Design Authentication CRD with Basic Auth and JWT Auth in mind
 - Determine initial resource specification
 - Evaluate filter early in request processing, occurring before URLRewrite, header modifiers and backend selection
-- Authentication failures return appropriate status by default (e.g., 401/403)
+- Authentication failures returns 401 Unauthorized by default
 - Ensure response codes are configurable
 
 ## Non-Goals
 
 - Design for OIDC Auth
 - An Auth filter for TCP and UDP routes
+- Implementation of the Gateway API's ExternalAuth filter
