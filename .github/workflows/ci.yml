@@ -272,7 +272,7 @@ jobs:
           echo "GOCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
 
       - name: Create/Update Draft
-        uses: lucacome/draft-release@fd099feb33710d1fa27b915a08a7acd6a1fb7fd2 # v2.0.0
+        uses: lucacome/draft-release@45e4395a3d8463abdb1747b20445b9be16ef6409 # v2.0.1
         with:
           minor-label: "enhancement"
           major-label: "change"
@@ -374,7 +374,7 @@ jobs:
 
       - name: Generate Assertion Document
         id: assertiondoc
-        uses: nginxinc/compliance-rules/.github/actions/assertion@83e452166aaf0ad8f07caf91a4f1f903b3dea1e6
+        uses: nginxinc/compliance-rules/.github/actions/assertion@08d220029442f94f6e859863342515e5a7c0f9d5
         with:
           artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
           artifact-digest: ${{ matrix.gateway.digest }}
@@ -393,7 +393,7 @@ jobs:
 
       - name: Sign and Store Assertion Document
         id: sign
-        uses: nginxinc/compliance-rules/.github/actions/sign@83e452166aaf0ad8f07caf91a4f1f903b3dea1e6
+        uses: nginxinc/compliance-rules/.github/actions/sign@08d220029442f94f6e859863342515e5a7c0f9d5
         with:
           assertion-doc: ${{ steps.assertiondoc.outputs.assertion-document-path }}
 
