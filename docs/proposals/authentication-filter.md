@@ -21,4 +21,4 @@ This new filter should eventually expose all forms of authentication available t
 
 - Design for OIDC Auth
 - An Auth filter for TCP and UDP routes
-- Implementation of the Gateway API's ExternalAuth filter
+- Design for integration with [ExternalAuth in the Gateway API](https://gateway-api.sigs.k8s.io/geps/gep-1494/)
