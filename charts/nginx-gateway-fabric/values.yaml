@@ -672,6 +672,8 @@ nginx:
 
 # -- The certGenerator section contains the configuration for the cert-generator Job.
 certGenerator:
+  # -- Enable the cert-generator Job. If this is disabled, then cert-manager or some other method must be used to create the required Secrets.
+  enable: true
   # -- The annotations of the cert-generator Job.
   annotations: {}
 
