@@ -8017,12 +8017,18 @@ spec:
                 description: Logging defines logging related settings for NGINX.
                 properties:
                   accessLog:
-                    description: AccessLogs defines the access log settings, including
-                      the log file path, format, and optional parameters.
+                    description: |-
+                      AccessLog defines the access log settings, including the log file path and format name.
+                      For now only path /dev/stdout can be used.
+                      Path can be set to "OFF" to disable logging.
+                      https://nginx.org/en/docs/http/ngx_http_log_module.html#access_log
                     properties:
                       format:
+                        description: Format specifies the log format name to be used.
                         type: string
                       path:
+                        description: Path specifies the log file path. Or "OFF" to
+                          disable logging.
                         type: string
                     type: object
                   agentLevel:
@@ -8056,12 +8062,15 @@ spec:
                     type: string
                   logFormat:
                     description: |-
-                      LogFormats defines custom log formats that can be used in access logs.
+                      LogFormat defines custom log format that can be used in access logs.
                       Each log format must have a unique name.
+                      https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
                     properties:
                       format:
+                        description: Format specifies the log format string.
                         type: string
                       name:
+                        description: Name specifies the name of the log format.
                         type: string
                     type: object
                 type: object

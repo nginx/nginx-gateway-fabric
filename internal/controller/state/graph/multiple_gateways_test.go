@@ -224,11 +224,11 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 		Logging: &ngfAPIv1alpha2.NginxLogging{
 			ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
 			AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelDebug),
-			LogFormat: &ngfAPIv1alpha2.LogFormat{
+			LogFormat: &ngfAPIv1alpha2.NginxLogFormat{
 				Name:   helpers.GetPointer("custom_format"),
 				Format: helpers.GetPointer("$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent"),
 			},
-			AccessLog: &ngfAPIv1alpha2.AccessLog{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 				Path:   helpers.GetPointer("/var/log/nginx/access.log"),
 				Format: helpers.GetPointer("custom_format"),
 			},
@@ -343,11 +343,11 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 							Logging: &ngfAPIv1alpha2.NginxLogging{
 								ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelDebug),
 								AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelDebug),
-								LogFormat: &ngfAPIv1alpha2.LogFormat{
+								LogFormat: &ngfAPIv1alpha2.NginxLogFormat{
 									Name:   helpers.GetPointer("custom_format"),
 									Format: helpers.GetPointer("$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent"),
 								},
-								AccessLog: &ngfAPIv1alpha2.AccessLog{
+								AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 									Path:   helpers.GetPointer("/var/log/nginx/access.log"),
 									Format: helpers.GetPointer("custom_format"),
 								},

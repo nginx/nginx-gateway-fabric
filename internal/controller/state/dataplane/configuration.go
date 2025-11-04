@@ -1262,10 +1262,8 @@ func buildLogFormat(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *LogFormat {
 func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 	var accessLog AccessLog
 	// Current API exposes a singular *string AccessLog path (no format yet) – only /dev/stdout or "off".
-	if srcLogSettings.AccessLog != nil &&
-		srcLogSettings.AccessLog.Path != nil &&
-		*srcLogSettings.AccessLog.Path != "" {
-		if strings.ToLower(*srcLogSettings.AccessLog.Path) == "off" {
+	if srcLogSettings.AccessLog != nil {
+		if srcLogSettings.AccessLog.Path != nil && strings.ToLower(*srcLogSettings.AccessLog.Path) == "off" {
 			accessLog = AccessLog{Path: "off"}
 		} else {
 			// only "/dev/stdout" is supported for now
