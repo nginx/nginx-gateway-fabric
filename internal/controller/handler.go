@@ -248,6 +248,12 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			vm = gw.EffectiveNginxProxy.Kubernetes.Deployment.Container.VolumeMounts
 		}
 
+		if gw.EffectiveNginxProxy != nil &&
+			gw.EffectiveNginxProxy.Kubernetes != nil &&
+			gw.EffectiveNginxProxy.Kubernetes.DaemonSet != nil {
+			vm = gw.EffectiveNginxProxy.Kubernetes.DaemonSet.Container.VolumeMounts
+		}
+
 		deployment.FileLock.Lock()
 		h.updateNginxConf(deployment, cfg, vm)
 		deployment.FileLock.Unlock()
