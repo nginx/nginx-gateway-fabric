@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	filesHelper "github.com/nginx/agent/v3/pkg/files"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
@@ -57,6 +59,8 @@ type Deployment struct {
 	nginxPlusActions []*pb.NGINXPlusAction
 	fileOverviews    []*pb.File
 	files            []File
+
+	latestFileNames []string
 
 	FileLock sync.RWMutex
 	errLock  sync.RWMutex
@@ -187,7 +191,7 @@ func (d *Deployment) GetFile(name, hash string) ([]byte, string) {
 
 // SetFiles updates the nginx files and fileOverviews for the deployment and returns the message to send.
 // The deployment FileLock MUST already be locked before calling this function.
-func (d *Deployment) SetFiles(files []File) *broadcast.NginxAgentMessage {
+func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broadcast.NginxAgentMessage {
 	d.files = files
 
 	fileOverviews := make([]*pb.File, 0, len(files))
@@ -195,8 +199,23 @@ func (d *Deployment) SetFiles(files []File) *broadcast.NginxAgentMessage {
 		fileOverviews = append(fileOverviews, &pb.File{FileMeta: file.Meta})
 	}
 
+	// To avoid duplicates, use a set for volume ignore files
+	volumeIgnoreSet := make(map[string]struct{}, len(d.latestFileNames))
+	for _, vm := range volumeMounts {
+		for _, f := range d.latestFileNames {
+			if strings.HasPrefix(f, vm.MountPath) {
+				volumeIgnoreSet[f] = struct{}{}
+			}
+		}
+	}
+
+	volumeIgnoreFiles := make([]string, 0, len(volumeIgnoreSet))
+	for f := range volumeIgnoreSet {
+		volumeIgnoreFiles = append(volumeIgnoreFiles, f)
+	}
+
 	// add ignored files to the overview as 'unmanaged' so agent doesn't touch them
-	for _, f := range ignoreFiles {
+	for _, f := range append(ignoreFiles, volumeIgnoreFiles...) {
 		meta := &pb.FileMeta{
 			Name:        f,
 			Permissions: fileMode,
