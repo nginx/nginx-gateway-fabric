@@ -10,12 +10,12 @@ require (
 	github.com/onsi/gomega v1.38.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.67.2
-	github.com/tsenart/vegeta/v12 v12.12.0
+	github.com/tsenart/vegeta/v12 v12.13.0
 	k8s.io/api v0.34.1
 	k8s.io/apiextensions-apiserver v0.34.1
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
-	sigs.k8s.io/controller-runtime v0.22.3
+	sigs.k8s.io/controller-runtime v0.22.4
 	sigs.k8s.io/gateway-api v1.3.0
 	sigs.k8s.io/gateway-api-inference-extension v1.0.1
 	sigs.k8s.io/yaml v1.6.0
