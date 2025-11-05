@@ -110,6 +110,7 @@ jobs:
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
       k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
       helm_changes: ${{ steps.filter.outputs.charts }}
+      operator_changes: ${{ steps.filter.outputs.operator }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -144,6 +145,9 @@ jobs:
         with:
           filters: |
             charts:
+            - charts/nginx-gateway-fabric/**/*
+            operator:
+            - operators/**/*
             - charts/nginx-gateway-fabric/**/*
 
       - name: Output Variables
@@ -405,7 +409,9 @@ jobs:
       matrix:
         image: [ngf, nginx]
         platforms: ["linux/arm64, linux/amd64"]
-        build-os: ["", ubi]
+        # On PRs: only standard OS (2 jobs)
+        # On main/release: include ubi (4 jobs)
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
     uses: ./.github/workflows/build.yml
     with:
       image: ${{ matrix.image }}
@@ -428,7 +434,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build-os: ["", ubi]
+        # On PRs: only standard OS (1 job)
+        # On main/release: include ubi (2 jobs)
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
     with:
       image: plus
       platforms: "linux/arm64, linux/amd64"
@@ -459,6 +467,7 @@ jobs:
       packages: write # for docker/build-push-action to push to GHCR
       id-token: write # for docker/login to login to NGINX registry
     secrets: inherit
+    if: ${{ needs.vars.outputs.operator_changes == 'true' || github.event_name == 'push' || github.event_name == 'schedule' || inputs.is_production_release }}
 
   functional-tests:
     name: Functional tests
@@ -466,13 +475,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [nginx, plus]
-        build-os: ["", ubi]
-        k8s-version:
-          [
-            "${{ needs.vars.outputs.min_k8s_version }}",
-            "${{ needs.vars.outputs.k8s_latest }}",
-          ]
+        # On PRs: run nginx + plus with latest k8s only (2 jobs)
+        # On main/release: run full matrix (8 jobs)
+        image: ${{ github.event_name == 'pull_request' && fromJSON('["nginx", "plus"]') || fromJSON('["nginx", "plus"]') }}
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+        k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
     uses: ./.github/workflows/functional.yml
     with:
       image: ${{ matrix.image }}
@@ -488,14 +495,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [nginx, plus]
-        build-os: ["", ubi]
-        k8s-version:
-          [
-            "${{ needs.vars.outputs.min_k8s_version }}",
-            "${{ needs.vars.outputs.k8s_latest }}",
-          ]
-        enable-experimental: [true, false]
+        # On PRs: run nginx only, latest k8s, experimental enabled (1 job - most coverage)
+        # On main/release: run full matrix (16 jobs)
+        image: ${{ github.event_name == 'pull_request' && fromJSON('["nginx"]') || fromJSON('["nginx", "plus"]') }}
+        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
+        k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
+        enable-experimental: ${{ github.event_name == 'pull_request' && fromJSON('[true]') || fromJSON('[true, false]') }}
     uses: ./.github/workflows/conformance.yml
     with:
       image: ${{ matrix.image }}
