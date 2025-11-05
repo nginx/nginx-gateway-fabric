@@ -235,7 +235,8 @@ jobs:
   binary:
     name: Build Binary
     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-    needs: [vars, unit-tests, njs-unit-tests]
+    # Run in parallel with tests - they're independent validations
+    needs: [vars]
     outputs:
       json: ${{ steps.gateway_binaries.outputs.json }}
     permissions:
