@@ -179,7 +179,15 @@ jobs:
       - name: Inspect SBOM and output manifest
         if: ${{ !inputs.dry_run }}
         run: |
+          # For single-platform builds, SBOM is not indexed by platform
+          # For multi-platform builds, we need to index by platform
+          if [[ "${{ inputs.platforms }}" == *","* ]] || [[ "${{ inputs.platforms }}" == *" "* ]]; then
+          # Multi-platform build - index by platform
           docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > sbom-${{ inputs.image }}.json
+          else
+          # Single-platform build - SBOM is at top level
+          docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --format '{{ json .SBOM.SPDX }}' > sbom-${{ inputs.image }}.json
+          fi
           docker buildx imagetools inspect localhost:5000/nginx-gateway-fabric/${{ inputs.image }}:${{ steps.meta.outputs.version }} --raw
 
       - name: Scan SBOM
