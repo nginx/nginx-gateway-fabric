@@ -1,6 +1,6 @@
 module github.com/nginx/nginx-gateway-fabric/v2/tests
 
-go 1.24.2
+go 1.25.3
 
 replace github.com/nginx/nginx-gateway-fabric/v2 => ../
 
