@@ -121,7 +121,10 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 
 	var errs []error
 	var applied bool
-	actions := make([]*pb.NGINXPlusAction, 0, len(conf.Upstreams)+len(conf.StreamUpstreams))
+	actions := make([]*pb.NGINXPlusAction, 0,
+		len(conf.Upstreams)+len(conf.StreamUpstreams)+len(conf.TCPUpstreams)+len(conf.UDPUpstreams))
+
+	// HTTP/GRPC Upstreams
 	for _, upstream := range conf.Upstreams {
 		// Skip upstreams that have resolve servers to avoid "UpstreamServerImmutable" errors
 		if upstreamHasResolveServers(upstream) {
@@ -135,7 +138,9 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 		actions = append(actions, action)
 	}
 
-	for _, upstream := range conf.StreamUpstreams {
+	// TLS Passthrough Upstreams, TCP Upstreams, UDP Upstreams
+	allStreamUpstreams := append(append(conf.StreamUpstreams, conf.TCPUpstreams...), conf.UDPUpstreams...)
+	for _, upstream := range allStreamUpstreams {
 		// Skip upstreams that have resolve servers to avoid "UpstreamServerImmutable" errors
 		if upstreamHasResolveServers(upstream) {
 			continue
