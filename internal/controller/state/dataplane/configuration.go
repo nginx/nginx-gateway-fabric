@@ -54,7 +54,7 @@ func BuildConfiguration(
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
-	httpServers, sslServers := buildServers(gateway)
+	httpServers, sslServers := buildServers(gateway, g.ReferencedServices)
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 	upstreams := buildUpstreams(
 		ctx,
@@ -374,6 +374,7 @@ func newBackendGroup(
 	gatewayName types.NamespacedName,
 	sourceNsName types.NamespacedName,
 	ruleIdx int,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 ) (BackendGroup, bool) {
 	var backends []Backend
 
@@ -402,12 +403,16 @@ func newBackendGroup(
 			}
 		}
 
+		// Check if this backend is an ExternalName service
+		externalHostname := getExternalHostname(ref.SvcNsName, referencedServices)
+
 		backends = append(backends, Backend{
 			UpstreamName:         ref.ServicePortReference(),
 			Weight:               ref.Weight,
 			Valid:                valid,
 			VerifyTLS:            convertBackendTLS(ref.BackendTLSPolicy, gatewayName),
 			EndpointPickerConfig: eppRef,
+			ExternalHostname:     externalHostname,
 		})
 	}
 
@@ -437,7 +442,10 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 	return verify
 }
 
-func buildServers(gateway *graph.Gateway) (http, ssl []VirtualServer) {
+func buildServers(
+	gateway *graph.Gateway,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+) (http, ssl []VirtualServer) {
 	rulesForProtocol := map[v1.ProtocolType]portPathRules{
 		v1.HTTPProtocolType:  make(portPathRules),
 		v1.HTTPSProtocolType: make(portPathRules),
@@ -454,7 +462,7 @@ func buildServers(gateway *graph.Gateway) (http, ssl []VirtualServer) {
 				rulesForProtocol[l.Source.Protocol][l.Source.Port] = rules
 			}
 
-			rules.upsertListener(l, gateway)
+			rules.upsertListener(l, gateway, referencedServices)
 		}
 	}
 
@@ -515,7 +523,11 @@ func newHostPathRules() *hostPathRules {
 	}
 }
 
-func (hpr *hostPathRules) upsertListener(l *graph.Listener, gateway *graph.Gateway) {
+func (hpr *hostPathRules) upsertListener(
+	l *graph.Listener,
+	gateway *graph.Gateway,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+) {
 	hpr.listenersExist = true
 	hpr.port = int32(l.Source.Port)
 
@@ -528,7 +540,7 @@ func (hpr *hostPathRules) upsertListener(l *graph.Listener, gateway *graph.Gatew
 			continue
 		}
 
-		hpr.upsertRoute(r, l, gateway)
+		hpr.upsertRoute(r, l, gateway, referencedServices)
 	}
 }
 
@@ -536,6 +548,7 @@ func (hpr *hostPathRules) upsertRoute(
 	route *graph.L7Route,
 	listener *graph.Listener,
 	gateway *graph.Gateway,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 ) {
 	var hostnames []string
 	GRPC := route.RouteType == graph.RouteTypeGRPC
@@ -612,6 +625,7 @@ func (hpr *hostPathRules) upsertRoute(
 					listener.GatewayName,
 					routeNsName,
 					idx,
+					referencedServices,
 				)
 				if inferencePoolBackendExists {
 					hostRule.HasInferenceBackends = true
@@ -1292,6 +1306,18 @@ func buildDNSResolverConfig(dnsResolver *ngfAPIv1alpha2.DNSResolver) *DNSResolve
 	return config
 }
 
+// getExternalHostname returns the external hostname if the service is an ExternalName type.
+// Returns an empty string if the service is not found or is not an ExternalName service.
+func getExternalHostname(
+	svcNsName types.NamespacedName,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+) string {
+	if graphSvc, exists := referencedServices[svcNsName]; exists && graphSvc.IsExternalName {
+		return graphSvc.ExternalName
+	}
+	return ""
+}
+
 // resolveUpstreamEndpoints handles service resolution for both regular and ExternalName services.
 func resolveUpstreamEndpoints(
 	ctx context.Context,
@@ -1302,10 +1328,10 @@ func resolveUpstreamEndpoints(
 	allowedAddressType []discoveryV1.AddressType,
 ) ([]resolver.Endpoint, error) {
 	// Check if this is an ExternalName service
-	if graphSvc, exists := referencedServices[br.SvcNsName]; exists && graphSvc.IsExternalName {
+	if externalName := getExternalHostname(br.SvcNsName, referencedServices); externalName != "" {
 		// For ExternalName services, create an endpoint directly with the external name
 		endpoint := resolver.Endpoint{
-			Address: graphSvc.ExternalName,
+			Address: externalName,
 			Port:    br.ServicePort.Port,
 			IPv6:    false, // DNS names are neither IPv4 nor IPv6
 			Resolve: true,  // ExternalName services require DNS resolution
@@ -1313,7 +1339,7 @@ func resolveUpstreamEndpoints(
 
 		logger.V(1).Info("resolved ExternalName service",
 			"service", br.SvcNsName,
-			"externalName", graphSvc.ExternalName,
+			"externalName", externalName,
 			"port", br.ServicePort.Port)
 
 		return []resolver.Endpoint{endpoint}, nil
