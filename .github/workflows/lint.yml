@@ -45,6 +45,9 @@ jobs:
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version: stable
+          cache-dependency-path: |
+            go.sum
+            tests/go.sum
 
       - name: Lint Go
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
@@ -63,6 +66,8 @@ jobs:
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version-file: .nvmrc
+          cache: 'npm'
+          cache-dependency-path: internal/controller/nginx/modules/package-lock.json
 
       - name: Run Prettier on NJS code
         id: prettier-run
