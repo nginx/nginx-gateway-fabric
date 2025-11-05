@@ -2,6 +2,8 @@ package provisioner
 
 import (
 	"maps"
+	"slices"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -83,8 +85,56 @@ func serviceSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
+		const managedKeysAnnotation = "gateway.nginx.org/internal-managed-annotation-keys"
+
+		// Track which annotation keys NGF currently manages
+		currentManagedKeys := make(map[string]bool)
+		for k := range objectMeta.Annotations {
+			currentManagedKeys[k] = true
+		}
+
+		// Get previously managed keys from existing service
+		var previousManagedKeys map[string]bool
+		if prevKeysStr, ok := service.Annotations[managedKeysAnnotation]; ok {
+			previousManagedKeys = make(map[string]bool)
+			for _, k := range strings.Split(prevKeysStr, ",") {
+				if k != "" {
+					previousManagedKeys[k] = true
+				}
+			}
+		}
+
+		// Start with existing annotations (preserves external controller annotations)
+		mergedAnnotations := make(map[string]string)
+		for k, v := range service.Annotations {
+			// Skip the internal tracking annotation
+			if k == managedKeysAnnotation {
+				continue
+			}
+			// Remove annotations that NGF previously managed but no longer wants
+			if previousManagedKeys != nil && previousManagedKeys[k] && !currentManagedKeys[k] {
+				continue // Remove this annotation
+			}
+			mergedAnnotations[k] = v
+		}
+
+		// Apply NGF-managed annotations (take precedence)
+		for k, v := range objectMeta.Annotations {
+			mergedAnnotations[k] = v
+		}
+
+		// Store current managed keys for next reconciliation
+		if len(currentManagedKeys) > 0 {
+			var managedKeysList []string
+			for k := range currentManagedKeys {
+				managedKeysList = append(managedKeysList, k)
+			}
+			slices.Sort(managedKeysList) // Sort for deterministic output
+			mergedAnnotations[managedKeysAnnotation] = strings.Join(managedKeysList, ",")
+		}
+
 		service.Labels = objectMeta.Labels
-		service.Annotations = objectMeta.Annotations
+		service.Annotations = mergedAnnotations
 		service.Spec = spec
 		return nil
 	}
