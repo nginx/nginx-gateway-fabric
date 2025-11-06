@@ -1,18 +1,17 @@
-package v1alpha2
+package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-
-	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
 // +kubebuilder:object:root=true
-// +kubebuilder:storageversion
+// +kubebuilder:deprecatedversion:warning="The 'v1alpha1' version of ObservabilityPolicy API is deprecated, please migrate to 'v1alpha2'."
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:categories=nginx-gateway-fabric,scope=Namespaced
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
+//nolint:lll
 
 // ObservabilityPolicy is a Direct Attached Policy. It provides a way to configure observability settings for
 // the NGINX Gateway Fabric data plane. Used in conjunction with the NginxProxy CRD that is attached to the
@@ -48,14 +47,10 @@ type ObservabilityPolicySpec struct {
 	// Objects must be in the same namespace as the policy.
 	// Support: HTTPRoute, GRPCRoute.
 	//
-	// TargetRefs must be _distinct_. This means that the multi-part key defined by `kind` and `name` must
-	// be unique across all targetRef entries in the ObservabilityPolicy.
-	//
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=16
 	// +kubebuilder:validation:XValidation:message="TargetRef Kind must be: HTTPRoute or GRPCRoute",rule="(self.exists(t, t.kind=='HTTPRoute') || self.exists(t, t.kind=='GRPCRoute'))"
 	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.all(t, t.group=='gateway.networking.k8s.io')"
-	// +kubebuilder:validation:XValidation:message="TargetRef Kind and Name combination must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name) && (p1.kind == p2.kind)))"
 	//nolint:lll
 	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 }
@@ -101,7 +96,7 @@ type Tracing struct {
 	// +listType=map
 	// +listMapKey=key
 	// +kubebuilder:validation:MaxItems=64
-	SpanAttributes []ngfAPIv1alpha1.SpanAttribute `json:"spanAttributes,omitempty"`
+	SpanAttributes []SpanAttribute `json:"spanAttributes,omitempty"`
 }
 
 // TraceStrategy defines the tracing strategy.

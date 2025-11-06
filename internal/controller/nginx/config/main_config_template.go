@@ -5,6 +5,10 @@ const mainConfigTemplateText = `
 load_module modules/ngx_otel_module.so;
 {{ end -}}
 
+{{ if .Conf.WAF.Enabled -}}
+load_module modules/ngx_http_app_protect_module.so;
+{{ end -}}
+
 error_log stderr {{ .Conf.Logging.ErrorLevel }};
 
 
