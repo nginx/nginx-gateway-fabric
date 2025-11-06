@@ -8018,17 +8018,19 @@ spec:
                 properties:
                   accessLog:
                     description: |-
-                      AccessLog defines the access log settings, including the log file path and format name.
+                      AccessLog defines the access log settings, including format itself and disabling option.
                       For now only path /dev/stdout can be used.
-                      Path can be set to "OFF" to disable logging.
-                      https://nginx.org/en/docs/http/ngx_http_log_module.html#access_log
                     properties:
+                      disabled:
+                        description: Disabled turns off access logging when set to
+                          true.
+                        type: boolean
                       format:
-                        description: Format specifies the log format name to be used.
-                        type: string
-                      path:
-                        description: Path specifies the log file path. Or "OFF" to
-                          disable logging.
+                        description: |-
+                          Format specifies the custom log format string.
+                          If not specified, NGINX default 'combined' format is used.
+                          For now only path /dev/stdout can be used.
+                          See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
                         type: string
                     type: object
                   agentLevel:
@@ -8060,19 +8062,6 @@ spec:
                     - alert
                     - emerg
                     type: string
-                  logFormat:
-                    description: |-
-                      LogFormat defines custom log format that can be used in access logs.
-                      Each log format must have a unique name.
-                      https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
-                    properties:
-                      format:
-                        description: Format specifies the log format string.
-                        type: string
-                      name:
-                        description: Name specifies the name of the log format.
-                        type: string
-                    type: object
                 type: object
               metrics:
                 description: |-

@@ -50,9 +50,10 @@ server {
 
 {{- /* Define custom log format */ -}}
 {{- if .LogFormat }}
-  {{- if .LogFormat.Name }}
-log_format {{ .LogFormat.Name }} '{{ .LogFormat.Format }}';
-  {{- end }}
+{{- /* We use a fixed name for user-defined log format to avoid complexity of passing the name around. */ -}}
+{{- if .LogFormat.Format }}
+log_format ngf_user_defined_log_format '{{ .LogFormat.Format }}';
+{{- end }}
 {{- end }}
 
 {{- /* Access log directives for AccessLog. If path is "off" we disable logging. If Format set, use /dev/stdout with that format. Otherwise use the given path. */ -}}
@@ -61,7 +62,7 @@ log_format {{ .LogFormat.Name }} '{{ .LogFormat.Format }}';
 access_log off;
   {{- else }}
   {{- if .AccessLog.Format }}
-access_log /dev/stdout {{ .AccessLog.Format }};
+access_log /dev/stdout ngf_user_defined_log_format;
   {{- end }}
   {{- end }}
 {{- end }}

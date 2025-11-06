@@ -21,15 +21,15 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 		unexpectedOutputs []string
 	}{
 		{
-			name: "Log format and access log with custom path",
+			name: "Log format and access log with custom path and custom format name",
 			logFormat: &dataplane.LogFormat{
 				Name:   "custom_format",
 				Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
 			},
 			accessLog: &dataplane.AccessLog{Path: "/path/to/log.gz", Format: "custom_format"},
 			expectedOutputs: []string{
-				`log_format custom_format '$remote_addr - [$time_local] "$request" $status $body_bytes_sent';`,
-				`access_log /dev/stdout custom_format;`,
+				`log_format ngf_user_defined_log_format '$remote_addr - [$time_local] "$request" $status $body_bytes_sent';`,
+				`access_log /dev/stdout ngf_user_defined_log_format;`,
 			},
 		},
 		{
@@ -40,23 +40,23 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 			},
 			accessLog: &dataplane.AccessLog{Path: "", Format: ""},
 			unexpectedOutputs: []string{
-				`log_format custom_format`,
+				`log_format ngf_user_defined_log_format`,
 				`access_log /dev/stdout`,
 			},
 		},
 		{
 			name: "Access log off while format presented",
 			logFormat: &dataplane.LogFormat{
-				Name:   "custom_format",
+				Name:   "ngf_user_defined_log_format",
 				Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
 			},
-			accessLog: &dataplane.AccessLog{Path: "off", Format: "custom_format"},
+			accessLog: &dataplane.AccessLog{Path: "off", Format: "ngf_user_defined_log_format"},
 			expectedOutputs: []string{
 				`access_log off;`,
-				`log_format custom_format`,
+				`log_format ngf_user_defined_log_format`,
 			},
 			unexpectedOutputs: []string{
-				`access_log off custom_format`,
+				`access_log off ngf_user_defined_log_format`,
 			},
 		},
 		{

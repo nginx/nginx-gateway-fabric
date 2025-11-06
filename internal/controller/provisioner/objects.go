@@ -407,7 +407,6 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 	}
 
 	// Add LogFormats and AccessLogs to mainFields
-	logFormat := addLogFormatToNginxConfig(logging)
 	accessLog := addAccessLogsToNginxConfig(logging)
 
 	mainFields := map[string]interface{}{
@@ -415,9 +414,6 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		"WorkerConnections": workerConnections,
 	}
 
-	if logFormat != nil {
-		mainFields["LogFormat"] = logFormat
-	}
 	if accessLog != nil {
 		mainFields["AccessLog"] = accessLog
 	}
@@ -1484,22 +1480,6 @@ func DetermineNginxImageName(
 	return fmt.Sprintf("%s:%s", image, tag), pullPolicy
 }
 
-func addLogFormatToNginxConfig(logging *ngfAPIv1alpha2.NginxLogging) *ngfAPIv1alpha2.NginxLogFormat {
-	logFormat := &ngfAPIv1alpha2.NginxLogFormat{}
-	if logging == nil {
-		return logFormat
-	}
-
-	if logging.LogFormat != nil {
-		logFormat = &ngfAPIv1alpha2.NginxLogFormat{
-			Name:   logging.LogFormat.Name,
-			Format: logging.LogFormat.Format,
-		}
-	}
-
-	return logFormat
-}
-
 func addAccessLogsToNginxConfig(logging *ngfAPIv1alpha2.NginxLogging) *ngfAPIv1alpha2.NginxAccessLog {
 	accessLog := &ngfAPIv1alpha2.NginxAccessLog{}
 	if logging == nil {
@@ -1508,8 +1488,8 @@ func addAccessLogsToNginxConfig(logging *ngfAPIv1alpha2.NginxLogging) *ngfAPIv1a
 
 	if logging.AccessLog != nil {
 		accessLog = &ngfAPIv1alpha2.NginxAccessLog{
-			Path:   logging.AccessLog.Path,
-			Format: logging.AccessLog.Format,
+			Disabled: logging.AccessLog.Disabled,
+			Format:   logging.AccessLog.Format,
 		}
 	}
 

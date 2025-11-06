@@ -4890,15 +4890,10 @@ func TestBuildLogging(t *testing.T) {
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-						LogFormat: &ngfAPIv1alpha2.NginxLogFormat{
-							Name: helpers.GetPointer("custom_format"),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 							Format: helpers.GetPointer(`'$remote_addr - $remote_user [$time_local] '
 							'"$request" $status $body_bytes_sent '
 							'"$http_referer" "$http_user_agent" '`),
-						},
-						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
-							Path:   helpers.GetPointer("/dev/stdout"),
-							Format: helpers.GetPointer("custom_format"),
 						},
 					},
 				},
@@ -4906,31 +4901,28 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
 				LogFormat: &LogFormat{
-					Name: "custom_format",
+					Name: ngfAPIv1alpha2.DefaultLogFormatName,
 					Format: `'$remote_addr - $remote_user [$time_local] '
 							'"$request" $status $body_bytes_sent '
 							'"$http_referer" "$http_user_agent" '`,
 				},
 				AccessLog: &AccessLog{
-					Path:   "/dev/stdout",
-					Format: "custom_format",
+					Path:   ngfAPIv1alpha2.DefaultAccessLogPath,
+					Format: ngfAPIv1alpha2.DefaultLogFormatName,
 				},
 			},
 		},
 		{
-			msg: "AccessLog has no path configured",
+			msg: "AccessLog is configured and Disabled = false",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-						LogFormat: &ngfAPIv1alpha2.NginxLogFormat{
-							Name: helpers.GetPointer("custom_format"),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Disabled: helpers.GetPointer(false),
 							Format: helpers.GetPointer(`'$remote_addr - $remote_user [$time_local] '
 							'"$request" $status $body_bytes_sent '
 							'"$http_referer" "$http_user_agent" '`),
-						},
-						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
-							Format: helpers.GetPointer("custom_format"),
 						},
 					},
 				},
@@ -4938,28 +4930,25 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
 				LogFormat: &LogFormat{
-					Name: "custom_format",
+					Name: ngfAPIv1alpha2.DefaultLogFormatName,
 					Format: `'$remote_addr - $remote_user [$time_local] '
 							'"$request" $status $body_bytes_sent '
 							'"$http_referer" "$http_user_agent" '`,
 				},
 				AccessLog: &AccessLog{
-					Path:   "/dev/stdout",
-					Format: "custom_format",
+					Path:   ngfAPIv1alpha2.DefaultAccessLogPath,
+					Format: ngfAPIv1alpha2.DefaultLogFormatName,
 				},
 			},
 		},
 		{
-			msg: "Nothing configured if AccessLog is missing",
+			msg: "Nothing configured if AccessLog Format is missing",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-						LogFormat: &ngfAPIv1alpha2.NginxLogFormat{
-							Name: helpers.GetPointer("custom_format"),
-							Format: helpers.GetPointer(`'$remote_addr - $remote_user [$time_local] '
-							'"$request" $status $body_bytes_sent '
-							'"$http_referer" "$http_user_agent" '`),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Disabled: helpers.GetPointer(false),
 						},
 					},
 				},
@@ -4971,77 +4960,25 @@ func TestBuildLogging(t *testing.T) {
 			},
 		},
 		{
-			msg: "No AccessLog setting if LogFormat is not configured properly (no name given)",
-			gw: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					Logging: &ngfAPIv1alpha2.NginxLogging{
-						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-						LogFormat: &ngfAPIv1alpha2.NginxLogFormat{
-							Format: helpers.GetPointer(`'$remote_addr - $remote_user [$time_local] '
-							'"$request" $status $body_bytes_sent '
-							'"$http_referer" "$http_user_agent" '`),
-						},
-						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
-							Path:   helpers.GetPointer("/dev/stdout"),
-							Format: helpers.GetPointer("custom_format"),
-						},
-					},
-				},
-			},
-			expLoggingSettings: Logging{
-				ErrorLevel: "info",
-			},
-		},
-		{
 			msg: "AccessLog OFF while LogFormat is configured",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
 						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
-							Path:   helpers.GetPointer("OFF"),
-							Format: helpers.GetPointer("custom_format"),
-						},
-					},
-				},
-			},
-			expLoggingSettings: Logging{
-				ErrorLevel: "info",
-				AccessLog: &AccessLog{
-					Path: "off",
-				},
-			},
-		},
-		{
-			msg: "AccessLog path replaced with /dev/stdout",
-			gw: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					Logging: &ngfAPIv1alpha2.NginxLogging{
-						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
-						LogFormat: &ngfAPIv1alpha2.NginxLogFormat{
-							Name: helpers.GetPointer("custom_format"),
+							Disabled: helpers.GetPointer(true),
 							Format: helpers.GetPointer(`'$remote_addr - $remote_user [$time_local] '
 							'"$request" $status $body_bytes_sent '
 							'"$http_referer" "$http_user_agent" '`),
 						},
-						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
-							Path:   helpers.GetPointer("logs/access.log"),
-							Format: helpers.GetPointer("custom_format"),
-						},
 					},
 				},
 			},
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
-				LogFormat: &LogFormat{
-					Name: "custom_format",
-					Format: `'$remote_addr - $remote_user [$time_local] '
-							'"$request" $status $body_bytes_sent '
-							'"$http_referer" "$http_user_agent" '`,
-				},
+				LogFormat:  nil,
 				AccessLog: &AccessLog{
-					Path:   "/dev/stdout",
-					Format: "custom_format",
+					Path: "off",
 				},
 			},
 		},

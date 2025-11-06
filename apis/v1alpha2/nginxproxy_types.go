@@ -298,17 +298,8 @@ type NginxLogging struct {
 	// +kubebuilder:default=info
 	AgentLevel *AgentLogLevel `json:"agentLevel,omitempty"`
 
-	// LogFormat defines custom log format that can be used in access logs.
-	// Each log format must have a unique name.
-	// https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
-	//
-	// +optional
-	LogFormat *NginxLogFormat `json:"logFormat,omitempty"`
-
-	// AccessLog defines the access log settings, including the log file path and format name.
+	// AccessLog defines the access log settings, including format itself and disabling option.
 	// For now only path /dev/stdout can be used.
-	// Path can be set to "OFF" to disable logging.
-	// https://nginx.org/en/docs/http/ngx_http_log_module.html#access_log
 	//
 	// +optional
 	AccessLog *NginxAccessLog `json:"accessLog,omitempty"`
@@ -367,35 +358,28 @@ const (
 	AgentLogLevelFatal AgentLogLevel = "fatal"
 )
 
-// NginxLogFormat defines a custom log format for NGINX.
-// https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
-type NginxLogFormat struct {
-	// Name specifies the name of the log format.
-	//
-	// +optional
-	Name *string `json:"name,omitempty"`
-
-	// Format specifies the log format string.
-	//
-	// +optional
-	Format *string `json:"format,omitempty"`
-}
-
 // NginxAccessLog defines the configuration for an NGINX access log.
-// For now only path /dev/stdout can be used.
-// Path can be set to "OFF" to disable logging.
-// https://nginx.org/en/docs/http/ngx_http_log_module.html#access_log
 type NginxAccessLog struct {
-	// Path specifies the log file path. Or "OFF" to disable logging.
+	// Disabled turns off access logging when set to true.
 	//
 	// +optional
-	Path *string `json:"path,omitempty"`
+	Disabled *bool `json:"disabled,omitempty"`
 
-	// Format specifies the log format name to be used.
+	// Format specifies the custom log format string.
+	// If not specified, NGINX default 'combined' format is used.
+	// For now only path /dev/stdout can be used.
+	// See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
 	//
 	// +optional
 	Format *string `json:"format,omitempty"`
 }
+
+const (
+	// DefaultLogFormatName is used when user provides custom access_log format.
+	DefaultLogFormatName = "ngf_user_defined_log_format"
+	// DefaultAccessLogPath is the default path for the access log.
+	DefaultAccessLogPath = "/dev/stdout"
+)
 
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.
 type NginxPlus struct {
