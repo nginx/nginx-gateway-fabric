@@ -742,7 +742,6 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			expected: &AuthenticationFilter{},
 		},
 	}
-
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -750,6 +749,72 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 
 			result := convertAuthenticationFilter(tc.filter, tc.referencedSecrets)
 			g.Expect(result).To(Equal(tc.expected))
+		})
+	}
+}
+
+func TestConvertWAFBundles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    map[graph.WAFBundleKey]*graph.WAFBundleData
+		expected map[WAFBundleID]WAFBundle
+		name     string
+	}{
+		{
+			name:     "empty input",
+			input:    map[graph.WAFBundleKey]*graph.WAFBundleData{},
+			expected: map[WAFBundleID]WAFBundle{},
+		},
+		{
+			name: "single bundle with data",
+			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
+				"bundle1.tgz": func() *graph.WAFBundleData {
+					data := graph.WAFBundleData([]byte("bundle data"))
+					return &data
+				}(),
+			},
+			expected: map[WAFBundleID]WAFBundle{
+				"bundle1.tgz": WAFBundle([]byte("bundle data")),
+			},
+		},
+		{
+			name: "single bundle with nil data",
+			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
+				"bundle2.tgz": nil,
+			},
+			expected: map[WAFBundleID]WAFBundle{
+				"bundle2.tgz": WAFBundle(nil),
+			},
+		},
+		{
+			name: "multiple bundles with mixed data",
+			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
+				"bundle1.tgz": func() *graph.WAFBundleData {
+					data := graph.WAFBundleData([]byte("first bundle"))
+					return &data
+				}(),
+				"bundle2.tgz": nil,
+				"bundle3.tgz": func() *graph.WAFBundleData {
+					data := graph.WAFBundleData([]byte("third bundle"))
+					return &data
+				}(),
+			},
+			expected: map[WAFBundleID]WAFBundle{
+				"bundle1.tgz": WAFBundle([]byte("first bundle")),
+				"bundle2.tgz": WAFBundle(nil),
+				"bundle3.tgz": WAFBundle([]byte("third bundle")),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := convertWAFBundles(test.input)
+			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }

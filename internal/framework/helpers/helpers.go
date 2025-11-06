@@ -3,6 +3,8 @@ package helpers
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"text/template"
@@ -96,4 +98,11 @@ func CapitalizeString(s string) string {
 	}
 
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// ToSafeFileName converts any string to a filesystem-safe filename using SHA256 hash.
+func ToSafeFileName(input string) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(input))
+	return base64.URLEncoding.EncodeToString(hasher.Sum(nil))
 }

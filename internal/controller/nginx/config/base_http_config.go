@@ -29,6 +29,7 @@ type httpConfig struct {
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
 	HTTP2                   bool
+	WAF                     bool
 }
 
 func newExecuteBaseHTTPConfigFunc(generator policies.Generator) executeFunc {
@@ -52,6 +53,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		DNSResolver:             buildDNSResolver(conf.BaseHTTPConfig.DNSResolver),
 		AccessLog:               buildAccessLog(conf.Logging.AccessLog),
 		GatewaySecretID:         conf.BaseHTTPConfig.GatewaySecretID,
+		WAF:                     conf.WAF.Enabled,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)

@@ -549,6 +549,11 @@ nginx:
   #       disableIPv6:
   #         type: boolean
   #         description: DisableIPv6 disables DisableIPv6 lookups. If not specified, or set to false, IPv6 lookups will be enabled.
+  #   waf:
+  #     description: WAF enables NGINX App Protect WAF functionality.
+  #     enum:
+  #       - enabled
+  #       - disabled
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.
@@ -626,6 +631,32 @@ nginx:
 
       # -- The number of seconds after the Pod has started before the readiness probes are initiated.
       # initialDelaySeconds: 3
+  # -- Configuration for NGINX App Protect WAF v5 containers.
+  # These containers are only deployed when WAF is enabled via nginx.config.waf: "Enabled".
+  # All settings are optional overrides - defaults are provided by NGF.
+  wafContainers: {}
+    # -- WAF Enforcer container configuration.
+    # enforcer:
+    #   image: {}
+
+    # -- The resource requirements of the WAF Enforcer container.
+    #   resources: {}
+    #
+    #   # -- Additional volume mounts for the WAF enforcer container.
+    #   # NAP v5 shared volumes are automatically configured by NGF.
+    #   volumeMounts: []
+
+    # -- WAF Configuration Manager container configuration.
+    # configManager:
+    #   # -- Container image configuration
+    #   image: {}
+    #
+    #   # -- The resource requirements of the WAF config manager container.
+    #   resources: {}
+
+    #   # -- Additional volume mounts for the WAF config manager container.
+    #   # NAP v5 shared volumes are automatically configured by NGF.
+    #   volumeMounts: []
 
   # -- The service configuration for the NGINX data plane. This is applied globally to all Gateways managed by this
   # instance of NGINX Gateway Fabric.

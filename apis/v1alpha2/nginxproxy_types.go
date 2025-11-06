@@ -9,7 +9,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
-// +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:resource:categories=nginx-gateway-fabric,scope=Namespaced
@@ -44,7 +43,7 @@ type NginxProxySpec struct {
 	// Default is "dual", meaning the server will use both IPv4 and IPv6.
 	//
 	// +optional
-	// +kubebuilder:default:=dual
+	// +kubebuilder:default=dual
 	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
 	// Telemetry specifies the OpenTelemetry configuration.
 	//
@@ -83,6 +82,14 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DisableSNIHostValidation *bool `json:"disableSNIHostValidation,omitempty"`
+	// WAF enables NGINX App Protect WAF functionality.
+	// When enabled, NGINX Gateway Fabric will deploy additional WAF containers
+	// (waf-enforcer and waf-config-mgr) alongside the main NGINX container.
+	// Default is "disabled".
+	//
+	// +optional
+	// +kubebuilder:default:=disabled
+	WAF *WAFState `json:"waf,omitempty"`
 	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
 	//
 	// +optional
@@ -100,6 +107,21 @@ type NginxProxySpec struct {
 	// +optional
 	DNSResolver *DNSResolver `json:"dnsResolver,omitempty"`
 }
+
+// WAFState defines the state of WAF functionality.
+//
+// +kubebuilder:validation:Enum=enabled;disabled
+type WAFState string
+
+const (
+	// WAFEnabled enables NGINX App Protect WAF functionality.
+	// This will deploy additional containers for WAF enforcement and configuration management.
+	WAFEnabled WAFState = "enabled"
+
+	// WAFDisabled disables NGINX App Protect WAF functionality.
+	// Only the standard NGINX container will be deployed.
+	WAFDisabled WAFState = "disabled"
+)
 
 // Telemetry specifies the OpenTelemetry configuration.
 type Telemetry struct {
@@ -550,6 +572,12 @@ type DeploymentSpec struct {
 	// +optional
 	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
 
+	// WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
+	// These containers are only deployed when WAF is enabled in the NginxProxy spec.
+	//
+	// +optional
+	WAFContainers *WAFContainerSpec `json:"wafContainers,omitempty"`
+
 	// Pod defines Pod-specific fields.
 	//
 	// +optional
@@ -572,6 +600,12 @@ type DaemonSetSpec struct {
 	//
 	// +optional
 	Container ContainerSpec `json:"container"`
+
+	// WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
+	// These containers are only deployed when WAF is enabled in the NginxProxy spec.
+	//
+	// +optional
+	WAFContainers *WAFContainerSpec `json:"wafContainers,omitempty"`
 
 	// Pod defines Pod-specific fields.
 	//
@@ -749,6 +783,40 @@ type ReadinessProbeSpec struct {
 	Expose *bool `json:"expose,omitempty"`
 }
 
+// WAFContainerSpec defines the container specifications for NGINX App Protect WAF v5.
+// NAP v5 requires two additional containers: waf-enforcer and waf-config-mgr.
+type WAFContainerSpec struct {
+	// Enforcer defines the configuration for the WAF enforcer container.
+	// This container performs the actual WAF enforcement and policy application.
+	//
+	// +optional
+	Enforcer *WAFContainerConfig `json:"enforcer,omitempty"`
+
+	// ConfigManager defines the configuration for the WAF configuration manager container.
+	// This container manages policy configuration and communication with the enforcer.
+	//
+	// +optional
+	ConfigManager *WAFContainerConfig `json:"configManager,omitempty"`
+}
+
+// WAFContainerConfig defines the configuration for a single WAF container.
+type WAFContainerConfig struct {
+	// Image is the container image to use for this WAF container.
+	//
+	// +optional
+	Image *Image `json:"image,omitempty"`
+
+	// Resources describes the compute resource requirements for this WAF container.
+	//
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// VolumeMounts describe the mounting of Volumes within the WAF container.
+	//
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+}
+
 // Image is the NGINX image to use.
 type Image struct {
 	// Repository is the image path.
@@ -763,7 +831,7 @@ type Image struct {
 	// PullPolicy describes a policy for if/when to pull a container image.
 	//
 	// +optional
-	// +kubebuilder:default:=IfNotPresent
+	// +kubebuilder:default=IfNotPresent
 	PullPolicy *PullPolicy `json:"pullPolicy,omitempty"`
 }
 
@@ -787,7 +855,7 @@ type ServiceSpec struct {
 	// ServiceType describes ingress method for the Service.
 	//
 	// +optional
-	// +kubebuilder:default:=LoadBalancer
+	// +kubebuilder:default=LoadBalancer
 	ServiceType *ServiceType `json:"type,omitempty"`
 
 	// ExternalTrafficPolicy describes how nodes distribute service traffic they
@@ -795,7 +863,7 @@ type ServiceSpec struct {
 	// and LoadBalancer IPs.
 	//
 	// +optional
-	// +kubebuilder:default:=Local
+	// +kubebuilder:default=Local
 	ExternalTrafficPolicy *ExternalTrafficPolicy `json:"externalTrafficPolicy,omitempty"`
 
 	// LoadBalancerIP is a static IP address for the load balancer. Requires service type to be LoadBalancer.
