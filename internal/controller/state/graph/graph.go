@@ -83,6 +83,8 @@ type Graph struct {
 	BackendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy
 	// NGFPolicies holds all NGF Policies.
 	NGFPolicies map[PolicyKey]*Policy
+	// ReferencedWAFBundles includes the WAFPolicy Bundles that have been referenced by any Gateways or Routes.
+	ReferencedWAFBundles map[WAFBundleKey]*WAFBundleData
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// AuthenticationFilters holds all the AuthenticationFilters.
@@ -307,7 +309,7 @@ func BuildGraph(
 	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
 	// policies must be processed last because they rely on the state of the other resources in the graph
-	processedPolicies := processPolicies(
+	processedPolicies, referencedWAFBundles := processPolicies(
 		state.NGFPolicies,
 		validators.PolicyValidator,
 		routes,
@@ -337,6 +339,7 @@ func BuildGraph(
 		SnippetsFilters:            processedSnippetsFilters,
 		AuthenticationFilters:      processedAuthenticationFilters,
 		PlusSecrets:                plusSecrets,
+		ReferencedWAFBundles:       referencedWAFBundles,
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)

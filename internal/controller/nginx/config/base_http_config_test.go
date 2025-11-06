@@ -167,6 +167,51 @@ func TestExecuteBaseHttp_HTTP2(t *testing.T) {
 	}
 }
 
+func TestExecuteBaseHttp_WAF(t *testing.T) {
+	t.Parallel()
+	confOn := dataplane.Configuration{
+		WAF: dataplane.WAFConfig{
+			Enabled: true,
+		},
+	}
+
+	confOff := dataplane.Configuration{
+		WAF: dataplane.WAFConfig{
+			Enabled: false,
+		},
+	}
+
+	expSubStr := "app_protect_enforcer_address 127.0.0.1:50000;"
+
+	tests := []struct {
+		name     string
+		conf     dataplane.Configuration
+		expCount int
+	}{
+		{
+			name:     "waf on",
+			conf:     confOn,
+			expCount: 1,
+		},
+		{
+			name:     "waf off",
+			expCount: 0,
+			conf:     confOff,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			g.Expect(res).To(HaveLen(1))
+			g.Expect(test.expCount).To(Equal(strings.Count(string(res[0].data), expSubStr)))
+		})
+	}
+}
+
 func TestExecuteBaseHttp_Snippets(t *testing.T) {
 	t.Parallel()
 

@@ -41,6 +41,8 @@ type Configuration struct {
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
+	// WAF defines the WAF configuration.
+	WAF WAFConfig
 	// MainSnippets holds all the snippets that apply to the main context.
 	MainSnippets []Snippet
 	// HTTPServers holds all HTTPServers.
@@ -89,6 +91,13 @@ type CertBundle []byte
 
 // AuthFileData is the data for a basic auth user file.
 type AuthFileData []byte
+
+// WAFBundleID is a unique identifier for a WAF bundle.
+// The ID is safe to use as a file name.
+type WAFBundleID string
+
+// WAFBundle is a WAF bundle.
+type WAFBundle []byte
 
 // SSLKeyPair is an SSL private/public key pair.
 type SSLKeyPair struct {
@@ -623,4 +632,13 @@ var serverTokensKeywords = map[string]struct{}{
 	graph.ServerTokenBuild: {},
 	graph.ServerTokenOff:   {},
 	graph.ServerTokenOn:    {},
+}
+
+// WAFConfig holds the WAF configuration for the dataplane.
+// It is used to determine whether WAF is enabled and to load the WAF module, as well as storing the WAFBundles.
+type WAFConfig struct {
+	// WAFBundles are the WAF Policy Bundles to be stored in the app_protect bundles directory.
+	WAFBundles map[WAFBundleID]WAFBundle
+	// Enabled indicates whether WAF is enabled.
+	Enabled bool
 }

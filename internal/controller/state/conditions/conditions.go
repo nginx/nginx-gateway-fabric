@@ -10,6 +10,7 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
+// Conditions and Reasons for Route resources.
 const (
 	// GatewayClassReasonGatewayClassConflict indicates there are multiple GatewayClass resources
 	// that reference this controller, and we ignored the resource in question and picked the
@@ -86,12 +87,6 @@ const (
 	GatewayMessageFailedNginxReload = "The Gateway is not programmed due to a failure to " +
 		"reload nginx with the configuration"
 
-	// RouteMessageFailedNginxReload is a message used with RouteReasonGatewayNotProgrammed
-	// when nginx fails to reload.
-	RouteMessageFailedNginxReload = GatewayMessageFailedNginxReload + ". NGINX may still be configured " +
-		"for this Route. However, future updates to this resource will not be configured until the Gateway " +
-		"is programmed again"
-
 	// GatewayClassResolvedRefs condition indicates whether the controller was able to resolve the
 	// parametersRef on the GatewayClass.
 	GatewayClassResolvedRefs v1.GatewayClassConditionType = "ResolvedRefs"
@@ -106,7 +101,10 @@ const (
 	// GatewayClassReasonParamsRefInvalid is used with the "GatewayClassResolvedRefs" condition when the
 	// parametersRef resource is invalid.
 	GatewayClassReasonParamsRefInvalid v1.GatewayClassConditionReason = "ParametersRefInvalid"
+)
 
+// Conditions and Reasons for Policy resources.
+const (
 	// PolicyReasonNginxProxyConfigNotSet is used with the "PolicyAccepted" condition when the
 	// NginxProxy resource is missing or invalid.
 	PolicyReasonNginxProxyConfigNotSet v1.PolicyConditionReason = "NginxProxyConfigNotSet"
@@ -122,6 +120,18 @@ const (
 	// PolicyReasonTargetConflict is used with the "PolicyAccepted" condition when a Route that it targets
 	// has an overlapping hostname:port/path combination with another Route.
 	PolicyReasonTargetConflict v1.PolicyConditionReason = "TargetConflict"
+
+	// WAFPolicyFetchError is used with the "WAFPolicyFetchError" condition when a
+	// WAFPolicy or LogProfileBundle cannot be fetched from the specified file location.
+	WAFPolicyFetchError v1.PolicyConditionReason = "FetchError"
+
+	// WAFPolicyMessageSourceInvalid is a message used with the "PolicyInvalid" condition
+	// when the WAF policy source is invalid or incomplete.
+	WAFPolicyMessageSourceInvalid = "The WAF policy source is invalid or incomplete."
+
+	// WAFSecurityLogMessageSourceInvalid is a message used with the "PolicyInvalid" condition
+	// when the WAFSecurityLog source is invalid or incomplete.
+	WAFSecurityLogMessageSourceInvalid = "The WAFSecurityLog source is invalid or incomplete."
 
 	// ClientSettingsPolicyAffected is used with the "PolicyAffected" condition when a
 	// ClientSettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
@@ -180,6 +190,22 @@ const (
 	// when a policy cannot be applied due to the ancestor limit being reached.
 	PolicyMessageAncestorLimitReached = "Policies cannot be applied because the ancestor status list " +
 		"has reached the maximum size. The following policies have been ignored:"
+
+	// BackendTLSPolicyReasonInvalidCACertificateRef is used with the "ResolvedRefs" condition when a
+	// CACertificateRef refers to a resource that cannot be resolved or is misconfigured.
+	BackendTLSPolicyReasonInvalidCACertificateRef v1.PolicyConditionReason = "InvalidCACertificateRef"
+
+	// BackendTLSPolicyReasonInvalidKind is used with the "ResolvedRefs" condition when a
+	// CACertificateRef refers to an unknown or unsupported kind of resource.
+	BackendTLSPolicyReasonInvalidKind v1.PolicyConditionReason = "InvalidKind"
+
+	// BackendTLSPolicyReasonNoValidCACertificate is used with the "Accepted" condition when all
+	// CACertificateRefs are invalid.
+	BackendTLSPolicyReasonNoValidCACertificate v1.PolicyConditionReason = "NoValidCACertificate"
+
+	// WAFPolicyAffected is used with the "PolicyAffected" condition when an
+	// WAFPolicyAffected is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	WAFPolicyAffected v1.PolicyConditionType = "WAFPolicyAffected"
 )
 
 // Condition defines a condition to be reported in the status of resources.
@@ -1322,5 +1348,26 @@ func NewInferencePoolInvalidExtensionref(msg string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(inference.InferencePoolReasonInvalidExtensionRef),
 		Message: msg,
+	}
+}
+
+// NewWAFPolicyAffected returns a Condition that indicates that a WAFPolicy
+// is applied to the resource.
+func NewWAFPolicyAffected() Condition {
+	return Condition{
+		Type:    string(WAFPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "WAFPolicy is applied to the resource",
+	}
+}
+
+// NewWAFPolicyFetchError returns a Condition that indicates that there was an error fetching the WAF policy bundle.
+func NewWAFPolicyFetchError(msg string) Condition {
+	return Condition{
+		Type:    string(WAFPolicyFetchError),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(WAFPolicyFetchError),
+		Message: "Failed to fetch the policy bundle due to: " + msg,
 	}
 }

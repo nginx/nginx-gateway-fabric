@@ -118,6 +118,7 @@ func BuildConfiguration(
 		Policies:          buildPolicies(gateway, gateway.Policies),
 		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections: buildWorkerConnections(gateway),
+		WAF:               buildWAF(g, gateway),
 	}
 
 	return config
@@ -1677,4 +1678,14 @@ func buildServerTokens(gateway *graph.Gateway) string {
 	}
 
 	return fmt.Sprintf(`"%s"`, serverToken)
+}
+
+func buildWAF(g *graph.Graph, gateway *graph.Gateway) WAFConfig {
+	wb := convertWAFBundles(g.ReferencedWAFBundles)
+
+	wc := WAFConfig{
+		Enabled:    graph.WAFEnabledForNginxProxy(gateway.EffectiveNginxProxy),
+		WAFBundles: wb,
+	}
+	return wc
 }

@@ -5,7 +5,6 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status

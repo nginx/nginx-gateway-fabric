@@ -5,7 +5,9 @@ CHART_DIR = $(SELF_DIR)charts/nginx-gateway-fabric
 NGINX_CONF_DIR = internal/controller/nginx/conf
 NJS_DIR = internal/controller/nginx/modules/src
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
+NAP_WAF_ALPINE_VERSION = 3.19
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
+NGINX_DOCKER_BUILD_NAP_WAF_ARGS = --build-arg ALPINE_VERSION=$(NAP_WAF_ALPINE_VERSION) --build-arg INCLUDE_NAP_WAF=true
 BUILD_AGENT = local
 
 PROD_TELEMETRY_ENDPOINT = oss.edge.df.f5.com:443
@@ -81,6 +83,9 @@ build-images: build-ngf-image build-nginx-image ## Build the NGF and nginx docke
 .PHONY: build-images-with-plus
 build-images-with-plus: build-ngf-image build-nginx-plus-image ## Build the NGF and NGINX Plus docker images
 
+.PHONY: build-images-nap-waf
+build-images-with-nap-waf: build-ngf-image build-nginx-plus-image-with-nap-waf ## Build the NGF and NGINX Plus with WAF docker images
+
 .PHONY: build-prod-ngf-image
 build-prod-ngf-image: TELEMETRY_ENDPOINT=$(PROD_TELEMETRY_ENDPOINT)
 build-prod-ngf-image: build-ngf-image ## Build the NGF docker image for production
@@ -102,6 +107,13 @@ build-prod-nginx-plus-image: build-nginx-plus-image ## Build the custom nginx pl
 .PHONY: build-nginx-plus-image
 build-nginx-plus-image: check-for-docker ## Build the custom nginx plus image
 	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS))  -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+
+.PHONY: build-nginx-plus-image-with-nap-waf
+build-nginx-plus-image-with-nap-waf: check-for-docker ## Build the custom nginx plus image with NAP WAF. Note that arm is NOT supported.
+	@if [ $(GOARCH) = "arm64" ]; then \
+		echo "\033[0;31mIMPORTANT:\033[0m The nginx-plus-waf image cannot be built for arm64 architecture and will be built for amd64."; \
+	fi
+	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) -f $(SELF_DIR)build/Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: check-for-docker
 check-for-docker: ## Check if Docker is installed

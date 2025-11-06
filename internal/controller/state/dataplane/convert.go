@@ -231,6 +231,22 @@ func convertDNSResolverAddresses(addresses []ngfAPIv1alpha2.DNSResolverAddress) 
 	for _, addr := range addresses {
 		result = append(result, addr.Value)
 	}
+	return result
+}
+
+func convertWAFBundles(graphBundles map[graph.WAFBundleKey]*graph.WAFBundleData) map[WAFBundleID]WAFBundle {
+	result := make(map[WAFBundleID]WAFBundle, len(graphBundles))
+
+	for key, value := range graphBundles {
+		dataplaneKey := WAFBundleID(key)
+
+		var dataplaneValue WAFBundle
+		if value != nil {
+			dataplaneValue = WAFBundle(*value)
+		}
+
+		result[dataplaneKey] = dataplaneValue
+	}
 
 	return result
 }
