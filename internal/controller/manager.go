@@ -57,6 +57,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/ratelimit"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/snippetspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/waf"
 	ngxvalidation "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
@@ -357,6 +358,10 @@ func createPolicyManager(
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),
 			Validator: ratelimit.NewValidator(validator),
+		},
+		{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
+			Validator: waf.NewValidator(validator),
 		},
 	}
 
@@ -680,6 +685,12 @@ func registerControllers(
 		},
 		{
 			objectType: &ngfAPIv1alpha1.RateLimitPolicy{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
+		{
+			objectType: &ngfAPIv1alpha1.WAFPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -1042,6 +1053,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
 		&ngfAPIv1alpha1.RateLimitPolicyList{},
+		&ngfAPIv1alpha1.WAFPolicyList{},
 		partialObjectMetadataList,
 	}
 
