@@ -47,11 +47,12 @@ This document also focus on HTTP Basic Authentication and JWT Authentication. Ot
 
 This portion of the proposal will cover API design and interaction experience for use of Basic Auth and JWT.
 This portioan also contains:
+
 1. The Golang API
 2. Example spec for Basic Auth
     - Example HTTPRoutes and NINGX configuration
 3. Example spec for JWT Auth
-    - Example HTTPRoutes 
+    - Example HTTPRoutes
     - Examples for Local & Remote JWKS configration
     - Example NINGX configuration for both Local & Remote JWKS
     - Example of additioanl optional fields
@@ -575,6 +576,7 @@ http {
 ### Example spec for JWT Auth
 
 For JWT Auth, there is two options.
+
 1. Local JWKS file stored as as a Secret or as a ConfigMap
 2. Remote JWKS from an IdP provider like Keycloak
 
@@ -593,8 +595,8 @@ spec:
     mode: File # Defaults to File.
     file:
       # In File mode, exactly one of configMapRef or secretRef must be defined.
-      configMapRef: 
-        name: jwt-keys 
+      configMapRef:
+        name: jwt-keys
       secretRef:
         name: jwt-keys-secure
         key: jwks.json
@@ -769,11 +771,12 @@ http {
 }
 ```
 
-2. NGINX Config when using `Mode: Remote`
+1. NGINX Config when using `Mode: Remote`
 
 These are some directives the `Remote` mode uses over the `File` mode:
- - `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/jwks_uri` to redirect the request to the external auth provider (e.g. KeyCloak)
- - `proxy_cache_path`: This is used to configuring caching of the JWKS after an initial request allowing subseuqnt requests to not request re-authenticaiton for a time
+
+- `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/jwks_uri` to redirect the request to the external auth provider (e.g. KeyCloak)
+- `proxy_cache_path`: This is used to configuring caching of the JWKS after an initial request allowing subseuqnt requests to not request re-authenticaiton for a time
 
 ```nginx
 http {
@@ -878,7 +881,7 @@ spec:
       mode: Remote
       remote:
         url: https://issuer.example.com/.well-known/jwks.json
-    
+
     # Required claims (exact matching done via maps in NGINX; see config)
     require:
       iss:
@@ -887,7 +890,7 @@ spec:
       aud:
         - "api"
         - "cli"
-    
+
     # Where client presents the token (defaults to Authorization header)
     tokenSource:
       header: true
@@ -895,7 +898,7 @@ spec:
       cookieName: access_token
       query: false
       queryParam: access_token
-    
+
     # Identity propagation to backend and header stripping
     propagation:
       addIdentityHeaders:
@@ -1076,20 +1079,20 @@ It is certainly possible for us to provide an External Authentication Services t
 
 In regards to documentation of filter behavour with the `AuthenticationFilter`, the Gateway API documentation on filters states the following:
 
-```
+```text
 Wherever possible, implementations SHOULD implement filters in the order they are specified.
 
 Implementations MAY choose to implement this ordering strictly, rejecting
-any combination or order of filters that cannot be supported. 
+any combination or order of filters that cannot be supported.
 If implementations choose a strict interpretation of filter ordering, they MUST clearly
 document that behavior.
 ```
 
 ## References
 
- - [Gateway API ExternalAuthFilter GEP]((https://gateway-api.sigs.k8s.io/geps/gep-1494/))
- - [HTTPExternalAuthFilter Specification](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter)
- - [Kubernetes documentation on CEL validaton](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules)
- - [NGINX HTTP Basic Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html)
- - [NGINX JWT Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html)
- - [NGINX OIDC Module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html)
+- [Gateway API ExternalAuthFilter GEP]((https://gateway-api.sigs.k8s.io/geps/gep-1494/))
+- [HTTPExternalAuthFilter Specification](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter)
+- [Kubernetes documentation on CEL validaton](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules)
+- [NGINX HTTP Basic Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html)
+- [NGINX JWT Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html)
+- [NGINX OIDC Module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html)
