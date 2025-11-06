@@ -1026,7 +1026,7 @@ Users sholud be advised to regularly rotate their JWKS keys in cases where they 
 Below are a list of default defensive headers for authentication failure reponses.
 We may choose to include these headers by default for improved robustness in auth falure responses.
 
-```
+```nginx
 add_header Content-Type "text/plain; charset=utf-8" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header Cache-Control "no-store" always;
