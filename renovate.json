@@ -17,6 +17,97 @@
         "github.com/nginx/agent/v3"
       ],
       "groupName": "NGINX Agent"
+    },
+    {
+      "groupName": "Go module dependencies",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "matchCurrentVersion": "!/^0/"
+    },
+    {
+      "groupName": "Docker digests",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchUpdateTypes": [
+        "digest"
+      ]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ]
+    },
+    {
+      "groupName": "Kubernetes manifests",
+      "matchManagers": [
+        "kubernetes"
+      ]
+    },
+    {
+      "groupName": "Testing dependencies",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "matchPackageNames": [
+        "/^github.com/onsi//",
+        "/^github.com/stretchr/testify/"
+      ]
+    },
+    {
+      "groupName": "npm dependencies",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "schedule": [
+        "before 3am on Monday"
+      ]
+    },
+    {
+      "groupName": "OpenTelemetry Collector",
+      "schedule": [
+        "before 3am on Monday"
+      ],
+      "matchPackageNames": [
+        "/opentelemetry.*collector/",
+        "/opentelemetry-collector/"
+      ]
+    },
+    {
+      "groupName": "CodeQL",
+      "matchPackageNames": [
+        "github/codeql-action"
+      ],
+      "schedule": [
+        "before 3am on Monday"
+      ]
+    },
+    {
+      "groupName": "Lock file maintenance",
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "schedule": [
+        "before 3am on Monday"
+      ]
     }
   ]
 }

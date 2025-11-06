@@ -22,6 +22,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing/licensingfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/metrics/collectors"
@@ -66,7 +67,7 @@ var _ = Describe("eventHandler", func() {
 		Expect(fakeGenerator.GenerateArgsForCall(0)).Should(Equal(expectedConf))
 
 		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
-		_, files := fakeNginxUpdater.UpdateConfigArgsForCall(0)
+		_, files, _ := fakeNginxUpdater.UpdateConfigArgsForCall(0)
 		Expect(expectedFiles).To(Equal(files))
 
 		Eventually(
@@ -641,6 +642,104 @@ var _ = Describe("eventHandler", func() {
 		Expect(handle).Should(Panic())
 
 		Expect(handler.GetLatestConfiguration()).To(BeEmpty())
+	})
+
+	It("should process events with volume mounts from Deployment", func() {
+		// Create a gateway with EffectiveNginxProxy containing Deployment VolumeMounts
+		gatewayWithVolumeMounts := &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				{Namespace: "test", Name: "gateway"}: {
+					Valid: true,
+					Source: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "gateway",
+							Namespace: "test",
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+					},
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Kubernetes: &v1alpha2.KubernetesSpec{
+							Deployment: &v1alpha2.DeploymentSpec{
+								Container: v1alpha2.ContainerSpec{
+									VolumeMounts: []v1.VolumeMount{
+										{
+											Name:      "test-volume",
+											MountPath: "/etc/test",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		fakeProcessor.ProcessReturns(gatewayWithVolumeMounts)
+
+		e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
+		batch := []interface{}{e}
+
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+		// Verify that UpdateConfig was called with the volume mounts
+		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
+		_, _, volumeMounts := fakeNginxUpdater.UpdateConfigArgsForCall(0)
+		Expect(volumeMounts).To(HaveLen(1))
+		Expect(volumeMounts[0].Name).To(Equal("test-volume"))
+		Expect(volumeMounts[0].MountPath).To(Equal("/etc/test"))
+	})
+
+	It("should process events with volume mounts from DaemonSet", func() {
+		// Create a gateway with EffectiveNginxProxy containing DaemonSet VolumeMounts
+		gatewayWithVolumeMounts := &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{
+				{Namespace: "test", Name: "gateway"}: {
+					Valid: true,
+					Source: &gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "gateway",
+							Namespace: "test",
+						},
+					},
+					DeploymentName: types.NamespacedName{
+						Namespace: "test",
+						Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+					},
+					EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+						Kubernetes: &v1alpha2.KubernetesSpec{
+							DaemonSet: &v1alpha2.DaemonSetSpec{
+								Container: v1alpha2.ContainerSpec{
+									VolumeMounts: []v1.VolumeMount{
+										{
+											Name:      "daemon-volume",
+											MountPath: "/var/daemon",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		fakeProcessor.ProcessReturns(gatewayWithVolumeMounts)
+
+		e := &events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}}
+		batch := []interface{}{e}
+
+		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+		// Verify that UpdateConfig was called with the volume mounts
+		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
+		_, _, volumeMounts := fakeNginxUpdater.UpdateConfigArgsForCall(0)
+		Expect(volumeMounts).To(HaveLen(1))
+		Expect(volumeMounts[0].Name).To(Equal("daemon-volume"))
+		Expect(volumeMounts[0].MountPath).To(Equal("/var/daemon"))
 	})
 })
 

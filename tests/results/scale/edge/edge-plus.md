@@ -6,16 +6,16 @@ NGINX Plus: true
 
 NGINX Gateway Fabric:
 
-- Commit: 9010072ecd34a8fa99bfdd3d7580c9d725fb063e
-- Date: 2025-10-01T09:39:27Z
+- Commit: b41c973c8399458984def3c2a8a268a237c864c8
+- Date: 2025-10-30T03:04:40Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.33.4-gke.1172000
+- k8s version: v1.33.5-gke.1162000
 - vCPUs per node: 16
-- RAM per node: 65851524Ki
+- RAM per node: 65851520Ki
 - Max pods per node: 110
 - Zone: us-west1-b
 - Instance Type: n2d-standard-16
@@ -24,19 +24,19 @@ GKE Cluster:
 
 ### Event Batch Processing
 
-- Total: 204
-- Average Time: 24ms
+- Total: 205
+- Average Time: 20ms
 - Event Batch Processing distribution:
-	- 500.0ms: 198
-	- 1000.0ms: 204
-	- 5000.0ms: 204
-	- 10000.0ms: 204
-	- 30000.0ms: 204
-	- +Infms: 204
+	- 500.0ms: 199
+	- 1000.0ms: 205
+	- 5000.0ms: 205
+	- 10000.0ms: 205
+	- 30000.0ms: 205
+	- +Infms: 205
 
 ### Errors
 
-- NGF errors: 3
+- NGF errors: 2
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -51,9 +51,9 @@ The logs are attached only if there are errors.
 ### Event Batch Processing
 
 - Total: 268
-- Average Time: 19ms
+- Average Time: 16ms
 - Event Batch Processing distribution:
-	- 500.0ms: 261
+	- 500.0ms: 262
 	- 1000.0ms: 268
 	- 5000.0ms: 268
 	- 10000.0ms: 268
@@ -62,7 +62,7 @@ The logs are attached only if there are errors.
 
 ### Errors
 
-- NGF errors: 2
+- NGF errors: 1
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -77,9 +77,9 @@ The logs are attached only if there are errors.
 ### Event Batch Processing
 
 - Total: 1009
-- Average Time: 219ms
+- Average Time: 195ms
 - Event Batch Processing distribution:
-	- 500.0ms: 925
+	- 500.0ms: 967
 	- 1000.0ms: 1009
 	- 5000.0ms: 1009
 	- 10000.0ms: 1009
@@ -102,19 +102,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 48
-- Average Time: 392ms
+- Total: 45
+- Average Time: 387ms
 - Event Batch Processing distribution:
 	- 500.0ms: 34
-	- 1000.0ms: 47
-	- 5000.0ms: 48
-	- 10000.0ms: 48
-	- 30000.0ms: 48
-	- +Infms: 48
+	- 1000.0ms: 43
+	- 5000.0ms: 45
+	- 10000.0ms: 45
+	- 30000.0ms: 45
+	- +Infms: 45
 
 ### Errors
 
-- NGF errors: 1
+- NGF errors: 2
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -128,19 +128,19 @@ The logs are attached only if there are errors.
 
 ```text
 Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
-Duration      [total, attack, wait]             30s, 29.999s, 867.362µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  699.209µs, 952.288µs, 915.354µs, 1.046ms, 1.101ms, 1.287ms, 22.891ms
-Bytes In      [total, mean]                     4800000, 160.00
+Duration      [total, attack, wait]             30s, 29.999s, 902.858µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  716.896µs, 911.6µs, 891.329µs, 980.97µs, 1.017ms, 1.159ms, 16.929ms
+Bytes In      [total, mean]                     4860000, 162.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:30000  
 Error Set:
 ```
 ```text
-Requests      [total, rate, throughput]         30000, 1000.04, 1000.00
-Duration      [total, attack, wait]             30s, 29.999s, 1.044ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  839.937µs, 1.057ms, 1.034ms, 1.158ms, 1.218ms, 1.39ms, 15.677ms
-Bytes In      [total, mean]                     4800000, 160.00
+Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
+Duration      [total, attack, wait]             30s, 29.999s, 963.339µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  831.179µs, 1.019ms, 998.918µs, 1.128ms, 1.18ms, 1.32ms, 11.719ms
+Bytes In      [total, mean]                     4860000, 162.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:30000  

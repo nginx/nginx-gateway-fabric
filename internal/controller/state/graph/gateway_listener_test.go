@@ -39,7 +39,7 @@ func TestValidateHTTPListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 80,
-				TLS: &v1.GatewayTLSConfig{
+				TLS: &v1.ListenerTLSConfig{
 					Mode: helpers.GetPointer(v1.TLSModeTerminate),
 				},
 				Name: "http-listener",
@@ -106,7 +106,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 443,
-				TLS: &v1.GatewayTLSConfig{
+				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
 				},
@@ -117,7 +117,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 0,
-				TLS: &v1.GatewayTLSConfig{
+				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
 				},
@@ -128,7 +128,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 9113,
-				TLS: &v1.GatewayTLSConfig{
+				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
 				},
@@ -141,7 +141,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 443,
-				TLS: &v1.GatewayTLSConfig{
+				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
 					Options:         map[v1.AnnotationKey]v1.AnnotationValue{"key": "val"},
@@ -153,7 +153,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 443,
-				TLS: &v1.GatewayTLSConfig{
+				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModePassthrough),
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
 				},
@@ -176,7 +176,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 443,
-				TLS: &v1.GatewayTLSConfig{
+				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{invalidSecretRefGroup},
 				},
@@ -189,7 +189,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 443,
-				TLS: &v1.GatewayTLSConfig{
+				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{},
 				},
@@ -202,7 +202,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 443,
-				TLS: &v1.GatewayTLSConfig{
+				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{invalidSecretRefKind},
 				},
@@ -215,7 +215,7 @@ func TestValidateHTTPSListener(t *testing.T) {
 		{
 			l: v1.Listener{
 				Port: 443,
-				TLS: &v1.GatewayTLSConfig{
+				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef, validSecretRef},
 				},
@@ -627,7 +627,7 @@ func TestValidateTLSFieldOnTLSListener(t *testing.T) {
 			msg:         "TLS listener with TLS field nil",
 		},
 		{
-			listener: v1.Listener{TLS: &v1.GatewayTLSConfig{Mode: helpers.GetPointer(v1.TLSModeTerminate)}},
+			listener: v1.Listener{TLS: &v1.ListenerTLSConfig{Mode: helpers.GetPointer(v1.TLSModeTerminate)}},
 			expectedCond: conditions.NewListenerUnsupportedValue(
 				"TLS.Mode: Required value: Mode must be passthrough for TLS listener",
 			),
@@ -635,7 +635,7 @@ func TestValidateTLSFieldOnTLSListener(t *testing.T) {
 			msg:         "TLS listener with TLS mode terminate",
 		},
 		{
-			listener:    v1.Listener{TLS: &v1.GatewayTLSConfig{Mode: helpers.GetPointer(v1.TLSModePassthrough)}},
+			listener:    v1.Listener{TLS: &v1.ListenerTLSConfig{Mode: helpers.GetPointer(v1.TLSModePassthrough)}},
 			expectValid: true,
 			msg:         "TLS listener with TLS mode passthrough",
 		},
@@ -677,7 +677,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     443,
 							Protocol: v1.HTTPSProtocolType,
 							Hostname: helpers.GetPointer[v1.Hostname]("*.example.com"),
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
 									{Name: "secret1"},
@@ -689,7 +689,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     443,
 							Protocol: v1.HTTPSProtocolType,
 							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
 									{Name: "secret2"},
@@ -716,7 +716,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     443,
 							Protocol: v1.HTTPSProtocolType,
 							Hostname: helpers.GetPointer[v1.Hostname]("*.example.com"),
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
 									{Name: "secret1"},
@@ -728,7 +728,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     8443,
 							Protocol: v1.HTTPSProtocolType,
 							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
 									{Name: "secret2"},
@@ -754,7 +754,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     443,
 							Protocol: v1.HTTPSProtocolType,
 							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
 									{Name: "secret1"},
@@ -766,7 +766,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     443,
 							Protocol: v1.HTTPSProtocolType,
 							Hostname: helpers.GetPointer[v1.Hostname]("cafe.example.org"),
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
 									{Name: "secret2"},
@@ -792,7 +792,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     443,
 							Protocol: v1.HTTPSProtocolType,
 							Hostname: helpers.GetPointer[v1.Hostname]("*.example.com"),
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
 									{Name: "secret1"},
@@ -804,7 +804,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     443,
 							Protocol: v1.TLSProtocolType,
 							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModePassthrough),
 							},
 						},
@@ -828,7 +828,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     443,
 							Protocol: v1.HTTPSProtocolType,
 							Hostname: nil, // nil hostname matches everything
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
 									{Name: "secret1"},
@@ -840,7 +840,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     443,
 							Protocol: v1.HTTPSProtocolType,
 							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
 									{Name: "secret2"},
@@ -899,7 +899,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 							Port:     80,
 							Protocol: v1.HTTPSProtocolType,
 							Hostname: helpers.GetPointer[v1.Hostname]("app.example.com"),
-							TLS: &v1.GatewayTLSConfig{
+							TLS: &v1.ListenerTLSConfig{
 								Mode: helpers.GetPointer(v1.TLSModeTerminate),
 								CertificateRefs: []v1.SecretObjectReference{
 									{Name: "secret1"},

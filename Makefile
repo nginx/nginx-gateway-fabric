@@ -24,7 +24,7 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION = v2.6.0
+GOLANGCI_LINT_VERSION = v2.6.1
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.34.0
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
@@ -126,6 +126,7 @@ generate: ## Run go generate
 .PHONY: generate-crds
 generate-crds: ## Generate CRDs and Go types using kubebuilder
 	go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION) crd object paths=./apis/... output:crd:artifacts:config=config/crd/bases
+	./scripts/strip-crd-excludes.sh config/crd/bases
 	kubectl kustomize config/crd >deploy/crds.yaml
 
 .PHONY: install-crds

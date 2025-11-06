@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -23,7 +23,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 		{
 			name: "Validate TargetRef of kind HTTPRoute is allowed",
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
 						Group: gatewayGroup,
@@ -34,7 +34,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 		{
 			name: "Validate TargetRef of kind GRPCRoute is allowed",
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  grpcRouteKind,
 						Group: gatewayGroup,
@@ -46,7 +46,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 			name:       "Validate Invalid TargetRef Kind is not allowed",
 			wantErrors: []string{expectedTargetRefMustBeHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  invalidKind,
 						Group: gatewayGroup,
@@ -58,7 +58,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 			name:       "Validate TCPRoute TargetRef Kind is not allowed",
 			wantErrors: []string{expectedTargetRefMustBeHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  tcpRouteKind,
 						Group: gatewayGroup,
@@ -70,7 +70,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 			name:       "Validate TargetRef of kind Gateway is not allowed",
 			wantErrors: []string{expectedTargetRefMustBeHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  gatewayKind,
 						Group: gatewayGroup,
@@ -81,7 +81,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 		{
 			name: "Validate ObservabilityPolicy is applied when one TargetRef is valid and another is invalid",
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  gatewayKind,
 						Group: gatewayGroup,
@@ -101,7 +101,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 			spec := tt.spec
 
 			for i := range spec.TargetRefs {
-				spec.TargetRefs[i].Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+				spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 			}
 
 			observabilityPolicy := &ngfAPIv1alpha2.ObservabilityPolicy{
@@ -128,7 +128,7 @@ func TestObservabilityPoliciesTargetRefGroup(t *testing.T) {
 		{
 			name: "Validate gateway.networking.k8s.io TargetRef Group is allowed",
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
 						Group: gatewayGroup,
@@ -140,7 +140,7 @@ func TestObservabilityPoliciesTargetRefGroup(t *testing.T) {
 			name:       "Validate invalid.networking.k8s.io TargetRef Group is not allowed",
 			wantErrors: []string{expectedTargetRefGroupError},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
 						Group: invalidGroup,
@@ -152,7 +152,7 @@ func TestObservabilityPoliciesTargetRefGroup(t *testing.T) {
 			name:       "Validate discovery.k8s.io/v1 TargetRef Group is not allowed",
 			wantErrors: []string{expectedTargetRefGroupError},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
 						Group: discoveryGroup,
@@ -168,7 +168,7 @@ func TestObservabilityPoliciesTargetRefGroup(t *testing.T) {
 			spec := tt.spec
 
 			for i := range spec.TargetRefs {
-				spec.TargetRefs[i].Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+				spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 			}
 
 			observabilityPolicy := &ngfAPIv1alpha2.ObservabilityPolicy{
@@ -196,15 +196,15 @@ func TestObservabilityPoliciesTargetRefKindAndNameCombo(t *testing.T) {
 			name:       "Validate resource is invalid when TargetRef Kind and Name combination is not unique",
 			wantErrors: []string{expectedTargetRefKindAndNameComboMustBeUnique},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Name:  gatewayv1.ObjectName(testTargetRefName),
 						Group: gatewayGroup,
 					},
 					{
 						Kind:  httpRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Name:  gatewayv1.ObjectName(testTargetRefName),
 						Group: gatewayGroup,
 					},
 				},
@@ -213,15 +213,15 @@ func TestObservabilityPoliciesTargetRefKindAndNameCombo(t *testing.T) {
 		{
 			name: "Validate resource is valid when TargetRef Kind and Name combination is unique using different kinds",
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Name:  gatewayv1.ObjectName(testTargetRefName),
 						Group: gatewayGroup,
 					},
 					{
 						Kind:  grpcRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Name:  gatewayv1.ObjectName(testTargetRefName),
 						Group: gatewayGroup,
 					},
 				},
@@ -230,15 +230,15 @@ func TestObservabilityPoliciesTargetRefKindAndNameCombo(t *testing.T) {
 		{
 			name: "Validate resource is valid when TargetRef Kind and Name combination is unique using different names",
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
+						Name:  gatewayv1.ObjectName(uniqueResourceName(testTargetRefName)),
 						Group: gatewayGroup,
 					},
 					{
 						Kind:  grpcRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
+						Name:  gatewayv1.ObjectName(uniqueResourceName(testTargetRefName)),
 						Group: gatewayGroup,
 					},
 				},
@@ -248,20 +248,20 @@ func TestObservabilityPoliciesTargetRefKindAndNameCombo(t *testing.T) {
 			name:       "Validate three TargetRefs with one duplicate name are not allowed",
 			wantErrors: []string{expectedTargetRefKindAndNameComboMustBeUnique},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName)),
+						Name:  gatewayv1.ObjectName(uniqueResourceName(testTargetRefName)),
 						Group: gatewayGroup,
 					},
 					{
 						Kind:  grpcRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Name:  gatewayv1.ObjectName(testTargetRefName),
 						Group: gatewayGroup,
 					},
 					{
 						Kind:  grpcRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(testTargetRefName),
+						Name:  gatewayv1.ObjectName(testTargetRefName),
 						Group: gatewayGroup,
 					},
 				},
@@ -271,25 +271,25 @@ func TestObservabilityPoliciesTargetRefKindAndNameCombo(t *testing.T) {
 			name:       "Validate multiple duplicate TargetRefs are not allowed",
 			wantErrors: []string{expectedTargetRefKindAndNameComboMustBeUnique},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  grpcRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(fmt.Sprintf("duplicate-group-1-%s", testTargetRefName)),
+						Name:  gatewayv1.ObjectName(fmt.Sprintf("duplicate-group-1-%s", testTargetRefName)),
 						Group: gatewayGroup,
 					},
 					{
 						Kind:  grpcRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(fmt.Sprintf("duplicate-group-1-%s", testTargetRefName)),
+						Name:  gatewayv1.ObjectName(fmt.Sprintf("duplicate-group-1-%s", testTargetRefName)),
 						Group: gatewayGroup,
 					},
 					{
 						Kind:  grpcRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(fmt.Sprintf("duplicate-group-2-%s", testTargetRefName)),
+						Name:  gatewayv1.ObjectName(fmt.Sprintf("duplicate-group-2-%s", testTargetRefName)),
 						Group: gatewayGroup,
 					},
 					{
 						Kind:  grpcRouteKind,
-						Name:  gatewayv1alpha2.ObjectName(fmt.Sprintf("duplicate-group-2-%s", testTargetRefName)),
+						Name:  gatewayv1.ObjectName(fmt.Sprintf("duplicate-group-2-%s", testTargetRefName)),
 						Group: gatewayGroup,
 					},
 				},
@@ -326,7 +326,7 @@ func TestObservabilityPoliciesTracing(t *testing.T) {
 		{
 			name: "Validate ObservabilityPolicy is applied when ratio is set and strategy is TraceStrategyRatio",
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
 						Group: gatewayGroup,
@@ -342,7 +342,7 @@ func TestObservabilityPoliciesTracing(t *testing.T) {
 			name:       "Validate ObservabilityPolicy is invalid when ratio is set and strategy is not TraceStrategyRatio",
 			wantErrors: []string{expectedStrategyMustBeOfTypeRatio},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
-				TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReference{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
 						Kind:  httpRouteKind,
 						Group: gatewayGroup,
@@ -362,7 +362,7 @@ func TestObservabilityPoliciesTracing(t *testing.T) {
 			spec := tt.spec
 
 			for i := range spec.TargetRefs {
-				spec.TargetRefs[i].Name = gatewayv1alpha2.ObjectName(uniqueResourceName(testTargetRefName))
+				spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 			}
 
 			observabilityPolicy := &ngfAPIv1alpha2.ObservabilityPolicy{

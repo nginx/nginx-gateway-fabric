@@ -1,7 +1,11 @@
 # Enhancement Proposal-4052: Authentiation Filter
 
 - Issue: https://github.com/nginx/nginx-gateway-fabric/issues/4052
+<<<<<<< HEAD
 - Status: Implementable
+=======
+- Status: Provisional
+>>>>>>> main
 
 ## Summary
 
@@ -22,6 +26,7 @@ This new filter should eventually expose all forms of authentication available t
 - Design for OIDC Auth
 - An Auth filter for TCP and UDP routes
 - Design for integration with [ExternalAuth in the Gateway API](https://gateway-api.sigs.k8s.io/geps/gep-1494/)
+<<<<<<< HEAD
 
 ## Introduction
 
@@ -1093,3 +1098,5 @@ document that behavior.
  - [NGINX HTTP Basic Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html)
  - [NGINX JWT Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html)
  - [NGINX OIDC Module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html)
+=======
+>>>>>>> main

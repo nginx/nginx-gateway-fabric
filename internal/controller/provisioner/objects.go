@@ -149,7 +149,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 
 	ports := make(map[int32]struct{})
 	for _, listener := range gateway.Spec.Listeners {
-		ports[int32(listener.Port)] = struct{}{}
+		ports[listener.Port] = struct{}{}
 	}
 
 	// Create separate copies of objectMeta for service and deployment to avoid shared map references

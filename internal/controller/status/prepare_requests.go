@@ -11,7 +11,6 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
-	"sigs.k8s.io/gateway-api/apis/v1alpha3"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -364,7 +363,7 @@ func PrepareNGFPolicyRequests(
 	reqs := make([]UpdateRequest, 0, len(policies))
 
 	for key, pol := range policies {
-		ancestorStatuses := make([]v1alpha2.PolicyAncestorStatus, 0, len(pol.TargetRefs))
+		ancestorStatuses := make([]v1.PolicyAncestorStatus, 0, len(pol.TargetRefs))
 
 		if len(pol.Ancestors) == 0 {
 			continue
@@ -383,14 +382,14 @@ func PrepareNGFPolicyRequests(
 			conds := conditions.DeduplicateConditions(allConds)
 			apiConds := conditions.ConvertConditions(conds, pol.Source.GetGeneration(), transitionTime)
 
-			ancestorStatuses = append(ancestorStatuses, v1alpha2.PolicyAncestorStatus{
+			ancestorStatuses = append(ancestorStatuses, v1.PolicyAncestorStatus{
 				AncestorRef:    ancestor.Ancestor,
 				ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
 				Conditions:     apiConds,
 			})
 		}
 
-		status := v1alpha2.PolicyStatus{Ancestors: ancestorStatuses}
+		status := v1.PolicyStatus{Ancestors: ancestorStatuses}
 
 		reqs = append(reqs, UpdateRequest{
 			NsName:       key.NsName,
@@ -418,9 +417,9 @@ func PrepareBackendTLSPolicyRequests(
 		conds := conditions.DeduplicateConditions(pol.Conditions)
 		apiConds := conditions.ConvertConditions(conds, pol.Source.Generation, transitionTime)
 
-		policyAncestors := make([]v1alpha2.PolicyAncestorStatus, 0, len(pol.Gateways))
+		policyAncestors := make([]v1.PolicyAncestorStatus, 0, len(pol.Gateways))
 		for _, gwNsName := range pol.Gateways {
-			policyAncestorStatus := v1alpha2.PolicyAncestorStatus{
+			policyAncestorStatus := v1.PolicyAncestorStatus{
 				AncestorRef: v1.ParentReference{
 					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
 					Name:      v1.ObjectName(gwNsName.Name),
@@ -434,13 +433,13 @@ func PrepareBackendTLSPolicyRequests(
 			policyAncestors = append(policyAncestors, policyAncestorStatus)
 		}
 
-		status := v1alpha2.PolicyStatus{
+		status := v1.PolicyStatus{
 			Ancestors: policyAncestors,
 		}
 
 		reqs = append(reqs, UpdateRequest{
 			NsName:       nsname,
-			ResourceType: &v1alpha3.BackendTLSPolicy{},
+			ResourceType: &v1.BackendTLSPolicy{},
 			Setter:       newBackendTLSPolicyStatusSetter(status, gatewayCtlrName),
 		})
 	}

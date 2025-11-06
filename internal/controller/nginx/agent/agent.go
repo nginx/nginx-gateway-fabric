@@ -10,6 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	"google.golang.org/protobuf/types/known/structpb"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -29,7 +30,7 @@ const retryUpstreamTimeout = 5 * time.Second
 
 // NginxUpdater is an interface for updating NGINX using the NGINX agent.
 type NginxUpdater interface {
-	UpdateConfig(deployment *Deployment, files []File)
+	UpdateConfig(deployment *Deployment, files []File, volumeMounts []v1.VolumeMount)
 	UpdateUpstreamServers(deployment *Deployment, conf dataplane.Configuration)
 }
 
@@ -87,8 +88,9 @@ func NewNginxUpdater(
 func (n *NginxUpdaterImpl) UpdateConfig(
 	deployment *Deployment,
 	files []File,
+	volumeMounts []v1.VolumeMount,
 ) {
-	msg := deployment.SetFiles(files)
+	msg := deployment.SetFiles(files, volumeMounts)
 	if msg == nil {
 		n.logger.V(1).Info("No changes to nginx configuration files, not sending to agent")
 		return

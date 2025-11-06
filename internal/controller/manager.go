@@ -35,7 +35,6 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -85,7 +84,6 @@ var scheme = runtime.NewScheme()
 func init() {
 	utilruntime.Must(gatewayv1beta1.Install(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
-	utilruntime.Must(gatewayv1alpha3.Install(scheme))
 	utilruntime.Must(gatewayv1alpha2.Install(scheme))
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 	utilruntime.Must(discoveryV1.AddToScheme(scheme))
@@ -448,6 +446,17 @@ func registerControllers(
 			},
 		},
 		{
+			objectType: &gatewayv1.BackendTLSPolicy{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
+		{
+			// FIXME(ciarams87): If possible, use only metadata predicate
+			// https://github.com/nginx/nginx-gateway-fabric/issues/1545
+			objectType: &apiv1.ConfigMap{},
+		},
+		{
 			objectType: &apiv1.Service{},
 			name:       "user-service", // unique controller names are needed and we have multiple Service ctlrs
 			options: []controller.Option{
@@ -522,17 +531,6 @@ func registerControllers(
 
 	if cfg.ExperimentalFeatures {
 		gwExpFeatures := []ctlrCfg{
-			{
-				objectType: &gatewayv1alpha3.BackendTLSPolicy{},
-				options: []controller.Option{
-					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-				},
-			},
-			{
-				// FIXME(ciarams87): If possible, use only metadata predicate
-				// https://github.com/nginx/nginx-gateway-fabric/issues/1545
-				objectType: &apiv1.ConfigMap{},
-			},
 			{
 				objectType: &gatewayv1alpha2.TLSRoute{},
 				options: []controller.Option{
@@ -762,6 +760,8 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 		&apiv1.NamespaceList{},
 		&discoveryV1.EndpointSliceList{},
 		&gatewayv1.HTTPRouteList{},
+		&gatewayv1.BackendTLSPolicyList{},
+		&apiv1.ConfigMapList{},
 		&gatewayv1beta1.ReferenceGrantList{},
 		&ngfAPIv1alpha2.NginxProxyList{},
 		&gatewayv1.GRPCRouteList{},
@@ -774,8 +774,6 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 	if cfg.ExperimentalFeatures {
 		objectLists = append(
 			objectLists,
-			&gatewayv1alpha3.BackendTLSPolicyList{},
-			&apiv1.ConfigMapList{},
 			&gatewayv1alpha2.TLSRouteList{},
 		)
 	}

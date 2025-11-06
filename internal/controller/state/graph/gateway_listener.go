@@ -361,7 +361,7 @@ func validateListenerPort(port v1.PortNumber, protectedPorts ProtectedPorts) err
 		return errors.New("port must be between 1-65535")
 	}
 
-	if portName, ok := protectedPorts[int32(port)]; ok {
+	if portName, ok := protectedPorts[port]; ok {
 		return fmt.Errorf("port is already in use as %v", portName)
 	}
 
