@@ -6227,7 +6227,6 @@ func TestBuildDNSResolverConfig(t *testing.T) {
 			},
 		},
 	}
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -7166,6 +7165,102 @@ func TestBuildAuthSecrets(t *testing.T) {
 			result := buildAuthSecrets(test.secrets)
 
 			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestBuildWAF(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		graph        *graph.Graph
+		gateway      *graph.Gateway
+		expWAFConfig WAFConfig
+	}{
+		{
+			name: "WAF disabled, no bundles",
+			graph: &graph.Graph{
+				ReferencedWAFBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{},
+			},
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: nil,
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    false,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+			},
+		},
+		{
+			name: "WAF enabled, no bundles",
+			graph: &graph.Graph{
+				ReferencedWAFBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{},
+			},
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled:    true,
+				WAFBundles: map[WAFBundleID]WAFBundle{},
+			},
+		},
+		{
+			name: "WAF disabled, with bundles",
+			graph: &graph.Graph{
+				ReferencedWAFBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+					"bundle1.tgz": func() *graph.WAFBundleData {
+						data := graph.WAFBundleData([]byte("bundle data"))
+						return &data
+					}(),
+				},
+			},
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFDisabled),
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled: false,
+				WAFBundles: map[WAFBundleID]WAFBundle{
+					"bundle1.tgz": WAFBundle([]byte("bundle data")),
+				},
+			},
+		},
+		{
+			name: "WAF enabled, with bundles",
+			graph: &graph.Graph{
+				ReferencedWAFBundles: map[graph.WAFBundleKey]*graph.WAFBundleData{
+					"bundle1.tgz": func() *graph.WAFBundleData {
+						data := graph.WAFBundleData([]byte("first bundle"))
+						return &data
+					}(),
+					"bundle2.tgz": nil,
+				},
+			},
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+				},
+			},
+			expWAFConfig: WAFConfig{
+				Enabled: true,
+				WAFBundles: map[WAFBundleID]WAFBundle{
+					"bundle1.tgz": WAFBundle([]byte("first bundle")),
+					"bundle2.tgz": WAFBundle(nil),
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildWAF(test.graph, test.gateway)
+			g.Expect(result).To(Equal(test.expWAFConfig))
 		})
 	}
 }

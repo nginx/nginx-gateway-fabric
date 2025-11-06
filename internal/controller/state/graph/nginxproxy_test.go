@@ -319,6 +319,11 @@ func TestTelemetryEnabledForNginxProxy(t *testing.T) {
 		enabled bool
 	}{
 		{
+			name:    "effective nginx proxy is nil",
+			ep:      nil,
+			enabled: false,
+		},
+		{
 			name: "telemetry struct is nil",
 			ep: &EffectiveNginxProxy{
 				Telemetry: nil,
@@ -456,6 +461,112 @@ func TestMetricsEnabledForNginxProxy(t *testing.T) {
 			port, enabled := MetricsEnabledForNginxProxy(test.ep)
 			g.Expect(port).To(Equal(test.port))
 			g.Expect(enabled).To(Equal(test.enabled))
+		})
+	}
+}
+
+// Add test cases for WAF merging in TestBuildEffectiveNginxProxy.
+func TestBuildEffectiveNginxProxy_WAF(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		gcNp *NginxProxy
+		gwNp *NginxProxy
+		exp  *EffectiveNginxProxy
+		name string
+	}{
+		{
+			name: "gateway nginx proxy overrides WAF setting",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFDisabled),
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+			},
+		},
+		{
+			name: "gateway class WAF setting when gateway has no WAF config",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						// No WAF field set
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFEnabled),
+			},
+		},
+		{
+			name: "both have WAF disabled",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFDisabled),
+					},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{
+						WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFDisabled),
+					},
+				},
+			},
+			exp: &EffectiveNginxProxy{
+				WAF: helpers.GetPointer(ngfAPIv1alpha2.WAFDisabled),
+			},
+		},
+		{
+			name: "both have WAF unset",
+			gcNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{},
+				},
+			},
+			gwNp: &NginxProxy{
+				Valid: true,
+				Source: &ngfAPIv1alpha2.NginxProxy{
+					Spec: ngfAPIv1alpha2.NginxProxySpec{},
+				},
+			},
+			exp: &EffectiveNginxProxy{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			enp := buildEffectiveNginxProxy(test.gcNp, test.gwNp)
+			g.Expect(enp).ToNot(BeNil())
+			g.Expect(enp.WAF).To(Equal(test.exp.WAF))
 		})
 	}
 }
