@@ -1,7 +1,7 @@
 # Enhancement Proposal-4051: Session Persistence for NGINX Plus and OSS
 
 - Issue: https://github.com/nginx/nginx-gateway-fabric/issues/4051
-- Status: Provisional
+- Status: Implementable
 
 ## Summary
 
@@ -53,6 +53,8 @@ path=<path> - Sets the path for the cookie scope.
 samesite=[strict|lax|none|$variable] - Sets the sameSite attribute for the cookie.
 secure - Sets the `secure` attribute for the cookie.
 httpOnly - Sets the `httpOnly` attribute for the cookie.
+
+## API, Customer Driven Interfaces, and User Experience
 
 ### Session Persistence for NGINX OSS users
 
@@ -118,7 +120,7 @@ const (
 )
 ```
 
-Note: `LoadBalancingMethod` is optional and defaults to `random two least_conn`. Adding this optional field is a non-breaking change and does not require a version bump in alignment with the [Kubernetes API compatibility guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api_changes.md#on-compatibility).
+Note: `LoadBalancingMethod` is optional and defaults to `random two least_conn` in NGINX Gateway Fabric, even though NGINX itself defaults to `round_robin` load balancing. Adding this optional field is a non-breaking change and does not require a version bump in alignment with the [Kubernetes API compatibility guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api_changes.md#on-compatibility).
 
 ### Session Persistence for NGINX Plus users
 
@@ -160,9 +162,20 @@ When there are multiple path matches that share the same sessionPersistence conf
 
 For **GRPCRoutes**, we do not set explicit cookie `domain` or `path` attributes. Leaving `domain` unset keeps cookies host-only, and omitting `path` means the user agent applies its default path derivation. This avoids guessing a cookie scope from gRPC routing metadata. gRPC routing is driven by a combination of listener hostnames, methods, and header matches, none of which map cleanly onto a single stable cookie scope: methods are too granular, hostnames may be broad or wildcarded, and header-based matches are inherently dynamic. Any attempt to derive a `domain` or `path` from this information would likely be ambiguous or over-scoped.
 
-
 These decisions let HTTPRoute traffic benefit from path-scoped cookies while keeping cookie domain to host-only for both HTTPRoutes and GRPCRoutes to avoid cross-host leakage.
 For GRPCRoutes, we only provide basic sessionPersistence because typical gRPC clients do not implement browser-style cookie storage and replay. Cookies are treated as ordinary headers, so applications must handle them explicitly rather than relying on an automatic client-side cookie store.
+
+## Use Cases
+
+This enhancement targets apps that need straightforward session persistence, such as keeping a user on the same backend across multiple requests or supporting stateful services that keep session data in memory. Session persistence keeps a client pinned to one upstream while it’s healthy instead of re-randomizing on each request.
+
+## Testing
+
+There are no existing conformance tests for session persistence, so we will add functional tests to verify end-to-end behavior for both OSS and Plus. For OSS, tests will confirm that `ip_hash` keeps a client pinned to a single upstream while it is healthy. For Plus, tests will verify that `sessionPersistence` produces the expected `sticky cookie` configuration for both HTTPRoute and GRPCRoute and that requests with a valid session cookie are routed consistently to the same upstream.
+
+## Security Considerations
+
+The main security concern is scoping of session cookies. This design keeps cookies host-only by never setting the domain attribute, and for HTTPRoutes it scopes cookies by route path (or `/` when no safe common prefix exists). That limits both cross-host and cross-path leakage and reduces the impact of a compromised cookie.
 
 ### Edge Cases
 
