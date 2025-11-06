@@ -495,6 +495,8 @@ spec:
 
 ### WAFGatewayBindingPolicy Custom Resource with PLM Integration
 
+**Note**: When referencing S3 objects, use HTTPS URLs (e.g., `https://bucket.s3.amazonaws.com/path/file.tgz`) rather than S3 protocol URLs (`s3://bucket/path/file.tgz`).
+
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
 kind: WAFGatewayBindingPolicy

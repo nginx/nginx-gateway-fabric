@@ -122,7 +122,7 @@ func nginxProxyValid(np *NginxProxy) bool {
 }
 
 func telemetryEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
-	if np.Telemetry == nil || np.Telemetry.Exporter == nil || np.Telemetry.Exporter.Endpoint == nil {
+	if np == nil || np.Telemetry == nil || np.Telemetry.Exporter == nil || np.Telemetry.Exporter.Endpoint == nil {
 		return false
 	}
 
@@ -144,6 +144,11 @@ func MetricsEnabledForNginxProxy(np *EffectiveNginxProxy) (*int32, bool) {
 	}
 
 	return nil, true
+}
+
+// WAFEnabledForNginxProxy returns whether WAF is enabled for the given NginxProxy configuration.
+func WAFEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
+	return np != nil && np.WAF != nil && *np.WAF == ngfAPIv1alpha2.WAFEnabled
 }
 
 func processNginxProxies(
