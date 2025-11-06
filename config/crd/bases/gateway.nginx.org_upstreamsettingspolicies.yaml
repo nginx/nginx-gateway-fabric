@@ -85,6 +85,14 @@ spec:
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
                 type: object
+              loadBalancingMethod:
+                default: random two least_conn
+                description: LoadBalancingMethod specifies the load balancing algorithm
+                  to be used for the upstream.
+                enum:
+                - ip_hash
+                - random two least_conn
+                type: string
               targetRefs:
                 description: |-
                   TargetRefs identifies API object(s) to apply the policy to.

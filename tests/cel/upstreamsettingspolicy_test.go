@@ -372,3 +372,64 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 		})
 	}
 }
+
+func TestUpstreamSettingsPolicy_LoadBalancingMethodTypes(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	convertLBType := func(s ngfAPIv1alpha1.LoadBalancingType) *ngfAPIv1alpha1.LoadBalancingType {
+		return &s
+	}
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.UpstreamSettingsPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "Valid LoadBalancingType 'random two least_conn' is allowed",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				LoadBalancingMethod: convertLBType(ngfAPIv1alpha1.LoadBalancingTypeRandomTwoLeastConnection),
+			},
+		},
+		{
+			name: "Valid LoadBalancingType 'ip_hash' is allowed",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				LoadBalancingMethod: convertLBType(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
+			},
+		},
+		{
+			name: "Invalid LoadBalancingType 'invalid_type' is not allowed",
+			wantErrors: []string{
+				"spec.loadBalancingMethod: Unsupported value: " +
+					"\"invalid_type\": supported values: \"ip_hash\", \"random two least_conn\"",
+			},
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				LoadBalancingMethod: convertLBType("invalid_type"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			tt.spec.TargetRefs = []gatewayv1.LocalPolicyTargetReference{
+				{
+					Kind:  serviceKind,
+					Group: coreGroup,
+					Name:  gatewayv1.ObjectName(uniqueResourceName(testTargetRefName)),
+				},
+			}
+
+			upstreamSettingsPolicy := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      uniqueResourceName(testResourceName),
+					Namespace: defaultNamespace,
+				},
+				Spec: tt.spec,
+			}
+			validateCrd(t, tt.wantErrors, upstreamSettingsPolicy, k8sClient)
+		})
+	}
+}
