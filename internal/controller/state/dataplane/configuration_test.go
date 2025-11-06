@@ -4768,6 +4768,9 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 
 func TestBuildLogging(t *testing.T) {
 	defaultLogging := Logging{ErrorLevel: defaultErrorLogLevel}
+	logFormat := `'$remote_addr - $remote_user [$time_local] '
+							'"$request" $status $body_bytes_sent '
+							'"$http_referer" "$http_user_agent" '`
 
 	t.Parallel()
 	tests := []struct {
@@ -4885,30 +4888,21 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{ErrorLevel: "emerg"},
 		},
 		{
-			msg: "LogFormat and AccessLog configured",
+			msg: "AccessLog configured",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
 						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
-							Format: helpers.GetPointer(`'$remote_addr - $remote_user [$time_local] '
-							'"$request" $status $body_bytes_sent '
-							'"$http_referer" "$http_user_agent" '`),
+							Format: helpers.GetPointer(logFormat),
 						},
 					},
 				},
 			},
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
-				LogFormat: &LogFormat{
-					Name: ngfAPIv1alpha2.DefaultLogFormatName,
-					Format: `'$remote_addr - $remote_user [$time_local] '
-							'"$request" $status $body_bytes_sent '
-							'"$http_referer" "$http_user_agent" '`,
-				},
 				AccessLog: &AccessLog{
-					Path:   ngfAPIv1alpha2.DefaultAccessLogPath,
-					Format: ngfAPIv1alpha2.DefaultLogFormatName,
+					Format: logFormat,
 				},
 			},
 		},
@@ -4920,24 +4914,17 @@ func TestBuildLogging(t *testing.T) {
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
 						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 							Disabled: helpers.GetPointer(false),
-							Format: helpers.GetPointer(`'$remote_addr - $remote_user [$time_local] '
-							'"$request" $status $body_bytes_sent '
-							'"$http_referer" "$http_user_agent" '`),
+							Format:   helpers.GetPointer(logFormat),
 						},
 					},
 				},
 			},
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
-				LogFormat: &LogFormat{
-					Name: ngfAPIv1alpha2.DefaultLogFormatName,
-					Format: `'$remote_addr - $remote_user [$time_local] '
-							'"$request" $status $body_bytes_sent '
-							'"$http_referer" "$http_user_agent" '`,
-				},
+
 				AccessLog: &AccessLog{
-					Path:   ngfAPIv1alpha2.DefaultAccessLogPath,
-					Format: ngfAPIv1alpha2.DefaultLogFormatName,
+					Disabled: false,
+					Format:   logFormat,
 				},
 			},
 		},
@@ -4955,7 +4942,6 @@ func TestBuildLogging(t *testing.T) {
 			},
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
-				LogFormat:  nil,
 				AccessLog:  nil,
 			},
 		},
@@ -4967,18 +4953,34 @@ func TestBuildLogging(t *testing.T) {
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
 						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 							Disabled: helpers.GetPointer(true),
-							Format: helpers.GetPointer(`'$remote_addr - $remote_user [$time_local] '
-							'"$request" $status $body_bytes_sent '
-							'"$http_referer" "$http_user_agent" '`),
+							Format:   helpers.GetPointer(logFormat),
 						},
 					},
 				},
 			},
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
-				LogFormat:  nil,
 				AccessLog: &AccessLog{
-					Path: "off",
+					Disabled: true,
+				},
+			},
+		},
+		{
+			msg: "AccessLog OFF",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Disabled: helpers.GetPointer(true),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				AccessLog: &AccessLog{
+					Disabled: true,
 				},
 			},
 		},

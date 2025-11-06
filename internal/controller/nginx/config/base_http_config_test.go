@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -13,57 +14,48 @@ import (
 func TestLoggingSettingsTemplate(t *testing.T) {
 	t.Parallel()
 
+	logFormat := "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent"
+
 	tests := []struct {
 		name              string
 		accessLog         *dataplane.AccessLog
-		logFormat         *dataplane.LogFormat
 		expectedOutputs   []string
 		unexpectedOutputs []string
 	}{
 		{
-			name: "Log format and access log with custom path and custom format name",
-			logFormat: &dataplane.LogFormat{
-				Name:   "custom_format",
-				Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
-			},
-			accessLog: &dataplane.AccessLog{Path: "/path/to/log.gz", Format: "custom_format"},
+			name:      "Log format and access log with custom path and custom format name",
+			accessLog: &dataplane.AccessLog{Format: logFormat},
 			expectedOutputs: []string{
-				`log_format ngf_user_defined_log_format '$remote_addr - [$time_local] "$request" $status $body_bytes_sent';`,
-				`access_log /dev/stdout ngf_user_defined_log_format;`,
+				fmt.Sprintf("log_format %s '%s'", dataplane.DefaultLogFormatName, logFormat),
+				fmt.Sprintf("access_log %s %s", dataplane.DefaultAccessLogPath, dataplane.DefaultLogFormatName),
 			},
 		},
 		{
-			name: "Empty log format name and format",
-			logFormat: &dataplane.LogFormat{
-				Name:   "",
-				Format: "",
-			},
-			accessLog: &dataplane.AccessLog{Path: "", Format: ""},
+			name:      "Empty format",
+			accessLog: &dataplane.AccessLog{Format: ""},
 			unexpectedOutputs: []string{
-				`log_format ngf_user_defined_log_format`,
-				`access_log /dev/stdout`,
+				fmt.Sprintf("log_format %s '%s'", dataplane.DefaultLogFormatName, logFormat),
+				fmt.Sprintf("access_log %s %s", dataplane.DefaultAccessLogPath, dataplane.DefaultLogFormatName),
 			},
 		},
 		{
-			name: "Access log off while format presented",
-			logFormat: &dataplane.LogFormat{
-				Name:   "ngf_user_defined_log_format",
-				Format: "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent",
-			},
-			accessLog: &dataplane.AccessLog{Path: "off", Format: "ngf_user_defined_log_format"},
+			name:      "Access log off while format presented",
+			accessLog: &dataplane.AccessLog{Disabled: true, Format: logFormat},
 			expectedOutputs: []string{
 				`access_log off;`,
-				`log_format ngf_user_defined_log_format`,
 			},
 			unexpectedOutputs: []string{
-				`access_log off ngf_user_defined_log_format`,
+				fmt.Sprintf("access_log off %s", dataplane.DefaultLogFormatName),
 			},
 		},
 		{
 			name:      "Access log off",
-			accessLog: &dataplane.AccessLog{Path: "off"},
+			accessLog: &dataplane.AccessLog{Disabled: true},
 			expectedOutputs: []string{
 				`access_log off;`,
+			},
+			unexpectedOutputs: []string{
+				`log_format`,
 			},
 		},
 	}
@@ -74,7 +66,7 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 			g := NewWithT(t)
 
 			conf := dataplane.Configuration{
-				Logging: dataplane.Logging{AccessLog: tt.accessLog, LogFormat: tt.logFormat},
+				Logging: dataplane.Logging{AccessLog: tt.accessLog},
 			}
 
 			res := executeBaseHTTPConfig(conf)

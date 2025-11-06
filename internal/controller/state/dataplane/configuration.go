@@ -28,6 +28,10 @@ const (
 	defaultErrorLogLevel           = "info"
 	DefaultWorkerConnections       = int32(1024)
 	DefaultNginxReadinessProbePort = int32(8081)
+	// DefaultLogFormatName is used when user provides custom access_log format.
+	DefaultLogFormatName = "ngf_user_defined_log_format"
+	// DefaultAccessLogPath is the default path for the access log.
+	DefaultAccessLogPath = "/dev/stdout"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -1222,13 +1226,8 @@ func buildLogging(gateway *graph.Gateway) Logging {
 		}
 
 		srcLogSettings := ngfProxy.Logging
-		logFormat, accessLog := buildAccessLog(srcLogSettings)
 
-		if logFormat != nil {
-			logSettings.LogFormat = logFormat
-		}
-
-		if accessLog != nil {
+		if accessLog := buildAccessLog(srcLogSettings); accessLog != nil {
 			logSettings.AccessLog = accessLog
 		}
 	}
@@ -1236,35 +1235,20 @@ func buildLogging(gateway *graph.Gateway) Logging {
 	return logSettings
 }
 
-func buildLogFormat(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *LogFormat {
-	if srcLogSettings.AccessLog != nil &&
-		srcLogSettings.AccessLog.Format != nil &&
-		*srcLogSettings.AccessLog.Format != "" {
-		return &LogFormat{
-			Name:   ngfAPIv1alpha2.DefaultLogFormatName,
-			Format: *srcLogSettings.AccessLog.Format,
-		}
-	}
-
-	return nil
-}
-
-func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) (*LogFormat, *AccessLog) {
-	logFormat := buildLogFormat(srcLogSettings)
+func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 	if srcLogSettings.AccessLog != nil {
 		if srcLogSettings.AccessLog.Disabled != nil && *srcLogSettings.AccessLog.Disabled {
-			return nil, &AccessLog{Path: "off"}
+			return &AccessLog{Disabled: true}
 		}
 
-		if logFormat != nil {
-			return logFormat, &AccessLog{
-				Path:   ngfAPIv1alpha2.DefaultAccessLogPath,
-				Format: ngfAPIv1alpha2.DefaultLogFormatName,
+		if srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "" {
+			return &AccessLog{
+				Format: *srcLogSettings.AccessLog.Format,
 			}
 		}
 	}
 
-	return nil, nil
+	return nil
 }
 
 func buildWorkerConnections(gateway *graph.Gateway) int32 {

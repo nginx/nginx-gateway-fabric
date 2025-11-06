@@ -474,10 +474,8 @@ type Ratio struct {
 
 // Logging defines logging related settings for NGINX.
 type Logging struct {
-	// AccessLog defines the configuration for the NGINX access log. For now only path /dev/stdout is used.
+	// AccessLog defines the configuration for the NGINX access log.
 	AccessLog *AccessLog
-	// LogFormat represents a custom log format.
-	LogFormat *LogFormat
 	// ErrorLevel defines the error log level.
 	ErrorLevel string
 }
@@ -501,18 +499,10 @@ type DeploymentContext struct {
 	Integration string `json:"integration"`
 }
 
-// LogFormat represents a custom log format.
-type LogFormat struct {
-	// Name is the name of the log format.
-	Name string
-	// Format is the format string.
-	Format string
-}
-
-// AccessLog defines the configuration for an NGINX access log. For now only path /dev/stdout is used.
+// AccessLog defines the configuration for an NGINX access log.
 type AccessLog struct {
-	// Path is the path of the access log. Currently supported only /dev/stdout, or "off" to disable logging.
-	Path string
-	// Format is the log_format name
+	// Format is the access log format template.
 	Format string
+	// Disabled specifies whether the access log is disabled.
+	Disabled bool
 }

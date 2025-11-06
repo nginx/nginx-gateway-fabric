@@ -49,20 +49,15 @@ server {
 }
 
 {{- /* Define custom log format */ -}}
-{{- if .LogFormat }}
+{{- /* Access log directives for AccessLog. If path is "off" we disable logging. */ -}}
 {{- /* We use a fixed name for user-defined log format to avoid complexity of passing the name around. */ -}}
-{{- if .LogFormat.Format }}
-log_format ngf_user_defined_log_format '{{ .LogFormat.Format }}';
-{{- end }}
-{{- end }}
-
-{{- /* Access log directives for AccessLog. If path is "off" we disable logging. If Format set, use /dev/stdout with that format. Otherwise use the given path. */ -}}
 {{- if .AccessLog }}
-  {{- if eq .AccessLog.Path "off" }}
+  {{- if .AccessLog.Disabled }}
 access_log off;
   {{- else }}
   {{- if .AccessLog.Format }}
-access_log /dev/stdout ngf_user_defined_log_format;
+log_format {{ .DefaultLogFormatName }} '{{ .AccessLog.Format }}';
+access_log {{ .DefaultAccessLogPath }} {{ .DefaultLogFormatName }};
   {{- end }}
   {{- end }}
 {{- end }}

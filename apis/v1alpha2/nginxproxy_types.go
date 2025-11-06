@@ -374,13 +374,6 @@ type NginxAccessLog struct {
 	Format *string `json:"format,omitempty"`
 }
 
-const (
-	// DefaultLogFormatName is used when user provides custom access_log format.
-	DefaultLogFormatName = "ngf_user_defined_log_format"
-	// DefaultAccessLogPath is the default path for the access log.
-	DefaultAccessLogPath = "/dev/stdout"
-)
-
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.
 type NginxPlus struct {
 	// AllowedAddresses specifies IPAddresses or CIDR blocks to the allow list for accessing the NGINX Plus API.
