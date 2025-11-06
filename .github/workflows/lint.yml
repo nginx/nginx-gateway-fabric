@@ -122,7 +122,7 @@ jobs:
           check-latest: true
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@0d28d3144d3a25ea2cc349d6e59901c4ff469b3b # v2.7.0
+        uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f # v2.8.0
         with:
           version: 3.14.0 # renovate: datasource=github-tags depName=helm/chart-testing
           # v6.0.0 resolved the compatibility issue with Python > 3.13. may be removed after the action itself is updated
