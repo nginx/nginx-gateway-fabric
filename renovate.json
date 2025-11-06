@@ -59,13 +59,13 @@
       "matchManagers": [
         "gomod"
       ],
-      "matchPackagePatterns": [
-        "^github.com/onsi/",
-        "^github.com/stretchr/testify"
-      ],
       "matchUpdateTypes": [
         "minor",
         "patch"
+      ],
+      "matchPackageNames": [
+        "/^github.com/onsi//",
+        "/^github.com/stretchr/testify/"
       ]
     },
     {
@@ -83,12 +83,12 @@
     },
     {
       "groupName": "OpenTelemetry Collector",
-      "matchPackagePatterns": [
-        "opentelemetry.*collector",
-        "opentelemetry-collector"
-      ],
       "schedule": [
         "before 3am on Monday"
+      ],
+      "matchPackageNames": [
+        "/opentelemetry.*collector/",
+        "/opentelemetry-collector/"
       ]
     },
     {
