@@ -143,6 +143,12 @@ type BasicAuth struct {
 	// Key is the key within the Secret that contains the htpasswd data.
 	Key string `json:"key,omitempty"`
 
+	// SecretRef allows referencing a Secret in the same or another namespace.
+	// When namespace is set and differs from the filter's namespace, a ReferenceGrant in the target namespace is required.
+	//
+	// +optional
+	SecretRef *NamespacedSecretKeyReference `json:"secretRef,omitempty"`
+
 	// Realm used by NGINX `auth_basic`.
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
 	//
@@ -267,13 +273,13 @@ type JWTFileKeySource struct {
 	// Exactly one of ConfigMapRef or SecretRef must be set.
 	//
 	// +optional
-	ConfigMapRef *LocalObjectReference `json:"configMapRef,omitempty"`
+	ConfigMapRef *NamespacedObjectReference `json:"configMapRef,omitempty"`
 
 	// SecretRef references a Secret containing the JWKS (with optional key).
 	// Exactly one of ConfigMapRef or SecretRef must be set.
 	//
 	// +optional
-	SecretRef *SecretKeyReference `json:"secretRef,omitempty"`
+	SecretRef *NamespacedSecretKeyReference `json:"secretRef,omitempty"`
 
 	// MountPath is the path where NGF will mount the data into the NGINX container.
   // Used in `auth_jwt_key_file` directive.
@@ -324,16 +330,16 @@ type JWKSCache struct {
 	// +optional
 	KeysZoneName *string `json:"keysZoneName,omitempty"`
 
-	// KeysZoneSize is the size of the cache keys zone (e.g., "10m").
+	// KeysZoneSize is the size of the cache keys zone (e.g. "10m").
 	// This is required to avoid unbounded allocations.
 	KeysZoneSize string `json:"keysZoneSize"`
 
-	// MaxSize limits the total size of the cache (e.g., "50m").
+	// MaxSize limits the total size of the cache (e.g. "50m").
 	//
 	// +optional
 	MaxSize *string `json:"maxSize,omitempty"`
 
-	// Inactive defines the inactivity timeout before cached items are evicted (e.g., "10m").
+	// Inactive defines the inactivity timeout before cached items are evicted (e.g. "10m").
 	//
 	// +optional
 	Inactive *string `json:"inactive,omitempty"`
@@ -469,12 +475,30 @@ type LocalObjectReference struct {
 	Name string `json:"name"`
 }
 
-// SecretKeyReference references a Secret and an optional key.
+	// SecretKeyReference references a Secret and an optional key.
 type SecretKeyReference struct {
 	Name string `json:"name"`
 
-	// Key within the Secret data. If omitted, controller defaults apply (e.g., "jwks.json").
+	// Key within the Secret data. If omitted, controller defaults apply (e.g. "jwks.json").
 	Key string `json:"key,omitempty"`
+}
+
+// NamespacedObjectReference references an object by name with an optional namespace.
+// If namespace is omitted, it defaults to the AuthenticationFilter's namespace.
+type NamespacedObjectReference struct {
+	// +optional
+	Namespace *string `json:"namespace,omitempty"`
+	Name      string  `json:"name"`
+}
+
+// NamespacedSecretKeyReference references a Secret and optional key, with an optional namespace.
+// If namespace differs from the filter's, a ReferenceGrant in the target namespace is required.
+type NamespacedSecretKeyReference struct {
+	// +optional
+	Namespace *string `json:"namespace,omitempty"`
+	Name      string  `json:"name"`
+	// +optional
+	Key       *string `json:"key,omitempty"`
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
@@ -1056,8 +1080,92 @@ Users that attach an `AuthenticaitonFilter` to a HTTPRoute/GRPCRoute should be a
 
 Any exmaple configurations and deployments for the `AuthenticationFilter` should enable HTTPS at the Gateway level by default.
 
-The `mountPath` for local JWKS should be mounted to a fixed location (e.g., /etc/nginx/keys).
+The `mountPath` for local JWKS should be mounted to a fixed location (e.g. /etc/nginx/keys).
 The `fileName` for a local JWKS should be sanatized to a pattern of [A-Za-z0-9._-].
+
+### Namespace isolataion and cross-namespace references
+Both Auth and Local JWKS should only have access to Secrets and ConfigMaps in the same namespace by default.
+
+Cross-namespace references are allowed only when authorized via a Gateway API ReferenceGrant in the target namespace.
+
+Controller behavior:
+- Same-namespace references are permitted without a grant.
+- For cross-namespace references, the controller MUST verify a ReferenceGrant exists in the target namespace:
+  - from: group=gateway.nginx.org, kind=AuthenticationFilter, namespace=<filter-namespace>
+  - to:   group="", kind=(Secret|ConfigMap), name=<target-name>
+- If no valid grant is found, the filter status should update the status to `Accepted=False` with `reason=RefNotPermitted` and a clear message. We should avoid rendering any NGINX configuration in this scenario.
+
+Example: Grant BasicAuth in app-ns to read a Secret in security-ns
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: ReferenceGrant
+metadata:
+  name: allow-basic-auth-secret
+  namespace: security-ns # target namespace where the Secret lives
+spec:
+  from:
+  - group: gateway.nginx.org
+    kind: AuthenticationFilter
+    namespace: app-ns
+  to:
+  - group: ""   # core API group
+    kind: Secret
+    name: basic-auth-users
+```
+
+AuthenticationFilter referencing the cross-namespace Secret
+```yaml
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth
+  namespace: app-ns
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      namespace: security-ns
+      name: basic-auth-users
+      key: htpasswd
+    realm: "Restricted"
+```
+
+Example: Grant JWT file-based JWKS in keys-ns to filter in app-ns
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: ReferenceGrant
+metadata:
+  name: allow-jwks-configmap
+  namespace: keys-ns
+spec:
+  from:
+  - group: gateway.nginx.org
+    kind: AuthenticationFilter
+    namespace: app-ns
+  to:
+  - group: ""    # core API group
+    kind: ConfigMap
+    name: jwt-keys
+```
+
+AuthenticationFilter referencing cross-namespace JWKS ConfigMap
+```yaml
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-auth
+  namespace: app-ns
+spec:
+  type: JWT
+  jwt:
+    mode: File
+    file:
+      configMapRef:
+        namespace: keys-ns
+        name: jwt-keys
+      mountPath: /etc/nginx/keys
+      fileName: jwks.json
+```
 
 ### Remote JWKS
 
@@ -1098,7 +1206,6 @@ Detailed header breakdown:
 
 - Pragma: "no-cache"
   - This header is commonly paired with `Cache-Control: "no-store"` for broad coverage. It acts as an additional signal for older intermediaries that do not honor Cache-Control.
-
 
 ### Validation
 
