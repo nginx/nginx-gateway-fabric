@@ -66,6 +66,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+  "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
 // +genclient
@@ -102,6 +103,12 @@ type AuthenticationFilterList struct {
 
 // AuthenticationFilterSpec defines the desired configuration.
 // Exactly one of Basic or JWT must be set according to Type.
+// +kubebuilder:validation:XValidation:message="for type=Basic, spec.basic must be set and spec.jwt must be empty; for type=JWT, spec.jwt must be set and spec.basic must be empty",rule="self.type == 'Basic' ? self.basic != null && self.jwt == null : self.type == 'JWT' ? self.jwt != null && self.basic == null : false"
+
+// +kubebuilder:validation:XValidation:message="type 'Basic' requires spec.basic to be set. All other spec types must be unset",rule="self.type == 'Basic' ? self.type != null && self.jwt == null : true"
+// +kubebuilder:validation:XValidation:message="type 'JWT' requires spec.jwt to be set. All other spec types must be unset",rule="self.type == 'JWT' ? self.type != null && self.basic == null : true"
+// +kubebuilder:validation:XValidation:message="when spec.basic is set, type must be 'Basic'",rule="self.basic != null ? self.type == 'Basic' : true"
+// +kubebuilder:validation:XValidation:message="when spec.jwt is set, type must be 'JWT'",rule="self.jwt != null ? self.type == 'JWT' : true" 
 type AuthenticationFilterSpec struct {
 	// Type selects the authentication mechanism.
 	//
@@ -134,7 +141,6 @@ type BasicAuth struct {
 	Secret string `json:"secret"`
 
 	// Key is the key within the Secret that contains the htpasswd data.
-	// Default: "htpasswd".
 	//
 	// +optional
 	Key *string `json:"key,omitempty"`
@@ -150,7 +156,11 @@ type BasicAuth struct {
 	OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 }
 
- // JWTAuth configures JWT-based authentication (NGINX Plus).
+// JWTAuth configures JWT-based authentication (NGINX Plus).
+// +kubebuilder:validation:XValidation:message="mode 'File' requires file set and remote unset",rule="self.mode == 'File' ? self.file != null && self.remote == null : true"
+// +kubebuilder:validation:XValidation:message="mode 'Remote' requires remote set and file unset",rule="self.mode == 'Remote' ? self.remote != null && self.file == null : true"
+// +kubebuilder:validation:XValidation:message="when file is set, mode must be 'File'",rule="self.file != null ? self.mode == 'File' : true"
+// +kubebuilder:validation:XValidation:message="when remote is set, mode must be 'Remote'",rule="self.remote != null ? self.mode == 'Remote' : true" 
 type JWTAuth struct {
 	// Realm used by NGINX auth_jwt; sets realm in the auth challenge.
 	//
@@ -162,6 +172,8 @@ type JWTAuth struct {
 	//
 	// +optional
 	// +kubebuilder:validation:Enum=File;Remote
+  // +kubebuilder:default=File
+  // +kubebuilder:validation:XValidation:message="mode must be one of [File, Remote]",rule="self in ['File','Remote']"
 	Mode JWTKeyMode `json:"mode,omitempty"`
 
 	// File specifies local JWKS configuration (Secret or ConfigMap, mount path, file name).
@@ -180,7 +192,8 @@ type JWTAuth struct {
 	// Example: "60s".
 	//
 	// +optional
-	Leeway *string `json:"leeway,omitempty"`
+  // +kubebuilder:default=60s
+	Leeway *v1alpha1.Duration `json:"leeway,omitempty"`
 
 	// Type sets token type: signed | encrypted | nested (auth_jwt_type).
 	// Default: "signed".
@@ -333,26 +346,31 @@ type JWTTokenSource struct {
 	// Read token from Authorization header. Default: true.
 	//
 	// +optional
+  // +kubebuilder:default=true
 	Header *bool `json:"header,omitempty"`
 
 	// Read token from a cookie. Default: false.
 	//
 	// +optional
+  // +kubebuilder:default=false
 	Cookie *bool `json:"cookie,omitempty"`
 
 	// CookieName when Cookie is true. Example: "access_token".
 	//
 	// +optional
+  // +kubebuilder:default=access_token
 	CookieName *string `json:"cookieName,omitempty"`
 
 	// Read token from query string. Default: false.
 	//
 	// +optional
+  // +kubebuilder:default=false
 	Query *bool `json:"query,omitempty"`
 
 	// QueryParam when Query is true. Example: "access_token".
 	//
 	// +optional
+  // +kubebuilder:default=access_token
 	QueryParam *string `json:"queryParam,omitempty"`
 }
 
@@ -395,9 +413,12 @@ const (
 
 // AuthFailureResponse customizes 401/403 failures.
 type AuthFailureResponse struct {
-    // Allowed: 401, 403. Default: 401.
+    // Allowed: 401, 403.
+    // Default: 401.
     //
     // +optional
+    // +kubebuilder:default=401
+    // +kubebuilder:validation:XValidation:message="statusCode must be 401 or 403",rule="self == null || self in [401, 403]"
     StatusCode *int32 `json:"statusCode,omitempty"`
 
     // Challenge scheme. If omitted, inferred from filter Type (Basic|Bearer).
@@ -407,10 +428,11 @@ type AuthFailureResponse struct {
     Scheme *AuthScheme `json:"scheme,omitempty"`
 
     // Controls whether a default canned body is sent or an empty body.
-    // Default: Default.
+    // Default: Unauthorized.
     //
     // +optional
     // +kubebuilder:validation:Enum=Unauthorized;Forbidden;Empty
+    // +kubebuilder:default=Unauthorized
     BodyPolicy *AuthFailureBodyPolicy `json:"bodyPolicy,omitempty"`
 }
 
@@ -422,13 +444,12 @@ type LocalObjectReference struct {
 // SecretKeyReference references a Secret and an optional key.
 type SecretKeyReference struct {
 	Name string `json:"name"`
+
 	// Key within the Secret data. If omitted, controller defaults apply (e.g., "jwks.json").
-	//
-	// +optional
-	Key *string `json:"key,omitempty"`
+	Key string `json:"key,omitempty"`
 }
 
-// AuthenticationFilterStatus defines the state of AuthenticationFilter (similar to SnippetsFilter).
+// AuthenticationFilterStatus defines the state of AuthenticationFilter.
 type AuthenticationFilterStatus struct {
 	// Controllers is a list of Gateway API controllers that processed the AuthenticationFilter
 	// and the status of the AuthenticationFilter with respect to each controller.
