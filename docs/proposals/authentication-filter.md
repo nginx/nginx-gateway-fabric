@@ -136,14 +136,7 @@ const (
 
 // BasicAuth configures HTTP Basic Authentication.
 type BasicAuth struct {
-	// Secret is the name of the Secret containing htpasswd data.
-	// The Secret must be in the same namespace as this filter.
-	Secret string `json:"secret"`
-
-	// Key is the key within the Secret that contains the htpasswd data.
-	Key string `json:"key,omitempty"`
-
-	// SecretRef allows referencing a Secret in the same or another namespace.
+	// SecretRef allows referencing a Secret in the same or different namespace.
 	// When namespace is set and differs from the filter's namespace, a ReferenceGrant in the target namespace is required.
 	//
 	// +optional
@@ -470,19 +463,6 @@ type AuthFailureResponse struct {
     BodyPolicy *AuthFailureBodyPolicy `json:"bodyPolicy,omitempty"`
 }
 
-// LocalObjectReference references a namespaced object in the same namespace.
-type LocalObjectReference struct {
-	Name string `json:"name"`
-}
-
-	// SecretKeyReference references a Secret and an optional key.
-type SecretKeyReference struct {
-	Name string `json:"name"`
-
-	// Key within the Secret data. If omitted, controller defaults apply (e.g. "jwks.json").
-	Key string `json:"key,omitempty"`
-}
-
 // NamespacedObjectReference references an object by name with an optional namespace.
 // If namespace is omitted, it defaults to the AuthenticationFilter's namespace.
 type NamespacedObjectReference struct {
@@ -546,10 +526,11 @@ metadata:
 spec:
   type: Basic
   basic:
-    secret: basic-auth-users # Secret containing htpasswd data
-    key: htpasswd            # key within the Secret
-    realm: "Restricted"      # Optional. Helps with logging
-    onFailure:               # Optional. These setting may be defaults.
+    secretRef:
+      name: basic-auth-users   # Secret containing htpasswd data
+      key: htpasswd            # key within the Secret
+    realm: "Restricted"        # Optional. Helps with logging
+    onFailure:                 # Optional. These setting may be defaults.
       statusCode: 401
       scheme: Basic
 ```
