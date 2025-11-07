@@ -1211,7 +1211,7 @@ func convertAddresses(addresses []ngfAPIv1alpha2.RewriteClientIPAddress) []strin
 }
 
 // buildLogging converts the API logging spec (currently singular LogFormat / AccessLog fields
-// in v1alpha2) into internal slice-based representation used by templates.
+// in v1alpha2) into internal representation used by templates.
 func buildLogging(gateway *graph.Gateway) Logging {
 	logSettings := Logging{ErrorLevel: defaultErrorLogLevel}
 

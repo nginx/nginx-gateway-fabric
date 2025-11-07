@@ -19,8 +19,6 @@ type AccessLog struct {
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
-	DefaultAccessLogPath    string
-	DefaultLogFormatName    string
 	Includes                []shared.Include
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
