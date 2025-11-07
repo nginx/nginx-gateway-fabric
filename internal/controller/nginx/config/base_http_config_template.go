@@ -49,7 +49,6 @@ server {
 }
 
 {{- /* Define custom log format */ -}}
-{{- /* Access log directives for AccessLog. If path is "off" we disable logging. */ -}}
 {{- /* We use a fixed name for user-defined log format to avoid complexity of passing the name around. */ -}}
 {{- if .AccessLog }}
 {{- if .AccessLog.Disabled }}

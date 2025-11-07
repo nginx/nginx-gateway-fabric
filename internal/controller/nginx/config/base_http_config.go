@@ -56,10 +56,7 @@ func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {
 		if accessLogConfig.Format != "" {
 			accessLog.Format = accessLogConfig.Format
 		}
-
-		if accessLogConfig.Disabled {
-			accessLog.Disabled = accessLogConfig.Disabled
-		}
+		accessLog.Disabled = accessLogConfig.Disabled
 
 		return accessLog
 	}
