@@ -108,7 +108,7 @@ type AuthenticationFilterList struct {
 // +kubebuilder:validation:XValidation:message="type 'Basic' requires spec.basic to be set. All other spec types must be unset",rule="self.type == 'Basic' ? self.type != null && self.jwt == null : true"
 // +kubebuilder:validation:XValidation:message="type 'JWT' requires spec.jwt to be set. All other spec types must be unset",rule="self.type == 'JWT' ? self.type != null && self.basic == null : true"
 // +kubebuilder:validation:XValidation:message="when spec.basic is set, type must be 'Basic'",rule="self.basic != null ? self.type == 'Basic' : true"
-// +kubebuilder:validation:XValidation:message="when spec.jwt is set, type must be 'JWT'",rule="self.jwt != null ? self.type == 'JWT' : true" 
+// +kubebuilder:validation:XValidation:message="when spec.jwt is set, type must be 'JWT'",rule="self.jwt != null ? self.type == 'JWT' : true"
 type AuthenticationFilterSpec struct {
 	// Type selects the authentication mechanism.
 	//
@@ -165,7 +165,7 @@ type BasicAuth struct {
 // +kubebuilder:validation:XValidation:message="mode 'File' requires file set and remote unset",rule="self.mode == 'File' ? self.file != null && self.remote == null : true"
 // +kubebuilder:validation:XValidation:message="mode 'Remote' requires remote set and file unset",rule="self.mode == 'Remote' ? self.remote != null && self.file == null : true"
 // +kubebuilder:validation:XValidation:message="when file is set, mode must be 'File'",rule="self.file != null ? self.mode == 'File' : true"
-// +kubebuilder:validation:XValidation:message="when remote is set, mode must be 'Remote'",rule="self.remote != null ? self.mode == 'Remote' : true" 
+// +kubebuilder:validation:XValidation:message="when remote is set, mode must be 'Remote'",rule="self.remote != null ? self.mode == 'Remote' : true"
 type JWTAuth struct {
 	// Realm used by NGINX `auth_jwt` directive.
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
