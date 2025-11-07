@@ -211,7 +211,7 @@ type JWTAuth struct {
 	// Example: "auth_jwt_key_cache 10m".
 	//
 	// +optional
-	KeyCache *string `json:"keyCache,omitempty"`
+	KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
 
 	// OnFailure customizes the 401 response for failed authentication.
 	//
@@ -289,7 +289,7 @@ type JWTFileKeySource struct {
 	// Example: "auth_jwt_key_cache 10m;".
 	//
 	// +optional
-	KeyCache *string `json:"keyCache,omitempty"`
+	KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
 }
 
  // JWTRemoteKeySource specifies remote JWKS configuration.
