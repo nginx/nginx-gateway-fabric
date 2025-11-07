@@ -142,7 +142,7 @@ Users can configure [sessionPersistence](https://gateway-api.sigs.k8s.io/referen
 | no matching spec field                 | `secure`                   | Enabled by default for all routes.                                                                                                  |
 | no matching spec field                 | `httpOnly`                 | Enabled by default for all routes.                                                                                                  |
 
-
+Note: The default `secure` and `httpOnly` settings may change in the future if we need to align with the Gateway API specification.
 
 #### Domain and Path selection for Routes
 
@@ -175,7 +175,9 @@ There are no existing conformance tests for session persistence, so we will add 
 
 ## Security Considerations
 
-The main security concern is scoping of session cookies. This design keeps cookies host-only by never setting the domain attribute, and for HTTPRoutes it scopes cookies by route path (or `/` when no safe common prefix exists). That limits both cross-host and cross-path leakage and reduces the impact of a compromised cookie.
+The main security concern is how far session cookies reach. This design keeps cookies host-only by never setting the domain attribute, and for HTTPRoutes it scopes cookies by route path (or `/` when no safe common prefix exists). That limits both cross-host and cross-path leakage and reduces the impact of a compromised cookie.
+
+We also set `secure` and `httponly` on the session cookie by default as a hardening measure. If Gateway API later adds these as fields with different defaults, we’ll treat any change in behavior as an experimental-API breaking change. This will be documented in the Session Persistence guide, and upgrade guidance will be provided so users can explicitly configure these cookie attributes.
 
 ### Edge Cases
 
