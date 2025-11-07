@@ -141,11 +141,10 @@ type BasicAuth struct {
 	Secret string `json:"secret"`
 
 	// Key is the key within the Secret that contains the htpasswd data.
-	//
-	// +optional
-	Key *string `json:"key,omitempty"`
+	Key string `json:"key,omitempty"`
 
-	// Realm used by NGINX auth_basic; helps with logging and WWW-Authenticate.
+	// Realm used by NGINX `auth_basic`.
+  // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
 	//
 	// +optional
 	Realm *string `json:"realm,omitempty"`
@@ -162,17 +161,19 @@ type BasicAuth struct {
 // +kubebuilder:validation:XValidation:message="when file is set, mode must be 'File'",rule="self.file != null ? self.mode == 'File' : true"
 // +kubebuilder:validation:XValidation:message="when remote is set, mode must be 'Remote'",rule="self.remote != null ? self.mode == 'Remote' : true" 
 type JWTAuth struct {
-	// Realm used by NGINX auth_jwt; sets realm in the auth challenge.
+	// Realm used by NGINX `auth_jwt` directive.
+  // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
 	//
 	// +optional
+  // +kubebuilder:default="Restricted"
 	Realm *string `json:"realm,omitempty"`
 
 	// Mode selects how JWT keys are provided: local file or remote JWKS.
 	// Default: File.
 	//
 	// +optional
-	// +kubebuilder:validation:Enum=File;Remote
   // +kubebuilder:default=File
+	// +kubebuilder:validation:Enum=File;Remote
   // +kubebuilder:validation:XValidation:message="mode must be one of [File, Remote]",rule="self in ['File','Remote']"
 	Mode JWTKeyMode `json:"mode,omitempty"`
 
@@ -188,23 +189,27 @@ type JWTAuth struct {
 	// +optional
 	Remote *JWTRemoteKeySource `json:"remote,omitempty"`
 
-	// Leeway is the acceptable clock skew for exp/nbf checks (auth_jwt_leeway).
-	// Example: "60s".
+	// Leeway is the acceptable clock skew for exp/nbf checks.
+  // Configures `auth_jwt_leeway` directive.
+	// Example: "auth_jwt_leeway 60s".
 	//
 	// +optional
   // +kubebuilder:default=60s
 	Leeway *v1alpha1.Duration `json:"leeway,omitempty"`
 
-	// Type sets token type: signed | encrypted | nested (auth_jwt_type).
-	// Default: "signed".
+	// Type sets token type: signed | encrypted | nested.
+	// Default: signed.
+  // Configures `auth_jwt_type` directive.
+  // Example: "auth_jwt_type signed;".
 	//
 	// +optional
-	// +kubebuilder:validation:Enum=signed;encrypted;nested
   // +kubebuilder:default=signed
+	// +kubebuilder:validation:Enum=signed;encrypted;nested
 	Type *JWTTokenType `json:"type,omitempty"`
 
-	// KeyCache is the cache duration for keys (auth_jwt_key_cache).
-	// Example: "10m".
+	// KeyCache is the cache duration for keys.
+  // Configures auth_jwt_key_cache directive.
+	// Example: "auth_jwt_key_cache 10m".
 	//
 	// +optional
 	KeyCache *string `json:"keyCache,omitempty"`
@@ -214,8 +219,23 @@ type JWTAuth struct {
 	// +optional
 	OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 
-	// Require defines claims that must match exactly (e.g., iss, aud).
-	// NGF will translate these into NGINX maps and auth_jwt_require directives.
+	// Require defines claims that must match exactly (e.g. iss, aud).
+	// These translate into NGINX maps and auth_jwt_require directives.
+  // Example directives and maps:
+  //
+  //  auth_jwt_require $valid_jwt_iss;
+  //  auth_jwt_require $valid_jwt_aud;
+  //
+  //  map $jwt_claim_iss $valid_jwt_iss {
+  //      "https://issuer.example.com" 1;
+  //      "https://issuer.example1.com" 1;
+  //      default 0;
+  //  }
+  //  map $jwt_claim_aud $valid_jwt_aud {
+  //      "api" 1;
+  //      "cli" 1;
+  //      default 0;
+  //  }
 	//
 	// +optional
 	Require *JWTRequiredClaims `json:"require,omitempty"`
@@ -256,15 +276,18 @@ type JWTFileKeySource struct {
 	SecretRef *SecretKeyReference `json:"secretRef,omitempty"`
 
 	// MountPath is the path where NGF will mount the data into the NGINX container.
+  // Used in `auth_jwt_key_file` directive.
 	// Example: "/etc/nginx/keys".
 	MountPath string `json:"mountPath"`
 
 	// FileName is the file name of the JWKS within the mount path.
+  // Used in `auth_jwt_key_file` directive.
 	// Example: "jwks.json".
 	FileName string `json:"fileName"`
 
-	// KeyCache is the cache duration for keys (auth_jwt_key_cache).
-	// Example: "10m".
+	// KeyCache is the cache duration for keys.
+  // Configures `auth_jwt_key_cache` directive
+	// Example: "auth_jwt_key_cache 10m;".
 	//
 	// +optional
 	KeyCache *string `json:"keyCache,omitempty"`
@@ -282,14 +305,15 @@ type JWTRemoteKeySource struct {
 	Cache *JWKSCache `json:"cache,omitempty"`
 }
 
- // JWKSCache controls NGINX proxy_cache_path and proxy_cache settings used for JWKS responses.
+ // JWKSCache controls NGINX `proxy_cache_path` and `proxy_cache` settings used for JWKS responses.
 type JWKSCache struct {
 	// Path is the filesystem path for cached JWKS objects.
 	// Example: "/var/cache/nginx/jwks".
 	Path string `json:"path"`
 
 	// Levels specifies the directory hierarchy for cached files.
-	// Example: "1:2".
+  // Used in `proxy_cache_path` directive.
+	// Example: "levels=1:2".
 	//
 	// +optional
 	Levels *string `json:"levels,omitempty"`
@@ -424,8 +448,10 @@ type AuthFailureResponse struct {
     StatusCode *int32 `json:"statusCode,omitempty"`
 
     // Challenge scheme. If omitted, inferred from filter Type (Basic|Bearer).
+    // Configures WWW-Authenticate header in error page location.
     //
     // +optional
+    // +kubebuilder:default=Basic
     // +kubebuilder:validation:Enum=Basic;Bearer
     Scheme *AuthScheme `json:"scheme,omitempty"`
 
@@ -433,8 +459,8 @@ type AuthFailureResponse struct {
     // Default: Unauthorized.
     //
     // +optional
-    // +kubebuilder:validation:Enum=Unauthorized;Forbidden;Empty
     // +kubebuilder:default=Unauthorized
+    // +kubebuilder:validation:Enum=Unauthorized;Forbidden;Empty
     BodyPolicy *AuthFailureBodyPolicy `json:"bodyPolicy,omitempty"`
 }
 
