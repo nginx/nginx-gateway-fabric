@@ -25,7 +25,7 @@ This new filter should eventually expose all forms of authentication available t
 
 ## Introduction
 
-This document focus expliclty on Authentiaction (AuthN) and not Authorization (AuthZ). Authentiaction (AuthN) defines the verification of identiy. It asks the question, "Who are you?". This is different from Authorization (AuthZ), which preceeds Authentication. It asks the question, "What are you allowed to do".
+This document focuses expliclty on Authentication (AuthN) and not Authorization (AuthZ). Authentication (AuthN) defines the verification of identiy. It asks the question, "Who are you?". This is different from Authorization (AuthZ), which preceeds Authentication. It asks the question, "What are you allowed to do".
 
 This document also focus on HTTP Basic Authentication and JWT Authentication. Other authentication methods such as OpenID Connect (OIDC) are mentioned, but are not part of the CRD design. These will be covered in future design and implementation tasks.
 
