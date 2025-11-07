@@ -392,78 +392,156 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 
 func TestBuildNginxResourceObjects_DeploymentReplicasFromHPA(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	// Create a fake HPA with status.desiredReplicas set
-	hpa := &autoscalingv2.HorizontalPodAutoscaler{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gw-nginx",
-			Namespace: "default",
+	tests := []struct {
+		currentReplicas  *int32
+		configReplicas   *int32
+		name             string
+		description      string
+		expectedValue    int32
+		hpaExists        bool
+		deploymentExists bool
+		expectedNil      bool
+	}{
+		{
+			name:             "HPA exists - use current deployment replicas",
+			hpaExists:        true,
+			deploymentExists: true,
+			currentReplicas:  helpers.GetPointer(int32(8)),
+			configReplicas:   helpers.GetPointer(int32(5)),
+			expectedNil:      false,
+			expectedValue:    8,
+			description:      "When HPA exists, read current deployment replicas (set by HPA)",
 		},
-		Status: autoscalingv2.HorizontalPodAutoscalerStatus{
-			DesiredReplicas: 7,
+		{
+			name:             "HPA does not exist - use configured replicas",
+			hpaExists:        false,
+			deploymentExists: false,
+			configReplicas:   helpers.GetPointer(int32(3)),
+			expectedNil:      false,
+			expectedValue:    3,
+			description:      "When HPA doesn't exist yet (initial creation), use configured replicas",
 		},
-	}
-
-	agentTLSSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      agentTLSTestSecretName,
-			Namespace: ngfNamespace,
-		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
-	}
-
-	fakeClient := fake.NewFakeClient(agentTLSSecret, hpa)
-
-	provisioner := &NginxProvisioner{
-		cfg: Config{
-			GatewayPodConfig: &config.GatewayPodConfig{
-				Namespace: ngfNamespace,
-				Version:   "1.0.0",
-				Image:     "ngf-image",
-			},
-			AgentTLSSecretName: agentTLSTestSecretName,
-		},
-		baseLabelSelector: metav1.LabelSelector{
-			MatchLabels: map[string]string{"app": "nginx"},
-		},
-		k8sClient: fakeClient,
-	}
-
-	gateway := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gw",
-			Namespace: "default",
-		},
-		Spec: gatewayv1.GatewaySpec{
-			Listeners: []gatewayv1.Listener{{Port: 80}},
+		{
+			name:             "HPA enabled but doesn't exist, no configured replicas",
+			hpaExists:        false,
+			deploymentExists: false,
+			configReplicas:   nil,
+			expectedNil:      true,
+			description:      "When HPA enabled but doesn't exist and no replicas configured, don't set replicas",
 		},
 	}
 
-	resourceName := "gw-nginx"
-	nProxyCfg := &graph.EffectiveNginxProxy{
-		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
-			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
-				Replicas:    nil, // Should be overridden by HPA
-				Autoscaling: &ngfAPIv1alpha2.AutoscalingSpec{Enable: true},
-			},
-		},
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-	objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
-	g.Expect(err).ToNot(HaveOccurred())
+			agentTLSSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentTLSTestSecretName,
+					Namespace: ngfNamespace,
+				},
+				Data: map[string][]byte{"tls.crt": []byte("tls")},
+			}
 
-	// Find the deployment object
-	var deployment *appsv1.Deployment
-	for _, obj := range objects {
-		if d, ok := obj.(*appsv1.Deployment); ok {
-			deployment = d
-			break
-		}
+			var fakeClient client.Client
+			switch {
+			case tc.hpaExists && tc.deploymentExists:
+				// Create a fake HPA and existing deployment
+				hpa := &autoscalingv2.HorizontalPodAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gw-nginx",
+						Namespace: "default",
+					},
+					Status: autoscalingv2.HorizontalPodAutoscalerStatus{
+						DesiredReplicas: 7,
+					},
+				}
+				existingDeployment := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gw-nginx",
+						Namespace: "default",
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: tc.currentReplicas,
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"app": "nginx"},
+						},
+					},
+				}
+				fakeClient = fake.NewFakeClient(agentTLSSecret, hpa, existingDeployment)
+			case tc.hpaExists:
+				hpa := &autoscalingv2.HorizontalPodAutoscaler{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gw-nginx",
+						Namespace: "default",
+					},
+					Status: autoscalingv2.HorizontalPodAutoscalerStatus{
+						DesiredReplicas: 7,
+					},
+				}
+				fakeClient = fake.NewFakeClient(agentTLSSecret, hpa)
+			default:
+				fakeClient = fake.NewFakeClient(agentTLSSecret)
+			}
+
+			provisioner := &NginxProvisioner{
+				cfg: Config{
+					GatewayPodConfig: &config.GatewayPodConfig{
+						Namespace: ngfNamespace,
+						Version:   "1.0.0",
+						Image:     "ngf-image",
+					},
+					AgentTLSSecretName: agentTLSTestSecretName,
+				},
+				baseLabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "nginx"},
+				},
+				k8sClient: fakeClient,
+			}
+
+			gateway := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gw",
+					Namespace: "default",
+				},
+				Spec: gatewayv1.GatewaySpec{
+					Listeners: []gatewayv1.Listener{{Port: 80}},
+				},
+			}
+
+			resourceName := "gw-nginx"
+			nProxyCfg := &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Replicas:    tc.configReplicas,
+						Autoscaling: &ngfAPIv1alpha2.AutoscalingSpec{Enable: true},
+					},
+				},
+			}
+
+			objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, nProxyCfg)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// Find the deployment object
+			var deployment *appsv1.Deployment
+			for _, obj := range objects {
+				if d, ok := obj.(*appsv1.Deployment); ok {
+					deployment = d
+					break
+				}
+			}
+			g.Expect(deployment).ToNot(BeNil())
+
+			if tc.expectedNil {
+				g.Expect(deployment.Spec.Replicas).To(BeNil(), tc.description)
+			} else {
+				g.Expect(deployment.Spec.Replicas).ToNot(BeNil(), tc.description)
+				g.Expect(*deployment.Spec.Replicas).To(Equal(tc.expectedValue), tc.description)
+			}
+		})
 	}
-	g.Expect(deployment).ToNot(BeNil())
-	g.Expect(deployment.Spec.Replicas).ToNot(BeNil())
-	g.Expect(*deployment.Spec.Replicas).To(Equal(int32(7)))
 }
 
 func TestBuildNginxResourceObjects_Plus(t *testing.T) {
