@@ -23,7 +23,7 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 		unexpectedOutputs []string
 	}{
 		{
-			name:      "Log format and access log with custom path and custom format name",
+			name:      "Log format and access log with custom format",
 			accessLog: &dataplane.AccessLog{Format: logFormat},
 			expectedOutputs: []string{
 				fmt.Sprintf("log_format %s '%s'", dataplane.DefaultLogFormatName, logFormat),

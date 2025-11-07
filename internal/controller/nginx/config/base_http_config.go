@@ -10,9 +10,15 @@ import (
 
 var baseHTTPTemplate = gotemplate.Must(gotemplate.New("baseHttp").Parse(baseHTTPTemplateText))
 
+type AccessLog struct {
+	Format     string // User's format string
+	Path       string // Where to write logs (/dev/stdout)
+	FormatName string // Internal format name (ngf_user_defined_log_format)
+	Disabled   bool   // User's disabled flag
+}
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
-	AccessLog               *dataplane.AccessLog
+	AccessLog               *AccessLog
 	DefaultAccessLogPath    string
 	DefaultLogFormatName    string
 	Includes                []shared.Include
@@ -30,9 +36,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
 		NginxReadinessProbePort: conf.BaseHTTPConfig.NginxReadinessProbePort,
 		IPFamily:                getIPFamily(conf.BaseHTTPConfig),
 		DNSResolver:             conf.BaseHTTPConfig.DNSResolver,
-		AccessLog:               conf.Logging.AccessLog,
-		DefaultAccessLogPath:    dataplane.DefaultAccessLogPath,
-		DefaultLogFormatName:    dataplane.DefaultLogFormatName,
+		AccessLog:               buildAccessLog(conf.Logging.AccessLog),
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
@@ -43,4 +47,23 @@ func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
 	results = append(results, createIncludeExecuteResults(includes)...)
 
 	return results
+}
+
+func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {
+	if accessLogConfig != nil {
+		accessLog := &AccessLog{
+			Path:       dataplane.DefaultAccessLogPath,
+			FormatName: dataplane.DefaultLogFormatName,
+		}
+		if accessLogConfig.Format != "" {
+			accessLog.Format = accessLogConfig.Format
+		}
+
+		if accessLogConfig.Disabled {
+			accessLog.Disabled = accessLogConfig.Disabled
+		}
+
+		return accessLog
+	}
+	return nil
 }

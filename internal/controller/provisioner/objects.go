@@ -406,16 +406,9 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		workerConnections = *nProxyCfg.WorkerConnections
 	}
 
-	// Add LogFormats and AccessLogs to mainFields
-	accessLog := addAccessLogsToNginxConfig(logging)
-
 	mainFields := map[string]interface{}{
 		"ErrorLevel":        logLevel,
 		"WorkerConnections": workerConnections,
-	}
-
-	if accessLog != nil {
-		mainFields["AccessLog"] = accessLog
 	}
 
 	// Create events ConfigMap data using template
@@ -1478,20 +1471,4 @@ func DetermineNginxImageName(
 	}
 
 	return fmt.Sprintf("%s:%s", image, tag), pullPolicy
-}
-
-func addAccessLogsToNginxConfig(logging *ngfAPIv1alpha2.NginxLogging) *ngfAPIv1alpha2.NginxAccessLog {
-	accessLog := &ngfAPIv1alpha2.NginxAccessLog{}
-	if logging == nil {
-		return accessLog
-	}
-
-	if logging.AccessLog != nil {
-		accessLog = &ngfAPIv1alpha2.NginxAccessLog{
-			Disabled: logging.AccessLog.Disabled,
-			Format:   logging.AccessLog.Format,
-		}
-	}
-
-	return accessLog
 }

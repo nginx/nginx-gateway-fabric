@@ -52,14 +52,14 @@ server {
 {{- /* Access log directives for AccessLog. If path is "off" we disable logging. */ -}}
 {{- /* We use a fixed name for user-defined log format to avoid complexity of passing the name around. */ -}}
 {{- if .AccessLog }}
-  {{- if .AccessLog.Disabled }}
+{{- if .AccessLog.Disabled }}
 access_log off;
-  {{- else }}
-  {{- if .AccessLog.Format }}
-log_format {{ .DefaultLogFormatName }} '{{ .AccessLog.Format }}';
-access_log {{ .DefaultAccessLogPath }} {{ .DefaultLogFormatName }};
-  {{- end }}
-  {{- end }}
+{{- else }}
+{{- if .AccessLog.Format }}
+log_format {{ .AccessLog.FormatName }} '{{ .AccessLog.Format }}';
+access_log {{ .AccessLog.Path }} {{ .AccessLog.FormatName }};
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{ range $i := .Includes -}}
