@@ -25,7 +25,7 @@ This new filter should eventually expose all forms of authentication available t
 
 ## Introduction
 
-This document focuses expliclty on Authentication (AuthN) and not Authorization (AuthZ). Authentication (AuthN) defines the verification of identiy. It asks the question, "Who are you?". This is different from Authorization (AuthZ), which preceeds Authentication. It asks the question, "What are you allowed to do".
+This document focuses explicitly on Authentication (AuthN) and not Authorization (AuthZ). Authentication (AuthN) defines the verification of identity. It asks the question, "Who are you?". This is different from Authorization (AuthZ), which preceeds Authentication. It asks the question, "What are you allowed to do".
 
 This document also focus on HTTP Basic Authentication and JWT Authentication. Other authentication methods such as OpenID Connect (OIDC) are mentioned, but are not part of the CRD design. These will be covered in future design and implementation tasks.
 
@@ -33,7 +33,7 @@ This document also focus on HTTP Basic Authentication and JWT Authentication. Ot
 ## Use Cases
 
 - As an Application Developer, I want to secure access to my APIs and Backend Applications.
-- As an Application Developer, I want to enforce authenticaiton on specific routes and matches.
+- As an Application Developer, I want to enforce authentication on specific routes and matches.
 
 ### Understanding NGINX authentication methods
 
@@ -46,15 +46,15 @@ This document also focus on HTTP Basic Authentication and JWT Authentication. Ot
 ## API, Customer Driven Interfaces, and User Experience
 
 This portion of the proposal will cover API design and interaction experience for use of Basic Auth and JWT.
-This portioan also contains:
+This portion also contains:
 
 1. The Golang API
 2. Example spec for Basic Auth
-    - Example HTTPRoutes and NINGX configuration
+    - Example HTTPRoutes and NGINX configuration
 3. Example spec for JWT Auth
     - Example HTTPRoutes
     - Examples for Local & Remote JWKS configration
-    - Example NINGX configuration for both Local & Remote JWKS
+    - Example NGINX configuration for both Local & Remote JWKS
     - Example of additioanl optional fields
 
 ### Golang API
@@ -639,7 +639,6 @@ http {
             add_header Content-Type "text/plain; charset=utf-8" always;
             add_header X-Content-Type-Options "nosniff" always;
             add_header Cache-Control "no-store" always;
-            add_header Pragma "no-cache" always;
             return 401 'Unauthorized';
         }
     }
@@ -837,7 +836,6 @@ http {
             add_header Content-Type "text/plain; charset=utf-8" always;
             add_header X-Content-Type-Options "nosniff" always;
             add_header Cache-Control "no-store" always;
-            add_header Pragma "no-cache" always;
             return 403 'Forbidden';
         }
     }
@@ -930,7 +928,6 @@ http {
             add_header Content-Type "text/plain; charset=utf-8" always;
             add_header X-Content-Type-Options "nosniff" always;
             add_header Cache-Control "no-store" always;
-            add_header Pragma "no-cache" always;
             return 401 'Unauthorized';
         }
     }
@@ -1010,7 +1007,7 @@ spec:
 
 ### Attachment
 
-Filters must be attached to a HTTPRoute at the `rules.matces` level.
+Filters must be attached to a HTTPRoute at the `rules.matches` level.
 This means that a single `AuthenticationFilter` may be attached mutliple times to a single HTTPRoute.
 
 #### Basic example
@@ -1173,7 +1170,7 @@ Proxy cache TTL should be configurable and set to a resonable default, reducing 
 
 ### Key rotation
 
-Users sholud be advised to regularly rotate their JWKS keys in cases where they chose to reference a local JWKS via a `secrefRef` or `configMapRef`
+Users should be advised to regularly rotate their JWKS keys in cases where they chose to reference a local JWKS via a `secrefRef` or `configMapRef`
 
 ### Auth failure behaviour
 
@@ -1184,19 +1181,18 @@ Users sholud be advised to regularly rotate their JWKS keys in cases where they 
 ### Auth failure default headers
 
 Below are a list of default defensive headers for authentication failure reponses.
-We may choose to include these headers by default for improved robustness in auth falure responses.
+We may choose to include these headers by default for improved robustness in auth failure responses.
 
 ```nginx
 add_header Content-Type "text/plain; charset=utf-8" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header Cache-Control "no-store" always;
-add_header Pragma "no-cache" always;
 ```
 
 Detailed header breakdown:
 
 - Content-Type: "text/plain; charset=utf-8"
-  - This header explicitly set the body as plan text. This prevents browsers from treating the response as HTML or JavaScript, and is effective at mitigating Cross-side scrpting (XSS) through error pages
+  - This header explicitly set the body as plain text. This prevents browsers from treating the response as HTML or JavaScript, and is effective at mitigating Cross-side scrpting (XSS) through error pages
 
 - X-Content-Type-Options: "nosniff"
   - This header prevents content type confusion. This occurrs when browsers guesses HTML & JavaScript, and executes it despite a benign type.
@@ -1204,19 +1200,17 @@ Detailed header breakdown:
 - Cache-Control: "no-store"
   - This header informs browsers and proxies not to cache the response. Avoids sensitive, auth-related content, from being being stored and served later to unintended recipients.
 
-- Pragma: "no-cache"
-  - This header is commonly paired with `Cache-Control: "no-store"` for broad coverage. It acts as an additional signal for older intermediaries that do not honor Cache-Control.
 
 ### Validation
 
-When referencing an `AuthenticationFilter` in either a HTTPRoute or GRPCRoute, it is important that we ensure all configurable fields are validated, and that the resulting NGINX configuration is correct and secure
+When referencing an `AuthenticationFilter` in either a HTTPRoute or GRPCRoute, it is important that we ensure all configurable fields are validated, and that the resulting NGINX configuration is correct and secure.
 
 All fields in the `AuthenticationFilter` will be validated with Open API Schema.
 We should also include [CEL](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules) validation where required.
 
 We should validated that only one `AuthenticationFilter` is referenced per-rule. Multiple references to an `AuthenticationFilter` in a single rule should result in an `Invalid` HTTPRoute/GRPCRoute, and the resource should be `Rejected`.
 
-an `AuthenticationFilter` that sets a `onFailure.statusCode` to anything other than `401` or `403` should be rejected. This relates to the "Auth failure behaviour" section in the Security Condierations section.
+An `AuthenticationFilter` that sets a `onFailure.statusCode` to anything other than `401` or `403` should be rejected. This relates to the "Auth failure behaviour" section in the Security Considerations section.
 
 ## Alternatives
 
@@ -1225,7 +1219,7 @@ The Gateway API defines a means to standardise authentication through use of the
 This allows users to reference an external authentication services, such as Keycloak, to handle the authentication requests.
 While this API is available in the experimental channel, it is subject to change.
 
-Our decision to go forward with our own `AuthenticationFilter` was to ensure we could quckly provide authenticaiton to our users while allowing us to closley monitor progress of the ExternalAuthFilter.
+Our decision to go forward with our own `AuthenticationFilter` was to ensure we could quickly provide authentication to our users while allowing us to closely monitor progress of the ExternalAuthFilter.
 
 It is certainly possible for us to provide an External Authentication Services that leverages NGINX and is something we can further investigate as the API progresses.
 
@@ -1233,7 +1227,7 @@ It is certainly possible for us to provide an External Authentication Services t
 
 ### Documenting filter behavour
 
-In regards to documentation of filter behavour with the `AuthenticationFilter`, the Gateway API documentation on filters states the following:
+In regards to documentation of filter behaviour with the `AuthenticationFilter`, the Gateway API documentation on filters states the following:
 
 ```text
 Wherever possible, implementations SHOULD implement filters in the order they are specified.
