@@ -200,6 +200,7 @@ type JWTAuth struct {
 	//
 	// +optional
 	// +kubebuilder:validation:Enum=signed;encrypted;nested
+  // +kubebuilder:default=signed
 	Type *JWTTokenType `json:"type,omitempty"`
 
 	// KeyCache is the cache duration for keys (auth_jwt_key_cache).
@@ -240,6 +241,7 @@ const (
 )
 
 // JWTFileKeySource specifies local JWKS key configuration.
+// +kubebuilder:validation:XValidation:message="exactly one of configMapRef or secretRef must be set",rule="(self.configMapRef == null) != (self.secretRef == null)"
 type JWTFileKeySource struct {
 	// ConfigMapRef references a ConfigMap containing the JWKS.
 	// Exactly one of ConfigMapRef or SecretRef must be set.
