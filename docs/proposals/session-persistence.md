@@ -10,18 +10,18 @@ Enable NGINX Gateway Fabric to support session persistence for both NGINX Plus a
 ## Goals
 
 - Extend the Upstream Settings Policy API to allow specifying `ip_hash` load balancing method to support basic session persistence.
-- Design the translation of the Gateway API `sessionPersistence` specification, which can be configured on both HTTPRoute and GRPCRoute, into NGINX Plus cookie-based session persistence directives with `secure` and `httpOnly` mode enforced by default.
+- Design the translation of the Gateway API `sessionPersistence` specification, which can be configured on both HTTPRoute and GRPCRoute, into NGINX Plus cookie-based session persistence directives.
 
 ## Non-Goals
 
 - Describe or implement low-level configuration details for enabling session persistence.
 - Extend session persistence support to TLSRoutes or other Layer 4 route types.
-- Supporting the `sameSite` cookie directive for NGINX Plus session persistence, which may be considered in the future as the Gateway API `sessionPersistence` specification evolves.
+- Supporting the `secure`, `httponly`, `sameSite` cookie directive for NGINX Plus session persistence, which may be considered in the future as the Gateway API `sessionPersistence` specification evolves.
 
 ## Introduction
 
 For NGINX OSS, session persistence is enabled by setting `loadBalancingMethod: ip_hash` on UpstreamSettingsPolicy, which adds the `ip_hash` directive to upstreams and provides IP-based affinity.
-For NGINX Plus, session persistence defined on `HTTPRouteRule/GRPCRouteRule` is translated into sticky cookie upstream configuration with secure, httpOnly, host-only cookies and a path derived from HTTPRoute matches (or defaulted for GRPCRoutes), so sessions stick to a chosen backend.
+For NGINX Plus, session persistence defined on `HTTPRouteRule/GRPCRouteRule` is translated into sticky cookie upstream configuration with host-only cookies and a path derived from HTTPRoute matches (or defaulted for GRPCRoutes), so sessions stick to a chosen backend.
 
 ### Understanding the NGINX directives
 
@@ -52,7 +52,7 @@ domain=<domain> - Sets the domain for the cookie scope.
 path=<path> - Sets the path for the cookie scope.
 samesite=[strict|lax|none|$variable] - Sets the sameSite attribute for the cookie.
 secure - Sets the `secure` attribute for the cookie.
-httpOnly - Sets the `httpOnly` attribute for the cookie.
+httponly - Sets the `httponly` attribute for the cookie.
 
 ## API, Customer Driven Interfaces, and User Experience
 
@@ -139,10 +139,6 @@ Users can configure [sessionPersistence](https://gateway-api.sigs.k8s.io/referen
 | `cookieConfig.lifetimeType=Permanent`  | `expires=<absoluteTimeout>`| Cookie persists until the specified timeout. `absoluteTimeout` is required when `lifetimeType` is `Permanent`.                      |
 | no matching spec field                 | _no `domain` attribute_    | Cookies are host-only for both `HTTPRoute` and `GRPCRoute`.                                                                         |
 | no matching spec field                 | `path`                     | Behavior is described separately for `HTTPRoute` below.                                                                             |
-| no matching spec field                 | `secure`                   | Enabled by default for all routes.                                                                                                  |
-| no matching spec field                 | `httpOnly`                 | Enabled by default for all routes.                                                                                                  |
-
-Note: The default `secure` and `httpOnly` settings may change in the future if we need to align with the Gateway API specification. Enabling `secure` limits session persistence to HTTPS connections to the Gateway, which can be a limitation for HTTP-only clients, and `httpOnly` prevents JavaScript from accessing the cookie. These limitations will be described in more detail in the Session Persistence user documentation.
 
 #### Domain and Path selection for Routes
 
@@ -177,8 +173,6 @@ There are no existing conformance tests for session persistence, so we will add 
 
 The main security concern is how far session cookies reach. This design keeps cookies host-only by never setting the domain attribute, and for HTTPRoutes it scopes cookies by route path (or `/` when no safe common prefix exists). That limits both cross-host and cross-path leakage and reduces the impact of a compromised cookie.
 
-We also set `secure` and `httponly` on the session cookie by default as a hardening measure. If Gateway API later adds these as fields with different defaults, we’ll treat any change in behavior as an experimental-API breaking change. TThis will be documented in the Session Persistence guide, along with the limitations of these directives, and upgrade guidance will be provided so users can explicitly configure these cookie attributes.
-
 ### Edge Cases
 
 - If an implementation routes through Service IPs, any Gateway-level session persistence must be rejected when Service-level session affinity is enabled. In our case, the data plane routes directly to pod IPs, so Service affinity does not interfere with session persistence between the gateway and backends.
@@ -187,7 +181,7 @@ We also set `secure` and `httponly` on the session cookie by default as a harden
 ### Future work
 
 - Define clear precedence and additional restrictions when SessionPersistence is configured via a separate policy.
-- Add support for the `sameSite` cookie attribute in a way that remains compliant with the Gateway API specification.
+- Add support for the `sameSite`, `secure`, `httponly` cookie attribute in a way that remains compliant with the Gateway API specification.
 
 ## Useful Links
 
@@ -196,4 +190,4 @@ We also set `secure` and `httponly` on the session cookie by default as a harden
 - RFC standard for [Set-Cookie](https://datatracker.ietf.org/doc/html/rfc6265#section-4.1) header.
 - [Security risks with subdomain](https://blog.stackademic.com/session-security-risks-with-subdomains-2802c56d681f).
 - [Cookie Security](https://www.appsecmonkey.com/blog/cookie-security), read the section `Malicious Subdomains`.
-- [gRPC Metadata](https://grpc.io/docs/guides/metadata/)
+- [gRPC Metadata](https://grpc.io/docs/guides/metadata/).
