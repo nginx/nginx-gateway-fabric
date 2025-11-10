@@ -503,6 +503,6 @@ type DeploymentContext struct {
 type AccessLog struct {
 	// Format is the access log format template.
 	Format string
-	// Disabled specifies whether the access log is disabled.
-	Disabled bool
+	// Disable specifies whether the access log is disabled.
+	Disable bool
 }

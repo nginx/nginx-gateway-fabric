@@ -360,10 +360,10 @@ const (
 
 // NginxAccessLog defines the configuration for an NGINX access log.
 type NginxAccessLog struct {
-	// Disabled turns off access logging when set to true.
+	// Disable turns off access logging when set to true.
 	//
 	// +optional
-	Disabled *bool `json:"disabled,omitempty"`
+	Disable *bool `json:"disable,omitempty"`
 
 	// Format specifies the custom log format string.
 	// If not specified, NGINX default 'combined' format is used.

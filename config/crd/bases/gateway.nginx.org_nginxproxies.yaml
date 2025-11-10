@@ -8021,8 +8021,8 @@ spec:
                       AccessLog defines the access log settings, including format itself and disabling option.
                       For now only path /dev/stdout can be used.
                     properties:
-                      disabled:
-                        description: Disabled turns off access logging when set to
+                      disable:
+                        description: Disable turns off access logging when set to
                           true.
                         type: boolean
                       format:

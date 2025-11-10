@@ -4907,14 +4907,14 @@ func TestBuildLogging(t *testing.T) {
 			},
 		},
 		{
-			msg: "AccessLog is configured and Disabled = false",
+			msg: "AccessLog is configured and Disable = false",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
 						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
-							Disabled: helpers.GetPointer(false),
-							Format:   helpers.GetPointer(logFormat),
+							Disable: helpers.GetPointer(false),
+							Format:  helpers.GetPointer(logFormat),
 						},
 					},
 				},
@@ -4923,8 +4923,8 @@ func TestBuildLogging(t *testing.T) {
 				ErrorLevel: "info",
 
 				AccessLog: &AccessLog{
-					Disabled: false,
-					Format:   logFormat,
+					Disable: false,
+					Format:  logFormat,
 				},
 			},
 		},
@@ -4935,7 +4935,7 @@ func TestBuildLogging(t *testing.T) {
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
 						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
-							Disabled: helpers.GetPointer(false),
+							Disable: helpers.GetPointer(false),
 						},
 					},
 				},
@@ -4952,8 +4952,8 @@ func TestBuildLogging(t *testing.T) {
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
 						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
-							Disabled: helpers.GetPointer(true),
-							Format:   helpers.GetPointer(logFormat),
+							Disable: helpers.GetPointer(true),
+							Format:  helpers.GetPointer(logFormat),
 						},
 					},
 				},
@@ -4961,7 +4961,7 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
 				AccessLog: &AccessLog{
-					Disabled: true,
+					Disable: true,
 				},
 			},
 		},
@@ -4972,7 +4972,7 @@ func TestBuildLogging(t *testing.T) {
 					Logging: &ngfAPIv1alpha2.NginxLogging{
 						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
 						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
-							Disabled: helpers.GetPointer(true),
+							Disable: helpers.GetPointer(true),
 						},
 					},
 				},
@@ -4980,7 +4980,7 @@ func TestBuildLogging(t *testing.T) {
 			expLoggingSettings: Logging{
 				ErrorLevel: "info",
 				AccessLog: &AccessLog{
-					Disabled: true,
+					Disable: true,
 				},
 			},
 		},

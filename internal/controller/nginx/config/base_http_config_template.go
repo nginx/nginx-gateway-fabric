@@ -51,7 +51,7 @@ server {
 {{- /* Define custom log format */ -}}
 {{- /* We use a fixed name for user-defined log format to avoid complexity of passing the name around. */ -}}
 {{- if .AccessLog }}
-{{- if .AccessLog.Disabled }}
+{{- if .AccessLog.Disable }}
 access_log off;
 {{- else }}
 {{- if .AccessLog.Format }}

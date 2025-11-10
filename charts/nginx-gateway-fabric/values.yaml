@@ -475,9 +475,9 @@ nginx:
   #         type: object
   #         description: AccessLog defines the access log settings.
   #         properties:
-  #           disabled:
+  #           disable:
   #             type: boolean
-  #             description: Disabled turns off access logging when set to true.
+  #             description: Disable turns off access logging when set to true.
   #           format:
   #             type: string
   #             description: Format specifies the custom log format string. If not specified, NGINX default 'combined' format is used.

@@ -1237,8 +1237,8 @@ func buildLogging(gateway *graph.Gateway) Logging {
 
 func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 	if srcLogSettings.AccessLog != nil {
-		if srcLogSettings.AccessLog.Disabled != nil && *srcLogSettings.AccessLog.Disabled {
-			return &AccessLog{Disabled: true}
+		if srcLogSettings.AccessLog.Disable != nil && *srcLogSettings.AccessLog.Disable {
+			return &AccessLog{Disable: true}
 		}
 
 		if srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "" {

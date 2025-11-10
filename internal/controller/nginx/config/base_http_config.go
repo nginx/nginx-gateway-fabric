@@ -14,7 +14,7 @@ type AccessLog struct {
 	Format     string // User's format string
 	Path       string // Where to write logs (/dev/stdout)
 	FormatName string // Internal format name (ngf_user_defined_log_format)
-	Disabled   bool   // User's disabled flag
+	Disable    bool   // User's disable flag
 }
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
@@ -56,7 +56,7 @@ func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {
 		if accessLogConfig.Format != "" {
 			accessLog.Format = accessLogConfig.Format
 		}
-		accessLog.Disabled = accessLogConfig.Disabled
+		accessLog.Disable = accessLogConfig.Disable
 
 		return accessLog
 	}

@@ -40,7 +40,7 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 		},
 		{
 			name:      "Access log off while format presented",
-			accessLog: &dataplane.AccessLog{Disabled: true, Format: logFormat},
+			accessLog: &dataplane.AccessLog{Disable: true, Format: logFormat},
 			expectedOutputs: []string{
 				`access_log off;`,
 			},
@@ -50,7 +50,7 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 		},
 		{
 			name:      "Access log off",
-			accessLog: &dataplane.AccessLog{Disabled: true},
+			accessLog: &dataplane.AccessLog{Disable: true},
 			expectedOutputs: []string{
 				`access_log off;`,
 			},

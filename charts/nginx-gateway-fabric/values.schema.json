@@ -205,8 +205,8 @@
                 "accessLog": {
                   "description": "AccessLog defines the access log settings.",
                   "properties": {
-                    "disabled": {
-                      "description": "Disabled turns off access logging when set to true.",
+                    "disable": {
+                      "description": "Disable turns off access logging when set to true.",
                       "required": [],
                       "type": "boolean"
                     },
