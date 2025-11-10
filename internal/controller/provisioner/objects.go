@@ -686,31 +686,67 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		}
 	}
 
-	var replicas *int32
-	if deploymentCfg.Replicas != nil {
-		replicas = deploymentCfg.Replicas
-	}
-
-	if isAutoscalingEnabled(&deploymentCfg) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		hpa := &autoscalingv2.HorizontalPodAutoscaler{}
-		err := p.k8sClient.Get(ctx, types.NamespacedName{
-			Namespace: objectMeta.Namespace,
-			Name:      objectMeta.Name,
-		}, hpa)
-		if err == nil && hpa.Status.DesiredReplicas > 0 {
-			// overwrite with HPA's desiredReplicas
-			replicas = helpers.GetPointer(hpa.Status.DesiredReplicas)
-		}
-	}
-
+	// Determine replica count based on HPA status
+	replicas := p.determineReplicas(objectMeta, deploymentCfg)
 	if replicas != nil {
 		deployment.Spec.Replicas = replicas
 	}
 
 	return deployment, nil
+}
+
+// determineReplicas determines the appropriate replica count for a deployment based on HPA status.
+//
+// HPA Replicas Management Strategy:
+//
+// When an HPA is managing a deployment, we must read the current deployment's replicas
+// from the cluster and use that value, rather than trying to set our own value or read
+// from HPA.Status.DesiredReplicas (which is eventually consistent and stale).
+//
+// Why we can't use HPA.Status.DesiredReplicas:
+// - HPA.Status updates lag behind Deployment.Spec.Replicas changes
+// - When HPA scales down: HPA writes Deployment.Spec → then updates its own Status
+// - If we read Status during this window, we get the OLD value and overwrite HPA's new value
+// - This creates a race condition causing pod churn
+//
+// Our approach:
+// - When HPA exists: Read current deployment replicas from cluster and use that
+// - When HPA doesn't exist yet: Set replicas for initial deployment creation
+// - When HPA exists but Deployment doesn't exist yet: Set replicas for initial deployment creation
+// - When HPA is disabled: Set replicas normally.
+func (p *NginxProvisioner) determineReplicas(
+	objectMeta metav1.ObjectMeta,
+	deploymentCfg ngfAPIv1alpha2.DeploymentSpec,
+) *int32 {
+	replicas := deploymentCfg.Replicas
+
+	if !isAutoscalingEnabled(&deploymentCfg) {
+		return replicas
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{}
+	err := p.k8sClient.Get(ctx, types.NamespacedName{
+		Namespace: objectMeta.Namespace,
+		Name:      objectMeta.Name,
+	}, hpa)
+	if err != nil {
+		return replicas
+	}
+
+	existingDeployment := &appsv1.Deployment{}
+	err = p.k8sClient.Get(ctx, types.NamespacedName{
+		Namespace: objectMeta.Namespace,
+		Name:      objectMeta.Name,
+	}, existingDeployment)
+
+	if err == nil && existingDeployment.Spec.Replicas != nil {
+		replicas = existingDeployment.Spec.Replicas
+	}
+
+	return replicas
 }
 
 // applyPatches applies the provided patches to the given object.
