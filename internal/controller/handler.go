@@ -241,8 +241,20 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 
 		h.setLatestConfiguration(gw, &cfg)
 
+		vm := []v1.VolumeMount{}
+		if gw.EffectiveNginxProxy != nil &&
+			gw.EffectiveNginxProxy.Kubernetes != nil {
+			if gw.EffectiveNginxProxy.Kubernetes.Deployment != nil {
+				vm = gw.EffectiveNginxProxy.Kubernetes.Deployment.Container.VolumeMounts
+			}
+
+			if gw.EffectiveNginxProxy.Kubernetes.DaemonSet != nil {
+				vm = gw.EffectiveNginxProxy.Kubernetes.DaemonSet.Container.VolumeMounts
+			}
+		}
+
 		deployment.FileLock.Lock()
-		h.updateNginxConf(deployment, cfg)
+		h.updateNginxConf(deployment, cfg, vm)
 		deployment.FileLock.Unlock()
 
 		configErr := deployment.GetLatestConfigError()
@@ -454,9 +466,10 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 func (h *eventHandlerImpl) updateNginxConf(
 	deployment *agent.Deployment,
 	conf dataplane.Configuration,
+	volumeMounts []v1.VolumeMount,
 ) {
 	files := h.cfg.generator.Generate(conf)
-	h.cfg.nginxUpdater.UpdateConfig(deployment, files)
+	h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
 
 	// If using NGINX Plus, update upstream servers using the API.
 	if h.cfg.plus {
