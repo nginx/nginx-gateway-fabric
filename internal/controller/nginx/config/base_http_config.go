@@ -19,6 +19,7 @@ type AccessLog struct {
 type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
+	GatewaySecretID         dataplane.SSLKeyPairID
 	Includes                []shared.Include
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
@@ -35,6 +36,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
 		IPFamily:                getIPFamily(conf.BaseHTTPConfig),
 		DNSResolver:             conf.BaseHTTPConfig.DNSResolver,
 		AccessLog:               buildAccessLog(conf.Logging.AccessLog),
+		GatewaySecretID:         conf.BaseHTTPConfig.GatewaySecretID,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)

@@ -242,6 +242,7 @@ func BuildGraph(
 		gc,
 		refGrantResolver,
 		processedNginxProxies,
+		experimentalEnabled,
 	)
 
 	processedBackendTLSPolicies := processBackendTLSPolicies(
