@@ -1019,6 +1019,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		},
 	}
 
+	var containerResources corev1.ResourceRequirements
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
 		var podSpec *ngfAPIv1alpha2.PodSpec
 		var containerSpec *ngfAPIv1alpha2.ContainerSpec
@@ -1042,7 +1043,8 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		if containerSpec != nil {
 			container := spec.Spec.Containers[0]
 			if containerSpec.Resources != nil {
-				container.Resources = *containerSpec.Resources
+				containerResources = *containerSpec.Resources
+				container.Resources = containerResources
 			}
 			container.Lifecycle = containerSpec.Lifecycle
 			container.VolumeMounts = append(container.VolumeMounts, containerSpec.VolumeMounts...)
@@ -1174,6 +1176,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			Image:           p.cfg.GatewayPodConfig.Image,
 			ImagePullPolicy: pullPolicy,
 			Command:         command,
+			Resources:       containerResources,
 			SecurityContext: &corev1.SecurityContext{
 				AllowPrivilegeEscalation: helpers.GetPointer(false),
 				Capabilities: &corev1.Capabilities{
