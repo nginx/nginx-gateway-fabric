@@ -84,17 +84,22 @@ func newHTTPRouteStatusSetter(status gatewayv1.HTTPRouteStatus, gatewayCtlrName 
 		hr := helpers.MustCastObject[*gatewayv1.HTTPRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
+		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
+		copy(newParents, status.Parents)
 		for _, os := range hr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
-				status.Parents = append(status.Parents, os)
+				newParents = append(newParents, os)
 			}
 		}
 
-		if routeStatusEqual(gatewayCtlrName, hr.Status.Parents, status.Parents) {
+		fullStatus := status
+		fullStatus.Parents = newParents
+
+		if routeStatusEqual(gatewayCtlrName, hr.Status.Parents, fullStatus.Parents) {
 			return false
 		}
 
-		hr.Status = status
+		hr.Status = fullStatus
 
 		return true
 	}
@@ -105,17 +110,22 @@ func newTLSRouteStatusSetter(status v1alpha2.TLSRouteStatus, gatewayCtlrName str
 		tr := helpers.MustCastObject[*v1alpha2.TLSRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
+		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
+		copy(newParents, status.Parents)
 		for _, os := range tr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
-				status.Parents = append(status.Parents, os)
+				newParents = append(newParents, os)
 			}
 		}
 
-		if routeStatusEqual(gatewayCtlrName, tr.Status.Parents, status.Parents) {
+		fullStatus := status
+		fullStatus.Parents = newParents
+
+		if routeStatusEqual(gatewayCtlrName, tr.Status.Parents, fullStatus.Parents) {
 			return false
 		}
 
-		tr.Status = status
+		tr.Status = fullStatus
 
 		return true
 	}
@@ -126,17 +136,22 @@ func newGRPCRouteStatusSetter(status gatewayv1.GRPCRouteStatus, gatewayCtlrName 
 		gr := helpers.MustCastObject[*gatewayv1.GRPCRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
+		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
+		copy(newParents, status.Parents)
 		for _, os := range gr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
-				status.Parents = append(status.Parents, os)
+				newParents = append(newParents, os)
 			}
 		}
 
-		if routeStatusEqual(gatewayCtlrName, gr.Status.Parents, status.Parents) {
+		fullStatus := status
+		fullStatus.Parents = newParents
+
+		if routeStatusEqual(gatewayCtlrName, gr.Status.Parents, fullStatus.Parents) {
 			return false
 		}
 
-		gr.Status = status
+		gr.Status = fullStatus
 
 		return true
 	}
