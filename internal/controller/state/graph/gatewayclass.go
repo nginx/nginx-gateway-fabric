@@ -10,6 +10,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -130,7 +131,7 @@ func validateGatewayClassParametersRef(path *field.Path, ref v1.ParametersRefere
 	}
 
 	if len(errs) > 0 {
-		msg := errs.ToAggregate().Error()
+		msg := helpers.CapitalizeString(errs.ToAggregate().Error())
 		return []conditions.Condition{
 			conditions.NewGatewayClassRefInvalid(msg),
 			conditions.NewGatewayClassInvalidParameters(msg),
@@ -175,7 +176,7 @@ func validateGatewayClass(
 	}
 
 	if !npCfg.Valid {
-		msg := npCfg.ErrMsgs.ToAggregate().Error()
+		msg := helpers.CapitalizeString(npCfg.ErrMsgs.ToAggregate().Error())
 		conds = append(
 			conds,
 			conditions.NewGatewayClassRefInvalid(msg),

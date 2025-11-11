@@ -228,10 +228,10 @@ func TestBuildGatewayClass(t *testing.T) {
 				Valid:  true,
 				Conditions: []conditions.Condition{
 					conditions.NewGatewayClassRefInvalid(
-						"spec.parametersRef.namespace: Required value: ParametersRef must specify Namespace",
+						"Spec.parametersRef.namespace: Required value: ParametersRef must specify Namespace",
 					),
 					conditions.NewGatewayClassInvalidParameters(
-						"spec.parametersRef.namespace: Required value: ParametersRef must specify Namespace",
+						"Spec.parametersRef.namespace: Required value: ParametersRef must specify Namespace",
 					),
 				},
 			},
@@ -244,10 +244,10 @@ func TestBuildGatewayClass(t *testing.T) {
 				Valid:  true,
 				Conditions: []conditions.Condition{
 					conditions.NewGatewayClassRefInvalid(
-						"spec.parametersRef.kind: Unsupported value: \"Invalid\": supported values: \"NginxProxy\"",
+						"Spec.parametersRef.kind: Unsupported value: \"Invalid\": supported values: \"NginxProxy\"",
 					),
 					conditions.NewGatewayClassInvalidParameters(
-						"spec.parametersRef.kind: Unsupported value: \"Invalid\": supported values: \"NginxProxy\"",
+						"Spec.parametersRef.kind: Unsupported value: \"Invalid\": supported values: \"NginxProxy\"",
 					),
 				},
 			},

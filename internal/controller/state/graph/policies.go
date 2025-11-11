@@ -205,7 +205,7 @@ func attachPolicyToService(
 
 		if !gw.Valid {
 			policy.InvalidForGateways[gwNsName] = struct{}{}
-			ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("Parent Gateway is invalid")}
+			ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("The Parent Gateway is invalid")}
 			policy.Ancestors = append(policy.Ancestors, ancestor)
 			continue
 		}
@@ -254,7 +254,7 @@ func attachPolicyToRoute(
 	}
 
 	if !route.Valid || !route.Attachable || len(route.ParentRefs) == 0 {
-		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")}
+		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is invalid")}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}
@@ -334,14 +334,14 @@ func attachPolicyToGateway(
 
 	if !exists || (gw != nil && gw.Source == nil) {
 		policy.InvalidForGateways[ref.Nsname] = struct{}{}
-		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is not found")}
+		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is not found")}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}
 
 	if !gw.Valid {
 		policy.InvalidForGateways[ref.Nsname] = struct{}{}
-		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")}
+		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is invalid")}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}

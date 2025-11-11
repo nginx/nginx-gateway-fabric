@@ -9,6 +9,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -134,10 +135,11 @@ func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersRefer
 
 	if _, ok := supportedParamKinds[string(ref.Kind)]; !ok {
 		err := field.NotSupported(path.Child("kind"), string(ref.Kind), []string{kinds.NginxProxy})
+		condMsg := helpers.CapitalizeString(err.Error())
 		conds = append(
 			conds,
-			conditions.NewGatewayRefInvalid(err.Error()),
-			conditions.NewGatewayInvalidParameters(err.Error()),
+			conditions.NewGatewayRefInvalid(condMsg),
+			conditions.NewGatewayInvalidParameters(condMsg),
 		)
 
 		return conds
@@ -156,7 +158,7 @@ func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersRefer
 	}
 
 	if !npCfg.Valid {
-		msg := npCfg.ErrMsgs.ToAggregate().Error()
+		msg := helpers.CapitalizeString(npCfg.ErrMsgs.ToAggregate().Error())
 		conds = append(
 			conds,
 			conditions.NewGatewayRefInvalid(msg),
@@ -174,16 +176,16 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]con
 	var conds []conditions.Condition
 
 	if gc == nil {
-		conds = append(conds, conditions.NewGatewayInvalid("GatewayClass doesn't exist")...)
+		conds = append(conds, conditions.NewGatewayInvalid("The GatewayClass doesn't exist")...)
 	} else if !gc.Valid {
-		conds = append(conds, conditions.NewGatewayInvalid("GatewayClass is invalid")...)
+		conds = append(conds, conditions.NewGatewayInvalid("The GatewayClass is invalid")...)
 	}
 
 	// Set the unaccepted conditions here, because those make the gateway invalid. We set the unprogrammed conditions
 	// elsewhere, because those do not make the gateway invalid.
 	for _, address := range gw.Spec.Addresses {
 		if address.Type == nil {
-			conds = append(conds, conditions.NewGatewayUnsupportedAddress("AddressType must be specified"))
+			conds = append(conds, conditions.NewGatewayUnsupportedAddress("The AddressType must be specified"))
 		} else if *address.Type != v1.IPAddressType {
 			conds = append(conds, conditions.NewGatewayUnsupportedAddress("Only AddressType IPAddress is supported"))
 		}

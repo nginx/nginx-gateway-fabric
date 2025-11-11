@@ -730,7 +730,7 @@ func TestBuildGateway(t *testing.T) {
 							Valid:       false,
 							Attachable:  true,
 							Conditions: conditions.NewListenerUnsupportedValue(
-								`invalid label selector: "invalid" is not a valid label selector operator`,
+								`Invalid label selector: "invalid" is not a valid label selector operator`,
 							),
 							Routes:   map[RouteKey]*L7Route{},
 							L4Routes: map[L4RouteKey]*L4Route{},
@@ -1142,7 +1142,7 @@ func TestBuildGateway(t *testing.T) {
 						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid:      false,
-					Conditions: conditions.NewGatewayInvalid("GatewayClass is invalid"),
+					Conditions: conditions.NewGatewayInvalid("The GatewayClass is invalid"),
 				},
 			},
 			name: "invalid gatewayclass",
@@ -1160,7 +1160,7 @@ func TestBuildGateway(t *testing.T) {
 						Name:      controller.CreateNginxResourceName("gateway1", gcName),
 					},
 					Valid:      false,
-					Conditions: conditions.NewGatewayInvalid("GatewayClass doesn't exist"),
+					Conditions: conditions.NewGatewayInvalid("The GatewayClass doesn't exist"),
 				},
 			},
 			name: "nil gatewayclass",
@@ -1337,11 +1337,11 @@ func TestBuildGateway(t *testing.T) {
 					Valid: true, // invalid parametersRef does not invalidate Gateway.
 					Conditions: []conditions.Condition{
 						conditions.NewGatewayRefInvalid(
-							"spec.infrastructure.parametersRef.kind: Unsupported value: \"Invalid\": " +
+							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"Invalid\": " +
 								"supported values: \"NginxProxy\"",
 						),
 						conditions.NewGatewayInvalidParameters(
-							"spec.infrastructure.parametersRef.kind: Unsupported value: \"Invalid\": " +
+							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"Invalid\": " +
 								"supported values: \"NginxProxy\"",
 						),
 					},
@@ -1425,8 +1425,8 @@ func TestBuildGateway(t *testing.T) {
 						Valid: false,
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayRefInvalid("somePath: Required value: someField"),
-						conditions.NewGatewayInvalidParameters("somePath: Required value: someField"),
+						conditions.NewGatewayRefInvalid("SomePath: Required value: someField"),
+						conditions.NewGatewayInvalidParameters("SomePath: Required value: someField"),
 					},
 				},
 			},
@@ -1456,9 +1456,9 @@ func TestBuildGateway(t *testing.T) {
 						Valid: false,
 					},
 					Conditions: append(
-						conditions.NewGatewayInvalid("GatewayClass is invalid"),
-						conditions.NewGatewayRefInvalid("somePath: Required value: someField"),
-						conditions.NewGatewayInvalidParameters("somePath: Required value: someField"),
+						conditions.NewGatewayInvalid("The GatewayClass is invalid"),
+						conditions.NewGatewayRefInvalid("SomePath: Required value: someField"),
+						conditions.NewGatewayInvalidParameters("SomePath: Required value: someField"),
 					),
 				},
 			},
@@ -1485,7 +1485,7 @@ func TestBuildGateway(t *testing.T) {
 					},
 					Valid: false,
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayUnsupportedAddress("AddressType must be specified"),
+						conditions.NewGatewayUnsupportedAddress("The AddressType must be specified"),
 					},
 				},
 			},
@@ -1607,10 +1607,10 @@ func TestBuildGateway(t *testing.T) {
 					Conditions: []conditions.Condition{
 						conditions.NewGatewayAcceptedUnsupportedField("TLS"),
 						conditions.NewGatewayRefInvalid(
-							"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
+							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
 						),
 						conditions.NewGatewayInvalidParameters(
-							"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
+							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
 						),
 					},
 				},
@@ -1660,11 +1660,11 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 			},
 			expConds: []conditions.Condition{
 				conditions.NewGatewayRefInvalid(
-					"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": " +
+					"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": " +
 						"supported values: \"NginxProxy\"",
 				),
 				conditions.NewGatewayInvalidParameters(
-					"spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": " +
+					"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": " +
 						"supported values: \"NginxProxy\"",
 				),
 			},
@@ -1696,8 +1696,8 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 				Name:  "np",
 			},
 			expConds: []conditions.Condition{
-				conditions.NewGatewayRefInvalid("somePath: Required value: someField"),
-				conditions.NewGatewayInvalidParameters("somePath: Required value: someField"),
+				conditions.NewGatewayRefInvalid("SomePath: Required value: someField"),
+				conditions.NewGatewayInvalidParameters("SomePath: Required value: someField"),
 			},
 		},
 		{
