@@ -85,7 +85,7 @@ func newHTTPRouteStatusSetter(status gatewayv1.HTTPRouteStatus, gatewayCtlrName 
 
 		// keep all the parent statuses that belong to other controllers
 		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
-		copy(newParents, status.Parents)
+		newParents = append(newParents, status.Parents...)
 		for _, os := range hr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
 				newParents = append(newParents, os)
@@ -111,7 +111,7 @@ func newTLSRouteStatusSetter(status v1alpha2.TLSRouteStatus, gatewayCtlrName str
 
 		// keep all the parent statuses that belong to other controllers
 		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
-		copy(newParents, status.Parents)
+		newParents = append(newParents, status.Parents...)
 		for _, os := range tr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
 				newParents = append(newParents, os)
@@ -137,7 +137,7 @@ func newGRPCRouteStatusSetter(status gatewayv1.GRPCRouteStatus, gatewayCtlrName 
 
 		// keep all the parent statuses that belong to other controllers
 		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
-		copy(newParents, status.Parents)
+		newParents = append(newParents, status.Parents...)
 		for _, os := range gr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
 				newParents = append(newParents, os)
