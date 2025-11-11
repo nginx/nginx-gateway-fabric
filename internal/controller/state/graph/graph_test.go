@@ -33,8 +33,9 @@ import (
 
 func TestBuildGraph(t *testing.T) {
 	const (
-		gcName         = "my-class"
-		controllerName = "my.controller"
+		gcName                  = "my-class"
+		controllerName          = "my.controller"
+		experimentalFeaturesOff = false
 	)
 
 	cm := &v1.ConfigMap{
@@ -1456,7 +1457,7 @@ func TestBuildGraph(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
-				false,
+				experimentalFeaturesOff,
 			)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())

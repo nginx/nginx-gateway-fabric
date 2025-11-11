@@ -22,8 +22,9 @@ import (
 )
 
 const (
-	controllerName = "nginx"
-	gcName         = "my-gateway-class"
+	controllerName          = "nginx"
+	gcName                  = "my-gateway-class"
+	experimentalFeaturesOff = false
 )
 
 var (
@@ -406,7 +407,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
-				false,
+				experimentalFeaturesOff,
 			)
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
@@ -896,7 +897,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
-				false,
+				experimentalFeaturesOff,
 			)
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())

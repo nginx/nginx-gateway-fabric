@@ -6,10 +6,44 @@ import (
 
 	. "github.com/onsi/gomega"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/gateway-api/pkg/features"
 )
 
 func TestSupportedFeatures(t *testing.T) {
 	t.Parallel()
+
+	standardFeatures := []gatewayv1.FeatureName{
+		gatewayv1.FeatureName(features.SupportBackendTLSPolicy),
+		gatewayv1.FeatureName(features.SupportGRPCRoute),
+		gatewayv1.FeatureName(features.SupportGateway),
+		gatewayv1.FeatureName(features.SupportGatewayAddressEmpty),
+		gatewayv1.FeatureName(features.SupportGatewayHTTPListenerIsolation),
+		gatewayv1.FeatureName(features.SupportGatewayInfrastructurePropagation),
+		gatewayv1.FeatureName(features.SupportGatewayPort8080),
+		gatewayv1.FeatureName(features.SupportGatewayStaticAddresses),
+		gatewayv1.FeatureName(features.SupportHTTPRoute),
+		gatewayv1.FeatureName(features.SupportHTTPRouteBackendProtocolWebSocket),
+		gatewayv1.FeatureName(features.SupportHTTPRouteDestinationPortMatching),
+		gatewayv1.FeatureName(features.SupportHTTPRouteHostRewrite),
+		gatewayv1.FeatureName(features.SupportHTTPRouteMethodMatching),
+		gatewayv1.FeatureName(features.SupportHTTPRouteParentRefPort),
+		gatewayv1.FeatureName(features.SupportHTTPRoutePathRedirect),
+		gatewayv1.FeatureName(features.SupportHTTPRoutePathRewrite),
+		gatewayv1.FeatureName(features.SupportHTTPRoutePortRedirect),
+		gatewayv1.FeatureName(features.SupportHTTPRouteQueryParamMatching),
+		gatewayv1.FeatureName(features.SupportHTTPRouteRequestMirror),
+		gatewayv1.FeatureName(features.SupportHTTPRouteRequestMultipleMirrors),
+		gatewayv1.FeatureName(features.SupportHTTPRouteRequestPercentageMirror),
+		gatewayv1.FeatureName(features.SupportHTTPRouteResponseHeaderModification),
+		gatewayv1.FeatureName(features.SupportHTTPRouteSchemeRedirect),
+		gatewayv1.FeatureName(features.SupportReferenceGrant),
+	}
+
+	experimentalFeatures := []gatewayv1.FeatureName{
+		gatewayv1.FeatureName(features.SupportTLSRoute),
+	}
+
+	allFeatures := append(slices.Clone(standardFeatures), experimentalFeatures...)
 
 	tests := []struct {
 		name               string
@@ -18,68 +52,15 @@ func TestSupportedFeatures(t *testing.T) {
 		experimental       bool
 	}{
 		{
-			name:         "standard features only",
-			experimental: false,
-			expectedFeatures: []gatewayv1.FeatureName{
-				"BackendTLSPolicy",
-				"GRPCRoute",
-				"Gateway",
-				"GatewayAddressEmpty",
-				"GatewayHTTPListenerIsolation",
-				"GatewayInfrastructurePropagation",
-				"GatewayPort8080",
-				"GatewayStaticAddresses",
-				"HTTPRoute",
-				"HTTPRouteBackendProtocolWebSocket",
-				"HTTPRouteDestinationPortMatching",
-				"HTTPRouteHostRewrite",
-				"HTTPRouteMethodMatching",
-				"HTTPRouteParentRefPort",
-				"HTTPRoutePathRedirect",
-				"HTTPRoutePathRewrite",
-				"HTTPRoutePortRedirect",
-				"HTTPRouteQueryParamMatching",
-				"HTTPRouteRequestMirror",
-				"HTTPRouteRequestMultipleMirrors",
-				"HTTPRouteRequestPercentageMirror",
-				"HTTPRouteResponseHeaderModification",
-				"HTTPRouteSchemeRedirect",
-				"ReferenceGrant",
-			},
-			unexpectedFeatures: []gatewayv1.FeatureName{
-				"TLSRoute",
-			},
+			name:               "standard features only",
+			experimental:       false,
+			expectedFeatures:   standardFeatures,
+			unexpectedFeatures: experimentalFeatures,
 		},
 		{
-			name:         "standard and experimental features",
-			experimental: true,
-			expectedFeatures: []gatewayv1.FeatureName{
-				"BackendTLSPolicy",
-				"GRPCRoute",
-				"Gateway",
-				"GatewayAddressEmpty",
-				"GatewayHTTPListenerIsolation",
-				"GatewayInfrastructurePropagation",
-				"GatewayPort8080",
-				"GatewayStaticAddresses",
-				"HTTPRoute",
-				"HTTPRouteBackendProtocolWebSocket",
-				"HTTPRouteDestinationPortMatching",
-				"HTTPRouteHostRewrite",
-				"HTTPRouteMethodMatching",
-				"HTTPRouteParentRefPort",
-				"HTTPRoutePathRedirect",
-				"HTTPRoutePathRewrite",
-				"HTTPRoutePortRedirect",
-				"HTTPRouteQueryParamMatching",
-				"HTTPRouteRequestMirror",
-				"HTTPRouteRequestMultipleMirrors",
-				"HTTPRouteRequestPercentageMirror",
-				"HTTPRouteResponseHeaderModification",
-				"HTTPRouteSchemeRedirect",
-				"ReferenceGrant",
-				"TLSRoute",
-			},
+			name:               "standard and experimental features",
+			experimental:       true,
+			expectedFeatures:   allFeatures,
 			unexpectedFeatures: []gatewayv1.FeatureName{},
 		},
 	}

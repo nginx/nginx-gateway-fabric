@@ -3,7 +3,6 @@ package status
 import (
 	"sort"
 
-	"k8s.io/apimachinery/pkg/util/sets"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/pkg/features"
 )
@@ -12,55 +11,55 @@ import (
 // The list must be sorted in ascending alphabetical order.
 // If experimental is true, experimental features like TLSRoute will be included.
 func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
-	featSet := sets.New(
+	featureNames := []features.FeatureName{
 		// Core features
-		features.GatewayFeature,
-		features.GRPCRouteFeature,
-		features.HTTPRouteFeature,
-		features.ReferenceGrantFeature,
+		features.SupportGateway,
+		features.SupportGRPCRoute,
+		features.SupportHTTPRoute,
+		features.SupportReferenceGrant,
 
 		// BackendTLSPolicy
-		features.BackendTLSPolicyFeature,
+		features.SupportBackendTLSPolicy,
 
 		// Gateway extended
-		features.GatewayEmptyAddressFeature,
-		features.GatewayHTTPListenerIsolationFeature,
-		features.GatewayInfrastructurePropagationFeature,
-		features.GatewayPort8080Feature,
-		features.GatewayStaticAddressesFeature,
+		features.SupportGatewayAddressEmpty,
+		features.SupportGatewayHTTPListenerIsolation,
+		features.SupportGatewayInfrastructurePropagation,
+		features.SupportGatewayPort8080,
+		features.SupportGatewayStaticAddresses,
 
 		// HTTPRoute extended
-		features.HTTPRouteBackendProtocolWebSocketFeature,
-		features.HTTPRouteDestinationPortMatchingFeature,
-		features.HTTPRouteHostRewriteFeature,
-		features.HTTPRouteMethodMatchingFeature,
-		features.HTTPRouteParentRefPortFeature,
-		features.HTTPRoutePathRedirectFeature,
-		features.HTTPRoutePathRewriteFeature,
-		features.HTTPRoutePortRedirectFeature,
-		features.HTTPRouteQueryParamMatchingFeature,
-		features.HTTPRouteRequestMirrorFeature,
-		features.HTTPRouteRequestMultipleMirrorsFeature,
-		features.HTTPRouteRequestPercentageMirrorFeature,
-		features.HTTPRouteResponseHeaderModificationFeature,
-		features.HTTPRouteSchemeRedirectFeature,
-	)
+		features.SupportHTTPRouteBackendProtocolWebSocket,
+		features.SupportHTTPRouteDestinationPortMatching,
+		features.SupportHTTPRouteHostRewrite,
+		features.SupportHTTPRouteMethodMatching,
+		features.SupportHTTPRouteParentRefPort,
+		features.SupportHTTPRoutePathRedirect,
+		features.SupportHTTPRoutePathRewrite,
+		features.SupportHTTPRoutePortRedirect,
+		features.SupportHTTPRouteQueryParamMatching,
+		features.SupportHTTPRouteRequestMirror,
+		features.SupportHTTPRouteRequestMultipleMirrors,
+		features.SupportHTTPRouteRequestPercentageMirror,
+		features.SupportHTTPRouteResponseHeaderModification,
+		features.SupportHTTPRouteSchemeRedirect,
+	}
 
 	// Add experimental features if enabled
 	if experimental {
-		featSet.Insert(features.TLSRouteFeature)
-	}
-
-	// Convert features to SupportedFeature slice
-	result := make([]gatewayv1.SupportedFeature, 0, featSet.Len())
-	for _, feat := range featSet.UnsortedList() {
-		result = append(result, gatewayv1.SupportedFeature{Name: gatewayv1.FeatureName(feat.Name)})
+		featureNames = append(featureNames, features.SupportTLSRoute)
 	}
 
 	// Sort alphabetically by feature name
-	sort.Slice(result, func(i, j int) bool {
-		return string(result[i].Name) < string(result[j].Name)
+	sort.Slice(featureNames, func(i, j int) bool {
+		return string(featureNames[i]) < string(featureNames[j])
 	})
+
+	// Convert to SupportedFeature slice
+	result := make([]gatewayv1.SupportedFeature, 0, len(featureNames))
+	for _, name := range featureNames {
+		result = append(result, gatewayv1.SupportedFeature{Name: gatewayv1.FeatureName(name)})
+	}
 
 	return result
 }
