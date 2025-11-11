@@ -18,3 +18,4 @@ This Enhancement Proposal introduces the `ProxySettingsPolicy` API that allows C
 ## Non-Goals
 
 - Define the complete set of all proxy directives (only buffering directives are in scope for initial implementation).
+- Support for stream (TCP/UDP) proxy buffering configurations (only HTTP/GRPCRoutes are in scope for initial implementation).
