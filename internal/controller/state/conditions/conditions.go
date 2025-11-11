@@ -322,7 +322,7 @@ func NewRouteNotAllowedByListeners() Condition {
 	}
 }
 
-// NewRouteNoMatchingListenerHostname returns a Condition that indicates that the hostname of the listener
+// NewRouteNoMatchingListenerHostname returns a Condition that indicates that the hostname of the Listener
 // does not match the hostnames of the Route.
 func NewRouteNoMatchingListenerHostname() Condition {
 	return Condition{
@@ -397,7 +397,7 @@ func NewRouteHostnameConflict() Condition {
 		Type:    string(v1.RouteConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonHostnameConflict),
-		Message: "Hostname(s) conflict with another route of the same kind on the same port",
+		Message: "Hostname(s) conflict with another Route of the same kind on the same port",
 	}
 }
 

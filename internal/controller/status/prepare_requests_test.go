@@ -2060,7 +2060,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 				Generation: 1,
 			},
 		},
-		Conditions: []conditions.Condition{conditions.NewSnippetsFilterInvalid("Invalid snippetsFilter")},
+		Conditions: []conditions.Condition{conditions.NewSnippetsFilterInvalid("Invalid SnippetsFilter")},
 		Valid:      false,
 	}
 
@@ -2118,7 +2118,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(ngfAPI.SnippetsFilterConditionReasonInvalid),
-									Message:            "Invalid snippetsFilter",
+									Message:            "Invalid SnippetsFilter",
 								},
 							},
 							ControllerName: gatewayCtlrName,

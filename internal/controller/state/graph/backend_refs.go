@@ -420,7 +420,7 @@ func findBackendTLSPolicyForService(
 		beTLSPolicy.IsReferenced = true
 		if !beTLSPolicy.Valid {
 			//nolint:staticcheck // Capitalization required for alignment with other messages.
-			err = fmt.Errorf("The backend TLS policy is invalid: %s", beTLSPolicy.Conditions[0].Message)
+			err = fmt.Errorf("The BackendTLSPolicy is invalid: %s", beTLSPolicy.Conditions[0].Message)
 		} else {
 			beTLSPolicy.Conditions = append(beTLSPolicy.Conditions, conditions.NewPolicyAccepted())
 		}

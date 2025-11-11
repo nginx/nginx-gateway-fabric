@@ -1573,7 +1573,7 @@ func TestCreateBackend(t *testing.T) {
 			expectedServicePortReference: "",
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedValue(
-					"The backend TLS policy is invalid: Unsupported value",
+					"The BackendTLSPolicy is invalid: Unsupported value",
 				),
 			},
 			name: "invalid policy",
