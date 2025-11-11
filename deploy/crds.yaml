@@ -9613,8 +9613,10 @@ spec:
                     type: string
                 type: object
               loadBalancingMethod:
-                description: LoadBalancingMethod specifies the load balancing algorithm
-                  to be used for the upstream.
+                description: |-
+                  LoadBalancingMethod specifies the load balancing algorithm to be used for the upstream.
+                  If not specified, NGINX Gateway Fabric defaults to `random two least_conn`,
+                  which differs from the standard NGINX default `round-robin`.
                 enum:
                 - ip_hash
                 - random two least_conn

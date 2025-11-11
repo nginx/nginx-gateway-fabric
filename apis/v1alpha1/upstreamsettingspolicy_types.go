@@ -52,6 +52,8 @@ type UpstreamSettingsPolicySpec struct {
 	KeepAlive *UpstreamKeepAlive `json:"keepAlive,omitempty"`
 
 	// LoadBalancingMethod specifies the load balancing algorithm to be used for the upstream.
+	// If not specified, NGINX Gateway Fabric defaults to `random two least_conn`,
+	// which differs from the standard NGINX default `round-robin`.
 	//
 	// +optional
 	LoadBalancingMethod *LoadBalancingType `json:"loadBalancingMethod,omitempty"`
