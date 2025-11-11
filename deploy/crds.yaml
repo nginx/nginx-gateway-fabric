@@ -9613,7 +9613,6 @@ spec:
                     type: string
                 type: object
               loadBalancingMethod:
-                default: random two least_conn
                 description: LoadBalancingMethod specifies the load balancing algorithm
                   to be used for the upstream.
                 enum:

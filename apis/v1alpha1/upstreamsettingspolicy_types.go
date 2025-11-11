@@ -54,7 +54,6 @@ type UpstreamSettingsPolicySpec struct {
 	// LoadBalancingMethod specifies the load balancing algorithm to be used for the upstream.
 	//
 	// +optional
-	// +kubebuilder:default:=random two least_conn
 	LoadBalancingMethod *LoadBalancingType `json:"loadBalancingMethod,omitempty"`
 
 	// TargetRefs identifies API object(s) to apply the policy to.
