@@ -18,6 +18,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
+	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -666,13 +667,13 @@ var _ = Describe("ChangeProcessor", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "gatewayclasses.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							graph.BundleVersionAnnotation: graph.SupportedVersion,
+							consts.BundleVersionAnnotation: consts.BundleVersion,
 						},
 					},
 				}
 
 				gatewayAPICRDUpdated = gatewayAPICRD.DeepCopy()
-				gatewayAPICRDUpdated.Annotations[graph.BundleVersionAnnotation] = "v1.99.0"
+				gatewayAPICRDUpdated.Annotations[consts.BundleVersionAnnotation] = "v1.99.0"
 			})
 			BeforeEach(func() {
 				expRouteHR1 = &graph.L7Route{
@@ -1556,7 +1557,7 @@ var _ = Describe("ChangeProcessor", func() {
 					}
 
 					expGraph.GatewayClass.Conditions = conditions.NewGatewayClassSupportedVersionBestEffort(
-						graph.SupportedVersion,
+						consts.BundleVersion,
 					)
 
 					processAndValidateGraph(expGraph)
@@ -1574,7 +1575,7 @@ var _ = Describe("ChangeProcessor", func() {
 					}
 
 					expGraph.GatewayClass.Conditions = conditions.NewGatewayClassSupportedVersionBestEffort(
-						graph.SupportedVersion,
+						consts.BundleVersion,
 					)
 
 					graphCfg := processor.Process()

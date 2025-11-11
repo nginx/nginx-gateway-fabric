@@ -10,51 +10,113 @@ import (
 
 func TestSupportedFeatures(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	features := SupportedFeatures()
-
-	// Verify we have the expected features
-	expectedFeatures := []gatewayv1.FeatureName{
-		"BackendTLSPolicy",
-		"GatewayAddressEmpty",
-		"GatewayHTTPListenerIsolation",
-		"GatewayInfrastructurePropagation",
-		"GatewayPort8080",
-		"GatewayStaticAddresses",
-		"HTTPRouteBackendProtocolWebSocket",
-		"HTTPRouteDestinationPortMatching",
-		"HTTPRouteHostRewrite",
-		"HTTPRouteMethodMatching",
-		"HTTPRouteParentRefPort",
-		"HTTPRoutePathRedirect",
-		"HTTPRoutePathRewrite",
-		"HTTPRoutePortRedirect",
-		"HTTPRouteQueryParamMatching",
-		"HTTPRouteRequestMirror",
-		"HTTPRouteRequestMultipleMirrors",
-		"HTTPRouteRequestPercentageMirror",
-		"HTTPRouteResponseHeaderModification",
-		"HTTPRouteSchemeRedirect",
+	tests := []struct {
+		name               string
+		expectedFeatures   []gatewayv1.FeatureName
+		unexpectedFeatures []gatewayv1.FeatureName
+		experimental       bool
+	}{
+		{
+			name:         "standard features only",
+			experimental: false,
+			expectedFeatures: []gatewayv1.FeatureName{
+				"BackendTLSPolicy",
+				"GRPCRoute",
+				"Gateway",
+				"GatewayAddressEmpty",
+				"GatewayHTTPListenerIsolation",
+				"GatewayInfrastructurePropagation",
+				"GatewayPort8080",
+				"GatewayStaticAddresses",
+				"HTTPRoute",
+				"HTTPRouteBackendProtocolWebSocket",
+				"HTTPRouteDestinationPortMatching",
+				"HTTPRouteHostRewrite",
+				"HTTPRouteMethodMatching",
+				"HTTPRouteParentRefPort",
+				"HTTPRoutePathRedirect",
+				"HTTPRoutePathRewrite",
+				"HTTPRoutePortRedirect",
+				"HTTPRouteQueryParamMatching",
+				"HTTPRouteRequestMirror",
+				"HTTPRouteRequestMultipleMirrors",
+				"HTTPRouteRequestPercentageMirror",
+				"HTTPRouteResponseHeaderModification",
+				"HTTPRouteSchemeRedirect",
+				"ReferenceGrant",
+			},
+			unexpectedFeatures: []gatewayv1.FeatureName{
+				"TLSRoute",
+			},
+		},
+		{
+			name:         "standard and experimental features",
+			experimental: true,
+			expectedFeatures: []gatewayv1.FeatureName{
+				"BackendTLSPolicy",
+				"GRPCRoute",
+				"Gateway",
+				"GatewayAddressEmpty",
+				"GatewayHTTPListenerIsolation",
+				"GatewayInfrastructurePropagation",
+				"GatewayPort8080",
+				"GatewayStaticAddresses",
+				"HTTPRoute",
+				"HTTPRouteBackendProtocolWebSocket",
+				"HTTPRouteDestinationPortMatching",
+				"HTTPRouteHostRewrite",
+				"HTTPRouteMethodMatching",
+				"HTTPRouteParentRefPort",
+				"HTTPRoutePathRedirect",
+				"HTTPRoutePathRewrite",
+				"HTTPRoutePortRedirect",
+				"HTTPRouteQueryParamMatching",
+				"HTTPRouteRequestMirror",
+				"HTTPRouteRequestMultipleMirrors",
+				"HTTPRouteRequestPercentageMirror",
+				"HTTPRouteResponseHeaderModification",
+				"HTTPRouteSchemeRedirect",
+				"ReferenceGrant",
+				"TLSRoute",
+			},
+			unexpectedFeatures: []gatewayv1.FeatureName{},
+		},
 	}
 
-	g.Expect(features).To(HaveLen(len(expectedFeatures)))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-	// Verify all expected features are present
-	for _, expected := range expectedFeatures {
-		g.Expect(slices.ContainsFunc(features, func(f gatewayv1.SupportedFeature) bool {
-			return f.Name == expected
-		})).To(BeTrue(), "expected feature %s not found", expected)
+			features := supportedFeatures(tc.experimental)
+
+			g.Expect(features).To(HaveLen(len(tc.expectedFeatures)))
+
+			// Verify all expected features are present
+			for _, expected := range tc.expectedFeatures {
+				g.Expect(slices.ContainsFunc(features, func(f gatewayv1.SupportedFeature) bool {
+					return f.Name == expected
+				})).To(BeTrue(), "expected feature %s not found", expected)
+			}
+
+			// Verify unexpected features are not present
+			for _, unexpected := range tc.unexpectedFeatures {
+				g.Expect(slices.ContainsFunc(features, func(f gatewayv1.SupportedFeature) bool {
+					return f.Name == unexpected
+				})).To(BeFalse(), "unexpected feature %s found", unexpected)
+			}
+
+			// Verify the list is sorted alphabetically
+			g.Expect(slices.IsSortedFunc(features, func(a, b gatewayv1.SupportedFeature) int {
+				if a.Name < b.Name {
+					return -1
+				}
+				if a.Name > b.Name {
+					return 1
+				}
+				return 0
+			})).To(BeTrue(), "features should be sorted alphabetically")
+		})
 	}
-
-	// Verify the list is sorted alphabetically
-	g.Expect(slices.IsSortedFunc(features, func(a, b gatewayv1.SupportedFeature) int {
-		if a.Name < b.Name {
-			return -1
-		}
-		if a.Name > b.Name {
-			return 1
-		}
-		return 0
-	})).To(BeTrue(), "features should be sorted alphabetically")
 }

@@ -208,6 +208,7 @@ func BuildGraph(
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	validators validation.Validators,
 	logger logr.Logger,
+	experimentalEnabled bool,
 ) *Graph {
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
@@ -227,6 +228,7 @@ func BuildGraph(
 		processedGwClasses.Winner,
 		processedNginxProxies,
 		state.CRDMetadata,
+		experimentalEnabled,
 	)
 
 	secretResolver := newSecretResolver(state.Secrets)

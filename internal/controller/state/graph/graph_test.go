@@ -1456,6 +1456,7 @@ func TestBuildGraph(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
+				false,
 			)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())

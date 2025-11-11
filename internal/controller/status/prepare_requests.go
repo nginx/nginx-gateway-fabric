@@ -211,7 +211,7 @@ func PrepareGatewayClassRequests(
 			ResourceType: &v1.GatewayClass{},
 			Setter: newGatewayClassStatusSetter(v1.GatewayClassStatus{
 				Conditions:        apiConds,
-				SupportedFeatures: SupportedFeatures(),
+				SupportedFeatures: supportedFeatures(gc.ExperimentalSupported),
 			}),
 		}
 
@@ -228,7 +228,7 @@ func PrepareGatewayClassRequests(
 					gwClass.Generation,
 					transitionTime,
 				),
-				SupportedFeatures: SupportedFeatures(),
+				SupportedFeatures: supportedFeatures(false),
 			}),
 		}
 
