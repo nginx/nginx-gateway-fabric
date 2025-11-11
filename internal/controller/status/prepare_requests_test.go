@@ -196,7 +196,7 @@ var (
 						ObservedGeneration: 3,
 						LastTransitionTime: transitionTime,
 						Reason:             string(v1.RouteReasonAccepted),
-						Message:            "The route is accepted",
+						Message:            "The Route is accepted",
 					},
 					{
 						Type:               string(v1.RouteConditionResolvedRefs),
@@ -222,7 +222,7 @@ var (
 						ObservedGeneration: 3,
 						LastTransitionTime: transitionTime,
 						Reason:             string(v1.RouteReasonAccepted),
-						Message:            "The route is accepted",
+						Message:            "The Route is accepted",
 					},
 					{
 						Type:               string(v1.RouteConditionResolvedRefs),
@@ -254,7 +254,7 @@ var (
 						ObservedGeneration: 3,
 						LastTransitionTime: transitionTime,
 						Reason:             string(v1.RouteReasonAccepted),
-						Message:            "The route is accepted",
+						Message:            "The Route is accepted",
 					},
 					{
 						Type:               string(v1.RouteConditionResolvedRefs),
@@ -285,7 +285,7 @@ var (
 						ObservedGeneration: 3,
 						LastTransitionTime: transitionTime,
 						Reason:             string(v1.RouteReasonAccepted),
-						Message:            "The route is accepted",
+						Message:            "The Route is accepted",
 					},
 					{
 						Type:               string(v1.RouteConditionResolvedRefs),
@@ -310,7 +310,7 @@ var (
 						ObservedGeneration: 3,
 						LastTransitionTime: transitionTime,
 						Reason:             string(v1.RouteReasonAccepted),
-						Message:            "The route is accepted",
+						Message:            "The Route is accepted",
 					},
 					{
 						Type:               string(v1.RouteConditionResolvedRefs),
@@ -347,7 +347,7 @@ var (
 						ObservedGeneration: 3,
 						LastTransitionTime: transitionTime,
 						Reason:             string(v1.RouteReasonAccepted),
-						Message:            "The route is accepted",
+						Message:            "The Route is accepted",
 					},
 					{
 						Type:               string(v1.RouteConditionResolvedRefs),
@@ -678,7 +678,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							ObservedGeneration: 1,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayClassReasonAccepted),
-							Message:            "GatewayClass is accepted",
+							Message:            "The GatewayClass is accepted",
 						},
 						{
 							Type:               string(v1.GatewayClassReasonSupportedVersion),
@@ -686,7 +686,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							ObservedGeneration: 1,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayClassReasonSupportedVersion),
-							Message:            "Gateway API CRD versions are supported",
+							Message:            "The Gateway API CRD versions are supported",
 						},
 					},
 				},
@@ -760,7 +760,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 			ObservedGeneration: 2,
 			LastTransitionTime: transitionTime,
 			Reason:             string(v1.ListenerReasonAccepted),
-			Message:            "Listener is accepted",
+			Message:            "The Listener is accepted",
 		},
 		{
 			Type:               string(v1.ListenerConditionProgrammed),
@@ -768,7 +768,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 			ObservedGeneration: 2,
 			LastTransitionTime: transitionTime,
 			Reason:             string(v1.ListenerReasonProgrammed),
-			Message:            "Listener is programmed",
+			Message:            "The Listener is programmed",
 		},
 		{
 			Type:               string(v1.ListenerConditionResolvedRefs),
@@ -835,7 +835,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonAccepted),
-							Message:            "Gateway is accepted",
+							Message:            "The Gateway is accepted",
 						},
 						{
 							Type:               string(v1.GatewayConditionProgrammed),
@@ -843,7 +843,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonProgrammed),
-							Message:            "Gateway is programmed",
+							Message:            "The Gateway is programmed",
 						},
 					},
 					Listeners: []v1.ListenerStatus{
@@ -874,7 +874,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 					{
 						Name:       "listener-invalid",
 						Valid:      false,
-						Conditions: conditions.NewListenerUnsupportedValue("unsupported value"),
+						Conditions: conditions.NewListenerUnsupportedValue("Unsupported value"),
 					},
 				},
 				Valid: true,
@@ -889,7 +889,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonProgrammed),
-							Message:            "Gateway is programmed",
+							Message:            "The Gateway is programmed",
 						},
 						{
 							// is it a bug?
@@ -898,7 +898,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonListenersNotValid),
-							Message:            "Gateway has at least one valid listener",
+							Message:            "The Gateway has at least one valid listener",
 						},
 					},
 					Listeners: []v1.ListenerStatus{
@@ -917,7 +917,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(conditions.ListenerReasonUnsupportedValue),
-									Message:            "unsupported value",
+									Message:            "Unsupported value",
 								},
 								{
 									Type:               string(v1.ListenerConditionProgrammed),
@@ -925,7 +925,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.ListenerReasonInvalid),
-									Message:            "unsupported value",
+									Message:            "Unsupported value",
 								},
 							},
 						},
@@ -941,12 +941,12 @@ func TestBuildGatewayStatuses(t *testing.T) {
 					{
 						Name:       "listener-invalid-1",
 						Valid:      false,
-						Conditions: conditions.NewListenerUnsupportedProtocol("unsupported protocol"),
+						Conditions: conditions.NewListenerUnsupportedProtocol("Unsupported protocol"),
 					},
 					{
 						Name:       "listener-invalid-2",
 						Valid:      false,
-						Conditions: conditions.NewListenerUnsupportedValue("unsupported value"),
+						Conditions: conditions.NewListenerUnsupportedValue("Unsupported value"),
 					},
 				},
 				Valid: true,
@@ -961,7 +961,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonListenersNotValid),
-							Message:            "Gateway has no valid listeners",
+							Message:            "The Gateway has no valid listeners",
 						},
 						{
 							Type:               string(v1.GatewayConditionProgrammed),
@@ -969,7 +969,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonInvalid),
-							Message:            "Gateway has no valid listeners",
+							Message:            "The Gateway has no valid listeners",
 						},
 					},
 					Listeners: []v1.ListenerStatus{
@@ -983,7 +983,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.ListenerReasonUnsupportedProtocol),
-									Message:            "unsupported protocol",
+									Message:            "Unsupported protocol",
 								},
 								{
 									Type:               string(v1.ListenerConditionProgrammed),
@@ -991,7 +991,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.ListenerReasonInvalid),
-									Message:            "unsupported protocol",
+									Message:            "Unsupported protocol",
 								},
 							},
 						},
@@ -1005,7 +1005,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(conditions.ListenerReasonUnsupportedValue),
-									Message:            "unsupported value",
+									Message:            "Unsupported value",
 								},
 								{
 									Type:               string(v1.ListenerConditionProgrammed),
@@ -1013,7 +1013,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.ListenerReasonInvalid),
-									Message:            "unsupported value",
+									Message:            "Unsupported value",
 								},
 							},
 						},
@@ -1075,7 +1075,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonAccepted),
-							Message:            "Gateway is accepted",
+							Message:            "The Gateway is accepted",
 						},
 						{
 							Type:               string(v1.GatewayConditionProgrammed),
@@ -1097,7 +1097,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.ListenerReasonAccepted),
-									Message:            "Listener is accepted",
+									Message:            "The Listener is accepted",
 								},
 								{
 									Type:               string(v1.ListenerConditionResolvedRefs),
@@ -1156,7 +1156,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonAccepted),
-							Message:            "Gateway is accepted",
+							Message:            "The Gateway is accepted",
 						},
 						{
 							Type:               string(v1.GatewayConditionProgrammed),
@@ -1164,7 +1164,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonProgrammed),
-							Message:            "Gateway is programmed",
+							Message:            "The Gateway is programmed",
 						},
 						{
 							Type:               string(conditions.GatewayResolvedRefs),
@@ -1172,7 +1172,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(conditions.GatewayReasonResolvedRefs),
-							Message:            "ParametersRef resource is resolved",
+							Message:            "The ParametersRef resource is resolved",
 						},
 					},
 					Listeners: []v1.ListenerStatus{
@@ -1199,7 +1199,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 				Valid: true,
 				Conditions: []conditions.Condition{
 					conditions.NewGatewayRefNotFound(),
-					conditions.NewGatewayInvalidParameters("ParametersRef not found"),
+					conditions.NewGatewayInvalidParameters("The ParametersRef not found"),
 				},
 			},
 			expected: map[types.NamespacedName]v1.GatewayStatus{
@@ -1212,7 +1212,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonProgrammed),
-							Message:            "Gateway is programmed",
+							Message:            "The Gateway is programmed",
 						},
 						{
 							Type:               string(conditions.GatewayResolvedRefs),
@@ -1220,7 +1220,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(conditions.GatewayReasonParamsRefNotFound),
-							Message:            "ParametersRef resource could not be found",
+							Message:            "The ParametersRef resource could not be found",
 						},
 						{
 							Type:               string(v1.GatewayConditionAccepted),
@@ -1228,7 +1228,8 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonInvalidParameters),
-							Message:            "Gateway is accepted, but ParametersRef is ignored due to an error: ParametersRef not found",
+							Message: "The Gateway is accepted, but ParametersRef is ignored due to an error: " +
+								"The ParametersRef not found",
 						},
 					},
 					Listeners: []v1.ListenerStatus{
@@ -1269,7 +1270,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonAccepted),
-							Message:            "Gateway is accepted",
+							Message:            "The Gateway is accepted",
 						},
 						{
 							Type:               string(v1.GatewayConditionProgrammed),
@@ -1319,7 +1320,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonAccepted),
-							Message:            "Gateway is accepted",
+							Message:            "The Gateway is accepted",
 						},
 						{
 							Type:               string(v1.GatewayConditionProgrammed),
@@ -1415,7 +1416,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 	}
 
 	attachedConds := []conditions.Condition{conditions.NewPolicyAccepted()}
-	invalidConds := []conditions.Condition{conditions.NewPolicyInvalid("invalid backendTLSPolicy")}
+	invalidConds := []conditions.Condition{conditions.NewPolicyInvalid("The BackendTLSPolicy is invalid")}
 
 	validPolicyCfg := policyCfg{
 		Name:         "valid-bt",
@@ -1460,7 +1461,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 			expected:     map[types.NamespacedName]v1.PolicyStatus{},
 		},
 		{
-			name: "valid backendTLSPolicy",
+			name: "valid BackendTLSPolicy",
 			backendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
 				{Namespace: "test", Name: "valid-bt"}: getBackendTLSPolicy(validPolicyCfg),
 			},
@@ -1483,7 +1484,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonAccepted),
-									Message:            "Policy is accepted",
+									Message:            "The Policy is accepted",
 								},
 							},
 						},
@@ -1502,7 +1503,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonAccepted),
-									Message:            "Policy is accepted",
+									Message:            "The Policy is accepted",
 								},
 							},
 						},
@@ -1511,7 +1512,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid backendTLSPolicy",
+			name: "invalid BackendTLSPolicy",
 			backendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
 				{Namespace: "test", Name: "invalid-bt"}: getBackendTLSPolicy(invalidPolicyCfg),
 			},
@@ -1534,7 +1535,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonInvalid),
-									Message:            "invalid backendTLSPolicy",
+									Message:            "The BackendTLSPolicy is invalid",
 								},
 							},
 						},
@@ -1580,7 +1581,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonAccepted),
-									Message:            "Policy is accepted",
+									Message:            "The Policy is accepted",
 								},
 							},
 						},
@@ -1599,7 +1600,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonAccepted),
-									Message:            "Policy is accepted",
+									Message:            "The Policy is accepted",
 								},
 							},
 						},
@@ -1671,7 +1672,7 @@ func TestBuildNginxGatewayStatus(t *testing.T) {
 						ObservedGeneration: 3,
 						LastTransitionTime: transitionTime,
 						Reason:             string(ngfAPI.NginxGatewayReasonValid),
-						Message:            "NginxGateway is valid",
+						Message:            "The NginxGateway is valid",
 					},
 				},
 			},
@@ -1936,7 +1937,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonAccepted),
-									Message:            "Policy is accepted",
+									Message:            "The Policy is accepted",
 								},
 							},
 						},
@@ -1952,7 +1953,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonAccepted),
-									Message:            "Policy is accepted",
+									Message:            "The Policy is accepted",
 								},
 							},
 						},
@@ -2059,7 +2060,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 				Generation: 1,
 			},
 		},
-		Conditions: []conditions.Condition{conditions.NewSnippetsFilterInvalid("invalid snippetsFilter")},
+		Conditions: []conditions.Condition{conditions.NewSnippetsFilterInvalid("Invalid snippetsFilter")},
 		Valid:      false,
 	}
 
@@ -2091,7 +2092,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(ngfAPI.SnippetsFilterConditionReasonAccepted),
-									Message:            "SnippetsFilter is accepted",
+									Message:            "The SnippetsFilter is accepted",
 								},
 							},
 							ControllerName: gatewayCtlrName,
@@ -2117,7 +2118,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(ngfAPI.SnippetsFilterConditionReasonInvalid),
-									Message:            "invalid snippetsFilter",
+									Message:            "Invalid snippetsFilter",
 								},
 							},
 							ControllerName: gatewayCtlrName,
@@ -2169,7 +2170,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 		ObservedGeneration: 1,
 		LastTransitionTime: transitionTime,
 		Reason:             string(inference.InferencePoolReasonAccepted),
-		Message:            "InferencePool is accepted by the Gateway.",
+		Message:            "The InferencePool is accepted by the Gateway.",
 	}
 
 	validResolvedRefsCondition := metav1.Condition{
@@ -2178,7 +2179,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 		ObservedGeneration: 1,
 		LastTransitionTime: transitionTime,
 		Reason:             string(inference.InferencePoolConditionResolvedRefs),
-		Message:            "Inference pool references a valid ExtensionRef.",
+		Message:            "The InferencePool references a valid ExtensionRef.",
 	}
 
 	referencedGateways := map[types.NamespacedName]*graph.Gateway{

@@ -884,7 +884,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 					Type:    "Accepted",
 					Status:  "True",
 					Reason:  "Accepted",
-					Message: "Policy is accepted",
+					Message: "The Policy is accepted",
 				},
 			},
 			Valid:        true,
@@ -899,7 +899,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 		Type:    "Accepted",
 		Status:  "True",
 		Reason:  "Accepted",
-		Message: "Policy is accepted",
+		Message: "The Policy is accepted",
 	},
 	)
 	btpWSS := getBtp("btpWSS", "svcWSS", "test")
@@ -1406,7 +1406,7 @@ func TestCreateBackend(t *testing.T) {
 		},
 		Valid: false,
 		Conditions: []conditions.Condition{
-			conditions.NewPolicyInvalid("unsupported value"),
+			conditions.NewPolicyInvalid("Unsupported value"),
 		},
 	}
 
@@ -1573,7 +1573,7 @@ func TestCreateBackend(t *testing.T) {
 			expectedServicePortReference: "",
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedValue(
-					"the backend TLS policy is invalid: unsupported value",
+					"The backend TLS policy is invalid: Unsupported value",
 				),
 			},
 			name: "invalid policy",
