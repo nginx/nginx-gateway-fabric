@@ -1,8 +1,6 @@
 package graph
 
 import (
-	"strings"
-
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -11,6 +9,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -136,7 +135,7 @@ func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersRefer
 
 	if _, ok := supportedParamKinds[string(ref.Kind)]; !ok {
 		err := field.NotSupported(path.Child("kind"), string(ref.Kind), []string{kinds.NginxProxy})
-		condMsg := strings.ToUpper(err.Error()[:1]) + err.Error()[1:] // Capitalize first letter
+		condMsg := helpers.CapitalizeString(err.Error())
 		conds = append(
 			conds,
 			conditions.NewGatewayRefInvalid(condMsg),
@@ -159,8 +158,7 @@ func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersRefer
 	}
 
 	if !npCfg.Valid {
-		msg := npCfg.ErrMsgs.ToAggregate().Error()
-		msg = strings.ToUpper(msg[:1]) + msg[1:]
+		msg := helpers.CapitalizeString(npCfg.ErrMsgs.ToAggregate().Error())
 		conds = append(
 			conds,
 			conditions.NewGatewayRefInvalid(msg),

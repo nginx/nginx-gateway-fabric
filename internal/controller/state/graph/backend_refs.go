@@ -689,7 +689,7 @@ func validateRouteBackendRefAppProtocol(
 ) error {
 	//nolint: staticcheck // used in status condition which is normally capitalized
 	err := fmt.Errorf(
-		"The RouteType %s does not support service port appProtocol %s",
+		"The Route type %s does not support service port appProtocol %s",
 		routeType,
 		appProtocol,
 	)

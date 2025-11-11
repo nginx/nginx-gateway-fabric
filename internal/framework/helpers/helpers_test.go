@@ -108,3 +108,47 @@ func TestMustExecuteTemplatePanics(t *testing.T) {
 
 	g.Expect(execute).To(Panic())
 }
+
+func TestCapitalizeString(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		out  string
+	}{
+		{
+			name: "empty string",
+			in:   "",
+			out:  "",
+		},
+		{
+			name: "single lowercase letter",
+			in:   "a",
+			out:  "A",
+		},
+		{
+			name: "lowercase word",
+			in:   "gateway",
+			out:  "Gateway",
+		},
+		{
+			name: "Phrase with mixed case",
+			in:   "gateway API not found",
+			out:  "Gateway API not found",
+		},
+		{
+			name: "non-letter first char",
+			in:   "1abc",
+			out:  "1abc",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(helpers.CapitalizeString(tc.in)).To(Equal(tc.out))
+		})
+	}
+}

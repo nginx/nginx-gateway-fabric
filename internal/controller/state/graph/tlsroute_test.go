@@ -383,7 +383,7 @@ func TestBuildTLSRoute(t *testing.T) {
 				Attachable: true,
 				Valid:      true,
 				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(
-					"The RouteType tls does not support service port appProtocol kubernetes.io/h2c",
+					"The Route type tls does not support service port appProtocol kubernetes.io/h2c",
 				)},
 			},
 			gateway: createGateway(),
@@ -412,7 +412,7 @@ func TestBuildTLSRoute(t *testing.T) {
 				Attachable: true,
 				Valid:      true,
 				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(
-					"The RouteType tls does not support service port appProtocol kubernetes.io/ws",
+					"The Route type tls does not support service port appProtocol kubernetes.io/ws",
 				)},
 			},
 			gateway: createGateway(),

@@ -1,14 +1,13 @@
 package graph
 
 import (
-	"strings"
-
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func buildTLSRoute(
@@ -38,7 +37,7 @@ func buildTLSRoute(
 		field.NewPath("spec").Child("hostnames"),
 	); err != nil {
 		r.Valid = false
-		condMsg := strings.ToUpper(err.Error()[:1]) + err.Error()[1:]
+		condMsg := helpers.CapitalizeString(err.Error())
 		r.Conditions = append(r.Conditions, conditions.NewRouteUnsupportedValue(condMsg))
 		return r
 	}

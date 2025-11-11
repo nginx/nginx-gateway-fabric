@@ -985,12 +985,12 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
-					"The RouteType http does not support service port appProtocol kubernetes.io/h2c;" +
+					"The Route type http does not support service port appProtocol kubernetes.io/h2c;" +
 						" nginx does not support proxying to upstreams with http2 or h2c",
 				),
 			},
 			policies: emptyPolicies,
-			name:     "invalid backendRef with service port appProtocol h2c and The RouteType http",
+			name:     "invalid backendRef with service port appProtocol h2c and Route type http",
 		},
 		{
 			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcWS"),
@@ -1005,7 +1005,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: nil,
 			policies:           emptyPolicies,
-			name:               "valid backendRef with service port appProtocol ws and RouteType http",
+			name:               "valid backendRef with service port appProtocol ws and Route type http",
 		},
 		{
 			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcWSS"),
@@ -1022,7 +1022,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			expectedConditions: nil,
 			policies:           policiesMatching,
 			name: "valid backendRef with service port appProtocol wss," +
-				" The RouteType http, and corresponding BackendTLSPolicy",
+				" The Route type http, and corresponding BackendTLSPolicy",
 		},
 		{
 			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcWSS"),
@@ -1037,12 +1037,12 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
-					"The RouteType http does not support service port appProtocol kubernetes.io/wss;" +
+					"The Route type http does not support service port appProtocol kubernetes.io/wss;" +
 						" missing corresponding BackendTLSPolicy",
 				),
 			},
 			policies: emptyPolicies,
-			name:     "invalid backendRef with service port appProtocol wss, RouteType http, but missing BackendTLSPolicy",
+			name:     "invalid backendRef with service port appProtocol wss, Route type http, but missing BackendTLSPolicy",
 		},
 		{
 			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcH2c"),
@@ -1057,7 +1057,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: nil,
 			policies:           emptyPolicies,
-			name:               "valid backendRef with service port appProtocol h2c and RouteType grpc",
+			name:               "valid backendRef with service port appProtocol h2c and Route type grpc",
 		},
 		{
 			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcWS"),
@@ -1072,11 +1072,11 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
-					"The RouteType grpc does not support service port appProtocol kubernetes.io/ws",
+					"The Route type grpc does not support service port appProtocol kubernetes.io/ws",
 				),
 			},
 			policies: emptyPolicies,
-			name:     "invalid backendRef with service port appProtocol ws and RouteType grpc",
+			name:     "invalid backendRef with service port appProtocol ws and Route type grpc",
 		},
 		{
 			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcWSS"),
@@ -1091,11 +1091,11 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
-					"The RouteType grpc does not support service port appProtocol kubernetes.io/wss",
+					"The Route type grpc does not support service port appProtocol kubernetes.io/wss",
 				),
 			},
 			policies: emptyPolicies,
-			name:     "invalid backendRef with service port appProtocol wss and RouteType grpc",
+			name:     "invalid backendRef with service port appProtocol wss and Route type grpc",
 		},
 		{
 			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcGRPC"),
@@ -1111,7 +1111,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			expectedConditions: nil,
 			policies:           emptyPolicies,
 			name: "valid backendRef with non-Kubernetes Standard Application Protocol" +
-				" service port appProtocol and RouteType http",
+				" service port appProtocol and Route type http",
 		},
 		{
 			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcGRPC"),
@@ -1127,7 +1127,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			expectedConditions: nil,
 			policies:           emptyPolicies,
 			name: "valid backendRef with non-Kubernetes Standard Application Protocol" +
-				" service port appProtocol and RouteType grpc",
+				" service port appProtocol and Route type grpc",
 		},
 		{
 			route: modRoute(createRoute("hr1", RouteTypeHTTP, "Service", 1, "svc1"), func(route *L7Route) *L7Route {
