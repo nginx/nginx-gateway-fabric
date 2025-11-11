@@ -75,7 +75,7 @@ func validateBackendTLSPolicy(
 
 	if err := validateBackendTLSHostname(backendTLSPolicy); err != nil {
 		valid = false
-		conds = append(conds, conditions.NewPolicyInvalid(fmt.Sprintf("invalid hostname: %s", err.Error())))
+		conds = append(conds, conditions.NewPolicyInvalid(fmt.Sprintf("Invalid hostname: %s", err.Error())))
 	}
 
 	caCertRefs := backendTLSPolicy.Spec.Validation.CACertificateRefs
@@ -109,7 +109,7 @@ func validateBackendTLSPolicy(
 		valid = false
 		conds = append(
 			conds,
-			conditions.NewPolicyInvalid("either CACertificateRefs or WellKnownCACertificates must be specified"),
+			conditions.NewPolicyInvalid("Either CACertificateRefs or WellKnownCACertificates must be specified"),
 		)
 	}
 

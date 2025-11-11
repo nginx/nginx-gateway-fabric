@@ -616,7 +616,7 @@ func TestVerifyIPFamily(t *testing.T) {
 				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv4),
 			},
 			svcIPFamily: []v1.IPFamily{v1.IPv6Protocol},
-			expErr:      errors.New("service configured with IPv6 family but NginxProxy is configured with IPv4"),
+			expErr:      errors.New("The Service configured with IPv6 family but NginxProxy is configured with IPv4"),
 		},
 		{
 			name: "Invalid - IPv6 configured for NGINX, service has only IPv4",
@@ -624,7 +624,7 @@ func TestVerifyIPFamily(t *testing.T) {
 				IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6),
 			},
 			svcIPFamily: []v1.IPFamily{v1.IPv4Protocol},
-			expErr:      errors.New("service configured with IPv4 family but NginxProxy is configured with IPv6"),
+			expErr:      errors.New("The Service configured with IPv4 family but NginxProxy is configured with IPv6"),
 		},
 		{
 			name:        "Valid - When NginxProxy is nil",
@@ -985,12 +985,12 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
-					"route type http does not support service port appProtocol kubernetes.io/h2c;" +
+					"The RouteType http does not support service port appProtocol kubernetes.io/h2c;" +
 						" nginx does not support proxying to upstreams with http2 or h2c",
 				),
 			},
 			policies: emptyPolicies,
-			name:     "invalid backendRef with service port appProtocol h2c and route type http",
+			name:     "invalid backendRef with service port appProtocol h2c and The RouteType http",
 		},
 		{
 			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcWS"),
@@ -1005,7 +1005,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: nil,
 			policies:           emptyPolicies,
-			name:               "valid backendRef with service port appProtocol ws and route type http",
+			name:               "valid backendRef with service port appProtocol ws and RouteType http",
 		},
 		{
 			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcWSS"),
@@ -1022,7 +1022,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			expectedConditions: nil,
 			policies:           policiesMatching,
 			name: "valid backendRef with service port appProtocol wss," +
-				" route type http, and corresponding BackendTLSPolicy",
+				" The RouteType http, and corresponding BackendTLSPolicy",
 		},
 		{
 			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcWSS"),
@@ -1037,12 +1037,12 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
-					"route type http does not support service port appProtocol kubernetes.io/wss;" +
+					"The RouteType http does not support service port appProtocol kubernetes.io/wss;" +
 						" missing corresponding BackendTLSPolicy",
 				),
 			},
 			policies: emptyPolicies,
-			name:     "invalid backendRef with service port appProtocol wss, route type http, but missing BackendTLSPolicy",
+			name:     "invalid backendRef with service port appProtocol wss, RouteType http, but missing BackendTLSPolicy",
 		},
 		{
 			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcH2c"),
@@ -1057,7 +1057,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: nil,
 			policies:           emptyPolicies,
-			name:               "valid backendRef with service port appProtocol h2c and route type grpc",
+			name:               "valid backendRef with service port appProtocol h2c and RouteType grpc",
 		},
 		{
 			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcWS"),
@@ -1072,11 +1072,11 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
-					"route type grpc does not support service port appProtocol kubernetes.io/ws",
+					"The RouteType grpc does not support service port appProtocol kubernetes.io/ws",
 				),
 			},
 			policies: emptyPolicies,
-			name:     "invalid backendRef with service port appProtocol ws and route type grpc",
+			name:     "invalid backendRef with service port appProtocol ws and RouteType grpc",
 		},
 		{
 			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcWSS"),
@@ -1091,11 +1091,11 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedProtocol(
-					"route type grpc does not support service port appProtocol kubernetes.io/wss",
+					"The RouteType grpc does not support service port appProtocol kubernetes.io/wss",
 				),
 			},
 			policies: emptyPolicies,
-			name:     "invalid backendRef with service port appProtocol wss and route type grpc",
+			name:     "invalid backendRef with service port appProtocol wss and RouteType grpc",
 		},
 		{
 			route: createRoute("hr1", RouteTypeHTTP, "Service", 1, "svcGRPC"),
@@ -1111,7 +1111,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			expectedConditions: nil,
 			policies:           emptyPolicies,
 			name: "valid backendRef with non-Kubernetes Standard Application Protocol" +
-				" service port appProtocol and route type http",
+				" service port appProtocol and RouteType http",
 		},
 		{
 			route: createRoute("gr1", RouteTypeGRPC, "Service", 1, "svcGRPC"),
@@ -1127,7 +1127,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			expectedConditions: nil,
 			policies:           emptyPolicies,
 			name: "valid backendRef with non-Kubernetes Standard Application Protocol" +
-				" service port appProtocol and route type grpc",
+				" service port appProtocol and RouteType grpc",
 		},
 		{
 			route: modRoute(createRoute("hr1", RouteTypeHTTP, "Service", 1, "svc1"), func(route *L7Route) *L7Route {
@@ -1528,7 +1528,7 @@ func TestCreateBackend(t *testing.T) {
 				Valid:       true,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{
 					{Namespace: "test", Name: "gateway"}: conditions.NewRouteInvalidIPFamily(
-						`service configured with IPv4 family but NginxProxy is configured with IPv6`,
+						`The Service configured with IPv4 family but NginxProxy is configured with IPv6`,
 					),
 				},
 			},

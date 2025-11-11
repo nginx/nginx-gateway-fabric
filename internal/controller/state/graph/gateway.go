@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"strings"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -134,10 +136,11 @@ func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersRefer
 
 	if _, ok := supportedParamKinds[string(ref.Kind)]; !ok {
 		err := field.NotSupported(path.Child("kind"), string(ref.Kind), []string{kinds.NginxProxy})
+		condMsg := strings.ToUpper(err.Error()[:1]) + err.Error()[1:] // Capitalize first letter
 		conds = append(
 			conds,
-			conditions.NewGatewayRefInvalid(err.Error()),
-			conditions.NewGatewayInvalidParameters(err.Error()),
+			conditions.NewGatewayRefInvalid(condMsg),
+			conditions.NewGatewayInvalidParameters(condMsg),
 		)
 
 		return conds
@@ -157,6 +160,7 @@ func validateGatewayParametersRef(npCfg *NginxProxy, ref v1.LocalParametersRefer
 
 	if !npCfg.Valid {
 		msg := npCfg.ErrMsgs.ToAggregate().Error()
+		msg = strings.ToUpper(msg[:1]) + msg[1:]
 		conds = append(
 			conds,
 			conditions.NewGatewayRefInvalid(msg),
@@ -174,16 +178,16 @@ func validateGateway(gw *v1.Gateway, gc *GatewayClass, npCfg *NginxProxy) ([]con
 	var conds []conditions.Condition
 
 	if gc == nil {
-		conds = append(conds, conditions.NewGatewayInvalid("GatewayClass doesn't exist")...)
+		conds = append(conds, conditions.NewGatewayInvalid("The GatewayClass doesn't exist")...)
 	} else if !gc.Valid {
-		conds = append(conds, conditions.NewGatewayInvalid("GatewayClass is invalid")...)
+		conds = append(conds, conditions.NewGatewayInvalid("The GatewayClass is invalid")...)
 	}
 
 	// Set the unaccepted conditions here, because those make the gateway invalid. We set the unprogrammed conditions
 	// elsewhere, because those do not make the gateway invalid.
 	for _, address := range gw.Spec.Addresses {
 		if address.Type == nil {
-			conds = append(conds, conditions.NewGatewayUnsupportedAddress("AddressType must be specified"))
+			conds = append(conds, conditions.NewGatewayUnsupportedAddress("The AddressType must be specified"))
 		} else if *address.Type != v1.IPAddressType {
 			conds = append(conds, conditions.NewGatewayUnsupportedAddress("Only AddressType IPAddress is supported"))
 		}

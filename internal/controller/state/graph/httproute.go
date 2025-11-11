@@ -54,7 +54,8 @@ func buildHTTPRoute(
 		field.NewPath("spec").Child("hostnames"),
 	); err != nil {
 		r.Valid = false
-		r.Conditions = append(r.Conditions, conditions.NewRouteUnsupportedValue(err.Error()))
+		condMsg := strings.ToUpper(err.Error()[:1]) + err.Error()[1:]
+		r.Conditions = append(r.Conditions, conditions.NewRouteUnsupportedValue(condMsg))
 
 		return r
 	}
@@ -338,6 +339,7 @@ func processHTTPRouteRules(
 	// resolve errors do not invalidate routes
 	if len(allRulesErrors.resolve) > 0 {
 		msg := allRulesErrors.resolve.ToAggregate().Error()
+		msg = strings.ToUpper(msg[:1]) + msg[1:]
 		conds = append(conds, conditions.NewRouteResolvedRefsInvalidFilter(msg))
 	}
 

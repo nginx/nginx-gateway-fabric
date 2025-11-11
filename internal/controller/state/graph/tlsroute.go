@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"strings"
+
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -36,7 +38,8 @@ func buildTLSRoute(
 		field.NewPath("spec").Child("hostnames"),
 	); err != nil {
 		r.Valid = false
-		r.Conditions = append(r.Conditions, conditions.NewRouteUnsupportedValue(err.Error()))
+		condMsg := strings.ToUpper(err.Error()[:1]) + err.Error()[1:]
+		r.Conditions = append(r.Conditions, conditions.NewRouteUnsupportedValue(condMsg))
 		return r
 	}
 

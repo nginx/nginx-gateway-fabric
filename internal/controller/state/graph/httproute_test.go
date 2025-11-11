@@ -578,7 +578,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 				},
 				Conditions: []conditions.Condition{
 					conditions.NewRouteUnsupportedValue(
-						`spec.hostnames[0]: Invalid value: "": cannot be empty string`,
+						`Spec.hostnames[0]: Invalid value: "": cannot be empty string`,
 					),
 				},
 			},
@@ -909,7 +909,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 				},
 				Conditions: []conditions.Condition{
 					conditions.NewRouteResolvedRefsInvalidFilter(
-						"spec.rules[0].filters[0].extensionRef: Not found: " +
+						"Spec.rules[0].filters[0].extensionRef: Not found: " +
 							`{"group":"gateway.nginx.org","kind":"SnippetsFilter",` +
 							`"name":"does-not-exist"}`,
 					),
@@ -952,7 +952,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 							"Unsupported value: \"wrong\": supported values: \"gateway.nginx.org\"",
 					),
 					conditions.NewRouteResolvedRefsInvalidFilter(
-						"spec.rules[0].filters[1].extensionRef: Not found: " +
+						"Spec.rules[0].filters[1].extensionRef: Not found: " +
 							`{"group":"gateway.nginx.org","kind":"SnippetsFilter",` +
 							`"name":"does-not-exist"}`,
 					),

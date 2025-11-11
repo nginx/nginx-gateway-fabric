@@ -360,7 +360,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
-					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is invalid")},
 				},
 			},
 			expAttached: false,
@@ -373,7 +373,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
-					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is invalid")},
 				},
 			},
 			expAttached: false,
@@ -386,7 +386,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
-					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is invalid")},
 				},
 			},
 			expAttached: false,
@@ -595,7 +595,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   getGatewayParentRef(gateway2NsName),
-					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is not found")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is not found")},
 				},
 			},
 			expAttached: false,
@@ -616,7 +616,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   getGatewayParentRef(gatewayNsName),
-					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("TargetRef is invalid")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is invalid")},
 				},
 			},
 			expAttached: false,
@@ -810,7 +810,7 @@ func TestAttachPolicyToService(t *testing.T) {
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   getGatewayParentRef(gwNsname),
-					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("Parent Gateway is invalid")},
+					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("The Parent Gateway is invalid")},
 				},
 			},
 		},
@@ -1016,7 +1016,7 @@ func TestProcessPolicies(t *testing.T) {
 			validator: &policiesfakes.FakeValidator{
 				ValidateStub: func(policy policies.Policy) []conditions.Condition {
 					if policy.GetName() == "pol1" {
-						return []conditions.Condition{conditions.NewPolicyInvalid("invalid error")}
+						return []conditions.Condition{conditions.NewPolicyInvalid("Invalid error")}
 					}
 
 					return nil
@@ -1037,7 +1037,7 @@ func TestProcessPolicies(t *testing.T) {
 						},
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewPolicyInvalid("invalid error"),
+						conditions.NewPolicyInvalid("Invalid error"),
 					},
 					Ancestors:          []PolicyAncestor{},
 					InvalidForGateways: map[types.NamespacedName]struct{}{},

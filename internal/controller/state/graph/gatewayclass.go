@@ -131,6 +131,7 @@ func validateGatewayClassParametersRef(path *field.Path, ref v1.ParametersRefere
 
 	if len(errs) > 0 {
 		msg := errs.ToAggregate().Error()
+		msg = strings.ToUpper(msg[:1]) + msg[1:]
 		return []conditions.Condition{
 			conditions.NewGatewayClassRefInvalid(msg),
 			conditions.NewGatewayClassInvalidParameters(msg),
@@ -176,6 +177,7 @@ func validateGatewayClass(
 
 	if !npCfg.Valid {
 		msg := npCfg.ErrMsgs.ToAggregate().Error()
+		msg = strings.ToUpper(msg[:1]) + msg[1:]
 		conds = append(
 			conds,
 			conditions.NewGatewayClassRefInvalid(msg),

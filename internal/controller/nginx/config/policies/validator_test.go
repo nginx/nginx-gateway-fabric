@@ -49,10 +49,10 @@ var _ = Describe("Policy CompositeValidator", func() {
 		policies.ManagerConfig{
 			Validator: &policiesfakes.FakeValidator{
 				ValidateStub: func(_ policies.Policy) []conditions.Condition {
-					return []conditions.Condition{conditions.NewPolicyInvalid("apple error")}
+					return []conditions.Condition{conditions.NewPolicyInvalid("Apple error")}
 				},
 				ValidateGlobalSettingsStub: func(_ policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
-					return []conditions.Condition{conditions.NewPolicyInvalid("apple global settings error")}
+					return []conditions.Condition{conditions.NewPolicyInvalid("Apple global settings error")}
 				},
 				ConflictsStub: func(_ policies.Policy, _ policies.Policy) bool { return true },
 			},
@@ -61,10 +61,10 @@ var _ = Describe("Policy CompositeValidator", func() {
 		policies.ManagerConfig{
 			Validator: &policiesfakes.FakeValidator{
 				ValidateStub: func(_ policies.Policy) []conditions.Condition {
-					return []conditions.Condition{conditions.NewPolicyInvalid("orange error")}
+					return []conditions.Condition{conditions.NewPolicyInvalid("Orange error")}
 				},
 				ValidateGlobalSettingsStub: func(_ policies.Policy, _ *policies.GlobalSettings) []conditions.Condition {
-					return []conditions.Condition{conditions.NewPolicyInvalid("orange global settings error")}
+					return []conditions.Condition{conditions.NewPolicyInvalid("Orange global settings error")}
 				},
 				ConflictsStub: func(_ policies.Policy, _ policies.Policy) bool { return false },
 			},
@@ -83,19 +83,18 @@ var _ = Describe("Policy CompositeValidator", func() {
 
 				conds := mgr.Validate(applePolicy)
 				Expect(conds).To(HaveLen(1))
-				Expect(conds[0].Message).To(Equal("apple error"))
+				Expect(conds[0].Message).To(Equal("Apple error"))
 
 				conds = mgr.ValidateGlobalSettings(applePolicy, globalSettings)
 				Expect(conds).To(HaveLen(1))
-				Expect(conds[0].Message).To(Equal("apple global settings error"))
-
+				Expect(conds[0].Message).To(Equal("Apple global settings error"))
 				conds = mgr.Validate(orangePolicy)
 				Expect(conds).To(HaveLen(1))
-				Expect(conds[0].Message).To(Equal("orange error"))
+				Expect(conds[0].Message).To(Equal("Orange error"))
 
 				conds = mgr.ValidateGlobalSettings(orangePolicy, globalSettings)
 				Expect(conds).To(HaveLen(1))
-				Expect(conds[0].Message).To(Equal("orange global settings error"))
+				Expect(conds[0].Message).To(Equal("Orange global settings error"))
 			})
 			It("Returns whether the policies conflict", func() {
 				Expect(mgr.Conflicts(applePolicy, applePolicy)).To(BeTrue())

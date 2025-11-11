@@ -1026,7 +1026,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 			gateway: &graph.Gateway{
 				Source:     createGateway(),
 				Valid:      false,
-				Conditions: conditions.NewGatewayInvalid("no gateway class"),
+				Conditions: conditions.NewGatewayInvalid("No GatewayClass"),
 			},
 			expected: map[types.NamespacedName]v1.GatewayStatus{
 				{Namespace: "test", Name: "gateway"}: {
@@ -1037,7 +1037,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonInvalid),
-							Message:            "no gateway class",
+							Message:            "No GatewayClass",
 						},
 						{
 							Type:               string(v1.GatewayConditionProgrammed),
@@ -1045,7 +1045,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(v1.GatewayReasonInvalid),
-							Message:            "no gateway class",
+							Message:            "No GatewayClass",
 						},
 					},
 				},
@@ -1764,8 +1764,8 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 		}
 	}
 
-	invalidConds := []conditions.Condition{conditions.NewPolicyInvalid("invalid")}
-	targetRefNotFoundConds := []conditions.Condition{conditions.NewPolicyTargetNotFound("target not found")}
+	invalidConds := []conditions.Condition{conditions.NewPolicyInvalid("Invalid")}
+	targetRefNotFoundConds := []conditions.Condition{conditions.NewPolicyTargetNotFound("The Target not found")}
 
 	validPolicyKey := graph.PolicyKey{
 		NsName: types.NamespacedName{Namespace: "test", Name: "valid-pol"},
@@ -1881,7 +1881,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonInvalid),
-									Message:            "invalid",
+									Message:            "Invalid",
 								},
 							},
 						},
@@ -1897,7 +1897,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonInvalid),
-									Message:            "invalid",
+									Message:            "Invalid",
 								},
 							},
 						},
@@ -1917,7 +1917,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonTargetNotFound),
-									Message:            "target not found",
+									Message:            "The Target not found",
 								},
 							},
 						},
@@ -1981,7 +1981,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 2,
 									LastTransitionTime: transitionTime,
 									Reason:             string(v1.PolicyReasonInvalid),
-									Message:            "invalid",
+									Message:            "Invalid",
 								},
 							},
 						},
@@ -2318,7 +2318,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 			},
 		},
 		{
-			name: "an inference pool has accepted valid status and is referenced by invalid extension ref",
+			name: "an inference pool has accepted valid status and is referenced by invalid ExtensionRef",
 			referencedInferencePool: map[types.NamespacedName]*graph.ReferencedInferencePool{
 				{Namespace: "test", Name: "valid-inference-pool"}: {
 					Source: validInferencePoolWithInvalidExtensionRef,
@@ -2331,7 +2331,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 						},
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewInferencePoolInvalidExtensionref("Invalid extension ref: test/invalid-extension-ref"),
+						conditions.NewInferencePoolInvalidExtensionref("Invalid ExtensionRef: test/invalid-extension-ref"),
 					},
 				},
 			},
@@ -2353,7 +2353,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(inference.InferencePoolReasonInvalidExtensionRef),
-									Message:            "Invalid extension ref: test/invalid-extension-ref",
+									Message:            "Invalid ExtensionRef: test/invalid-extension-ref",
 								},
 							},
 							ParentRef: inference.ParentReference{
@@ -2368,7 +2368,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 			},
 		},
 		{
-			name: "an inference pool is referencing an invalid route and is referenced by invalid extension ref",
+			name: "an inference pool is referencing an invalid route and is referenced by invalid ExtensionRef",
 			referencedInferencePool: map[types.NamespacedName]*graph.ReferencedInferencePool{
 				{Namespace: "test", Name: "valid-inference-pool"}: {
 					Source: validInferencePool,
@@ -2382,7 +2382,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 					},
 					Conditions: []conditions.Condition{
 						conditions.NewInferencePoolInvalidHTTPRouteNotAccepted("Invalid HTTPRoute: test/invalid-route not accepted"),
-						conditions.NewInferencePoolInvalidExtensionref("Invalid extension ref: test/invalid-extension-ref"),
+						conditions.NewInferencePoolInvalidExtensionref("Invalid ExtensionRef: test/invalid-extension-ref"),
 					},
 				},
 			},
@@ -2411,7 +2411,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(inference.InferencePoolReasonInvalidExtensionRef),
-									Message:            "Invalid extension ref: test/invalid-extension-ref",
+									Message:            "Invalid ExtensionRef: test/invalid-extension-ref",
 								},
 							},
 							ParentRef: inference.ParentReference{

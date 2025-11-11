@@ -1276,7 +1276,7 @@ var _ = Describe("ChangeProcessor", func() {
 							expGraph.GatewayClass = nil
 
 							gw := expGraph.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway-1"}]
-							gw.Conditions = conditions.NewGatewayInvalid("GatewayClass doesn't exist")
+							gw.Conditions = conditions.NewGatewayInvalid("The GatewayClass doesn't exist")
 							gw.Valid = false
 							gw.Listeners = nil
 
@@ -2253,7 +2253,7 @@ var _ = Describe("ChangeProcessor", func() {
 									},
 								},
 							},
-							Conditions: conditions.NewGatewayInvalid("GatewayClass doesn't exist"),
+							Conditions: conditions.NewGatewayInvalid("The GatewayClass doesn't exist"),
 							DeploymentName: types.NamespacedName{
 								Namespace: "test",
 								Name:      "gateway-2-test-class",
