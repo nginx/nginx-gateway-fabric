@@ -11,7 +11,7 @@ FROM nginx:1.29.2-alpine-otel
 RUN apk update && apk add --no-cache 'pcre2>=10.46-r0' 'libxml2>=2.13.9-r0'
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.3.2
+ARG NGINX_AGENT_VERSION=v3.5.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
