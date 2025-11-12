@@ -356,3 +356,49 @@ func TestExecuteBaseHttp_DNSResolver(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteBaseHttp_GatewaySecretID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		expectedConfig string
+		conf           dataplane.Configuration
+	}{
+		{
+			name: "with GatewaySecretID",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					GatewaySecretID: "client-secret",
+				},
+			},
+			expectedConfig: "proxy_ssl_certificate /etc/nginx/secrets/client-secret.pem;" +
+				"\nproxy_ssl_certificate_key /etc/nginx/secrets/client-secret.pem;",
+		},
+		{
+			name: "without GatewaySecretID",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					GatewaySecretID: "",
+				},
+			},
+			expectedConfig: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf)
+			g.Expect(res).To(HaveLen(1))
+
+			httpConfig := string(res[0].data)
+
+			if test.expectedConfig != "" {
+				g.Expect(httpConfig).To(ContainSubstring(test.expectedConfig))
+			}
+		})
+	}
+}

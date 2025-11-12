@@ -85,9 +85,10 @@ func BuildConfiguration(
 			gateway,
 			serviceResolver,
 			g.ReferencedServices,
-			baseHTTPConfig.IPFamily),
+			baseHTTPConfig.IPFamily,
+		),
 		BackendGroups: backendGroups,
-		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway.Listeners),
+		SSLKeyPairs:   buildSSLKeyPairs(g.ReferencedSecrets, gateway),
 		CertBundles: buildCertBundles(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
@@ -252,14 +253,14 @@ func buildStreamUpstreams(
 }
 
 // buildSSLKeyPairs builds the SSLKeyPairs from the Secrets. It will only include Secrets that are referenced by
-// valid listeners, so that we don't include unused Secrets in the configuration of the data plane.
+// valid gateway and its listeners, so that we don't include unused Secrets in the configuration of the data plane.
 func buildSSLKeyPairs(
 	secrets map[types.NamespacedName]*graph.Secret,
-	listeners []*graph.Listener,
+	gateway *graph.Gateway,
 ) map[SSLKeyPairID]SSLKeyPair {
 	keyPairs := make(map[SSLKeyPairID]SSLKeyPair)
 
-	for _, l := range listeners {
+	for _, l := range gateway.Listeners {
 		if l.Valid && l.ResolvedSecret != nil {
 			id := generateSSLKeyPairID(*l.ResolvedSecret)
 			secret := secrets[*l.ResolvedSecret]
@@ -269,6 +270,15 @@ func buildSSLKeyPairs(
 				Cert: secret.CertBundle.Cert.TLSCert,
 				Key:  secret.CertBundle.Cert.TLSPrivateKey,
 			}
+		}
+	}
+
+	if gateway.Valid && gateway.SecretRef != nil {
+		id := generateSSLKeyPairID(*gateway.SecretRef)
+		secret := secrets[*gateway.SecretRef]
+		keyPairs[id] = SSLKeyPair{
+			Cert: secret.CertBundle.Cert.TLSCert,
+			Key:  secret.CertBundle.Cert.TLSPrivateKey,
 		}
 	}
 
@@ -1058,6 +1068,10 @@ func buildBaseHTTPConfig(
 		NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 	}
 
+	if gateway.Valid && gateway.SecretRef != nil {
+		baseConfig.GatewaySecretID = generateSSLKeyPairID(*gateway.SecretRef)
+	}
+
 	// safe to access EffectiveNginxProxy since we only call this function when the Gateway is not nil.
 	np := gateway.EffectiveNginxProxy
 	if np == nil {
@@ -1081,7 +1095,19 @@ func buildBaseHTTPConfig(
 		}
 	}
 
+	if port := getNginxReadinessProbePort(np); port != 0 {
+		baseConfig.NginxReadinessProbePort = port
+	}
+
 	baseConfig.RewriteClientIPSettings = buildRewriteClientIPConfig(np.RewriteClientIP)
+
+	baseConfig.DNSResolver = buildDNSResolverConfig(np.DNSResolver)
+
+	return baseConfig
+}
+
+func getNginxReadinessProbePort(np *graph.EffectiveNginxProxy) int32 {
+	var port int32
 
 	if np.Kubernetes != nil {
 		var containerSpec *ngfAPIv1alpha2.ContainerSpec
@@ -1091,13 +1117,10 @@ func buildBaseHTTPConfig(
 			containerSpec = &np.Kubernetes.DaemonSet.Container
 		}
 		if containerSpec != nil && containerSpec.ReadinessProbe != nil && containerSpec.ReadinessProbe.Port != nil {
-			baseConfig.NginxReadinessProbePort = *containerSpec.ReadinessProbe.Port
+			port = *containerSpec.ReadinessProbe.Port
 		}
 	}
-
-	baseConfig.DNSResolver = buildDNSResolverConfig(np.DNSResolver)
-
-	return baseConfig
+	return port
 }
 
 // buildBaseStreamConfig generates the base stream context config that should be applied to all stream servers.
