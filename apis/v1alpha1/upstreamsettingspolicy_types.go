@@ -51,6 +51,13 @@ type UpstreamSettingsPolicySpec struct {
 	// +optional
 	KeepAlive *UpstreamKeepAlive `json:"keepAlive,omitempty"`
 
+	// LoadBalancingMethod specifies the load balancing algorithm to be used for the upstream.
+	// If not specified, NGINX Gateway Fabric defaults to `random two least_conn`,
+	// which differs from the standard NGINX default `round-robin`.
+	//
+	// +optional
+	LoadBalancingMethod *LoadBalancingType `json:"loadBalancingMethod,omitempty"`
+
 	// TargetRefs identifies API object(s) to apply the policy to.
 	// Objects must be in the same namespace as the policy.
 	// Support: Service
@@ -98,3 +105,22 @@ type UpstreamKeepAlive struct {
 	// +optional
 	Timeout *Duration `json:"timeout,omitempty"`
 }
+
+// LoadBalancingType defines the supported load balancing methods.
+//
+// +kubebuilder:validation:Enum=ip_hash;random two least_conn
+type LoadBalancingType string
+
+const (
+	// LoadBalancingTypeIPHash enables IP hash-based load balancing,
+	// ensuring requests from the same client IP are routed to the same upstream server.
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#ip_hash
+	LoadBalancingTypeIPHash LoadBalancingType = "ip_hash"
+
+	// LoadBalancingTypeRandomTwoLeastConnection enables a variation of least-connections
+	// balancing that randomly selects two servers and forwards traffic to the one with
+	// fewer active connections.
+	// NGINX directive least_conn: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#least_conn
+	// NGINX directive random: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#random
+	LoadBalancingTypeRandomTwoLeastConnection LoadBalancingType = "random two least_conn"
+)
