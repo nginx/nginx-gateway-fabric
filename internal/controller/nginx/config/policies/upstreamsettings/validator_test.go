@@ -38,6 +38,7 @@ func createValidPolicy() *ngfAPI.UpstreamSettingsPolicy {
 				Timeout:     helpers.GetPointer[ngfAPI.Duration]("30s"),
 				Connections: helpers.GetPointer[int32](100),
 			},
+			LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
 		},
 		Status: v1.PolicyStatus{},
 	}
@@ -118,6 +119,17 @@ func TestValidator_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid load balancing method",
+			policy: createModifiedPolicy(func(p *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy {
+				p.Spec.LoadBalancingMethod = helpers.GetPointer[ngfAPI.LoadBalancingType]("invalid-lb-method")
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Unsupported value: \"invalid-lb-method\": " +
+					"supported values: \"ip_hash\", \"random two least_conn\""),
+			},
+		},
+		{
 			name:          "valid",
 			policy:        createValidPolicy(),
 			expConditions: nil,
@@ -176,6 +188,7 @@ func TestValidator_Conflicts(t *testing.T) {
 						Requests: helpers.GetPointer[int32](900),
 						Time:     helpers.GetPointer[ngfAPI.Duration]("50s"),
 					},
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
 				},
 			},
 			polB: &ngfAPI.UpstreamSettingsPolicy{
@@ -242,6 +255,16 @@ func TestValidator_Conflicts(t *testing.T) {
 					KeepAlive: &ngfAPI.UpstreamKeepAlive{
 						Timeout: helpers.GetPointer[ngfAPI.Duration]("30s"),
 					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "load balancing method conflicts",
+			polA: createValidPolicy(),
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeIPHash),
 				},
 			},
 			conflicts: true,

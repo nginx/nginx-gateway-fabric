@@ -83,6 +83,10 @@ func conflicts(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
 		}
 	}
 
+	if a.LoadBalancingMethod != nil && b.LoadBalancingMethod != nil {
+		return true
+	}
+
 	return false
 }
 
@@ -101,6 +105,13 @@ func (v Validator) validateSettings(spec ngfAPI.UpstreamSettingsPolicySpec) erro
 
 	if spec.KeepAlive != nil {
 		allErrs = append(allErrs, v.validateUpstreamKeepAlive(*spec.KeepAlive, fieldPath.Child("keepAlive"))...)
+	}
+
+	if spec.LoadBalancingMethod != nil {
+		allErrs = append(
+			allErrs,
+			v.validateLoadBalancingMethod(*spec.LoadBalancingMethod, fieldPath.Child("loadBalancingMethod"))...,
+		)
 	}
 
 	return allErrs.ToAggregate()
@@ -126,6 +137,28 @@ func (v Validator) validateUpstreamKeepAlive(
 
 			allErrs = append(allErrs, field.Invalid(path, *keepAlive.Timeout, err.Error()))
 		}
+	}
+
+	return allErrs
+}
+
+func (v Validator) validateLoadBalancingMethod(
+	method ngfAPI.LoadBalancingType,
+	fieldPath *field.Path,
+) field.ErrorList {
+	var allErrs field.ErrorList
+
+	switch method {
+	case ngfAPI.LoadBalancingTypeIPHash, ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:
+	default:
+		allErrs = append(allErrs, field.NotSupported(
+			fieldPath,
+			method,
+			[]string{
+				string(ngfAPI.LoadBalancingTypeIPHash),
+				string(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
+			},
+		))
 	}
 
 	return allErrs

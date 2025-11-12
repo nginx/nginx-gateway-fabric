@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -75,31 +77,35 @@ func TestExecuteUpstreams(t *testing.T) {
 							Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
 							Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
 						}),
+						LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeIPHash),
 					},
 				},
 			},
 		},
 	}
 
-	expectedSubStrings := []string{
-		"upstream up1",
-		"upstream up2",
-		"upstream up3",
-		"upstream up4-ipv6",
-		"upstream up5-usp",
-		"upstream invalid-backend-ref",
+	expectedSubStrings := map[string]int{
+		"upstream up1":                 1,
+		"upstream up2":                 1,
+		"upstream up3":                 1,
+		"upstream up4-ipv6":            1,
+		"upstream up5-usp":             1,
+		"upstream invalid-backend-ref": 1,
 
-		"server 10.0.0.0:80;",
-		"server 11.0.0.0:80;",
-		"server [2001:db8::1]:80",
-		"server 12.0.0.0:80;",
-		"server unix:/var/run/nginx/nginx-503-server.sock;",
+		"server 10.0.0.0:80;":                               1,
+		"server 11.0.0.0:80;":                               1,
+		"server [2001:db8::1]:80":                           1,
+		"server 12.0.0.0:80;":                               1,
+		"server unix:/var/run/nginx/nginx-503-server.sock;": 1,
 
-		"keepalive 1;",
-		"keepalive_requests 1;",
-		"keepalive_time 5s;",
-		"keepalive_timeout 10s;",
-		"zone up5-usp 2m;",
+		"keepalive 1;":           1,
+		"keepalive_requests 1;":  1,
+		"keepalive_time 5s;":     1,
+		"keepalive_timeout 10s;": 1,
+		"zone up5-usp 2m;":       1,
+		"ip_hash;":               1,
+
+		"random two least_conn;": 3,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
@@ -107,11 +113,15 @@ func TestExecuteUpstreams(t *testing.T) {
 	upstreamResults := executeUpstreams(upstreams)
 	g := NewWithT(t)
 	g.Expect(upstreamResults).To(HaveLen(1))
-	nginxUpstreams := string(upstreamResults[0].data)
-
 	g.Expect(upstreamResults[0].dest).To(Equal(httpConfigFile))
-	for _, expSubString := range expectedSubStrings {
-		g.Expect(nginxUpstreams).To(ContainSubstring(expSubString))
+
+	nginxUpstreams := string(upstreamResults[0].data)
+	for expSubString, expectedCount := range expectedSubStrings {
+		actualCount := strings.Count(nginxUpstreams, expSubString)
+		g.Expect(actualCount).To(
+			Equal(expectedCount),
+			fmt.Sprintf("substring %q expected %d occurrence(s), got %d", expSubString, expectedCount, actualCount),
+		)
 	}
 }
 
@@ -181,6 +191,7 @@ func TestCreateUpstreams(t *testing.T) {
 							Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
 							Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
 						}),
+						LoadBalancingMethod: helpers.GetPointer((ngfAPI.LoadBalancingTypeIPHash)),
 					},
 				},
 			},
@@ -202,6 +213,7 @@ func TestCreateUpstreams(t *testing.T) {
 					Address: "10.0.0.2:80",
 				},
 			},
+			LoadBalancingMethod: randomTwoLeastConnLB,
 		},
 		{
 			Name:     "up2",
@@ -211,6 +223,7 @@ func TestCreateUpstreams(t *testing.T) {
 					Address: "11.0.0.0:80",
 				},
 			},
+			LoadBalancingMethod: randomTwoLeastConnLB,
 		},
 		{
 			Name:     "up3",
@@ -229,6 +242,7 @@ func TestCreateUpstreams(t *testing.T) {
 					Address: "[fd00:10:244:1::7]:80",
 				},
 			},
+			LoadBalancingMethod: randomTwoLeastConnLB,
 		},
 		{
 			Name:     "up5-usp",
@@ -244,6 +258,7 @@ func TestCreateUpstreams(t *testing.T) {
 				Time:        "5s",
 				Timeout:     "10s",
 			},
+			LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 		},
 		{
 			Name: invalidBackendRef,
@@ -332,6 +347,7 @@ func TestCreateUpstream(t *testing.T) {
 						Address: "10.0.0.3:80",
 					},
 				},
+				LoadBalancingMethod: randomTwoLeastConnLB,
 			},
 			msg: "multiple endpoints",
 		},
@@ -354,6 +370,7 @@ func TestCreateUpstream(t *testing.T) {
 						Address: "[fd00:10:244:1::7]:80",
 					},
 				},
+				LoadBalancingMethod: randomTwoLeastConnLB,
 			},
 			msg: "endpoint ipv6",
 		},
@@ -380,6 +397,7 @@ func TestCreateUpstream(t *testing.T) {
 								Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
 								Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
 							}),
+							LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeIPHash),
 						},
 					},
 				},
@@ -398,6 +416,7 @@ func TestCreateUpstream(t *testing.T) {
 					Time:        "5s",
 					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 			},
 			msg: "single upstreamSettingsPolicy",
 		},
@@ -422,6 +441,7 @@ func TestCreateUpstream(t *testing.T) {
 								Time:    helpers.GetPointer[ngfAPI.Duration]("5s"),
 								Timeout: helpers.GetPointer[ngfAPI.Duration]("10s"),
 							}),
+							LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
 						},
 					},
 					&ngfAPI.UpstreamSettingsPolicy{
@@ -452,6 +472,7 @@ func TestCreateUpstream(t *testing.T) {
 					Time:        "5s",
 					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
 			},
 			msg: "multiple upstreamSettingsPolicies",
 		},
@@ -481,6 +502,7 @@ func TestCreateUpstream(t *testing.T) {
 						Address: "10.0.0.1:80",
 					},
 				},
+				LoadBalancingMethod: randomTwoLeastConnLB,
 			},
 			msg: "empty upstreamSettingsPolicies",
 		},
@@ -524,8 +546,42 @@ func TestCreateUpstream(t *testing.T) {
 					Time:        "5s",
 					Timeout:     "10s",
 				},
+				LoadBalancingMethod: randomTwoLeastConnLB,
 			},
 			msg: "upstreamSettingsPolicy with only keep alive settings",
+		},
+		{
+			stateUpstream: dataplane.Upstream{
+				Name: "upstreamSettingsPolicy with only load balancing settings",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "11.0.20.9",
+						Port:    80,
+					},
+				},
+				Policies: []policies.Policy{
+					&ngfAPI.UpstreamSettingsPolicy{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "usp1",
+							Namespace: "test",
+						},
+						Spec: ngfAPI.UpstreamSettingsPolicySpec{
+							LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeIPHash),
+						},
+					},
+				},
+			},
+			expectedUpstream: http.Upstream{
+				Name:     "upstreamSettingsPolicy with only load balancing settings",
+				ZoneSize: ossZoneSize,
+				Servers: []http.UpstreamServer{
+					{
+						Address: "11.0.20.9:80",
+					},
+				},
+				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
+			},
+			msg: "upstreamSettingsPolicy with only load balancing settings",
 		},
 		{
 			stateUpstream: dataplane.Upstream{
@@ -547,6 +603,7 @@ func TestCreateUpstream(t *testing.T) {
 						Resolve: true,
 					},
 				},
+				LoadBalancingMethod: randomTwoLeastConnLB,
 			},
 			msg: "ExternalName service with DNS name",
 		},
@@ -585,6 +642,7 @@ func TestCreateUpstream(t *testing.T) {
 						Address: "[fd00:10:244:1::7]:80",
 					},
 				},
+				LoadBalancingMethod: randomTwoLeastConnLB,
 			},
 			msg: "mixed IP addresses and DNS names",
 		},
@@ -629,6 +687,7 @@ func TestCreateUpstreamPlus(t *testing.T) {
 						Address: "10.0.0.1:80",
 					},
 				},
+				LoadBalancingMethod: randomTwoLeastConnLB,
 			},
 		},
 		{

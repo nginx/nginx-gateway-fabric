@@ -119,11 +119,12 @@ const (
 
 // Upstream holds all configuration for an HTTP upstream.
 type Upstream struct {
-	Name      string
-	ZoneSize  string // format: 512k, 1m
-	StateFile string
-	KeepAlive UpstreamKeepAlive
-	Servers   []UpstreamServer
+	Name                string
+	ZoneSize            string // format: 512k, 1m
+	StateFile           string
+	KeepAlive           UpstreamKeepAlive
+	LoadBalancingMethod string
+	Servers             []UpstreamServer
 }
 
 // UpstreamKeepAlive holds the keepalive configuration for an HTTP upstream.

@@ -32,6 +32,8 @@ const (
 	plusZoneSizeStream = "1m"
 	// stateDir is the directory for storing state files.
 	stateDir = "/var/lib/nginx/state"
+	// default load balancing method.
+	randomTwoLeastConnLB = "random two least_conn"
 )
 
 // keepAliveChecker takes an upstream name and returns if it has keep alive settings enabled.
@@ -185,12 +187,18 @@ func (g GeneratorImpl) createUpstream(
 		}
 	}
 
+	chosenLBMethod := randomTwoLeastConnLB
+	if upstreamPolicySettings.LoadBalancingMethod != "" {
+		chosenLBMethod = upstreamPolicySettings.LoadBalancingMethod
+	}
+
 	return http.Upstream{
-		Name:      up.Name,
-		ZoneSize:  zoneSize,
-		StateFile: stateFile,
-		Servers:   upstreamServers,
-		KeepAlive: upstreamPolicySettings.KeepAlive,
+		Name:                up.Name,
+		ZoneSize:            zoneSize,
+		StateFile:           stateFile,
+		Servers:             upstreamServers,
+		KeepAlive:           upstreamPolicySettings.KeepAlive,
+		LoadBalancingMethod: chosenLBMethod,
 	}
 }
 
