@@ -33,7 +33,7 @@ const (
 	// stateDir is the directory for storing state files.
 	stateDir = "/var/lib/nginx/state"
 	// default load balancing method.
-	randomTwoLeastConnLB = "random two least_conn"
+	defaultLBMethod = "random two least_conn"
 )
 
 // keepAliveChecker takes an upstream name and returns if it has keep alive settings enabled.
@@ -187,7 +187,7 @@ func (g GeneratorImpl) createUpstream(
 		}
 	}
 
-	chosenLBMethod := randomTwoLeastConnLB
+	chosenLBMethod := defaultLBMethod
 	if upstreamPolicySettings.LoadBalancingMethod != "" {
 		chosenLBMethod = upstreamPolicySettings.LoadBalancingMethod
 	}

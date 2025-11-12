@@ -213,7 +213,7 @@ func TestCreateUpstreams(t *testing.T) {
 					Address: "10.0.0.2:80",
 				},
 			},
-			LoadBalancingMethod: randomTwoLeastConnLB,
+			LoadBalancingMethod: defaultLBMethod,
 		},
 		{
 			Name:     "up2",
@@ -223,7 +223,7 @@ func TestCreateUpstreams(t *testing.T) {
 					Address: "11.0.0.0:80",
 				},
 			},
-			LoadBalancingMethod: randomTwoLeastConnLB,
+			LoadBalancingMethod: defaultLBMethod,
 		},
 		{
 			Name:     "up3",
@@ -242,7 +242,7 @@ func TestCreateUpstreams(t *testing.T) {
 					Address: "[fd00:10:244:1::7]:80",
 				},
 			},
-			LoadBalancingMethod: randomTwoLeastConnLB,
+			LoadBalancingMethod: defaultLBMethod,
 		},
 		{
 			Name:     "up5-usp",
@@ -347,7 +347,7 @@ func TestCreateUpstream(t *testing.T) {
 						Address: "10.0.0.3:80",
 					},
 				},
-				LoadBalancingMethod: randomTwoLeastConnLB,
+				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "multiple endpoints",
 		},
@@ -370,7 +370,7 @@ func TestCreateUpstream(t *testing.T) {
 						Address: "[fd00:10:244:1::7]:80",
 					},
 				},
-				LoadBalancingMethod: randomTwoLeastConnLB,
+				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "endpoint ipv6",
 		},
@@ -502,7 +502,7 @@ func TestCreateUpstream(t *testing.T) {
 						Address: "10.0.0.1:80",
 					},
 				},
-				LoadBalancingMethod: randomTwoLeastConnLB,
+				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "empty upstreamSettingsPolicies",
 		},
@@ -546,7 +546,7 @@ func TestCreateUpstream(t *testing.T) {
 					Time:        "5s",
 					Timeout:     "10s",
 				},
-				LoadBalancingMethod: randomTwoLeastConnLB,
+				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "upstreamSettingsPolicy with only keep alive settings",
 		},
@@ -603,7 +603,7 @@ func TestCreateUpstream(t *testing.T) {
 						Resolve: true,
 					},
 				},
-				LoadBalancingMethod: randomTwoLeastConnLB,
+				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "ExternalName service with DNS name",
 		},
@@ -642,7 +642,7 @@ func TestCreateUpstream(t *testing.T) {
 						Address: "[fd00:10:244:1::7]:80",
 					},
 				},
-				LoadBalancingMethod: randomTwoLeastConnLB,
+				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "mixed IP addresses and DNS names",
 		},
@@ -663,9 +663,9 @@ func TestCreateUpstreamPlus(t *testing.T) {
 	gen := GeneratorImpl{plus: true}
 
 	tests := []struct {
+		expectedUpstream http.Upstream
 		msg              string
 		stateUpstream    dataplane.Upstream
-		expectedUpstream http.Upstream
 	}{
 		{
 			msg: "with endpoints",
@@ -687,7 +687,7 @@ func TestCreateUpstreamPlus(t *testing.T) {
 						Address: "10.0.0.1:80",
 					},
 				},
-				LoadBalancingMethod: randomTwoLeastConnLB,
+				LoadBalancingMethod: defaultLBMethod,
 			},
 		},
 		{
