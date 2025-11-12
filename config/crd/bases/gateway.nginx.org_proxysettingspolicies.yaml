@@ -52,7 +52,8 @@ spec:
             description: Spec defines the desired state of the ProxySettingsPolicy.
             properties:
               buffering:
-                description: ProxyBuffering contains the settings for proxy buffering.
+                description: Buffering configures the buffering of responses from
+                  the proxied server.
                 properties:
                   bufferSize:
                     description: |-
@@ -70,13 +71,12 @@ spec:
                       Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffers
                     properties:
                       number:
+                        description: Number sets the number of buffers.
                         format: int32
+                        minimum: 2
                         type: integer
                       size:
-                        description: |-
-                          Size is a string value representing a size. Size can be specified in bytes, kilobytes (k), megabytes (m),
-                          or gigabytes (g).
-                          Examples: 1024, 8k, 1m.
+                        description: Size sets the size of each buffer.
                         pattern: ^\d{1,4}(k|m|g)?$
                         type: string
                     required:
@@ -99,6 +99,10 @@ spec:
                     type: boolean
                 type: object
               targetRefs:
+                description: |-
+                  TargetRefs identifies the API object(s) to apply the policy to.
+                  Objects must be in the same namespace as the policy.
+                  Support: Gateway, HTTPRoute, GRPCRoute
                 items:
                   description: |-
                     LocalPolicyTargetReference identifies an API object to apply a direct or
@@ -128,6 +132,8 @@ spec:
                   - kind
                   - name
                   type: object
+                maxItems: 16
+                minItems: 1
                 type: array
             required:
             - targetRefs

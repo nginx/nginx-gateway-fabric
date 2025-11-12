@@ -37,7 +37,17 @@ type ProxySettingsPolicyList struct {
 
 // ProxySettingsPolicySpec defines the desired state of the ProxySettingsPolicy.
 type ProxySettingsPolicySpec struct {
-	Buffering  *ProxyBuffering                        `json:"buffering,omitempty"`
+	// Buffering configures the buffering of responses from the proxied server.
+	//
+	// +optional
+	Buffering *ProxyBuffering `json:"buffering,omitempty"`
+
+	// TargetRefs identifies the API object(s) to apply the policy to.
+	// Objects must be in the same namespace as the policy.
+	// Support: Gateway, HTTPRoute, GRPCRoute
+	//
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
 	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 }
 
@@ -77,6 +87,11 @@ type ProxyBuffering struct {
 
 // ProxyBuffers defines the number and size of the proxy buffers.
 type ProxyBuffers struct {
-	Size   Size  `json:"size"`
+	// Size sets the size of each buffer.
+	Size Size `json:"size"`
+
+	// Number sets the number of buffers.
+	//
+	// +kubebuilder:validation:Minimum=2
 	Number int32 `json:"number"`
 }
