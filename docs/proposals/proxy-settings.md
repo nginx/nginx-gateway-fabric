@@ -50,6 +50,12 @@ In the future, we can extend the Proxy Settings Policy to include more proxy-rel
 
 The `ProxySettingsPolicy` API is a CRD that is a part of the `gateway.nginx.org` Group. It adheres to the guidelines and requirements of an Inherited Policy as outlined in the [Policy Attachment GEP (GEP-713)](https://gateway-api.sigs.k8s.io/geps/gep-713/).
 
+The policy uses `targetRefs` (plural) to support targeting multiple resources with a single policy instance. This follows the current GEP-713 guidance and provides better user experience by:
+
+- Avoiding policy duplication when applying the same settings to multiple targets
+- Reducing maintenance burden and risk of configuration inconsistencies
+- Preventing future migration challenges from singular to plural forms
+
 Below is the Golang API for the `ProxySettingsPolicy` API:
 
 ### Go
@@ -85,14 +91,17 @@ type ProxySettingsPolicy struct {
 
 // ProxySettingsPolicySpec defines the desired state of the ProxySettingsPolicy.
 type ProxySettingsPolicySpec struct {
-    // TargetRef identifies an API object to apply the policy to.
-    // Object must be in the same namespace as the policy.
+    // TargetRefs identifies API object(s) to apply the policy to.
+    // Objects must be in the same namespace as the policy.
     //
     // Support: Gateway, HTTPRoute, GRPCRoute
     //
-    // +kubebuilder:validation:XValidation:message="TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute",rule="self.kind == 'Gateway' || self.kind == 'HTTPRoute' || self.kind == 'GRPCRoute'"
-    // +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.group == 'gateway.networking.k8s.io'"
-    TargetRef gatewayv1.LocalPolicyTargetReference `json:"targetRef"`
+    // +kubebuilder:validation:MinItems=1
+    // +kubebuilder:validation:MaxItems=16
+    // +kubebuilder:validation:XValidation:message="TargetRefs entries must have kind Gateway, HTTPRoute, or GRPCRoute",rule="self.all(t, t.kind == 'Gateway' || t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute')"
+    // +kubebuilder:validation:XValidation:message="TargetRefs entries must have group gateway.networking.k8s.io",rule="self.all(t, t.group == 'gateway.networking.k8s.io')"
+    // +kubebuilder:validation:XValidation:message="TargetRefs must be unique",rule="self.all(t1, self.exists_one(t2, t1.group == t2.group && t1.kind == t2.kind && t1.name == t2.name))"
+    TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 
     // Buffering defines the proxy buffering settings.
     //
@@ -255,8 +264,8 @@ metadata:
   name: example-proxy-settings
   namespace: default
 spec:
-  targetRef:
-    group: gateway.networking.k8s.io
+  targetRefs:
+  - group: gateway.networking.k8s.io
     kind: Gateway
     name: example-gateway
   buffering:
@@ -293,8 +302,8 @@ metadata:
   name: streaming-proxy-settings
   namespace: default
 spec:
-  targetRef:
-    group: gateway.networking.k8s.io
+  targetRefs:
+  - group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: streaming-route
   buffering:
@@ -342,12 +351,12 @@ NGINX directives inherit downwards only. The `location` context inherits values 
 
 ### Creating the Effective Policy in NGINX Config
 
-The findings from the ClientSettingsPolicy proposal apply here as well. The strategy for implementing the effective policy is:
+The strategy for implementing the effective policy is:
 
-- When a `ProxySettingsPolicy` is attached to a Gateway, add the corresponding NGINX directives to each `server` block generated from that Gateway.
-- When a `ProxySettingsPolicy` is attached to an HTTPRoute or GRPCRoute, add the corresponding NGINX directives to each of the final `location` blocks generated for the Route.
+- When a `ProxySettingsPolicy` is attached to a Gateway, add the corresponding NGINX directives to the `http` block.
+- When a `ProxySettingsPolicy` is attached to an HTTPRoute or GRPCRoute, add the corresponding NGINX directives to the final `location` blocks generated for the Route.
 
-We can rely on NGINX to compute the effective policy by applying its own inheritance rules.
+We can rely on NGINX to compute the effective policy by applying its own inheritance rules. Since each Gateway has a 1-1 relationship with an NGINX deployment, Gateway-level policies naturally map to the `http` context, and Route-level policies in the `location` context can override them as needed.
 
 ## Testing
 
