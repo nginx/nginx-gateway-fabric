@@ -26,3 +26,10 @@ type SpanAttribute struct {
 	// +kubebuilder:validation:Pattern=`^([^"$\\]|\\[^$])*$`
 	Value string `json:"value"`
 }
+
+// Size is a string value representing a size. Size can be specified in bytes, kilobytes (k), megabytes (m),
+// or gigabytes (g).
+// Examples: 1024, 8k, 1m.
+//
+// +kubebuilder:validation:Pattern=`^\d{1,4}(k|m|g)?$`
+type Size string
