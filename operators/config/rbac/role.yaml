@@ -115,6 +115,20 @@ rules:
   verbs:
   - update
 - apiGroups:
+  - inference.networking.k8s.io
+  resources:
+  - inferencepools
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - inference.networking.k8s.io
+  resources:
+  - inferencepools/status
+  verbs:
+  - update
+- apiGroups:
   - gateway.nginx.org
   resources:
   - nginxgatewayfabrics
