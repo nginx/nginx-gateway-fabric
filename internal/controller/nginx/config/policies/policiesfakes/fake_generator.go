@@ -9,6 +9,17 @@ import (
 )
 
 type FakeGenerator struct {
+	GenerateForHTTPStub        func([]policies.Policy) policies.GenerateResultFiles
+	generateForHTTPMutex       sync.RWMutex
+	generateForHTTPArgsForCall []struct {
+		arg1 []policies.Policy
+	}
+	generateForHTTPReturns struct {
+		result1 policies.GenerateResultFiles
+	}
+	generateForHTTPReturnsOnCall map[int]struct {
+		result1 policies.GenerateResultFiles
+	}
 	GenerateForInternalLocationStub        func([]policies.Policy) policies.GenerateResultFiles
 	generateForInternalLocationMutex       sync.RWMutex
 	generateForInternalLocationArgsForCall []struct {
@@ -46,6 +57,72 @@ type FakeGenerator struct {
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+func (fake *FakeGenerator) GenerateForHTTP(arg1 []policies.Policy) policies.GenerateResultFiles {
+	var arg1Copy []policies.Policy
+	if arg1 != nil {
+		arg1Copy = make([]policies.Policy, len(arg1))
+		copy(arg1Copy, arg1)
+	}
+	fake.generateForHTTPMutex.Lock()
+	ret, specificReturn := fake.generateForHTTPReturnsOnCall[len(fake.generateForHTTPArgsForCall)]
+	fake.generateForHTTPArgsForCall = append(fake.generateForHTTPArgsForCall, struct {
+		arg1 []policies.Policy
+	}{arg1Copy})
+	stub := fake.GenerateForHTTPStub
+	fakeReturns := fake.generateForHTTPReturns
+	fake.recordInvocation("GenerateForHTTP", []interface{}{arg1Copy})
+	fake.generateForHTTPMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenerator) GenerateForHTTPCallCount() int {
+	fake.generateForHTTPMutex.RLock()
+	defer fake.generateForHTTPMutex.RUnlock()
+	return len(fake.generateForHTTPArgsForCall)
+}
+
+func (fake *FakeGenerator) GenerateForHTTPCalls(stub func([]policies.Policy) policies.GenerateResultFiles) {
+	fake.generateForHTTPMutex.Lock()
+	defer fake.generateForHTTPMutex.Unlock()
+	fake.GenerateForHTTPStub = stub
+}
+
+func (fake *FakeGenerator) GenerateForHTTPArgsForCall(i int) []policies.Policy {
+	fake.generateForHTTPMutex.RLock()
+	defer fake.generateForHTTPMutex.RUnlock()
+	argsForCall := fake.generateForHTTPArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenerator) GenerateForHTTPReturns(result1 policies.GenerateResultFiles) {
+	fake.generateForHTTPMutex.Lock()
+	defer fake.generateForHTTPMutex.Unlock()
+	fake.GenerateForHTTPStub = nil
+	fake.generateForHTTPReturns = struct {
+		result1 policies.GenerateResultFiles
+	}{result1}
+}
+
+func (fake *FakeGenerator) GenerateForHTTPReturnsOnCall(i int, result1 policies.GenerateResultFiles) {
+	fake.generateForHTTPMutex.Lock()
+	defer fake.generateForHTTPMutex.Unlock()
+	fake.GenerateForHTTPStub = nil
+	if fake.generateForHTTPReturnsOnCall == nil {
+		fake.generateForHTTPReturnsOnCall = make(map[int]struct {
+			result1 policies.GenerateResultFiles
+		})
+	}
+	fake.generateForHTTPReturnsOnCall[i] = struct {
+		result1 policies.GenerateResultFiles
+	}{result1}
 }
 
 func (fake *FakeGenerator) GenerateForInternalLocation(arg1 []policies.Policy) policies.GenerateResultFiles {

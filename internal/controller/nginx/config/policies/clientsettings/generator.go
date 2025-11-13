@@ -39,7 +39,9 @@ keepalive_timeout {{ .KeepAlive.Timeout.Server }};
 `
 
 // Generator generates nginx configuration based on a clientsettings policy.
-type Generator struct{}
+type Generator struct {
+	policies.UnimplementedGenerator
+}
 
 // NewGenerator returns a new instance of Generator.
 func NewGenerator() *Generator {
