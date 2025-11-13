@@ -6,7 +6,7 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.2.1
 
-_November 12, 2025_
+_November 13, 2025_
 
 FEATURES:
 
@@ -33,6 +33,7 @@ KNOWN ISSUES:
 COMPATIBILITY:
 
 - Gateway API version: `1.3.0`
+- Gateway API Inference Extension version: `1.0.1`
 - NGINX version: `1.29.2`
 - NGINX Plus version: `R35`
 - NGINX Agent version: `v3.5.0`

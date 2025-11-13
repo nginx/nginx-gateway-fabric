@@ -30,6 +30,7 @@ KNOWN ISSUES:
 COMPATIBILITY:
 
 - Gateway API version: ``
+- Gateway API Inference Extension version: ``
 - NGINX version: ``
 - NGINX Plus version: ``
 - NGINX Agent version: ``
