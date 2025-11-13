@@ -23,6 +23,13 @@
           "title": "annotations",
           "type": "object"
         },
+        "enable": {
+          "default": true,
+          "description": "Enable the cert-generator Job. If this is disabled, then cert-manager or some other method must be used to create the required Secrets.",
+          "required": [],
+          "title": "enable",
+          "type": "boolean"
+        },
         "nodeSelector": {
           "description": "The nodeSelector of the cert-generator pod.",
           "required": [],
