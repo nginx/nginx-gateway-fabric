@@ -59,7 +59,6 @@ spec:
                     description: |-
                       BufferSize sets the size of the buffer used for reading the first part of the response received from
                       the proxied server. This part usually contains a small response header.
-                      Default: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffer_size
                       Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffer_size
                     pattern: ^\d{1,4}(k|m|g)?$
                     type: string
@@ -67,12 +66,12 @@ spec:
                     description: |-
                       Buffers sets the number and size of buffers used for reading a response from the proxied server,
                       for a single connection.
-                      Default: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffers
                       Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffers
                     properties:
                       number:
                         description: Number sets the number of buffers.
                         format: int32
+                        maximum: 256
                         minimum: 2
                         type: integer
                       size:
@@ -87,7 +86,6 @@ spec:
                     description: |-
                       BusyBuffersSize sets the total size of buffers that can be busy sending a response to the client,
                       while the response is not yet fully read.
-                      Default: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_busy_buffers_size
                       Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_busy_buffers_size
                     pattern: ^\d{1,4}(k|m|g)?$
                     type: string
@@ -135,6 +133,16 @@ spec:
                 maxItems: 16
                 minItems: 1
                 type: array
+                x-kubernetes-validations:
+                - message: TargetRefs entries must have kind Gateway, HTTPRoute, or
+                    GRPCRoute
+                  rule: self.all(t, t.kind == 'Gateway' || t.kind == 'HTTPRoute' ||
+                    t.kind == 'GRPCRoute')
+                - message: TargetRefs entries must have group gateway.networking.k8s.io
+                  rule: self.all(t, t.group == 'gateway.networking.k8s.io')
+                - message: TargetRefs must be unique
+                  rule: self.all(t1, self.exists_one(t2, t1.group == t2.group && t1.kind
+                    == t2.kind && t1.name == t2.name))
             required:
             - targetRefs
             type: object

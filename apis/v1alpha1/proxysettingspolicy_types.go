@@ -66,7 +66,6 @@ type ProxyBuffering struct {
 
 	// BufferSize sets the size of the buffer used for reading the first part of the response received from
 	// the proxied server. This part usually contains a small response header.
-	// Default: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffer_size
 	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffer_size
 	//
 	// +optional
@@ -74,7 +73,6 @@ type ProxyBuffering struct {
 
 	// Buffers sets the number and size of buffers used for reading a response from the proxied server,
 	// for a single connection.
-	// Default: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffers
 	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffers
 	//
 	// +optional
@@ -82,7 +80,6 @@ type ProxyBuffering struct {
 
 	// BusyBuffersSize sets the total size of buffers that can be busy sending a response to the client,
 	// while the response is not yet fully read.
-	// Default: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_busy_buffers_size
 	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_busy_buffers_size
 	//
 	// +optional
