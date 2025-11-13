@@ -22,7 +22,9 @@ BUG FIXES:
 
 HELM CHART:
 
+- Allow disabling cert-generator with a Helm value. [4186](https://github.com/nginx/nginx-gateway-fabric/pull/4186). Thanks to [fabian4](https://github.com/fabian4)
 - The version of the Helm chart is now 2.2.1
+
 
 KNOWN ISSUES:
 
