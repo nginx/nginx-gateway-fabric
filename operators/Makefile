@@ -1,6 +1,6 @@
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of the operator.
-VERSION ?= 1.0.2
+VERSION ?= edge
 
 # renovate: datasource=github-tags depName=operator-framework/operator-sdk
 OPERATOR_SDK_VERSION ?= v1.42.0
@@ -40,6 +40,10 @@ all: docker-build
 .PHONY: help
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+.PHONY: verify-rbac
+verify-rbac: ## Verify operator RBAC includes all Helm chart permissions.
+	@./scripts/verify-rbac-sync.sh
 
 ##@ Build
 
@@ -140,7 +144,7 @@ endif
 endif
 
 .PHONY: bundle
-bundle: kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
+bundle: verify-rbac kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)

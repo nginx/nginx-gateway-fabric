@@ -165,7 +165,11 @@ generate-helm-schema: ## Generate the Helm chart schema
 	go run github.com/dadav/helm-schema/cmd/helm-schema@$(HELM_SCHEMA_VERSION) --chart-search-root=charts --add-schema-reference "--skip-auto-generation=required,additionalProperties" --append-newline
 
 .PHONY: generate-all
-generate-all: generate generate-crds generate-helm-schema generate-manifests generate-api-docs generate-helm-docs ## Generate all the necessary files
+generate-all: generate generate-crds generate-helm-schema generate-manifests generate-api-docs generate-helm-docs verify-operator-rbac ## Generate all the necessary files
+
+.PHONY: verify-operator-rbac
+verify-operator-rbac: ## Verify operator RBAC is in sync with Helm chart
+	@./operators/scripts/verify-rbac-sync.sh
 
 .PHONY: clean
 clean: ## Clean the build
