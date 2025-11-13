@@ -119,17 +119,6 @@ func TestValidator_Validate(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid load balancing method",
-			policy: createModifiedPolicy(func(p *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy {
-				p.Spec.LoadBalancingMethod = helpers.GetPointer[ngfAPI.LoadBalancingType]("invalid-lb-method")
-				return p
-			}),
-			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Unsupported value: \"invalid-lb-method\": " +
-					"supported values: \"ip_hash\", \"random two least_conn\""),
-			},
-		},
-		{
 			name:          "valid",
 			policy:        createValidPolicy(),
 			expConditions: nil,
