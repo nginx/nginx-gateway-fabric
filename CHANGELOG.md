@@ -4,6 +4,46 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.2.1
+
+_November 12, 2025_
+
+FEATURES:
+
+- Add support to make endpoint picker communication settings configurable. [4105](https://github.com/nginx/nginx-gateway-fabric/pull/4105)
+
+BUG FIXES:
+
+- Support mixed externalname and local services in single route. [4188](https://github.com/nginx/nginx-gateway-fabric/pull/4188)
+- Preserve HPA replicas on deployment. [4214](https://github.com/nginx/nginx-gateway-fabric/pull/4214)
+- Preserve external controller annotations. [4182](https://github.com/nginx/nginx-gateway-fabric/pull/4182)
+- Fix bug where user mounted files were being removed by NGINX. [4178](https://github.com/nginx/nginx-gateway-fabric/pull/4178)
+- Fix bug that prevented HPA from working when Inference Extension was enabled. [4247](https://github.com/nginx/nginx-gateway-fabric/pull/4247)
+
+HELM CHART:
+
+- Allow disabling cert-generator with a Helm value. [4186](https://github.com/nginx/nginx-gateway-fabric/pull/4186). Thanks to [fabian4](https://github.com/fabian4)
+- The version of the Helm chart is now 2.2.1
+
+
+KNOWN ISSUES:
+
+- Data plane sometimes does not sync upstream server IPs. [3626](https://github.com/nginx/nginx-gateway-fabric/issues/3626)
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- NGINX version: `1.29.2`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.5.0`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.2.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.2.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.2.1`
+
 ## Release 2.2.0
 
 _October 21, 2025_
@@ -26,6 +66,10 @@ HELM CHART:
 
 - The version of the Helm chart is now 2.2.0
 - Set NGINX Plus default image. [3919](https://github.com/nginx/nginx-gateway-fabric/pull/3919)
+
+KNOWN ISSUES:
+
+- Data plane sometimes does not sync upstream server IPs. [3626](https://github.com/nginx/nginx-gateway-fabric/issues/3626)
 
 COMPATIBILITY:
 
