@@ -40,7 +40,7 @@ metadata:
               "image": {
                 "pullPolicy": "IfNotPresent",
                 "repository": "ghcr.io/nginx/nginx-gateway-fabric/nginx",
-                "tag": "2.2.0-ubi"
+                "tag": "2.2.1-ubi"
               },
               "imagePullSecret": "",
               "imagePullSecrets": [],
@@ -96,7 +96,7 @@ metadata:
               "image": {
                 "pullPolicy": "IfNotPresent",
                 "repository": "ghcr.io/nginx/nginx-gateway-fabric",
-                "tag": "2.2.0-ubi"
+                "tag": "2.2.1-ubi"
               },
               "kind": "deployment",
               "labels": {},
@@ -144,12 +144,12 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    createdAt: "2025-10-23T13:55:48Z"
-    operators.operatorframework.io/builder: operator-sdk-v1.41.1
+    createdAt: "2025-11-13T19:38:00Z"
+    operators.operatorframework.io/builder: operator-sdk-v1.42.0
     operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
     categories: Networking
     certified: "true"
-    containerImage: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:e2a8de4ef9724ef2e4f0b2b648681b4a4b6a5714ba111dd9348c5599dd552a84
+    containerImage: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:c9c8456458ab9433edb0370c45c20f64363f6376c5ca488ae6b125fd9f27f8a3
     description: The NGINX Gateway Fabric is a Kubernetes Gateway API implementation that provides application traffic management for modern cloud-native applications
     features.operators.openshift.io/cnf: "false"
     features.operators.openshift.io/cni: "false"
@@ -165,7 +165,7 @@ metadata:
     repository: https://github.com/nginx/nginx-gateway-fabric
     support: NGINX Inc.
     com.redhat.openshift.versions: v4.19
-  name: nginx-gateway-fabric.v1.0.0
+  name: nginx-gateway-fabric.v1.0.1
   namespace: placeholder
   labels:
     operatorframework.io/arch.amd64: supported
@@ -346,6 +346,20 @@ spec:
               verbs:
                 - update
             - apiGroups:
+                - inference.networking.k8s.io
+              resources:
+                - inferencepools
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - inference.networking.k8s.io
+              resources:
+                - inferencepools/status
+              verbs:
+                - update
+            - apiGroups:
                 - gateway.nginx.org
               resources:
                 - nginxgatewayfabrics
@@ -454,7 +468,7 @@ spec:
                       - --leader-elect
                       - --leader-election-id=nginx-gateway-fabric
                       - --health-probe-bind-address=:8081
-                    image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:e2a8de4ef9724ef2e4f0b2b648681b4a4b6a5714ba111dd9348c5599dd552a84
+                    image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:c9c8456458ab9433edb0370c45c20f64363f6376c5ca488ae6b125fd9f27f8a3
                     livenessProbe:
                       httpGet:
                         path: /healthz
@@ -547,6 +561,6 @@ spec:
     name: F5 NGINX
     url: https://www.f5.com/go/product/welcome-to-nginx
   relatedImages:
-    - image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:e2a8de4ef9724ef2e4f0b2b648681b4a4b6a5714ba111dd9348c5599dd552a84
+    - image: ghcr.io/nginx/nginx-gateway-fabric/operator@sha256:c9c8456458ab9433edb0370c45c20f64363f6376c5ca488ae6b125fd9f27f8a3
       name: manager
-  version: 1.0.0
+  version: 1.0.1

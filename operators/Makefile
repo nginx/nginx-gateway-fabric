@@ -1,9 +1,9 @@
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of the operator.
-VERSION ?= 1.0.0
+VERSION ?= 1.0.1
 
 # renovate: datasource=github-tags depName=operator-framework/operator-sdk
-OPERATOR_SDK_VERSION ?= v1.41.1
+OPERATOR_SDK_VERSION ?= v1.42.0
 
 # renovate: datasource=github-tags depName=kubernetes-sigs/kustomize
 KUSTOMIZE_VERSION ?= v5.6.0
