@@ -37,6 +37,7 @@ func TestProcess(t *testing.T) {
 							Time:        helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
 							Timeout:     helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
 						}),
+						LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
 					},
 				},
 			},
@@ -48,6 +49,24 @@ func TestProcess(t *testing.T) {
 					Time:        "5s",
 					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
+			},
+		},
+		{
+			name: "load balancing method set",
+			policies: []policies.Policy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeRandomTwoLeastConnection),
+					},
+				},
+			},
+			expUpstreamSettings: UpstreamSettings{
+				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeRandomTwoLeastConnection),
 			},
 		},
 		{
@@ -220,6 +239,15 @@ func TestProcess(t *testing.T) {
 						}),
 					},
 				},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp-loadBalancingMethod",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
+					},
+				},
 			},
 			expUpstreamSettings: UpstreamSettings{
 				ZoneSize: "2m",
@@ -229,6 +257,7 @@ func TestProcess(t *testing.T) {
 					Time:        "5s",
 					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
 			},
 		},
 		{
@@ -310,6 +339,15 @@ func TestProcess(t *testing.T) {
 						},
 					},
 				},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp-lb-method",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
+					},
+				},
 			},
 			expUpstreamSettings: UpstreamSettings{
 				ZoneSize: "2m",
@@ -319,6 +357,7 @@ func TestProcess(t *testing.T) {
 					Time:        "5s",
 					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
 			},
 		},
 	}

@@ -10,7 +10,9 @@ package config
 const upstreamsTemplateText = `
 {{ range $u := . }}
 upstream {{ $u.Name }} {
-    random two least_conn;
+    {{ if $u.LoadBalancingMethod -}}
+    {{ $u.LoadBalancingMethod }};
+    {{- end }}
     {{ if $u.ZoneSize -}}
     zone {{ $u.Name }} {{ $u.ZoneSize }};
     {{ end -}}

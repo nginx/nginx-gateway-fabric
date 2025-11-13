@@ -83,6 +83,10 @@ func conflicts(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
 		}
 	}
 
+	if a.LoadBalancingMethod != nil && b.LoadBalancingMethod != nil {
+		return true
+	}
+
 	return false
 }
 
