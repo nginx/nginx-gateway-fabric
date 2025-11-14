@@ -696,6 +696,30 @@ func TestNewGatewayClassStatusSetter(t *testing.T) {
 			},
 			expStatusSet: false,
 		},
+		{
+			name: "GatewayClass has same conditions but different SupportedFeatures",
+			newStatus: gatewayv1.GatewayClassStatus{
+				Conditions:        []metav1.Condition{{Message: "same condition"}},
+				SupportedFeatures: []gatewayv1.SupportedFeature{{Name: "Feature1"}},
+			},
+			status: gatewayv1.GatewayClassStatus{
+				Conditions:        []metav1.Condition{{Message: "same condition"}},
+				SupportedFeatures: []gatewayv1.SupportedFeature{{Name: "Feature2"}},
+			},
+			expStatusSet: true,
+		},
+		{
+			name: "GatewayClass has same conditions and same SupportedFeatures",
+			newStatus: gatewayv1.GatewayClassStatus{
+				Conditions:        []metav1.Condition{{Message: "same condition"}},
+				SupportedFeatures: []gatewayv1.SupportedFeature{{Name: "Feature1"}},
+			},
+			status: gatewayv1.GatewayClassStatus{
+				Conditions:        []metav1.Condition{{Message: "same condition"}},
+				SupportedFeatures: []gatewayv1.SupportedFeature{{Name: "Feature1"}},
+			},
+			expStatusSet: false,
+		},
 	}
 
 	for _, test := range tests {

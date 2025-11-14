@@ -202,6 +202,23 @@
             "logging": {
               "description": "Logging defines logging related settings for NGINX.",
               "properties": {
+                "accessLog": {
+                  "description": "AccessLog defines the access log settings.",
+                  "properties": {
+                    "disable": {
+                      "description": "Disable turns off access logging when set to true.",
+                      "required": [],
+                      "type": "boolean"
+                    },
+                    "format": {
+                      "description": "Format specifies the custom log format string. If not specified, NGINX default 'combined' format is used.",
+                      "required": [],
+                      "type": "string"
+                    }
+                  },
+                  "required": [],
+                  "type": "object"
+                },
                 "agentLevel": {
                   "enum": [
                     "debug",

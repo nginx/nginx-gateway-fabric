@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -9,6 +10,77 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
+
+func TestLoggingSettingsTemplate(t *testing.T) {
+	t.Parallel()
+
+	logFormat := "$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent"
+
+	tests := []struct {
+		name              string
+		accessLog         *dataplane.AccessLog
+		expectedOutputs   []string
+		unexpectedOutputs []string
+	}{
+		{
+			name:      "Log format and access log with custom format",
+			accessLog: &dataplane.AccessLog{Format: logFormat},
+			expectedOutputs: []string{
+				fmt.Sprintf("log_format %s '%s'", dataplane.DefaultLogFormatName, logFormat),
+				fmt.Sprintf("access_log %s %s", dataplane.DefaultAccessLogPath, dataplane.DefaultLogFormatName),
+			},
+		},
+		{
+			name:      "Empty format",
+			accessLog: &dataplane.AccessLog{Format: ""},
+			unexpectedOutputs: []string{
+				fmt.Sprintf("log_format %s '%s'", dataplane.DefaultLogFormatName, logFormat),
+				fmt.Sprintf("access_log %s %s", dataplane.DefaultAccessLogPath, dataplane.DefaultLogFormatName),
+			},
+		},
+		{
+			name:      "Access log off while format presented",
+			accessLog: &dataplane.AccessLog{Disable: true, Format: logFormat},
+			expectedOutputs: []string{
+				`access_log off;`,
+			},
+			unexpectedOutputs: []string{
+				fmt.Sprintf("access_log off %s", dataplane.DefaultLogFormatName),
+			},
+		},
+		{
+			name:      "Access log off",
+			accessLog: &dataplane.AccessLog{Disable: true},
+			expectedOutputs: []string{
+				`access_log off;`,
+			},
+			unexpectedOutputs: []string{
+				`log_format`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conf := dataplane.Configuration{
+				Logging: dataplane.Logging{AccessLog: tt.accessLog},
+			}
+
+			res := executeBaseHTTPConfig(conf)
+			g.Expect(res).To(HaveLen(1))
+			httpConfig := string(res[0].data)
+			for _, expectedOutput := range tt.expectedOutputs {
+				g.Expect(httpConfig).To(ContainSubstring(expectedOutput))
+			}
+			for _, unexpectedOutput := range tt.unexpectedOutputs {
+				g.Expect(httpConfig).ToNot(ContainSubstring(unexpectedOutput))
+			}
+		})
+	}
+}
 
 func TestExecuteBaseHttp_HTTP2(t *testing.T) {
 	t.Parallel()
@@ -281,6 +353,52 @@ func TestExecuteBaseHttp_DNSResolver(t *testing.T) {
 			g.Expect(httpConfig).To(ContainSubstring("map $http_host $gw_api_compliant_host {"))
 			g.Expect(httpConfig).To(ContainSubstring("map $http_upgrade $connection_upgrade {"))
 			g.Expect(httpConfig).To(ContainSubstring("map $request_uri $request_uri_path {"))
+		})
+	}
+}
+
+func TestExecuteBaseHttp_GatewaySecretID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		expectedConfig string
+		conf           dataplane.Configuration
+	}{
+		{
+			name: "with GatewaySecretID",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					GatewaySecretID: "client-secret",
+				},
+			},
+			expectedConfig: "proxy_ssl_certificate /etc/nginx/secrets/client-secret.pem;" +
+				"\nproxy_ssl_certificate_key /etc/nginx/secrets/client-secret.pem;",
+		},
+		{
+			name: "without GatewaySecretID",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					GatewaySecretID: "",
+				},
+			},
+			expectedConfig: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf)
+			g.Expect(res).To(HaveLen(1))
+
+			httpConfig := string(res[0].data)
+
+			if test.expectedConfig != "" {
+				g.Expect(httpConfig).To(ContainSubstring(test.expectedConfig))
+			}
 		})
 	}
 }

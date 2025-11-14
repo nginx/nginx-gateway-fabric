@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -165,7 +166,7 @@ func TestBuildGatewayClass(t *testing.T) {
 		{Name: "gateways.gateway.networking.k8s.io"}: {
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					BundleVersionAnnotation: SupportedVersion,
+					consts.BundleVersionAnnotation: consts.BundleVersion,
 				},
 			},
 		},
@@ -175,18 +176,30 @@ func TestBuildGatewayClass(t *testing.T) {
 		{Name: "gateways.gateway.networking.k8s.io"}: {
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					BundleVersionAnnotation: "v99.0.0",
+					consts.BundleVersionAnnotation: "v99.0.0",
+				},
+			},
+		},
+	}
+
+	experimentalCRDs := map[types.NamespacedName]*metav1.PartialObjectMetadata{
+		{Name: "gateways.gateway.networking.k8s.io"}: {
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					consts.BundleVersionAnnotation: consts.BundleVersion,
+					consts.ChannelAnnotation:       "experimental",
 				},
 			},
 		},
 	}
 
 	tests := []struct {
-		gc          *v1.GatewayClass
-		nps         map[types.NamespacedName]*NginxProxy
-		crdMetadata map[types.NamespacedName]*metav1.PartialObjectMetadata
-		expected    *GatewayClass
-		name        string
+		gc                  *v1.GatewayClass
+		nps                 map[types.NamespacedName]*NginxProxy
+		crdMetadata         map[types.NamespacedName]*metav1.PartialObjectMetadata
+		expected            *GatewayClass
+		name                string
+		experimentalEnabled bool
 	}{
 		{
 			gc:          validGC,
@@ -228,10 +241,10 @@ func TestBuildGatewayClass(t *testing.T) {
 				Valid:  true,
 				Conditions: []conditions.Condition{
 					conditions.NewGatewayClassRefInvalid(
-						"spec.parametersRef.namespace: Required value: ParametersRef must specify Namespace",
+						"Spec.parametersRef.namespace: Required value: ParametersRef must specify Namespace",
 					),
 					conditions.NewGatewayClassInvalidParameters(
-						"spec.parametersRef.namespace: Required value: ParametersRef must specify Namespace",
+						"Spec.parametersRef.namespace: Required value: ParametersRef must specify Namespace",
 					),
 				},
 			},
@@ -244,10 +257,10 @@ func TestBuildGatewayClass(t *testing.T) {
 				Valid:  true,
 				Conditions: []conditions.Condition{
 					conditions.NewGatewayClassRefInvalid(
-						"spec.parametersRef.kind: Unsupported value: \"Invalid\": supported values: \"NginxProxy\"",
+						"Spec.parametersRef.kind: Unsupported value: \"Invalid\": supported values: \"NginxProxy\"",
 					),
 					conditions.NewGatewayClassInvalidParameters(
-						"spec.parametersRef.kind: Unsupported value: \"Invalid\": supported values: \"NginxProxy\"",
+						"Spec.parametersRef.kind: Unsupported value: \"Invalid\": supported values: \"NginxProxy\"",
 					),
 				},
 			},
@@ -323,9 +336,42 @@ func TestBuildGatewayClass(t *testing.T) {
 			expected: &GatewayClass{
 				Source:     validGC,
 				Valid:      false,
-				Conditions: conditions.NewGatewayClassUnsupportedVersion(SupportedVersion),
+				Conditions: conditions.NewGatewayClassUnsupportedVersion(consts.BundleVersion),
 			},
 			name: "invalid gatewayclass; unsupported version",
+		},
+		{
+			gc:                  validGC,
+			crdMetadata:         experimentalCRDs,
+			experimentalEnabled: true,
+			expected: &GatewayClass{
+				Source:                validGC,
+				Valid:                 true,
+				ExperimentalSupported: true,
+			},
+			name: "experimental enabled and CRDs have experimental channel",
+		},
+		{
+			gc:                  validGC,
+			crdMetadata:         validCRDs,
+			experimentalEnabled: true,
+			expected: &GatewayClass{
+				Source:                validGC,
+				Valid:                 true,
+				ExperimentalSupported: false,
+			},
+			name: "experimental enabled but CRDs have standard channel",
+		},
+		{
+			gc:                  validGC,
+			crdMetadata:         experimentalCRDs,
+			experimentalEnabled: false,
+			expected: &GatewayClass{
+				Source:                validGC,
+				Valid:                 true,
+				ExperimentalSupported: false,
+			},
+			name: "experimental disabled but CRDs have experimental channel",
 		},
 	}
 
@@ -334,7 +380,7 @@ func TestBuildGatewayClass(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildGatewayClass(test.gc, test.nps, test.crdMetadata)
+			result := buildGatewayClass(test.gc, test.nps, test.crdMetadata, test.experimentalEnabled)
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}
@@ -346,14 +392,14 @@ func TestValidateCRDVersions(t *testing.T) {
 		return &metav1.PartialObjectMetadata{
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					BundleVersionAnnotation: version,
+					consts.BundleVersionAnnotation: version,
 				},
 			},
 		}
 	}
 
-	// Adding patch version to SupportedVersion to try and avoid having to update these tests with every release.
-	fields := strings.Split(SupportedVersion, ".")
+	// Adding patch version to consts.BundleVersion to try and avoid having to update these tests with every release.
+	fields := strings.Split(consts.BundleVersion, ".")
 	fields[2] = "99"
 
 	validVersionWithPatch := createCRDMetadata(strings.Join(fields, "."))
@@ -396,7 +442,7 @@ func TestValidateCRDVersions(t *testing.T) {
 				{Name: "referencegrants.gateway.networking.k8s.io"}: bestEffortVersion,
 			},
 			valid:    true,
-			expConds: conditions.NewGatewayClassSupportedVersionBestEffort(SupportedVersion),
+			expConds: conditions.NewGatewayClassSupportedVersionBestEffort(consts.BundleVersion),
 		},
 		{
 			name: "valid; mix of supported and best effort versions",
@@ -407,7 +453,7 @@ func TestValidateCRDVersions(t *testing.T) {
 				{Name: "referencegrants.gateway.networking.k8s.io"}: validVersionWithPatch,
 			},
 			valid:    true,
-			expConds: conditions.NewGatewayClassSupportedVersionBestEffort(SupportedVersion),
+			expConds: conditions.NewGatewayClassSupportedVersionBestEffort(consts.BundleVersion),
 		},
 		{
 			name: "invalid; all unsupported versions",
@@ -418,7 +464,7 @@ func TestValidateCRDVersions(t *testing.T) {
 				{Name: "referencegrants.gateway.networking.k8s.io"}: unsupportedVersion,
 			},
 			valid:    false,
-			expConds: conditions.NewGatewayClassUnsupportedVersion(SupportedVersion),
+			expConds: conditions.NewGatewayClassUnsupportedVersion(consts.BundleVersion),
 		},
 		{
 			name: "invalid; mix unsupported and best effort versions",
@@ -429,7 +475,7 @@ func TestValidateCRDVersions(t *testing.T) {
 				{Name: "referencegrants.gateway.networking.k8s.io"}: bestEffortVersion,
 			},
 			valid:    false,
-			expConds: conditions.NewGatewayClassUnsupportedVersion(SupportedVersion),
+			expConds: conditions.NewGatewayClassUnsupportedVersion(consts.BundleVersion),
 		},
 		{
 			name: "invalid; bad version string",
@@ -437,7 +483,7 @@ func TestValidateCRDVersions(t *testing.T) {
 				{Name: "gatewayclasses.gateway.networking.k8s.io"}: createCRDMetadata("v"),
 			},
 			valid:    false,
-			expConds: conditions.NewGatewayClassUnsupportedVersion(SupportedVersion),
+			expConds: conditions.NewGatewayClassUnsupportedVersion(consts.BundleVersion),
 		},
 	}
 
@@ -446,7 +492,7 @@ func TestValidateCRDVersions(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			conds, valid := validateCRDVersions(test.crds)
+			conds, valid, _ := validateCRDVersions(test.crds)
 			g.Expect(valid).To(Equal(test.valid))
 			g.Expect(conds).To(Equal(test.expConds))
 		})

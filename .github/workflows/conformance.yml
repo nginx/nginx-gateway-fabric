@@ -196,7 +196,7 @@ jobs:
         if: ${{ inputs.production-release && inputs.enable-experimental }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.ref_name }} conformance-profile.yaml --clobber
+        run: gh release upload ${{ inputs.release_version }} conformance-profile.yaml --clobber
         working-directory: ./tests
 
       - name: Run inference conformance tests
@@ -217,5 +217,5 @@ jobs:
         if: ${{ inputs.production-release && inputs.enable-experimental }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.ref_name }} conformance-profile-inference.yaml --clobber
+        run: gh release upload ${{ inputs.release_version }} conformance-profile-inference.yaml --clobber
         working-directory: ./tests

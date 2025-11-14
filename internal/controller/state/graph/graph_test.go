@@ -33,8 +33,9 @@ import (
 
 func TestBuildGraph(t *testing.T) {
 	const (
-		gcName         = "my-class"
-		controllerName = "my.controller"
+		gcName                  = "my-class"
+		controllerName          = "my.controller"
+		experimentalFeaturesOff = false
 	)
 
 	cm := &v1.ConfigMap{
@@ -440,6 +441,21 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
+	gatewaySecret := &v1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "gateway-secret",
+		},
+		Data: map[string][]byte{
+			v1.TLSCertKey:       cert,
+			v1.TLSPrivateKeyKey: key,
+		},
+		Type: v1.SecretTypeTLS,
+	}
+
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: testNs,
@@ -517,6 +533,15 @@ func TestBuildGraph(t *testing.T) {
 							Port:     8443,
 							Protocol: gatewayv1.TLSProtocolType,
 							TLS:      &gatewayv1.ListenerTLSConfig{Mode: helpers.GetPointer(gatewayv1.TLSModePassthrough)},
+						},
+					},
+					TLS: &gatewayv1.GatewayTLSConfig{
+						Backend: &gatewayv1.GatewayBackendTLS{
+							ClientCertificateRef: &gatewayv1.SecretObjectReference{
+								Kind:      helpers.GetPointer[gatewayv1.Kind]("Secret"),
+								Name:      gatewayv1.ObjectName(gatewaySecret.Name),
+								Namespace: helpers.GetPointer(gatewayv1.Namespace(gatewaySecret.Namespace)),
+							},
 						},
 					},
 				},
@@ -807,8 +832,9 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(grToServiceNsRefGrant): grToServiceNsRefGrant,
 			},
 			Secrets: map[types.NamespacedName]*v1.Secret{
-				client.ObjectKeyFromObject(secret):     secret,
-				client.ObjectKeyFromObject(plusSecret): plusSecret,
+				client.ObjectKeyFromObject(secret):        secret,
+				client.ObjectKeyFromObject(plusSecret):    plusSecret,
+				client.ObjectKeyFromObject(gatewaySecret): gatewaySecret,
 			},
 			BackendTLSPolicies: map[types.NamespacedName]*gatewayv1.BackendTLSPolicy{
 				client.ObjectKeyFromObject(btp.Source): btp.Source,
@@ -1220,6 +1246,7 @@ func TestBuildGraph(t *testing.T) {
 						Namespace: "test",
 						Name:      "gateway-1-my-class",
 					},
+					SecretRef: helpers.GetPointer(client.ObjectKeyFromObject(gatewaySecret)),
 				},
 				{Namespace: testNs, Name: "gateway-2"}: {
 					Source: gw2.Source,
@@ -1296,6 +1323,7 @@ func TestBuildGraph(t *testing.T) {
 						Namespace: "test",
 						Name:      "gateway-2-my-class",
 					},
+					SecretRef: helpers.GetPointer(client.ObjectKeyFromObject(gatewaySecret)),
 				},
 			},
 			Routes: map[RouteKey]*L7Route{
@@ -1312,6 +1340,13 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(secret): {
 					Source: secret,
 					CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", &Certificate{
+						TLSCert:       cert,
+						TLSPrivateKey: key,
+					}),
+				},
+				client.ObjectKeyFromObject(gatewaySecret): {
+					Source: gatewaySecret,
+					CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(gatewaySecret), "Secret", &Certificate{
 						TLSCert:       cert,
 						TLSPrivateKey: key,
 					}),
@@ -1413,14 +1448,16 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	tests := []struct {
-		store    ClusterState
-		expected *Graph
-		name     string
+		store               ClusterState
+		expected            *Graph
+		name                string
+		experimentalEnabled bool
 	}{
 		{
-			store:    createStateWithGatewayClass(normalGC),
-			expected: createExpectedGraphWithGatewayClass(normalGC),
-			name:     "normal case",
+			store:               createStateWithGatewayClass(normalGC),
+			expected:            createExpectedGraphWithGatewayClass(normalGC),
+			experimentalEnabled: true,
+			name:                "normal case",
 		},
 		{
 			store:    createStateWithGatewayClass(differentControllerGC),
@@ -1456,6 +1493,7 @@ func TestBuildGraph(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
+				test.experimentalEnabled,
 			)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())

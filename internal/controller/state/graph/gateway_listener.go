@@ -192,7 +192,7 @@ func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.Na
 		var err error
 		allowedRouteSelector, err = metav1.LabelSelectorAsSelector(selector)
 		if err != nil {
-			msg := fmt.Sprintf("invalid label selector: %s", err.Error())
+			msg := fmt.Sprintf("Invalid label selector: %s", err.Error())
 			conds = append(conds, conditions.NewListenerUnsupportedValue(msg)...)
 			valid = false
 		}

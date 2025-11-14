@@ -15,6 +15,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
+	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -63,6 +64,8 @@ type ChangeProcessorConfig struct {
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
 	GatewayClassName string
+	// ExperimentalFeatures indicates if experimental features are enabled.
+	ExperimentalFeatures bool
 }
 
 // ChangeProcessorImpl is an implementation of ChangeProcessor.
@@ -190,7 +193,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			{
 				gvk:       cfg.MustExtractGVK(&apiext.CustomResourceDefinition{}),
 				store:     newObjectStoreMapAdapter(clusterStore.CRDMetadata),
-				predicate: annotationChangedPredicate{annotation: graph.BundleVersionAnnotation},
+				predicate: annotationChangedPredicate{annotation: consts.BundleVersionAnnotation},
 			},
 			{
 				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha2.NginxProxy{}),
@@ -275,6 +278,7 @@ func (c *ChangeProcessorImpl) Process() *graph.Graph {
 		c.cfg.PlusSecrets,
 		c.cfg.Validators,
 		c.cfg.Logger,
+		c.cfg.ExperimentalFeatures,
 	)
 
 	return c.latestGraph

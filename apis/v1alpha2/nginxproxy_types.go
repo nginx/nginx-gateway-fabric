@@ -297,6 +297,12 @@ type NginxLogging struct {
 	// +optional
 	// +kubebuilder:default=info
 	AgentLevel *AgentLogLevel `json:"agentLevel,omitempty"`
+
+	// AccessLog defines the access log settings, including format itself and disabling option.
+	// For now only path /dev/stdout can be used.
+	//
+	// +optional
+	AccessLog *NginxAccessLog `json:"accessLog,omitempty"`
 }
 
 // NginxErrorLogLevel type defines the log level of error logs for NGINX.
@@ -351,6 +357,22 @@ const (
 	// AgentLogLevelFatal is the fatal level NGINX agent logs.
 	AgentLogLevelFatal AgentLogLevel = "fatal"
 )
+
+// NginxAccessLog defines the configuration for an NGINX access log.
+type NginxAccessLog struct {
+	// Disable turns off access logging when set to true.
+	//
+	// +optional
+	Disable *bool `json:"disable,omitempty"`
+
+	// Format specifies the custom log format string.
+	// If not specified, NGINX default 'combined' format is used.
+	// For now only path /dev/stdout can be used.
+	// See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
+	//
+	// +optional
+	Format *string `json:"format,omitempty"`
+}
 
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.
 type NginxPlus struct {

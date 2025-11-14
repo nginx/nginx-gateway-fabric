@@ -375,7 +375,7 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 							"Referenced HTTPRoute test/valid-route is not accepted by the Gateway",
 						),
 						conditions.NewInferencePoolInvalidExtensionref(
-							"ExtensionRef Service not found: test/invalid-extension-ref",
+							"The ExtensionRef Service not found: test/invalid-extension-ref",
 						),
 					},
 				},
@@ -451,7 +451,7 @@ func TestValidateInferencePoolExtensionRef(t *testing.T) {
 			},
 			services: map[types.NamespacedName]*v1.Service{},
 			expCond: helpers.GetPointer(
-				conditions.NewInferencePoolInvalidExtensionref("ExtensionRef Service not found: test/does-not-exist"),
+				conditions.NewInferencePoolInvalidExtensionref("The ExtensionRef Service not found: test/does-not-exist"),
 			),
 		},
 		{

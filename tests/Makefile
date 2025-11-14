@@ -12,7 +12,6 @@ GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
 NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY ?= Never## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
-SUPPORTED_EXTENDED_FEATURES = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,GatewayAddressEmpty,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteBackendProtocolWebSocket,HTTPRouteParentRefPort,HTTPRouteDestinationPortMatching,GatewayStaticAddresses,BackendTLSPolicy
 SUPPORTED_EXTENDED_FEATURES_OPENSHIFT = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,GatewayAddressEmpty,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteBackendProtocolWebSocket,HTTPRouteParentRefPort,HTTPRouteDestinationPortMatching
 STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC
 EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
@@ -58,7 +57,7 @@ run-conformance-tests: ## Run conformance tests
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
 		--restart=Never -- sh -c "go test -v . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
-						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
+						        --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml

@@ -8016,6 +8016,23 @@ spec:
               logging:
                 description: Logging defines logging related settings for NGINX.
                 properties:
+                  accessLog:
+                    description: |-
+                      AccessLog defines the access log settings, including format itself and disabling option.
+                      For now only path /dev/stdout can be used.
+                    properties:
+                      disable:
+                        description: Disable turns off access logging when set to
+                          true.
+                        type: boolean
+                      format:
+                        description: |-
+                          Format specifies the custom log format string.
+                          If not specified, NGINX default 'combined' format is used.
+                          For now only path /dev/stdout can be used.
+                          See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
+                        type: string
+                    type: object
                   agentLevel:
                     default: info
                     description: |-

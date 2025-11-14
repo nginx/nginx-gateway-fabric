@@ -471,6 +471,16 @@ nginx:
   #           - error
   #           - panic
   #           - fatal
+  #       accessLog:
+  #         type: object
+  #         description: AccessLog defines the access log settings.
+  #         properties:
+  #           disable:
+  #             type: boolean
+  #             description: Disable turns off access logging when set to true.
+  #           format:
+  #             type: string
+  #             description: Format specifies the custom log format string. If not specified, NGINX default 'combined' format is used.
   #   nginxPlus:
   #     type: object
   #     description: NginxPlus specifies NGINX Plus additional settings.

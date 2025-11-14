@@ -1883,7 +1883,20 @@ func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
 		},
 	}
 
-	objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, &graph.EffectiveNginxProxy{})
+	npCfg := &graph.EffectiveNginxProxy{
+		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+				Container: ngfAPIv1alpha2.ContainerSpec{
+					Resources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU: resource.MustParse("500m"),
+						},
+					},
+				},
+			},
+		},
+	}
+	objects, err := provisioner.buildNginxResourceObjects("gw-nginx", gateway, npCfg)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Find the deployment object
@@ -1907,4 +1920,5 @@ func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
 	g.Expect(containers).To(HaveLen(2))
 	g.Expect(containers[1].Name).To(Equal("endpoint-picker-shim"))
 	g.Expect(containers[1].Command).To(Equal(expectedCommands))
+	g.Expect(containers[1].Resources.Limits).To(HaveKeyWithValue(corev1.ResourceCPU, resource.MustParse("500m")))
 }

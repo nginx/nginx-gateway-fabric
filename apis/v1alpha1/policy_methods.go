@@ -20,18 +20,6 @@ func (p *ClientSettingsPolicy) SetPolicyStatus(status gatewayv1.PolicyStatus) {
 	p.Status = status
 }
 
-func (p *ObservabilityPolicy) GetTargetRefs() []gatewayv1.LocalPolicyTargetReference {
-	return p.Spec.TargetRefs
-}
-
-func (p *ObservabilityPolicy) GetPolicyStatus() gatewayv1.PolicyStatus {
-	return p.Status
-}
-
-func (p *ObservabilityPolicy) SetPolicyStatus(status gatewayv1.PolicyStatus) {
-	p.Status = status
-}
-
 func (p *UpstreamSettingsPolicy) GetTargetRefs() []gatewayv1.LocalPolicyTargetReference {
 	return p.Spec.TargetRefs
 }
