@@ -29,6 +29,7 @@ rules:
     check-multi-line-strings: true
     ignore: |
       operators/**/*
+      .github/workflows/redhat-certification.yml
   key-duplicates: enable
   key-ordering: disable
   line-length:
