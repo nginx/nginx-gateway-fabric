@@ -257,6 +257,7 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		extraInstallArgs = append(
 			extraInstallArgs,
 			"--set", "nginxGateway.config.logging.level=debug",
+			"--set", "nginx.config.logging.agentLevel=debug",
 		)
 	}
 
