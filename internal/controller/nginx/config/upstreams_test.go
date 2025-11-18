@@ -19,9 +19,11 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-func TestExecuteUpstreams(t *testing.T) {
+func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 	t.Parallel()
-	gen := GeneratorImpl{}
+	gen := GeneratorImpl{
+		plus: false,
+	}
 	stateUpstreams := []dataplane.Upstream{
 		{
 			Name: "up1",
@@ -102,10 +104,209 @@ func TestExecuteUpstreams(t *testing.T) {
 		"keepalive_requests 1;":  1,
 		"keepalive_time 5s;":     1,
 		"keepalive_timeout 10s;": 1,
-		"zone up5-usp 2m;":       1,
 		"ip_hash;":               1,
 
+		"zone up1 512k;":      1,
+		"zone up2 512k;":      1,
+		"zone up3 512k;":      1,
+		"zone up4-ipv6 512k;": 1,
+		"zone up5-usp 2m;":    1,
+
 		"random two least_conn;": 4,
+	}
+
+	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
+
+	upstreamResults := executeUpstreams(upstreams)
+	g := NewWithT(t)
+	g.Expect(upstreamResults).To(HaveLen(1))
+	g.Expect(upstreamResults[0].dest).To(Equal(httpConfigFile))
+
+	nginxUpstreams := string(upstreamResults[0].data)
+	for expSubString, expectedCount := range expectedSubStrings {
+		actualCount := strings.Count(nginxUpstreams, expSubString)
+		g.Expect(actualCount).To(
+			Equal(expectedCount),
+			fmt.Sprintf("substring %q expected %d occurrence(s), got %d", expSubString, expectedCount, actualCount),
+		)
+	}
+}
+
+func TestExecuteUpstreams_NginxPlus(t *testing.T) {
+	t.Parallel()
+	gen := GeneratorImpl{
+		plus: true,
+	}
+	stateUpstreams := []dataplane.Upstream{
+		{
+			Name: "up1",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "10.0.0.0",
+					Port:    80,
+					Resolve: true,
+				},
+			},
+		},
+		{
+			Name: "up2",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "11.0.0.0",
+					Port:    80,
+					Resolve: true,
+				},
+				{
+					Address: "11.0.0.1",
+					Port:    80,
+					Resolve: true,
+				},
+				{
+					Address: "11.0.0.2",
+					Port:    80,
+				},
+			},
+		},
+		{
+			Name: "up3-ipv6",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "2001:db8::1",
+					Port:    80,
+					IPv6:    true,
+					Resolve: true,
+				},
+			},
+		},
+		{
+			Name: "up4-ipv6",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "2001:db8::2",
+					Port:    80,
+					IPv6:    true,
+					Resolve: true,
+				},
+				{
+					Address: "2001:db8::3",
+					Port:    80,
+					IPv6:    true,
+				},
+			},
+		},
+		{
+			Name:      "up5",
+			Endpoints: []resolver.Endpoint{},
+		},
+		{
+			Name: "up6-usp-with-sp",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "12.0.0.1",
+					Port:    80,
+					Resolve: true,
+				},
+			},
+			Policies: []policies.Policy{
+				&ngfAPI.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp",
+						Namespace: "test",
+					},
+					Spec: ngfAPI.UpstreamSettingsPolicySpec{
+						ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+						KeepAlive: helpers.GetPointer(ngfAPI.UpstreamKeepAlive{
+							Connections: helpers.GetPointer(int32(1)),
+							Requests:    helpers.GetPointer(int32(1)),
+							Time:        helpers.GetPointer[ngfAPI.Duration]("5s"),
+							Timeout:     helpers.GetPointer[ngfAPI.Duration]("10s"),
+						}),
+						LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeIPHash),
+					},
+				},
+			},
+			SessionPersistence: dataplane.SessionPersistenceConfig{
+				Name:        "session-persistence",
+				Expiry:      "30m",
+				Path:        "/session",
+				SessionType: dataplane.SessionPersistenceCookie,
+			},
+		},
+		{
+			Name: "up7-with-sp",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "12.0.0.2",
+					Port:    80,
+					Resolve: true,
+				},
+			},
+			SessionPersistence: dataplane.SessionPersistenceConfig{
+				Name:        "session-persistence",
+				Expiry:      "100h",
+				Path:        "/v1/users",
+				SessionType: dataplane.SessionPersistenceCookie,
+			},
+		},
+		{
+			Name: "up8-with-sp-expiry-and-path-empty",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "12.0.0.3",
+					Port:    80,
+					Resolve: true,
+				},
+			},
+			SessionPersistence: dataplane.SessionPersistenceConfig{
+				Name:        "session-persistence",
+				SessionType: dataplane.SessionPersistenceCookie,
+			},
+		},
+	}
+
+	expectedSubStrings := map[string]int{
+		"upstream up1":                               1,
+		"upstream up2":                               1,
+		"upstream up3-ipv6":                          1,
+		"upstream up4-ipv6":                          1,
+		"upstream up5":                               1,
+		"upstream up6-usp-with-sp":                   1,
+		"upstream up7-with-sp":                       1,
+		"upstream up8-with-sp-expiry-and-path-empty": 1,
+		"upstream invalid-backend-ref":               1,
+
+		"random two least_conn;": 6,
+		"ip_hash;":               1,
+
+		"zone up1 1m;":                               1,
+		"zone up2 1m;":                               1,
+		"zone up3-ipv6 1m;":                          1,
+		"zone up4-ipv6 1m;":                          1,
+		"zone up5 1m;":                               1,
+		"zone up6-usp-with-sp 2m;":                   1,
+		"zone up7-with-sp 1m;":                       1,
+		"zone up8-with-sp-expiry-and-path-empty 1m;": 1,
+
+		"sticky cookie session-persistence expires=30m path=/session;":   1,
+		"sticky cookie session-persistence expires=100h path=/v1/users;": 1,
+		"sticky cookie session-persistence;":                             1,
+
+		"keepalive 1;":           1,
+		"keepalive_requests 1;":  1,
+		"keepalive_time 5s;":     1,
+		"keepalive_timeout 10s;": 1,
+
+		"server 10.0.0.0:80 resolve;":                       1,
+		"server 11.0.0.0:80 resolve;":                       1,
+		"server 11.0.0.1:80 resolve;":                       1,
+		"server 11.0.0.2:80;":                               1,
+		"server [2001:db8::1]:80 resolve;":                  1,
+		"server [2001:db8::2]:80 resolve;":                  1,
+		"server [2001:db8::3]:80;":                          1,
+		"server 12.0.0.1:80 resolve;":                       1,
+		"server 12.0.0.2:80 resolve;":                       1,
+		"server 12.0.0.3:80 resolve;":                       1,
+		"server unix:/var/run/nginx/nginx-500-server.sock;": 1,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
@@ -709,6 +910,41 @@ func TestCreateUpstreamPlus(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: defaultLBMethod,
+			},
+		},
+		{
+			msg: "session persistence config with endpoints",
+			stateUpstream: dataplane.Upstream{
+				Name: "sp-with-endpoints",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "10.0.0.2",
+						Port:    80,
+					},
+				},
+				SessionPersistence: dataplane.SessionPersistenceConfig{
+					Name:        "session-persistence",
+					Expiry:      "45m",
+					SessionType: dataplane.SessionPersistenceCookie,
+					Path:        "/app",
+				},
+			},
+			expectedUpstream: http.Upstream{
+				Name:      "sp-with-endpoints",
+				ZoneSize:  plusZoneSize,
+				StateFile: stateDir + "/sp-with-endpoints.conf",
+				Servers: []http.UpstreamServer{
+					{
+						Address: "10.0.0.2:80",
+					},
+				},
+				LoadBalancingMethod: defaultLBMethod,
+				SessionPersistence: http.UpstreamSessionPersistence{
+					Name:        "session-persistence",
+					Expiry:      "45m",
+					SessionType: string(dataplane.SessionPersistenceCookie),
+					Path:        "/app",
+				},
 			},
 		},
 	}
