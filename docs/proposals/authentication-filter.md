@@ -111,8 +111,6 @@ type AuthenticationFilterList struct {
 // +kubebuilder:validation:XValidation:message="when spec.jwt is set, type must be 'JWT'",rule="self.jwt != null ? self.type == 'JWT' : true"
 type AuthenticationFilterSpec struct {
 	// Type selects the authentication mechanism.
-	//
-	// +kubebuilder:validation:Enum=Basic;JWT
 	Type AuthType `json:"type"`
 
 	// Basic configures HTTP Basic Authentication.
@@ -127,6 +125,7 @@ type AuthenticationFilterSpec struct {
 }
 
 // AuthType defines the authentication mechanism.
+// +kubebuilder:validation:Enum=Basic;JWT
 type AuthType string
 
 const (
@@ -170,10 +169,7 @@ type JWTAuth struct {
 	// Mode selects how JWT keys are provided: local file or remote JWKS.
 	// Default: File.
 	//
-	// +optional
-  // +kubebuilder:default=File
-	// +kubebuilder:validation:Enum=File;Remote
-  // +kubebuilder:validation:XValidation:message="mode must be one of [File, Remote]",rule="self in ['File','Remote']"
+  // +kubebuilder:default=File"
 	Mode JWTKeyMode `json:"mode,omitempty"`
 
 	// File specifies local JWKS configuration (Secret or ConfigMap, mount path, file name).
@@ -203,7 +199,6 @@ type JWTAuth struct {
 	//
 	// +optional
   // +kubebuilder:default=signed
-	// +kubebuilder:validation:Enum=signed;encrypted;nested
 	Type *JWTTokenType `json:"type,omitempty"`
 
 	// KeyCache is the cache duration for keys.
@@ -240,7 +235,7 @@ type JWTAuth struct {
 	Require *JWTRequiredClaims `json:"require,omitempty"`
 
 	// TokenSource defines where the client presents the token.
-	// Defaults to Authorization header only.
+	// Defaults to reading from Authorization header.
 	//
 	// +optional
 	TokenSource *JWTTokenSource `json:"tokenSource,omitempty"`
@@ -252,6 +247,7 @@ type JWTAuth struct {
 }
 
 // JWTKeyMode selects where JWT keys come from.
+// +kubebuilder:validation:Enum=File;Remote
 type JWTKeyMode string
 
 const (
@@ -262,27 +258,11 @@ const (
 // JWTFileKeySource specifies local JWKS key configuration.
 // +kubebuilder:validation:XValidation:message="exactly one of configMapRef or secretRef must be set",rule="(self.configMapRef == null) != (self.secretRef == null)"
 type JWTFileKeySource struct {
-	// ConfigMapRef references a ConfigMap containing the JWKS.
-	// Exactly one of ConfigMapRef or SecretRef must be set.
-	//
-	// +optional
-	ConfigMapRef *NamespacedObjectReference `json:"configMapRef,omitempty"`
-
 	// SecretRef references a Secret containing the JWKS (with optional key).
 	// Exactly one of ConfigMapRef or SecretRef must be set.
 	//
 	// +optional
 	SecretRef *NamespacedSecretKeyReference `json:"secretRef,omitempty"`
-
-	// MountPath is the path where NGF will mount the data into the NGINX container.
-  // Used in `auth_jwt_key_file` directive.
-	// Example: "/etc/nginx/keys".
-	MountPath string `json:"mountPath"`
-
-	// FileName is the file name of the JWKS within the mount path.
-  // Used in `auth_jwt_key_file` directive.
-	// Example: "jwks.json".
-	FileName string `json:"fileName"`
 
 	// KeyCache is the cache duration for keys.
   // Configures `auth_jwt_key_cache` directive
@@ -345,6 +325,7 @@ type JWKSCache struct {
 }
 
 // JWTTokenType represents NGINX auth_jwt_type.
+// +kubebuilder:validation:Enum=signed;encrypted;nested
 type JWTTokenType string
 
 const (
@@ -366,38 +347,33 @@ type JWTRequiredClaims struct {
 	Aud *string `json:"aud,omitempty"`
 }
 
-// JWTTokenSource specifies where tokens may be read from.
+ // JWTTokenSourceMode selects where the JWT token is read from.
+type JWTTokenSourceMode string
+
+const (
+	// Read from Authorization header (Bearer). Default.
+	JWTTokenSourceModeHeader JWTTokenSourceMode = "Header"
+	// Read from a cookie named tokenName.
+	JWTTokenSourceModeCookie JWTTokenSourceMode = "Cookie"
+	// Read from a query arg named tokenName.
+	JWTTokenSourceModeQueryArg JWTTokenSourceMode = "QueryArg"
+)
+
+// JWTTokenSource specifies where tokens may be read from and the name when required.
 type JWTTokenSource struct {
-	// Read token from Authorization header. Default: true.
-	//
-	// +optional
-  // +kubebuilder:default=true
-	Header *bool `json:"header,omitempty"`
+	// Mode selects the token source.
+	// +kubebuilder:validation:Enum=Header;Cookie;QueryArg
+	// +kubebuilder:default=Header
+	Type JWTTokenSourceMode `json:"mode"`
 
-	// Read token from a cookie. Default: false.
+	// TokenName is the cookie or query parameter name when Mode=Cookie or Mode=QueryArg.
+	// Ignored when Mode=Header.
 	//
 	// +optional
-  // +kubebuilder:default=false
-	Cookie *bool `json:"cookie,omitempty"`
-
-	// CookieName when Cookie is true. Example: "access_token".
-	//
-	// +optional
-  // +kubebuilder:default=access_token
-	CookieName *string `json:"cookieName,omitempty"`
-
-	// Read token from query string. Default: false.
-	//
-	// +optional
-  // +kubebuilder:default=false
-	Query *bool `json:"query,omitempty"`
-
-	// QueryParam when Query is true. Example: "access_token".
-	//
-	// +optional
-  // +kubebuilder:default=access_token
-	QueryParam *string `json:"queryParam,omitempty"`
+	// +kubebuilder:default=access_token
+	TokenName string `json:"tokenName,omitempty"`
 }
+
 
 // JWTPropagation controls identity header propagation and header stripping.
 type JWTPropagation struct {
@@ -420,6 +396,7 @@ type HeaderValue struct {
 }
 
 // AuthScheme enumerates supported WWW-Authenticate schemes.
+// +kubebuilder:validation:Enum=Basic;Bearer
 type AuthScheme string
 
 const (
@@ -428,6 +405,7 @@ const (
 )
 
 // AuthFailureBodyPolicy controls the failure response body behavior.
+// +kubebuilder:validation:Enum=Unauthorized;Forbidden;Empty
 type AuthFailureBodyPolicy string
 
 const (
@@ -451,7 +429,6 @@ type AuthFailureResponse struct {
     //
     // +optional
     // +kubebuilder:default=Basic
-    // +kubebuilder:validation:Enum=Basic;Bearer
     Scheme *AuthScheme `json:"scheme,omitempty"`
 
     // Controls whether a default canned body is sent or an empty body.
@@ -459,16 +436,7 @@ type AuthFailureResponse struct {
     //
     // +optional
     // +kubebuilder:default=Unauthorized
-    // +kubebuilder:validation:Enum=Unauthorized;Forbidden;Empty
     BodyPolicy *AuthFailureBodyPolicy `json:"bodyPolicy,omitempty"`
-}
-
-// NamespacedObjectReference references an object by name with an optional namespace.
-// If namespace is omitted, it defaults to the AuthenticationFilter's namespace.
-type NamespacedObjectReference struct {
-	// +optional
-	Namespace *string `json:"namespace,omitempty"`
-	Name      string  `json:"name"`
 }
 
 // NamespacedSecretKeyReference references a Secret and optional key, with an optional namespace.
@@ -647,14 +615,9 @@ spec:
     # Key verification mode: Local file or Remote JWKs
     mode: File # Defaults to File.
     file:
-      # In File mode, exactly one of configMapRef or secretRef must be defined.
-      configMapRef:
-        name: jwt-keys
       secretRef:
         name: jwt-keys-secure
         key: jwks.json
-      mountPath: /etc/nginx/keys
-      fileName: jwks.json
       keyCache: 10m  # Optional cache time for keys (auth_jwt_key_cache)
     # Acceptable clock skew for exp/nbf
     leeway: 60s # Configures auth_jwt_leeway
@@ -942,13 +905,16 @@ spec:
         - "api"
         - "cli"
 
-    # Where client presents the token (defaults to Authorization header)
+    # Where client presents the token
+    # By defaults to reading from Authorization header (Bearer)
     tokenSource:
-      header: true
-      cookie: false
-      cookieName: access_token
-      query: false
-      queryParam: access_token
+      type: Header
+      # Alternative: read from a cookie named tokenName
+      # type: Cookie
+      # tokenName: access_token
+      # Alternative: read from a query arg named tokenName
+      # type: QueryArg
+      # tokenName: access_token
 
     # Identity propagation to backend and header stripping
     propagation:
@@ -1058,9 +1024,6 @@ Users that attach an `AuthenticaitonFilter` to a HTTPRoute/GRPCRoute should be a
 
 Any exmaple configurations and deployments for the `AuthenticationFilter` should enable HTTPS at the Gateway level by default.
 
-The `mountPath` for local JWKS should be mounted to a fixed location (e.g. /etc/nginx/keys).
-The `fileName` for a local JWKS should be sanatized to a pattern of [A-Za-z0-9._-].
-
 ### Namespace isolataion and cross-namespace references
 Both Auth and Local JWKS should only have access to Secrets and ConfigMaps in the same namespace by default.
 
@@ -1141,8 +1104,6 @@ spec:
       configMapRef:
         namespace: keys-ns
         name: jwt-keys
-      mountPath: /etc/nginx/keys
-      fileName: jwks.json
 ```
 
 ### Remote JWKS
