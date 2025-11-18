@@ -31,6 +31,7 @@ func buildHTTPRoute(
 	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	featureFlags flags,
 ) *L7Route {
 	r := &L7Route{
 		Source:    ghr,
@@ -69,6 +70,7 @@ func buildHTTPRoute(
 		getSnippetsFilterResolverForNamespace(snippetsFilters, r.Source.GetNamespace()),
 		inferencePools,
 		r.Source.GetNamespace(),
+		featureFlags,
 	)
 
 	r.Spec.Rules = rules
@@ -84,6 +86,7 @@ func buildHTTPMirrorRoutes(
 	route *v1.HTTPRoute,
 	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	featureFlags flags,
 ) {
 	for idx, rule := range l7route.Spec.Rules {
 		if rule.Filters.Valid {
@@ -121,6 +124,7 @@ func buildHTTPMirrorRoutes(
 					gateways,
 					snippetsFilters,
 					nil,
+					featureFlags,
 				)
 
 				if mirrorRoute != nil {
@@ -176,10 +180,11 @@ func processHTTPRouteRule(
 	resolveExtRefFunc resolveExtRefFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 	routeNamespace string,
+	featureFlags flags,
 ) (RouteRule, routeRuleErrors) {
 	var errors routeRuleErrors
 
-	unsupportedFieldsErrors := checkForUnsupportedHTTPFields(specRule, rulePath)
+	unsupportedFieldsErrors := checkForUnsupportedHTTPFields(specRule, rulePath, featureFlags)
 	if len(unsupportedFieldsErrors) > 0 {
 		errors.warn = append(errors.warn, unsupportedFieldsErrors...)
 	}
@@ -202,13 +207,63 @@ func processHTTPRouteRule(
 		validator,
 		resolveExtRefFunc,
 	)
-
 	errors = errors.append(filterErrors)
 
-	backendRefs := make([]RouteBackendRef, 0, len(specRule.BackendRefs))
+	backendRefs, backendRefErrors := getBackendRefs(specRule.BackendRefs, routeNamespace, inferencePools, rulePath)
+	errors = errors.append(backendRefErrors)
+
+	if routeFilters.Valid {
+		for i, filter := range routeFilters.Filters {
+			if filter.RequestMirror == nil {
+				continue
+			}
+
+			rbr := RouteBackendRef{
+				BackendRef: v1.BackendRef{
+					BackendObjectReference: filter.RequestMirror.BackendRef,
+				},
+				MirrorBackendIdx: helpers.GetPointer(i),
+			}
+			backendRefs = append(backendRefs, rbr)
+		}
+	}
+
+	var sp *SessionPersistenceConfig
+	if specRule.SessionPersistence != nil {
+		spConfig, spErrors := processSessionPersistenceConfig(
+			specRule.SessionPersistence,
+			specRule.Matches,
+			rulePath.Child("sessionPersistence"),
+			validator,
+		)
+
+		errors = errors.append(spErrors)
+
+		if spConfig != nil && spConfig.Valid {
+			sp = spConfig
+		}
+	}
+
+	return RouteRule{
+		ValidMatches:       validMatches,
+		Matches:            specRule.Matches,
+		Filters:            routeFilters,
+		RouteBackendRefs:   backendRefs,
+		SessionPersistence: sp,
+	}, errors
+}
+
+func getBackendRefs(
+	routeBackendRefs []v1.HTTPBackendRef,
+	routeNamespace string,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	rulePath *field.Path,
+) ([]RouteBackendRef, routeRuleErrors) {
+	var errors routeRuleErrors
+	backendRefs := make([]RouteBackendRef, 0, len(routeBackendRefs))
 
 	// rule.BackendRefs are validated separately because of their special requirements
-	for _, b := range specRule.BackendRefs {
+	for _, b := range routeBackendRefs {
 		var interfaceFilters []any
 		if len(b.Filters) > 0 {
 			interfaceFilters = make([]any, 0, len(b.Filters))
@@ -228,7 +283,7 @@ func processHTTPRouteRule(
 			// We don't support traffic splitting at the Route level for
 			// InferencePool backends, so if there's more than one backendRef, and one of them
 			// is an InferencePool, we mark the rule as invalid.
-			if len(specRule.BackendRefs) > 1 {
+			if len(routeBackendRefs) > 1 {
 				err := field.Forbidden(
 					rulePath.Child("backendRefs"),
 					"cannot use InferencePool backend when multiple backendRefs are specified in a single rule",
@@ -256,28 +311,7 @@ func processHTTPRouteRule(
 		backendRefs = append(backendRefs, rbr)
 	}
 
-	if routeFilters.Valid {
-		for i, filter := range routeFilters.Filters {
-			if filter.RequestMirror == nil {
-				continue
-			}
-
-			rbr := RouteBackendRef{
-				BackendRef: v1.BackendRef{
-					BackendObjectReference: filter.RequestMirror.BackendRef,
-				},
-				MirrorBackendIdx: helpers.GetPointer(i),
-			}
-			backendRefs = append(backendRefs, rbr)
-		}
-	}
-
-	return RouteRule{
-		ValidMatches:     validMatches,
-		Matches:          specRule.Matches,
-		Filters:          routeFilters,
-		RouteBackendRefs: backendRefs,
-	}, errors
+	return backendRefs, errors
 }
 
 func processHTTPRouteRules(
@@ -286,6 +320,7 @@ func processHTTPRouteRules(
 	resolveExtRefFunc resolveExtRefFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 	routeNamespace string,
+	featureFlags flags,
 ) (rules []RouteRule, valid bool, conds []conditions.Condition) {
 	rules = make([]RouteRule, len(specRules))
 
@@ -304,6 +339,7 @@ func processHTTPRouteRules(
 			resolveExtRefFunc,
 			inferencePools,
 			routeNamespace,
+			featureFlags,
 		)
 
 		if rr.ValidMatches && rr.Filters.Valid {
@@ -322,6 +358,11 @@ func processHTTPRouteRules(
 	// add warning condition for unsupported fields if any
 	if len(allRulesErrors.warn) > 0 {
 		conds = append(conds, conditions.NewRouteAcceptedUnsupportedField(allRulesErrors.warn.ToAggregate().Error()))
+	}
+
+	spConflictErrors := handleSessionPersistenceConflicts(rules)
+	if spConflictErrors != nil {
+		conds = append(conds, conditions.NewRouteAcceptedInvalidSessionPersistenceConfiguration(spConflictErrors.Error()))
 	}
 
 	if len(allRulesErrors.invalid) > 0 {
@@ -608,7 +649,7 @@ func validateFilterRewrite(
 	return allErrs
 }
 
-func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) field.ErrorList {
+func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path, featureFlags flags) field.ErrorList {
 	var ruleErrors field.ErrorList
 
 	if rule.Name != nil {
@@ -629,10 +670,18 @@ func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) 
 			"Retry",
 		))
 	}
-	if rule.SessionPersistence != nil {
+
+	if !featureFlags.plus && rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),
-			"SessionPersistence",
+			"SessionPersistence is only supported in NGINX Plus. This configuration will be ignored.",
+		))
+	}
+
+	if !featureFlags.experimental && rule.SessionPersistence != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("sessionPersistence"),
+			"SessionPersistence is only supported in experimental mode.",
 		))
 	}
 

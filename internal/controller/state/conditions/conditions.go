@@ -42,6 +42,10 @@ const (
 	// not yet supported.
 	RouteReasonUnsupportedField v1.RouteConditionReason = "UnsupportedField"
 
+	// RouteReasonInvalidSessionPersistence is used with the "Accepted" (true) condition when the Route
+	// contains invalid session persistence configuration.
+	RouteReasonInvalidSessionPersistence v1.RouteConditionReason = "InvalidSessionPersistence"
+
 	// RouteReasonInvalidGateway is used with the "Accepted" (false) condition when the Gateway the Route
 	// references is invalid.
 	RouteReasonInvalidGateway v1.RouteConditionReason = "InvalidGateway"
@@ -390,6 +394,17 @@ func NewRouteAcceptedUnsupportedField(msg string) Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(RouteReasonUnsupportedField),
 		Message: fmt.Sprintf("The following unsupported parameters were ignored: %s", msg),
+	}
+}
+
+// NewRouteAcceptedInvalidSessionPersistenceConfiguration returns a Condition that indicates that the
+// Route is accepted but invalid session persistence configuration was ignored.
+func NewRouteAcceptedInvalidSessionPersistenceConfiguration(msg string) Condition {
+	return Condition{
+		Type:    string(v1.RouteConditionAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(RouteReasonInvalidSessionPersistence),
+		Message: fmt.Sprintf("Session Persistence configuration ignored: %s", msg),
 	}
 }
 

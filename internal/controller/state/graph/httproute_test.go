@@ -59,6 +59,7 @@ func createHTTPRoute(
 						BackendObjectReference: gatewayv1.BackendObjectReference{
 							Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
 							Name: "backend",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](80),
 						},
 					},
 					Filters: []gatewayv1.HTTPRouteFilter{
@@ -92,7 +93,12 @@ func createHTTPRoute(
 	}
 }
 
-func addFilterToPath(hr *gatewayv1.HTTPRoute, path string, filter gatewayv1.HTTPRouteFilter) {
+func addElementsToPath(
+	hr *gatewayv1.HTTPRoute,
+	path string,
+	filter gatewayv1.HTTPRouteFilter,
+	sp *gatewayv1.SessionPersistence,
+) {
 	for i := range hr.Spec.Rules {
 		for _, match := range hr.Spec.Rules[i].Matches {
 			if match.Path == nil {
@@ -100,6 +106,10 @@ func addFilterToPath(hr *gatewayv1.HTTPRoute, path string, filter gatewayv1.HTTP
 			}
 			if *match.Path.Value == path {
 				hr.Spec.Rules[i].Filters = append(hr.Spec.Rules[i].Filters, filter)
+
+				if sp != nil {
+					hr.Spec.Rules[i].SessionPersistence = sp
+				}
 			}
 		}
 	}
@@ -110,6 +120,7 @@ var expRouteBackendRef = RouteBackendRef{
 		BackendObjectReference: gatewayv1.BackendObjectReference{
 			Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
 			Name: "backend",
+			Port: helpers.GetPointer[gatewayv1.PortNumber](80),
 		},
 	},
 	Filters: []any{
@@ -161,8 +172,17 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
 	}
 
-	addFilterToPath(hr, "/", snippetsFilterRef)
-	addFilterToPath(hr, "/", requestRedirectFilter)
+	sessionPersistenceConfig := &gatewayv1.SessionPersistence{
+		SessionName:     helpers.GetPointer("http-route-session"),
+		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
+		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+		CookieConfig: &gatewayv1.CookieConfig{
+			LifetimeType: helpers.GetPointer((gatewayv1.PermanentCookieLifetimeType)),
+		},
+	}
+
+	addElementsToPath(hr, "/", snippetsFilterRef, nil)
+	addElementsToPath(hr, "/", requestRedirectFilter, sessionPersistenceConfig)
 
 	hrWrongGateway := createHTTPRoute("hr-2", "some-gateway", "example.com", "/")
 
@@ -239,6 +259,13 @@ func TestBuildHTTPRoutes(t *testing.T) {
 								},
 								Matches:          hr.Spec.Rules[0].Matches,
 								RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+								SessionPersistence: &SessionPersistenceConfig{
+									Valid:       true,
+									Name:        *sessionPersistenceConfig.SessionName,
+									SessionType: *sessionPersistenceConfig.Type,
+									Expiry:      "1h",
+									Path:        "/",
+								},
 							},
 						},
 					},
@@ -253,7 +280,11 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		},
 	}
 
-	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
+		v := &validationfakes.FakeHTTPFieldsValidator{}
+		v.ValidateDurationReturns("1h", nil)
+		return v
+	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -271,12 +302,16 @@ func TestBuildHTTPRoutes(t *testing.T) {
 			}
 
 			routes := buildRoutesForGateways(
-				validator,
+				createAllValidValidator(),
 				hrRoutes,
 				map[types.NamespacedName]*gatewayv1.GRPCRoute{},
 				test.gateways,
 				snippetsFilters,
 				nil,
+				flags{
+					plus:         true,
+					experimental: true,
+				},
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
 		})
@@ -305,13 +340,21 @@ func TestBuildHTTPRoute(t *testing.T) {
 	hrValidWithUnsupportedField := createHTTPRoute("hr-valid-unsupported", gatewayNsName.Name, "example.com", "/")
 	hrValidWithUnsupportedField.Spec.Rules[0].Name = helpers.GetPointer[gatewayv1.SectionName]("unsupported-name")
 
+	sp := &gatewayv1.SessionPersistence{
+		SessionName:     helpers.GetPointer("http-route-session"),
+		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
+		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+		CookieConfig: &gatewayv1.CookieConfig{
+			LifetimeType: helpers.GetPointer((gatewayv1.SessionCookieLifetimeType)),
+		},
+	}
 	// route with valid filter
 	validFilter := gatewayv1.HTTPRouteFilter{
 		Type:            gatewayv1.HTTPRouteFilterRequestRedirect,
 		RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
 	}
 	hr := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/", "/filter")
-	addFilterToPath(hr, "/filter", validFilter)
+	addElementsToPath(hr, "/filter", validFilter, sp)
 
 	// invalid routes without filters
 	hrInvalidHostname := createHTTPRoute("hr", gatewayNsName.Name, "", "/")
@@ -329,7 +372,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 		},
 	}
 	hrInvalidFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
-	addFilterToPath(hrInvalidFilters, "/filter", invalidFilter)
+	addElementsToPath(hrInvalidFilters, "/filter", invalidFilter, nil)
 
 	// route with invalid matches and filters
 	hrDroppedInvalidMatchesAndInvalidFilters := createHTTPRoute(
@@ -340,12 +383,12 @@ func TestBuildHTTPRoute(t *testing.T) {
 		"/filter",
 		"/",
 	)
-	addFilterToPath(hrDroppedInvalidMatchesAndInvalidFilters, "/filter", invalidFilter)
+	addElementsToPath(hrDroppedInvalidMatchesAndInvalidFilters, "/filter", invalidFilter, nil)
 
 	// route with both invalid and valid filters in the same rule
 	hrDroppedInvalidFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter", "/")
-	addFilterToPath(hrDroppedInvalidFilters, "/filter", validFilter)
-	addFilterToPath(hrDroppedInvalidFilters, "/", invalidFilter)
+	addElementsToPath(hrDroppedInvalidFilters, "/filter", validFilter, nil)
+	addElementsToPath(hrDroppedInvalidFilters, "/", invalidFilter, nil)
 
 	// route with duplicate section names
 	hrDuplicateSectionName := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
@@ -364,7 +407,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "sf",
 		},
 	}
-	addFilterToPath(hrValidSnippetsFilter, "/filter", validSnippetsFilterExtRef)
+	addElementsToPath(hrValidSnippetsFilter, "/filter", validSnippetsFilterExtRef, nil)
 
 	// route with invalid snippets filter extension ref
 	hrInvalidSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
@@ -376,7 +419,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "sf",
 		},
 	}
-	addFilterToPath(hrInvalidSnippetsFilter, "/filter", invalidSnippetsFilterExtRef)
+	addElementsToPath(hrInvalidSnippetsFilter, "/filter", invalidSnippetsFilterExtRef, nil)
 
 	// route with unresolvable snippets filter extension ref
 	hrUnresolvableSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
@@ -388,12 +431,12 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "does-not-exist",
 		},
 	}
-	addFilterToPath(hrUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef)
+	addElementsToPath(hrUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef, nil)
 
 	// route with two invalid snippets filter extensions refs: (1) invalid group (2) unresolvable
 	hrInvalidAndUnresolvableSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
-	addFilterToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", invalidSnippetsFilterExtRef)
-	addFilterToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef)
+	addElementsToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", invalidSnippetsFilterExtRef, nil)
+	addElementsToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef, nil)
 
 	// routes with an inference pool backend
 	hrInferencePool := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
@@ -425,11 +468,32 @@ func TestBuildHTTPRoute(t *testing.T) {
 		},
 	}
 
+	hrWithMultipleRulesDifferentSP := createHTTPRoute(
+		"hr-multi-rules-sp",
+		gatewayNsName.Name,
+		"example.com",
+		"/rule1",
+		"/rule2",
+	)
+
+	spDifferent := &gatewayv1.SessionPersistence{
+		SessionName:     helpers.GetPointer("session-different"),
+		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("2h")),
+		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+		CookieConfig: &gatewayv1.CookieConfig{
+			LifetimeType: helpers.GetPointer((gatewayv1.PermanentCookieLifetimeType)),
+		},
+	}
+
+	addElementsToPath(hrWithMultipleRulesDifferentSP, "/rule1", validFilter, sp)
+	addElementsToPath(hrWithMultipleRulesDifferentSP, "/rule2", validFilter, spDifferent)
+
 	tests := []struct {
-		validator *validationfakes.FakeHTTPFieldsValidator
-		hr        *gatewayv1.HTTPRoute
-		expected  *L7Route
-		name      string
+		validator          *validationfakes.FakeHTTPFieldsValidator
+		hr                 *gatewayv1.HTTPRoute
+		expected           *L7Route
+		name               string
+		plus, experimental bool
 	}{
 		{
 			validator: &validationfakes.FakeHTTPFieldsValidator{},
@@ -466,11 +530,19 @@ func TestBuildHTTPRoute(t *testing.T) {
 							},
 							Matches:          hr.Spec.Rules[1].Matches,
 							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+							SessionPersistence: &SessionPersistenceConfig{
+								Valid:       true,
+								Name:        *sp.SessionName,
+								SessionType: *sp.Type,
+								Path:        "/filter",
+							},
 						},
 					},
 				},
 			},
-			name: "normal case",
+			plus:         true,
+			experimental: true,
+			name:         "normal case",
 		},
 		{
 			validator: &validationfakes.FakeHTTPFieldsValidator{},
@@ -705,7 +777,6 @@ func TestBuildHTTPRoute(t *testing.T) {
 			},
 			name: "dropped invalid rule with invalid matches",
 		},
-
 		{
 			validator: validatorInvalidFieldsInRule,
 			hr:        hrDroppedInvalidMatchesAndInvalidFilters,
@@ -1091,6 +1162,66 @@ func TestBuildHTTPRoute(t *testing.T) {
 			},
 			name: "route with an inference pool backend that doesn't exist",
 		},
+		{
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			hr:        hrWithMultipleRulesDifferentSP,
+			expected: &L7Route{
+				RouteType: RouteTypeHTTP,
+				Source:    hrWithMultipleRulesDifferentSP,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrWithMultipleRulesDifferentSP.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Valid:      true,
+				Attachable: true,
+				Spec: L7RouteSpec{
+					Hostnames: hrWithMultipleRulesDifferentSP.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid: true,
+								Filters: []Filter{
+									{
+										RouteType:       RouteTypeHTTP,
+										FilterType:      FilterRequestRedirect,
+										RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
+									},
+								},
+							},
+							Matches:          hrWithMultipleRulesDifferentSP.Spec.Rules[0].Matches,
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid: true,
+								Filters: []Filter{
+									{
+										RouteType:       RouteTypeHTTP,
+										FilterType:      FilterRequestRedirect,
+										RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
+									},
+								},
+							},
+							Matches:          hrWithMultipleRulesDifferentSP.Spec.Rules[1].Matches,
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteAcceptedInvalidSessionPersistenceConfiguration(
+						"for backendRefs default/backend:80 due to conflicting configuration across multiple rules",
+					),
+				},
+			},
+			plus:         true,
+			experimental: true,
+			name:         "route with multiple rules with different session persistence configs",
+		},
 	}
 
 	gws := map[types.NamespacedName]*Gateway{
@@ -1108,8 +1239,17 @@ func TestBuildHTTPRoute(t *testing.T) {
 			inferencePools := map[types.NamespacedName]*inference.InferencePool{
 				{Namespace: "test", Name: "ipool"}: {},
 			}
-
-			route := buildHTTPRoute(test.validator, test.hr, gws, snippetsFilters, inferencePools)
+			route := buildHTTPRoute(
+				test.validator,
+				test.hr,
+				gws,
+				snippetsFilters,
+				inferencePools,
+				flags{
+					plus:         test.plus,
+					experimental: test.experimental,
+				},
+			)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
 	}
@@ -1151,8 +1291,8 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 		},
 	}
 	hr := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/mirror")
-	addFilterToPath(hr, "/mirror", mirrorFilter)
-	addFilterToPath(hr, "/mirror", urlRewriteFilter)
+	addElementsToPath(hr, "/mirror", mirrorFilter, nil)
+	addElementsToPath(hr, "/mirror", urlRewriteFilter, nil)
 
 	// Expected mirror route
 	expectedMirrorRoute := &L7Route{
@@ -1240,11 +1380,23 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 
 	g := NewWithT(t)
 
+	featureFlags := flags{
+		plus:         false,
+		experimental: false,
+	}
+
 	routes := map[RouteKey]*L7Route{}
-	l7route := buildHTTPRoute(validator, hr, gateways, snippetsFilters, nil)
+	l7route := buildHTTPRoute(
+		validator,
+		hr,
+		gateways,
+		snippetsFilters,
+		nil,
+		featureFlags,
+	)
 	g.Expect(l7route).NotTo(BeNil())
 
-	buildHTTPMirrorRoutes(routes, l7route, hr, gateways, snippetsFilters)
+	buildHTTPMirrorRoutes(routes, l7route, hr, gateways, snippetsFilters, featureFlags)
 
 	obj, ok := expectedMirrorRoute.Source.(*gatewayv1.HTTPRoute)
 	g.Expect(ok).To(BeTrue())
@@ -1306,6 +1458,10 @@ func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T)
 		nil,
 		inferencePools,
 		routeNamespace,
+		flags{
+			plus:         false,
+			experimental: false,
+		},
 	)
 
 	g.Expect(routeRule.RouteBackendRefs).To(BeEmpty())
@@ -1920,7 +2076,7 @@ func TestUnsupportedFieldsErrors(t *testing.T) {
 					Type: helpers.GetPointer(gatewayv1.SessionPersistenceType("unsupported-session-persistence")),
 				}),
 			},
-			expectedErrors: 4,
+			expectedErrors: 5,
 		},
 	}
 
@@ -1932,7 +2088,14 @@ func TestUnsupportedFieldsErrors(t *testing.T) {
 			rulePath := field.NewPath("spec").Child("rules")
 			var errors routeRuleErrors
 
-			unsupportedFieldsErrors := checkForUnsupportedHTTPFields(test.specRule, rulePath)
+			unsupportedFieldsErrors := checkForUnsupportedHTTPFields(
+				test.specRule,
+				rulePath,
+				flags{
+					plus:         false,
+					experimental: false,
+				},
+			)
 			if len(unsupportedFieldsErrors) > 0 {
 				errors.warn = append(errors.warn, unsupportedFieldsErrors...)
 			}
@@ -1952,6 +2115,8 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 		expectedConds []conditions.Condition
 		expectedWarns int
 		expectedValid bool
+		plusEnabled   bool
+		experimental  bool
 	}{
 		{
 			name:          "No unsupported fields",
@@ -1983,7 +2148,8 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 					}),
 					Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: helpers.GetPointer(3)}),
 					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
-						Type: helpers.GetPointer(gatewayv1.SessionPersistenceType("unsupported-session-persistence")),
+						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						SessionName: helpers.GetPointer("session_id"),
 					}),
 				},
 			},
@@ -1991,9 +2157,47 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			expectedConds: []conditions.Condition{
 				conditions.NewRouteAcceptedUnsupportedField("[spec.rules[0].name: Forbidden: Name, spec.rules[0].timeouts: " +
 					"Forbidden: Timeouts, spec.rules[0].retry: Forbidden: Retry, " +
-					"spec.rules[0].sessionPersistence: Forbidden: SessionPersistence]"),
+					"spec.rules[0].sessionPersistence: Forbidden: " +
+					"SessionPersistence is only supported in NGINX Plus. This configuration will be ignored.]"),
 			},
+			experimental:  true,
+			plusEnabled:   false,
 			expectedWarns: 4,
+		},
+		{
+			name: "Session persistence unsupported with experimental disabled",
+			specRules: []gatewayv1.HTTPRouteRule{
+				{
+					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
+						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						SessionName: helpers.GetPointer("session_id"),
+					}),
+				},
+			},
+			expectedValid: true,
+			expectedConds: []conditions.Condition{
+				conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].sessionPersistence: Forbidden: " +
+					"SessionPersistence is only supported in experimental mode."),
+			},
+			expectedWarns: 1,
+			plusEnabled:   true,
+			experimental:  false,
+		},
+		{
+			name: "SessionPersistence field with Plus enabled and experimental enabled",
+			specRules: []gatewayv1.HTTPRouteRule{
+				{
+					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
+						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						SessionName: helpers.GetPointer("session_id"),
+					}),
+				},
+			},
+			expectedValid: true,
+			expectedConds: nil,
+			expectedWarns: 0,
+			plusEnabled:   true,
+			experimental:  true,
 		},
 	}
 
@@ -2008,6 +2212,10 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 				nil,
 				nil,
 				routeNamespace,
+				flags{
+					plus:         test.plusEnabled,
+					experimental: test.experimental,
+				},
 			)
 
 			g.Expect(valid).To(Equal(test.expectedValid))

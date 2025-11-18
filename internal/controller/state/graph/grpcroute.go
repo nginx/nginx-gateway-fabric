@@ -21,6 +21,7 @@ func buildGRPCRoute(
 	ghr *v1.GRPCRoute,
 	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	featureFlags flags,
 ) *L7Route {
 	r := &L7Route{
 		Source:    ghr,
@@ -56,6 +57,7 @@ func buildGRPCRoute(
 		ghr.Spec.Rules,
 		validator,
 		getSnippetsFilterResolverForNamespace(snippetsFilters, r.Source.GetNamespace()),
+		featureFlags,
 	)
 
 	r.Spec.Rules = rules
@@ -71,6 +73,7 @@ func buildGRPCMirrorRoutes(
 	route *v1.GRPCRoute,
 	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	featureFlags flags,
 ) {
 	for idx, rule := range l7route.Spec.Rules {
 		if rule.Filters.Valid {
@@ -107,6 +110,7 @@ func buildGRPCMirrorRoutes(
 					tmpMirrorRoute,
 					gateways,
 					snippetsFilters,
+					featureFlags,
 				)
 
 				if mirrorRoute != nil {
@@ -160,12 +164,13 @@ func processGRPCRouteRule(
 	rulePath *field.Path,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
+	featureFlags flags,
 ) (RouteRule, routeRuleErrors) {
 	var errors routeRuleErrors
 
 	validMatches := true
 
-	unsupportedFieldsErrors := checkForUnsupportedGRPCFields(specRule, rulePath)
+	unsupportedFieldsErrors := checkForUnsupportedGRPCFields(specRule, rulePath, featureFlags)
 	if len(unsupportedFieldsErrors) > 0 {
 		errors.warn = append(errors.warn, unsupportedFieldsErrors...)
 	}
@@ -223,11 +228,27 @@ func processGRPCRouteRule(
 		}
 	}
 
+	var sp *SessionPersistenceConfig
+	if specRule.SessionPersistence != nil {
+		spConfig, spErrors := processSessionPersistenceConfig(
+			specRule.SessionPersistence,
+			specRule.Matches,
+			rulePath.Child("sessionPersistence"),
+			validator,
+		)
+		errors = errors.append(spErrors)
+
+		if spConfig != nil && spConfig.Valid {
+			sp = spConfig
+		}
+	}
+
 	return RouteRule{
-		ValidMatches:     validMatches,
-		Matches:          ConvertGRPCMatches(specRule.Matches),
-		Filters:          routeFilters,
-		RouteBackendRefs: backendRefs,
+		ValidMatches:       validMatches,
+		Matches:            ConvertGRPCMatches(specRule.Matches),
+		Filters:            routeFilters,
+		RouteBackendRefs:   backendRefs,
+		SessionPersistence: sp,
 	}, errors
 }
 
@@ -235,6 +256,7 @@ func processGRPCRouteRules(
 	specRules []v1.GRPCRouteRule,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
+	featureFlags flags,
 ) (rules []RouteRule, valid bool, conds []conditions.Condition) {
 	rules = make([]RouteRule, len(specRules))
 
@@ -251,6 +273,7 @@ func processGRPCRouteRules(
 			rulePath,
 			validator,
 			resolveExtRefFunc,
+			featureFlags,
 		)
 
 		if rr.ValidMatches && rr.Filters.Valid {
@@ -268,6 +291,11 @@ func processGRPCRouteRules(
 	// add warning condition for unsupported fields if any
 	if len(allRulesErrors.warn) > 0 {
 		conds = append(conds, conditions.NewRouteAcceptedUnsupportedField(allRulesErrors.warn.ToAggregate().Error()))
+	}
+
+	spConflictErrors := handleSessionPersistenceConflicts(rules)
+	if spConflictErrors != nil {
+		conds = append(conds, conditions.NewRouteAcceptedInvalidSessionPersistenceConfiguration(spConflictErrors.Error()))
 	}
 
 	if len(allRulesErrors.invalid) > 0 {
@@ -455,7 +483,7 @@ func validateGRPCHeaderMatch(
 	return allErrs
 }
 
-func checkForUnsupportedGRPCFields(rule v1.GRPCRouteRule, rulePath *field.Path) field.ErrorList {
+func checkForUnsupportedGRPCFields(rule v1.GRPCRouteRule, rulePath *field.Path, featureFlags flags) field.ErrorList {
 	var ruleErrors field.ErrorList
 
 	if rule.Name != nil {
@@ -464,10 +492,18 @@ func checkForUnsupportedGRPCFields(rule v1.GRPCRouteRule, rulePath *field.Path) 
 			"Name",
 		))
 	}
-	if rule.SessionPersistence != nil {
+
+	if !featureFlags.plus && rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),
-			"SessionPersistence",
+			"SessionPersistence is only supported in NGINX Plus. This configuration will be ignored.",
+		))
+	}
+
+	if !featureFlags.experimental && rule.SessionPersistence != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("sessionPersistence"),
+			"SessionPersistence is only supported in experimental mode.",
 		))
 	}
 
