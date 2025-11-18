@@ -102,8 +102,8 @@ make update-firewall-with-local-ip
 
 ### Step 2 - Build and Load Images
 
-Loading the images only applies to a `kind` cluster. If using a cloud provider, you will need to tag and push
-your images to a registry that is accessible from that cloud provider.
+Loading the images only applies to a `kind` cluster. If using GKE, you will need to tag and push
+your images to a registry that is accessible from GKE.
 
 ```makefile
 make build-images load-images TAG=$(whoami)
@@ -114,6 +114,8 @@ Or, to build NGF with NGINX Plus enabled (NGINX Plus cert and key must exist in 
 ```makefile
 make build-images-with-plus load-images-with-plus TAG=$(whoami)
 ```
+
+When building images to run on GKE, you'll need to specify `GOARCH=amd64` in the build command if your local system doesn't default to that architecture.
 
 For the telemetry test, which requires a OTel collector, build an image with the following variables set:
 
@@ -313,6 +315,8 @@ incremental changes and copy your local changes to the VM to test, you can run
 ```makefile
 make sync-files-to-vm
 ```
+
+> Note: if just running longevity tests, skip to the [Longevity section](#longevity-testing).
 
 To set up the GCP environment with the router and VM and then run the tests, run the following command:
 
