@@ -970,9 +970,9 @@ Only a single `AuthenticationFilter` may be referened in a single rule.
 
 The `Status` the HTTPRoute/GRPCRoute in this scenario should be set to `Invalid`, and the resource should be `Rejected`
 
-This behavour falls in line with the expected behaviour of filters in the Gateway API, which generally allows only one type of a specific filter (authentication, rewriting, etc.) within a rule.
+This behaviour falls in line with the expected behaviour of filters in the Gateway API, which generally allows only one type of a specific filter (authentication, rewriting, etc.) within a rule.
 
-Below is an eample of an **invalid** HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule
+Below is an example of an **invalid** HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -1008,20 +1008,20 @@ spec:
 ## Testing
 
 - Unit tests
-- Functional tests to validate behavioural scenarios when referncing filters in different combinations. The details of these tests are out of scope for this document.
+- Functional tests to validate behavioural scenarios when referencing filters in different combinations. The details of these tests are out of scope for this document.
 
 ## Security Considerations
 
 ### Basic Auth and Local JWKS
 
 Basic Auth sends credentials in an Authorization header that is base64-encoded.
-JWT Auth requires users to provided a bearer token through the Authroization header.
+JWT Auth requires users to provide a bearer token through the Authorization header.
 
 Both of these methods can be easily intercepted over HTTP.
 
-Users that attach an `AuthenticaitonFilter` to a HTTPRoute/GRPCRoute should be advised to enable HTTPS traffic at the Gateway level for the routes.
+Users that attach an `AuthenticationFilter` to an HTTPRoute/GRPCRoute should be advised to enable HTTPS traffic at the Gateway level for the routes.
 
-Any exmaple configurations and deployments for the `AuthenticationFilter` should enable HTTPS at the Gateway level by default.
+Any example configurations and deployments for the `AuthenticationFilter` should enable HTTPS at the Gateway level by default.
 
 ### Namespace isolataion and cross-namespace references
 Both Auth and Local JWKS should only have access to Secrets and ConfigMaps in the same namespace by default.
@@ -1107,7 +1107,7 @@ spec:
 
 ### Remote JWKS
 
-Proxy cache TTL should be configurable and set to a resonable default, reducing periods of stale cached JWKs.
+Proxy cache TTL should be configurable and set to a reasonable default, reducing periods of stale cached JWKs.
 
 ### Key rotation
 
