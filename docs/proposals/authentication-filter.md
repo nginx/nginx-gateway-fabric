@@ -158,7 +158,8 @@ type BasicAuth struct {
 // +kubebuilder:validation:XValidation:message="when file is set, mode must be 'File'",rule="self.file != null ? self.mode == 'File' : true"
 // +kubebuilder:validation:XValidation:message="when remote is set, mode must be 'Remote'",rule="self.remote != null ? self.mode == 'Remote' : true"
 type JWTAuth struct {
-  // Realm used by NGINX `auth_jwt` directive.
+  // Realm used by NGINX `auth_jwt` directive 
+  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
   //
   // +optional
@@ -181,6 +182,7 @@ type JWTAuth struct {
 
   // Leeway is the acceptable clock skew for exp/nbf checks.
   // Configures `auth_jwt_leeway` directive.
+  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
   // Example: "auth_jwt_leeway 60s".
   //
   // +optional
@@ -190,6 +192,7 @@ type JWTAuth struct {
   // Type sets token type: signed | encrypted | nested.
   // Default: signed.
   // Configures `auth_jwt_type` directive.
+  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_type
   // Example: "auth_jwt_type signed;".
   //
   // +optional
@@ -198,6 +201,7 @@ type JWTAuth struct {
 
   // KeyCache is the cache duration for keys.
   // Configures auth_jwt_key_cache directive.
+  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
   // Example: "auth_jwt_key_cache 10m".
   //
   // +optional
@@ -257,6 +261,7 @@ type JWTFileKeySource struct {
 
   // KeyCache is the cache duration for keys.
   // Configures `auth_jwt_key_cache` directive.
+  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
   // Example: "auth_jwt_key_cache 10m;".
   //
   // +optional
@@ -283,6 +288,7 @@ type JWKSCache struct {
 
   // Levels specifies the directory hierarchy for cached files.
   // Used in `proxy_cache_path` directive.
+  // https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_path
   // Example: "levels=1:2".
   //
   // +optional
