@@ -113,11 +113,13 @@ type AuthenticationFilterSpec struct {
   Type AuthType `json:"type"`
 
   // Basic configures HTTP Basic Authentication.
+  // Required when Type == Basic
   //
   // +optional
   Basic *BasicAuth `json:"basic,omitempty"`
 
   // JWT configures JSON Web Token authentication (NGINX Plus).
+  // Required when Type == JWT
   //
   // +optional
   JWT *JWTAuth `json:"jwt,omitempty"`
@@ -170,6 +172,7 @@ type JWTAuth struct {
   Mode JWTKeyMode `json:"mode,omitempty"`
 
   // File specifies local JWKS configuration.
+  // Required when Mode == File.
   //
   // +optional
   File *JWTFileKeySource `json:"file,omitempty"`
