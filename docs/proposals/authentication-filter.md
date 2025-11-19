@@ -55,7 +55,7 @@ This portion also contains:
     - Example HTTPRoutes
     - Examples for Local & Remote JWKS configration
     - Example NGINX configuration for both Local & Remote JWKS
-    - Example of additioanl optional fields
+    - Example of additional optional fields
 
 ### Golang API
 
@@ -104,7 +104,6 @@ type AuthenticationFilterList struct {
 // AuthenticationFilterSpec defines the desired configuration.
 // Exactly one of Basic or JWT must be set according to Type.
 // +kubebuilder:validation:XValidation:message="for type=Basic, spec.basic must be set and spec.jwt must be empty; for type=JWT, spec.jwt must be set and spec.basic must be empty",rule="self.type == 'Basic' ? self.basic != null && self.jwt == null : self.type == 'JWT' ? self.jwt != null && self.basic == null : false"
-
 // +kubebuilder:validation:XValidation:message="type 'Basic' requires spec.basic to be set. All other spec types must be unset",rule="self.type == 'Basic' ? self.type != null && self.jwt == null : true"
 // +kubebuilder:validation:XValidation:message="type 'JWT' requires spec.jwt to be set. All other spec types must be unset",rule="self.type == 'JWT' ? self.type != null && self.basic == null : true"
 // +kubebuilder:validation:XValidation:message="when spec.basic is set, type must be 'Basic'",rule="self.basic != null ? self.type == 'Basic' : true"
@@ -790,7 +789,7 @@ http {
 
 These are some directives the `Remote` mode uses over the `File` mode:
 
-- `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/jwks_uri` to redirect the request to the external auth provider (e.g. KeyCloak)
+- `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal_jwks_uri` to redirect the request to the external auth provider (e.g. KeyCloak)
 - `proxy_cache_path`: This is used to configuring caching of the JWKS after an initial request allowing subseuqnt requests to not request re-authenticaiton for a time
 
 ```nginx
@@ -822,7 +821,7 @@ http {
         location /v2 {
             auth_jwt "Restricted";
             # Remote JWKS
-            auth_jwt_key_request /jwks_uri;
+            auth_jwt_key_request /_ngf-internal_jwks_uri;
 
             # Optional: key cache duration
             auth_jwt_key_cache 10m;
@@ -859,7 +858,7 @@ http {
         }
 
         # Internal endpoint to fetch JWKS from IdP
-        location = /jwks_uri {
+        location = /_ngf-internal_jwks_uri {
             internal;
             # Enable caching of JWKS
             proxy_cache jwks_jwt_auth;
