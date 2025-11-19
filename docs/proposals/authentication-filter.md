@@ -168,8 +168,7 @@ type JWTAuth struct {
   // Mode selects how JWT keys are provided: local file or remote JWKS.
   Mode JWTKeyMode `json:"mode,omitempty"`
 
-  // File specifies local JWKS configuration (Secret or ConfigMap, mount path, file name).
-  // Required when Mode == File. Exactly one of ConfigMapRef or SecretRef must be set.
+  // File specifies local JWKS configuration.
   //
   // +optional
   File *JWTFileKeySource `json:"file,omitempty"`
@@ -252,16 +251,12 @@ const (
 )
 
 // JWTFileKeySource specifies local JWKS key configuration.
-// +kubebuilder:validation:XValidation:message="exactly one of configMapRef or secretRef must be set",rule="(self.configMapRef == null) != (self.secretRef == null)"
 type JWTFileKeySource struct {
-  // SecretRef references a Secret containing the JWKS (with optional key).
-  // Exactly one of ConfigMapRef or SecretRef must be set.
-  //
-  // +optional
-  SecretRef *SecretObjectReference `json:"secretRef,omitempty"`
+  // SecretRef references a Secret containing the JWKS.
+  SecretRef SecretObjectReference `json:"secretRef,omitempty"`
 
   // KeyCache is the cache duration for keys.
-  // Configures `auth_jwt_key_cache` directive
+  // Configures `auth_jwt_key_cache` directive.
   // Example: "auth_jwt_key_cache 10m;".
   //
   // +optional
@@ -406,8 +401,8 @@ type AuthFailureBodyPolicy string
 
 const (
   AuthFailureBodyPolicyUnauthorized AuthFailureBodyPolicy = "Unauthorized"
-  AuthFailureBodyPolicyForbidden AuthFailureBodyPolicy = "Forbidden"
-  AuthFailureBodyPolicyEmpty   AuthFailureBodyPolicy = "Empty"
+  AuthFailureBodyPolicyForbidden    AuthFailureBodyPolicy = "Forbidden"
+  AuthFailureBodyPolicyEmpty        AuthFailureBodyPolicy = "Empty"
 )
 
 // AuthFailureResponse customizes 401/403 failures.
@@ -434,16 +429,6 @@ type AuthFailureResponse struct {
   // +kubebuilder:default=Unauthorized
   BodyPolicy *AuthFailureBodyPolicy `json:"bodyPolicy,omitempty"`
 }
-
-// NamespacedSecretKeyReference references a Secret and optional key, with an optional namespace.
-// If namespace differs from the filter's, a ReferenceGrant in the target namespace is required.
-type NamespacedSecretKeyReference struct {
-  // +optional
-  Namespace *string `json:"namespace,omitempty"`
-  Name      string  `json:"name"`
-  // +optional
-  Key       *string `json:"key,omitempty"`
-  }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
 type AuthenticationFilterStatus struct {
@@ -635,7 +620,7 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    # Key verification mode: Local file or Remote JWKs
+    # Key verification mode. Local file or Remote JWKs
     mode: Remote
     remote:
       url: https://issuer.example.com/.well-known/jwks.json
@@ -648,17 +633,6 @@ spec:
     onFailure:
       statusCode: 403 # Set to 403 for example purposes. Defaults to 401.
       scheme: Bearer
-```
-
-#### ConfigMap referenced by filter (if using configMapRef)
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: jwt-keys
-data:
-  jwks.json: ewogICJrZXlzIjogWwogICAgewogICAgICAia3R5IjogIlJTQSIsCiAgICAgICJ1c2UiOiAic2lnIiwKICAgICAgImtpZCI6ICJleGFtcGxlLWtleS1pZCIsCiAgICAgICJhbGciOiAiUlMyNTYiLAogICAgICAibiI6ICJiYXNlNjR1cmwtbW9kdWx1cyIsCiAgICAgICJlIjogIkFRQUIiCiAgICB9CiAgXQp9Cg==
 ```
 
 #### Secret referenced by filter (if using secretRef)
@@ -1067,48 +1041,13 @@ spec:
     realm: "Restricted"
 ```
 
-Example: Grant JWT file-based JWKS in keys-ns to filter in app-ns
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: ReferenceGrant
-metadata:
-  name: allow-jwks-configmap
-  namespace: keys-ns
-spec:
-  from:
-  - group: gateway.nginx.org
-    kind: AuthenticationFilter
-    namespace: app-ns
-  to:
-  - group: ""    # core API group
-    kind: ConfigMap
-    name: jwt-keys
-```
-
-AuthenticationFilter referencing cross-namespace JWKS ConfigMap
-```yaml
-apiVersion: gateway.nginx.org/v1alpha1
-kind: AuthenticationFilter
-metadata:
-  name: jwt-auth
-  namespace: app-ns
-spec:
-  type: JWT
-  jwt:
-    mode: File
-    file:
-      configMapRef:
-        namespace: keys-ns
-        name: jwt-keys
-```
-
 ### Remote JWKS
 
 Proxy cache TTL should be configurable and set to a reasonable default, reducing periods of stale cached JWKs.
 
 ### Key rotation
 
-Users should be advised to regularly rotate their JWKS keys in cases where they chose to reference a local JWKS via a `secrefRef` or `configMapRef`
+Users should be advised to regularly rotate their JWKS keys in cases where they chose to reference a local JWKS via a `secrefRef`
 
 ### Auth failure behaviour
 
