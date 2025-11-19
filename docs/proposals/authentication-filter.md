@@ -158,7 +158,7 @@ type BasicAuth struct {
 // +kubebuilder:validation:XValidation:message="when file is set, mode must be 'File'",rule="self.file != null ? self.mode == 'File' : true"
 // +kubebuilder:validation:XValidation:message="when remote is set, mode must be 'Remote'",rule="self.remote != null ? self.mode == 'Remote' : true"
 type JWTAuth struct {
-  // Realm used by NGINX `auth_jwt` directive 
+  // Realm used by NGINX `auth_jwt` directive
   // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
   //
