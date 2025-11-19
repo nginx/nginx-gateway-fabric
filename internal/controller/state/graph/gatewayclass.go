@@ -8,16 +8,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/gateway-api/pkg/consts"
+	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
-)
-
-const (
-	// BundleVersionAnnotation is the annotation on Gateway API CRDs that contains the installed version.
-	BundleVersionAnnotation = "gateway.networking.k8s.io/bundle-version"
-	// SupportedVersion is the supported version of the Gateway API CRDs.
-	SupportedVersion = "v1.4.0"
 )
 
 var gatewayCRDs = map[string]apiVersion{
@@ -40,6 +36,8 @@ type GatewayClass struct {
 	Conditions []conditions.Condition
 	// Valid shows whether the GatewayClass is valid.
 	Valid bool
+	// ExperimentalSupported indicates whether experimental features are supported.
+	ExperimentalSupported bool
 }
 
 // processedGatewayClasses holds the resources that belong to NGF.
@@ -82,6 +80,7 @@ func buildGatewayClass(
 	gc *v1.GatewayClass,
 	nps map[types.NamespacedName]*NginxProxy,
 	crdVersions map[types.NamespacedName]*metav1.PartialObjectMetadata,
+	experimentalEnabled bool,
 ) *GatewayClass {
 	if gc == nil {
 		return nil
@@ -92,13 +91,17 @@ func buildGatewayClass(
 		np = getNginxProxyForGatewayClass(*gc.Spec.ParametersRef, nps)
 	}
 
-	conds, valid := validateGatewayClass(gc, np, crdVersions)
+	conds, valid, crdExperimental := validateGatewayClass(gc, np, crdVersions)
+
+	// Experimental features are supported only if both the config flag AND CRD channel are experimental
+	experimental := experimentalEnabled && crdExperimental
 
 	return &GatewayClass{
-		Source:     gc,
-		NginxProxy: np,
-		Valid:      valid,
-		Conditions: conds,
+		Source:                gc,
+		NginxProxy:            np,
+		Valid:                 valid,
+		Conditions:            conds,
+		ExperimentalSupported: experimental,
 	}
 }
 
@@ -130,7 +133,7 @@ func validateGatewayClassParametersRef(path *field.Path, ref v1.ParametersRefere
 	}
 
 	if len(errs) > 0 {
-		msg := errs.ToAggregate().Error()
+		msg := helpers.CapitalizeString(errs.ToAggregate().Error())
 		return []conditions.Condition{
 			conditions.NewGatewayClassRefInvalid(msg),
 			conditions.NewGatewayClassInvalidParameters(msg),
@@ -144,14 +147,14 @@ func validateGatewayClass(
 	gc *v1.GatewayClass,
 	npCfg *NginxProxy,
 	crdVersions map[types.NamespacedName]*metav1.PartialObjectMetadata,
-) ([]conditions.Condition, bool) {
+) ([]conditions.Condition, bool, bool) {
 	var conds []conditions.Condition
 
-	supportedVersionConds, versionsValid := validateCRDVersions(crdVersions)
+	supportedVersionConds, versionsValid, experimental := validateCRDVersions(crdVersions)
 	conds = append(conds, supportedVersionConds...)
 
 	if gc.Spec.ParametersRef == nil {
-		return conds, versionsValid
+		return conds, versionsValid, experimental
 	}
 
 	path := field.NewPath("spec").Child("parametersRef")
@@ -160,7 +163,7 @@ func validateGatewayClass(
 	// return early since parametersRef isn't valid
 	if len(refConds) > 0 {
 		conds = append(conds, refConds...)
-		return conds, versionsValid
+		return conds, versionsValid, experimental
 	}
 
 	if npCfg == nil {
@@ -171,20 +174,20 @@ func validateGatewayClass(
 				field.NotFound(path.Child("name"), gc.Spec.ParametersRef.Name).Error(),
 			),
 		)
-		return conds, versionsValid
+		return conds, versionsValid, experimental
 	}
 
 	if !npCfg.Valid {
-		msg := npCfg.ErrMsgs.ToAggregate().Error()
+		msg := helpers.CapitalizeString(npCfg.ErrMsgs.ToAggregate().Error())
 		conds = append(
 			conds,
 			conditions.NewGatewayClassRefInvalid(msg),
 			conditions.NewGatewayClassInvalidParameters(msg),
 		)
-		return conds, versionsValid
+		return conds, versionsValid, experimental
 	}
 
-	return append(conds, conditions.NewGatewayClassResolvedRefs()), versionsValid
+	return append(conds, conditions.NewGatewayClassResolvedRefs()), versionsValid, experimental
 }
 
 var supportedParamKinds = map[string]struct{}{
@@ -198,9 +201,9 @@ type apiVersion struct {
 
 func validateCRDVersions(
 	crdMetadata map[types.NamespacedName]*metav1.PartialObjectMetadata,
-) (conds []conditions.Condition, valid bool) {
-	installedAPIVersions := getBundleVersions(crdMetadata)
-	supportedAPIVersion := parseVersionString(SupportedVersion)
+) (conds []conditions.Condition, valid bool, experimental bool) {
+	installedAPIVersions, channels := getBundleVersions(crdMetadata)
+	supportedAPIVersion := parseVersionString(consts.BundleVersion)
 
 	var unsupported, bestEffort bool
 
@@ -212,15 +215,23 @@ func validateCRDVersions(
 		}
 	}
 
+	// Check if any CRD is using experimental channel
+	for _, ch := range channels {
+		if ch == features.FeatureChannelExperimental {
+			experimental = true
+			break
+		}
+	}
+
 	if unsupported {
-		return conditions.NewGatewayClassUnsupportedVersion(SupportedVersion), false
+		return conditions.NewGatewayClassUnsupportedVersion(consts.BundleVersion), false, experimental
 	}
 
 	if bestEffort {
-		return conditions.NewGatewayClassSupportedVersionBestEffort(SupportedVersion), true
+		return conditions.NewGatewayClassSupportedVersionBestEffort(consts.BundleVersion), true, experimental
 	}
 
-	return nil, true
+	return nil, true, experimental
 }
 
 func parseVersionString(version string) apiVersion {
@@ -245,15 +256,25 @@ func parseVersionString(version string) apiVersion {
 	}
 }
 
-func getBundleVersions(crdMetadata map[types.NamespacedName]*metav1.PartialObjectMetadata) []apiVersion {
+func getBundleVersions(
+	crdMetadata map[types.NamespacedName]*metav1.PartialObjectMetadata,
+) ([]apiVersion, []features.FeatureChannel) {
 	versions := make([]apiVersion, 0, len(gatewayCRDs))
+	channels := make([]features.FeatureChannel, 0, len(gatewayCRDs))
 
 	for nsname, md := range crdMetadata {
 		if _, ok := gatewayCRDs[nsname.Name]; ok {
-			bundleVersion := md.Annotations[BundleVersionAnnotation]
+			bundleVersion := md.Annotations[consts.BundleVersionAnnotation]
 			versions = append(versions, parseVersionString(bundleVersion))
+
+			// Default to standard channel if annotation is missing
+			ch := md.Annotations[consts.ChannelAnnotation]
+			if ch == "" {
+				ch = string(features.FeatureChannelStandard)
+			}
+			channels = append(channels, features.FeatureChannel(ch))
 		}
 	}
 
-	return versions
+	return versions, channels
 }

@@ -4,6 +4,7 @@ package helpers
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/google/go-cmp/cmp"
@@ -86,4 +87,13 @@ func MustExecuteTemplate(templ *template.Template, data interface{}) []byte {
 	}
 
 	return buf.Bytes()
+}
+
+// CapitalizeString capitalizes the first letter of the string.
+func CapitalizeString(s string) string {
+	if s == "" {
+		return s
+	}
+
+	return strings.ToUpper(s[:1]) + s[1:]
 }

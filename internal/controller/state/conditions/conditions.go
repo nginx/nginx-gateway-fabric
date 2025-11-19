@@ -146,6 +146,14 @@ const (
 	// parametersRef resource is invalid.
 	GatewayReasonParamsRefInvalid v1.GatewayConditionReason = "ParametersRefInvalid"
 
+	// GatewayReasonSecretRefInvalid is used with the "GatewayResolvedRefs" condition when the
+	// secretRef resource is invalid.
+	GatewayReasonSecretRefInvalid v1.GatewayConditionReason = "SecretRefInvalid"
+
+	// GatewayReasonSecretRefNotPermitted is used with the "GatewayResolvedRefs" condition when the
+	// secretRef resource is not permitted by any ReferenceGrant.
+	GatewayReasonSecretRefNotPermitted v1.GatewayConditionReason = "SecretRefNotPermitted"
+
 	// PolicyReasonAncestorLimitReached is used with the "PolicyAccepted" condition when a policy
 	// cannot be applied because the ancestor status list has reached the maximum size of 16.
 	PolicyReasonAncestorLimitReached v1.PolicyConditionReason = "AncestorLimitReached"
@@ -239,13 +247,13 @@ func NewDefaultGatewayClassConditions() []Condition {
 			Type:    string(v1.GatewayClassConditionStatusAccepted),
 			Status:  metav1.ConditionTrue,
 			Reason:  string(v1.GatewayClassReasonAccepted),
-			Message: "GatewayClass is accepted",
+			Message: "The GatewayClass is accepted",
 		},
 		{
 			Type:    string(v1.GatewayClassConditionStatusSupportedVersion),
 			Status:  metav1.ConditionTrue,
 			Reason:  string(v1.GatewayClassReasonSupportedVersion),
-			Message: "Gateway API CRD versions are supported",
+			Message: "The Gateway API CRD versions are supported",
 		},
 	}
 }
@@ -260,7 +268,7 @@ func NewGatewayClassSupportedVersionBestEffort(recommendedVersion string) []Cond
 			Status: metav1.ConditionFalse,
 			Reason: string(v1.GatewayClassReasonUnsupportedVersion),
 			Message: fmt.Sprintf(
-				"Gateway API CRD versions are not recommended. Recommended version is %s",
+				"The Gateway API CRD versions are not recommended. Recommended version is %s",
 				recommendedVersion,
 			),
 		},
@@ -276,7 +284,7 @@ func NewGatewayClassUnsupportedVersion(recommendedVersion string) []Condition {
 			Status: metav1.ConditionFalse,
 			Reason: string(v1.GatewayClassReasonUnsupportedVersion),
 			Message: fmt.Sprintf(
-				"Gateway API CRD versions are not supported. Please install version %s",
+				"The Gateway API CRD versions are not supported. Please install version %s",
 				recommendedVersion,
 			),
 		},
@@ -285,10 +293,31 @@ func NewGatewayClassUnsupportedVersion(recommendedVersion string) []Condition {
 			Status: metav1.ConditionFalse,
 			Reason: string(v1.GatewayClassReasonUnsupportedVersion),
 			Message: fmt.Sprintf(
-				"Gateway API CRD versions are not supported. Please install version %s",
+				"The Gateway API CRD versions are not supported. Please install version %s",
 				recommendedVersion,
 			),
 		},
+	}
+}
+
+// NewGatewaySecretRefNotPermitted returns Condition that indicates that the Gateway references a TLS secret that is not
+// permitted by any ReferenceGrant.
+func NewGatewaySecretRefNotPermitted(msg string) Condition {
+	return Condition{
+		Type:    string(GatewayReasonResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(GatewayReasonSecretRefNotPermitted),
+		Message: msg,
+	}
+}
+
+// NewGatewaySecretRefInvalid returns Condition that indicates that the Gateway references a TLS secret that is invalid.
+func NewGatewaySecretRefInvalid(msg string) Condition {
+	return Condition{
+		Type:    string(GatewayReasonResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(GatewayReasonSecretRefInvalid),
+		Message: msg,
 	}
 }
 
@@ -318,18 +347,18 @@ func NewRouteNotAllowedByListeners() Condition {
 		Type:    string(v1.RouteConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.RouteReasonNotAllowedByListeners),
-		Message: "Route is not allowed by any listener",
+		Message: "The Route is not allowed by any listener",
 	}
 }
 
-// NewRouteNoMatchingListenerHostname returns a Condition that indicates that the hostname of the listener
+// NewRouteNoMatchingListenerHostname returns a Condition that indicates that the hostname of the Listener
 // does not match the hostnames of the Route.
 func NewRouteNoMatchingListenerHostname() Condition {
 	return Condition{
 		Type:    string(v1.RouteConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.RouteReasonNoMatchingListenerHostname),
-		Message: "Listener hostname does not match the Route hostnames",
+		Message: "The Listener hostname does not match the Route hostnames",
 	}
 }
 
@@ -339,7 +368,7 @@ func NewRouteAccepted() Condition {
 		Type:    string(v1.RouteConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.RouteReasonAccepted),
-		Message: "The route is accepted",
+		Message: "The Route is accepted",
 	}
 }
 
@@ -386,7 +415,7 @@ func NewRouteInvalidListener() Condition {
 		Type:    string(v1.RouteConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonInvalidListener),
-		Message: "Listener is invalid for this parent ref",
+		Message: "The Listener is invalid for this parent ref",
 	}
 }
 
@@ -397,7 +426,7 @@ func NewRouteHostnameConflict() Condition {
 		Type:    string(v1.RouteConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonHostnameConflict),
-		Message: "Hostname(s) conflict with another route of the same kind on the same port",
+		Message: "Hostname(s) conflict with another Route of the same kind on the same port",
 	}
 }
 
@@ -484,7 +513,7 @@ func NewRouteInvalidGateway() Condition {
 		Type:    string(v1.RouteConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonInvalidGateway),
-		Message: "Gateway is invalid",
+		Message: "The Gateway is invalid",
 	}
 }
 
@@ -495,7 +524,7 @@ func NewRouteNoMatchingParent() Condition {
 		Type:    string(v1.RouteConditionAccepted),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.RouteReasonNoMatchingParent),
-		Message: "Listener is not found for this parent ref",
+		Message: "The Listener is not found for this parent ref",
 	}
 }
 
@@ -550,7 +579,7 @@ func NewDefaultListenerConditions(existingConditions []Condition) []Condition {
 	return defaultConds
 }
 
-// hasConflictConditions checks if the listener has any conflict-related conditions.
+// hasConflictConditions checks if the Listener has any conflict-related conditions.
 func hasConflictConditions(conditions []Condition) bool {
 	for _, cond := range conditions {
 		if cond.Type == string(v1.ListenerConditionConflicted) ||
@@ -567,7 +596,7 @@ func NewListenerAccepted() Condition {
 		Type:    string(v1.ListenerConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.ListenerReasonAccepted),
-		Message: "Listener is accepted",
+		Message: "The Listener is accepted",
 	}
 }
 
@@ -577,7 +606,7 @@ func NewListenerProgrammed() Condition {
 		Type:    string(v1.ListenerConditionProgrammed),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.ListenerReasonProgrammed),
-		Message: "Listener is programmed",
+		Message: "The Listener is programmed",
 	}
 }
 
@@ -750,7 +779,7 @@ func NewGatewayClassResolvedRefs() Condition {
 		Type:    string(GatewayClassResolvedRefs),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(GatewayClassReasonResolvedRefs),
-		Message: "ParametersRef resource is resolved",
+		Message: "The ParametersRef resource is resolved",
 	}
 }
 
@@ -761,7 +790,7 @@ func NewGatewayClassRefNotFound() Condition {
 		Type:    string(GatewayClassResolvedRefs),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(GatewayClassReasonParamsRefNotFound),
-		Message: "ParametersRef resource could not be found",
+		Message: "The ParametersRef resource could not be found",
 	}
 }
 
@@ -784,7 +813,7 @@ func NewGatewayClassInvalidParameters(msg string) Condition {
 		Type:    string(v1.GatewayClassConditionStatusAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.GatewayClassReasonInvalidParameters),
-		Message: fmt.Sprintf("GatewayClass is accepted, but ParametersRef is ignored due to an error: %s", msg),
+		Message: fmt.Sprintf("The GatewayClass is accepted, but ParametersRef is ignored due to an error: %s", msg),
 	}
 }
 
@@ -802,7 +831,7 @@ func NewGatewayAccepted() Condition {
 		Type:    string(v1.GatewayConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.GatewayReasonAccepted),
-		Message: "Gateway is accepted",
+		Message: "The Gateway is accepted",
 	}
 }
 
@@ -813,14 +842,14 @@ func NewGatewayAcceptedListenersNotValid() Condition {
 		Type:    string(v1.GatewayConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.GatewayReasonListenersNotValid),
-		Message: "Gateway has at least one valid listener",
+		Message: "The Gateway has at least one valid listener",
 	}
 }
 
 // NewGatewayNotAcceptedListenersNotValid returns Conditions that indicate the Gateway is not accepted,
 // because all listeners are invalid.
 func NewGatewayNotAcceptedListenersNotValid() []Condition {
-	msg := "Gateway has no valid listeners"
+	msg := "The Gateway has no valid listeners"
 	return []Condition{
 		{
 			Type:    string(v1.GatewayConditionAccepted),
@@ -843,6 +872,25 @@ func NewGatewayInvalid(msg string) []Condition {
 			Message: msg,
 		},
 		NewGatewayNotProgrammedInvalid(msg),
+	}
+}
+
+// NewGatewayUnsupportedValue returns Conditions that indicate that a field of the Gateway has an unsupported value.
+// Unsupported means that the value is not supported by the implementation under certain conditions or invalid.
+func NewGatewayUnsupportedValue(msg string) []Condition {
+	return []Condition{
+		{
+			Type:    string(v1.GatewayConditionAccepted),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(GatewayReasonUnsupportedValue),
+			Message: msg,
+		},
+		{
+			Type:    string(v1.GatewayConditionProgrammed),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(GatewayReasonUnsupportedValue),
+			Message: msg,
+		},
 	}
 }
 
@@ -885,7 +933,7 @@ func NewGatewayProgrammed() Condition {
 		Type:    string(v1.GatewayConditionProgrammed),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.GatewayReasonProgrammed),
-		Message: "Gateway is programmed",
+		Message: "The Gateway is programmed",
 	}
 }
 
@@ -907,7 +955,7 @@ func NewNginxGatewayValid() Condition {
 		Type:    string(ngfAPI.NginxGatewayConditionValid),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(ngfAPI.NginxGatewayReasonValid),
-		Message: "NginxGateway is valid",
+		Message: "The NginxGateway is valid",
 	}
 }
 
@@ -928,7 +976,7 @@ func NewGatewayResolvedRefs() Condition {
 		Type:    string(GatewayResolvedRefs),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(GatewayReasonResolvedRefs),
-		Message: "ParametersRef resource is resolved",
+		Message: "The ParametersRef resource is resolved",
 	}
 }
 
@@ -939,7 +987,7 @@ func NewGatewayRefNotFound() Condition {
 		Type:    string(GatewayResolvedRefs),
 		Status:  metav1.ConditionFalse,
 		Reason:  string(GatewayReasonParamsRefNotFound),
-		Message: "ParametersRef resource could not be found",
+		Message: "The ParametersRef resource could not be found",
 	}
 }
 
@@ -962,7 +1010,7 @@ func NewGatewayInvalidParameters(msg string) Condition {
 		Type:    string(v1.GatewayConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.GatewayReasonInvalidParameters),
-		Message: fmt.Sprintf("Gateway is accepted, but ParametersRef is ignored due to an error: %s", msg),
+		Message: fmt.Sprintf("The Gateway is accepted, but ParametersRef is ignored due to an error: %s", msg),
 	}
 }
 
@@ -973,7 +1021,7 @@ func NewGatewayAcceptedUnsupportedField(msg string) Condition {
 		Type:    string(v1.GatewayConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(GatewayReasonUnsupportedField),
-		Message: fmt.Sprintf("Gateway accepted but the following unsupported parameters were ignored: %s", msg),
+		Message: fmt.Sprintf("The Gateway is accepted but the following unsupported parameters were ignored: %s", msg),
 	}
 }
 
@@ -983,7 +1031,7 @@ func NewPolicyAccepted() Condition {
 		Type:    string(v1.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(v1.PolicyReasonAccepted),
-		Message: "Policy is accepted",
+		Message: "The Policy is accepted",
 	}
 }
 
@@ -1071,7 +1119,7 @@ func NewSnippetsFilterAccepted() Condition {
 		Type:    string(ngfAPI.SnippetsFilterConditionTypeAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(ngfAPI.SnippetsFilterConditionReasonAccepted),
-		Message: "SnippetsFilter is accepted",
+		Message: "The SnippetsFilter is accepted",
 	}
 }
 
@@ -1082,7 +1130,7 @@ func NewObservabilityPolicyAffected() Condition {
 		Type:    string(ObservabilityPolicyAffected),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
-		Message: "ObservabilityPolicy is applied to the resource",
+		Message: "The ObservabilityPolicy is applied to the resource",
 	}
 }
 
@@ -1093,7 +1141,7 @@ func NewClientSettingsPolicyAffected() Condition {
 		Type:    string(ClientSettingsPolicyAffected),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
-		Message: "ClientSettingsPolicy is applied to the resource",
+		Message: "The ClientSettingsPolicy is applied to the resource",
 	}
 }
 
@@ -1147,7 +1195,7 @@ func NewInferencePoolAccepted() Condition {
 		Type:    string(inference.InferencePoolConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(inference.InferencePoolConditionAccepted),
-		Message: "InferencePool is accepted by the Gateway.",
+		Message: "The InferencePool is accepted by the Gateway.",
 	}
 }
 
@@ -1158,7 +1206,7 @@ func NewInferencePoolResolvedRefs() Condition {
 		Type:    string(inference.InferencePoolConditionResolvedRefs),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(inference.InferencePoolConditionResolvedRefs),
-		Message: "Inference pool references a valid ExtensionRef.",
+		Message: "The InferencePool references a valid ExtensionRef.",
 	}
 }
 

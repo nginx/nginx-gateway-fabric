@@ -26,23 +26,19 @@ const (
 
 // Configuration is an intermediate representation of dataplane configuration.
 type Configuration struct {
-	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
-	// Gateway API resources.
-	AuxiliarySecrets map[graph.SecretFileType][]byte
 	// CertBundles holds all unique Certificate Bundles.
 	CertBundles map[CertBundleID]CertBundle
 	// BaseStreamConfig holds the configuration options at the stream context.
 	BaseStreamConfig BaseStreamConfig
 	// SSLKeyPairs holds all unique SSLKeyPairs.
 	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
+	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
+	// Gateway API resources.
+	AuxiliarySecrets map[graph.SecretFileType][]byte
 	// DeploymentContext contains metadata about NGF and the cluster.
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
-	// StreamUpstreams holds all unique stream Upstreams
-	StreamUpstreams []Upstream
-	// TLSPassthroughServers hold all TLSPassthroughServers
-	TLSPassthroughServers []Layer4VirtualServer
 	// BackendGroups holds all unique BackendGroups.
 	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
@@ -51,10 +47,14 @@ type Configuration struct {
 	Upstreams []Upstream
 	// NginxPlus specifies NGINX Plus additional settings.
 	NginxPlus NginxPlus
-	// SSLServers holds all SSLServers.
-	SSLServers []VirtualServer
 	// HTTPServers holds all HTTPServers.
 	HTTPServers []VirtualServer
+	// StreamUpstreams holds all unique stream Upstreams
+	StreamUpstreams []Upstream
+	// SSLServers holds all SSLServers.
+	SSLServers []VirtualServer
+	// TLSPassthroughServers hold all TLSPassthroughServers
+	TLSPassthroughServers []Layer4VirtualServer
 	// Telemetry holds the Otel configuration.
 	Telemetry Telemetry
 	// BaseHTTPConfig holds the configuration options at the http context.
@@ -393,6 +393,8 @@ type BaseHTTPConfig struct {
 	DNSResolver *DNSResolverConfig
 	// IPFamily specifies the IP family for all servers.
 	IPFamily IPFamilyType
+	// GatewaySecretID is the ID of the secret that contains the gateway backend TLS certificate.
+	GatewaySecretID SSLKeyPairID
 	// Snippets contain the snippets that apply to the http context.
 	Snippets []Snippet
 	// RewriteIPSettings defines configuration for rewriting the client IP to the original client's IP.

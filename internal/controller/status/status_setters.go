@@ -41,7 +41,7 @@ func newGatewayStatusSetter(status gatewayv1.GatewayStatus) Setter {
 
 func gwStatusEqual(prev, cur gatewayv1.GatewayStatus) bool {
 	addressesEqual := slices.EqualFunc(prev.Addresses, cur.Addresses, func(a1, a2 gatewayv1.GatewayStatusAddress) bool {
-		if !helpers.EqualPointers[gatewayv1.AddressType](a1.Type, a2.Type) {
+		if !helpers.EqualPointers(a1.Type, a2.Type) {
 			return false
 		}
 
@@ -84,17 +84,22 @@ func newHTTPRouteStatusSetter(status gatewayv1.HTTPRouteStatus, gatewayCtlrName 
 		hr := helpers.MustCastObject[*gatewayv1.HTTPRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
+		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
+		newParents = append(newParents, status.Parents...)
 		for _, os := range hr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
-				status.Parents = append(status.Parents, os)
+				newParents = append(newParents, os)
 			}
 		}
 
-		if routeStatusEqual(gatewayCtlrName, hr.Status.Parents, status.Parents) {
+		fullStatus := status
+		fullStatus.Parents = newParents
+
+		if routeStatusEqual(gatewayCtlrName, hr.Status.Parents, fullStatus.Parents) {
 			return false
 		}
 
-		hr.Status = status
+		hr.Status = fullStatus
 
 		return true
 	}
@@ -105,17 +110,22 @@ func newTLSRouteStatusSetter(status v1alpha2.TLSRouteStatus, gatewayCtlrName str
 		tr := helpers.MustCastObject[*v1alpha2.TLSRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
+		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
+		newParents = append(newParents, status.Parents...)
 		for _, os := range tr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
-				status.Parents = append(status.Parents, os)
+				newParents = append(newParents, os)
 			}
 		}
 
-		if routeStatusEqual(gatewayCtlrName, tr.Status.Parents, status.Parents) {
+		fullStatus := status
+		fullStatus.Parents = newParents
+
+		if routeStatusEqual(gatewayCtlrName, tr.Status.Parents, fullStatus.Parents) {
 			return false
 		}
 
-		tr.Status = status
+		tr.Status = fullStatus
 
 		return true
 	}
@@ -126,17 +136,22 @@ func newGRPCRouteStatusSetter(status gatewayv1.GRPCRouteStatus, gatewayCtlrName 
 		gr := helpers.MustCastObject[*gatewayv1.GRPCRoute](object)
 
 		// keep all the parent statuses that belong to other controllers
+		newParents := make([]gatewayv1.RouteParentStatus, 0, len(status.Parents))
+		newParents = append(newParents, status.Parents...)
 		for _, os := range gr.Status.Parents {
 			if string(os.ControllerName) != gatewayCtlrName {
-				status.Parents = append(status.Parents, os)
+				newParents = append(newParents, os)
 			}
 		}
 
-		if routeStatusEqual(gatewayCtlrName, gr.Status.Parents, status.Parents) {
+		fullStatus := status
+		fullStatus.Parents = newParents
+
+		if routeStatusEqual(gatewayCtlrName, gr.Status.Parents, fullStatus.Parents) {
 			return false
 		}
 
-		gr.Status = status
+		gr.Status = fullStatus
 
 		return true
 	}
@@ -202,13 +217,23 @@ func newGatewayClassStatusSetter(status gatewayv1.GatewayClassStatus) Setter {
 	return func(obj client.Object) (wasSet bool) {
 		gc := helpers.MustCastObject[*gatewayv1.GatewayClass](obj)
 
-		if ConditionsEqual(gc.Status.Conditions, status.Conditions) {
+		if gcStatusEqual(gc.Status, status) {
 			return false
 		}
 
 		gc.Status = status
 		return true
 	}
+}
+
+func gcStatusEqual(prev, cur gatewayv1.GatewayClassStatus) bool {
+	if !ConditionsEqual(prev.Conditions, cur.Conditions) {
+		return false
+	}
+
+	return slices.EqualFunc(prev.SupportedFeatures, cur.SupportedFeatures, func(f1, f2 gatewayv1.SupportedFeature) bool {
+		return f1.Name == f2.Name
+	})
 }
 
 func newBackendTLSPolicyStatusSetter(

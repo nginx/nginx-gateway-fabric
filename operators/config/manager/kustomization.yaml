@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: ghcr.io/nginx/nginx-gateway-fabric/operator
-  newTag: 1.0.0
+  newTag: 1.0.1

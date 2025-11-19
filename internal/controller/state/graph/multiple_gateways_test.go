@@ -22,8 +22,9 @@ import (
 )
 
 const (
-	controllerName = "nginx"
-	gcName         = "my-gateway-class"
+	controllerName          = "nginx"
+	gcName                  = "my-gateway-class"
+	experimentalFeaturesOff = false
 )
 
 var (
@@ -65,6 +66,8 @@ var (
 			{Kind: kinds.TLSRoute, Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
 		},
 	}
+
+	experimentalFeaturesEnabled = false
 )
 
 func createGateway(name, namespace, nginxProxyName string, listeners []gatewayv1.Listener) *gatewayv1.Gateway {
@@ -406,6 +409,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
+				experimentalFeaturesEnabled,
 			)
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
@@ -895,6 +899,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
+				experimentalFeaturesEnabled,
 			)
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())

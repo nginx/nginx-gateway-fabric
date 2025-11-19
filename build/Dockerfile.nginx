@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.19
+# syntax=docker/dockerfile:1.20
 FROM scratch AS nginx-files
 
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
@@ -6,12 +6,8 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.p
 
 FROM nginx:1.29.3-alpine-otel
 
-# the following apk update and add are to address CVE-2025-58050, CVE-2025-6021/CVE-2025-49795/CVE-2025-49794/CVE-2025-49796 respectively.
-# once a new base image is available with these package updates, they can be removed.
-RUN apk update && apk add --no-cache 'pcre2>=10.46-r0' 'libxml2>=2.13.9-r0'
-
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.4.2
+ARG NGINX_AGENT_VERSION=v3.5.0
 ARG NGINX_AGENT_BRANCH=release-3.5.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR

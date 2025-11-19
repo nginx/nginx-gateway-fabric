@@ -36,6 +36,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -139,9 +140,10 @@ func StartManager(cfg config.Config) error {
 			GenericValidator:    genericValidator,
 			PolicyValidator:     policyManager,
 		},
-		EventRecorder:  recorder,
-		MustExtractGVK: mustExtractGVK,
-		PlusSecrets:    plusSecrets,
+		EventRecorder:        recorder,
+		MustExtractGVK:       mustExtractGVK,
+		PlusSecrets:          plusSecrets,
+		ExperimentalFeatures: cfg.ExperimentalFeatures,
 	})
 
 	var handlerCollector handlerMetricsCollector = collectors.NewControllerNoopCollector()
@@ -493,7 +495,7 @@ func registerControllers(
 			options: []controller.Option{
 				controller.WithOnlyMetadata(),
 				controller.WithK8sPredicate(
-					predicate.AnnotationPredicate{Annotation: graph.BundleVersionAnnotation},
+					predicate.AnnotationPredicate{Annotation: consts.BundleVersionAnnotation},
 				),
 			},
 		},

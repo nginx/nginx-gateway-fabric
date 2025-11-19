@@ -331,7 +331,7 @@ func TestBuildTLSRoute(t *testing.T) {
 				Source:     invalidHostnameGtr,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Conditions: []conditions.Condition{conditions.NewRouteUnsupportedValue(
-					"spec.hostnames[0]: Invalid value: \"hi....com\": a lowercase RFC 1" +
+					"Spec.hostnames[0]: Invalid value: \"hi....com\": a lowercase RFC 1" +
 						"123 subdomain must consist of lower case alphanumeric characters" +
 						", '-' or '.', and must start and end with an alphanumeric charac" +
 						"ter (e.g. 'example.com', regex used for validation is '[a-z0-9](" +
@@ -383,7 +383,7 @@ func TestBuildTLSRoute(t *testing.T) {
 				Attachable: true,
 				Valid:      true,
 				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(
-					"route type tls does not support service port appProtocol kubernetes.io/h2c",
+					"The Route type tls does not support service port appProtocol kubernetes.io/h2c",
 				)},
 			},
 			gateway: createGateway(),
@@ -412,7 +412,7 @@ func TestBuildTLSRoute(t *testing.T) {
 				Attachable: true,
 				Valid:      true,
 				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedProtocol(
-					"route type tls does not support service port appProtocol kubernetes.io/ws",
+					"The Route type tls does not support service port appProtocol kubernetes.io/ws",
 				)},
 			},
 			gateway: createGateway(),
@@ -587,7 +587,7 @@ func TestBuildTLSRoute(t *testing.T) {
 						ServicePort: apiv1.ServicePort{Port: 80},
 						InvalidForGateways: map[types.NamespacedName]conditions.Condition{
 							{Namespace: "test", Name: "gateway"}: conditions.NewRouteInvalidIPFamily(
-								"service configured with IPv4 family but NginxProxy is configured with IPv6",
+								"The Service configured with IPv4 family but NginxProxy is configured with IPv6",
 							),
 						},
 						Valid: true,

@@ -156,7 +156,9 @@ func validateInferencePoolExtensionRef(
 	}
 
 	if _, ok := svc[eppNsName]; !ok {
-		failingCond = conditions.NewInferencePoolInvalidExtensionref("ExtensionRef Service not found: " + eppNsName.String())
+		failingCond = conditions.NewInferencePoolInvalidExtensionref(
+			"The ExtensionRef Service not found: " + eppNsName.String(),
+		)
 		return &failingCond
 	}
 

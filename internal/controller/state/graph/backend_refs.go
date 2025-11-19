@@ -419,7 +419,8 @@ func findBackendTLSPolicyForService(
 	if beTLSPolicy != nil {
 		beTLSPolicy.IsReferenced = true
 		if !beTLSPolicy.Valid {
-			err = fmt.Errorf("the backend TLS policy is invalid: %s", beTLSPolicy.Conditions[0].Message)
+			//nolint:staticcheck // Capitalization required for alignment with other messages.
+			err = fmt.Errorf("The BackendTLSPolicy is invalid: %s", beTLSPolicy.Conditions[0].Message)
 		} else {
 			beTLSPolicy.Conditions = append(beTLSPolicy.Conditions, conditions.NewPolicyAccepted())
 		}
@@ -460,10 +461,10 @@ func verifyIPFamily(npCfg *EffectiveNginxProxy, svcIPFamily []v1.IPFamily) error
 	containsIPv6 := slices.Contains(svcIPFamily, v1.IPv6Protocol)
 	containsIPv4 := slices.Contains(svcIPFamily, v1.IPv4Protocol)
 
-	//nolint: stylecheck // used in status condition which is normally capitalized
-	errIPv6Mismatch := errors.New("service configured with IPv6 family but NginxProxy is configured with IPv4")
-	//nolint: stylecheck // used in status condition which is normally capitalized
-	errIPv4Mismatch := errors.New("service configured with IPv4 family but NginxProxy is configured with IPv6")
+	//nolint: staticcheck // used in status condition which is normally capitalized
+	errIPv6Mismatch := errors.New("The Service configured with IPv6 family but NginxProxy is configured with IPv4")
+	//nolint: staticcheck // used in status condition which is normally capitalized
+	errIPv4Mismatch := errors.New("The Service configured with IPv4 family but NginxProxy is configured with IPv6")
 
 	npIPFamily := npCfg.IPFamily
 
@@ -686,8 +687,9 @@ func validateRouteBackendRefAppProtocol(
 	appProtocol string,
 	backendTLSPolicy *BackendTLSPolicy,
 ) error {
+	//nolint: staticcheck // used in status condition which is normally capitalized
 	err := fmt.Errorf(
-		"route type %s does not support service port appProtocol %s",
+		"The Route type %s does not support service port appProtocol %s",
 		routeType,
 		appProtocol,
 	)
@@ -748,8 +750,8 @@ func getServicePort(svc *v1.Service, port int32) (v1.ServicePort, error) {
 			return p, nil
 		}
 	}
-
-	return v1.ServicePort{}, fmt.Errorf("no matching port for Service %s and port %d", svc.Name, port)
+	//nolint: staticcheck // used in status condition which is normally capitalized
+	return v1.ServicePort{}, fmt.Errorf("No matching port for Service %s and port %d", svc.Name, port)
 }
 
 func getRefGrantFromResourceForRoute(routeType RouteType, routeNs string) fromResource {
