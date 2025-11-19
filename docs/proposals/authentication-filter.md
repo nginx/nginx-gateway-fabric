@@ -113,13 +113,13 @@ type AuthenticationFilterSpec struct {
   Type AuthType `json:"type"`
 
   // Basic configures HTTP Basic Authentication.
-  // Required when Type == Basic
+  // Required when Type == Basic.
   //
   // +optional
   Basic *BasicAuth `json:"basic,omitempty"`
 
   // JWT configures JSON Web Token authentication (NGINX Plus).
-  // Required when Type == JWT
+  // Required when Type == JWT.
   //
   // +optional
   JWT *JWTAuth `json:"jwt,omitempty"`
@@ -142,8 +142,9 @@ type BasicAuth struct {
   // +optional
   SecretRef *SecretObjectReference `json:"secretRef,omitempty"`
 
-  // Realm used by NGINX `auth_basic`.
-  // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
+  // Realm used by NGINX `auth_basic` directive.
+  // https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html#auth_basic
+  // Also configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
   //
   // +optional
   Realm *string `json:"realm,omitempty"`
@@ -153,6 +154,15 @@ type BasicAuth struct {
   // +optional
   OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 }
+
+// JWTKeyMode selects where JWT keys come from.
+// +kubebuilder:validation:Enum=File;Remote
+type JWTKeyMode string
+
+const (
+  JWTKeyModeFile   JWTKeyMode = "File"
+  JWTKeyModeRemote JWTKeyMode = "Remote"
+)
 
 // JWTAuth configures JWT-based authentication (NGINX Plus).
 // +kubebuilder:validation:XValidation:message="mode 'File' requires file set and remote unset",rule="self.mode == 'File' ? self.file != null && self.remote == null : true"
@@ -247,15 +257,6 @@ type JWTAuth struct {
   // +optional
   Propagation *JWTPropagation `json:"propagation,omitempty"`
 }
-
-// JWTKeyMode selects where JWT keys come from.
-// +kubebuilder:validation:Enum=File;Remote
-type JWTKeyMode string
-
-const (
-  JWTKeyModeFile   JWTKeyMode = "File"
-  JWTKeyModeRemote JWTKeyMode = "Remote"
-)
 
 // JWTFileKeySource specifies local JWKS key configuration.
 type JWTFileKeySource struct {
@@ -374,6 +375,11 @@ type JWTTokenSource struct {
   TokenName string `json:"tokenName,omitempty"`
 }
 
+// HeaderValue defines a header name and a value (may reference NGINX variables).
+type HeaderValue struct {
+  Name      string `json:"name"`
+  ValueFrom string `json:"valueFrom"`
+}
 
 // JWTPropagation controls identity header propagation and header stripping.
 type JWTPropagation struct {
@@ -387,12 +393,6 @@ type JWTPropagation struct {
   //
   // +optional
   StripAuthorization *bool `json:"stripAuthorization,omitempty"`
-}
-
-// HeaderValue defines a header name and a value (may reference NGINX variables).
-type HeaderValue struct {
-  Name      string `json:"name"`
-  ValueFrom string `json:"valueFrom"`
 }
 
 // AuthScheme enumerates supported WWW-Authenticate schemes.
@@ -900,7 +900,7 @@ spec:
           valueFrom: "$jwt_claim_sub"
         - name: X-User-Email
           valueFrom: "$jwt_claim_email"
-      stripAuthorization: true # Optionally remove client Authorization header
+      stripAuthorization: true # Optionally remove client Authorization header before proxy_pass
 ```
 
 ### Caching configuration
