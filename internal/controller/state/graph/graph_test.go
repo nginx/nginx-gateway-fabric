@@ -196,6 +196,7 @@ func TestBuildGraph(t *testing.T) {
 	createValidRuleWithBackendRefsAndFilters := func(
 		matches []gatewayv1.HTTPRouteMatch,
 		routeType RouteType,
+		sessionPersistence *SessionPersistenceConfig,
 	) RouteRule {
 		rule := createValidRuleWithBackendRefs(matches)
 		rule.Filters = RouteRuleFilters{
@@ -211,6 +212,10 @@ func TestBuildGraph(t *testing.T) {
 				},
 			},
 			Valid: true,
+		}
+
+		if sessionPersistence != nil {
+			rule.SessionPersistence = sessionPersistence
 		}
 
 		return rule
@@ -333,14 +338,23 @@ func TestBuildGraph(t *testing.T) {
 		}
 	}
 
+	spConfig := &gatewayv1.SessionPersistence{
+		SessionName:     helpers.GetPointer("session-persistence-httproute"),
+		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("30m")),
+		CookieConfig: &gatewayv1.CookieConfig{
+			LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
+		},
+	}
 	hr1 := createRoute("hr-1", "gateway-1", "listener-80-1")
-	addFilterToPath(
+	addElementsToPath(
 		hr1,
 		"/",
 		gatewayv1.HTTPRouteFilter{
 			Type:         gatewayv1.HTTPRouteFilterExtensionRef,
 			ExtensionRef: refSnippetsFilterExtensionRef,
 		},
+		spConfig,
 	)
 
 	hr2 := createRoute("hr-2", "wrong-gateway", "listener-80-1")
@@ -379,6 +393,14 @@ func TestBuildGraph(t *testing.T) {
 						{
 							Type:         gatewayv1.GRPCRouteFilterExtensionRef,
 							ExtensionRef: refSnippetsFilterExtensionRef,
+						},
+					},
+					SessionPersistence: &gatewayv1.SessionPersistence{
+						SessionName:     helpers.GetPointer("session-persistence-grpcroute"),
+						Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("30m")),
+						CookieConfig: &gatewayv1.CookieConfig{
+							LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 						},
 					},
 				},
@@ -858,6 +880,13 @@ func TestBuildGraph(t *testing.T) {
 		}
 	}
 
+	expectedSP := &SessionPersistenceConfig{
+		Name:        "session-persistence-httproute",
+		SessionType: gatewayv1.CookieBasedSessionPersistence,
+		Expiry:      "30m",
+		Valid:       true,
+		Path:        "/",
+	}
 	routeHR1 := &L7Route{
 		RouteType:  RouteTypeHTTP,
 		Valid:      true,
@@ -885,7 +914,7 @@ func TestBuildGraph(t *testing.T) {
 		},
 		Spec: L7RouteSpec{
 			Hostnames: hr1.Spec.Hostnames,
-			Rules:     []RouteRule{createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeHTTP)},
+			Rules:     []RouteRule{createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeHTTP, expectedSP)},
 		},
 		Policies: []*Policy{processedRoutePolicy},
 		Conditions: []conditions.Condition{
@@ -1049,6 +1078,12 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
+	expectedSPgr := &SessionPersistenceConfig{
+		Name:        "session-persistence-grpcroute",
+		SessionType: gatewayv1.CookieBasedSessionPersistence,
+		Expiry:      "30m",
+		Valid:       true,
+	}
 	routeGR := &L7Route{
 		RouteType:  RouteTypeGRPC,
 		Valid:      true,
@@ -1077,7 +1112,7 @@ func TestBuildGraph(t *testing.T) {
 		Spec: L7RouteSpec{
 			Hostnames: gr.Spec.Hostnames,
 			Rules: []RouteRule{
-				createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeGRPC),
+				createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeGRPC, expectedSPgr),
 			},
 		},
 	}
@@ -1475,6 +1510,12 @@ func TestBuildGraph(t *testing.T) {
 
 			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
 
+			createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
+				v := &validationfakes.FakeHTTPFieldsValidator{}
+				v.ValidateDurationReturns("30m", nil)
+				return v
+			}
+
 			result := BuildGraph(
 				test.store,
 				controllerName,
@@ -1488,7 +1529,7 @@ func TestBuildGraph(t *testing.T) {
 					},
 				},
 				validation.Validators{
-					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
+					HTTPFieldsValidator: createAllValidValidator(),
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
 					PolicyValidator:     fakePolicyValidator,
 				},

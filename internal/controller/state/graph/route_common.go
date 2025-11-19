@@ -23,6 +23,7 @@ import (
 const (
 	wildcardHostname  = "~^"
 	inferenceAPIGroup = "inference.networking.k8s.io"
+	defaultNamespace  = "default"
 )
 
 // ParentRef describes a reference to a parent in a Route.
@@ -147,6 +148,8 @@ type L7RouteSpec struct {
 }
 
 type RouteRule struct {
+	// SessionPersistence holds the session persistence configuration for the route rule.
+	SessionPersistence *SessionPersistenceConfig
 	// Matches define the predicate used to match requests to a given action.
 	Matches []v1.HTTPRouteMatch
 	// RouteBackendRefs are a wrapper for v1.BackendRef and any BackendRef filters from the HTTPRoute or GRPCRoute.
@@ -173,6 +176,19 @@ type RouteBackendRef struct {
 
 	// IsInferencePool indicates if this backend is an InferencePool disguised as a Service.
 	IsInferencePool bool
+}
+
+type SessionPersistenceConfig struct {
+	// Name is the name of the session.
+	Name string
+	// Expiry determines the expiry time of the session.
+	Expiry string
+	// SessionType is the type of session persistence.
+	SessionType v1.SessionPersistenceType
+	// Path is the path for which the session persistence is allowed.
+	Path string
+	// Valid indicates if the session persistence configuration is valid.
+	Valid bool
 }
 
 // CreateRouteKey takes a client.Object and creates a RouteKey.
@@ -256,6 +272,7 @@ func buildRoutesForGateways(
 	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	featureFlags flags,
 ) map[RouteKey]*L7Route {
 	if len(gateways) == 0 {
 		return nil
@@ -264,7 +281,7 @@ func buildRoutesForGateways(
 	routes := make(map[RouteKey]*L7Route)
 
 	for _, route := range httpRoutes {
-		r := buildHTTPRoute(validator, route, gateways, snippetsFilters, inferencePools)
+		r := buildHTTPRoute(validator, route, gateways, snippetsFilters, inferencePools, featureFlags)
 		if r == nil {
 			continue
 		}
@@ -272,11 +289,11 @@ func buildRoutesForGateways(
 		routes[CreateRouteKey(route)] = r
 
 		// if this route has a RequestMirror filter, build a duplicate route for the mirror
-		buildHTTPMirrorRoutes(routes, r, route, gateways, snippetsFilters)
+		buildHTTPMirrorRoutes(routes, r, route, gateways, snippetsFilters, featureFlags)
 	}
 
 	for _, route := range grpcRoutes {
-		r := buildGRPCRoute(validator, route, gateways, snippetsFilters)
+		r := buildGRPCRoute(validator, route, gateways, snippetsFilters, featureFlags)
 		if r == nil {
 			continue
 		}
@@ -284,7 +301,7 @@ func buildRoutesForGateways(
 		routes[CreateRouteKey(route)] = r
 
 		// if this route has a RequestMirror filter, build a duplicate route for the mirror
-		buildGRPCMirrorRoutes(routes, r, route, gateways, snippetsFilters)
+		buildGRPCMirrorRoutes(routes, r, route, gateways, snippetsFilters, featureFlags)
 	}
 
 	return routes
@@ -1149,4 +1166,239 @@ func routeKeyForKind(kind v1.Kind, nsname types.NamespacedName) RouteKey {
 	}
 
 	return key
+}
+
+// processSessionPersistenceConfig processes the session persistence configuration.
+func processSessionPersistenceConfig[T any](
+	sp *v1.SessionPersistence,
+	routeMatches []T,
+	rulePath *field.Path,
+	validator validation.HTTPFieldsValidator,
+) (*SessionPersistenceConfig, routeRuleErrors) {
+	var spConfig SessionPersistenceConfig
+	expiry, errors := validateSessionPersistenceConfig(sp, rulePath, validator)
+
+	if len(errors.warn) > 0 {
+		errors.warn = append(errors.warn, field.Invalid(
+			rulePath,
+			rulePath.String(),
+			"session persistence is ignored because there are errors in the configuration",
+		))
+		spConfig.Valid = false
+		return &spConfig, errors
+	}
+
+	var cookieLifetimeType v1.CookieLifetimeType
+	if sp.CookieConfig != nil && sp.CookieConfig.LifetimeType != nil {
+		cookieLifetimeType = *sp.CookieConfig.LifetimeType
+	}
+
+	if sp.AbsoluteTimeout != nil {
+		if cookieLifetimeType == v1.SessionCookieLifetimeType {
+			expiry = ""
+		}
+	}
+
+	var path string
+	switch rm := any(routeMatches).(type) {
+	case []v1.HTTPRouteMatch:
+		path = deriveCookiePathForHTTPMatches(rm)
+	case []v1.GRPCRouteMatch:
+		path = ""
+	default:
+		panic("unsupported route match type")
+	}
+
+	spConfig = SessionPersistenceConfig{
+		Valid:       true,
+		Name:        *sp.SessionName,
+		SessionType: *sp.Type,
+		Path:        path,
+		Expiry:      expiry,
+	}
+
+	return &spConfig, errors
+}
+
+// validateSessionPersistenceConfig validates the session persistence configuration.
+// Returns warnings for any invalid session persistence configuration.
+// but that does not make the route associated with it invalid.
+func validateSessionPersistenceConfig(
+	sp *v1.SessionPersistence,
+	path *field.Path,
+	validator validation.HTTPFieldsValidator,
+) (string, routeRuleErrors) {
+	if sp == nil {
+		return "", routeRuleErrors{}
+	}
+
+	var errors routeRuleErrors
+	if sp.SessionName == nil {
+		errors.warn = append(errors.warn, field.Required(path.Child("sessionName"), "sessionName cannot be empty"))
+	}
+
+	if sp.Type != nil && *sp.Type != v1.CookieBasedSessionPersistence {
+		errors.warn = append(errors.warn, field.NotSupported(
+			path.Child("type"),
+			sp.Type,
+			[]string{string(v1.CookieBasedSessionPersistence)},
+		))
+	}
+
+	if sp.IdleTimeout != nil {
+		errors.warn = append(errors.warn, field.Forbidden(
+			path.Child("idleTimeout"),
+			"IdleTimeout",
+		))
+	}
+
+	var timeout string
+	if sp.AbsoluteTimeout != nil {
+		if absoluteTimeout, err := validator.ValidateDuration(string(*sp.AbsoluteTimeout)); err != nil {
+			errors.warn = append(errors.warn, field.Invalid(
+				path.Child("absoluteTimeout"),
+				sp.AbsoluteTimeout,
+				err.Error(),
+			))
+		} else {
+			timeout = absoluteTimeout
+		}
+	}
+
+	return timeout, errors
+}
+
+func deriveCookiePathForHTTPMatches(matches []v1.HTTPRouteMatch) string {
+	paths := make([]string, 0, len(matches))
+	for _, match := range matches {
+		path := getCookiePath(match)
+		paths = append(paths, path)
+	}
+
+	return longestCommonPathPrefix(paths)
+}
+
+// longestCommonPathPrefix returns the longest common path prefix of the given
+// paths.
+// Examples:
+//
+//	["/foo/bar", "/foo/baz"]    -> "/foo"
+//	["/foo/bar", "/foo/bar/b"]  -> "/foo/bar"
+//	["/foo", "/bar"]            -> ""
+//	[]                          -> ""
+func longestCommonPathPrefix(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	if len(paths) == 1 {
+		return paths[0]
+	}
+
+	commonSegs := strings.Split(paths[0], "/")
+	for _, p := range paths[1:] {
+		segs := strings.Split(p, "/")
+		i := 0
+		limit := len(commonSegs)
+		if len(segs) < limit {
+			limit = len(segs)
+		}
+		for i < limit && commonSegs[i] == segs[i] {
+			i++
+		}
+		// truncate commonSegs to the common prefix
+		commonSegs = commonSegs[:i]
+		if len(commonSegs) == 0 {
+			return ""
+		}
+	}
+
+	return strings.Join(commonSegs, "/")
+}
+
+func getCookiePath(match v1.HTTPRouteMatch) string {
+	pathType := *match.Path.Type
+
+	switch pathType {
+	case v1.PathMatchExact, v1.PathMatchPathPrefix:
+		return *match.Path.Value
+	default:
+		return ""
+	}
+}
+
+// handleSessionPersistenceConflicts enforces:
+// 1. For each backend (ns/name:port), all rules that configure SessionPersistence
+// for that backend must have the same SessionPersistenceConfig.
+// 2. If multiple rules configure different session persistence configs for the same backend, it
+// is cleared on all those rules for that backend and a warning is emitted.
+func handleSessionPersistenceConflicts(rules []RouteRule) error {
+	if len(rules) == 0 {
+		return nil
+	}
+
+	backendToRuleIdxs := make(map[string][]int)
+	spPerBackendRef := make(map[string]*SessionPersistenceConfig)
+
+	for ri, rule := range rules {
+		sp := rule.SessionPersistence
+		if sp == nil {
+			continue
+		}
+
+		for _, rbr := range rule.RouteBackendRefs {
+			key := createBackendRefKey(rbr.BackendRef)
+			backendToRuleIdxs[key] = append(backendToRuleIdxs[key], ri)
+
+			if existing, ok := spPerBackendRef[key]; !ok {
+				spPerBackendRef[key] = sp
+			} else if !equalSessionPersistenceConfig(existing, sp) {
+				spPerBackendRef[key] = nil
+			}
+		}
+	}
+
+	hadConflict := false
+	conflictingBackends := make([]string, 0)
+	for backendKey, sp := range spPerBackendRef {
+		if sp != nil {
+			continue
+		}
+
+		hadConflict = true
+		conflictingBackends = append(conflictingBackends, backendKey)
+		for _, ri := range backendToRuleIdxs[backendKey] {
+			rules[ri].SessionPersistence = nil
+		}
+	}
+
+	if !hadConflict {
+		return nil
+	}
+
+	return fmt.Errorf("for backendRefs %s due to conflicting configuration across multiple rules",
+		strings.Join(conflictingBackends, ", "),
+	)
+}
+
+func equalSessionPersistenceConfig(a, b *SessionPersistenceConfig) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Name == b.Name &&
+		a.SessionType == b.SessionType &&
+		a.Expiry == b.Expiry &&
+		a.Path == b.Path
+}
+
+func createBackendRefKey(backendRef v1.BackendRef) string {
+	var port int32
+	if backendRef.Port != nil {
+		port = *backendRef.Port
+	}
+
+	ns := defaultNamespace
+	if backendRef.Namespace != nil {
+		ns = string(*backendRef.Namespace)
+	}
+	return fmt.Sprintf("%s/%s:%d", ns, backendRef.Name, port)
 }

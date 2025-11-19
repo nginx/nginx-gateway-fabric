@@ -146,6 +146,7 @@ func (g GeneratorImpl) createUpstream(
 	processor upstreamsettings.Processor,
 ) http.Upstream {
 	var stateFile string
+	var sp http.UpstreamSessionPersistence
 	upstreamPolicySettings := processor.Process(up.Policies)
 
 	zoneSize := ossZoneSize
@@ -156,6 +157,8 @@ func (g GeneratorImpl) createUpstream(
 		if !upstreamHasResolveServers(up) {
 			stateFile = fmt.Sprintf("%s/%s.conf", stateDir, up.Name)
 		}
+
+		sp = getSessionPersistenceConfiguration(up.SessionPersistence)
 	}
 
 	if upstreamPolicySettings.ZoneSize != "" {
@@ -199,6 +202,7 @@ func (g GeneratorImpl) createUpstream(
 		Servers:             upstreamServers,
 		KeepAlive:           upstreamPolicySettings.KeepAlive,
 		LoadBalancingMethod: chosenLBMethod,
+		SessionPersistence:  sp,
 	}
 }
 
@@ -222,4 +226,18 @@ func upstreamHasResolveServers(upstream dataplane.Upstream) bool {
 		}
 	}
 	return false
+}
+
+// getSessionPersistenceConfiguration gets the session persistence configuration for an upstream.
+// Supported only for NGINX Plus and cookie-based type.
+func getSessionPersistenceConfiguration(sp dataplane.SessionPersistenceConfig) http.UpstreamSessionPersistence {
+	if sp.Name == "" {
+		return http.UpstreamSessionPersistence{}
+	}
+	return http.UpstreamSessionPersistence{
+		Name:        sp.Name,
+		Expiry:      sp.Expiry,
+		Path:        sp.Path,
+		SessionType: string(sp.SessionType),
+	}
 }

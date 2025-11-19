@@ -92,6 +92,14 @@ type NginxReloadResult struct {
 // ProtectedPorts are the ports that may not be configured by a listener with a descriptive name of each port.
 type ProtectedPorts map[int32]string
 
+// flags hold the configuration flags for building the Graph.
+type flags struct {
+	// plus indicates whether NGINX Plus features are enabled.
+	plus bool
+	// experimental indicates whether experimental features are enabled.
+	experimental bool
+}
+
 // IsReferenced returns true if the Graph references the resource.
 func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.NamespacedName) bool {
 	switch obj := resourceType.(type) {
@@ -254,6 +262,8 @@ func BuildGraph(
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 
+	// secrets map only gets populated if plus is enabled
+	plusEnabled := len(plusSecrets) > 0
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
 		state.HTTPRoutes,
@@ -261,6 +271,7 @@ func BuildGraph(
 		gws,
 		processedSnippetsFilters,
 		state.InferencePools,
+		flags{plus: plusEnabled, experimental: experimentalEnabled},
 	)
 
 	referencedInferencePools := buildReferencedInferencePools(routes, gws, state.InferencePools, state.Services)

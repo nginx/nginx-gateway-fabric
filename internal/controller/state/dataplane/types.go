@@ -112,6 +112,8 @@ type Layer4VirtualServer struct {
 
 // Upstream is a pool of endpoints to be load balanced.
 type Upstream struct {
+	// SessionPersistence holds the session persistence configuration for the upstream.
+	SessionPersistence SessionPersistenceConfig
 	// Name is the name of the Upstream. Will be unique for each service/port combination.
 	Name string
 	// ErrorMsg contains the error message if the Upstream is invalid.
@@ -121,6 +123,25 @@ type Upstream struct {
 	// Policies holds all the valid policies that apply to the Upstream.
 	Policies []policies.Policy
 }
+
+// SessionPersistenceConfig holds the session persistence configuration for an upstream.
+type SessionPersistenceConfig struct {
+	// SessionType is the type of session persistence.
+	SessionType SessionPersistenceType
+	// Name is the name of the session.
+	Name string
+	// Expiry is the expiration time of the session.
+	Expiry string
+	// Path is the path of the for which session is applied.
+	Path string
+}
+
+type SessionPersistenceType string
+
+const (
+	// SessionPersistenceCookie indicates cookie-based session persistence.
+	SessionPersistenceCookie SessionPersistenceType = "cookie"
+)
 
 // SSL is the SSL configuration for a server.
 type SSL struct {

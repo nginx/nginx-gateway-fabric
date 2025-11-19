@@ -13,6 +13,7 @@ type HTTPValidator struct {
 	HTTPURLRewriteValidator
 	HTTPHeaderValidator
 	HTTPPathValidator
+	HTTPDurationValidator
 }
 
 func (HTTPValidator) SkipValidation() bool { return false }
