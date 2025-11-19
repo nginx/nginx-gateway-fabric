@@ -105,7 +105,7 @@ func TestExecuteUpstreams(t *testing.T) {
 		"zone up5-usp 2m;":       1,
 		"ip_hash;":               1,
 
-		"random two least_conn;": 3,
+		"random two least_conn;": 4,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
@@ -233,6 +233,7 @@ func TestCreateUpstreams(t *testing.T) {
 					Address: types.Nginx503Server,
 				},
 			},
+			LoadBalancingMethod: defaultLBMethod,
 		},
 		{
 			Name:     "up4-ipv6",
@@ -296,6 +297,7 @@ func TestCreateUpstream(t *testing.T) {
 						Address: types.Nginx503Server,
 					},
 				},
+				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "nil endpoints",
 		},
@@ -312,6 +314,7 @@ func TestCreateUpstream(t *testing.T) {
 						Address: types.Nginx503Server,
 					},
 				},
+				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "no endpoints",
 		},
@@ -705,6 +708,7 @@ func TestCreateUpstreamPlus(t *testing.T) {
 						Address: types.Nginx503Server,
 					},
 				},
+				LoadBalancingMethod: defaultLBMethod,
 			},
 		},
 	}
@@ -1194,6 +1198,209 @@ func TestKeepAliveChecker(t *testing.T) {
 
 			for index, upstream := range test.upstreams {
 				g.Expect(keepAliveCheck(upstream.Name)).To(Equal(test.expKeepAliveEnabled[index]))
+			}
+		})
+	}
+}
+
+func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		expectedSubStrings map[string]int
+		name               string
+		lbType             ngfAPI.LoadBalancingType
+		hashkey            ngfAPI.HashMethodKey
+	}{
+		{
+			name: "default load balancing method",
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4":  1,
+				"upstream up2-usp-ipv6":  1,
+				"random two least_conn;": 2,
+			},
+		},
+		{
+			name: "round_robin load balancing method",
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4": 1,
+				"upstream up2-usp-ipv6": 1,
+			},
+		},
+		{
+			name:   "least_conn load balancing method",
+			lbType: ngfAPI.LoadBalancingTypeLeastConnection,
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4": 1,
+				"upstream up2-usp-ipv6": 1,
+				"least_conn;":           2,
+			},
+		},
+		{
+			name:   "ip_hash load balancing method",
+			lbType: ngfAPI.LoadBalancingTypeIPHash,
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4": 1,
+				"upstream up2-usp-ipv6": 1,
+				"ip_hash;":              2,
+			},
+		},
+		{
+			name:    "hash load balancing method with specific hash key",
+			lbType:  ngfAPI.LoadBalancingTypeHash,
+			hashkey: ngfAPI.HashMethodKey("$request_uri"),
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4": 1,
+				"upstream up2-usp-ipv6": 1,
+				"hash $request_uri;":    2,
+			},
+		},
+		{
+			name:    "hash consistent load balancing method with specific hash key",
+			lbType:  ngfAPI.LoadBalancingTypeHashConsistent,
+			hashkey: ngfAPI.HashMethodKey("$remote_addr"),
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4":         1,
+				"upstream up2-usp-ipv6":         1,
+				"hash $remote_addr consistent;": 2,
+			},
+		},
+		{
+			name:   "random load balancing method",
+			lbType: ngfAPI.LoadBalancingTypeRandom,
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4": 1,
+				"upstream up2-usp-ipv6": 1,
+				"random;":               2,
+			},
+		},
+		{
+			name:   "random two load balancing method",
+			lbType: ngfAPI.LoadBalancingTypeRandomTwo,
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4": 1,
+				"upstream up2-usp-ipv6": 1,
+				"random two;":           2,
+			},
+		},
+		{
+			name:   "random two least_time=header load balancing method",
+			lbType: ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader,
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4":         1,
+				"upstream up2-usp-ipv6":         1,
+				"random two least_time=header;": 2,
+			},
+		},
+		{
+			name:   "random two least_time=last_byte load balancing method",
+			lbType: ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte,
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4":            1,
+				"upstream up2-usp-ipv6":            1,
+				"random two least_time=last_byte;": 2,
+			},
+		},
+		{
+			name:   "least_time header load balancing method",
+			lbType: ngfAPI.LoadBalancingTypeLeastTimeHeader,
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4": 1,
+				"upstream up2-usp-ipv6": 1,
+				"least_time header;":    2,
+			},
+		},
+		{
+			name:   "least_time last_byte load balancing method",
+			lbType: ngfAPI.LoadBalancingTypeLeastTimeLastByte,
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4": 1,
+				"upstream up2-usp-ipv6": 1,
+				"least_time last_byte;": 2,
+			},
+		},
+		{
+			name:   "least_time header inflight load balancing method",
+			lbType: ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight,
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4":       1,
+				"upstream up2-usp-ipv6":       1,
+				"least_time header inflight;": 2,
+			},
+		},
+		{
+			name:   "least_time last_byte inflight load balancing method",
+			lbType: ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight,
+			expectedSubStrings: map[string]int{
+				"upstream up1-usp-ipv4":          1,
+				"upstream up2-usp-ipv6":          1,
+				"least_time last_byte inflight;": 2,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			gen := GeneratorImpl{}
+			stateUpstreams := []dataplane.Upstream{
+				{
+					Name: "up1-usp-ipv4",
+					Endpoints: []resolver.Endpoint{
+						{
+							Address: "12.0.0.0",
+							Port:    80,
+						},
+					},
+					Policies: []policies.Policy{
+						&ngfAPI.UpstreamSettingsPolicy{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "usp-ipv4",
+								Namespace: "test",
+							},
+							Spec: ngfAPI.UpstreamSettingsPolicySpec{
+								LoadBalancingMethod: helpers.GetPointer(tt.lbType),
+								HashKey:             helpers.GetPointer(tt.hashkey),
+							},
+						},
+					},
+				},
+				{
+					Name: "up2-usp-ipv6",
+					Endpoints: []resolver.Endpoint{
+						{
+							Address: "2001:db8::1",
+							Port:    80,
+						},
+					},
+					Policies: []policies.Policy{
+						&ngfAPI.UpstreamSettingsPolicy{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "usp-ipv6",
+								Namespace: "test",
+							},
+							Spec: ngfAPI.UpstreamSettingsPolicySpec{
+								LoadBalancingMethod: helpers.GetPointer(tt.lbType),
+								HashKey:             helpers.GetPointer(tt.hashkey),
+							},
+						},
+					},
+				},
+			}
+
+			upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
+			upstreamResults := executeUpstreams(upstreams)
+
+			g.Expect(upstreamResults).To(HaveLen(1))
+			nginxUpstreams := string(upstreamResults[0].data)
+
+			for expSubString, expectedCount := range tt.expectedSubStrings {
+				actualCount := strings.Count(nginxUpstreams, expSubString)
+				g.Expect(actualCount).To(
+					Equal(expectedCount),
+					fmt.Sprintf("substring %q expected %d occurrence(s), got %d", expSubString, expectedCount, actualCount),
+				)
 			}
 		})
 	}

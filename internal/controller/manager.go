@@ -131,6 +131,11 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
+	flags := graph.Flags{
+		Plus:         cfg.Plus,
+		Experimental: cfg.ExperimentalFeatures,
+	}
+
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 		GatewayCtlrName:  cfg.GatewayCtlrName,
 		GatewayClassName: cfg.GatewayClassName,
@@ -140,10 +145,10 @@ func StartManager(cfg config.Config) error {
 			GenericValidator:    genericValidator,
 			PolicyValidator:     policyManager,
 		},
-		EventRecorder:        recorder,
-		MustExtractGVK:       mustExtractGVK,
-		PlusSecrets:          plusSecrets,
-		ExperimentalFeatures: cfg.ExperimentalFeatures,
+		EventRecorder:  recorder,
+		MustExtractGVK: mustExtractGVK,
+		PlusSecrets:    plusSecrets,
+		Flags:          flags,
 	})
 
 	var handlerCollector handlerMetricsCollector = collectors.NewControllerNoopCollector()

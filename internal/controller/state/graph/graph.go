@@ -92,6 +92,14 @@ type NginxReloadResult struct {
 // ProtectedPorts are the ports that may not be configured by a listener with a descriptive name of each port.
 type ProtectedPorts map[int32]string
 
+// Flags hold the configuration flags for building the Graph.
+type Flags struct {
+	// Plus indicates whether NGINX Plus features are enabled.
+	Plus bool
+	// Experimental indicates whether experimental features are enabled.
+	Experimental bool
+}
+
 // IsReferenced returns true if the Graph references the resource.
 func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.NamespacedName) bool {
 	switch obj := resourceType.(type) {
@@ -208,7 +216,7 @@ func BuildGraph(
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	validators validation.Validators,
 	logger logr.Logger,
-	experimentalEnabled bool,
+	flags Flags,
 ) *Graph {
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
@@ -228,7 +236,7 @@ func BuildGraph(
 		processedGwClasses.Winner,
 		processedNginxProxies,
 		state.CRDMetadata,
-		experimentalEnabled,
+		flags.Experimental,
 	)
 
 	secretResolver := newSecretResolver(state.Secrets)
@@ -242,7 +250,7 @@ func BuildGraph(
 		gc,
 		refGrantResolver,
 		processedNginxProxies,
-		experimentalEnabled,
+		flags.Experimental,
 	)
 
 	processedBackendTLSPolicies := processBackendTLSPolicies(
@@ -319,7 +327,7 @@ func BuildGraph(
 		PlusSecrets:                plusSecrets,
 	}
 
-	g.attachPolicies(validators.PolicyValidator, controllerName, logger)
+	g.attachPolicies(validators.PolicyValidator, controllerName, logger, flags.Plus)
 
 	return g
 }

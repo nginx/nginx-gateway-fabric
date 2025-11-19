@@ -49,6 +49,7 @@ type GenericValidator interface {
 	ValidateNginxDuration(duration string) error
 	ValidateNginxSize(size string) error
 	ValidateEndpoint(endpoint string) error
+	ValidateNginxVariableName(name string) error
 }
 
 // PolicyValidator validates an NGF Policy.
@@ -61,6 +62,8 @@ type PolicyValidator interface {
 	ValidateGlobalSettings(policy policies.Policy, globalSettings *policies.GlobalSettings) []conditions.Condition
 	// Conflicts returns true if the two Policies conflict.
 	Conflicts(a, b policies.Policy) bool
+	// ValidateLoadBalancingMethod validates the load balancing method for upstream servers.
+	ValidateLoadBalancingMethod(policy policies.Policy, plusEnabled bool) []conditions.Condition
 }
 
 // SkipValidator is used to skip validation on internally-created routes for request mirroring.

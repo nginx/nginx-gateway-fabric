@@ -21,6 +21,8 @@ type Validator interface {
 	ValidateGlobalSettings(policy Policy, globalSettings *GlobalSettings) []conditions.Condition
 	// Conflicts returns true if the two Policies conflict.
 	Conflicts(a, b Policy) bool
+	// ValidateLoadBalancingMethod validates the load balancing method for upstream servers.
+	ValidateLoadBalancingMethod(policy Policy, plusEnabled bool) []conditions.Condition
 }
 
 // CompositeValidator manages the validators for NGF Policies.
@@ -92,4 +94,15 @@ func (m *CompositeValidator) Conflicts(polA, polB Policy) bool {
 	}
 
 	return validator.Conflicts(polA, polB)
+}
+
+func (m *CompositeValidator) ValidateLoadBalancingMethod(policy Policy, plusEnabled bool) []conditions.Condition {
+	gvk := m.mustExtractGVK(policy)
+
+	validator, ok := m.validators[gvk]
+	if !ok {
+		panic(fmt.Sprintf("no validator registered for policy %T", policy))
+	}
+
+	return validator.ValidateLoadBalancingMethod(policy, plusEnabled)
 }

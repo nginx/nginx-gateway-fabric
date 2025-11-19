@@ -106,3 +106,24 @@ func (GenericValidator) ValidateEndpoint(endpoint string) error {
 
 	return nil
 }
+
+const (
+	variableNameFmt    = `\$[a-z_]+`
+	variableNameErrMsg = "must start with '$' followed by lowercase letters and underscores only"
+)
+
+var variableNameRegexp = regexp.MustCompile("^" + variableNameFmt + "$")
+
+// ValidateNginxVariableName validates an nginx variable name.
+func (GenericValidator) ValidateNginxVariableName(name string) error {
+	if !variableNameRegexp.MatchString(name) {
+		examples := []string{
+			"$upstream_addr",
+			"$remote_addr",
+		}
+
+		return errors.New(k8svalidation.RegexError(variableNameFmt, variableNameErrMsg, examples...))
+	}
+
+	return nil
+}

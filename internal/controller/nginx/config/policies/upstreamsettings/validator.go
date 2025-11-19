@@ -1,10 +1,14 @@
 package upstreamsettings
 
 import (
+	"fmt"
+	"strings"
+
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	httpConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
@@ -83,11 +87,23 @@ func conflicts(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
 		}
 	}
 
-	if a.LoadBalancingMethod != nil && b.LoadBalancingMethod != nil {
+	if !checkConflictForLoadBalancingFields(a, b) {
 		return true
 	}
 
 	return false
+}
+
+func checkConflictForLoadBalancingFields(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
+	if a.LoadBalancingMethod != nil && b.LoadBalancingMethod != nil {
+		return *a.LoadBalancingMethod == *b.LoadBalancingMethod
+	}
+
+	if a.HashKey != nil && b.HashKey != nil {
+		return *a.HashKey == *b.HashKey
+	}
+
+	return true
 }
 
 // validateSettings performs validation on fields in the spec that are vulnerable to code injection.
@@ -133,4 +149,57 @@ func (v Validator) validateUpstreamKeepAlive(
 	}
 
 	return allErrs
+}
+
+// ValidateLoadBalancingMethod validates the load balancing method for upstream servers.
+func (v Validator) ValidateLoadBalancingMethod(
+	policy policies.Policy,
+	plusEnabled bool,
+) []conditions.Condition {
+	var allErrs field.ErrorList
+	fieldPath := field.NewPath("spec")
+	usp := helpers.MustCastObject[*ngfAPI.UpstreamSettingsPolicy](policy)
+
+	if usp.Spec.LoadBalancingMethod == nil {
+		return nil
+	}
+
+	lbMethod := *usp.Spec.LoadBalancingMethod
+	if !plusEnabled {
+		if _, ok := httpConfig.OSSAllowedLBMethods[lbMethod]; !ok {
+			allErrs = append(allErrs, field.Invalid(
+				fieldPath.Child("loadBalancingMethod"),
+				lbMethod,
+				fmt.Sprintf(
+					"NGINX OSS only supports the following load balancing methods: %s",
+					getLoadBalancingMethodList(httpConfig.OSSAllowedLBMethods),
+				),
+			))
+		}
+	} else {
+		if _, ok := httpConfig.PlusAllowedLBMethods[lbMethod]; !ok {
+			allErrs = append(allErrs, field.Invalid(
+				fieldPath.Child("loadBalancingMethod"),
+				lbMethod,
+				fmt.Sprintf(
+					"NGINX Plus only supports the following load balancing methods: %s",
+					getLoadBalancingMethodList(httpConfig.PlusAllowedLBMethods),
+				),
+			))
+		}
+	}
+
+	if len(allErrs) > 0 {
+		return []conditions.Condition{conditions.NewPolicyInvalid(allErrs.ToAggregate().Error())}
+	}
+
+	return nil
+}
+
+func getLoadBalancingMethodList(lbMethods map[ngfAPI.LoadBalancingType]struct{}) string {
+	var methods []string
+	for method := range lbMethods {
+		methods = append(methods, string(method))
+	}
+	return strings.Join(methods, ", ")
 }
