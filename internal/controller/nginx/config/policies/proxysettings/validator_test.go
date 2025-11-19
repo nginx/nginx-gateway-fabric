@@ -310,3 +310,77 @@ func TestValidator_ConflictsPanics(t *testing.T) {
 
 	g.Expect(conflicts).To(Panic())
 }
+
+func TestParseNginxSize(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name          string
+		input         string
+		expectedBytes int64
+		expectError   bool
+	}{
+		{
+			name:          "bytes without unit",
+			input:         "1024",
+			expectedBytes: 1024,
+			expectError:   false,
+		},
+		{
+			name:          "kilobytes",
+			input:         "8k",
+			expectedBytes: 8 * 1024,
+			expectError:   false,
+		},
+		{
+			name:          "megabytes",
+			input:         "16m",
+			expectedBytes: 16 * 1024 * 1024,
+			expectError:   false,
+		},
+		{
+			name:          "gigabytes",
+			input:         "2g",
+			expectedBytes: 2 * 1024 * 1024 * 1024,
+			expectError:   false,
+		},
+		{
+			name:          "single digit",
+			input:         "4",
+			expectedBytes: 4,
+			expectError:   false,
+		},
+		{
+			name:          "four digits maximum",
+			input:         "9999",
+			expectedBytes: 9999,
+			expectError:   false,
+		},
+		{
+			name:          "four digits with unit",
+			input:         "1024k",
+			expectedBytes: 1024 * 1024,
+			expectError:   false,
+		},
+		{
+			name:        "invalid input - non-numeric",
+			input:       "abc",
+			expectError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result, err := proxysettings.ParseNginxSize(test.input)
+
+			if test.expectError {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(result).To(Equal(test.expectedBytes))
+			}
+		})
+	}
+}

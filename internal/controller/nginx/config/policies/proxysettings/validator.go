@@ -130,14 +130,14 @@ func validateBusyBufferSizeRelationships(buffering ngfAPI.ProxyBuffering, fieldP
 		return nil
 	}
 
-	busyBuffersSize, err := parseNginxSize(string(*buffering.BusyBuffersSize))
+	busyBuffersSize, err := ParseNginxSize(string(*buffering.BusyBuffersSize))
 	if err != nil {
 		return nil // Skip validation if size is invalid (will be caught by other validation)
 	}
 
 	// Validate: busyBuffersSize > bufferSize
 	if buffering.BufferSize != nil {
-		bufferSize, err := parseNginxSize(string(*buffering.BufferSize))
+		bufferSize, err := ParseNginxSize(string(*buffering.BufferSize))
 		if err == nil && busyBuffersSize <= bufferSize {
 			path := fieldPath.Child("busyBuffersSize")
 			allErrs = append(allErrs, field.Invalid(
@@ -150,7 +150,7 @@ func validateBusyBufferSizeRelationships(buffering ngfAPI.ProxyBuffering, fieldP
 
 	// Validate: busyBuffersSize < (buffers.number * buffers.size) - buffers.size
 	if buffering.Buffers != nil {
-		buffersSize, err := parseNginxSize(string(buffering.Buffers.Size))
+		buffersSize, err := ParseNginxSize(string(buffering.Buffers.Size))
 		if err == nil {
 			totalBufferSpace := buffersSize * int64(buffering.Buffers.Number)
 			maxBusyBuffersSize := totalBufferSpace - buffersSize
@@ -168,9 +168,9 @@ func validateBusyBufferSizeRelationships(buffering ngfAPI.ProxyBuffering, fieldP
 	return allErrs
 }
 
-// parseNginxSize parses an NGINX size string (e.g., "8k", "16m", "1024") and returns the size in bytes.
+// ParseNginxSize parses an NGINX size string (e.g., "8k", "16m", "1024") and returns the size in bytes.
 // Returns an error if the size string is invalid.
-func parseNginxSize(size string) (int64, error) {
+func ParseNginxSize(size string) (int64, error) {
 	size = strings.TrimSpace(strings.ToLower(size))
 	if size == "" {
 		return 0, strconv.ErrSyntax
