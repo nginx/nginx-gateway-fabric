@@ -138,7 +138,7 @@ type BasicAuth struct {
   // When namespace is set and differs from the filter's namespace, a ReferenceGrant in the target namespace is required.
   //
   // +optional
-  SecretRef *NamespacedSecretKeyReference `json:"secretRef,omitempty"`
+  SecretRef *SecretObjectReference `json:"secretRef,omitempty"`
 
   // Realm used by NGINX `auth_basic`.
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
@@ -166,9 +166,6 @@ type JWTAuth struct {
   Realm *string `json:"realm,omitempty"`
 
   // Mode selects how JWT keys are provided: local file or remote JWKS.
-  // Default: File.
-  //
-  // +kubebuilder:default=File"
   Mode JWTKeyMode `json:"mode,omitempty"`
 
   // File specifies local JWKS configuration (Secret or ConfigMap, mount path, file name).
@@ -261,7 +258,7 @@ type JWTFileKeySource struct {
   // Exactly one of ConfigMapRef or SecretRef must be set.
   //
   // +optional
-  SecretRef *NamespacedSecretKeyReference `json:"secretRef,omitempty"`
+  SecretRef *SecretObjectReference `json:"secretRef,omitempty"`
 
   // KeyCache is the cache duration for keys.
   // Configures `auth_jwt_key_cache` directive
@@ -611,8 +608,8 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    # Key verification mode: Local file or Remote JWKs
-    mode: File # Defaults to File.
+    # Key verification mode. Local file or Remote JWKs
+    mode: File
     file:
       secretRef:
         name: jwt-keys-secure
@@ -639,7 +636,7 @@ spec:
   jwt:
     realm: "Restricted"
     # Key verification mode: Local file or Remote JWKs
-    mode: Remote # Defaults to File.
+    mode: Remote
     remote:
       url: https://issuer.example.com/.well-known/jwks.json
     # Acceptable clock skew for exp/nbf
