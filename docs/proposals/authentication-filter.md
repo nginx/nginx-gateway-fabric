@@ -574,9 +574,6 @@ http {
         # Internal location for custom 401 response
         location @basic_auth_failure {
             add_header WWW-Authenticate 'Basic realm="Restricted"' always;
-            add_header Content-Type "text/plain; charset=utf-8" always;
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header Cache-Control "no-store" always;
             return 401 'Unauthorized';
         }
     }
@@ -754,9 +751,6 @@ http {
         # Internal location for custom 401 response
         location @jwt_auth_failure {
             add_header WWW-Authenticate 'Bearer realm="Restricted", error="insufficient_scope"' always;
-            add_header Content-Type "text/plain; charset=utf-8" always;
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header Cache-Control "no-store" always;
             return 403 'Forbidden';
         }
     }
@@ -846,9 +840,6 @@ http {
         # Internal location for custom 401 response
         location @jwt_auth_failure {
             add_header WWW-Authenticate 'Bearer realm="Restricted", error="invalid_token"' always;
-            add_header Content-Type "text/plain; charset=utf-8" always;
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header Cache-Control "no-store" always;
             return 401 'Unauthorized';
         }
     }
@@ -1061,10 +1052,10 @@ Users should be advised to regularly rotate their JWKS keys in cases where they 
 
 401 and 403 should be the only allowable auth failure codes.
 
-### Auth failure default headers
+### Optional headers
 
-Below are a list of default defensive headers for authentication failure reponses.
-We may choose to include these headers by default for improved robustness in auth failure responses.
+Below are a list of optional defensive headers that user's may choose to include.
+In certain scenarios, these headers may be deployed to improve overall security from client reponses.
 
 ```nginx
 add_header Content-Type "text/plain; charset=utf-8" always;
