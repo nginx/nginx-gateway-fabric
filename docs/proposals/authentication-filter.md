@@ -82,13 +82,13 @@ type AuthenticationFilter struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Spec defines the desired state of the AuthenticationFilter.
+  // Spec defines the desired state of the AuthenticationFilter.
 	Spec AuthenticationFilterSpec `json:"spec"`
 
-	// Status defines the state of the AuthenticationFilter, following the same
-	// pattern as SnippetsFilter: per-controller conditions with an Accepted condition.
-	//
-	// +optional
+  // Status defines the state of the AuthenticationFilter, following the same
+  // pattern as SnippetsFilter: per-controller conditions with an Accepted condition.
+  //
+  // +optional
 	Status AuthenticationFilterStatus `json:"status,omitempty"`
 }
 
@@ -109,17 +109,17 @@ type AuthenticationFilterList struct {
 // +kubebuilder:validation:XValidation:message="when spec.basic is set, type must be 'Basic'",rule="self.basic != null ? self.type == 'Basic' : true"
 // +kubebuilder:validation:XValidation:message="when spec.jwt is set, type must be 'JWT'",rule="self.jwt != null ? self.type == 'JWT' : true"
 type AuthenticationFilterSpec struct {
-	// Type selects the authentication mechanism.
+  // Type selects the authentication mechanism.
 	Type AuthType `json:"type"`
 
-	// Basic configures HTTP Basic Authentication.
-	//
-	// +optional
+  // Basic configures HTTP Basic Authentication.
+  //
+  // +optional
 	Basic *BasicAuth `json:"basic,omitempty"`
 
-	// JWT configures JSON Web Token authentication (NGINX Plus).
-	//
-	// +optional
+  // JWT configures JSON Web Token authentication (NGINX Plus).
+  //
+  // +optional
 	JWT *JWTAuth `json:"jwt,omitempty"`
 }
 
@@ -134,21 +134,21 @@ const (
 
 // BasicAuth configures HTTP Basic Authentication.
 type BasicAuth struct {
-	// SecretRef allows referencing a Secret in the same or different namespace.
-	// When namespace is set and differs from the filter's namespace, a ReferenceGrant in the target namespace is required.
-	//
-	// +optional
+  // SecretRef allows referencing a Secret in the same or different namespace.
+  // When namespace is set and differs from the filter's namespace, a ReferenceGrant in the target namespace is required.
+  //
+  // +optional
 	SecretRef *NamespacedSecretKeyReference `json:"secretRef,omitempty"`
 
-	// Realm used by NGINX `auth_basic`.
+  // Realm used by NGINX `auth_basic`.  
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
-	//
-	// +optional
+  //
+  // +optional
 	Realm *string `json:"realm,omitempty"`
 
-	// OnFailure customizes the 401 response for failed authentication.
-	//
-	// +optional
+  // OnFailure customizes the 401 response for failed authentication.
+  //
+  // +optional
 	OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 }
 
@@ -158,62 +158,62 @@ type BasicAuth struct {
 // +kubebuilder:validation:XValidation:message="when file is set, mode must be 'File'",rule="self.file != null ? self.mode == 'File' : true"
 // +kubebuilder:validation:XValidation:message="when remote is set, mode must be 'Remote'",rule="self.remote != null ? self.mode == 'Remote' : true"
 type JWTAuth struct {
-	// Realm used by NGINX `auth_jwt` directive.
+  // Realm used by NGINX `auth_jwt` directive.
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
-	//
-	// +optional
+  //
+  // +optional
   // +kubebuilder:default="Restricted"
 	Realm *string `json:"realm,omitempty"`
 
-	// Mode selects how JWT keys are provided: local file or remote JWKS.
-	// Default: File.
-	//
+  // Mode selects how JWT keys are provided: local file or remote JWKS.
+  // Default: File.
+  //
   // +kubebuilder:default=File"
 	Mode JWTKeyMode `json:"mode,omitempty"`
 
-	// File specifies local JWKS configuration (Secret or ConfigMap, mount path, file name).
-	// Required when Mode == File. Exactly one of ConfigMapRef or SecretRef must be set.
-	//
-	// +optional
+  // File specifies local JWKS configuration (Secret or ConfigMap, mount path, file name).
+  // Required when Mode == File. Exactly one of ConfigMapRef or SecretRef must be set.
+  //
+  // +optional
 	File *JWTFileKeySource `json:"file,omitempty"`
 
-	// Remote specifies remote JWKS configuration.
-	// Required when Mode == Remote.
-	//
-	// +optional
+  // Remote specifies remote JWKS configuration.
+  // Required when Mode == Remote.
+  //
+  // +optional
 	Remote *JWTRemoteKeySource `json:"remote,omitempty"`
 
-	// Leeway is the acceptable clock skew for exp/nbf checks.
+  // Leeway is the acceptable clock skew for exp/nbf checks.
   // Configures `auth_jwt_leeway` directive.
-	// Example: "auth_jwt_leeway 60s".
-	//
-	// +optional
+  // Example: "auth_jwt_leeway 60s".
+  //
+  // +optional
   // +kubebuilder:default=60s
 	Leeway *v1alpha1.Duration `json:"leeway,omitempty"`
 
-	// Type sets token type: signed | encrypted | nested.
-	// Default: signed.
+  // Type sets token type: signed | encrypted | nested.
+  // Default: signed.
   // Configures `auth_jwt_type` directive.
   // Example: "auth_jwt_type signed;".
-	//
-	// +optional
+  //
+  // +optional
   // +kubebuilder:default=signed
 	Type *JWTTokenType `json:"type,omitempty"`
 
-	// KeyCache is the cache duration for keys.
+  // KeyCache is the cache duration for keys.
   // Configures auth_jwt_key_cache directive.
-	// Example: "auth_jwt_key_cache 10m".
-	//
-	// +optional
+  // Example: "auth_jwt_key_cache 10m".
+  //
+  // +optional
 	KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
 
-	// OnFailure customizes the 401 response for failed authentication.
-	//
-	// +optional
+  // OnFailure customizes the 401 response for failed authentication.
+  //
+  // +optional
 	OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 
-	// Require defines claims that must match exactly (e.g. iss, aud).
-	// These translate into NGINX maps and auth_jwt_require directives.
+  // Require defines claims that must match exactly (e.g. iss, aud).
+  // These translate into NGINX maps and auth_jwt_require directives.
   // Example directives and maps:
   //
   //  auth_jwt_require $valid_jwt_iss;
@@ -229,19 +229,19 @@ type JWTAuth struct {
   //      "cli" 1;
   //      default 0;
   //  }
-	//
-	// +optional
+  //
+  // +optional
 	Require *JWTRequiredClaims `json:"require,omitempty"`
 
-	// TokenSource defines where the client presents the token.
-	// Defaults to reading from Authorization header.
-	//
-	// +optional
+  // TokenSource defines where the client presents the token.
+  // Defaults to reading from Authorization header.
+  //
+  // +optional
 	TokenSource *JWTTokenSource `json:"tokenSource,omitempty"`
 
-	// Propagation controls identity header propagation to upstream and header stripping.
-	//
-	// +optional
+  // Propagation controls identity header propagation to upstream and header stripping.
+  //
+  // +optional
 	Propagation *JWTPropagation `json:"propagation,omitempty"`
 }
 
@@ -257,69 +257,69 @@ const (
 // JWTFileKeySource specifies local JWKS key configuration.
 // +kubebuilder:validation:XValidation:message="exactly one of configMapRef or secretRef must be set",rule="(self.configMapRef == null) != (self.secretRef == null)"
 type JWTFileKeySource struct {
-	// SecretRef references a Secret containing the JWKS (with optional key).
-	// Exactly one of ConfigMapRef or SecretRef must be set.
-	//
-	// +optional
+  // SecretRef references a Secret containing the JWKS (with optional key).
+  // Exactly one of ConfigMapRef or SecretRef must be set.
+  //
+  // +optional
 	SecretRef *NamespacedSecretKeyReference `json:"secretRef,omitempty"`
 
-	// KeyCache is the cache duration for keys.
+  // KeyCache is the cache duration for keys.
   // Configures `auth_jwt_key_cache` directive
-	// Example: "auth_jwt_key_cache 10m;".
-	//
-	// +optional
+  // Example: "auth_jwt_key_cache 10m;".
+  //
+  // +optional
 	KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
 }
 
  // JWTRemoteKeySource specifies remote JWKS configuration.
 type JWTRemoteKeySource struct {
-	// URL is the JWKS endpoint, e.g. "https://issuer.example.com/.well-known/jwks.json".
+  // URL is the JWKS endpoint, e.g. "https://issuer.example.com/.well-known/jwks.json".
 	URL string `json:"url"`
 
-	// Cache configures NGINX proxy_cache for JWKS fetches made via auth_jwt_key_request.
-	// When set, NGF will render proxy_cache_path in http{} and attach proxy_cache to the internal JWKS location.
-	//
-	// +optional
+  // Cache configures NGINX proxy_cache for JWKS fetches made via auth_jwt_key_request.
+  // When set, NGF will render proxy_cache_path in http{} and attach proxy_cache to the internal JWKS location.
+  //
+  // +optional
 	Cache *JWKSCache `json:"cache,omitempty"`
 }
 
  // JWKSCache controls NGINX `proxy_cache_path` and `proxy_cache` settings used for JWKS responses.
 type JWKSCache struct {
-	// Path is the filesystem path for cached JWKS objects.
-	// Example: "/var/cache/nginx/jwks".
+  // Path is the filesystem path for cached JWKS objects.
+  // Example: "/var/cache/nginx/jwks".
 	Path string `json:"path"`
 
-	// Levels specifies the directory hierarchy for cached files.
+  // Levels specifies the directory hierarchy for cached files.
   // Used in `proxy_cache_path` directive.
-	// Example: "levels=1:2".
-	//
-	// +optional
+  // Example: "levels=1:2".
+  //
+  // +optional
 	Levels *string `json:"levels,omitempty"`
 
-	// KeysZoneName is the name of the cache keys zone.
-	// If omitted, the controller SHOULD derive a unique, stable name per filter instance.
-	//
-	// +optional
+  // KeysZoneName is the name of the cache keys zone.
+  // If omitted, the controller SHOULD derive a unique, stable name per filter instance.
+  //
+  // +optional
 	KeysZoneName *string `json:"keysZoneName,omitempty"`
 
-	// KeysZoneSize is the size of the cache keys zone (e.g. "10m").
-	// This is required to avoid unbounded allocations.
+  // KeysZoneSize is the size of the cache keys zone (e.g. "10m").
+  // This is required to avoid unbounded allocations.
 	KeysZoneSize string `json:"keysZoneSize"`
 
-	// MaxSize limits the total size of the cache (e.g. "50m").
-	//
-	// +optional
+  // MaxSize limits the total size of the cache (e.g. "50m").
+  //
+  // +optional
 	MaxSize *string `json:"maxSize,omitempty"`
 
-	// Inactive defines the inactivity timeout before cached items are evicted (e.g. "10m").
-	//
-	// +optional
+  // Inactive defines the inactivity timeout before cached items are evicted (e.g. "10m").
+  //
+  // +optional
 	Inactive *string `json:"inactive,omitempty"`
 
-	// UseTempPath controls whether a temporary file is used for cache writes.
-	// Maps to use_temp_path=(on|off). Default: false (off).
-	//
-	// +optional
+  // UseTempPath controls whether a temporary file is used for cache writes.
+  // Maps to use_temp_path=(on|off). Default: false (off).
+  //
+  // +optional
 	UseTempPath *bool `json:"useTempPath,omitempty"`
 }
 
@@ -335,19 +335,20 @@ const (
 
 // JWTRequiredClaims specifies exact-match requirements for claims.
 type JWTRequiredClaims struct {
-	// Issuer (iss) required exact value.
-	//
-	// +optional
+  // Issuer (iss) required exact value.
+  //
+  // +optional
 	Iss *string `json:"iss,omitempty"`
 
-	// Audience (aud) required exact value.
-	//
-	// +optional
+  // Audience (aud) required exact value.
+  //
+  // +optional
 	Aud *string `json:"aud,omitempty"`
 }
 
- // JWTTokenSourceMode selects where the JWT token is read from.
-type JWTTokenSourceMode string
+// JWTTokenSourceType selects where the JWT token is read from.
+// +kubebuilder:validation:Enum=Header;Cookie;QueryArg
+type JWTTokenSourceType string
 
 const (
 	// Read from Authorization header (Bearer). Default.
@@ -360,31 +361,30 @@ const (
 
 // JWTTokenSource specifies where tokens may be read from and the name when required.
 type JWTTokenSource struct {
-	// Mode selects the token source.
-	// +kubebuilder:validation:Enum=Header;Cookie;QueryArg
-	// +kubebuilder:default=Header
-	Type JWTTokenSourceMode `json:"mode"`
+  // Mode selects the token source.
+  // +kubebuilder:default=Header
+	Type JWTTokenSourceType `json:"mode"`
 
-	// TokenName is the cookie or query parameter name when Mode=Cookie or Mode=QueryArg.
-	// Ignored when Mode=Header.
-	//
-	// +optional
-	// +kubebuilder:default=access_token
+  // TokenName is the cookie or query parameter name when Mode=Cookie or Mode=QueryArg.
+  // Ignored when Mode=Header.
+  //
+  // +optional
+  // +kubebuilder:default=access_token
 	TokenName string `json:"tokenName,omitempty"`
 }
 
 
 // JWTPropagation controls identity header propagation and header stripping.
 type JWTPropagation struct {
-	// AddIdentityHeaders defines headers to add on success with values
-	// typically derived from jwt_claim_* variables.
-	//
-	// +optional
+  // AddIdentityHeaders defines headers to add on success with values.
+  // typically derived from jwt_claim_* variables.
+  //
+  // +optional
 	AddIdentityHeaders []HeaderValue `json:"addIdentityHeaders,omitempty"`
 
-	// StripAuthorization removes the incoming Authorization header before proxying.
-	//
-	// +optional
+  // StripAuthorization removes the incoming Authorization header before proxying.
+  //
+  // +optional
 	StripAuthorization *bool `json:"stripAuthorization,omitempty"`
 }
 
@@ -441,19 +441,19 @@ type AuthFailureResponse struct {
 // NamespacedSecretKeyReference references a Secret and optional key, with an optional namespace.
 // If namespace differs from the filter's, a ReferenceGrant in the target namespace is required.
 type NamespacedSecretKeyReference struct {
-	// +optional
+  // +optional
 	Namespace *string `json:"namespace,omitempty"`
 	Name      string  `json:"name"`
-	// +optional
+  // +optional
 	Key       *string `json:"key,omitempty"`
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
 type AuthenticationFilterStatus struct {
-	// Controllers is a list of Gateway API controllers that processed the AuthenticationFilter
-	// and the status of the AuthenticationFilter with respect to each controller.
-	//
-	// +kubebuilder:validation:MaxItems=16
+  // Controllers is a list of Gateway API controllers that processed the AuthenticationFilter
+  // and the status of the AuthenticationFilter with respect to each controller.
+  //
+  // +kubebuilder:validation:MaxItems=16
 	Controllers []ControllerStatus `json:"controllers,omitempty"`
 }
 
@@ -464,21 +464,21 @@ type AuthenticationFilterConditionType string
 type AuthenticationFilterConditionReason string
 
 const (
-	// AuthenticationFilterConditionTypeAccepted indicates that the AuthenticationFilter is accepted.
-	//
-	// Possible reasons for this condition to be True:
-	// * Accepted
-	//
-	// Possible reasons for this condition to be False:
-	// * Invalid
+  // AuthenticationFilterConditionTypeAccepted indicates that the AuthenticationFilter is accepted.
+  //
+  // Possible reasons for this condition to be True:
+  // * Accepted
+  //
+  // Possible reasons for this condition to be False:
+  // * Invalid
 	AuthenticationFilterConditionTypeAccepted AuthenticationFilterConditionType = "Accepted"
 
-	// AuthenticationFilterConditionReasonAccepted is used with the Accepted condition type when
-	// the condition is true.
+// AuthenticationFilterConditionReasonAccepted is used with the Accepted condition type when
+// the condition is true.
 	AuthenticationFilterConditionReasonAccepted AuthenticationFilterConditionReason = "Accepted"
 
-	// AuthenticationFilterConditionReasonInvalid is used with the Accepted condition type when
-	// the filter is invalid.
+  // AuthenticationFilterConditionReasonInvalid is used with the Accepted condition type when
+  // the filter is invalid.
 	AuthenticationFilterConditionReasonInvalid AuthenticationFilterConditionReason = "Invalid"
 )
 ```
