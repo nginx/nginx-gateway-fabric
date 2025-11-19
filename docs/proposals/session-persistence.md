@@ -177,7 +177,7 @@ The main security concern is how far session cookies reach. This design keeps co
 
 - If an implementation routes through Service IPs, any Gateway-level session persistence must be rejected when Service-level session affinity is enabled. In our case, the data plane routes directly to pod IPs, so Service affinity does not interfere with session persistence between the gateway and backends.
 - For traffic-splitting configurations, if cookie-based session persistence is enabled, sessions must remain pinned consistently across the split backends.
-- In NGINX Gateway Fabric, each valid backendRef maps to a single upstream that owns the session persistence settings. When multiple rules share the same backendRef, their session persistence configs must match otherwise that `backendRef` is treated as invalid for session persistence and no `sticky cookie` is configured on its upstream.
+- When multiple HTTPRoute rules reference the same backend but define different (or no) sessionPersistence settings, session persistence is treated as rule-scoped rather than backend-scoped. For each unique combination of backendRef and session persistence configuration, the controller generates a dedicated NGINX upstream and wires that rule’s internal location to it.
 
 ### Future work
 
