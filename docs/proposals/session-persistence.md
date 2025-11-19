@@ -150,9 +150,9 @@ To determine the cookie `path` for HTTPRoutes, we handle the simple case where t
 
 | Path Value                          | Path Match Type | Cookie `Path` Value | Cookie Match Expectations                                                                                                                         |
 |-------------------------------------|-----------------|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| `/hello-exact`                      | Exact           | `/hello-exact`      | Cookie header is sent for `/hello-exact` path only.                                                                                                      |
-| `/hello-prefix`                     | Prefix          | `/hello-prefix`     | Cookie header is sent for `/hello-prefix` and any subpath starting with `/hello-prefix` (e.g. `/hello-prefix/foo`).                                      |
-| `/hello-regex/[a-zA-Z0-9_-]+$`      | Regex           | `/hello-regex`      | Cookie header is sent for any request whose path starts with `/hello-regex` and matches the regex in the location block (e.g. `/hello-regex/a`, `/hello-regex/abc123`). The regex still determines which requests match the route on the server side. |
+| `/hello-exact`                      | Exact           | `/hello-exact`      | Cookie header is sent for `/hello-exact` path only. 		       |
+| `/hello-prefix`                     | Prefix          | `/hello-prefix`     | Cookie header is sent for `/hello-prefix` and any subpath starting with `/hello-prefix` (e.g. `/hello-prefix/foo`).                                     |
+| `/hello-regex/[a-zA-Z0-9_-]+$`      | Regex           | `/hello-regex`      | No `path` attribute is set for pathType `RegularExpression` |
 
 When there are multiple path matches that share the same sessionPersistence configuration, we derive a single cookie path by computing the longest common prefix that ends on a path-segment boundary `/`. If no non-empty common prefix on a segment boundary exists, we fall back to `/` which is allowing all paths.
 
@@ -177,6 +177,7 @@ The main security concern is how far session cookies reach. This design keeps co
 
 - If an implementation routes through Service IPs, any Gateway-level session persistence must be rejected when Service-level session affinity is enabled. In our case, the data plane routes directly to pod IPs, so Service affinity does not interfere with session persistence between the gateway and backends.
 - For traffic-splitting configurations, if cookie-based session persistence is enabled, sessions must remain pinned consistently across the split backends.
+- In NGINX Gateway Fabric, each valid backendRef maps to a single upstream that owns the session persistence settings. When multiple rules share the same backendRef, their session persistence configs must match otherwise that `backendRef` is treated as invalid for session persistence and no `sticky cookie` is configured on its upstream.
 
 ### Future work
 
