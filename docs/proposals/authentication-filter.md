@@ -140,7 +140,7 @@ type BasicAuth struct {
   // +optional
   SecretRef *NamespacedSecretKeyReference `json:"secretRef,omitempty"`
 
-  // Realm used by NGINX `auth_basic`.  
+  // Realm used by NGINX `auth_basic`.
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
   //
   // +optional
