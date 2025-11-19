@@ -29,6 +29,7 @@ rules:
     check-multi-line-strings: true
     ignore: |
       operators/**/*
+      examples/proxy-settings-policy/app.yaml
   key-duplicates: enable
   key-ordering: disable
   line-length:
