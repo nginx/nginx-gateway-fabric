@@ -121,7 +121,7 @@ type AuthenticationFilterSpec struct {
   //
   // +optional
   JWT *JWTAuth `json:"jwt,omitempty"`
-  }
+}
 
 // AuthType defines the authentication mechanism.
 // +kubebuilder:validation:Enum=Basic;JWT
@@ -483,7 +483,6 @@ spec:
   basic:
     secretRef:
       name: basic-auth-users   # Secret containing htpasswd data
-      key: htpasswd            # key within the Secret
     realm: "Restricted"        # Optional. Helps with logging
     onFailure:                 # Optional. These setting may be defaults.
       statusCode: 401
@@ -604,7 +603,6 @@ spec:
     file:
       secretRef:
         name: jwt-keys-secure
-        key: jwks.json
       keyCache: 10m  # Optional cache time for keys (auth_jwt_key_cache)
     # Acceptable clock skew for exp/nbf
     leeway: 60s # Configures auth_jwt_leeway
@@ -945,7 +943,7 @@ This example shows a single HTTPRoute, with a single `filter` defined in a `rule
 
 Only a single `AuthenticationFilter` may be referened in a single rule.
 
-The `Status` the HTTPRoute/GRPCRoute in this scenario should be set to `Invalid`, and the resource should be `Rejected`
+The `Status` the HTTPRoute/GRPCRoute in this scenario should be set to `Invalid`, and the resource should be `Rejected`.
 
 This behaviour falls in line with the expected behaviour of filters in the Gateway API, which generally allows only one type of a specific filter (authentication, rewriting, etc.) within a rule.
 
@@ -1043,7 +1041,6 @@ spec:
     secretRef:
       namespace: security-ns
       name: basic-auth-users
-      key: htpasswd
     realm: "Restricted"
 ```
 
