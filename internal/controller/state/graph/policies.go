@@ -116,7 +116,12 @@ func collectOrderedGatewaysForService(
 	return append(existingGateways, newGateways...)
 }
 
-func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName string, logger logr.Logger) {
+func (g *Graph) attachPolicies(
+	validator validation.PolicyValidator,
+	ctlrName string,
+	logger logr.Logger,
+	plusEnabled bool,
+) {
 	if len(g.Gateways) == 0 {
 		return
 	}
@@ -139,7 +144,7 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 					continue
 				}
 
-				attachPolicyToService(policy, svc, g.Gateways, ctlrName, logger)
+				attachPolicyToService(policy, svc, g.Gateways, ctlrName, logger, plusEnabled, validator)
 			}
 		}
 	}
@@ -151,6 +156,8 @@ func attachPolicyToService(
 	gws map[types.NamespacedName]*Gateway,
 	ctlrName string,
 	logger logr.Logger,
+	plusEnabled bool,
+	validator validation.PolicyValidator,
 ) {
 	var attachedToAnyGateway bool
 
@@ -213,6 +220,10 @@ func attachPolicyToService(
 		// Gateway is valid, add ancestor and mark as attached
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		attachedToAnyGateway = true
+	}
+
+	if conds := validator.ValidateLoadBalancingMethod(policy.Source, plusEnabled); len(conds) > 0 {
+		policy.Conditions = append(policy.Conditions, conds...)
 	}
 
 	// Attach policy to service if effective for at least one gateway

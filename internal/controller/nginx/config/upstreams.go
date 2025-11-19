@@ -4,6 +4,7 @@ import (
 	"fmt"
 	gotemplate "text/template"
 
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
@@ -162,6 +163,22 @@ func (g GeneratorImpl) createUpstream(
 		zoneSize = upstreamPolicySettings.ZoneSize
 	}
 
+	chosenLBMethod := defaultLBMethod
+	if upstreamPolicySettings.LoadBalancingMethod != "" {
+		lbMethod := upstreamPolicySettings.LoadBalancingMethod
+
+		if lbMethod == string(ngfAPI.LoadBalancingTypeHash) {
+			lbMethod = fmt.Sprintf("hash %s", upstreamPolicySettings.HashKey)
+		}
+		if lbMethod == string(ngfAPI.LoadBalancingTypeHashConsistent) {
+			lbMethod = fmt.Sprintf("hash %s consistent", upstreamPolicySettings.HashKey)
+		}
+		if lbMethod == string(ngfAPI.LoadBalancingTypeRoundRobin) {
+			lbMethod = ""
+		}
+		chosenLBMethod = lbMethod
+	}
+
 	if len(up.Endpoints) == 0 {
 		return http.Upstream{
 			Name:      up.Name,
@@ -172,6 +189,7 @@ func (g GeneratorImpl) createUpstream(
 					Address: types.Nginx503Server,
 				},
 			},
+			LoadBalancingMethod: chosenLBMethod,
 		}
 	}
 
@@ -185,11 +203,6 @@ func (g GeneratorImpl) createUpstream(
 			Address: fmt.Sprintf(format, ep.Address, ep.Port),
 			Resolve: ep.Resolve,
 		}
-	}
-
-	chosenLBMethod := defaultLBMethod
-	if upstreamPolicySettings.LoadBalancingMethod != "" {
-		chosenLBMethod = upstreamPolicySettings.LoadBalancingMethod
 	}
 
 	return http.Upstream{

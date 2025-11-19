@@ -39,6 +39,7 @@ func createValidPolicy() *ngfAPI.UpstreamSettingsPolicy {
 				Connections: helpers.GetPointer[int32](100),
 			},
 			LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
+			HashKey:             helpers.GetPointer[ngfAPI.HashMethodKey]("$upstream_addr"),
 		},
 		Status: v1.PolicyStatus{},
 	}
@@ -258,6 +259,17 @@ func TestValidator_Conflicts(t *testing.T) {
 			},
 			conflicts: true,
 		},
+		{
+			name: "hash key conflicts",
+			polA: createValidPolicy(),
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeHashConsistent),
+					HashKey:             helpers.GetPointer[ngfAPI.HashMethodKey]("$upstream_addr"),
+				},
+			},
+			conflicts: true,
+		},
 	}
 
 	v := upstreamsettings.NewValidator(nil)
@@ -283,4 +295,110 @@ func TestValidator_ConflictsPanics(t *testing.T) {
 	g := NewWithT(t)
 
 	g.Expect(conflicts).To(Panic())
+}
+
+func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		policy        *ngfAPI.UpstreamSettingsPolicy
+		name          string
+		expConditions []conditions.Condition
+		plusEnabled   bool
+	}{
+		{
+			name: "oss method random with Plus disabled",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandom),
+				},
+			},
+			expConditions: nil,
+		},
+		{
+			name: "oss method hash consistent with Plus disabled",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeHashConsistent),
+				},
+			},
+			expConditions: nil,
+		},
+		{
+			name: "plus load balancing method least_time last_byte not allowed with Plus disabled",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeLeastTimeLastByte),
+				},
+			},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"least_time last_byte\": " +
+					"NGINX OSS only supports the following load balancing methods: "),
+			},
+		},
+		{
+			name: "plus load balancing method least_time header allowed with Plus enabled",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeLeastTimeHeader),
+				},
+			},
+			plusEnabled:   true,
+			expConditions: nil,
+		},
+		{
+			name: "invalid load balancing method for NGINX OSS",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingType("invalid-method")),
+				},
+			},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
+					"NGINX OSS only supports the following load balancing methods: "),
+			},
+		},
+		{
+			name: "invalid load balancing method for NGINX Plus",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingType("invalid-method")),
+				},
+			},
+			plusEnabled: true,
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
+					"NGINX Plus only supports the following load balancing methods: "),
+			},
+		},
+	}
+
+	v := upstreamsettings.NewValidator(validation.GenericValidator{})
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conds := v.ValidateLoadBalancingMethod(test.policy, test.plusEnabled)
+
+			if test.expConditions != nil {
+				g.Expect(conds).To(HaveLen(1))
+				g.Expect(conds[0].Message).To(ContainSubstring(test.expConditions[0].Message))
+			}
+		})
+	}
+}
+
+func TestValidator_ValidateLoadBalancingPanics(t *testing.T) {
+	t.Parallel()
+	v := upstreamsettings.NewValidator(nil)
+
+	validateLoadBalancingMethod := func() {
+		_ = v.ValidateLoadBalancingMethod(&policiesfakes.FakePolicy{}, true)
+	}
+
+	g := NewWithT(t)
+
+	g.Expect(validateLoadBalancingMethod).To(Panic())
 }
