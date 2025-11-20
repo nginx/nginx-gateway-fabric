@@ -225,38 +225,6 @@ type JWTAuth struct {
   //
   // +optional
   OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
-
-  // Require defines claims that must match exactly (e.g. iss, aud).
-  // These translate into NGINX maps and auth_jwt_require directives.
-  // Example directives and maps:
-  //
-  //  auth_jwt_require $valid_jwt_iss;
-  //  auth_jwt_require $valid_jwt_aud;
-  //
-  //  map $jwt_claim_iss $valid_jwt_iss {
-  //      "https://issuer.example.com" 1;
-  //      "https://issuer.example1.com" 1;
-  //      default 0;
-  //  }
-  //  map $jwt_claim_aud $valid_jwt_aud {
-  //      "api" 1;
-  //      "cli" 1;
-  //      default 0;
-  //  }
-  //
-  // +optional
-  Require *JWTRequiredClaims `json:"require,omitempty"`
-
-  // TokenSource defines where the client presents the token.
-  // Defaults to reading from Authorization header.
-  //
-  // +optional
-  TokenSource *TokenSource `json:"tokenSource,omitempty"`
-
-  // Propagation controls identity header propagation to upstream and header stripping.
-  //
-  // +optional
-  Propagation *JWTPropagation `json:"propagation,omitempty"`
 }
 
 // FileKeySource specifies local JWKS key configuration.
@@ -335,66 +303,6 @@ const (
 	TokenTypeEncrypted TokenType = "encrypted"
 	TokenTypeNested    TokenType = "nested"
 )
-
-// JWTRequiredClaims specifies exact-match requirements for claims.
-type JWTRequiredClaims struct {
-  // Issuer (iss) required exact value.
-  //
-  // +optional
-  Iss *string `json:"iss,omitempty"`
-
-  // Audience (aud) required exact value.
-  //
-  // +optional
-  Aud *string `json:"aud,omitempty"`
-}
-
-// JWTTokenSourceType selects where the JWT token is read from.
-// +kubebuilder:validation:Enum=Header;Cookie;QueryArg
-type TokenSourceType string
-
-const (
-  // Read from Authorization header (Bearer). Default.
-  TokenSourceModeHeader TokenSourceMode = "Header"
-  // Read from a cookie named tokenName.
-  TokenSourceModeCookie TokenSourceMode = "Cookie"
-  // Read from a query arg named tokenName.
-  TokenSourceModeQueryArg TokenSourceMode = "QueryArg"
-)
-
-// JWTTokenSource specifies where tokens may be read from and the name when required.
-type TokenSource struct {
-  // Mode selects the token source.
-  // +kubebuilder:default=Header
-  Type TokenSourceType `json:"mode"`
-
-  // TokenName is the cookie or query parameter name when Mode=Cookie or Mode=QueryArg.
-  // Ignored when Mode=Header.
-  //
-  // +optional
-  // +kubebuilder:default=access_token
-  TokenName string `json:"tokenName,omitempty"`
-}
-
-// HeaderValue defines a header name and a value (may reference NGINX variables).
-type HeaderValue struct {
-  Name      string `json:"name"`
-  ValueFrom string `json:"valueFrom"`
-}
-
-// JWTPropagation controls identity header propagation and header stripping.
-type JWTPropagation struct {
-  // AddIdentityHeaders defines headers to add on success with values.
-  // typically derived from jwt_claim_* variables.
-  //
-  // +optional
-  AddIdentityHeaders []HeaderValue `json:"addIdentityHeaders,omitempty"`
-
-  // StripAuthorization removes the incoming Authorization header before proxying.
-  //
-  // +optional
-  StripAuthorization *bool `json:"stripAuthorization,omitempty"`
-}
 
 // AuthScheme enumerates supported WWW-Authenticate schemes.
 // +kubebuilder:validation:Enum=Basic;Bearer
@@ -847,56 +755,6 @@ http {
 }
 ```
 
-#### Stretch goal - Additional Optional Fields
-
-`require`, `tokenSource` and `propagation` are some additional fields we may choose to include.
-These fields are going to be added as stretch goals for the initial implementation.
-This is to ensure the minimal required capabilties can be focused on.
-
-```yaml
-apiVersion: gateway.nginx.org/v1alpha1
-kind: AuthenticationFilter
-metadata:
-  name: jwt-auth
-spec:
-  type: JWT
-  jwt:
-    realm: "Restricted"
-    keys:
-      mode: Remote
-      remote:
-        url: https://issuer.example.com/.well-known/jwks.json
-
-    # Required claims (exact matching done via maps in NGINX; see config)
-    require:
-      iss:
-        - "https://issuer.example.com"
-        - "https://issuer2.example.com"
-      aud:
-        - "api"
-        - "cli"
-
-    # Where client presents the token
-    # By defaults to reading from Authorization header (Bearer)
-    tokenSource:
-      type: Header
-      # Alternative: read from a cookie named tokenName
-      # type: Cookie
-      # tokenName: access_token
-      # Alternative: read from a query arg named tokenName
-      # type: QueryArg
-      # tokenName: access_token
-
-    # Identity propagation to backend and header stripping
-    propagation:
-      addIdentityHeaders:
-        - name: X-User-Id
-          valueFrom: "$jwt_claim_sub"
-        - name: X-User-Email
-          valueFrom: "$jwt_claim_email"
-      stripAuthorization: true # Optionally remove client Authorization header before proxy_pass
-```
-
 ### Caching configuration
 
 Users may also choose to change the caching configuration set by `proxy_cache_path`.
@@ -981,7 +839,7 @@ spec:
 
 If a user attempts to attach a JWT tpye AuthenticationFilter while using NGINX OSS, the rule referncing the filter will be `Rejected`.
 
-This can appear as `UnresolvedRef` to inform the user that the rule has been `Rejected`.
+This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway API here: https://github.com/nginx/nginx-gateway-fabric/blob/main/internal/controller/state/conditions/conditions.go#L402
 
 ## Testing
 
@@ -1119,6 +977,174 @@ Implementations MAY choose to implement this ordering strictly, rejecting
 any combination or order of filters that cannot be supported.
 If implementations choose a strict interpretation of filter ordering, they MUST clearly
 document that behavior.
+```
+
+## Stretch Goals
+
+### Cross namespace acess
+
+When referencing secrets for Basic Auth and JWT Auth, the initial implementation will use `LocalObjectReference`.
+
+Future updates to this will use the `NamespacedSecretKeyReference` in conjunction with `ReferenceGrants` to support access to secrets in different namespace`
+
+Struct for `NamespacedSecretKeyReference`:
+
+```go
+// NamespacedSecretKeyReference references a Secret and optional key, with an optional namespace.
+// If namespace differs from the filter's, a ReferenceGrant in the target namespace is required.
+type NamespacedSecretKeyReference struct {
+  // +optional
+  Namespace *string `json:"namespace,omitempty"`
+  Name      string  `json:"name"`
+  // +optional
+  Key       *string `json:"key,omitempty"`
+}
+```
+
+### Additional Fields for JWT
+
+`require`, `tokenSource` and `propagation` are some additional fields that may be incldued in future updates to the API.
+These fields allow for more customization of how the JWT auth behavtes, but aren't required for the minial delivery of JWT Auth.
+
+Example of what implementation of these fields might look like:
+```yaml
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-auth
+spec:
+  type: JWT
+  jwt:
+    realm: "Restricted"
+    keys:
+      mode: Remote
+      remote:
+        url: https://issuer.example.com/.well-known/jwks.json
+
+    # Required claims (exact matching done via maps in NGINX; see config)
+    require:
+      iss:
+        - "https://issuer.example.com"
+        - "https://issuer2.example.com"
+      aud:
+        - "api"
+        - "cli"
+
+    # Where client presents the token
+    # By defaults to reading from Authorization header (Bearer)
+    tokenSource:
+      type: Header
+      # Alternative: read from a cookie named tokenName
+      # type: Cookie
+      # tokenName: access_token
+      # Alternative: read from a query arg named tokenName
+      # type: QueryArg
+      # tokenName: access_token
+
+    # Identity propagation to backend and header stripping
+    propagation:
+      addIdentityHeaders:
+        - name: X-User-Id
+          valueFrom: "$jwt_claim_sub"
+        - name: X-User-Email
+          valueFrom: "$jwt_claim_email"
+      stripAuthorization: true # Optionally remove client Authorization header before proxy_pass
+```
+
+Example GoLang API changes:
+```go
+type JWTAuth struct {
+  // Require defines claims that must match exactly (e.g. iss, aud).
+  // These translate into NGINX maps and auth_jwt_require directives.
+  // Example directives and maps:
+  //
+  //  auth_jwt_require $valid_jwt_iss;
+  //  auth_jwt_require $valid_jwt_aud;
+  //
+  //  map $jwt_claim_iss $valid_jwt_iss {
+  //      "https://issuer.example.com" 1;
+  //      "https://issuer.example1.com" 1;
+  //      default 0;
+  //  }
+  //  map $jwt_claim_aud $valid_jwt_aud {
+  //      "api" 1;
+  //      "cli" 1;
+  //      default 0;
+  //  }
+  //
+  // +optional
+  Require *JWTRequiredClaims `json:"require,omitempty"`
+
+  // TokenSource defines where the client presents the token.
+  // Defaults to reading from Authorization header.
+  //
+  // +optional
+  TokenSource *TokenSource `json:"tokenSource,omitempty"`
+
+  // Propagation controls identity header propagation to upstream and header stripping.
+  //
+  // +optional
+  Propagation *JWTPropagation `json:"propagation,omitempty"`
+}
+
+// JWTRequiredClaims specifies exact-match requirements for claims.
+type JWTRequiredClaims struct {
+  // Issuer (iss) required exact value.
+  //
+  // +optional
+  Iss *string `json:"iss,omitempty"`
+
+  // Audience (aud) required exact value.
+  //
+  // +optional
+  Aud *string `json:"aud,omitempty"`
+}
+
+// JWTTokenSourceType selects where the JWT token is read from.
+// +kubebuilder:validation:Enum=Header;Cookie;QueryArg
+type TokenSourceType string
+
+const (
+  // Read from Authorization header (Bearer). Default.
+  TokenSourceModeHeader TokenSourceMode = "Header"
+  // Read from a cookie named tokenName.
+  TokenSourceModeCookie TokenSourceMode = "Cookie"
+  // Read from a query arg named tokenName.
+  TokenSourceModeQueryArg TokenSourceMode = "QueryArg"
+)
+
+// JWTTokenSource specifies where tokens may be read from and the name when required.
+type TokenSource struct {
+  // Mode selects the token source.
+  // +kubebuilder:default=Header
+  Type TokenSourceType `json:"mode"`
+
+  // TokenName is the cookie or query parameter name when Mode=Cookie or Mode=QueryArg.
+  // Ignored when Mode=Header.
+  //
+  // +optional
+  // +kubebuilder:default=access_token
+  TokenName string `json:"tokenName,omitempty"`
+}
+// JWTPropagation controls identity header propagation and header stripping.
+type JWTPropagation struct {
+  // AddIdentityHeaders defines headers to add on success with values.
+  // typically derived from jwt_claim_* variables.
+  //
+  // +optional
+  AddIdentityHeaders []HeaderValue `json:"addIdentityHeaders,omitempty"`
+
+  // StripAuthorization removes the incoming Authorization header before proxying.
+  //
+  // +optional
+  StripAuthorization *bool `json:"stripAuthorization,omitempty"`
+}
+
+// HeaderValue defines a header name and a value (may reference NGINX variables).
+type HeaderValue struct {
+  Name      string `json:"name"`
+  ValueFrom string `json:"valueFrom"`
+}
 ```
 
 ## References
