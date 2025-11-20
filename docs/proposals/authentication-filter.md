@@ -909,7 +909,9 @@ When referencing an `AuthenticationFilter` in either a HTTPRoute or GRPCRoute, i
 All fields in the `AuthenticationFilter` will be validated with Open API Schema.
 We should also include [CEL](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules) validation where required.
 
-We should validated that only one `AuthenticationFilter` is referenced per-rule. Multiple references to an `AuthenticationFilter` in a single rule should result in an `Invalid` HTTPRoute/GRPCRoute, and the resource should be `Rejected`.
+We should validated that only one `AuthenticationFilter` is referenced per-rule. Multiple references to an `AuthenticationFilter` in a single rule should result in an `Invalid` HTTPRoute/GRPCRoute, and the rule should be `Rejected`.
+
+This scenario can use the status `RouteConditionPartiallyInvalid` defined in the Gateway API here: https://github.com/nginx/nginx-gateway-fabric/blob/main/internal/controller/state/conditions/conditions.go#L402
 
 An `AuthenticationFilter` that sets a `onFailure.statusCode` to anything other than `401` or `403` should be rejected. This relates to the "Auth failure behaviour" section in the Security Considerations section.
 
