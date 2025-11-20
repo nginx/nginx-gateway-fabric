@@ -136,11 +136,8 @@ const (
 
 // BasicAuth configures HTTP Basic Authentication.
 type BasicAuth struct {
-  // SecretRef allows referencing a Secret in the same or different namespace.
-  // When namespace is set and differs from the filter's namespace, a ReferenceGrant in the target namespace is required.
-  //
-  // +optional
-  SecretRef *SecretObjectReference `json:"secretRef,omitempty"`
+  // SecretRef allows referencing a Secret in the same namespace
+  SecretRef LocalObjectReferenceWithKey `json:"secretRef,omitempty"`
 
   // Realm used by NGINX `auth_basic` directive.
   // https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html#auth_basic
@@ -230,7 +227,7 @@ type JWTAuth struct {
 // FileKeySource specifies local JWKS key configuration.
 type FileKeySource struct {
   // SecretRef references a Secret containing the JWKS.
-  SecretRef SecretObjectReference `json:"secretRef,omitempty"`
+  SecretRef LocalObjectReferenceWithKey `json:"secretRef,omitempty"`
 
   // KeyCache is the cache duration for keys.
   // Configures `auth_jwt_key_cache` directive.
@@ -239,6 +236,13 @@ type FileKeySource struct {
   //
   // +optional
   KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
+}
+
+// LocalObjectReferenceWithKey sepcifies as local kubernetes object 
+// with required `key` field to extract data.
+type LocalObjectReferenceWithKey struct {
+     v1.LocalObjectReference
+     Key string
 }
 
  // RemoteKeySource specifies remote JWKS configuration.
@@ -395,6 +399,7 @@ spec:
   basic:
     secretRef:
       name: basic-auth-users   # Secret containing htpasswd data
+      key: htpasswd
     realm: "Restricted"        # Optional. Helps with logging
     onFailure:                 # Optional. These setting may be defaults.
       statusCode: 401
@@ -512,6 +517,7 @@ spec:
     file:
       secretRef:
         name: jwt-keys-secure
+        key: jwks.json
       keyCache: 10m  # Optional cache time for keys (auth_jwt_key_cache)
     # Acceptable clock skew for exp/nbf
     leeway: 60s # Configures auth_jwt_leeway
@@ -859,52 +865,6 @@ Users that attach an `AuthenticationFilter` to an HTTPRoute/GRPCRoute should be 
 
 Any example configurations and deployments for the `AuthenticationFilter` should enable HTTPS at the Gateway level by default.
 
-### Namespace isolataion and cross-namespace references
-Both Auth and Local JWKS should only have access to Secrets and ConfigMaps in the same namespace by default.
-
-Cross-namespace references are allowed only when authorized via a Gateway API ReferenceGrant in the target namespace.
-
-Controller behavior:
-- Same-namespace references are permitted without a grant.
-- For cross-namespace references, the controller MUST verify a ReferenceGrant exists in the target namespace:
-  - from: group=gateway.nginx.org, kind=AuthenticationFilter, namespace=<filter-namespace>
-  - to:   group="", kind=(Secret|ConfigMap), name=<target-name>
-- If no valid grant is found, the filter status should update the status to `Accepted=False` with `reason=RefNotPermitted` and a clear message. We should avoid rendering any NGINX configuration in this scenario.
-
-Example: Grant BasicAuth in app-ns to read a Secret in security-ns
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: ReferenceGrant
-metadata:
-  name: allow-basic-auth-secret
-  namespace: security-ns # target namespace where the Secret lives
-spec:
-  from:
-  - group: gateway.nginx.org
-    kind: AuthenticationFilter
-    namespace: app-ns
-  to:
-  - group: ""   # core API group
-    kind: Secret
-    name: basic-auth-users
-```
-
-AuthenticationFilter referencing the cross-namespace Secret
-```yaml
-apiVersion: gateway.nginx.org/v1alpha1
-kind: AuthenticationFilter
-metadata:
-  name: basic-auth
-  namespace: app-ns
-spec:
-  type: Basic
-  basic:
-    secretRef:
-      namespace: security-ns
-      name: basic-auth-users
-    realm: "Restricted"
-```
-
 ### Remote JWKS
 
 Proxy cache TTL should be configurable and set to a reasonable default, reducing periods of stale cached JWKs.
@@ -981,7 +941,7 @@ document that behavior.
 
 ## Stretch Goals
 
-### Cross namespace acess
+### Cross namespace access
 
 When referencing secrets for Basic Auth and JWT Auth, the initial implementation will use `LocalObjectReference`.
 
@@ -999,6 +959,42 @@ type NamespacedSecretKeyReference struct {
   // +optional
   Key       *string `json:"key,omitempty"`
 }
+```
+
+For initial implementaion, both Basic Auth and Local JWKS should will only  have access to Secrets in the same namespace.
+
+Example: Grant BasicAuth in app-ns to read a Secret in security-ns
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: ReferenceGrant
+metadata:
+  name: allow-basic-auth-secret
+  namespace: security-ns # target namespace where the Secret lives
+spec:
+  from:
+  - group: gateway.nginx.org
+    kind: AuthenticationFilter
+    namespace: app-ns
+  to:
+  - group: ""   # core API group
+    kind: Secret
+    name: basic-auth-users
+```
+
+AuthenticationFilter referencing the cross-namespace Secret
+```yaml
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth
+  namespace: app-ns
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      namespace: security-ns
+      name: basic-auth-users
+    realm: "Restricted"
 ```
 
 ### Additional Fields for JWT
