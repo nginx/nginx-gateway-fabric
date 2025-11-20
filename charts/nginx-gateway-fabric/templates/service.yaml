@@ -1,3 +1,5 @@
+# This is the control plane Service for internal communication with the data plane.
+# To get an NGINX LoadBalancer Service, create a Gateway resource once NGINX Gateway Fabric is installed.
 apiVersion: v1
 kind: Service
 metadata:
