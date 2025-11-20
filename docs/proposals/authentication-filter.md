@@ -847,9 +847,11 @@ http {
 }
 ```
 
-#### Additional Optional Fields
+#### Stretch goal - Additional Optional Fields
 
 `require`, `tokenSource` and `propagation` are some additional fields we may choose to include.
+These fields are going to be added as stretch goals for the initial implementation.
+This is to ensure the minimal required capabilties can be focused on.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
