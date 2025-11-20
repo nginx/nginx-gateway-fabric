@@ -155,13 +155,13 @@ type BasicAuth struct {
   OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 }
 
-// JWTKeyMode selects where JWT keys come from.
+// KeyMode selects where JWT keys come from.
 // +kubebuilder:validation:Enum=File;Remote
-type JWTKeyMode string
+type KeyMode string
 
 const (
-  JWTKeyModeFile   JWTKeyMode = "File"
-  JWTKeyModeRemote JWTKeyMode = "Remote"
+  KeyModeFile   KeyMode = "File"
+  KeyModeRemote KeyMode = "Remote"
 )
 
 // JWTAuth configures JWT-based authentication (NGINX Plus).
@@ -179,19 +179,19 @@ type JWTAuth struct {
   Realm *string `json:"realm,omitempty"`
 
   // Mode selects how JWT keys are provided: local file or remote JWKS.
-  Mode JWTKeyMode `json:"mode,omitempty"`
+  Mode KeyMode `json:"mode,omitempty"`
 
   // File specifies local JWKS configuration.
   // Required when Mode == File.
   //
   // +optional
-  File *JWTFileKeySource `json:"file,omitempty"`
+  File *FileKeySource `json:"file,omitempty"`
 
   // Remote specifies remote JWKS configuration.
   // Required when Mode == Remote.
   //
   // +optional
-  Remote *JWTRemoteKeySource `json:"remote,omitempty"`
+  Remote *RemoteKeySource `json:"remote,omitempty"`
 
   // Leeway is the acceptable clock skew for exp/nbf checks.
   // Configures `auth_jwt_leeway` directive.
@@ -210,7 +210,7 @@ type JWTAuth struct {
   //
   // +optional
   // +kubebuilder:default=signed
-  Type *JWTTokenType `json:"type,omitempty"`
+  Type *TokenType `json:"type,omitempty"`
 
   // KeyCache is the cache duration for keys.
   // Configures auth_jwt_key_cache directive.
@@ -250,7 +250,7 @@ type JWTAuth struct {
   // Defaults to reading from Authorization header.
   //
   // +optional
-  TokenSource *JWTTokenSource `json:"tokenSource,omitempty"`
+  TokenSource *TokenSource `json:"tokenSource,omitempty"`
 
   // Propagation controls identity header propagation to upstream and header stripping.
   //
@@ -258,8 +258,8 @@ type JWTAuth struct {
   Propagation *JWTPropagation `json:"propagation,omitempty"`
 }
 
-// JWTFileKeySource specifies local JWKS key configuration.
-type JWTFileKeySource struct {
+// FileKeySource specifies local JWKS key configuration.
+type FileKeySource struct {
   // SecretRef references a Secret containing the JWKS.
   SecretRef SecretObjectReference `json:"secretRef,omitempty"`
 
@@ -272,8 +272,8 @@ type JWTFileKeySource struct {
   KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
 }
 
- // JWTRemoteKeySource specifies remote JWKS configuration.
-type JWTRemoteKeySource struct {
+ // RemoteKeySource specifies remote JWKS configuration.
+type RemoteKeySource struct {
   // URL is the JWKS endpoint, e.g. "https://issuer.example.com/.well-known/jwks.json".
   URL string `json:"url"`
 
@@ -325,14 +325,14 @@ type JWKSCache struct {
   UseTempPath *bool `json:"useTempPath,omitempty"`
 }
 
-// JWTTokenType represents NGINX auth_jwt_type.
+// TokenType represents NGINX auth_jwt_type.
 // +kubebuilder:validation:Enum=signed;encrypted;nested
-type JWTTokenType string
+type TokenType string
 
 const (
-	JWTTokenTypeSigned    JWTTokenType = "signed"
-	JWTTokenTypeEncrypted JWTTokenType = "encrypted"
-	JWTTokenTypeNested    JWTTokenType = "nested"
+	TokenTypeSigned    TokenType = "signed"
+	TokenTypeEncrypted TokenType = "encrypted"
+	TokenTypeNested    TokenType = "nested"
 )
 
 // JWTRequiredClaims specifies exact-match requirements for claims.
@@ -350,22 +350,22 @@ type JWTRequiredClaims struct {
 
 // JWTTokenSourceType selects where the JWT token is read from.
 // +kubebuilder:validation:Enum=Header;Cookie;QueryArg
-type JWTTokenSourceType string
+type TokenSourceType string
 
 const (
   // Read from Authorization header (Bearer). Default.
-  JWTTokenSourceModeHeader JWTTokenSourceMode = "Header"
+  TokenSourceModeHeader TokenSourceMode = "Header"
   // Read from a cookie named tokenName.
-  JWTTokenSourceModeCookie JWTTokenSourceMode = "Cookie"
+  TokenSourceModeCookie TokenSourceMode = "Cookie"
   // Read from a query arg named tokenName.
-  JWTTokenSourceModeQueryArg JWTTokenSourceMode = "QueryArg"
+  TokenSourceModeQueryArg TokenSourceMode = "QueryArg"
 )
 
 // JWTTokenSource specifies where tokens may be read from and the name when required.
-type JWTTokenSource struct {
+type TokenSource struct {
   // Mode selects the token source.
   // +kubebuilder:default=Header
-  Type JWTTokenSourceType `json:"mode"`
+  Type TokenSourceType `json:"mode"`
 
   // TokenName is the cookie or query parameter name when Mode=Cookie or Mode=QueryArg.
   // Ignored when Mode=Header.
@@ -848,7 +848,7 @@ http {
 
 #### Additional Optional Fields
 
-`require`, `tokenSource` and `propagation` are some additioanl fields we may choose to include.
+`require`, `tokenSource` and `propagation` are some additional fields we may choose to include.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
