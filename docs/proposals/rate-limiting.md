@@ -16,6 +16,6 @@ This Enhancement Proposal introduces the "RateLimitPolicy" API that allows Clust
 
 ## Non-Goals
 
-- Championing a Rate Limiting Gateway API contribution.
-- Exposing Zone Sync settings.
+- Champion a Rate Limiting Gateway API contribution.
+- Expose Zone Sync settings.
 - Support for attachment to TLSRoute.
