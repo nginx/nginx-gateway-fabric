@@ -686,7 +686,7 @@ spec:
 
 Below are `two` potential NGINX configurations based on the mode used.
 
-1. NGINX Config when using `Mode: Key` (i.e. locally referenced JWKS key)
+1. NGINX Config when using `Mode: File` (i.e. locally referenced JWKS key)
 
 ```nginx
 http {
@@ -974,6 +974,12 @@ spec:
     - name: backend
       port: 80
 ```
+
+#### Attaching a JWT AuthenticationFilter to a route when using NGINX OSS
+
+If a user attempts to attach a JWT tpye AuthenticationFilter while using NGINX OSS, the rule referncing the filter will be `Rejected`.
+
+This can appear as `UnresolvedRef` to inform the user that the rule has been `Rejected`.
 
 ## Testing
 
