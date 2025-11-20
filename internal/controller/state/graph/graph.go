@@ -92,12 +92,12 @@ type NginxReloadResult struct {
 // ProtectedPorts are the ports that may not be configured by a listener with a descriptive name of each port.
 type ProtectedPorts map[int32]string
 
-// flags hold the configuration flags for building the Graph.
-type flags struct {
-	// plus indicates whether NGINX Plus features are enabled.
-	plus bool
-	// experimental indicates whether experimental features are enabled.
-	experimental bool
+// FeatureFlags hold the feature flags for building the Graph.
+type FeatureFlags struct {
+	// Plus indicates whether NGINX Plus features are enabled.
+	Plus bool
+	// Experimental indicates whether experimental features are enabled.
+	Experimental bool
 }
 
 // IsReferenced returns true if the Graph references the resource.
@@ -216,7 +216,7 @@ func BuildGraph(
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
 	validators validation.Validators,
 	logger logr.Logger,
-	experimentalEnabled bool,
+	featureFlags FeatureFlags,
 ) *Graph {
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
@@ -236,7 +236,7 @@ func BuildGraph(
 		processedGwClasses.Winner,
 		processedNginxProxies,
 		state.CRDMetadata,
-		experimentalEnabled,
+		featureFlags.Experimental,
 	)
 
 	secretResolver := newSecretResolver(state.Secrets)
@@ -250,7 +250,7 @@ func BuildGraph(
 		gc,
 		refGrantResolver,
 		processedNginxProxies,
-		experimentalEnabled,
+		featureFlags.Experimental,
 	)
 
 	processedBackendTLSPolicies := processBackendTLSPolicies(
@@ -262,8 +262,6 @@ func BuildGraph(
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 
-	// secrets map only gets populated if plus is enabled
-	plusEnabled := len(plusSecrets) > 0
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
 		state.HTTPRoutes,
@@ -271,7 +269,7 @@ func BuildGraph(
 		gws,
 		processedSnippetsFilters,
 		state.InferencePools,
-		flags{plus: plusEnabled, experimental: experimentalEnabled},
+		featureFlags,
 	)
 
 	referencedInferencePools := buildReferencedInferencePools(routes, gws, state.InferencePools, state.Services)

@@ -148,8 +148,6 @@ type L7RouteSpec struct {
 }
 
 type RouteRule struct {
-	// SessionPersistence holds the session persistence configuration for the route rule.
-	SessionPersistence *SessionPersistenceConfig
 	// Matches define the predicate used to match requests to a given action.
 	Matches []v1.HTTPRouteMatch
 	// RouteBackendRefs are a wrapper for v1.BackendRef and any BackendRef filters from the HTTPRoute or GRPCRoute.
@@ -172,6 +170,9 @@ type RouteBackendRef struct {
 	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
 	EndpointPickerConfig EndpointPickerConfig
 
+	// SessionPersistence holds the session persistence configuration for the route rule.
+	SessionPersistence *SessionPersistenceConfig
+
 	Filters []any
 
 	// IsInferencePool indicates if this backend is an InferencePool disguised as a Service.
@@ -187,6 +188,8 @@ type SessionPersistenceConfig struct {
 	SessionType v1.SessionPersistenceType
 	// Path is the path for which the session persistence is allowed.
 	Path string
+	// Idx is the unique identifier for this configuration in the route rule.
+	Idx string
 	// Valid indicates if the session persistence configuration is valid.
 	Valid bool
 }
@@ -272,7 +275,7 @@ func buildRoutesForGateways(
 	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
-	featureFlags flags,
+	featureFlags FeatureFlags,
 ) map[RouteKey]*L7Route {
 	if len(gateways) == 0 {
 		return nil
@@ -1168,6 +1171,10 @@ func routeKeyForKind(kind v1.Kind, nsname types.NamespacedName) RouteKey {
 	return key
 }
 
+func getSessionPersistenceKey(ruleIdx int, routeNsName types.NamespacedName) string {
+	return fmt.Sprintf("%s_%s_%d", routeNsName.Name, routeNsName.Namespace, ruleIdx)
+}
+
 // processSessionPersistenceConfig processes the session persistence configuration.
 func processSessionPersistenceConfig[T any](
 	sp *v1.SessionPersistence,
@@ -1324,81 +1331,4 @@ func getCookiePath(match v1.HTTPRouteMatch) string {
 	default:
 		return ""
 	}
-}
-
-// handleSessionPersistenceConflicts enforces:
-// 1. For each backend (ns/name:port), all rules that configure SessionPersistence
-// for that backend must have the same SessionPersistenceConfig.
-// 2. If multiple rules configure different session persistence configs for the same backend, it
-// is cleared on all those rules for that backend and a warning is emitted.
-func handleSessionPersistenceConflicts(rules []RouteRule) error {
-	if len(rules) == 0 {
-		return nil
-	}
-
-	backendToRuleIdxs := make(map[string][]int)
-	spPerBackendRef := make(map[string]*SessionPersistenceConfig)
-
-	for ri, rule := range rules {
-		sp := rule.SessionPersistence
-		if sp == nil {
-			continue
-		}
-
-		for _, rbr := range rule.RouteBackendRefs {
-			key := createBackendRefKey(rbr.BackendRef)
-			backendToRuleIdxs[key] = append(backendToRuleIdxs[key], ri)
-
-			if existing, ok := spPerBackendRef[key]; !ok {
-				spPerBackendRef[key] = sp
-			} else if !equalSessionPersistenceConfig(existing, sp) {
-				spPerBackendRef[key] = nil
-			}
-		}
-	}
-
-	hadConflict := false
-	conflictingBackends := make([]string, 0)
-	for backendKey, sp := range spPerBackendRef {
-		if sp != nil {
-			continue
-		}
-
-		hadConflict = true
-		conflictingBackends = append(conflictingBackends, backendKey)
-		for _, ri := range backendToRuleIdxs[backendKey] {
-			rules[ri].SessionPersistence = nil
-		}
-	}
-
-	if !hadConflict {
-		return nil
-	}
-
-	return fmt.Errorf("for backendRefs %s due to conflicting configuration across multiple rules",
-		strings.Join(conflictingBackends, ", "),
-	)
-}
-
-func equalSessionPersistenceConfig(a, b *SessionPersistenceConfig) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return a.Name == b.Name &&
-		a.SessionType == b.SessionType &&
-		a.Expiry == b.Expiry &&
-		a.Path == b.Path
-}
-
-func createBackendRefKey(backendRef v1.BackendRef) string {
-	var port int32
-	if backendRef.Port != nil {
-		port = *backendRef.Port
-	}
-
-	ns := defaultNamespace
-	if backendRef.Namespace != nil {
-		ns = string(*backendRef.Namespace)
-	}
-	return fmt.Sprintf("%s/%s:%d", ns, backendRef.Name, port)
 }

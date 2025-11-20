@@ -165,7 +165,10 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
-	createValidRuleWithBackendRefs := func(matches []gatewayv1.HTTPRouteMatch) RouteRule {
+	createValidRuleWithBackendRefs := func(
+		matches []gatewayv1.HTTPRouteMatch,
+		sessionPersistence *SessionPersistenceConfig,
+	) RouteRule {
 		refs := []BackendRef{
 			{
 				SvcNsName:          types.NamespacedName{Namespace: "service", Name: "foo"},
@@ -174,11 +177,13 @@ func TestBuildGraph(t *testing.T) {
 				Weight:             1,
 				BackendTLSPolicy:   &btp,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				SessionPersistence: sessionPersistence,
 			},
 		}
 		rbrs := []RouteBackendRef{
 			{
-				BackendRef: commonGWBackendRef,
+				BackendRef:         commonGWBackendRef,
+				SessionPersistence: sessionPersistence,
 			},
 		}
 		return RouteRule{
@@ -198,7 +203,7 @@ func TestBuildGraph(t *testing.T) {
 		routeType RouteType,
 		sessionPersistence *SessionPersistenceConfig,
 	) RouteRule {
-		rule := createValidRuleWithBackendRefs(matches)
+		rule := createValidRuleWithBackendRefs(matches, sessionPersistence)
 		rule.Filters = RouteRuleFilters{
 			Filters: []Filter{
 				{
@@ -212,10 +217,6 @@ func TestBuildGraph(t *testing.T) {
 				},
 			},
 			Valid: true,
-		}
-
-		if sessionPersistence != nil {
-			rule.SessionPersistence = sessionPersistence
 		}
 
 		return rule
@@ -880,13 +881,15 @@ func TestBuildGraph(t *testing.T) {
 		}
 	}
 
-	expectedSP := &SessionPersistenceConfig{
+	getExpectedSPConfig := &SessionPersistenceConfig{
 		Name:        "session-persistence-httproute",
 		SessionType: gatewayv1.CookieBasedSessionPersistence,
 		Expiry:      "30m",
 		Valid:       true,
 		Path:        "/",
+		Idx:         "hr-1_test_0",
 	}
+
 	routeHR1 := &L7Route{
 		RouteType:  RouteTypeHTTP,
 		Valid:      true,
@@ -914,7 +917,7 @@ func TestBuildGraph(t *testing.T) {
 		},
 		Spec: L7RouteSpec{
 			Hostnames: hr1.Spec.Hostnames,
-			Rules:     []RouteRule{createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeHTTP, expectedSP)},
+			Rules:     []RouteRule{createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeHTTP, getExpectedSPConfig)},
 		},
 		Policies: []*Policy{processedRoutePolicy},
 		Conditions: []conditions.Condition{
@@ -1083,6 +1086,7 @@ func TestBuildGraph(t *testing.T) {
 		SessionType: gatewayv1.CookieBasedSessionPersistence,
 		Expiry:      "30m",
 		Valid:       true,
+		Idx:         "gr_test_0",
 	}
 	routeGR := &L7Route{
 		RouteType:  RouteTypeGRPC,
@@ -1144,7 +1148,7 @@ func TestBuildGraph(t *testing.T) {
 		},
 		Spec: L7RouteSpec{
 			Hostnames: hr3.Spec.Hostnames,
-			Rules:     []RouteRule{createValidRuleWithBackendRefs(routeMatches)},
+			Rules:     []RouteRule{createValidRuleWithBackendRefs(routeMatches, nil)},
 		},
 	}
 
@@ -1483,15 +1487,16 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	tests := []struct {
-		store               ClusterState
-		expected            *Graph
-		name                string
-		experimentalEnabled bool
+		store                     ClusterState
+		expected                  *Graph
+		name                      string
+		plus, experimentalEnabled bool
 	}{
 		{
 			store:               createStateWithGatewayClass(normalGC),
 			expected:            createExpectedGraphWithGatewayClass(normalGC),
 			experimentalEnabled: true,
+			plus:                true,
 			name:                "normal case",
 		},
 		{
@@ -1534,7 +1539,10 @@ func TestBuildGraph(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
-				test.experimentalEnabled,
+				FeatureFlags{
+					Experimental: test.experimentalEnabled,
+					Plus:         test.plus,
+				},
 			)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
