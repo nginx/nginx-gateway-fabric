@@ -763,7 +763,7 @@ http {
 These are some directives the `Remote` mode uses over the `File` mode:
 
 - `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal_jwks_uri` to redirect the request to the external auth provider (e.g. KeyCloak)
-- `proxy_cache_path`: This is used to configuring caching of the JWKS after an initial request allowing subseuqnt requests to not request re-authenticaiton for a time
+- `proxy_cache_path`: This is used to configuring caching of the JWKS after an initial request allowing subsequent requests to not request re-authenticaiton for a time
 
 ```nginx
 http {
