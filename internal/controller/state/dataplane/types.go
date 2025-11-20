@@ -136,11 +136,12 @@ type SessionPersistenceConfig struct {
 	Path string
 }
 
+// SessionPersistenceType is the type of session persistence.
 type SessionPersistenceType string
 
 const (
-	// SessionPersistenceCookie indicates cookie-based session persistence.
-	SessionPersistenceCookie SessionPersistenceType = "cookie"
+	// CookieBasedSessionPersistence indicates cookie-based session persistence.
+	CookieBasedSessionPersistence SessionPersistenceType = "cookie"
 )
 
 // SSL is the SSL configuration for a server.

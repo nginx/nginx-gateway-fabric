@@ -774,12 +774,6 @@ func buildUpstreams(
 				}
 
 				for _, br := range rule.BackendRefs {
-					var spForThisBackend *graph.SessionPersistenceConfig
-					// only set session persistence for regular backends
-					if rule.SessionPersistence != nil && !br.IsMirrorBackend && !br.IsInferencePool {
-						spForThisBackend = rule.SessionPersistence
-					}
-
 					if upstream := buildUpstream(
 						ctx,
 						logger,
@@ -789,7 +783,7 @@ func buildUpstreams(
 						referencedServices,
 						uniqueUpstreams,
 						allowedAddressType,
-						spForThisBackend,
+						br.SessionPersistence,
 					); upstream != nil {
 						uniqueUpstreams[upstream.Name] = *upstream
 					}
@@ -844,7 +838,6 @@ func buildUpstream(
 	}
 
 	var errMsg string
-
 	eps, err := resolveUpstreamEndpoints(
 		ctx,
 		logger,
@@ -871,7 +864,7 @@ func buildUpstream(
 			Name:        sessionPersistence.Name,
 			Expiry:      sessionPersistence.Expiry,
 			Path:        sessionPersistence.Path,
-			SessionType: SessionPersistenceCookie,
+			SessionType: CookieBasedSessionPersistence,
 		}
 	}
 

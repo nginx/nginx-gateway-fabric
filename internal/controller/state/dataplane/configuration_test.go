@@ -2873,18 +2873,14 @@ func TestGetListenerHostname(t *testing.T) {
 	}
 }
 
-func refsToValidRules(
-	sessionPersistence *graph.SessionPersistenceConfig,
-	refs ...[]graph.BackendRef,
-) []graph.RouteRule {
-	rules := make([]graph.RouteRule, 0, len(refs))
+func refsToValidRules(backendRefs ...[]graph.BackendRef) []graph.RouteRule {
+	rules := make([]graph.RouteRule, 0, len(backendRefs))
 
-	for _, ref := range refs {
+	for _, ref := range backendRefs {
 		rules = append(rules, graph.RouteRule{
-			ValidMatches:       true,
-			Filters:            graph.RouteRuleFilters{Valid: true},
-			BackendRefs:        ref,
-			SessionPersistence: sessionPersistence,
+			ValidMatches: true,
+			Filters:      graph.RouteRuleFilters{Valid: true},
+			BackendRefs:  ref,
 		})
 	}
 
@@ -2985,95 +2981,84 @@ func TestBuildUpstreams(t *testing.T) {
 		},
 	}
 
-	createBackendRefs := func(serviceNames ...string) []graph.BackendRef {
+	createBackendRefs := func(sp *graph.SessionPersistenceConfig, serviceNames ...string) []graph.BackendRef {
 		var backends []graph.BackendRef
 		for _, name := range serviceNames {
 			backends = append(backends, graph.BackendRef{
-				SvcNsName:   types.NamespacedName{Namespace: "test", Name: name},
-				ServicePort: apiv1.ServicePort{Port: 80},
-				Valid:       name != "",
+				SvcNsName:          types.NamespacedName{Namespace: "test", Name: name},
+				ServicePort:        apiv1.ServicePort{Port: 80},
+				Valid:              name != "",
+				SessionPersistence: sp,
 			})
 		}
 		return backends
 	}
 
-	hr1Refs0 := createBackendRefs("foo", "bar")
+	createSPConfig := func(idx string) *graph.SessionPersistenceConfig {
+		return &graph.SessionPersistenceConfig{
+			Name:        "session-persistence",
+			SessionType: v1.CookieBasedSessionPersistence,
+			Expiry:      "24h",
+			Path:        "/",
+			Valid:       true,
+			Idx:         idx,
+		}
+	}
 
-	hr1Refs1 := createBackendRefs("baz", "", "") // empty service names should be ignored
+	hr1Refs0 := createBackendRefs(createSPConfig("foo-bar-sp"), "foo", "bar")
 
-	hr1Refs2 := createBackendRefs("invalid-for-gateway")
+	hr1Refs1 := createBackendRefs(nil, "baz", "", "") // empty service names should be ignored
+
+	hr1Refs2 := createBackendRefs(nil, "invalid-for-gateway")
 	hr1Refs2[0].InvalidForGateways = map[types.NamespacedName]conditions.Condition{
 		{Namespace: "test", Name: "gateway"}: {},
 	}
 
-	hr2Refs0 := createBackendRefs("foo", "baz") // shouldn't duplicate foo and baz upstream
+	// should duplicate foo upstream because it has a different SP config
+	hr2Refs0 := createBackendRefs(createSPConfig("foo-baz-sp"), "foo", "baz")
 
-	hr2Refs1 := createBackendRefs("nil-endpoints")
+	hr2Refs1 := createBackendRefs(nil, "nil-endpoints")
 
-	hr3Refs0 := createBackendRefs("baz") // shouldn't duplicate baz upstream
+	hr3Refs0 := createBackendRefs(nil, "baz") // shouldn't duplicate baz upstream
 
-	hr4Refs0 := createBackendRefs("empty-endpoints", "")
+	hr4Refs0 := createBackendRefs(nil, "empty-endpoints", "")
 
-	hr4Refs1 := createBackendRefs("baz2")
+	hr4Refs1 := createBackendRefs(nil, "baz2")
 
-	hr5Refs0 := createBackendRefs("ipv6-endpoints")
+	hr5Refs0 := createBackendRefs(nil, "ipv6-endpoints")
 
-	nonExistingRefs := createBackendRefs("non-existing")
+	nonExistingRefs := createBackendRefs(nil, "non-existing")
 
-	invalidHRRefs := createBackendRefs("abc")
+	invalidHRRefs := createBackendRefs(nil, "abc")
 
-	refsWithPolicies := createBackendRefs("policies")
+	refsWithPolicies := createBackendRefs(createSPConfig("policies-sp"), "policies")
 
-	mirrorRefs := createBackendRefs("mirror-service")
-	mirrorRefs[0].IsMirrorBackend = true
-
-	inferenceRefs := createBackendRefs("inference-service")
-	inferenceRefs[0].IsInferencePool = true
-
-	mixedRefs := []graph.BackendRef{
-		{
-			SvcNsName:   types.NamespacedName{Namespace: "test", Name: "regular-service"},
-			ServicePort: apiv1.ServicePort{Port: 80},
-			Valid:       true,
-		},
-		{
-			SvcNsName:       types.NamespacedName{Namespace: "test", Name: "mirror-service"},
-			ServicePort:     apiv1.ServicePort{Port: 80},
-			Valid:           true,
-			IsMirrorBackend: true,
-		},
-		{
-			SvcNsName:       types.NamespacedName{Namespace: "test", Name: "inference-service"},
-			ServicePort:     apiv1.ServicePort{Port: 80},
-			Valid:           true,
-			IsInferencePool: true,
-		},
-	}
-
-	spConfig := &graph.SessionPersistenceConfig{
-		Name:        "multiple-backends-sp",
-		SessionType: v1.CookieBasedSessionPersistence,
-		Expiry:      "24h",
-		Path:        "/",
+	getExpectedConfig := func() SessionPersistenceConfig {
+		return SessionPersistenceConfig{
+			Name:        "session-persistence",
+			SessionType: CookieBasedSessionPersistence,
+			Expiry:      "24h",
+			Path:        "/",
+		}
 	}
 
 	routes := map[graph.RouteKey]*graph.L7Route{
 		{NamespacedName: types.NamespacedName{Name: "hr1", Namespace: "test"}}: {
 			Valid: true,
 			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(spConfig, hr1Refs0, hr1Refs1, hr1Refs2),
+				Rules: refsToValidRules(hr1Refs0, hr1Refs1, hr1Refs2),
 			},
 		},
 		{NamespacedName: types.NamespacedName{Name: "hr2", Namespace: "test"}}: {
 			Valid: true,
 			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(nil, hr2Refs0, hr2Refs1),
+				Rules: refsToValidRules(hr2Refs0, hr2Refs1),
 			},
 		},
 		{NamespacedName: types.NamespacedName{Name: "hr3", Namespace: "test"}}: {
 			Valid: true,
 			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(spConfig, hr3Refs0),
+				Rules: refsToValidRules(hr3Refs0),
 			},
 		},
 	}
@@ -3082,7 +3067,7 @@ func TestBuildUpstreams(t *testing.T) {
 		{NamespacedName: types.NamespacedName{Name: "hr4", Namespace: "test"}}: {
 			Valid: true,
 			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(nil, hr4Refs0, hr4Refs1),
+				Rules: refsToValidRules(hr4Refs0, hr4Refs1),
 			},
 		},
 	}
@@ -3091,7 +3076,7 @@ func TestBuildUpstreams(t *testing.T) {
 		{NamespacedName: types.NamespacedName{Name: "hr4", Namespace: "test"}}: {
 			Valid: true,
 			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(nil, hr5Refs0, hr2Refs1),
+				Rules: refsToValidRules(hr5Refs0, hr2Refs1),
 			},
 		},
 	}
@@ -3100,7 +3085,7 @@ func TestBuildUpstreams(t *testing.T) {
 		{NamespacedName: types.NamespacedName{Name: "non-existing", Namespace: "test"}}: {
 			Valid: true,
 			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(spConfig, nonExistingRefs),
+				Rules: refsToValidRules(nonExistingRefs),
 			},
 		},
 	}
@@ -3109,7 +3094,7 @@ func TestBuildUpstreams(t *testing.T) {
 		{NamespacedName: types.NamespacedName{Name: "invalid", Namespace: "test"}}: {
 			Valid: false,
 			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(nil, invalidHRRefs),
+				Rules: refsToValidRules(invalidHRRefs),
 			},
 		},
 	}
@@ -3118,28 +3103,7 @@ func TestBuildUpstreams(t *testing.T) {
 		{NamespacedName: types.NamespacedName{Name: "policies", Namespace: "test"}}: {
 			Valid: true,
 			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(spConfig, refsWithPolicies),
-			},
-		},
-	}
-
-	routesWithMirrorAndInference := map[graph.RouteKey]*graph.L7Route{
-		{NamespacedName: types.NamespacedName{Name: "hr-mirror", Namespace: "test"}}: {
-			Valid: true,
-			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(spConfig, mirrorRefs),
-			},
-		},
-		{NamespacedName: types.NamespacedName{Name: "hr-inference", Namespace: "test"}}: {
-			Valid: true,
-			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(spConfig, inferenceRefs),
-			},
-		},
-		{NamespacedName: types.NamespacedName{Name: "hr-mixed", Namespace: "test"}}: {
-			Valid: true,
-			Spec: graph.L7RouteSpec{
-				Rules: refsToValidRules(spConfig, mixedRefs),
+				Rules: refsToValidRules(refsWithPolicies),
 			},
 		},
 	}
@@ -3182,11 +3146,6 @@ func TestBuildUpstreams(t *testing.T) {
 				Valid:  true,
 				Routes: routesWithPolicies,
 			},
-			{
-				Name:   "listener-6",
-				Valid:  true,
-				Routes: routesWithMirrorAndInference,
-			},
 		},
 	}
 
@@ -3219,26 +3178,16 @@ func TestBuildUpstreams(t *testing.T) {
 				},
 			},
 		},
-		{Name: "mirror-service", Namespace: "test"}:    {},
-		{Name: "inference-service", Namespace: "test"}: {},
-		{Name: "regular-service", Namespace: "test"}:   {},
 	}
 
 	emptyEndpointsErrMsg := "empty endpoints error"
 	nilEndpointsErrMsg := "nil endpoints error"
 
-	expectedSPConfig := SessionPersistenceConfig{
-		Name:        "multiple-backends-sp",
-		SessionType: SessionPersistenceCookie,
-		Expiry:      "24h",
-		Path:        "/",
-	}
-
 	expUpstreams := []Upstream{
 		{
-			Name:               "test_bar_80",
+			Name:               "test_bar_80_foo-bar-sp",
 			Endpoints:          barEndpoints,
-			SessionPersistence: expectedSPConfig,
+			SessionPersistence: getExpectedConfig(),
 		},
 		{
 			Name:               "test_baz2_80",
@@ -3248,7 +3197,12 @@ func TestBuildUpstreams(t *testing.T) {
 		{
 			Name:               "test_baz_80",
 			Endpoints:          bazEndpoints,
-			SessionPersistence: expectedSPConfig,
+			SessionPersistence: SessionPersistenceConfig{},
+		},
+		{
+			Name:               "test_baz_80_foo-baz-sp",
+			Endpoints:          bazEndpoints,
+			SessionPersistence: getExpectedConfig(),
 		},
 		{
 			Name:               "test_empty-endpoints_80",
@@ -3257,14 +3211,14 @@ func TestBuildUpstreams(t *testing.T) {
 			SessionPersistence: SessionPersistenceConfig{},
 		},
 		{
-			Name:               "test_foo_80",
+			Name:               "test_foo_80_foo-bar-sp",
 			Endpoints:          fooEndpoints,
-			SessionPersistence: expectedSPConfig,
+			SessionPersistence: getExpectedConfig(),
 		},
 		{
-			Name:      "test_nil-endpoints_80",
-			Endpoints: nil,
-			ErrorMsg:  nilEndpointsErrMsg,
+			Name:               "test_foo_80_foo-baz-sp",
+			Endpoints:          fooEndpoints,
+			SessionPersistence: getExpectedConfig(),
 		},
 		{
 			Name:               "test_ipv6-endpoints_80",
@@ -3272,25 +3226,16 @@ func TestBuildUpstreams(t *testing.T) {
 			SessionPersistence: SessionPersistenceConfig{},
 		},
 		{
-			Name:               "test_policies_80",
+			Name:      "test_nil-endpoints_80",
+			Endpoints: nil,
+			ErrorMsg:  nilEndpointsErrMsg,
+		},
+
+		{
+			Name:               "test_policies_80_policies-sp",
 			Endpoints:          policyEndpoints,
 			Policies:           []policies.Policy{validPolicy1, validPolicy2},
-			SessionPersistence: expectedSPConfig,
-		},
-		{
-			Name:               "test_mirror-service_80",
-			Endpoints:          []resolver.Endpoint{{Address: "17.0.0.0", Port: 80}},
-			SessionPersistence: SessionPersistenceConfig{},
-		},
-		{
-			Name:               "test_inference-service_80",
-			Endpoints:          []resolver.Endpoint{{Address: "18.0.0.0", Port: 80}},
-			SessionPersistence: SessionPersistenceConfig{},
-		},
-		{
-			Name:               "test_regular-service_80",
-			Endpoints:          []resolver.Endpoint{{Address: "19.0.0.0", Port: 80}},
-			SessionPersistence: expectedSPConfig,
+			SessionPersistence: getExpectedConfig(),
 		},
 	}
 
@@ -3323,12 +3268,6 @@ func TestBuildUpstreams(t *testing.T) {
 			return ipv6Endpoints, nil
 		case "policies":
 			return policyEndpoints, nil
-		case "mirror-service":
-			return []resolver.Endpoint{{Address: "17.0.0.0", Port: 80}}, nil
-		case "inference-service":
-			return []resolver.Endpoint{{Address: "18.0.0.0", Port: 80}}, nil
-		case "regular-service":
-			return []resolver.Endpoint{{Address: "19.0.0.0", Port: 80}}, nil
 		default:
 			return nil, fmt.Errorf("unexpected service %s", svcNsName.Name)
 		}

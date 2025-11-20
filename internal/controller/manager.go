@@ -140,10 +140,13 @@ func StartManager(cfg config.Config) error {
 			GenericValidator:    genericValidator,
 			PolicyValidator:     policyManager,
 		},
-		EventRecorder:        recorder,
-		MustExtractGVK:       mustExtractGVK,
-		PlusSecrets:          plusSecrets,
-		ExperimentalFeatures: cfg.ExperimentalFeatures,
+		EventRecorder:  recorder,
+		MustExtractGVK: mustExtractGVK,
+		PlusSecrets:    plusSecrets,
+		FeatureFlags: graph.FeatureFlags{
+			Plus:         cfg.Plus,
+			Experimental: cfg.ExperimentalFeatures,
+		},
 	})
 
 	var handlerCollector handlerMetricsCollector = collectors.NewControllerNoopCollector()

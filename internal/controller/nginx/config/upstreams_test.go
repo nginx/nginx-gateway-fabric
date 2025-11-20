@@ -229,7 +229,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				Name:        "session-persistence",
 				Expiry:      "30m",
 				Path:        "/session",
-				SessionType: dataplane.SessionPersistenceCookie,
+				SessionType: dataplane.CookieBasedSessionPersistence,
 			},
 		},
 		{
@@ -245,7 +245,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				Name:        "session-persistence",
 				Expiry:      "100h",
 				Path:        "/v1/users",
-				SessionType: dataplane.SessionPersistenceCookie,
+				SessionType: dataplane.CookieBasedSessionPersistence,
 			},
 		},
 		{
@@ -259,7 +259,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 			},
 			SessionPersistence: dataplane.SessionPersistenceConfig{
 				Name:        "session-persistence",
-				SessionType: dataplane.SessionPersistenceCookie,
+				SessionType: dataplane.CookieBasedSessionPersistence,
 			},
 		},
 	}
@@ -275,7 +275,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"upstream up8-with-sp-expiry-and-path-empty": 1,
 		"upstream invalid-backend-ref":               1,
 
-		"random two least_conn;": 6,
+		"random two least_conn;": 7,
 		"ip_hash;":               1,
 
 		"zone up1 1m;":                               1,
@@ -925,7 +925,7 @@ func TestCreateUpstreamPlus(t *testing.T) {
 				SessionPersistence: dataplane.SessionPersistenceConfig{
 					Name:        "session-persistence",
 					Expiry:      "45m",
-					SessionType: dataplane.SessionPersistenceCookie,
+					SessionType: dataplane.CookieBasedSessionPersistence,
 					Path:        "/app",
 				},
 			},
@@ -942,7 +942,7 @@ func TestCreateUpstreamPlus(t *testing.T) {
 				SessionPersistence: http.UpstreamSessionPersistence{
 					Name:        "session-persistence",
 					Expiry:      "45m",
-					SessionType: string(dataplane.SessionPersistenceCookie),
+					SessionType: string(dataplane.CookieBasedSessionPersistence),
 					Path:        "/app",
 				},
 			},
