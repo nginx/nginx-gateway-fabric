@@ -147,6 +147,7 @@ type BasicAuth struct {
   // Also configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
   //
   // +optional
+  // +kubebuilder:default="Restricted"
   Realm *string `json:"realm,omitempty"`
 
   // OnFailure customizes the 401 response for failed authentication.
@@ -199,7 +200,7 @@ type JWTAuth struct {
   // Example: "auth_jwt_leeway 60s".
   //
   // +optional
-  // +kubebuilder:default=60s
+  // +kubebuilder:default=0s
   Leeway *v1alpha1.Duration `json:"leeway,omitempty"`
 
   // Type sets token type: signed | encrypted | nested.
