@@ -159,31 +159,37 @@ func (v Validator) validateUpstreamKeepAlive(
 
 // ValidateLoadBalancingMethod validates the load balancing method for upstream servers.
 func (v Validator) validateLoadBalancingMethod(spec ngfAPI.UpstreamSettingsPolicySpec) field.ErrorList {
-	var allErrs field.ErrorList
-	fieldPath := field.NewPath("spec")
-
 	if spec.LoadBalancingMethod == nil {
 		return nil
 	}
 
-	if !v.plusEnabled {
-		if _, ok := httpConfig.OSSAllowedLBMethods[*spec.LoadBalancingMethod]; !ok {
-			path := fieldPath.Child("loadBalancingMethod")
-			allErrs = append(allErrs, field.Invalid(
-				path,
-				*spec.LoadBalancingMethod,
-				fmt.Sprintf(
-					"NGINX OSS only supports the following load balancing methods: %s",
-					getLoadBalancingMethodList(httpConfig.OSSAllowedLBMethods),
-				),
-			))
-		}
+	var allErrs field.ErrorList
+	path := field.NewPath("spec")
+	lbPath := path.Child("loadBalancingMethod")
+
+	allowedMethods := httpConfig.OSSAllowedLBMethods
+	nginxType := "NGINX OSS"
+	if v.plusEnabled {
+		allowedMethods = httpConfig.PlusAllowedLBMethods
+		nginxType = "NGINX Plus"
+	}
+
+	if _, ok := allowedMethods[*spec.LoadBalancingMethod]; !ok {
+		allErrs = append(allErrs, field.Invalid(
+			lbPath,
+			*spec.LoadBalancingMethod,
+			fmt.Sprintf(
+				"%s supports the following load balancing methods: %s",
+				nginxType,
+				getLoadBalancingMethodList(allowedMethods),
+			),
+		))
 	}
 
 	if spec.HashMethodKey != nil {
 		hashMethodKey := *spec.HashMethodKey
 		if err := v.genericValidator.ValidateNginxVariableName(string(hashMethodKey)); err != nil {
-			path := fieldPath.Child("hashMethodKey")
+			path := path.Child("hashMethodKey")
 			allErrs = append(allErrs, field.Invalid(path, hashMethodKey, err.Error()))
 		}
 	}
