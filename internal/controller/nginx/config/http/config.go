@@ -1,6 +1,7 @@
 package http
 
 import (
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 )
 
@@ -167,4 +168,15 @@ type ServerConfig struct {
 	IPFamily                 shared.IPFamily
 	Plus                     bool
 	DisableSNIHostValidation bool
+}
+
+var OSSAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
+	ngfAPI.LoadBalancingTypeRoundRobin:               {},
+	ngfAPI.LoadBalancingTypeLeastConnection:          {},
+	ngfAPI.LoadBalancingTypeIPHash:                   {},
+	ngfAPI.LoadBalancingTypeRandom:                   {},
+	ngfAPI.LoadBalancingTypeHash:                     {},
+	ngfAPI.LoadBalancingTypeHashConsistent:           {},
+	ngfAPI.LoadBalancingTypeRandomTwo:                {},
+	ngfAPI.LoadBalancingTypeRandomTwoLeastConnection: {},
 }

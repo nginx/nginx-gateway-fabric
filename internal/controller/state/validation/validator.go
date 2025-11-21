@@ -50,7 +50,6 @@ type GenericValidator interface {
 	ValidateNginxSize(size string) error
 	ValidateEndpoint(endpoint string) error
 	ValidateNginxVariableName(name string) error
-	ValidateLoadBalancingMethod(method string, plusEnabled bool) error
 }
 
 // PolicyValidator validates an NGF Policy.
