@@ -335,7 +335,7 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"least_time last_byte\": " +
-					"NGINX OSS only supports the following load balancing methods: "),
+					"NGINX OSS supports the following load balancing methods: "),
 			},
 		},
 		{
@@ -357,8 +357,21 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
-					"NGINX OSS only supports the following load balancing methods: "),
+					"NGINX OSS supports the following load balancing methods: "),
 			},
+		},
+		{
+			name: "invalid load balancing method for NGINX Plus",
+			policy: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingType("invalid-method")),
+				},
+			},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
+					"NGINX Plus supports the following load balancing methods: "),
+			},
+			plusEnabled: true,
 		},
 	}
 
