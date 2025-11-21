@@ -242,7 +242,7 @@ func TestAttachPolicies(t *testing.T) {
 				NGFPolicies:        test.ngfPolicies,
 			}
 
-			graph.attachPolicies(&policiesfakes.FakeValidator{}, "nginx-gateway", logr.Discard(), false)
+			graph.attachPolicies(&policiesfakes.FakeValidator{}, "nginx-gateway", logr.Discard())
 			for _, expect := range test.expects {
 				expect(g, graph)
 			}
@@ -681,23 +681,12 @@ func TestAttachPolicyToService(t *testing.T) {
 		}
 	}
 
-	validatorError := &policiesfakes.FakeValidator{
-		ValidateLoadBalancingMethodStub: func(_ policies.Policy, plusEnabled bool) []conditions.Condition {
-			if !plusEnabled {
-				return []conditions.Condition{conditions.NewPolicyInvalid("invalid load balancing method: NGINX Plus is required")}
-			}
-			return nil
-		},
-	}
-
 	tests := []struct {
 		policy       *Policy
 		svc          *ReferencedService
 		gws          map[types.NamespacedName]*Gateway
 		name         string
-		validator    policies.Validator
 		expAncestors []PolicyAncestor
-		plus         bool
 		expAttached  bool
 	}{
 		{
@@ -715,7 +704,6 @@ func TestAttachPolicyToService(t *testing.T) {
 					Ancestor: getGatewayParentRef(gwNsname),
 				},
 			},
-			validator: &policiesfakes.FakeValidator{},
 		},
 		{
 			name: "attachment; ancestor already exists so don't duplicate",
@@ -740,7 +728,6 @@ func TestAttachPolicyToService(t *testing.T) {
 					Ancestor: getGatewayParentRef(gwNsname), // only one ancestor per Gateway
 				},
 			},
-			validator: &policiesfakes.FakeValidator{},
 		},
 		{
 			name: "attachment; existing gateway from policy status processed first",
@@ -781,7 +768,6 @@ func TestAttachPolicyToService(t *testing.T) {
 					Ancestor: getGatewayParentRef(gw2Nsname), // Only new gateway gets added
 				},
 			},
-			validator: &policiesfakes.FakeValidator{},
 		},
 		{
 			name: "attachment; ancestor doesn't exist so add it",
@@ -810,7 +796,6 @@ func TestAttachPolicyToService(t *testing.T) {
 					Ancestor: getGatewayParentRef(gwNsname),
 				},
 			},
-			validator: &policiesfakes.FakeValidator{},
 		},
 		{
 			name:   "no attachment; gateway is invalid",
@@ -828,7 +813,6 @@ func TestAttachPolicyToService(t *testing.T) {
 					Conditions: []conditions.Condition{conditions.NewPolicyTargetNotFound("The Parent Gateway is invalid")},
 				},
 			},
-			validator: &policiesfakes.FakeValidator{},
 		},
 		{
 			name:   "no attachment; max ancestor",
@@ -841,7 +825,6 @@ func TestAttachPolicyToService(t *testing.T) {
 			gws:          getGateway(true /*valid*/),
 			expAttached:  false,
 			expAncestors: nil,
-			validator:    &policiesfakes.FakeValidator{},
 		},
 		{
 			name:   "no attachment; does not belong to gateway",
@@ -854,7 +837,6 @@ func TestAttachPolicyToService(t *testing.T) {
 			gws:          getGateway(true /*valid*/),
 			expAttached:  false,
 			expAncestors: nil,
-			validator:    &policiesfakes.FakeValidator{},
 		},
 		{
 			name: "no attachment; gateway is invalid",
@@ -881,24 +863,6 @@ func TestAttachPolicyToService(t *testing.T) {
 					Ancestor: getGatewayParentRef(gwNsname),
 				},
 			},
-			validator: &policiesfakes.FakeValidator{},
-		},
-		{
-			name:   "no attachment: invalid load balancing setting for OSS",
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}, InvalidForGateways: map[types.NamespacedName]struct{}{}},
-			svc: &ReferencedService{
-				GatewayNsNames: map[types.NamespacedName]struct{}{
-					gwNsname: {},
-				},
-			},
-			gws:         getGateway(true /*valid*/),
-			expAttached: true,
-			expAncestors: []PolicyAncestor{
-				{
-					Ancestor: getGatewayParentRef(gwNsname),
-				},
-			},
-			validator: validatorError,
 		},
 	}
 
@@ -907,7 +871,7 @@ func TestAttachPolicyToService(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			attachPolicyToService(test.policy, test.svc, test.gws, "ctlr", logr.Discard(), test.plus, test.validator)
+			attachPolicyToService(test.policy, test.svc, test.gws, "ctlr", logr.Discard())
 			if test.expAttached {
 				g.Expect(test.svc.Policies).To(HaveLen(1))
 			} else {
@@ -2308,7 +2272,7 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 	}
 
 	// Call attachPolicies to trigger the ancestor limit logic
-	graph.attachPolicies(validator, "nginx-gateway", testLogger, false)
+	graph.attachPolicies(validator, "nginx-gateway", testLogger)
 
 	// Verify that the policy with full ancestors has no actual ancestors assigned
 	policyFullKey := PolicyKey{

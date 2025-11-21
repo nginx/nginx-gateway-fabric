@@ -134,3 +134,34 @@ func TestValidateNginxVariableName(t *testing.T) {
 		`var$name`,
 	)
 }
+
+func makeValidator(plusEnabled bool) simpleValidatorFunc[string] {
+	return func(v string) error {
+		return (GenericValidator{}).ValidateLoadBalancingMethod(v, plusEnabled)
+	}
+}
+
+func TestValidateLoadBalancingMethod_OSS(t *testing.T) {
+	t.Helper()
+
+	ossValidator := makeValidator(false)
+	testValidValuesForSimpleValidator(t, ossValidator,
+		"round_robin",
+		"least_conn",
+		"ip_hash",
+		"hash",
+		"hash consistent",
+		"random",
+		"random two",
+		"random two least_conn",
+	)
+
+	testInvalidValuesForSimpleValidator(t, ossValidator,
+		"random two least_time=header",
+		"random two least_time=last_byte",
+		"least_time header",
+		"least_time last_byte",
+		"least_time header inflight",
+		"least_time last_byte inflight",
+	)
+}

@@ -44,18 +44,6 @@ type FakeValidator struct {
 	validateGlobalSettingsReturnsOnCall map[int]struct {
 		result1 []conditions.Condition
 	}
-	ValidateLoadBalancingMethodStub        func(policies.Policy, bool) []conditions.Condition
-	validateLoadBalancingMethodMutex       sync.RWMutex
-	validateLoadBalancingMethodArgsForCall []struct {
-		arg1 policies.Policy
-		arg2 bool
-	}
-	validateLoadBalancingMethodReturns struct {
-		result1 []conditions.Condition
-	}
-	validateLoadBalancingMethodReturnsOnCall map[int]struct {
-		result1 []conditions.Condition
-	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -241,68 +229,6 @@ func (fake *FakeValidator) ValidateGlobalSettingsReturnsOnCall(i int, result1 []
 		})
 	}
 	fake.validateGlobalSettingsReturnsOnCall[i] = struct {
-		result1 []conditions.Condition
-	}{result1}
-}
-
-func (fake *FakeValidator) ValidateLoadBalancingMethod(arg1 policies.Policy, arg2 bool) []conditions.Condition {
-	fake.validateLoadBalancingMethodMutex.Lock()
-	ret, specificReturn := fake.validateLoadBalancingMethodReturnsOnCall[len(fake.validateLoadBalancingMethodArgsForCall)]
-	fake.validateLoadBalancingMethodArgsForCall = append(fake.validateLoadBalancingMethodArgsForCall, struct {
-		arg1 policies.Policy
-		arg2 bool
-	}{arg1, arg2})
-	stub := fake.ValidateLoadBalancingMethodStub
-	fakeReturns := fake.validateLoadBalancingMethodReturns
-	fake.recordInvocation("ValidateLoadBalancingMethod", []interface{}{arg1, arg2})
-	fake.validateLoadBalancingMethodMutex.Unlock()
-	if stub != nil {
-		return stub(arg1, arg2)
-	}
-	if specificReturn {
-		return ret.result1
-	}
-	return fakeReturns.result1
-}
-
-func (fake *FakeValidator) ValidateLoadBalancingMethodCallCount() int {
-	fake.validateLoadBalancingMethodMutex.RLock()
-	defer fake.validateLoadBalancingMethodMutex.RUnlock()
-	return len(fake.validateLoadBalancingMethodArgsForCall)
-}
-
-func (fake *FakeValidator) ValidateLoadBalancingMethodCalls(stub func(policies.Policy, bool) []conditions.Condition) {
-	fake.validateLoadBalancingMethodMutex.Lock()
-	defer fake.validateLoadBalancingMethodMutex.Unlock()
-	fake.ValidateLoadBalancingMethodStub = stub
-}
-
-func (fake *FakeValidator) ValidateLoadBalancingMethodArgsForCall(i int) (policies.Policy, bool) {
-	fake.validateLoadBalancingMethodMutex.RLock()
-	defer fake.validateLoadBalancingMethodMutex.RUnlock()
-	argsForCall := fake.validateLoadBalancingMethodArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
-}
-
-func (fake *FakeValidator) ValidateLoadBalancingMethodReturns(result1 []conditions.Condition) {
-	fake.validateLoadBalancingMethodMutex.Lock()
-	defer fake.validateLoadBalancingMethodMutex.Unlock()
-	fake.ValidateLoadBalancingMethodStub = nil
-	fake.validateLoadBalancingMethodReturns = struct {
-		result1 []conditions.Condition
-	}{result1}
-}
-
-func (fake *FakeValidator) ValidateLoadBalancingMethodReturnsOnCall(i int, result1 []conditions.Condition) {
-	fake.validateLoadBalancingMethodMutex.Lock()
-	defer fake.validateLoadBalancingMethodMutex.Unlock()
-	fake.ValidateLoadBalancingMethodStub = nil
-	if fake.validateLoadBalancingMethodReturnsOnCall == nil {
-		fake.validateLoadBalancingMethodReturnsOnCall = make(map[int]struct {
-			result1 []conditions.Condition
-		})
-	}
-	fake.validateLoadBalancingMethodReturnsOnCall[i] = struct {
 		result1 []conditions.Condition
 	}{result1}
 }

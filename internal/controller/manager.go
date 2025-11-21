@@ -124,16 +124,11 @@ func StartManager(cfg config.Config) error {
 	mustExtractGVK := kinds.NewMustExtractGKV(scheme)
 
 	genericValidator := ngxvalidation.GenericValidator{}
-	policyManager := createPolicyManager(mustExtractGVK, genericValidator)
+	policyManager := createPolicyManager(mustExtractGVK, cfg.Plus, genericValidator)
 
 	plusSecrets, err := createPlusSecretMetadata(cfg, mgr.GetAPIReader())
 	if err != nil {
 		return err
-	}
-
-	flags := graph.Flags{
-		Plus:         cfg.Plus,
-		Experimental: cfg.ExperimentalFeatures,
 	}
 
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
@@ -145,10 +140,10 @@ func StartManager(cfg config.Config) error {
 			GenericValidator:    genericValidator,
 			PolicyValidator:     policyManager,
 		},
-		EventRecorder:  recorder,
-		MustExtractGVK: mustExtractGVK,
-		PlusSecrets:    plusSecrets,
-		Flags:          flags,
+		EventRecorder:        recorder,
+		MustExtractGVK:       mustExtractGVK,
+		PlusSecrets:          plusSecrets,
+		ExperimentalFeatures: cfg.ExperimentalFeatures,
 	})
 
 	var handlerCollector handlerMetricsCollector = collectors.NewControllerNoopCollector()
@@ -327,6 +322,7 @@ func StartManager(cfg config.Config) error {
 
 func createPolicyManager(
 	mustExtractGVK kinds.MustExtractGVK,
+	plusEnabled bool,
 	validator validation.GenericValidator,
 ) *policies.CompositeValidator {
 	cfgs := []policies.ManagerConfig{
@@ -340,7 +336,7 @@ func createPolicyManager(
 		},
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
-			Validator: upstreamsettings.NewValidator(validator),
+			Validator: upstreamsettings.NewValidator(validator, plusEnabled),
 		},
 	}
 

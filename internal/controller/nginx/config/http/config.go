@@ -1,7 +1,6 @@
 package http
 
 import (
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 )
 
@@ -124,7 +123,7 @@ type Upstream struct {
 	ZoneSize            string // format: 512k, 1m
 	StateFile           string
 	LoadBalancingMethod string
-	HashKey             string
+	HashMethodKey       string
 	KeepAlive           UpstreamKeepAlive
 	Servers             []UpstreamServer
 }
@@ -169,33 +168,3 @@ type ServerConfig struct {
 	Plus                     bool
 	DisableSNIHostValidation bool
 }
-
-var (
-	PlusAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
-		ngfAPI.LoadBalancingTypeRoundRobin:                 {},
-		ngfAPI.LoadBalancingTypeLeastConnection:            {},
-		ngfAPI.LoadBalancingTypeIPHash:                     {},
-		ngfAPI.LoadBalancingTypeRandom:                     {},
-		ngfAPI.LoadBalancingTypeHash:                       {},
-		ngfAPI.LoadBalancingTypeHashConsistent:             {},
-		ngfAPI.LoadBalancingTypeRandomTwo:                  {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:   {},
-		ngfAPI.LoadBalancingTypeLeastTimeHeader:            {},
-		ngfAPI.LoadBalancingTypeLeastTimeLastByte:          {},
-		ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight:    {},
-		ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight:  {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader:   {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte: {},
-	}
-
-	OSSAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
-		ngfAPI.LoadBalancingTypeRoundRobin:               {},
-		ngfAPI.LoadBalancingTypeLeastConnection:          {},
-		ngfAPI.LoadBalancingTypeIPHash:                   {},
-		ngfAPI.LoadBalancingTypeRandom:                   {},
-		ngfAPI.LoadBalancingTypeHash:                     {},
-		ngfAPI.LoadBalancingTypeHashConsistent:           {},
-		ngfAPI.LoadBalancingTypeRandomTwo:                {},
-		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection: {},
-	}
-)

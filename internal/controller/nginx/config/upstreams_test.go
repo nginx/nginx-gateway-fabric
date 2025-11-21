@@ -1210,7 +1210,7 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 		expectedSubStrings map[string]int
 		name               string
 		lbType             ngfAPI.LoadBalancingType
-		hashkey            ngfAPI.HashMethodKey
+		HashMethodKey      ngfAPI.HashMethodKey
 	}{
 		{
 			name: "default load balancing method",
@@ -1246,9 +1246,9 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 			},
 		},
 		{
-			name:    "hash load balancing method with specific hash key",
-			lbType:  ngfAPI.LoadBalancingTypeHash,
-			hashkey: ngfAPI.HashMethodKey("$request_uri"),
+			name:          "hash load balancing method with specific hash key",
+			lbType:        ngfAPI.LoadBalancingTypeHash,
+			HashMethodKey: ngfAPI.HashMethodKey("$request_uri"),
 			expectedSubStrings: map[string]int{
 				"upstream up1-usp-ipv4": 1,
 				"upstream up2-usp-ipv6": 1,
@@ -1256,9 +1256,9 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 			},
 		},
 		{
-			name:    "hash consistent load balancing method with specific hash key",
-			lbType:  ngfAPI.LoadBalancingTypeHashConsistent,
-			hashkey: ngfAPI.HashMethodKey("$remote_addr"),
+			name:          "hash consistent load balancing method with specific hash key",
+			lbType:        ngfAPI.LoadBalancingTypeHashConsistent,
+			HashMethodKey: ngfAPI.HashMethodKey("$remote_addr"),
 			expectedSubStrings: map[string]int{
 				"upstream up1-usp-ipv4":         1,
 				"upstream up2-usp-ipv6":         1,
@@ -1361,7 +1361,7 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 							},
 							Spec: ngfAPI.UpstreamSettingsPolicySpec{
 								LoadBalancingMethod: helpers.GetPointer(tt.lbType),
-								HashKey:             helpers.GetPointer(tt.hashkey),
+								HashMethodKey:       helpers.GetPointer(tt.HashMethodKey),
 							},
 						},
 					},
@@ -1382,7 +1382,7 @@ func TestExecuteUpstreams_LoadBalancingMethod(t *testing.T) {
 							},
 							Spec: ngfAPI.UpstreamSettingsPolicySpec{
 								LoadBalancingMethod: helpers.GetPointer(tt.lbType),
-								HashKey:             helpers.GetPointer(tt.hashkey),
+								HashMethodKey:       helpers.GetPointer(tt.HashMethodKey),
 							},
 						},
 					},

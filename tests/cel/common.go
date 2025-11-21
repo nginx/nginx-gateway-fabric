@@ -59,7 +59,7 @@ const (
 	expectedTargetRefKindServiceError     = `TargetRefs Kind must be: Service`
 	expectedTargetRefGroupCoreError       = `TargetRefs Group must be core`
 	expectedTargetRefNameUniqueError      = `TargetRef Name must be unique`
-	expectedHashKeyLoadBalancingTypeError = `hashKey is required when loadBalancingMethod ` +
+	expectedHashKeyLoadBalancingTypeError = `hashMethodKey is required when loadBalancingMethod ` +
 		`is 'hash' or 'hash consistent'`
 )
 

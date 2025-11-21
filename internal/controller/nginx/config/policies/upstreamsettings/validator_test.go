@@ -16,6 +16,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
+const plusDisabled = false
+
 type policyModFunc func(policy *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy
 
 func createValidPolicy() *ngfAPI.UpstreamSettingsPolicy {
@@ -39,7 +41,7 @@ func createValidPolicy() *ngfAPI.UpstreamSettingsPolicy {
 				Connections: helpers.GetPointer[int32](100),
 			},
 			LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
-			HashKey:             helpers.GetPointer[ngfAPI.HashMethodKey]("$upstream_addr"),
+			HashMethodKey:       helpers.GetPointer[ngfAPI.HashMethodKey]("$upstream_addr"),
 		},
 		Status: v1.PolicyStatus{},
 	}
@@ -126,7 +128,7 @@ func TestValidator_Validate(t *testing.T) {
 		},
 	}
 
-	v := upstreamsettings.NewValidator(validation.GenericValidator{})
+	v := upstreamsettings.NewValidator(validation.GenericValidator{}, plusDisabled)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -141,7 +143,7 @@ func TestValidator_Validate(t *testing.T) {
 
 func TestValidator_ValidatePanics(t *testing.T) {
 	t.Parallel()
-	v := upstreamsettings.NewValidator(nil)
+	v := upstreamsettings.NewValidator(nil, plusDisabled)
 
 	validate := func() {
 		_ = v.Validate(&policiesfakes.FakePolicy{})
@@ -156,7 +158,7 @@ func TestValidator_ValidateGlobalSettings(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	v := upstreamsettings.NewValidator(validation.GenericValidator{})
+	v := upstreamsettings.NewValidator(validation.GenericValidator{}, plusDisabled)
 
 	g.Expect(v.ValidateGlobalSettings(nil, nil)).To(BeNil())
 }
@@ -265,14 +267,14 @@ func TestValidator_Conflicts(t *testing.T) {
 			polB: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
 					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeHashConsistent),
-					HashKey:             helpers.GetPointer[ngfAPI.HashMethodKey]("$upstream_addr"),
+					HashMethodKey:       helpers.GetPointer[ngfAPI.HashMethodKey]("$upstream_addr"),
 				},
 			},
 			conflicts: true,
 		},
 	}
 
-	v := upstreamsettings.NewValidator(nil)
+	v := upstreamsettings.NewValidator(nil, plusDisabled)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -286,7 +288,7 @@ func TestValidator_Conflicts(t *testing.T) {
 
 func TestValidator_ConflictsPanics(t *testing.T) {
 	t.Parallel()
-	v := upstreamsettings.NewValidator(nil)
+	v := upstreamsettings.NewValidator(nil, plusDisabled)
 
 	conflicts := func() {
 		_ = v.Conflicts(&policiesfakes.FakePolicy{}, &policiesfakes.FakePolicy{})
@@ -358,29 +360,15 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 					"NGINX OSS only supports the following load balancing methods: "),
 			},
 		},
-		{
-			name: "invalid load balancing method for NGINX Plus",
-			policy: &ngfAPI.UpstreamSettingsPolicy{
-				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingType("invalid-method")),
-				},
-			},
-			plusEnabled: true,
-			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.loadBalancingMethod: Invalid value: \"invalid-method\": " +
-					"NGINX Plus only supports the following load balancing methods: "),
-			},
-		},
 	}
-
-	v := upstreamsettings.NewValidator(validation.GenericValidator{})
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			conds := v.ValidateLoadBalancingMethod(test.policy, test.plusEnabled)
+			v := upstreamsettings.NewValidator(validation.GenericValidator{}, test.plusEnabled)
+			conds := v.Validate(test.policy)
 
 			if test.expConditions != nil {
 				g.Expect(conds).To(HaveLen(1))
@@ -388,17 +376,4 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestValidator_ValidateLoadBalancingPanics(t *testing.T) {
-	t.Parallel()
-	v := upstreamsettings.NewValidator(nil)
-
-	validateLoadBalancingMethod := func() {
-		_ = v.ValidateLoadBalancingMethod(&policiesfakes.FakePolicy{}, true)
-	}
-
-	g := NewWithT(t)
-
-	g.Expect(validateLoadBalancingMethod).To(Panic())
 }

@@ -50,14 +50,6 @@ func (v *Validator) ValidateGlobalSettings(
 	return nil
 }
 
-// ValidateLoadBalancingMethod validates the load balancing method for upstream servers.
-func (v *Validator) ValidateLoadBalancingMethod(
-	_ policies.Policy,
-	_ bool,
-) []conditions.Condition {
-	return nil
-}
-
 // Conflicts returns true if the two ClientSettingsPolicies conflict.
 func (v *Validator) Conflicts(polA, polB policies.Policy) bool {
 	cspA := helpers.MustCastObject[*ngfAPI.ClientSettingsPolicy](polA)

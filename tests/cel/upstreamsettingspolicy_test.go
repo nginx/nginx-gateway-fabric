@@ -419,7 +419,7 @@ func TestUpstreamSettingsPolicy_LoadBalancing(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeHash),
-				HashKey:             helpers.GetPointer(ngfAPIv1alpha1.HashMethodKey("$upstream_connect_time")),
+				HashMethodKey:       helpers.GetPointer(ngfAPIv1alpha1.HashMethodKey("$upstream_connect_time")),
 			},
 		},
 		{
@@ -432,7 +432,7 @@ func TestUpstreamSettingsPolicy_LoadBalancing(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeHashConsistent),
-				HashKey:             helpers.GetPointer(ngfAPIv1alpha1.HashMethodKey("$upstream_bytes_sent")),
+				HashMethodKey:       helpers.GetPointer(ngfAPIv1alpha1.HashMethodKey("$upstream_bytes_sent")),
 			},
 		},
 	}

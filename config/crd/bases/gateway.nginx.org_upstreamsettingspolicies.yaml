@@ -51,9 +51,9 @@ spec:
           spec:
             description: Spec defines the desired state of the UpstreamSettingsPolicy.
             properties:
-              hashKey:
+              hashMethodKey:
                 description: |-
-                  HashKey defines the key used for hash-based load balancing methods.
+                  HashMethodKey defines the key used for hash-based load balancing methods.
                   This field is required when `LoadBalancingMethod` is set to `hash` or `hash consistent`.
                 pattern: ^\$[a-z_]+$
                 type: string
@@ -171,11 +171,11 @@ spec:
             - targetRefs
             type: object
             x-kubernetes-validations:
-            - message: hashKey is required when loadBalancingMethod is 'hash' or 'hash
-                consistent'
+            - message: hashMethodKey is required when loadBalancingMethod is 'hash'
+                or 'hash consistent'
               rule: '!(has(self.loadBalancingMethod) && (self.loadBalancingMethod
                 == ''hash'' || self.loadBalancingMethod == ''hash consistent'')) ||
-                has(self.hashKey)'
+                has(self.hashMethodKey)'
           status:
             description: Status defines the state of the UpstreamSettingsPolicy.
             properties:

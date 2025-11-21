@@ -2,9 +2,13 @@ package validation
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
+	"strings"
 
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
+
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
 // GenericValidator validates values for generic cases in the nginx conf.
@@ -126,4 +130,55 @@ func (GenericValidator) ValidateNginxVariableName(name string) error {
 	}
 
 	return nil
+}
+
+var (
+	PlusAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
+		ngfAPI.LoadBalancingTypeRoundRobin:                 {},
+		ngfAPI.LoadBalancingTypeLeastConnection:            {},
+		ngfAPI.LoadBalancingTypeIPHash:                     {},
+		ngfAPI.LoadBalancingTypeRandom:                     {},
+		ngfAPI.LoadBalancingTypeHash:                       {},
+		ngfAPI.LoadBalancingTypeHashConsistent:             {},
+		ngfAPI.LoadBalancingTypeRandomTwo:                  {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:   {},
+		ngfAPI.LoadBalancingTypeLeastTimeHeader:            {},
+		ngfAPI.LoadBalancingTypeLeastTimeLastByte:          {},
+		ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight:    {},
+		ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight:  {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader:   {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte: {},
+	}
+
+	OSSAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
+		ngfAPI.LoadBalancingTypeRoundRobin:               {},
+		ngfAPI.LoadBalancingTypeLeastConnection:          {},
+		ngfAPI.LoadBalancingTypeIPHash:                   {},
+		ngfAPI.LoadBalancingTypeRandom:                   {},
+		ngfAPI.LoadBalancingTypeHash:                     {},
+		ngfAPI.LoadBalancingTypeHashConsistent:           {},
+		ngfAPI.LoadBalancingTypeRandomTwo:                {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection: {},
+	}
+)
+
+func (GenericValidator) ValidateLoadBalancingMethod(method string, plusEnabled bool) error {
+	lbMethod := ngfAPI.LoadBalancingType(method)
+
+	if !plusEnabled {
+		if _, ok := OSSAllowedLBMethods[lbMethod]; ok {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("NGINX OSS only supports the following load balancing methods: %s",
+		getLoadBalancingMethodList(OSSAllowedLBMethods))
+}
+
+func getLoadBalancingMethodList(lbMethods map[ngfAPI.LoadBalancingType]struct{}) string {
+	var methods []string
+	for method := range lbMethods {
+		methods = append(methods, string(method))
+	}
+	return strings.Join(methods, ", ")
 }
