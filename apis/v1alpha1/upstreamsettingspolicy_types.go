@@ -131,7 +131,7 @@ const (
 	// - https://nginx.org/en/docs/http/ngx_http_upstream_module.html#ip_hash
 	// - https://nginx.org/en/docs/http/ngx_http_upstream_module.html#hash
 
-	// LoadBalancingMethods for NGINX OSS.
+	// LoadBalancingMethods supported by NGINX OSS and NGINX Plus.
 
 	// LoadBalancingTypeRoundRobin enables round-robin load balancing,
 	// distributing requests evenly across all upstream servers.
@@ -172,7 +172,7 @@ const (
 	// fewer active connections.
 	LoadBalancingTypeRandomTwoLeastConnection LoadBalancingType = "random two least_conn"
 
-	// LoadBalancingMethods for NGINX Plus along with OSS methods.
+	// LoadBalancingMethods supported by NGINX Plus.
 
 	// LoadBalancingTypeRandomTwoLeastTimeHeader enables a variation of least-time load balancing
 	// that randomly selects two servers and forwards traffic to the one with the least
