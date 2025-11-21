@@ -36,7 +36,7 @@ type UpstreamSettingsPolicyList struct {
 }
 
 // UpstreamSettingsPolicySpec defines the desired state of the UpstreamSettingsPolicy.
-// +kubebuilder:validation:XValidation:rule="!(has(self.loadBalancingMethod) && (self.loadBalancingMethod == 'hash' || self.loadBalancingMethod == 'hash consistent')) || has(self.hashKey)",message="hashKey is required when loadBalancingMethod is 'hash' or 'hash consistent'"
+// +kubebuilder:validation:XValidation:rule="!(has(self.loadBalancingMethod) && (self.loadBalancingMethod == 'hash' || self.loadBalancingMethod == 'hash consistent')) || has(self.hashMethodKey)",message="hashMethodKey is required when loadBalancingMethod is 'hash' or 'hash consistent'"
 //
 //nolint:lll
 type UpstreamSettingsPolicySpec struct {
@@ -61,11 +61,11 @@ type UpstreamSettingsPolicySpec struct {
 	// +optional
 	LoadBalancingMethod *LoadBalancingType `json:"loadBalancingMethod,omitempty"`
 
-	// HashKey defines the key used for hash-based load balancing methods.
+	// HashMethodKey defines the key used for hash-based load balancing methods.
 	// This field is required when `LoadBalancingMethod` is set to `hash` or `hash consistent`.
 	//
 	// +optional
-	HashKey *HashMethodKey `json:"hashKey,omitempty"`
+	HashMethodKey *HashMethodKey `json:"hashMethodKey,omitempty"`
 
 	// TargetRefs identifies API object(s) to apply the policy to.
 	// Objects must be in the same namespace as the policy.
@@ -135,7 +135,6 @@ const (
 
 	// LoadBalancingTypeRoundRobin enables round-robin load balancing,
 	// distributing requests evenly across all upstream servers.
-	// NGINX defaults to this method if no load balancing method is specified.
 	LoadBalancingTypeRoundRobin LoadBalancingType = "round_robin"
 
 	// LoadBalancingTypeLeastConn enables least-connections load balancing,
@@ -148,13 +147,13 @@ const (
 
 	// LoadBalancingTypeHash enables generic hash-based load balancing,
 	// routing requests to upstream servers based on a hash of a specified key
-	// HashKey field must be set when this method is selected.
+	// HashMethodKey field must be set when this method is selected.
 	// Example configuration: hash $binary_remote_addr;.
 	LoadBalancingTypeHash LoadBalancingType = "hash"
 
 	// LoadBalancingTypeHashConsistent enables consistent hash-based load balancing,
 	// which minimizes the number of keys remapped when a server is added or removed.
-	// HashKey field must be set when this method is selected.
+	// HashMethodKey field must be set when this method is selected.
 	// Example configuration: hash $binary_remote_addr consistent;.
 	LoadBalancingTypeHashConsistent LoadBalancingType = "hash consistent"
 

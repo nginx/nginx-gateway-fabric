@@ -168,10 +168,10 @@ func (g GeneratorImpl) createUpstream(
 		lbMethod := upstreamPolicySettings.LoadBalancingMethod
 
 		if lbMethod == string(ngfAPI.LoadBalancingTypeHash) {
-			lbMethod = fmt.Sprintf("hash %s", upstreamPolicySettings.HashKey)
+			lbMethod = fmt.Sprintf("hash %s", upstreamPolicySettings.HashMethodKey)
 		}
 		if lbMethod == string(ngfAPI.LoadBalancingTypeHashConsistent) {
-			lbMethod = fmt.Sprintf("hash %s consistent", upstreamPolicySettings.HashKey)
+			lbMethod = fmt.Sprintf("hash %s consistent", upstreamPolicySettings.HashMethodKey)
 		}
 		if lbMethod == string(ngfAPI.LoadBalancingTypeRoundRobin) {
 			lbMethod = ""

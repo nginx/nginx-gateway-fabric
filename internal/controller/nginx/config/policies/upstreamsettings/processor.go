@@ -15,8 +15,8 @@ type UpstreamSettings struct {
 	ZoneSize string
 	// LoadBalancingMethod is the load balancing method setting.
 	LoadBalancingMethod string
-	// HashKey is the key to be used for hash-based load balancing methods.
-	HashKey string
+	// HashMethodKey is the key to be used for hash-based load balancing methods.
+	HashMethodKey string
 	// KeepAlive contains the keepalive settings.
 	KeepAlive http.UpstreamKeepAlive
 }
@@ -70,8 +70,8 @@ func processPolicies(pols []policies.Policy) UpstreamSettings {
 			upstreamSettings.LoadBalancingMethod = string(*usp.Spec.LoadBalancingMethod)
 		}
 
-		if usp.Spec.HashKey != nil {
-			upstreamSettings.HashKey = string(*usp.Spec.HashKey)
+		if usp.Spec.HashMethodKey != nil {
+			upstreamSettings.HashMethodKey = string(*usp.Spec.HashMethodKey)
 		}
 	}
 

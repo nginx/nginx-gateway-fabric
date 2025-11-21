@@ -141,11 +141,3 @@ func (v *Validator) validateSettings(spec ngfAPIv1alpha2.ObservabilityPolicySpec
 
 	return allErrs.ToAggregate()
 }
-
-// ValidateLoadBalancingMethod validates the load balancing method for upstream servers.
-func (v *Validator) ValidateLoadBalancingMethod(
-	_ policies.Policy,
-	_ bool,
-) []conditions.Condition {
-	return nil
-}

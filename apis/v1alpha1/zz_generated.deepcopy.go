@@ -561,8 +561,8 @@ func (in *UpstreamSettingsPolicySpec) DeepCopyInto(out *UpstreamSettingsPolicySp
 		*out = new(LoadBalancingType)
 		**out = **in
 	}
-	if in.HashKey != nil {
-		in, out := &in.HashKey, &out.HashKey
+	if in.HashMethodKey != nil {
+		in, out := &in.HashMethodKey, &out.HashMethodKey
 		*out = new(HashMethodKey)
 		**out = **in
 	}

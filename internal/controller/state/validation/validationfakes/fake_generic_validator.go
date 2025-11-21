@@ -30,6 +30,18 @@ type FakeGenericValidator struct {
 	validateEscapedStringNoVarExpansionReturnsOnCall map[int]struct {
 		result1 error
 	}
+	ValidateLoadBalancingMethodStub        func(string, bool) error
+	validateLoadBalancingMethodMutex       sync.RWMutex
+	validateLoadBalancingMethodArgsForCall []struct {
+		arg1 string
+		arg2 bool
+	}
+	validateLoadBalancingMethodReturns struct {
+		result1 error
+	}
+	validateLoadBalancingMethodReturnsOnCall map[int]struct {
+		result1 error
+	}
 	ValidateNginxDurationStub        func(string) error
 	validateNginxDurationMutex       sync.RWMutex
 	validateNginxDurationArgsForCall []struct {
@@ -196,6 +208,68 @@ func (fake *FakeGenericValidator) ValidateEscapedStringNoVarExpansionReturnsOnCa
 		})
 	}
 	fake.validateEscapedStringNoVarExpansionReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateLoadBalancingMethod(arg1 string, arg2 bool) error {
+	fake.validateLoadBalancingMethodMutex.Lock()
+	ret, specificReturn := fake.validateLoadBalancingMethodReturnsOnCall[len(fake.validateLoadBalancingMethodArgsForCall)]
+	fake.validateLoadBalancingMethodArgsForCall = append(fake.validateLoadBalancingMethodArgsForCall, struct {
+		arg1 string
+		arg2 bool
+	}{arg1, arg2})
+	stub := fake.ValidateLoadBalancingMethodStub
+	fakeReturns := fake.validateLoadBalancingMethodReturns
+	fake.recordInvocation("ValidateLoadBalancingMethod", []interface{}{arg1, arg2})
+	fake.validateLoadBalancingMethodMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenericValidator) ValidateLoadBalancingMethodCallCount() int {
+	fake.validateLoadBalancingMethodMutex.RLock()
+	defer fake.validateLoadBalancingMethodMutex.RUnlock()
+	return len(fake.validateLoadBalancingMethodArgsForCall)
+}
+
+func (fake *FakeGenericValidator) ValidateLoadBalancingMethodCalls(stub func(string, bool) error) {
+	fake.validateLoadBalancingMethodMutex.Lock()
+	defer fake.validateLoadBalancingMethodMutex.Unlock()
+	fake.ValidateLoadBalancingMethodStub = stub
+}
+
+func (fake *FakeGenericValidator) ValidateLoadBalancingMethodArgsForCall(i int) (string, bool) {
+	fake.validateLoadBalancingMethodMutex.RLock()
+	defer fake.validateLoadBalancingMethodMutex.RUnlock()
+	argsForCall := fake.validateLoadBalancingMethodArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *FakeGenericValidator) ValidateLoadBalancingMethodReturns(result1 error) {
+	fake.validateLoadBalancingMethodMutex.Lock()
+	defer fake.validateLoadBalancingMethodMutex.Unlock()
+	fake.ValidateLoadBalancingMethodStub = nil
+	fake.validateLoadBalancingMethodReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateLoadBalancingMethodReturnsOnCall(i int, result1 error) {
+	fake.validateLoadBalancingMethodMutex.Lock()
+	defer fake.validateLoadBalancingMethodMutex.Unlock()
+	fake.ValidateLoadBalancingMethodStub = nil
+	if fake.validateLoadBalancingMethodReturnsOnCall == nil {
+		fake.validateLoadBalancingMethodReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateLoadBalancingMethodReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
 }
