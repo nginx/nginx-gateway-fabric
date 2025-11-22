@@ -137,7 +137,7 @@ const (
 	// distributing requests evenly across all upstream servers.
 	LoadBalancingTypeRoundRobin LoadBalancingType = "round_robin"
 
-	// LoadBalancingTypeLeastConn enables least-connections load balancing,
+	// LoadBalancingTypeLeastConnection enables least-connections load balancing,
 	// routing requests to the upstream server with the fewest active connections.
 	LoadBalancingTypeLeastConnection LoadBalancingType = "least_conn"
 
