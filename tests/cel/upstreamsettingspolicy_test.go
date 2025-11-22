@@ -7,6 +7,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestUpstreamSettingsPolicyTargetRefKind(t *testing.T) {
@@ -359,6 +360,89 @@ func TestUpstreamSettingsPolicyTargetRefNameUniqueness(t *testing.T) {
 				if tt.spec.TargetRefs[i].Name == "" {
 					tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 				}
+			}
+
+			upstreamSettingsPolicy := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      uniqueResourceName(testResourceName),
+					Namespace: defaultNamespace,
+				},
+				Spec: tt.spec,
+			}
+			validateCrd(t, tt.wantErrors, upstreamSettingsPolicy, k8sClient)
+		})
+	}
+}
+
+func TestUpstreamSettingsPolicy_LoadBalancing(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.UpstreamSettingsPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "when load balancing method is hash, hash key is required, error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeHash),
+			},
+			wantErrors: []string{expectedHashKeyLoadBalancingTypeError},
+		},
+		{
+			name: "when load balancing method is hash consistent, hash key is required, error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeHashConsistent),
+			},
+			wantErrors: []string{expectedHashKeyLoadBalancingTypeError},
+		},
+		{
+			name: "specify load balancing method as hash and set the hash key, no error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeHash),
+				HashMethodKey:       helpers.GetPointer(ngfAPIv1alpha1.HashMethodKey("$upstream_connect_time")),
+			},
+		},
+		{
+			name: "specify load balancing method as hash consistent and set the hash key, no error expected",
+			spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  serviceKind,
+						Group: coreGroup,
+					},
+				},
+				LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeHashConsistent),
+				HashMethodKey:       helpers.GetPointer(ngfAPIv1alpha1.HashMethodKey("$upstream_bytes_sent")),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			for i := range tt.spec.TargetRefs {
+				tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 			}
 
 			upstreamSettingsPolicy := &ngfAPIv1alpha1.UpstreamSettingsPolicy{
