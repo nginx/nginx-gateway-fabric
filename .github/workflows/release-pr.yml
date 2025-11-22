@@ -7,6 +7,10 @@ on:
         description: "Version to release"
         required: true
         default: "0.0.0"
+      operator-version:
+        description: "Operator version to release"
+        required: true
+        default: "0.0.0"
 
 defaults:
   run:
@@ -53,6 +57,22 @@ jobs:
           find: "edge"
           replace: ${{ inputs.version }}
           include: "charts/nginx-gateway-fabric/*.yaml"
+          regex: false
+
+      - name: Find and Replace
+        uses: jacobtomlinson/gha-find-replace@f1069b438f125e5395d84d1c6fd3b559a7880cb5 # 3.0.5
+        with:
+          find: "edge"
+          replace: ${{ inputs.operator-version }}
+          include: "operators/Dockerfile"
+          regex: false
+
+      - name: Find and Replace
+        uses: jacobtomlinson/gha-find-replace@f1069b438f125e5395d84d1c6fd3b559a7880cb5 # 3.0.5
+        with:
+          find: "VERSION ?= edge"
+          replace: "VERSION ?= ${{ inputs.operator-version }}"
+          include: "operators/Makefile"
           regex: false
 
       - name: Find and Replace

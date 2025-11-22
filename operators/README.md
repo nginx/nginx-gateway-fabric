@@ -94,33 +94,64 @@ operator-sdk scorecard bundle/
 
 ### Releases
 
-Once NGF has released, we can prepare the Operator release using the published NGF images.
+The Operator release process is largely automated. Once NGF has released, follow these steps:
 
-The Operator image is built using the Helm Chart from the root directory, so those changes are kept in sync by running `make docker-build` from the release branch (to be automated). The Operator image can be published and certified at the same time as the UBI based NGF control plane and OSS data plane images (instructions to follow, to be automated).
+#### Automated Release Process
 
-Once the images are certified and published, we can create the bundle for certification. This is mostly a scripted (note: to be automated) process.
-However, there are a few items that need to be kept in sync manually:
+1. Production Release: During the NGF production release (via the CI workflow), set the `operator_version` input to the new operator version (e.g., `v1.0.1`). This will:
+   - Build and push the operator image with the release tag
+   - Automatically submit the operator UBI image for RedHat certification via preflight
 
-1. RBAC:
-    The Operator requires RBAC rules to include permissions for anything the NGF Helm chart
-    can deploy (e.g. Pods, ConfigMaps, Gateways, HPAs, etc), and all permissions that NGF
-    itself has permissions for (e.g. all the Gateway APIs etc).
+2. Bundle Generation: After the production release completes, run the [Operator Bundle PR workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml):
+   - Set `operator-version` to the operator version without the `v` prefix (e.g., `1.0.1`)
+   - Set `submit-to-redhat` to `true` to automatically submit to the RedHat certified-operators repository
 
-    If the RBAC permissions either for or of the underlying Helm Chart changes, these need to be updated in [RBAC manifest](config/rbac/role.yaml).
+   This workflow will:
+   - Generate bundle manifests with NGF image versions updated to use image digests
+   - Create a draft PR in the NGF repository with the bundle changes
+   - If enabled, automatically:
+     - Fork and update the [RedHat certified-operators repository](https://github.com/redhat-openshift-ecosystem/certified-operators)
+     - Create a branch with the new bundle version
+     - Open a PR to the upstream certified-operators repo
 
-    The next time `make bundle` is ran, these RBAC changes will be reflected in the resulting bundle manifests.
+3. Review and Merge:
+   - Review and merge the internal bundle PR once approved
+   - Monitor the RedHat certified-operators PR for review feedback from RedHat
+   - Ensure the bundle PR changes are duplicated back to the main branch as well
 
-2. Sample manifest:
-   The [example manifest](config/samples/gateway_v1alpha1_nginxgatewayfabric.yaml) may need to be updated either to add new important fields, or to change existing entries.
+#### RBAC Synchronization
 
-3. Operator version:
-    Update the VERSION in the Makefile to reflect the version of the Operator being released.
+The Operator requires RBAC rules that include:
 
-When you are ready to release the bundle, run `make bundle-release`. This will update the NGF image version tags, and create the bundle manifests.
+- Permissions for anything the NGF Helm chart can deploy (e.g. Pods, ConfigMaps, Gateways, HPAs, etc)
+- All permissions that NGF itself has (e.g. all the Gateway API resources)
 
-To test the bundle locally, follow the `Building and Testing the Operator Locally` above.
+Automated Verification: A CI check runs automatically on PRs that modify RBAC files to ensure the operator RBAC includes all permissions from the Helm chart. You can also verify locally:
 
-To submit the bundle for certification, open a PR in the [RedHat Certified Operators repo](https://github.com/redhat-openshift-ecosystem/certified-operators) using your a branch from your own fork (Note: must have RedHat Portal access) following the guidelines in the repo.
+```bash
+./operators/scripts/verify-rbac-sync.sh
+```
+
+The verification script:
+
+- Renders the Helm chart with all features enabled to extract the maximum permission set
+- Compares operator RBAC permissions with the rendered chart
+- Handles wildcard permissions (`verbs: ["*"]`) correctly
+- Fails if any required permissions are missing
+
+If RBAC permissions in the Helm chart change, update [config/rbac/role.yaml](config/rbac/role.yaml) accordingly. The next time `make bundle` runs, these RBAC changes will be reflected in the bundle manifests.
+
+#### Manual Items to Check
+
+Before releasing, verify these items are up-to-date:
+
+1. Sample manifest: The [example manifest](config/samples/gateway_v1alpha1_nginxgatewayfabric.yaml) may need updates to add new important fields or change existing entries.
+
+2. Operator version: The VERSION in the [Makefile](Makefile) is automatically updated during the release process, but verify it matches the intended release version.
+
+#### Local Testing
+
+To test the operator bundle locally before releasing, follow the [Building and Testing the Operator Locally](#building-and-testing-the-operator-locally) instructions above.
 
 ## License
 

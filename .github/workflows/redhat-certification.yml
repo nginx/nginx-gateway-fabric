@@ -1,0 +1,78 @@
+name: RedHat Certification
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: "Image type to certify (ngf, nginx, operator)"
+        required: true
+        type: string
+      tag:
+        description: "Image tag to certify"
+        required: true
+        type: string
+      dry_run:
+        description: "Run preflight checks without submitting"
+        required: false
+        type: boolean
+        default: false
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    name: Submit ${{ inputs.image }} image for certification
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Set image reference
+        id: image
+        run: |
+          case "${{ inputs.image }}" in
+            ngf)
+              echo "ref=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric:${{ inputs.tag }}-ubi" >> $GITHUB_OUTPUT
+              ;;
+            nginx)
+              echo "ref=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx:${{ inputs.tag }}-ubi" >> $GITHUB_OUTPUT
+              ;;
+            operator)
+              echo "ref=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator:${{ inputs.tag }}" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "Error: Unknown image type: ${{ inputs.image }}"
+              exit 1
+              ;;
+          esac
+
+      - name: Set component ID environment variable
+        run: |
+          case "${{ inputs.image }}" in
+            ngf)
+              echo "COMPONENT_ID=${{ secrets.CERTIFICATION_COMPONENT_ID_NGF }}" >> $GITHUB_ENV
+              ;;
+            nginx)
+              echo "COMPONENT_ID=${{ secrets.CERTIFICATION_COMPONENT_ID_NGINX }}" >> $GITHUB_ENV
+              ;;
+            operator)
+              echo "COMPONENT_ID=${{ secrets.CERTIFICATION_COMPONENT_ID_OPERATOR }}" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Install preflight
+        run: |
+          PREFLIGHT_VERSION=1.14.1 # renovate: datasource=github-tags depName=redhat-openshift-ecosystem/openshift-preflight
+          curl -sSLo /tmp/preflight https://github.com/redhat-openshift-ecosystem/openshift-preflight/releases/download/${PREFLIGHT_VERSION}/preflight-linux-amd64
+          chmod +x /tmp/preflight
+          sudo mv /tmp/preflight /usr/local/bin/preflight
+          preflight version
+
+      - name: Run preflight check${{ !inputs.dry_run && ' and submit' || '' }}
+        run: |
+          preflight check container ${{ steps.image.outputs.ref }} \
+            --pyxis-api-token="${{ secrets.PYXIS_API_TOKEN }}" \
+            --certification-component-id="${COMPONENT_ID}" \
+            ${{ !inputs.dry_run && '--submit' || '' }}
