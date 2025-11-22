@@ -91,23 +91,23 @@ func conflicts(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
 		}
 	}
 
-	if !checkConflictForLoadBalancingFields(a, b) {
+	if checkConflictsForLoadBalancingFields(a, b) {
 		return true
 	}
 
 	return false
 }
 
-func checkConflictForLoadBalancingFields(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
+func checkConflictsForLoadBalancingFields(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
 	if a.LoadBalancingMethod != nil && b.LoadBalancingMethod != nil {
-		return *a.LoadBalancingMethod == *b.LoadBalancingMethod
+		return true
 	}
 
 	if a.HashMethodKey != nil && b.HashMethodKey != nil {
-		return *a.HashMethodKey == *b.HashMethodKey
+		return true
 	}
 
-	return true
+	return false
 }
 
 // validateSettings performs validation on fields in the spec that are vulnerable to code injection.
