@@ -112,3 +112,25 @@ func TestValidateEndpoint(t *testing.T) {
 		`my$endpoint`,
 	)
 }
+
+func TestValidateNginxVariableName(t *testing.T) {
+	t.Parallel()
+	validator := GenericValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateNginxVariableName,
+		`$upstream_bytes_sent`,
+		`$upstream_last_server_name`,
+		`$remote_addr`,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateNginxVariableName,
+		`1varname`,
+		`var-name`,
+		`var name`,
+		`var$name`,
+	)
+}

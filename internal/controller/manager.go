@@ -124,7 +124,7 @@ func StartManager(cfg config.Config) error {
 	mustExtractGVK := kinds.NewMustExtractGKV(scheme)
 
 	genericValidator := ngxvalidation.GenericValidator{}
-	policyManager := createPolicyManager(mustExtractGVK, genericValidator)
+	policyManager := createPolicyManager(mustExtractGVK, genericValidator, cfg.Plus)
 
 	plusSecrets, err := createPlusSecretMetadata(cfg, mgr.GetAPIReader())
 	if err != nil {
@@ -323,6 +323,7 @@ func StartManager(cfg config.Config) error {
 func createPolicyManager(
 	mustExtractGVK kinds.MustExtractGVK,
 	validator validation.GenericValidator,
+	plusEnabled bool,
 ) *policies.CompositeValidator {
 	cfgs := []policies.ManagerConfig{
 		{
@@ -335,7 +336,7 @@ func createPolicyManager(
 		},
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
-			Validator: upstreamsettings.NewValidator(validator),
+			Validator: upstreamsettings.NewValidator(validator, plusEnabled),
 		},
 	}
 

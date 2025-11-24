@@ -242,7 +242,7 @@ func TestAttachPolicies(t *testing.T) {
 				NGFPolicies:        test.ngfPolicies,
 			}
 
-			graph.attachPolicies(nil, "nginx-gateway", logr.Discard())
+			graph.attachPolicies(&policiesfakes.FakeValidator{}, "nginx-gateway", logr.Discard())
 			for _, expect := range test.expects {
 				expect(g, graph)
 			}
