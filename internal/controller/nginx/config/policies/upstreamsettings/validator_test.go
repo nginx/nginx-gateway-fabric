@@ -266,8 +266,7 @@ func TestValidator_Conflicts(t *testing.T) {
 			polA: createValidPolicy(),
 			polB: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					LoadBalancingMethod: helpers.GetPointer(ngfAPI.LoadBalancingTypeHashConsistent),
-					HashMethodKey:       helpers.GetPointer[ngfAPI.HashMethodKey]("$upstream_addr"),
+					HashMethodKey: helpers.GetPointer[ngfAPI.HashMethodKey]("$upstream_addr"),
 				},
 			},
 			conflicts: true,
