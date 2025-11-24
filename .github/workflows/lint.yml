@@ -47,7 +47,7 @@ jobs:
           go-version: stable
 
       - name: Lint Go
-        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
+        uses: golangci/golangci-lint-action@e7fa5ac41e1cf5b7d48e45e42232ce7ada589601 # v9.1.0
         with:
           working-directory: ${{ matrix.directory }}
           version: v2.6.2 # renovate: datasource=github-tags depName=golangci/golangci-lint
@@ -88,7 +88,7 @@ jobs:
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
 
       - name: Lint Actions
-        uses: reviewdog/action-actionlint@f00ad0691526c10be4021a91b2510f0a769b14d0 # v1.68.0
+        uses: reviewdog/action-actionlint@437bbe918b0d29544cbf9e8b1d63fe6f4e7a881d # v1.69.0
         with:
           actionlint_flags: -shellcheck ""
 
