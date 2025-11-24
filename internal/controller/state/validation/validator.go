@@ -49,6 +49,7 @@ type GenericValidator interface {
 	ValidateNginxDuration(duration string) error
 	ValidateNginxSize(size string) error
 	ValidateEndpoint(endpoint string) error
+	ValidateNginxVariableName(name string) error
 }
 
 // PolicyValidator validates an NGF Policy.
