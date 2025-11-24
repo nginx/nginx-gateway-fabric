@@ -561,6 +561,11 @@ func (in *UpstreamSettingsPolicySpec) DeepCopyInto(out *UpstreamSettingsPolicySp
 		*out = new(LoadBalancingType)
 		**out = **in
 	}
+	if in.HashMethodKey != nil {
+		in, out := &in.HashMethodKey, &out.HashMethodKey
+		*out = new(HashMethodKey)
+		**out = **in
+	}
 	if in.TargetRefs != nil {
 		in, out := &in.TargetRefs, &out.TargetRefs
 		*out = make([]apisv1.LocalPolicyTargetReference, len(*in))
