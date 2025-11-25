@@ -30,7 +30,7 @@ jobs:
       nginx_version: ${{ steps.nginx.outputs.nginx_version }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         with:
           fetch-depth: 0
 
@@ -41,7 +41,7 @@ jobs:
           echo "tag=${tag//v}" >> $GITHUB_OUTPUT
 
       - name: Checkout Repository at ${{ steps.ngf.outputs.tag }}
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         with:
           ref: refs/tags/v${{ steps.ngf.outputs.tag }}
 
@@ -67,7 +67,7 @@ jobs:
 
       - name: Check if update available for nginx image
         id: update
-        uses: lucacome/docker-image-update-checker@5d84572804be8bd4dc353f08c8437efdb6af37ac # v3.0.0
+        uses: lucacome/docker-image-update-checker@03e3f8ff4b69a3bf845e2f6b56f0e0b0ad7e1d1e # v3.0.1
         with:
           base-image: ${{ needs.variables.outputs.nginx_version }}
           image: ghcr.io/nginx/nginx-gateway-fabric/nginx:${{ needs.variables.outputs.ngf_tag }}
