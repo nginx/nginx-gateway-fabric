@@ -966,6 +966,7 @@ type NamespacedSecretKeyReference struct {
 For initial implementaion, both Basic Auth and Local JWKS should will only  have access to Secrets in the same namespace.
 
 Example: Grant BasicAuth in app-ns to read a Secret in security-ns
+
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
 kind: ReferenceGrant
@@ -1002,9 +1003,10 @@ spec:
 ### Additional Fields for JWT
 
 `require`, `tokenSource` and `propagation` are some additional fields that may be incldued in future updates to the API.
-These fields allow for more customization of how the JWT auth behavtes, but aren't required for the minial delivery of JWT Auth.
+These fields allow for more customization of how the JWT auth behaves, but aren't required for the minimal delivery of JWT Auth.
 
 Example of what implementation of these fields might look like:
+
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
 kind: AuthenticationFilter
@@ -1050,6 +1052,7 @@ spec:
 ```
 
 Example GoLang API changes:
+
 ```go
 type JWTAuth struct {
   // Require defines claims that must match exactly (e.g. iss, aud).
