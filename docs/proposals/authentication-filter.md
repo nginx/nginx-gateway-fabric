@@ -238,12 +238,21 @@ type FileKeySource struct {
   KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
 }
 
-// LocalObjectReferenceWithKey sepcifies as local kubernetes object 
-// with required `key` field to extract data.
+// LocalObjectReferenceWithKey specifies a local Kubernetes object
+// with a required `key` field to extract data.
+// +kubebuilder:validation:XValidation:message="name must be set",rule="self.name != ''"
 type LocalObjectReferenceWithKey struct {
-     v1.LocalObjectReference
-     Key string
+    // Inline the core LocalObjectReference so `name` sits at the same JSON level
+    // (optional, but avoids nesting)
+    v1.LocalObjectReference `json:",inline"`
+
+    // Key must be provided and non-empty.
+    // This makes the field required in the OpenAPI schema.
+    // +kubebuilder:validation:MinLength=1
+    // +kubebuilder:validation:XValidation:rule="self != ''",message="key must be non-empty"
+    Key string `json:"key"`
 }
+
 
  // RemoteKeySource specifies remote JWKS configuration.
 type RemoteKeySource struct {
