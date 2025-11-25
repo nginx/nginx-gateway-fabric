@@ -241,10 +241,8 @@ type JWTFileKeySource struct {
 // LocalObjectReferenceWithKey specifies a local Kubernetes object
 // with a required `key` field to extract data.
 type LocalObjectReferenceWithKey struct {
-    // Inline the core LocalObjectReference so `name` sits at the same JSON level
-    // (optional, but avoids nesting)
-    v1.LocalObjectReference `json:",inline"`
-
+    Name string: `json:"name"`
+    
     Key string `json:"key"`
 }
 
