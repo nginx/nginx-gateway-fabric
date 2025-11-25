@@ -2873,10 +2873,10 @@ func TestGetListenerHostname(t *testing.T) {
 	}
 }
 
-func refsToValidRules(refs ...[]graph.BackendRef) []graph.RouteRule {
-	rules := make([]graph.RouteRule, 0, len(refs))
+func refsToValidRules(backendRefs ...[]graph.BackendRef) []graph.RouteRule {
+	rules := make([]graph.RouteRule, 0, len(backendRefs))
 
-	for _, ref := range refs {
+	for _, ref := range backendRefs {
 		rules = append(rules, graph.RouteRule{
 			ValidMatches: true,
 			Filters:      graph.RouteRuleFilters{Valid: true},
@@ -2981,44 +2981,66 @@ func TestBuildUpstreams(t *testing.T) {
 		},
 	}
 
-	createBackendRefs := func(serviceNames ...string) []graph.BackendRef {
+	createBackendRefs := func(sp *graph.SessionPersistenceConfig, serviceNames ...string) []graph.BackendRef {
 		var backends []graph.BackendRef
 		for _, name := range serviceNames {
 			backends = append(backends, graph.BackendRef{
-				SvcNsName:   types.NamespacedName{Namespace: "test", Name: name},
-				ServicePort: apiv1.ServicePort{Port: 80},
-				Valid:       name != "",
+				SvcNsName:          types.NamespacedName{Namespace: "test", Name: name},
+				ServicePort:        apiv1.ServicePort{Port: 80},
+				Valid:              name != "",
+				SessionPersistence: sp,
 			})
 		}
 		return backends
 	}
 
-	hr1Refs0 := createBackendRefs("foo", "bar")
+	createSPConfig := func(idx string) *graph.SessionPersistenceConfig {
+		return &graph.SessionPersistenceConfig{
+			Name:        "session-persistence",
+			SessionType: v1.CookieBasedSessionPersistence,
+			Expiry:      "24h",
+			Path:        "/",
+			Valid:       true,
+			Idx:         idx,
+		}
+	}
 
-	hr1Refs1 := createBackendRefs("baz", "", "") // empty service names should be ignored
+	hr1Refs0 := createBackendRefs(createSPConfig("foo-bar-sp"), "foo", "bar")
 
-	hr1Refs2 := createBackendRefs("invalid-for-gateway")
+	hr1Refs1 := createBackendRefs(nil, "baz", "", "") // empty service names should be ignored
+
+	hr1Refs2 := createBackendRefs(nil, "invalid-for-gateway")
 	hr1Refs2[0].InvalidForGateways = map[types.NamespacedName]conditions.Condition{
 		{Namespace: "test", Name: "gateway"}: {},
 	}
 
-	hr2Refs0 := createBackendRefs("foo", "baz") // shouldn't duplicate foo and baz upstream
+	// should duplicate foo upstream because it has a different SP config
+	hr2Refs0 := createBackendRefs(createSPConfig("foo-baz-sp"), "foo", "baz")
 
-	hr2Refs1 := createBackendRefs("nil-endpoints")
+	hr2Refs1 := createBackendRefs(nil, "nil-endpoints")
 
-	hr3Refs0 := createBackendRefs("baz") // shouldn't duplicate baz upstream
+	hr3Refs0 := createBackendRefs(nil, "baz") // shouldn't duplicate baz upstream
 
-	hr4Refs0 := createBackendRefs("empty-endpoints", "")
+	hr4Refs0 := createBackendRefs(nil, "empty-endpoints", "")
 
-	hr4Refs1 := createBackendRefs("baz2")
+	hr4Refs1 := createBackendRefs(nil, "baz2")
 
-	hr5Refs0 := createBackendRefs("ipv6-endpoints")
+	hr5Refs0 := createBackendRefs(nil, "ipv6-endpoints")
 
-	nonExistingRefs := createBackendRefs("non-existing")
+	nonExistingRefs := createBackendRefs(nil, "non-existing")
 
-	invalidHRRefs := createBackendRefs("abc")
+	invalidHRRefs := createBackendRefs(nil, "abc")
 
-	refsWithPolicies := createBackendRefs("policies")
+	refsWithPolicies := createBackendRefs(createSPConfig("policies-sp"), "policies")
+
+	getExpectedConfig := func() SessionPersistenceConfig {
+		return SessionPersistenceConfig{
+			Name:        "session-persistence",
+			SessionType: CookieBasedSessionPersistence,
+			Expiry:      "24h",
+			Path:        "/",
+		}
+	}
 
 	routes := map[graph.RouteKey]*graph.L7Route{
 		{NamespacedName: types.NamespacedName{Name: "hr1", Namespace: "test"}}: {
@@ -3163,39 +3185,57 @@ func TestBuildUpstreams(t *testing.T) {
 
 	expUpstreams := []Upstream{
 		{
-			Name:      "test_bar_80",
-			Endpoints: barEndpoints,
+			Name:               "test_bar_80_foo-bar-sp",
+			Endpoints:          barEndpoints,
+			SessionPersistence: getExpectedConfig(),
 		},
 		{
-			Name:      "test_baz2_80",
-			Endpoints: baz2Endpoints,
+			Name:               "test_baz2_80",
+			Endpoints:          baz2Endpoints,
+			SessionPersistence: SessionPersistenceConfig{},
 		},
 		{
-			Name:      "test_baz_80",
-			Endpoints: bazEndpoints,
+			Name:               "test_baz_80",
+			Endpoints:          bazEndpoints,
+			SessionPersistence: SessionPersistenceConfig{},
 		},
 		{
-			Name:      "test_empty-endpoints_80",
-			Endpoints: []resolver.Endpoint{},
-			ErrorMsg:  emptyEndpointsErrMsg,
+			Name:               "test_baz_80_foo-baz-sp",
+			Endpoints:          bazEndpoints,
+			SessionPersistence: getExpectedConfig(),
 		},
 		{
-			Name:      "test_foo_80",
-			Endpoints: fooEndpoints,
+			Name:               "test_empty-endpoints_80",
+			Endpoints:          []resolver.Endpoint{},
+			ErrorMsg:           emptyEndpointsErrMsg,
+			SessionPersistence: SessionPersistenceConfig{},
+		},
+		{
+			Name:               "test_foo_80_foo-bar-sp",
+			Endpoints:          fooEndpoints,
+			SessionPersistence: getExpectedConfig(),
+		},
+		{
+			Name:               "test_foo_80_foo-baz-sp",
+			Endpoints:          fooEndpoints,
+			SessionPersistence: getExpectedConfig(),
+		},
+		{
+			Name:               "test_ipv6-endpoints_80",
+			Endpoints:          ipv6Endpoints,
+			SessionPersistence: SessionPersistenceConfig{},
 		},
 		{
 			Name:      "test_nil-endpoints_80",
 			Endpoints: nil,
 			ErrorMsg:  nilEndpointsErrMsg,
 		},
+
 		{
-			Name:      "test_ipv6-endpoints_80",
-			Endpoints: ipv6Endpoints,
-		},
-		{
-			Name:      "test_policies_80",
-			Endpoints: policyEndpoints,
-			Policies:  []policies.Policy{validPolicy1, validPolicy2},
+			Name:               "test_policies_80_policies-sp",
+			Endpoints:          policyEndpoints,
+			Policies:           []policies.Policy{validPolicy1, validPolicy2},
+			SessionPersistence: getExpectedConfig(),
 		},
 	}
 

@@ -409,7 +409,9 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
-				experimentalFeaturesEnabled,
+				FeatureFlags{
+					Experimental: experimentalFeaturesEnabled,
+				},
 			)
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
@@ -899,7 +901,9 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
-				experimentalFeaturesEnabled,
+				FeatureFlags{
+					Experimental: experimentalFeaturesEnabled,
+				},
 			)
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
