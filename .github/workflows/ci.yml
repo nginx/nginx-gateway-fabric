@@ -272,7 +272,7 @@ jobs:
           echo "GOCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
 
       - name: Create/Update Draft
-        uses: lucacome/draft-release@45e4395a3d8463abdb1747b20445b9be16ef6409 # v2.0.1
+        uses: lucacome/draft-release@0ebb400b90474a1b791602046abf8394e9f5402d # v2.0.2
         with:
           minor-label: "enhancement"
           major-label: "change"
