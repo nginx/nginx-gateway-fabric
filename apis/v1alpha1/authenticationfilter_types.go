@@ -38,19 +38,13 @@ type AuthenticationFilterList struct {
 }
 
 // AuthenticationFilterSpec defines the desired configuration.
-// For now only Basic is supported.
 // +kubebuilder:validation:XValidation:message="for type=Basic, spec.basic must be set",rule="self.type == 'Basic' ? self.basic != null : true"
 // +kubebuilder:validation:XValidation:message="when spec.basic is set, type must be 'Basic'",rule="self.basic != null ? self.type == 'Basic' : true"
+//
+//nolint:lll
 type AuthenticationFilterSpec struct {
-	// Type selects the authentication mechanism.
-	// +kubebuilder:default=Basic
-	Type AuthType `json:"type"`
-
-	// Basic configures HTTP Basic Authentication.
-	// Required when Type == Basic.
-	//
-	// +optional
 	Basic *BasicAuth `json:"basic,omitempty"`
+	Type  AuthType   `json:"type"`
 }
 
 // AuthType defines the authentication mechanism.
@@ -63,21 +57,9 @@ const (
 
 // BasicAuth configures HTTP Basic Authentication.
 type BasicAuth struct {
-	// SecretRef allows referencing a Secret in the same namespace
+	Realm     *string                     `json:"realm,omitempty"`
+	OnFailure *AuthFailureResponse        `json:"onFailure,omitempty"`
 	SecretRef LocalObjectReferenceWithKey `json:"secretRef"`
-
-	// Realm used by NGINX `auth_basic` directive.
-	// https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html#auth_basic
-	// Also configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
-	//
-	// +optional
-	// +kubebuilder:default="Restricted"
-	Realm *string `json:"realm,omitempty"`
-
-	// OnFailure customizes the 401 response for failed authentication.
-	//
-	// +optional
-	OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 }
 
 type LocalObjectReferenceWithKey struct {
@@ -99,6 +81,8 @@ const (
 
 // AuthScheme enumerates supported WWW-Authenticate schemes.Add a comment on  lines R320 to R321Add diff commentMarkdown input:  edit mode selected.WritePreviewAdd a suggestionHeadingBoldItalicQuoteCodeLinkUnordered listNumbered listTask listMentionReferenceSaved repliesAdd FilesPaste, drop, or click to add filesCancelCommentStart a reviewReturn to code
 // +kubebuilder:validation:Enum=Basic;Bearer
+//
+//nolint:lll
 type AuthScheme string
 
 const (
@@ -153,7 +137,7 @@ const (
 	// * Accepted
 	//
 	// Possible reasons for this condition to be False:
-	// * Invalid
+	// * Invalid.
 	AuthenticationFilterConditionTypeAccepted AuthenticationFilterConditionType = "Accepted"
 
 	// AuthenticationFilterConditionReasonAccepted is used with the Accepted condition type when

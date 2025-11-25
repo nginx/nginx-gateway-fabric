@@ -51,13 +51,10 @@ spec:
             description: Spec defines the desired state of the AuthenticationFilter.
             properties:
               basic:
-                description: |-
-                  Basic configures HTTP Basic Authentication.
-                  Required when Type == Basic.
+                description: BasicAuth configures HTTP Basic Authentication.
                 properties:
                   onFailure:
-                    description: OnFailure customizes the 401 response for failed
-                      authentication.
+                    description: AuthFailureResponse customizes 401/403 failures.
                     properties:
                       bodyPolicy:
                         default: Unauthorized
@@ -90,15 +87,8 @@ spec:
                           rule: self in [401, 403]
                     type: object
                   realm:
-                    default: Restricted
-                    description: |-
-                      Realm used by NGINX `auth_basic` directive.
-                      https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html#auth_basic
-                      Also configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
                     type: string
                   secretRef:
-                    description: SecretRef allows referencing a Secret in the same
-                      namespace
                     properties:
                       key:
                         minLength: 1
@@ -123,8 +113,7 @@ spec:
                 - secretRef
                 type: object
               type:
-                default: Basic
-                description: Type selects the authentication mechanism.
+                description: AuthType defines the authentication mechanism.
                 enum:
                 - Basic
                 type: string
