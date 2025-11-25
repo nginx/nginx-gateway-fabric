@@ -153,13 +153,13 @@ type BasicAuth struct {
   OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 }
 
-// KeyMode selects where JWT keys come from.
+// JWTKeyMode selects where JWT keys come from.
 // +kubebuilder:validation:Enum=File;Remote
-type KeyMode string
+type JWTKeyMode string
 
 const (
-  KeyModeFile   KeyMode = "File"
-  KeyModeRemote KeyMode = "Remote"
+  KeyModeFile   JWTKeyMode = "File"
+  KeyModeRemote JWTKeyMode = "Remote"
 )
 
 // JWTAuth configures JWT-based authentication (NGINX Plus).
@@ -177,13 +177,13 @@ type JWTAuth struct {
   Realm *string `json:"realm,omitempty"`
 
   // Mode selects how JWT keys are provided: local file or remote JWKS.
-  Mode KeyMode `json:"mode,omitempty"`
+  Mode JWTKeyMode `json:"mode,omitempty"`
 
   // File specifies local JWKS configuration.
   // Required when Mode == File.
   //
   // +optional
-  File *FileKeySource `json:"file,omitempty"`
+  File *JWTFileKeySource `json:"file,omitempty"`
 
   // Remote specifies remote JWKS configuration.
   // Required when Mode == Remote.
@@ -224,8 +224,8 @@ type JWTAuth struct {
   OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 }
 
-// FileKeySource specifies local JWKS key configuration.
-type FileKeySource struct {
+// JWTFileKeySource specifies local JWKS key configuration.
+type JWTFileKeySource struct {
   // SecretRef references a Secret containing the JWKS.
   SecretRef LocalObjectReferenceWithKey `json:"secretRef,omitempty"`
 
