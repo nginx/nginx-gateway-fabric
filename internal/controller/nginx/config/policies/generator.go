@@ -8,6 +8,8 @@ import (
 //
 //counterfeiter:generate . Generator
 type Generator interface {
+	// GenerateForHTTP generates policy configuration for the http block.
+	GenerateForHTTP(policies []Policy) GenerateResultFiles
 	// GenerateForServer generates policy configuration for the server block.
 	GenerateForServer(policies []Policy, server http.Server) GenerateResultFiles
 	// GenerateForLocation generates policy configuration for a normal location block.
@@ -33,6 +35,17 @@ type CompositeGenerator struct {
 // NewCompositeGenerator returns a new instance of a CompositeGenerator.
 func NewCompositeGenerator(generators ...Generator) *CompositeGenerator {
 	return &CompositeGenerator{generators: generators}
+}
+
+// GenerateForHTTP calls all policy generators for the http block.
+func (g *CompositeGenerator) GenerateForHTTP(policies []Policy) GenerateResultFiles {
+	var compositeResult GenerateResultFiles
+
+	for _, generator := range g.generators {
+		compositeResult = append(compositeResult, generator.GenerateForHTTP(policies)...)
+	}
+
+	return compositeResult
 }
 
 // GenerateForServer calls all policy generators for the server block.
@@ -71,6 +84,10 @@ func (g *CompositeGenerator) GenerateForInternalLocation(policies []Policy) Gene
 // UnimplementedGenerator can be inherited by any policy generator that may not need to implement all of
 // possible generations, in order to satisfy the Generator interface.
 type UnimplementedGenerator struct{}
+
+func (u UnimplementedGenerator) GenerateForHTTP(_ []Policy) GenerateResultFiles {
+	return nil
+}
 
 func (u UnimplementedGenerator) GenerateForServer(_ []Policy, _ http.Server) GenerateResultFiles {
 	return nil
