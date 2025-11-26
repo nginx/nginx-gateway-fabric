@@ -43,6 +43,21 @@ This document also focus on HTTP Basic Authentication and JWT Authentication. Ot
 | **JWT (JSON Web Token)**     | ❌           | ✅             | [ngx_http_auth_jwt_module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html) | Tokens are used for stateless authentication between client and server. |
 | **OpenID Connect**            | ❌           | ✅             | [ngx_http_oidc_module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html)| Allows authentication through third-party providers like Google.   |
 
+### Understanding authentication terminoligy
+
+#### Realms
+
+[RFC 7617](https://www.rfc-editor.org/rfc/rfc7617) gives an overview of the Realm parameter, which is used by `auth_basic` and `auth_jwt` directives in NGINX.
+
+```text
+The realm value is a free-form string
+that can only be compared for equality with other realms on that
+server.  The server will service the request only if it can validate
+the user-id and password for the protection space applying to the
+requested resource.
+```
+
+
 ## API, Customer Driven Interfaces, and User Experience
 
 This portion of the proposal will cover API design and interaction experience for use of Basic Auth and JWT.
@@ -144,7 +159,7 @@ type BasicAuth struct {
   // Also configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
   //
   // +optional
-  // +kubebuilder:default="Restricted"
+  // +kubebuilder:default=""
   Realm *string `json:"realm,omitempty"`
 
   // OnFailure customizes the 401 response for failed authentication.
@@ -173,7 +188,7 @@ type JWTAuth struct {
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
   //
   // +optional
-  // +kubebuilder:default="Restricted"
+  // +kubebuilder:default=""
   Realm *string `json:"realm,omitempty"`
 
   // Mode selects how JWT keys are provided: local file or remote JWKS.
@@ -502,7 +517,7 @@ http {
 
 For JWT Auth, there is two options.
 
-1. Local JWKS file stored as as a Secret or as a ConfigMap
+1. Local JWKS file stored as as a Secret
 2. Remote JWKS from an IdP provider like Keycloak
 
 #### Example JWT AuthenticationFilter with Local JWKS
@@ -558,7 +573,7 @@ spec:
       scheme: Bearer
 ```
 
-#### Secret referenced by filter (if using secretRef)
+#### Secret referenced by filter
 
 ```yaml
 apiVersion: v1
@@ -569,8 +584,6 @@ type: Opaque
 data:
   jwks.json: ewogICJrZXlzIjogWwogICAgewogICAgICAia3R5IjogIlJTQSIsCiAgICAgICJ1c2UiOiAic2lnIiwKICAgICAgImtpZCI6ICJleGFtcGxlLWtleS1pZCIsCiAgICAgICJhbGciOiAiUlMyNTYiLAogICAgICAibiI6ICJiYXNlNjR1cmwtbW9kdWx1cyIsCiAgICAgICJlIjogIkFRQUIiCiAgICB9CiAgXQp9Cg==
 ```
-
-Note: Secret data values must be base64-encoded and are decoded by the kubelet on mount, producing a valid jwks.json file. ConfigMap data values are plain text and should contain the raw JSON (not base64).
 
 #### HTTPRoute that will reference this filter
 
