@@ -152,7 +152,7 @@ const (
 // BasicAuth configures HTTP Basic Authentication.
 type BasicAuth struct {
   // SecretRef allows referencing a Secret in the same namespace
-  SecretRef LocalObjectReferenceWithKey `json:"secretRef,omitempty"`
+  SecretRef LocalObjectReference `json:"secretRef,omitempty"`
 
   // Realm used by NGINX `auth_basic` directive.
   // https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html#auth_basic
@@ -242,7 +242,7 @@ type JWTAuth struct {
 // JWTFileKeySource specifies local JWKS key configuration.
 type JWTFileKeySource struct {
   // SecretRef references a Secret containing the JWKS.
-  SecretRef LocalObjectReferenceWithKey `json:"secretRef,omitempty"`
+  SecretRef LocalObjectReference `json:"secretRef,omitempty"`
 
   // KeyCache is the cache duration for keys.
   // Configures `auth_jwt_key_cache` directive.
@@ -253,9 +253,9 @@ type JWTFileKeySource struct {
   KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
 }
 
-// LocalObjectReferenceWithKey specifies a local Kubernetes object
+// LocalObjectReference specifies a local Kubernetes object
 // with a required `key` field to extract data.
-type LocalObjectReferenceWithKey struct {
+type LocalObjectReference struct {
     Name string: `json:"name"`
     
     Key string `json:"key"`
