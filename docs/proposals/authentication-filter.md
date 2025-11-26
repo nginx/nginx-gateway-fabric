@@ -990,6 +990,7 @@ spec:
 ```
 
 AuthenticationFilter referencing the cross-namespace Secret
+AuthenticationFilter referencing the cross-namespace Secret
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
