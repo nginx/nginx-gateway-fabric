@@ -257,7 +257,7 @@ type JWTFileKeySource struct {
 // with a required `key` field to extract data.
 type LocalObjectReference struct {
     Name string: `json:"name"`
-    
+
     Key string `json:"key"`
 }
 
