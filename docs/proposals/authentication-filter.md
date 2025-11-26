@@ -157,10 +157,7 @@ type BasicAuth struct {
   // Realm used by NGINX `auth_basic` directive.
   // https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html#auth_basic
   // Also configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
-  //
-  // +optional
-  // +kubebuilder:default=""
-  Realm *string `json:"realm,omitempty"`
+  Realm string `json:"realm,omitempty"`
 
   // OnFailure customizes the 401 response for failed authentication.
   //
@@ -186,10 +183,7 @@ type JWTAuth struct {
   // Realm used by NGINX `auth_jwt` directive
   // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
-  //
-  // +optional
-  // +kubebuilder:default=""
-  Realm *string `json:"realm,omitempty"`
+  Realm string `json:"realm,omitempty"`
 
   // Mode selects how JWT keys are provided: local file or remote JWKS.
   Mode JWTKeyMode `json:"mode,omitempty"`
@@ -212,7 +206,6 @@ type JWTAuth struct {
   // Example: "auth_jwt_leeway 60s".
   //
   // +optional
-  // +kubebuilder:default=0s
   Leeway *v1alpha1.Duration `json:"leeway,omitempty"`
 
   // Type sets token type: signed | encrypted | nested.
@@ -417,7 +410,7 @@ spec:
     secretRef:
       name: basic-auth-users   # Secret containing htpasswd data
       key: htpasswd
-    realm: "Restricted"        # Optional. Helps with logging
+    realm: "Restricted"
     onFailure:                 # Optional. These setting may be defaults.
       statusCode: 401
       scheme: Basic
