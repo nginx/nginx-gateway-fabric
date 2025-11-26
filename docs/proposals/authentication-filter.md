@@ -1082,6 +1082,7 @@ spec:
 ```
 
 Example GoLang API changes:
+Example GoLang API changes:
 
 ```go
 type JWTAuth struct {
