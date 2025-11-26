@@ -250,9 +250,6 @@ type JWTFileKeySource struct {
 // with a required `key` field to extract data.
 type LocalObjectReference struct {
     Name string: `json:"name"`
-
-    // Default key will differ depending on auth Type
-    Key *string `json:"key"`
 }
 
 
@@ -406,7 +403,6 @@ spec:
   basic:
     secretRef:
       name: basic-auth-users   # Secret containing auth data.
-      key: auth                # Optional. Defaults to auth for Basic Auth.
     realm: "Restricted"
     onFailure:                 # Optional. These setting may be defaults.
       statusCode: 401
@@ -556,7 +552,6 @@ spec:
     file:
       secretRef:
         name: jwt-keys-secure
-        key: jwks.json # Optional. Defaults to jwks.json for JWT Auth.
       keyCache: 10m  # Optional cache time for keys (auth_jwt_key_cache)
     # Acceptable clock skew for exp/nbf
     leeway: 60s # Configures auth_jwt_leeway
