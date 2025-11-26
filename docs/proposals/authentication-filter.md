@@ -469,6 +469,10 @@ spec:
 
 #### Generated NGINX config
 
+Note: For Basic Auth, NGF will store the file used by `auth_basic_user_file` in `/etc/nginx/secrets/`
+The full path will use the `name` and `key` of the secret referenced by `AuthenticationFilter`
+In this case, the full path will be `/etc/nginx/secrets/basic-auth-users/htpasswd`
+
 ```nginx
 http {
     upstream backend_default {
@@ -618,6 +622,10 @@ spec:
 Below are `two` potential NGINX configurations based on the mode used.
 
 1. NGINX Config when using `Mode: File` (i.e. locally referenced JWKS key)
+
+Note: For JWT Auth, NGF will store the file used by `auth_jwt_key_file` in `/etc/nginx/keys/`
+The full path will use the `name` and `key` of the secret referenced by `AuthenticationFilter`
+In this case, the full path will be `/etc/nginx/keys/jwt-keys-secure/jwks.json`
 
 ```nginx
 http {
