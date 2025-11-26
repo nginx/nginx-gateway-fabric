@@ -8,6 +8,8 @@ import (
 
 	. "github.com/onsi/gomega"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
@@ -104,7 +106,7 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 				Logging: dataplane.Logging{AccessLog: tt.accessLog},
 			}
 
-			res := executeBaseHTTPConfig(conf)
+			res := executeBaseHTTPConfig(conf, policies.UnimplementedGenerator{})
 			g.Expect(res).To(HaveLen(1))
 			httpConfig := string(res[0].data)
 			for _, expectedOutput := range tt.expectedOutputs {
@@ -155,7 +157,7 @@ func TestExecuteBaseHttp_HTTP2(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf)
+			res := executeBaseHTTPConfig(test.conf, policies.UnimplementedGenerator{})
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(test.expCount).To(Equal(strings.Count(string(res[0].data), expSubStr)))
 			g.Expect(strings.Count(string(res[0].data), "map $http_host $gw_api_compliant_host {")).To(Equal(1))
@@ -185,7 +187,7 @@ func TestExecuteBaseHttp_Snippets(t *testing.T) {
 
 	g := NewWithT(t)
 
-	res := executeBaseHTTPConfig(conf)
+	res := executeBaseHTTPConfig(conf, policies.UnimplementedGenerator{})
 	g.Expect(res).To(HaveLen(3))
 
 	sort.Slice(
@@ -296,7 +298,7 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf)
+			res := executeBaseHTTPConfig(test.conf, policies.UnimplementedGenerator{})
 			g.Expect(res).To(HaveLen(1))
 
 			httpConfig := string(res[0].data)
@@ -412,7 +414,7 @@ func TestExecuteBaseHttp_DNSResolver(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf)
+			res := executeBaseHTTPConfig(test.conf, policies.UnimplementedGenerator{})
 			g.Expect(res).To(HaveLen(1))
 
 			httpConfig := string(res[0].data)
@@ -470,7 +472,7 @@ func TestExecuteBaseHttp_GatewaySecretID(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf)
+			res := executeBaseHTTPConfig(test.conf, policies.UnimplementedGenerator{})
 			g.Expect(res).To(HaveLen(1))
 
 			httpConfig := string(res[0].data)
@@ -494,10 +496,67 @@ func TestExecuteBaseHttp_ConnectionHeaderMaps(t *testing.T) {
 	}
 
 	g := NewWithT(t)
-	res := executeBaseHTTPConfig(dataplane.Configuration{})
+	res := executeBaseHTTPConfig(dataplane.Configuration{}, policies.UnimplementedGenerator{})
 	g.Expect(res).To(HaveLen(1))
 	httpConfig := string(res[0].data)
 	for subStr, count := range expSubStringsWithCount {
 		g.Expect(strings.Count(httpConfig, subStr)).To(Equal(count))
 	}
+}
+
+func TestExecuteBaseHttp_Policies(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	fakeGen := &policiesfakes.FakeGenerator{}
+	fakeGen.GenerateForHTTPReturns(policies.GenerateResultFiles{
+		{
+			Name:    "policy1.conf",
+			Content: []byte("policy1 content"),
+		},
+		{
+			Name:    "policy2.conf",
+			Content: []byte("policy2 content"),
+		},
+	})
+
+	conf := dataplane.Configuration{
+		BaseHTTPConfig: dataplane.BaseHTTPConfig{
+			Policies: []policies.Policy{
+				&policiesfakes.FakePolicy{},
+				&policiesfakes.FakePolicy{},
+			},
+		},
+	}
+
+	res := executeBaseHTTPConfig(conf, fakeGen)
+	g.Expect(res).To(HaveLen(3)) // 1 http.conf + 2 policy files
+
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].dest < res[j].dest
+	})
+
+	/*
+		Order of files:
+		/etc/nginx/conf.d/http.conf
+		/etc/nginx/includes/policy1.conf
+		/etc/nginx/includes/policy2.conf
+	*/
+
+	httpRes := string(res[0].data)
+	g.Expect(httpRes).To(ContainSubstring("map $http_host $gw_api_compliant_host {"))
+	g.Expect(httpRes).To(ContainSubstring("include /etc/nginx/includes/policy1.conf;"))
+	g.Expect(httpRes).To(ContainSubstring("include /etc/nginx/includes/policy2.conf;"))
+
+	policy1Res := string(res[1].data)
+	g.Expect(policy1Res).To(Equal("policy1 content"))
+
+	policy2Res := string(res[2].data)
+	g.Expect(policy2Res).To(Equal("policy2 content"))
+
+	// Verify GenerateForHTTP was called with the correct policies
+	g.Expect(fakeGen.GenerateForHTTPCallCount()).To(Equal(1))
+	calledPolicies := fakeGen.GenerateForHTTPArgsForCall(0)
+	g.Expect(calledPolicies).To(HaveLen(2))
 }

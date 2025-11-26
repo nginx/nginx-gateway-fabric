@@ -2140,6 +2140,7 @@ func TestBuildConfiguration(t *testing.T) {
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.BaseHTTPConfig.Policies = []policies.Policy{gwPolicy1.Source, gwPolicy2.Source}
 				conf.SSLServers = []VirtualServer{
 					{
 						IsDefault: true,
@@ -2225,6 +2226,7 @@ func TestBuildConfiguration(t *testing.T) {
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.BaseHTTPConfig.Policies = []policies.Policy{gwPolicy1.Source, gwPolicy2.Source}
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
 				conf.HTTPServers = []VirtualServer{

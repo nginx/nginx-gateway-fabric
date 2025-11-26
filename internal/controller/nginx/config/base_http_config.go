@@ -5,6 +5,7 @@ import (
 	"net"
 	gotemplate "text/template"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -29,8 +30,21 @@ type httpConfig struct {
 	HTTP2                   bool
 }
 
-func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
-	includes := createIncludesFromSnippets(conf.BaseHTTPConfig.Snippets)
+func newExecuteBaseHTTPConfigFunc(generator policies.Generator) executeFunc {
+	return func(conf dataplane.Configuration) []executeResult {
+		return executeBaseHTTPConfig(conf, generator)
+	}
+}
+
+func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Generator) []executeResult {
+	snippetIncludes := createIncludesFromSnippets(conf.BaseHTTPConfig.Snippets)
+	policyIncludes := createIncludesFromPolicyGenerateResult(
+		generator.GenerateForHTTP(conf.BaseHTTPConfig.Policies),
+	)
+
+	includes := make([]shared.Include, 0, len(snippetIncludes)+len(policyIncludes))
+	includes = append(includes, snippetIncludes...)
+	includes = append(includes, policyIncludes...)
 
 	hc := httpConfig{
 		HTTP2:                   conf.BaseHTTPConfig.HTTP2,

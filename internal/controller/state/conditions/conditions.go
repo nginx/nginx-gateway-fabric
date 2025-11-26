@@ -131,8 +131,12 @@ const (
 	// ObservabilityPolicy is applied to a HTTPRoute, or GRPCRoute.
 	ObservabilityPolicyAffected v1.PolicyConditionType = "ObservabilityPolicyAffected"
 
+	// ProxySettingsPolicyAffected is used with the "PolicyAffected" condition when a
+	// ProxySettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	ProxySettingsPolicyAffected v1.PolicyConditionType = "ProxySettingsPolicyAffected"
+
 	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
-	// ObservabilityPolicy or ClientSettingsPolicy is applied to Gateways or Routes.
+	// ObservabilityPolicy, ClientSettingsPolicy, or ProxySettingsPolicy is applied to Gateways or Routes.
 	PolicyAffectedReason v1.PolicyConditionReason = "PolicyAffected"
 
 	// GatewayResolvedRefs condition indicates whether the controller was able to resolve the
@@ -1157,6 +1161,17 @@ func NewClientSettingsPolicyAffected() Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
 		Message: "The ClientSettingsPolicy is applied to the resource",
+	}
+}
+
+// NewProxySettingsPolicyAffected returns a Condition that indicates that a ProxySettingsPolicy
+// is applied to the resource.
+func NewProxySettingsPolicyAffected() Condition {
+	return Condition{
+		Type:    string(ProxySettingsPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "The ProxySettingsPolicy is applied to the resource",
 	}
 }
 
