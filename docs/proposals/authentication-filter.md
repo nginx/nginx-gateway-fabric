@@ -43,7 +43,7 @@ This document also focus on HTTP Basic Authentication and JWT Authentication. Ot
 | **JWT (JSON Web Token)**     | ❌           | ✅             | [ngx_http_auth_jwt_module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html) | Tokens are used for stateless authentication between client and server. |
 | **OpenID Connect**            | ❌           | ✅             | [ngx_http_oidc_module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html)| Allows authentication through third-party providers like Google.   |
 
-### Understanding authentication terminoligy
+### Understanding authentication terminology
 
 #### Realms
 
@@ -1090,7 +1090,6 @@ spec:
       stripAuthorization: true # Optionally remove client Authorization header before proxy_pass
 ```
 
-Example GoLang API changes:
 Example GoLang API changes:
 
 ```go
