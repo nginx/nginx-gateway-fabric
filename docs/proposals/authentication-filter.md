@@ -173,8 +173,8 @@ type BasicAuth struct {
 type JWTKeyMode string
 
 const (
-  KeyModeFile   JWTKeyMode = "File"
-  KeyModeRemote JWTKeyMode = "Remote"
+  JWTKeyModeFile   JWTKeyMode = "File"
+  JWTKeyModeRemote JWTKeyMode = "Remote"
 )
 
 // JWTAuth configures JWT-based authentication (NGINX Plus).
@@ -223,7 +223,7 @@ type JWTAuth struct {
   //
   // +optional
   // +kubebuilder:default=signed
-  Type *TokenType `json:"type,omitempty"`
+  Type *JWTType `json:"type,omitempty"`
 
   // KeyCache is the cache duration for keys.
   // Configures auth_jwt_key_cache directive.
