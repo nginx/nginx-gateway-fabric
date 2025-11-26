@@ -637,5 +637,10 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 			return
 		}
 		*conditionsList = append(*conditionsList, conditions.NewClientSettingsPolicyAffected())
+	case kinds.ProxySettingsPolicy:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewProxySettingsPolicyAffected()) {
+			return
+		}
+		*conditionsList = append(*conditionsList, conditions.NewProxySettingsPolicyAffected())
 	}
 }

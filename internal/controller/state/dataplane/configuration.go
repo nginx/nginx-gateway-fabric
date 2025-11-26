@@ -1085,6 +1085,7 @@ func buildBaseHTTPConfig(
 		// HTTP2 should be enabled by default
 		HTTP2:                   true,
 		IPFamily:                Dual,
+		Policies:                buildPolicies(gateway, gateway.Policies),
 		Snippets:                buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
 		NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 	}
