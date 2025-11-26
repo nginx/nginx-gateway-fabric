@@ -1190,7 +1190,7 @@ type HeaderValue struct {
 
 ## References
 
-- [Gateway API ExternalAuthFilter GEP]((https://gateway-api.sigs.k8s.io/geps/gep-1494/))
+- [Gateway API ExternalAuthFilter GEP](https://gateway-api.sigs.k8s.io/geps/gep-1494/)
 - [HTTPExternalAuthFilter Specification](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter)
 - [Kubernetes documentation on CEL validaton](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules)
 - [NGINX HTTP Basic Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html)
