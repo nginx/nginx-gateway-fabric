@@ -1012,6 +1012,7 @@ spec:
 These fields allow for more customization of how the JWT auth behaves, but aren't required for the minimal delivery of JWT Auth.
 
 Example of what implementation of these fields might look like:
+Example of what implementation of these fields might look like:
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
