@@ -152,12 +152,12 @@ const (
 // BasicAuth configures HTTP Basic Authentication.
 type BasicAuth struct {
   // SecretRef allows referencing a Secret in the same namespace
-  SecretRef LocalObjectReference `json:"secretRef,omitempty"`
+  SecretRef LocalObjectReference `json:"secretRef"`
 
   // Realm used by NGINX `auth_basic` directive.
   // https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html#auth_basic
   // Also configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
-  Realm string `json:"realm,omitempty"`
+  Realm string `json:"realm"`
 
   // OnFailure customizes the 401 response for failed authentication.
   //
@@ -183,10 +183,10 @@ type JWTAuth struct {
   // Realm used by NGINX `auth_jwt` directive
   // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
-  Realm string `json:"realm,omitempty"`
+  Realm string `json:"realm"`
 
   // Mode selects how JWT keys are provided: local file or remote JWKS.
-  Mode JWTKeyMode `json:"mode,omitempty"`
+  Mode JWTKeyMode `json:"mode"`
 
   // File specifies local JWKS configuration.
   // Required when Mode == File.
@@ -235,7 +235,7 @@ type JWTAuth struct {
 // JWTFileKeySource specifies local JWKS key configuration.
 type JWTFileKeySource struct {
   // SecretRef references a Secret containing the JWKS.
-  SecretRef LocalObjectReference `json:"secretRef,omitempty"`
+  SecretRef LocalObjectReference `json:"secretRef"`
 
   // KeyCache is the cache duration for keys.
   // Configures `auth_jwt_key_cache` directive.
