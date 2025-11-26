@@ -971,6 +971,7 @@ type NamespacedSecretKeyReference struct {
 For initial implementaion, both Basic Auth and Local JWKS should will only  have access to Secrets in the same namespace.
 
 Example: Grant BasicAuth in app-ns to read a Secret in security-ns
+Example: Grant BasicAuth in app-ns to read a Secret in security-ns
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
