@@ -269,10 +269,6 @@ type RemoteKeySource struct {
 
  // JWKSCache controls NGINX `proxy_cache_path` and `proxy_cache` settings used for JWKS responses.
 type JWKSCache struct {
-  // Path is the filesystem path for cached JWKS objects.
-  // Example: "/var/cache/nginx/jwks".
-  Path string `json:"path"`
-
   // Levels specifies the directory hierarchy for cached files.
   // Used in `proxy_cache_path` directive.
   // https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_path
@@ -797,7 +793,6 @@ spec:
     remote:
       url: https://issuer.example.com/.well-known/jwks.json
       cache:
-        path: /var/cache/nginx/jwks # required when cache is set
         levels: "1:2"               # optional; defaults to "1:2"
         keysZoneName: jwks_jwtauth  # optional; controller can default to a derived name
         keysZoneSize: 10m           # required; size for keys_zone
