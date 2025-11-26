@@ -871,7 +871,7 @@ spec:
 
 If a user attempts to attach a JWT type AuthenticationFilter while using NGINX OSS, the rule referencing the filter will be `Rejected`.
 
-This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway API here: https://github.com/nginx/nginx-gateway-fabric/blob/main/internal/controller/state/conditions/conditions.go#L402
+This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway API here: https://github.com/nginx/nginx-gateway-fabric/blob/3934c5c8c60b5aea91be4337d63d4e1d8640baa8/internal/controller/state/conditions/conditions.go#L402
 
 ## Testing
 
@@ -937,7 +937,7 @@ We should also include [CEL](https://kubernetes.io/docs/tasks/extend-kubernetes/
 
 We should validated that only one `AuthenticationFilter` is referenced per-rule. Multiple references to an `AuthenticationFilter` in a single rule should result in an `Invalid` HTTPRoute/GRPCRoute, and the rule should be `Rejected`.
 
-This scenario can use the status `RouteConditionPartiallyInvalid` defined in the Gateway API here: https://github.com/nginx/nginx-gateway-fabric/blob/main/internal/controller/state/conditions/conditions.go#L402
+This scenario can use the status `RouteConditionPartiallyInvalid` defined in the Gateway API here: https://github.com/nginx/nginx-gateway-fabric/blob/3934c5c8c60b5aea91be4337d63d4e1d8640baa8/internal/controller/state/conditions/conditions.go#L402
 
 An `AuthenticationFilter` that sets a `onFailure.statusCode` to anything other than `401` or `403` should be rejected. This relates to the "Auth failure behaviour" section in the Security Considerations section.
 
