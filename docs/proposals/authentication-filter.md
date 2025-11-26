@@ -300,14 +300,14 @@ type JWKSCache struct {
   UseTempPath *bool `json:"useTempPath,omitempty"`
 }
 
-// TokenType represents NGINX auth_jwt_type.
+// JWTType represents NGINX auth_jwt_type.
 // +kubebuilder:validation:Enum=signed;encrypted;nested
-type TokenType string
+type JWTType string
 
 const (
-	TokenTypeSigned    TokenType = "signed"
-	TokenTypeEncrypted TokenType = "encrypted"
-	TokenTypeNested    TokenType = "nested"
+	JWTTypeSigned    JWTType = "signed"
+	JWTTypeEncrypted JWTType = "encrypted"
+	JWTTypeNested    JWTType = "nested"
 )
 
 // AuthScheme enumerates supported WWW-Authenticate schemes.
