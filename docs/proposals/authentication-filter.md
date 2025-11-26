@@ -831,10 +831,14 @@ This example shows a single HTTPRoute, with a single `filter` defined in a `rule
 Only a single `AuthenticationFilter` may be referened in a single rule.
 
 The `Status` the HTTPRoute/GRPCRoute in this scenario should be set to `Invalid`, and the resource should be `Rejected`.
+In this scenario, the route rule that is referencing multiple `AuthenticationFilter` resources will be `Rejected`/
+All other route rules will remain working.
+
+The HTTPRoute/GRPCRoute resource will display an `UnresolvedRef` message to inform the user that the rule has been `Rejected`.
 
 This behaviour falls in line with the expected behaviour of filters in the Gateway API, which generally allows only one type of a specific filter (authentication, rewriting, etc.) within a rule.
 
-Below is an example of an **invalid** HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule
+Below is an example of an **invalid** HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule:
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -866,6 +870,11 @@ spec:
     - name: backend
       port: 80
 ```
+
+#### Referencing an AuthenticationFilter resource that is invalid
+
+Note: With appropriate use of CEL validation, we are less likely to encounter a scenario where an AuthenticationFilter has been deployed to the cluster with an invalid configuration.
+If this does happen, and a route rule references this AuthenticationFilter, the route rule will be set to `Invalid` and the the HTTPRoute/GRPCRoute will display the `UnresolvedRef` status.
 
 #### Attaching a JWT AuthenticationFilter to a route when using NGINX OSS
 
