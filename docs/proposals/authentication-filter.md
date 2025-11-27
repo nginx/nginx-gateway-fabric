@@ -37,11 +37,11 @@ This document also focus on HTTP Basic Authentication and JWT Authentication. Ot
 
 ### Understanding NGINX authentication methods
 
-| **Authentication Method**     | **OSS**      | **Plus** | **NGINX Module**                | **Details**                                                        |
-|-------------------------------|--------------|----------------|----------------------------------|--------------------------------------------------------------------|
-| **HTTP Basic Authentication** | ✅           | ✅             | [ngx_http_auth_basic](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html) | Requires a username and password sent in an HTTP header.           |
-| **JWT (JSON Web Token)**     | ❌           | ✅             | [ngx_http_auth_jwt_module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html) | Tokens are used for stateless authentication between client and server. |
-| **OpenID Connect**            | ❌           | ✅             | [ngx_http_oidc_module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html)| Allows authentication through third-party providers like Google.   |
+| **Authentication Method** | **OSS** | **Plus** | **NGINX Module** | **Details** |
+| ------------------------------- | -------------- | ---------------- | ---------------------------------- | -------------------------------------------------------------------- |
+| **HTTP Basic Authentication** | ✅ | ✅ | [ngx_http_auth_basic](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html) | Requires a username and password sent in an HTTP header. |
+| **JWT (JSON Web Token)** | ❌ | ✅ | [ngx_http_auth_jwt_module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html) | Tokens are used for stateless authentication between client and server. |
+| **OpenID Connect** | ❌ | ✅ | [ngx_http_oidc_module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html) | Allows authentication through third-party providers like Google. |
 
 ### Understanding authentication terminology
 
@@ -427,6 +427,7 @@ user:$apr1$prQ3Bh4t$A6bmTv7VgmemGe5eqR61j0
 ```
 
 Use these options in the `htpasswd` command for stronger hashing algorithims:
+
 ```bash
  -2  Force SHA-256 hashing of the password (secure).
  -5  Force SHA-512 hashing of the password (secure).
@@ -434,6 +435,7 @@ Use these options in the `htpasswd` command for stronger hashing algorithims:
 ```
 
 You can then run this command to generate the secret from the `auth` file:
+
 ```bash
 kubectl create secret generic basic-auth --from-file=auth
 ```
@@ -441,6 +443,7 @@ kubectl create secret generic basic-auth --from-file=auth
 Note: `auth` will be the default key for secrets referenced `AuthenticationFilters` of `Type: Basic`.
 
 Example secret:
+
 ```yaml
 apiVersion: v1
 kind: Secret
