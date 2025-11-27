@@ -84,7 +84,7 @@ spec:
                         type: integer
                         x-kubernetes-validations:
                         - message: statusCode must be 401 or 403
-                          rule: self == null || self in [401, 403]
+                          rule: self in [401, 403]
                     type: object
                   realm:
                     description: |-

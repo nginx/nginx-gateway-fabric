@@ -74,7 +74,6 @@ type BasicAuth struct {
 }
 
 // LocalObjectReference specifies a local Kubernetes object
-// with a required `key` field to extract data.
 type LocalObjectReference struct {
 	Name string `json:"name"`
 }
@@ -105,7 +104,7 @@ type AuthFailureResponse struct {
 	//
 	// +optional
 	// +kubebuilder:default=401
-	// +kubebuilder:validation:XValidation:message="statusCode must be 401 or 403",rule="self == null || self in [401, 403]"
+	// +kubebuilder:validation:XValidation:message="statusCode must be 401 or 403",rule="self in [401, 403]"
 	StatusCode *int32 `json:"statusCode,omitempty"`
 
 	// Challenge scheme. If omitted, inferred from filter Type (Basic|Bearer).
