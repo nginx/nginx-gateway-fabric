@@ -42,11 +42,8 @@ type AuthenticationFilterList struct {
 //
 //nolint:lll
 type AuthenticationFilterSpec struct {
-	// Type selects the authentication mechanism.
-	Type AuthType `json:"type"`
-
-	// Basic configures HTTP Basic Authentication.
 	Basic BasicAuth `json:"basic"`
+	Type  AuthType  `json:"type"`
 }
 
 // AuthType defines the authentication mechanism.
@@ -59,21 +56,12 @@ const (
 
 // BasicAuth configures HTTP Basic Authentication.
 type BasicAuth struct {
-	// SecretRef allows referencing a Secret in the same namespace
-	SecretRef LocalObjectReference `json:"secretRef"`
-
-	// Realm used by NGINX `auth_basic` directive.
-	// https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html#auth_basic
-	// Also configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
-	Realm string `json:"realm"`
-
-	// OnFailure customizes the 401 response for failed authentication.
-	//
-	// +optional
 	OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
+	SecretRef LocalObjectReference `json:"secretRef"`
+	Realm     string               `json:"realm"`
 }
 
-// LocalObjectReference specifies a local Kubernetes object
+// LocalObjectReference specifies a local Kubernetes object.
 type LocalObjectReference struct {
 	Name string `json:"name"`
 }
@@ -144,7 +132,7 @@ const (
 	// * Accepted
 	//
 	// Possible reasons for this condition to be False:
-	// * Invalid
+	// * Invalid.
 	AuthenticationFilterConditionTypeAccepted AuthenticationFilterConditionType = "Accepted"
 
 	// AuthenticationFilterConditionReasonAccepted is used with the Accepted condition type when
