@@ -716,17 +716,17 @@ According to the [Policy and Metaresources GEP](https://gateway-api.sigs.k8s.io/
 
 The `Accepted` Condition must be populated on the `WAFPolicy` CRD using the reasons defined in the [PolicyCondition API](https://github.com/kubernetes-sigs/gateway-api/blob/main/apis/v1alpha2/policy_types.go). Below are example implementation-specific reasons that describe the lifecycle phases and potential issues encountered while processing the policy:
 
-| **Reason**               | **Description**                                                                                   | **Example Message**                                               |
-|---------------------------|---------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
-| **PolicySourceInvalid**   | The `policySource` contains invalid or incomplete information.                                    | "The policy source is invalid. Ensure fileLocation is correct."    |
-| **PolicyFetchError**      | Failed to fetch the policy due to network issues, authentication problems, or source misconfiguration. | "Failed to fetch policy bundle due to a network issue or invalid credentials." |
-| **PolicyIntegrityInvalid**| Checksum verification failed for the fetched policy bundle.                                       | "Policy integrity check failed because of a checksum mismatch."    |
-| **PolicyValidationError** | The WAF policy bundle failed schema or format validation for NGINX App Protect WAF.              | "The policy bundle did not pass schema validation. Update the policy and retry compilation." |
-| **PolicyDeployed**        | The policy was successfully deployed to the NGINX Data Plane (Pods).                             | "The policy has been successfully deployed and is now protecting the targeted resources." |
-| **PolicyDeployedUpdate**  | An updated version of the policy was successfully deployed to the NGINX Data Plane (Pods) after polling or change detection. | "The policy has been updated and successfully redeployed to the targeted resources." |
-| **PolicyDeploymentError** | The data plane (NGINX Pods) failed to apply the policy.                                          | "Failed to deploy the WAF policy to the NGINX Pods."               |
-| **AuthenticationError**   | Authentication to the external store (e.g., S3, HTTP) failed.                                    | "Authentication error while trying to fetch the policy bundle."    |
-| **PolicyConfigError**     | The policy configuration prevents proper processing.                 | "The policy configuration is incomplete or incorrectly formatted. Correct the configuration and retry." |
+| **Reason** | **Description** | **Example Message** |
+| ---------- | --------------- | ------------------- |
+| **PolicySourceInvalid** | The `policySource` contains invalid or incomplete information. | "The policy source is invalid. Ensure fileLocation is correct." |
+| **PolicyFetchError** | Failed to fetch the policy due to network issues, authentication problems, or source misconfiguration. | "Failed to fetch policy bundle due to a network issue or invalid credentials." |
+| **PolicyIntegrityInvalid** | Checksum verification failed for the fetched policy bundle. | "Policy integrity check failed because of a checksum mismatch." |
+| **PolicyValidationError** | The WAF policy bundle failed schema or format validation for NGINX App Protect WAF. | "The policy bundle did not pass schema validation. Update the policy and retry compilation." |
+| **PolicyDeployed** | The policy was successfully deployed to the NGINX Data Plane (Pods). | "The policy has been successfully deployed and is now protecting the targeted resources." |
+| **PolicyDeployedUpdate** | An updated version of the policy was successfully deployed to the NGINX Data Plane (Pods) after polling or change detection. | "The policy has been updated and successfully redeployed to the targeted resources." |
+| **PolicyDeploymentError** | The data plane (NGINX Pods) failed to apply the policy. | "Failed to deploy the WAF policy to the NGINX Pods." |
+| **AuthenticationError** | Authentication to the external store (e.g., S3, HTTP) failed. | "Authentication error while trying to fetch the policy bundle." |
+| **PolicyConfigError** | The policy configuration prevents proper processing. | "The policy configuration is incomplete or incorrectly formatted. Correct the configuration and retry." |
 
 ### Example Status Conditions in `WAFPolicy`
 

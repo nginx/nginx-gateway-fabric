@@ -129,16 +129,16 @@ Users can configure [sessionPersistence](https://gateway-api.sigs.k8s.io/referen
 
 #### Mapping the Gateway API fields to NGINX directives
 
-| Spec Field                             | NGINX Directive            | Notes / Limitations                                                                                                                 |
-|----------------------------------------|----------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| `sessionName`                          | `name`                     | Direct mapping to `sticky cookie` name.                                                                                             |
-| `absoluteTimeout`                      | `expires`                  | Only used when `cookieConfig.lifetimeType=Permanent`; not enforced for `Session` cookies.                                           |
-| `idleTimeout`                          | _not supported_            | NGINX does not support idle-based invalidation for sticky cookies. Sessions expire only when the cookie expires or the session ends.|
-| `type`                                 | `cookie`                   | Only cookie-based persistence is supported. If Header is specified, the sessionPersistence spec is ignored and a warning/status message is reported on the route, but the route itself remains valid. |
-| `cookieConfig.lifetimeType=Session`    | _no `expires` set_         | Session cookies expire when the browser session ends.                                                                               |
-| `cookieConfig.lifetimeType=Permanent`  | `expires=<absoluteTimeout>`| Cookie persists until the specified timeout. `absoluteTimeout` is required when `lifetimeType` is `Permanent`.                      |
-| no matching spec field                 | _no `domain` attribute_    | Cookies are host-only for both `HTTPRoute` and `GRPCRoute`.                                                                         |
-| no matching spec field                 | `path`                     | Behavior is described separately for `HTTPRoute` below.                                                                             |
+| Spec Field | NGINX Directive | Notes / Limitations |
+| ---------- | --------------- | ------------------- |
+| `sessionName` | `name` | Direct mapping to `sticky cookie` name. |
+| `absoluteTimeout` | `expires` | Only used when `cookieConfig.lifetimeType=Permanent`; not enforced for `Session` cookies. |
+| `idleTimeout` | _not supported_ | NGINX does not support idle-based invalidation for sticky cookies. Sessions expire only when the cookie expires or the session ends. |
+| `type` | `cookie` | Only cookie-based persistence is supported. If Header is specified, the sessionPersistence spec is ignored and a warning/status message is reported on the route, but the route itself remains valid. |
+| `cookieConfig.lifetimeType=Session` | _no `expires` set_ | Session cookies expire when the browser session ends. |
+| `cookieConfig.lifetimeType=Permanent` | `expires=<absoluteTimeout>` | Cookie persists until the specified timeout. `absoluteTimeout` is required when `lifetimeType` is `Permanent`. |
+| no matching spec field | _no `domain` attribute_ | Cookies are host-only for both `HTTPRoute` and `GRPCRoute`. |
+| no matching spec field | `path` | Behavior is described separately for `HTTPRoute` below. |
 
 #### Domain and Path selection for Routes
 
@@ -148,11 +148,11 @@ For **HTTPRoutes**, we do not set the `domain` attribute. Deriving a broader dom
 
 To determine the cookie `path` for HTTPRoutes, we handle the simple case where there is a single path match as follows:
 
-| Path Value                          | Path Match Type | Cookie `Path` Value | Cookie Match Expectations                                                                                                                         |
-|-------------------------------------|-----------------|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| `/hello-exact`                      | Exact           | `/hello-exact`      | Cookie header is sent for `/hello-exact` path only. 		       |
-| `/hello-prefix`                     | Prefix          | `/hello-prefix`     | Cookie header is sent for `/hello-prefix` and any subpath starting with `/hello-prefix` (e.g. `/hello-prefix/foo`).                                     |
-| `/hello-regex/[a-zA-Z0-9_-]+$`      | Regex           | `/hello-regex`      | No `path` attribute is set for pathType `RegularExpression` |
+| Path Value | Path Match Type | Cookie `Path` Value | Cookie Match Expectations |
+| ---------- | --------------- | ------------------- | ------------------------- |
+| `/hello-exact` | Exact | `/hello-exact` | Cookie header is sent for `/hello-exact` path only. |
+| `/hello-prefix` | Prefix | `/hello-prefix` | Cookie header is sent for `/hello-prefix` and any subpath starting with `/hello-prefix` (e.g. `/hello-prefix/foo`). |
+| `/hello-regex/[a-zA-Z0-9_-]+$` | Regex | `/hello-regex` | No `path` attribute is set for pathType `RegularExpression` |
 
 When there are multiple path matches that share the same sessionPersistence configuration, we derive a single cookie path by computing the longest common prefix that ends on a path-segment boundary `/`. If no non-empty common prefix on a segment boundary exists, we fall back to `/` which is allowing all paths.
 
