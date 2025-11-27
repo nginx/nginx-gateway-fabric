@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secure-app
+  template:
+    metadata:
+      labels:
+        app: secure-app
+    spec:
+      containers:
+        - name: secure-app
+          image: nginxinc/nginx-unprivileged:latest
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: secret
+              mountPath: /etc/nginx/ssl/secret
+              readOnly: true
+            - name: ca-cert-volume
+              mountPath: /etc/nginx/ssl/ca-cert
+              readOnly: true
+            - name: config-volume
+              mountPath: /etc/nginx/conf.d
+            - name: nginx-config
+              mountPath: /etc/nginx/
+      volumes:
+        - name: secret
+          secret:
+            secretName: app-tls-secret
+        - name: config-volume
+          configMap:
+            name: secure-config
+        - name: ca-cert-volume
+          configMap:
+            name: validate-gateway-cert-against-this-ca
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: secure-app
+spec:
+  ports:
+    - port: 8443
+      targetPort: 8443
+      protocol: TCP
+      name: https
+  selector:
+    app: secure-app
+---
+# yamllint disable rule:indentation
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: secure-config
+data:
+  app.conf: |-
+    server {
+        listen 8443 ssl;
+        listen [::]:8443 ssl;
+
+        server_name secure-app.example.com;
+
+        default_type text/plain;
+
+        ssl_certificate /etc/nginx/ssl/secret/tls.crt;
+        ssl_certificate_key /etc/nginx/ssl/secret/tls.key;
+
+        ssl_client_certificate /etc/nginx/ssl/ca-cert/ca.crt;
+        ssl_verify_client on;
+
+
+        # Enable access logging
+        access_log /var/log/nginx/access.log ssl_log;
+
+
+        location / {
+            return 200 "hello from pod secure-app\n";
+        }
+    }
+---
+# yamllint disable rule:indentation
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  nginx.conf: |
+    worker_processes auto;
+    pid /tmp/nginx.pid;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        log_format ssl_log '$remote_addr ssl_client_verify=$ssl_client_verify ssl_client_subject=$ssl_client_s_dn';
+        error_log /var/log/nginx/error.log debug;
+        include /etc/nginx/conf.d/*.conf;
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-tls-secret
+type: Opaque
+data:
+  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURhekNDQWxPZ0F3SUJBZ0lVSm82ZHpGa3NEVm1DWklETFgrQ2lzZFEyTElRd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1BURUxNQWtHQTFVRUJoTUNWVk14Q3pBSkJnTlZCQWdNQWtOUE1TRXdId1lEVlFRS0RCaEpiblJsY201bApkQ0JYYVdSbmFYUnpJRkIwZVNCTWRHUXdIaGNOTWpVd09ESXdNakUxT1RBNVdoY05Namd3TlRFMk1qRTFPVEE1CldqQmVNUXN3Q1FZRFZRUUdFd0pWVXpFTE1Ba0dBMVVFQ0F3Q1EwOHhJVEFmQmdOVkJBb01HRWx1ZEdWeWJtVjAKSUZkcFpHZHBkSE1nVUhSNUlFeDBaREVmTUIwR0ExVUVBd3dXYzJWamRYSmxMV0Z3Y0M1bGVHRnRjR3hsTG1OdgpiVENDQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQkFMdTRlKzBxRGt6ckN2aXhSQUZICnNvUWUydjhpeUw0dTJNZXN2SkUvalhPN2hSUmxiK0ZJVTltMzVHbTlBUXVlZnhLeE9XM3FRc3Qyckpua2JKN0UKTm9DdG9MdzZweEpZeDgxUFVmdHYyTW5zWTA1bkVYNTlteGd1MjRDeURhZmJGMmtjampjUnNzVXBpMncvWVo1bgpBTFNNSTNWWSsvUnIxT3JsajZrLzdaRHdkV2dhbDAvUGhyZU1uMEt0a1pmbFpvOGhuaitmaVc0M0c5NHZidmd3CjBqTnF5dHhYZ3Y2b1VEQjYwNFhqckZkKyt1MVZVeEtEQ3c1V3JqVlFqNlNHclFnRnpTWU9EZDlLdGljcDBPSmkKSmVYWkwrTG1uNHVSSkxMcVZRNEhaYWtFdzJZeVFzY2RybUlIaHorMWZzNnZ0RW40M0pOTEFWc1VIMTZGeVZaYgo3eUVDQXdFQUFhTkNNRUF3SFFZRFZSME9CQllFRkNDd3d0S2gvWU8vdWdqQzMwZHJHcGN3ZFZ0VE1COEdBMVVkCkl3UVlNQmFBRk1qd20xMVRzMXNtZDlZVEs4dGJoa2FiSVRTcU1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQWYKSWFpdlN2aUNIMThMZHhHRHZLL2pITjFhZHBTQjFUTzg5OE8vZXVUczh1SVB3V1VKN0ZHbTJEcFJLd254bk5qMAp1WVdBWGRJYkhzYTZiN0lINVdTemozRGJZTms2WnpTWmtNcHhQN252RXVNU0c1V2MyQ3FhOTIzYitKU2g0WEJJCjhiZmNoc1krZGFpRFlLNk5rdldYY0Fxd1Y3MUY1cnRUTXc0blpGOGhXSWtManlLUDJYeExYUzBlTHZBZklSOC8KMVRxN01xWXFJSkxURmVlREQ4TXg1OUFQYktsYzFTREIxUlpqdTRZYzdaWnc4N3ZrRzFqSnk1RkU0TkUxRzRmdwpQSHIwb2NiUFREeUxTQjNGdlJzeDZaMVMyejVVQVhDR2R5bnp1VU9KL0IrT0ZYZ2YxbURUUTlRbHltcjVFWmk4Cm5nZU1NbGl3WkdIWGJaM2dIeFlxCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+  tls.key: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2UUlCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktjd2dnU2pBZ0VBQW9JQkFRQzd1SHZ0S2c1TTZ3cjQKc1VRQlI3S0VIdHIvSXNpK0x0akhyTHlSUDQxenU0VVVaVy9oU0ZQWnQrUnB2UUVMbm44U3NUbHQ2a0xMZHF5Wgo1R3lleERhQXJhQzhPcWNTV01mTlQxSDdiOWpKN0dOT1p4RitmWnNZTHR1QXNnMm4yeGRwSEk0M0ViTEZLWXRzClAyR2Vad0MwakNOMVdQdjBhOVRxNVkrcFArMlE4SFZvR3BkUHo0YTNqSjlDclpHWDVXYVBJWjQvbjRsdU54dmUKTDI3NE1OSXphc3JjVjRMK3FGQXdldE9GNDZ4WGZ2cnRWVk1TZ3dzT1ZxNDFVSStraHEwSUJjMG1EZzNmU3JZbgpLZERpWWlYbDJTL2k1cCtMa1NTeTZsVU9CMldwQk1ObU1rTEhIYTVpQjRjL3RYN09yN1JKK055VFN3RmJGQjllCmhjbFdXKzhoQWdNQkFBRUNnZ0VBRUlDLytGSWRycnB0SFA3c2hSWktCZDUyano1K0dtWWc3YkRzWlBLSzIzVk4KVmtVeXFFSUZDUnRuQzdxdmVGZUhRVnZ1T2hFQnJVUnlHUmRoU3pYaHVyOUk1Yk5jVTdzVldhSFRDY0ZEOUVDQgpYSGVvTEpBYlRlMTBvNlJEbWhHalJiemFiZEh5L3UxUGtnVWlibHdNemxLUm5YUGt0cEN5UjdKRnhuSFZ6MHVGCng1dlM4OHAzRXJENWhlNzl3VVNOc2xvaFNhYUxVNERkMWZJclVuWHlmc3V3WkpFZEZPa3pPT1diYm94RUF2b00KYlliUERLMWxTcXhLT0t2TzVja20zVTZSYTZvcXFGSDdEbkpVZENsNVRBZ25kOVVSd0JwbWtBRTdHdnJ6TTNiMQpOaTE2UkJWSi9zSzJKUGs5MkZnelpaek9LS2ZXa2FEUkdBVHJCeXl6UndLQmdRRHNVQjNpT0JaSzVPb2xHRUZKCncxOTFoWS84V2crVytpOXN1d1pSZ2VqT1pvSDRjVER2TnRQSUxxQ09pV3R4L091c2VZc1hoQ0V0L25kMzBnUWEKVC9yVS85Ums5cXdMK1pVZmR5YkdPVjR3M1ExbmpRdlVva0xtblpXSmZneldNRCttT21WZFV0elg4LzRxUGxhRwowQVB4azl3MldHZFJFeW90czJXSVdaUHo5d0tCZ1FETFhBZ09xZ3R3eDZLcTZhT2l0TU1na0FJYnB3MStRbGh5CnNkdEhiRkQrQTJ1ZnUwTkw2TWx3ZWNqV1VicEFwd3F0K3NuckVRL1IwVU1yUEttNFNWTWtEdmpWZFJnWjZmSlAKeHFJZG9pZGZPb3B4cTI1Qys4aHlvU0JRcHRaRjMxdkJlbE82K1QwSS9nTWFQSnJrL3ZVczJQdVVSK2lMUlJOQgp1TGpQNFNJL3B3S0JnR25qUkdDM2JSWEdHVHpoNzI5VUFoUXc4dUhLb1MydmtVeVJTVFdBbG9iVjIrc3RIUll6ClpSWlAvbFdnTWVyenY4NmE3NzVyMEVwQnVkcVEycEhId01kc2t3bGlscGtQRHNqNHBRRXhkNGxCbzk0QWo0cUoKNHB4ZmhFQUZvVTdnYzhUU2FkVTFhZ3ZDSXVOZTUzcWsvdjlpbDh3cU5MRlpldzdiVWVXVTdmemxBb0dBTVZmdApaSkdDSVNWdnBRVDMvWnphMCtYZGZSUTF3L01aUHd0RTU3bXlsVkFESjBqcTlWcFF0b2YyWVhxSE5QVFROSS9yCnVxdnpLTGdjRWp1dit0VmY1Um4wNnVaMHFLVUpkSzMvM0N6aVhNcjVtTWMrQStiUUpuQk9SUU9XYm5IWjg4SlkKMnI5clBlbFVtMk1sT25kYXlqMEVIbUNzWGs2dWMzMzg2Z1A0cVhVQ2dZRUFwNkNEeGVKM2pNdG5RTHdFNU9LSwp1V1dGU0ltL3RSYURoMTJvaUdGQkY1N0lMdlkzdUcvZVdYUXJ3RUZYZFQ5V1lWWFFVVVVWdXg0VlhSZHdqWVZsCk5kcjZlc2tTQmFJYWxuRkczRG9SOUJSTHRFekJSaVA4UUtZVlJzYVp6Z2ZhK1B2cm14cmpLR3ZxUnpXbWNyR1gKSnlpVDZMMjNDTmY1bzJMRHErN0p1Mzg9Ci0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: validate-gateway-cert-against-this-ca
+data:
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDWzCCAkOgAwIBAgIULcvHW5CfsuZSwAgUMnCSf+JS7lUwDQYJKoZIhvcNAQEL
+    BQAwPTELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNPMSEwHwYDVQQKDBhJbnRlcm5l
+    dCBXaWRnaXRzIFB0eSBMdGQwHhcNMjUwODIwMjE1NzE3WhcNMjYwODIwMjE1NzE3
+    WjA9MQswCQYDVQQGEwJVUzELMAkGA1UECAwCQ08xITAfBgNVBAoMGEludGVybmV0
+    IFdpZGdpdHMgUHR5IEx0ZDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEB
+    ALF+GOHlmtcSh3oagcA0AdiLGR/MI5FA+1Zp3EkyrbtTM8NFv2YNntpoHQstl1no
+    8eoKzxcnallG6CNQpaOzuApEvoeUxbNtDpZ28dsgMX4QpZ627oob0DweAhSJ8+lL
+    dPmopjWKwWzoYEvvzjsozLg/utrd/ZN5zr1KACPq/hm8jzI0I2oRCQj90vo1T+q0
+    E2saMiPTPLX9cQNPJPhEYLpHuH/EIZNK7++p1qKLneTejWoxtyK1lCP/fPpJojce
+    ninF+Nphu4lEW9Gu7KFKHV9WMptWUa7L1SItoVWK5ydhDXV+bSXB6Wz3AqIIxoyI
+    CCjtfuiXri8jWSHzHsm1RUECAwEAAaNTMFEwHQYDVR0OBBYEFMjwm11Ts1smd9YT
+    K8tbhkabITSqMB8GA1UdIwQYMBaAFMjwm11Ts1smd9YTK8tbhkabITSqMA8GA1Ud
+    EwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBACNsDoUDOWBJq22VsiEeCnW3
+    h5SUn11OstDZiHkD84hZ6THywwEG2y2j28LOJZ71tNqjjCU4c1zmknvd4DddTwdF
+    MMOb1l164GKdSGzXEKMi4TaRnqPS2+PWate3bRTYOHwLMnVM745moQjDO0YHoEu6
+    E8xsKrgeweVIHsunjf76ZGXdN746AXZLryQHvKhxOMn8jZoKSRSfqtNiI9B8rpkG
+    ruHV5m1P9VYQ4HTvUemw+1jgIjtrOWVdT2U1oozCVAumNqPk6FoJ+yOMYXs/40oq
+    cdNQ++hAYJnxspHPnkI0r7q2nCqTxrKSOJt4vogOrn0DLVpS99CgfYrVhKihYKM=
+    -----END CERTIFICATE-----
