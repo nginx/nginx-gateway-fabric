@@ -32,7 +32,7 @@ func TestCronJob(t *testing.T) {
 	}
 	job := NewCronJob(cfg)
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 
 	errCh := make(chan error)
 	go func() {
@@ -64,7 +64,7 @@ func TestCronJob_ContextCanceled(t *testing.T) {
 	}
 	job := NewCronJob(cfg)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	errCh := make(chan error)
 	go func() {
