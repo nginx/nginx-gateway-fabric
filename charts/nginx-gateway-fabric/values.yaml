@@ -142,6 +142,9 @@ nginxGateway:
   # -- extraVolumeMounts are the additional volume mounts for the nginx-gateway container.
   extraVolumeMounts: []
 
+   # -- The priority class name for the NGINX Gateway Fabric control plane pod.
+  priorityClassName: ""
+
   # -- The termination grace period of the NGINX Gateway Fabric control plane pod.
   terminationGracePeriodSeconds: 30
 
