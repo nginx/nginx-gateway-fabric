@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth1
+type: Opaque
+stringData:
+  # Generated with: `htpasswd -bn user1 password1`
+  auth: |
+    user1:$apr1$hJljUiHG$VdydyTsxHpZVRsTQtUfpd0
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth1
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      name: basic-auth1
+    realm: "Restricted basic-auth1"
+    onFailure:
+      statusCode: 401
+      scheme: Basic
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth2
+type: Opaque
+stringData:
+  # Generated with: `htpasswd -bn user2 password2`
+  auth: |
+    user2:$apr1$bSMdiRmE$Y0JzX1oSOic8r6NYaS6ht1
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth2
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      name: basic-auth2
+    realm: "Restricted basic-auth2"
+    onFailure:
+      statusCode: 401
+      scheme: Basic
