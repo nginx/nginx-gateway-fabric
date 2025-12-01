@@ -27,8 +27,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          AuthenticationFilter configures request authentication (Basic or JWT) and is
-          referenced by HTTPRoute filters via ExtensionRef.
+          AuthenticationFilter configures request authentication and is
+          referenced by HTTPRoute and GRPCRoute filters using ExtensionRef.
         properties:
           apiVersion:
             description: |-
@@ -70,21 +70,20 @@ spec:
                       scheme:
                         default: Basic
                         description: |-
-                          Challenge scheme. If omitted, inferred from filter Type (Basic|Bearer).
+                          Challenge scheme. If omitted, inferred from filter Type.
                           Configures WWW-Authenticate header in error page location.
                         enum:
                         - Basic
                         type: string
                       statusCode:
-                        default: 401
                         description: |-
                           Allowed: 401, 403.
                           Default: 401.
+                        enum:
+                        - 401
+                        - 403
                         format: int32
                         type: integer
-                        x-kubernetes-validations:
-                        - message: statusCode must be 401 or 403
-                          rule: self in [401, 403]
                     type: object
                   realm:
                     description: |-
@@ -94,9 +93,10 @@ spec:
                     type: string
                   secretRef:
                     description: SecretRef allows referencing a Secret in the same
-                      namespace
+                      namespace.
                     properties:
                       name:
+                        description: Name is the referenced object.
                         type: string
                     required:
                     - name
@@ -111,7 +111,6 @@ spec:
                 - Basic
                 type: string
             required:
-            - basic
             - type
             type: object
             x-kubernetes-validations:

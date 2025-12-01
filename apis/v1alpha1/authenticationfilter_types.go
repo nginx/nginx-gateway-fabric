@@ -52,6 +52,7 @@ type AuthenticationFilterSpec struct {
 }
 
 // AuthType defines the authentication mechanism.
+//
 // +kubebuilder:validation:Enum=Basic;
 type AuthType string
 
@@ -82,6 +83,7 @@ type LocalObjectReference struct {
 }
 
 // AuthScheme enumerates supported WWW-Authenticate schemes.
+//
 // +kubebuilder:validation:Enum=Basic
 type AuthScheme string
 
@@ -109,7 +111,7 @@ type AuthFailureResponse struct {
 	// +kubebuilder:validation:Enum=401;403
 	StatusCode *int32 `json:"statusCode,omitempty"`
 
-	// Challenge scheme. If omitted, inferred from filter Type (Basic|Bearer).
+	// Challenge scheme. If omitted, inferred from filter Type.
 	// Configures WWW-Authenticate header in error page location.
 	//
 	// +optional
