@@ -164,6 +164,32 @@ func TestCreateConnection(t *testing.T) {
 			},
 		},
 		{
+			name: "uses regular hostname if container info not set",
+			ctx:  createGrpcContext(),
+			request: &pb.CreateConnectionRequest{
+				Resource: &pb.Resource{
+					Info: &pb.Resource_HostInfo{
+						HostInfo: &pb.HostInfo{
+							Hostname: "nginx-pod",
+						},
+					},
+					Instances: []*pb.Instance{
+						{
+							InstanceMeta: &pb.InstanceMeta{
+								InstanceId:   "nginx-id",
+								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_NGINX,
+							},
+						},
+					},
+				},
+			},
+			response: &pb.CreateConnectionResponse{
+				Response: &pb.CommandResponse{
+					Status: pb.CommandResponse_COMMAND_STATUS_OK,
+				},
+			},
+		},
+		{
 			name:      "request is nil",
 			request:   nil,
 			response:  nil,
