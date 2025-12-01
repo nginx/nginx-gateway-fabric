@@ -1,21 +1,19 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/go-logr/logr"
 
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
 
 const (
-	collectDeployCtxTimeout = 10 * time.Second
+	integrationID = "ngf"
 )
 
 type fileToCopy struct {
@@ -24,10 +22,11 @@ type fileToCopy struct {
 }
 
 type initializeConfig struct {
-	collector     licensing.Collector
 	fileManager   file.OSFileManager
 	fileGenerator config.Generator
 	logger        logr.Logger
+	podUID        string
+	clusterUID    string
 	copy          []fileToCopy
 	plus          bool
 }
@@ -44,15 +43,11 @@ func initialize(cfg initializeConfig) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), collectDeployCtxTimeout)
-	defer cancel()
-
-	depCtx, err := cfg.collector.Collect(ctx)
-	if err != nil {
-		cfg.logger.Error(err, "error collecting deployment context")
+	depCtx := dataplane.DeploymentContext{
+		InstallationID: &cfg.podUID,
+		ClusterID:      &cfg.clusterUID,
+		Integration:    integrationID,
 	}
-
-	cfg.logger.Info("Deployment context collected", "deployment context", depCtx)
 
 	depCtxFile, err := cfg.fileGenerator.GenerateDeploymentContext(depCtx)
 	if err != nil {
