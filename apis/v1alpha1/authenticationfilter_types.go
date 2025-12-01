@@ -79,12 +79,11 @@ type LocalObjectReference struct {
 }
 
 // AuthScheme enumerates supported WWW-Authenticate schemes.
-// +kubebuilder:validation:Enum=Basic;Bearer
+// +kubebuilder:validation:Enum=Basic
 type AuthScheme string
 
 const (
-	AuthSchemeBasic  AuthScheme = "Basic"
-	AuthSchemeBearer AuthScheme = "Bearer"
+	AuthSchemeBasic AuthScheme = "Basic" // For Basic Auth
 )
 
 // AuthFailureBodyPolicy controls the failure response body behavior.
@@ -98,6 +97,8 @@ const (
 )
 
 // AuthFailureResponse customizes 401/403 failures.
+//
+//nolint:lll
 type AuthFailureResponse struct {
 	// Allowed: 401, 403.
 	// Default: 401.
