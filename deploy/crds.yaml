@@ -73,7 +73,6 @@ spec:
                           Configures WWW-Authenticate header in error page location.
                         enum:
                         - Basic
-                        - Bearer
                         type: string
                       statusCode:
                         default: 401
