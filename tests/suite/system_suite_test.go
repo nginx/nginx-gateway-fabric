@@ -231,7 +231,7 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 	switch {
 	// if we aren't installing from the public charts, then set the custom images
 	case !strings.HasPrefix(cfg.chartPath, "oci://"):
-		GinkgoWriter.Printf("Chart path doesn't have prefix 'oci://'\n")
+		GinkgoWriter.Printf("Installing chart from local directory\n")
 		installCfg.NgfImageRepository = *ngfImageRepository
 		installCfg.NginxImageRepository = *nginxImageRepository
 		if *plusEnabled && cfg.nfr {
@@ -239,13 +239,6 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		}
 		installCfg.ImageTag = *imageTag
 		installCfg.ImagePullPolicy = *imagePullPolicy
-	case version == "edge":
-		GinkgoWriter.Printf("Using NGF image repository %q with version 'edge'\n", *ngfImageRepository)
-		chartVersion = "0.0.0-edge"
-		installCfg.ChartVersion = chartVersion
-		if *plusEnabled && cfg.nfr {
-			installCfg.NginxImageRepository = fmt.Sprintf(formatNginxPlusEdgeImagePath, *gkeProject)
-		}
 	case *plusEnabled && cfg.nfr:
 		installCfg.NginxImageRepository = fmt.Sprintf(formatNginxPlusEdgeImagePath, *gkeProject)
 	}
