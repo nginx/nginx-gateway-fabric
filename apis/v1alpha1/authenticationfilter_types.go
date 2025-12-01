@@ -98,7 +98,7 @@ const (
 
 // AuthFailureResponse customizes 401/403 failures.
 //
-//nolint:lll
+
 type AuthFailureResponse struct {
 	// Allowed: 401, 403.
 	// Default: 401.
