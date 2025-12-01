@@ -11,8 +11,8 @@ import (
 // +kubebuilder:resource:categories=nginx-gateway-fabric,shortName=authfilter;authenticationfilter
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// AuthenticationFilter configures request authentication (Basic or JWT) and is
-// referenced by HTTPRoute filters via ExtensionRef.
+// AuthenticationFilter configures request authentication and is
+// referenced by HTTPRoute and GRPCRoute filters using ExtensionRef.
 type AuthenticationFilter struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
@@ -43,7 +43,9 @@ type AuthenticationFilterList struct {
 //nolint:lll
 type AuthenticationFilterSpec struct {
 	// Basic configures HTTP Basic Authentication.
-	Basic BasicAuth `json:"basic"`
+	//
+	// +optional
+	Basic *BasicAuth `json:"basic"`
 
 	// Type selects the authentication mechanism.
 	Type AuthType `json:"type"`
@@ -64,7 +66,7 @@ type BasicAuth struct {
 	// +optional
 	OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 
-	// SecretRef allows referencing a Secret in the same namespace
+	// SecretRef allows referencing a Secret in the same namespace.
 	SecretRef LocalObjectReference `json:"secretRef"`
 
 	// Realm used by NGINX `auth_basic` directive.
@@ -75,6 +77,7 @@ type BasicAuth struct {
 
 // LocalObjectReference specifies a local Kubernetes object.
 type LocalObjectReference struct {
+	// Name is the referenced object.
 	Name string `json:"name"`
 }
 
@@ -83,10 +86,11 @@ type LocalObjectReference struct {
 type AuthScheme string
 
 const (
-	AuthSchemeBasic AuthScheme = "Basic" // For Basic Auth
+	AuthSchemeBasic AuthScheme = "Basic" // For Basic Auth.
 )
 
 // AuthFailureBodyPolicy controls the failure response body behavior.
+//
 // +kubebuilder:validation:Enum=Unauthorized;Forbidden;Empty
 type AuthFailureBodyPolicy string
 
@@ -97,15 +101,12 @@ const (
 )
 
 // AuthFailureResponse customizes 401/403 failures.
-//
-
 type AuthFailureResponse struct {
 	// Allowed: 401, 403.
 	// Default: 401.
 	//
 	// +optional
-	// +kubebuilder:default=401
-	// +kubebuilder:validation:XValidation:message="statusCode must be 401 or 403",rule="self in [401, 403]"
+	// +kubebuilder:validation:Enum=401;403
 	StatusCode *int32 `json:"statusCode,omitempty"`
 
 	// Challenge scheme. If omitted, inferred from filter Type (Basic|Bearer).
