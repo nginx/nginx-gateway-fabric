@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"io"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing/licensingfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/configfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
@@ -92,17 +90,8 @@ func TestInitialize_Plus(t *testing.T) {
 			name:       "normal",
 			collectErr: nil,
 			depCtx: dataplane.DeploymentContext{
-				Integration:      "ngf",
-				ClusterID:        helpers.GetPointer("cluster-id"),
-				InstallationID:   helpers.GetPointer("install-id"),
-				ClusterNodeCount: helpers.GetPointer(2),
-			},
-		},
-		{
-			name:       "collecting deployment context errors",
-			collectErr: errors.New("collect error"),
-			depCtx: dataplane.DeploymentContext{
 				Integration:    "ngf",
+				ClusterID:      helpers.GetPointer("cluster-id"),
 				InstallationID: helpers.GetPointer("install-id"),
 			},
 		},
@@ -114,17 +103,11 @@ func TestInitialize_Plus(t *testing.T) {
 			g := NewWithT(t)
 
 			fakeFileMgr := &filefakes.FakeOSFileManager{}
-			fakeCollector := &licensingfakes.FakeCollector{
-				CollectStub: func(_ context.Context) (dataplane.DeploymentContext, error) {
-					return test.depCtx, test.collectErr
-				},
-			}
 			fakeGenerator := &configfakes.FakeGenerator{}
 
 			ic := initializeConfig{
 				fileManager:   fakeFileMgr,
 				logger:        logr.Discard(),
-				collector:     fakeCollector,
 				fileGenerator: fakeGenerator,
 				copy: []fileToCopy{
 					{
@@ -136,7 +119,9 @@ func TestInitialize_Plus(t *testing.T) {
 						srcFileName: "src2",
 					},
 				},
-				plus: true,
+				podUID:     "install-id",
+				clusterUID: "cluster-id",
+				plus:       true,
 			}
 
 			g.Expect(initialize(ic)).To(Succeed())
@@ -149,7 +134,6 @@ func TestInitialize_Plus(t *testing.T) {
 			// write deploy ctx
 			g.Expect(fakeGenerator.GenerateDeploymentContextCallCount()).To(Equal(1))
 			g.Expect(fakeGenerator.GenerateDeploymentContextArgsForCall(0)).To(Equal(test.depCtx))
-			g.Expect(fakeCollector.CollectCallCount()).To(Equal(1))
 			g.Expect(fakeFileMgr.WriteCallCount()).To(Equal(1))
 			g.Expect(fakeFileMgr.ChmodCallCount()).To(Equal(3))
 		})

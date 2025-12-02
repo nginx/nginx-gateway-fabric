@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
-	ctlr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sConfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -21,7 +20,6 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
 	ngxConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
@@ -667,10 +665,9 @@ func createInitializeCommand() *cobra.Command {
 				return fmt.Errorf("could not get pod UID: %w", err)
 			}
 
-			clusterCfg := ctlr.GetConfigOrDie()
-			k8sReader, err := client.New(clusterCfg, client.Options{})
+			clusterUID, err := getValueFromEnv("CLUSTER_UID")
 			if err != nil {
-				return fmt.Errorf("unable to initialize k8s client: %w", err)
+				return fmt.Errorf("could not get cluster UID: %w", err)
 			}
 
 			logger := ctlrZap.New()
@@ -684,12 +681,6 @@ func createInitializeCommand() *cobra.Command {
 			)
 			log.SetLogger(logger)
 
-			dcc := licensing.NewDeploymentContextCollector(licensing.DeploymentContextCollectorConfig{
-				K8sClientReader: k8sReader,
-				PodUID:          podUID,
-				Logger:          logger.WithName("deployCtxCollector"),
-			})
-
 			files := make([]fileToCopy, 0, len(srcFiles))
 			for i, src := range srcFiles {
 				files = append(files, fileToCopy{
@@ -702,8 +693,9 @@ func createInitializeCommand() *cobra.Command {
 				fileManager:   file.NewStdLibOSFileManager(),
 				fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil, logger.WithName("generator")),
 				logger:        logger,
+				podUID:        podUID,
+				clusterUID:    clusterUID,
 				plus:          plus,
-				collector:     dcc,
 				copy:          files,
 			})
 		},

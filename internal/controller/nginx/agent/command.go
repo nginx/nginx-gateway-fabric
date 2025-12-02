@@ -84,6 +84,9 @@ func (cs *commandService) CreateConnection(
 
 	resource := req.GetResource()
 	podName := resource.GetContainerInfo().GetHostname()
+	if podName == "" {
+		podName = resource.GetHostInfo().GetHostname()
+	}
 	cs.logger.Info(fmt.Sprintf("Creating connection for nginx pod: %s", podName))
 
 	owner, _, err := cs.getPodOwner(podName)

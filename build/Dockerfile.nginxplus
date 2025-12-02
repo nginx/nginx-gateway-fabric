@@ -6,7 +6,7 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.p
 
 FROM alpine:3.22
 
-ARG NGINX_PLUS_VERSION=R35
+ARG NGINX_PLUS_VERSION=R36
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.5.0
 ARG NJS_DIR
