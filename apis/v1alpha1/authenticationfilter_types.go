@@ -57,6 +57,7 @@ type AuthenticationFilterSpec struct {
 type AuthType string
 
 const (
+	// AuthTypeBasic is the HTTP Basic Authentication mechanism.
 	AuthTypeBasic AuthType = "Basic"
 )
 
@@ -97,9 +98,14 @@ const (
 type AuthFailureBodyPolicy string
 
 const (
+	// AuthFailureBodyPolicyUnauthorized indicates a 401 Unauthorized response.
 	AuthFailureBodyPolicyUnauthorized AuthFailureBodyPolicy = "Unauthorized"
-	AuthFailureBodyPolicyForbidden    AuthFailureBodyPolicy = "Forbidden"
-	AuthFailureBodyPolicyEmpty        AuthFailureBodyPolicy = "Empty"
+
+	// AuthFailureBodyPolicyForbidden indicates a 403 Forbidden response.
+	AuthFailureBodyPolicyForbidden AuthFailureBodyPolicy = "Forbidden"
+
+	// AuthFailureBodyPolicyEmpty indicates an empty response body.
+	AuthFailureBodyPolicyEmpty AuthFailureBodyPolicy = "Empty"
 )
 
 // AuthFailureResponse customizes 401/403 failures.
