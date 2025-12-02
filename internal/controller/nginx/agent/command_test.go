@@ -83,7 +83,6 @@ func createGrpcContext(t *testing.T) context.Context {
 func createGrpcContextWithCancel(t *testing.T) (context.Context, context.CancelFunc) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-
 	return grpcContext.NewGrpcContext(ctx, grpcContext.GrpcInfo{
 		UUID: "1234567",
 	}), cancel
