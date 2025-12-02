@@ -28,9 +28,9 @@ Rate limiting is a feature in NGINX which allows users to limit the request proc
 
 Local Rate Limiting refers to rate limiting per NGINX instance. Meaning each NGINX instance will have independent limits and these limits are not affected by requests sent to other NGINX instances in a replica fleet.
 
-In NGINX, this can be done using the `ngx_http_limit_req_module`, using the `limit_req_zone` and `limit_req` directives. Below is a simple example configuration where a`zone` named `one` is created with a size of `10 megabytes` and an average request processing rate for this zone cannot exceed 1 request per second. This zone also keys on the variable `$binary_remote_addr` which is the client IP address, meaning each client IP address will be tracked by a separate rate limit. Finally, the `limit_req` directive is used in the `location /search/` to put a limit on requests targeting that path.
+In NGINX, this can be done using the `ngx_http_limit_req_module`, using the `limit_req_zone` and `limit_req` directives. Below is a simple example configuration where a `zone` named `one` is created with a size of `10 megabytes` and an average request processing rate for this zone cannot exceed 1 request per second. This zone also keys on the variable `$binary_remote_addr` which is the client IP address, meaning each client IP address will be tracked by a separate rate limit. Finally, the `limit_req` directive is used in the `location /search/` to put a limit on requests targeting that path.
 
-```yaml
+```nginx
 limit_req_zone $binary_remote_addr zone=one:10m rate=1r/s;
 
 server {
@@ -56,7 +56,7 @@ Global Rate Limiting refers to rate limiting across an entire NGINX Plus fleet. 
 
 In NGINX Plus, this can be done by using the `ngx_stream_zone_sync_module` to extend the solution for Local Rate Limiting and provide a way for synchronizing contents of shared memory zones across NGINX Plus instances. Below is a simple example configuration where the `sync` parameter is attached to the `limit_req_zone` directive. The other `zone_sync` directives living in a separate `stream` block starts the global synchronization engine and lets this NGINX Plus instance connect and share state with the other specified NGINX Plus instances.
 
-```yaml
+```nginx
 stream {
     server {
         listen 0.0.0.0:12345;      # any free TCP port for sync traffic
@@ -214,25 +214,38 @@ type RateLimitPolicySpec struct {
 // RateLimit contains settings for Rate Limitting.
 type RateLimit struct {
     // Local defines the local rate limit rules for this policy.
+    //
+    // +optional
     Local *LocalRateLimit `json:"local,omitempty"`
 
     // Global defines the global rate limit rules for this policy.
+    //
+    // +optional
     Global *GlobalRateLimit `json:"global,omitempty"`
 }
 
 // LocalRateLimit contains the local rate limit rules.
 type LocalRateLimit struct {
     // Rules contains the list of rate limit rules.
+    //
+    // +optional
     Rules *RateLimitRule[] `json:"rules,omitempty"`
 
     // Zones contains the list of rate limit zones. Multiple rate limit rules can target the same zone.
-    Zones *RateLimitZone[]
+    //
+    // +optional
+    Zones *RateLimitZone[] `json:"zones,omitempty"`
 }
 
 // GlobalRateLimit contains the global rate limit rules.
 type GlobalRateLimit struct {
     // Rules contains the list of rate limit rules.
     Rules *RateLimitRule[] `json:"rules,omitempty"`
+
+    // Zones contains the list of rate limit zones. Multiple rate limit rules can target the same zone.
+    //
+    // +optional
+    Zones *RateLimitZone[] `json:"zones,omitempty"`
 }
 
 // RateLimitZone contains the settings for a rate limit zone. Multiple rate limit rules can target the same zone.
@@ -241,22 +254,22 @@ type RateLimitZone struct {
     // or requests per minute (r/m).
     //
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    Rate *string `json:"rate"`
+    Rate Rate `json:"rate"`
 
     // Key represents the key to which the rate limit is applied.
     //
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    Key *string `json:"key"`
+    Key string `json:"key"`
 
     // ZoneSize is the size of the shared memory zone.
     //
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    ZoneSize *Size `json:"zoneSize"`
+    ZoneSize Size `json:"zoneSize"`
 
     // ZoneName is the name of the zone.
     //
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    ZoneName *string `json:"zoneName"`
+    ZoneName string `json:"zoneName"`
 }
 
 // RateLimitRule contains settings for a RateLimit Rule.
@@ -264,9 +277,9 @@ type RateLimitRule struct {
     // ZoneName is the name of the zone.
     //
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    ZoneName *string `json:"zoneName"`
+    ZoneName string `json:"zoneName"`
 
-    // Delay specifies a limit at which excessive requests become delayed. If not set all excessive requests are delayed.
+    // Delay specifies a limit at which excessive requests become delayed. Default value is zero, i.e. all excessive requests are delayed.
     //
     // Default: 0
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
@@ -306,7 +319,7 @@ type RateLimitRule struct {
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_log_level
     //
     // +optional
-    LogLevel *string `json:"logLevel,omitempty"`
+    LogLevel *RateLimitLogLevel `json:"logLevel,omitempty"`
 
     // RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400..599.
     //
@@ -344,17 +357,17 @@ type RateLimitCondition struct {
 // RateLimitJWTCondition represents a condition against a JWT claim.
 type RateLimitJWTCondition struct {
     // Claim is the JWT claim that the conditional will check against. Nested claims should be separated by ".".
-    Claim *string `json:"claim"`
+    Claim string `json:"claim"`
     // Match is the value of the claim to match against.
-    Match *string `json:"match"`
+    Match string `json:"match"`
 }
 
 // RateLimitVariableCondition represents a condition against an NGINX variable.
 type RateLimitVariableCondition struct {
     // Name is the name of the NGINX variable that the conditional will check against.
-    Name *string `json:"name"`
+    Name string `json:"name"`
     // Match is the value of the NGINX variable to match against. Values prefixed with the ~ character denote the following is a regular expression.
-    Match *string `json:"match"`
+    Match string `json:"match"`
 }
 
 // Size is a string value representing a size. Size can be specified in bytes, kilobytes (k), megabytes (m).
@@ -362,6 +375,11 @@ type RateLimitVariableCondition struct {
 //
 // +kubebuilder:validation:Pattern=`^\d{1,4}(k|m)?$`
 type Size string
+
+// Rate is a string value representing a rate. Rate can be specifid in r/s or r/m.
+//
+// +kubebuilder:validation:Pattern=`^\d+r/[sm]$`
+type Rate string
 
 // RateLimitPolicyList contains a list of RateLimitPolicies.
 //
@@ -371,6 +389,26 @@ type RateLimitPolicyList struct {
     metav1.ListMeta `json:"metadata,omitempty"`
     Items           []RateLimitPolicy `json:"items"`
 }
+
+// RateLimitLogLevel defines the log level for cases when the server refuses
+// to process requests due to rate exceeding, or delays request processing.
+//
+// +kubebuilder:validation:Enum=info;notice;warn;error
+type RateLimitLogLevel string
+
+const (
+	// AgentLogLevelInfo is the info level rate limit logs.
+	AgentLogLevelInfo RateLimitLogLevel = "info"
+
+	// AgentLogLevelNotice is the notice level rate limit logs.
+	AgentLogLevelNotice RateLimitLogLevel = "notice"
+
+	// AgentLogLevelWarn is the warn level rate limit logs.
+	AgentLogLevelWarn RateLimitLogLevel = "warn"
+
+	// AgentLogLevelError is the error level rate limit logs.
+	AgentLogLevelError RateLimitLogLevel = "error"
+)
 ```
 
 ### Versioning and Installation
@@ -397,14 +435,14 @@ The following Conditions must be populated on the `RateLimitPolicy` CRD:
 
 Note: The `Programmed` condition is part of the updated GEP-713 specification and should be implemented for this policy. Existing policies (ClientSettingsPolicy, UpstreamSettingsPolicy, ObservabilityPolicy) may not have implemented this condition yet and should be updated in future work.
 
-Additionally, when a Route-level policy specifies buffer size fields (`bufferSize`, `buffers`, or `busyBuffersSize`) but inherits `disable: true` from a Gateway-level policy without explicitly setting `disable: false`, the following condition will be set:
+<!-- Additionally, when a Route-level policy specifies buffer size fields (`bufferSize`, `buffers`, or `busyBuffersSize`) but inherits `disable: true` from a Gateway-level policy without explicitly setting `disable: false`, the following condition will be set:
 
 - **Condition Type**: `Programmed`
 - **Status**: `False`
 - **Reason**: `PartiallyInvalid` (implementation-specific reason)
 - **Message**: "Policy is not fully programmed: buffer size fields (bufferSize, buffers, busyBuffersSize) are ignored because buffering is disabled by an ancestor policy. Set disable to false to enable buffering and apply buffer size settings."
 
-This condition informs users that their policy configuration has not been fully programmed to the data plane due to inherited configuration conflicts.
+This condition informs users that their policy configuration has not been fully programmed to the data plane due to inherited configuration conflicts. -->
 
 #### Setting Status on Objects Affected by a Policy
 
