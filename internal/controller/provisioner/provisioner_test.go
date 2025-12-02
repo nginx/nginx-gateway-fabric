@@ -51,7 +51,8 @@ func createScheme() *runtime.Scheme {
 	return scheme
 }
 
-func expectResourcesToExist(g *WithT, t *testing.T, k8sClient client.Client, nsName types.NamespacedName, plus bool) {
+func expectResourcesToExist(t *testing.T, g *WithT, k8sClient client.Client, nsName types.NamespacedName, plus bool) {
+	t.Helper()
 	g.Expect(k8sClient.Get(t.Context(), nsName, &appsv1.Deployment{})).To(Succeed())
 
 	g.Expect(k8sClient.Get(t.Context(), nsName, &corev1.Service{})).To(Succeed())
@@ -105,7 +106,8 @@ func expectResourcesToExist(g *WithT, t *testing.T, k8sClient client.Client, nsN
 	g.Expect(k8sClient.Get(t.Context(), dockerSecret, &corev1.Secret{})).To(Succeed())
 }
 
-func expectResourcesToNotExist(g *WithT, t *testing.T, k8sClient client.Client, nsName types.NamespacedName) {
+func expectResourcesToNotExist(t *testing.T, g *WithT, k8sClient client.Client, nsName types.NamespacedName) {
+	t.Helper()
 	g.Expect(k8sClient.Get(t.Context(), nsName, &appsv1.Deployment{})).ToNot(Succeed())
 
 	g.Expect(k8sClient.Get(t.Context(), nsName, &corev1.Service{})).ToNot(Succeed())
@@ -269,7 +271,7 @@ func TestEnable(t *testing.T) {
 	provisioner.Enable(t.Context())
 	g.Expect(provisioner.isLeader()).To(BeTrue())
 	g.Expect(provisioner.resourcesToDeleteOnStartup).To(BeEmpty())
-	expectResourcesToNotExist(g, t, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"})
+	expectResourcesToNotExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"})
 }
 
 func TestRegisterGateway(t *testing.T) {
@@ -323,11 +325,11 @@ func TestRegisterGateway(t *testing.T) {
 	provisioner, fakeClient, deploymentStore := defaultNginxProvisioner(objects...)
 
 	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
-	expectResourcesToExist(g, t, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, true) // plus
+	expectResourcesToExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, true) // plus
 
 	// Call again, no updates so nothing should happen
 	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
-	expectResourcesToExist(g, t, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, true) // plus
+	expectResourcesToExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, true) // plus
 
 	// Now set the Gateway to invalid, and expect a deprovision to occur
 	invalid := &graph.Gateway{
@@ -340,7 +342,7 @@ func TestRegisterGateway(t *testing.T) {
 		Valid: false,
 	}
 	g.Expect(provisioner.RegisterGateway(t.Context(), invalid, "gw-nginx")).To(Succeed())
-	expectResourcesToNotExist(g, t, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"})
+	expectResourcesToNotExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"})
 
 	resources := provisioner.store.getNginxResourcesForGateway(types.NamespacedName{Name: "gw", Namespace: "default"})
 	g.Expect(resources).To(BeNil())
@@ -479,16 +481,16 @@ func TestNonLeaderProvisioner(t *testing.T) {
 	nsName := types.NamespacedName{Name: "gw-nginx", Namespace: "default"}
 
 	g.Expect(provisioner.RegisterGateway(t.Context(), nil, "gw-nginx")).To(Succeed())
-	expectResourcesToNotExist(g, t, fakeClient, nsName)
+	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
 	g.Expect(provisioner.provisionNginx(t.Context(), "gw-nginx", nil, nil)).To(Succeed())
-	expectResourcesToNotExist(g, t, fakeClient, nsName)
+	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
 	g.Expect(provisioner.reprovisionNginx(t.Context(), "gw-nginx", nil, nil)).To(Succeed())
-	expectResourcesToNotExist(g, t, fakeClient, nsName)
+	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
 	g.Expect(provisioner.deprovisionNginx(t.Context(), nsName)).To(Succeed())
-	expectResourcesToNotExist(g, t, fakeClient, nsName)
+	expectResourcesToNotExist(t, g, fakeClient, nsName)
 	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
 }
 
@@ -524,7 +526,8 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 	provisioner.cfg.NginxDockerSecretNames = nil
 
 	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
-	expectResourcesToExist(g, t, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, false) // not plus
+	// not plus
+	expectResourcesToExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, false)
 
 	// update agent config
 	updatedConfig := &graph.Gateway{

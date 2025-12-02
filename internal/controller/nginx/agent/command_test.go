@@ -72,14 +72,15 @@ func createFakeK8sClient(initObjs ...runtime.Object) (client.Client, error) {
 }
 
 func createGrpcContext(t *testing.T) context.Context {
+	t.Helper()
 	return grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
 		IPAddress: "127.0.0.1",
 	})
 }
 
 func createGrpcContextWithCancel(t *testing.T) (context.Context, context.CancelFunc) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-
 	return grpcContext.NewGrpcContext(ctx, grpcContext.GrpcInfo{
 		IPAddress: "127.0.0.1",
 	}), cancel
