@@ -318,6 +318,28 @@ func TestExecuteBaseHttp_DNSResolver(t *testing.T) {
 			expectedConfig: "resolver 8.8.8.8;",
 		},
 		{
+			name: "DNS resolver with single IPv6 address",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses: []string{"2606:4700:4700::64"},
+					},
+				},
+			},
+			expectedConfig: "resolver [2606:4700:4700::64];",
+		},
+		{
+			name: "DNS resolver with one IPv6 address and one IPv4 address",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					DNSResolver: &dataplane.DNSResolverConfig{
+						Addresses: []string{"2606:4700:4700::64", "8.8.8.8"},
+					},
+				},
+			},
+			expectedConfig: "resolver [2606:4700:4700::64] 8.8.8.8;",
+		},
+		{
 			name: "no DNS resolver",
 			conf: dataplane.Configuration{
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{
