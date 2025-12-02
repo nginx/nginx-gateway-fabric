@@ -6,14 +6,14 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/files/plus-9.repo nginx-
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:cd8693e02cd22ad05d1c5c57f7dd7ccfcf3cca23fac158381a760ff6f4d0f292 AS ubi9-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:55985e8ef90954271569da91cc33692688404cbbb004c48ee386d8925dc4a4e7 AS ubi9-packages
 
 FROM redhat/ubi9-minimal:9.7-1763362218 AS ubi-nginx-plus
 
-ARG NGINX_PLUS_VERSION=R35
+ARG NGINX_PLUS_VERSION=R36
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.5.0
+ARG NGINX_AGENT_VERSION=v3.5.1
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT

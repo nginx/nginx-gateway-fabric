@@ -39,7 +39,7 @@ jobs:
 
       - name: NGF Docker meta
         id: ngf-meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # v5.9.0
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: |
             name=ghcr.io/nginx/nginx-gateway-fabric
@@ -52,7 +52,7 @@ jobs:
 
       - name: NGINX Docker meta
         id: nginx-meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # v5.9.0
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: |
             name=ghcr.io/nginx/nginx-gateway-fabric/${{ inputs.image == 'plus' && 'nginx-plus' || inputs.image }}
@@ -90,7 +90,7 @@ jobs:
 
       - name: Install cloud-provider-kind
         run: |
-          CLOUD_PROVIDER_KIND_VERSION=v0.9.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
+          CLOUD_PROVIDER_KIND_VERSION=v0.10.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
           go install sigs.k8s.io/cloud-provider-kind@${CLOUD_PROVIDER_KIND_VERSION}
 
       - name: Run cloud-provider-kind
@@ -143,7 +143,7 @@ jobs:
 
       - name: Install cloud-provider-kind
         run: |
-          CLOUD_PROVIDER_KIND_VERSION=v0.9.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
+          CLOUD_PROVIDER_KIND_VERSION=v0.10.0 # renovate: datasource=github-tags depName=kubernetes-sigs/cloud-provider-kind
           go install sigs.k8s.io/cloud-provider-kind@${CLOUD_PROVIDER_KIND_VERSION}
 
       - name: Run cloud-provider-kind

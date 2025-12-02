@@ -859,13 +859,19 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	image, pullPolicy := p.buildImage(nProxyCfg)
 	tokenAudience := fmt.Sprintf("%s.%s.svc", p.cfg.GatewayPodConfig.ServiceName, p.cfg.GatewayPodConfig.Namespace)
 
+	clusterID := "unknown"
+	if p.cfg.AgentLabels != nil {
+		if val, ok := p.cfg.AgentLabels["cluster-id"]; ok {
+			clusterID = val
+		}
+	}
+
 	spec := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      objectMeta.Labels,
 			Annotations: podAnnotations,
 		},
 		Spec: corev1.PodSpec{
-			AutomountServiceAccountToken: helpers.GetPointer(true),
 			Containers: []corev1.Container{
 				{
 					Name:            "nginx",
@@ -925,6 +931,10 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 									FieldPath: "metadata.uid",
 								},
 							},
+						},
+						{
+							Name:  "CLUSTER_UID",
+							Value: clusterID,
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
