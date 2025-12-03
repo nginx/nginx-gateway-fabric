@@ -33,44 +33,46 @@ const (
 	emptyGroup     = ""
 )
 
-// ClientSettingsPolicy validation errors.
 const (
-	expectedTargetRefKindError       = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
-	expectedTargetRefGroupError      = `TargetRef Group must be gateway.networking.k8s.io`
-	expectedHeaderWithoutServerError = `header can only be specified if server is specified`
-)
+	// ClientSettingsPolicy and ProxySettingsPolicy validation errors.
+	expectedTargetRefKindError  = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
+	expectedTargetRefGroupError = `TargetRef Group must be gateway.networking.k8s.io`
 
-// NginxProxy validation errors.
-const (
+	// ClientSettingsPolicy validation errors.
+	expectedHeaderWithoutServerError = `header can only be specified if server is specified`
+
+	// NginxProxy validation errors.
 	expectedOneOfDeploymentOrDaemonSetError = `only one of deployment or daemonSet can be set`
 	expectedIfModeSetTrustedAddressesError  = `if mode is set, trustedAddresses is a required field`
 	expectedMinReplicasLessThanOrEqualError = `minReplicas must be less than or equal to maxReplicas`
-)
 
-// ObservabilityPolicy validation errors.
-const (
+	// ObservabilityPolicy validation errors.
 	expectedTargetRefMustBeHTTPRouteOrGrpcRouteError = `TargetRef Kind must be: HTTPRoute or GRPCRoute`
 	expectedTargetRefKindAndNameComboMustBeUnique    = `TargetRef Kind and Name combination must be unique`
 	expectedStrategyMustBeOfTypeRatio                = `ratio can only be specified if strategy is of type ratio`
-)
 
-// UpstreamSettingsPolicy validation errors.
-const (
+	// UpstreamSettingsPolicy validation errors.
 	expectedTargetRefKindServiceError = `TargetRefs Kind must be: Service`
 	expectedTargetRefGroupCoreError   = `TargetRefs Group must be core`
 	expectedTargetRefNameUniqueError  = `TargetRef Name must be unique`
-)
 
-// SnippetsFilter validation errors.
-const (
+	// SnippetsFilter validation errors.
 	expectedSnippetsFilterContextError = `Only one snippet allowed per context`
-)
 
-const (
+	// ProxySettingsPolicy validation errors.
+	expectedTargetRefsKindError                = "TargetRefs entries must have kind Gateway, HTTPRoute, or GRPCRoute"
+	expectedTargetRefsGroupError               = "TargetRefs entries must have group gateway.networking.k8s.io"
+	expectedTargetRefsUniqueError              = "TargetRefs must be unique"
+	expectedBufferingMinNumberError            = "number in body should be greater than or equal to 2"
+	expectedBufferingMaxNumberError            = "number in body should be less than or equal to 256"
+	expectedBufferingSizeFormatError           = "size in body should match '^\\d{1,4}(k|m|g)?$'"
+	expectedBufferingBufferSizeFormatError     = "bufferSize in body should match '^\\d{1,4}(k|m|g)?$'"
+	expectedBufferingBusyBufferSizeFormatError = "busyBuffersSize in body should match '^\\d{1,4}(k|m|g)?$'"
+
+	// Namespace for tests.
 	defaultNamespace = "default"
-)
 
-const (
+	// Test resource names.
 	testResourceName  = "test-resource"
 	testTargetRefName = "test-targetRef"
 )
