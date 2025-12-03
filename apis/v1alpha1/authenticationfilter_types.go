@@ -19,6 +19,9 @@ type AuthenticationFilter struct {
 
 	// Spec defines the desired state of the AuthenticationFilter.
 	Spec AuthenticationFilterSpec `json:"spec"`
+
+	// Status defines the state of the AuthenticationFilter.
+	Status AuthenticationFilterStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
