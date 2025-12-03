@@ -19,7 +19,7 @@ func (g GeneratorImpl) executeStreamServers(conf dataplane.Configuration) []exec
 		Servers:     streamServers,
 		IPFamily:    getIPFamily(conf.BaseHTTPConfig),
 		Plus:        g.plus,
-		DNSResolver: conf.BaseStreamConfig.DNSResolver,
+		DNSResolver: buildDNSResolver(conf.BaseStreamConfig.DNSResolver),
 	}
 
 	streamServerResult := executeResult{
