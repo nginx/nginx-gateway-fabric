@@ -41,7 +41,7 @@ type AuthenticationFilterSpec struct {
 	// Basic configures HTTP Basic Authentication.
 	//
 	// +optional
-	Basic *BasicAuth `json:"basic"`
+	Basic *BasicAuth `json:"basic,omitempty"`
 
 	// Type selects the authentication mechanism.
 	Type AuthType `json:"type"`
