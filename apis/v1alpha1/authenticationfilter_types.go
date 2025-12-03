@@ -34,8 +34,7 @@ type AuthenticationFilterList struct {
 }
 
 // AuthenticationFilterSpec defines the desired configuration.
-// +kubebuilder:validation:XValidation:message="for type=Basic, spec.basic must be set",rule="self.type == 'Basic' ? self.basic != null : true"
-// +kubebuilder:validation:XValidation:message="when spec.basic is set, type must be 'Basic'",rule="self.basic != null ? self.type == 'Basic' : true"
+// +kubebuilder:validation:XValidation:message="for type=Basic, spec.basic must be set",rule="!(!has(self.basic) && self.type == 'Basic')"
 //
 //nolint:lll
 type AuthenticationFilterSpec struct {

@@ -83,9 +83,7 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: for type=Basic, spec.basic must be set
-              rule: 'self.type == ''Basic'' ? self.basic != null : true'
-            - message: when spec.basic is set, type must be 'Basic'
-              rule: 'self.basic != null ? self.type == ''Basic'' : true'
+              rule: '!(!has(self.basic) && self.type == ''Basic'')'
           status:
             description: Status defines the state of the AuthenticationFilter.
             properties:
