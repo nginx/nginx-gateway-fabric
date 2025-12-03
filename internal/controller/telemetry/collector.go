@@ -110,6 +110,48 @@ type NGFResourceCounts struct {
 	UpstreamSettingsPolicyCount int64
 	// GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway.
 	GatewayAttachedNpCount int64
+	// GatewayAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+	// attached at the Gateway level.
+	GatewayAttachedProxySettingsPolicyCount int64
+	// RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+	// attached at the Route level.
+	RouteAttachedProxySettingsPolicyCount int64
+}
+
+func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
+	rc.BackendTLSPolicyCount = int64(len(g.BackendTLSPolicies))
+
+	for policyKey, policy := range g.NGFPolicies {
+		switch policyKey.GVK.Kind {
+		case kinds.ClientSettingsPolicy:
+			if len(policy.TargetRefs) == 0 {
+				continue
+			}
+
+			if policy.TargetRefs[0].Kind == kinds.Gateway {
+				rc.GatewayAttachedClientSettingsPolicyCount++
+			} else {
+				rc.RouteAttachedClientSettingsPolicyCount++
+			}
+		case kinds.ObservabilityPolicy:
+			rc.ObservabilityPolicyCount++
+		case kinds.UpstreamSettingsPolicy:
+			rc.UpstreamSettingsPolicyCount++
+		case kinds.ProxySettingsPolicy:
+			if len(policy.TargetRefs) == 0 {
+				continue
+			}
+
+			for _, tr := range policy.TargetRefs {
+				switch tr.Kind {
+				case kinds.Gateway:
+					rc.GatewayAttachedProxySettingsPolicyCount++
+				case kinds.HTTPRoute, kinds.GRPCRoute:
+					rc.RouteAttachedProxySettingsPolicyCount++
+				}
+			}
+		}
+	}
 }
 
 // DataCollectorConfig holds configuration parameters for DataCollectorImpl.
@@ -244,26 +286,7 @@ func collectGraphResourceCount(
 		}
 	}
 
-	ngfResourceCounts.BackendTLSPolicyCount = int64(len(g.BackendTLSPolicies))
-
-	for policyKey, policy := range g.NGFPolicies {
-		switch policyKey.GVK.Kind {
-		case kinds.ClientSettingsPolicy:
-			if len(policy.TargetRefs) == 0 {
-				continue
-			}
-
-			if policy.TargetRefs[0].Kind == kinds.Gateway {
-				ngfResourceCounts.GatewayAttachedClientSettingsPolicyCount++
-			} else {
-				ngfResourceCounts.RouteAttachedClientSettingsPolicyCount++
-			}
-		case kinds.ObservabilityPolicy:
-			ngfResourceCounts.ObservabilityPolicyCount++
-		case kinds.UpstreamSettingsPolicy:
-			ngfResourceCounts.UpstreamSettingsPolicyCount++
-		}
-	}
+	ngfResourceCounts.CountPolicies(g)
 
 	ngfResourceCounts.NginxProxyCount = int64(len(g.ReferencedNginxProxies))
 	ngfResourceCounts.SnippetsFilterCount = int64(len(g.SnippetsFilters))
