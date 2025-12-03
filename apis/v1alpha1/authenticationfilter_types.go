@@ -20,10 +20,7 @@ type AuthenticationFilter struct {
 	// Spec defines the desired state of the AuthenticationFilter.
 	Spec AuthenticationFilterSpec `json:"spec"`
 
-	// Status defines the state of the AuthenticationFilter, following the same
-	// pattern as SnippetsFilter: per-controller conditions with an Accepted condition.
-	//
-	// +optional
+	// Status defines the state of the AuthenticationFilter.
 	Status AuthenticationFilterStatus `json:"status"`
 }
 
@@ -63,11 +60,6 @@ const (
 
 // BasicAuth configures HTTP Basic Authentication.
 type BasicAuth struct {
-	// OnFailure customizes the 401 response for failed authentication.
-	//
-	// +optional
-	OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
-
 	// SecretRef allows referencing a Secret in the same namespace.
 	SecretRef LocalObjectReference `json:"secretRef"`
 
@@ -81,55 +73,6 @@ type BasicAuth struct {
 type LocalObjectReference struct {
 	// Name is the referenced object.
 	Name string `json:"name"`
-}
-
-// AuthScheme enumerates supported WWW-Authenticate schemes.
-//
-// +kubebuilder:validation:Enum=Basic
-type AuthScheme string
-
-const (
-	AuthSchemeBasic AuthScheme = "Basic" // For Basic Auth.
-)
-
-// AuthFailureBodyPolicy controls the failure response body behavior.
-//
-// +kubebuilder:validation:Enum=Unauthorized;Forbidden;Empty
-type AuthFailureBodyPolicy string
-
-const (
-	// AuthFailureBodyPolicyUnauthorized indicates a 401 Unauthorized response.
-	AuthFailureBodyPolicyUnauthorized AuthFailureBodyPolicy = "Unauthorized"
-
-	// AuthFailureBodyPolicyForbidden indicates a 403 Forbidden response.
-	AuthFailureBodyPolicyForbidden AuthFailureBodyPolicy = "Forbidden"
-
-	// AuthFailureBodyPolicyEmpty indicates an empty response body.
-	AuthFailureBodyPolicyEmpty AuthFailureBodyPolicy = "Empty"
-)
-
-// AuthFailureResponse customizes 401/403 failures.
-type AuthFailureResponse struct {
-	// Allowed: 401, 403.
-	// Default: 401.
-	//
-	// +optional
-	// +kubebuilder:validation:Enum=401;403
-	StatusCode *int32 `json:"statusCode,omitempty"`
-
-	// Challenge scheme. If omitted, inferred from filter Type.
-	// Configures WWW-Authenticate header in error page location.
-	//
-	// +optional
-	// +kubebuilder:default=Basic
-	Scheme *AuthScheme `json:"scheme,omitempty"`
-
-	// Controls whether a default canned body is sent or an empty body.
-	// Default: Unauthorized.
-	//
-	// +optional
-	// +kubebuilder:default=Unauthorized
-	BodyPolicy *AuthFailureBodyPolicy `json:"bodyPolicy,omitempty"`
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
