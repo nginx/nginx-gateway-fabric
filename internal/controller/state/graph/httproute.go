@@ -347,7 +347,7 @@ func processHTTPRouteRules(
 }
 
 // inferencePoolBackend returns if a Route references an InferencePool backend
-// and that InferencePool exists.
+// and that InferencePool exists. Also returns the NamespacedName of the InferencePool.
 func inferencePoolBackend(
 	backendRef v1.HTTPBackendRef,
 	routeNamespace string,
