@@ -224,7 +224,7 @@ func processHTTPRouteRule(
 		// If route specifies an InferencePool backend, we need to convert it to its associated
 		// headless Service backend (that we created), so nginx config can be built properly.
 		// Only do this if the InferencePool actually exists.
-		if inferencePoolBackend(b, routeNamespace, inferencePools) {
+		if ok, key := inferencePoolBackend(b, routeNamespace, inferencePools); ok {
 			// We don't support traffic splitting at the Route level for
 			// InferencePool backends, so if there's more than one backendRef, and one of them
 			// is an InferencePool, we mark the rule as invalid.
@@ -239,7 +239,8 @@ func processHTTPRouteRule(
 
 			svcName := controller.CreateInferencePoolServiceName(string(b.Name))
 			rbr = RouteBackendRef{
-				IsInferencePool: true,
+				IsInferencePool:   true,
+				InferencePoolName: key.Name,
 				BackendRef: v1.BackendRef{
 					BackendObjectReference: v1.BackendObjectReference{
 						Group:     helpers.GetPointer[v1.Group](""),
@@ -351,7 +352,7 @@ func inferencePoolBackend(
 	backendRef v1.HTTPBackendRef,
 	routeNamespace string,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
-) bool {
+) (bool, types.NamespacedName) {
 	if backendRef.Group != nil &&
 		*backendRef.Group == inferenceAPIGroup &&
 		*backendRef.Kind == kinds.InferencePool {
@@ -364,11 +365,11 @@ func inferencePoolBackend(
 			Namespace: namespace,
 		}
 		if _, exists := inferencePools[key]; exists {
-			return true
+			return true, key
 		}
 	}
 
-	return false
+	return false, types.NamespacedName{}
 }
 
 func validateMatch(

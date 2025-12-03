@@ -90,7 +90,11 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 
 	selectorLabels := make(map[string]string)
 	maps.Copy(selectorLabels, p.baseLabelSelector.MatchLabels)
-	selectorLabels[controller.GatewayLabel] = gateway.GetName()
+	gatewayName := gateway.GetName()
+	if len(gatewayName) > controller.MaxServiceNameLen {
+		gatewayName = gatewayName[:controller.MaxServiceNameLen]
+	}
+	selectorLabels[controller.GatewayLabel] = gatewayName
 	selectorLabels[controller.AppNameLabel] = resourceName
 
 	labels := make(map[string]string)

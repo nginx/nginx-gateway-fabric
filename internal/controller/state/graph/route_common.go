@@ -169,6 +169,9 @@ type RouteBackendRef struct {
 	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
 	EndpointPickerConfig EndpointPickerConfig
 
+	// InferencePoolName is the name of the InferencePool, if this backendRef is for an InferencePool.
+	InferencePoolName string
+
 	Filters []any
 
 	// IsInferencePool indicates if this backend is an InferencePool disguised as a Service.

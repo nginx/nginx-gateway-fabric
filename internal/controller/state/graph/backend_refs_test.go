@@ -106,7 +106,8 @@ func TestValidateRouteBackendRef(t *testing.T) {
 					backend.Name = gatewayv1.ObjectName(controller.CreateInferencePoolServiceName("ipool"))
 					return backend
 				}),
-				IsInferencePool: true,
+				IsInferencePool:   true,
+				InferencePoolName: "ipool",
 			},
 			expectedValid: true,
 		},
@@ -393,7 +394,8 @@ func TestValidateBackendRefHTTPRoute(t *testing.T) {
 					backend.Namespace = helpers.GetPointer[gatewayv1.Namespace]("invalid")
 					return backend
 				}),
-				IsInferencePool: true,
+				IsInferencePool:   true,
+				InferencePoolName: "ipool",
 			},
 			refGrantResolver: alwaysFalseRefGrantResolver,
 			expectedValid:    false,
@@ -1220,6 +1222,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 				route := createRoute("hr-inference", RouteTypeHTTP, "Service", 1, svcInferenceName)
 				// Mark the backend ref as IsInferencePool and set the port to nil (simulate InferencePool logic)
 				route.Spec.Rules[0].RouteBackendRefs[0].IsInferencePool = true
+				route.Spec.Rules[0].RouteBackendRefs[0].InferencePoolName = "ipool"
 				route.Spec.Rules[0].RouteBackendRefs[0].Port = nil
 				return route
 			}(),
