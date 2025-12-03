@@ -29,7 +29,7 @@ require (
 	k8s.io/klog/v2 v2.130.1
 	sigs.k8s.io/controller-runtime v0.22.4
 	sigs.k8s.io/gateway-api v1.4.0
-	sigs.k8s.io/gateway-api-inference-extension v1.1.0
+	sigs.k8s.io/gateway-api-inference-extension v1.2.0
 )
 
 require (
