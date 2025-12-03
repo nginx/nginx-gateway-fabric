@@ -51,8 +51,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 			Name:            "gw-nginx",
 			Namespace:       "default",
 			ResourceVersion: "1",
-			Labels:          map[string]string{"app": "nginx"},
-			Annotations:     map[string]string{controller.GatewayAnnotation: "gw"},
+			Labels:          map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 	}
 
@@ -61,8 +60,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 			Name:            "gw-nginx",
 			Namespace:       "default",
 			ResourceVersion: "1",
-			Labels:          map[string]string{"app": "nginx"},
-			Annotations:     map[string]string{controller.GatewayAnnotation: "gw"},
+			Labels:          map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 	}
 
@@ -71,8 +69,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 			Name:            "gw-nginx-" + jwtTestSecretName,
 			Namespace:       "default",
 			ResourceVersion: "1",
-			Labels:          map[string]string{"app": "nginx"},
-			Annotations:     map[string]string{controller.GatewayAnnotation: "gw"},
+			Labels:          map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 		Data: map[string][]byte{
 			"data": []byte("oldData"),
@@ -95,8 +92,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 			Name:            "gw-nginx-" + dockerTestSecretName,
 			Namespace:       "default",
 			ResourceVersion: "1",
-			Labels:          map[string]string{"app": "nginx"},
-			Annotations:     map[string]string{controller.GatewayAnnotation: "gw"},
+			Labels:          map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 		Data: map[string][]byte{
 			"data": []byte("oldDockerData"),
@@ -249,10 +245,9 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "gw-nginx",
-			Namespace:   "default",
-			Labels:      map[string]string{"app": "nginx"},
-			Annotations: map[string]string{controller.GatewayAnnotation: "gw"},
+			Name:      "gw-nginx",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 	}
 
@@ -266,10 +261,9 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 
 	jwtSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "gw-nginx-" + jwtTestSecretName,
-			Namespace:   "default",
-			Labels:      map[string]string{"app": "nginx"},
-			Annotations: map[string]string{controller.GatewayAnnotation: "gw"},
+			Name:      "gw-nginx-" + jwtTestSecretName,
+			Namespace: "default",
+			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
 	}
 

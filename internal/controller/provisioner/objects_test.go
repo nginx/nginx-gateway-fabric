@@ -91,13 +91,13 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	}
 
 	expLabels := map[string]string{
-		"label":                  "value",
-		"app":                    "nginx",
-		"app.kubernetes.io/name": "gw-nginx",
+		"label":                                  "value",
+		"app":                                    "nginx",
+		"gateway.networking.k8s.io/gateway-name": "gw",
+		"app.kubernetes.io/name":                 "gw-nginx",
 	}
 	expAnnotations := map[string]string{
-		"annotation":                             "value",
-		"gateway.networking.k8s.io/gateway-name": "gw",
+		"annotation": "value",
 	}
 
 	resourceName := "gw-nginx"
@@ -627,13 +627,13 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(objects).To(HaveLen(9))
 
 	expLabels := map[string]string{
-		"label":                  "value",
-		"app":                    "nginx",
-		"app.kubernetes.io/name": "gw-nginx",
+		"label":                                  "value",
+		"app":                                    "nginx",
+		"gateway.networking.k8s.io/gateway-name": "gw",
+		"app.kubernetes.io/name":                 "gw-nginx",
 	}
 	expAnnotations := map[string]string{
-		"annotation":                             "value",
-		"gateway.networking.k8s.io/gateway-name": "gw",
+		"annotation": "value",
 	}
 
 	secretObj := objects[1]
@@ -770,11 +770,9 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	g.Expect(objects).To(HaveLen(9))
 
 	expLabels := map[string]string{
-		"app":                    "nginx",
-		"app.kubernetes.io/name": "gw-nginx",
-	}
-	expAnnotations := map[string]string{
+		"app":                                    "nginx",
 		"gateway.networking.k8s.io/gateway-name": "gw",
+		"app.kubernetes.io/name":                 "gw-nginx",
 	}
 
 	secretObj := objects[0]
@@ -782,7 +780,6 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, agentTLSTestSecretName)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
-	g.Expect(secret.GetAnnotations()).To(Equal(expAnnotations))
 
 	// the (docker-only) secret order in the object list is sorted by secret name
 
@@ -791,21 +788,18 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerTestSecretName)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
-	g.Expect(secret.GetAnnotations()).To(Equal(expAnnotations))
 
 	registry1SecretObj := objects[2]
 	secret, ok = registry1SecretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerSecretRegistry1Name)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
-	g.Expect(secret.GetAnnotations()).To(Equal(expAnnotations))
 
 	registry2SecretObj := objects[3]
 	secret, ok = registry2SecretObj.(*corev1.Secret)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, dockerSecretRegistry2Name)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
-	g.Expect(secret.GetAnnotations()).To(Equal(expAnnotations))
 
 	depObj := objects[8]
 	dep, ok := depObj.(*appsv1.Deployment)
@@ -889,18 +883,15 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 	g.Expect(objects).To(HaveLen(6))
 
 	expLabels := map[string]string{
-		"app":                    "nginx",
-		"app.kubernetes.io/name": "gw-nginx",
-	}
-	expAnnotations := map[string]string{
+		"app":                                    "nginx",
 		"gateway.networking.k8s.io/gateway-name": "gw",
+		"app.kubernetes.io/name":                 "gw-nginx",
 	}
 
 	dsObj := objects[5]
 	ds, ok := dsObj.(*appsv1.DaemonSet)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(ds.GetLabels()).To(Equal(expLabels))
-	g.Expect(ds.GetAnnotations()).To(Equal(expAnnotations))
 
 	template := ds.Spec.Template
 	g.Expect(template.GetAnnotations()).To(HaveKey("prometheus.io/scrape"))
@@ -956,24 +947,20 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 	g.Expect(objects).To(HaveLen(8))
 
 	expLabels := map[string]string{
-		"app":                    "nginx",
-		"app.kubernetes.io/name": "gw-nginx",
-	}
-	expAnnotations := map[string]string{
+		"app":                                    "nginx",
 		"gateway.networking.k8s.io/gateway-name": "gw",
+		"app.kubernetes.io/name":                 "gw-nginx",
 	}
 
 	roleObj := objects[4]
 	role, ok := roleObj.(*rbacv1.Role)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(role.GetLabels()).To(Equal(expLabels))
-	g.Expect(role.GetAnnotations()).To(Equal(expAnnotations))
 
 	roleBindingObj := objects[5]
 	roleBinding, ok := roleBindingObj.(*rbacv1.RoleBinding)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(roleBinding.GetLabels()).To(Equal(expLabels))
-	g.Expect(roleBinding.GetAnnotations()).To(Equal(expAnnotations))
 }
 
 func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {

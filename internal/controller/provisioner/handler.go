@@ -66,7 +66,10 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 				*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
 				objLabels := labels.Set(obj.GetLabels())
 				if h.labelSelector.Matches(objLabels) {
-					gatewayName := obj.GetAnnotations()[controller.GatewayAnnotation]
+					gatewayName := objLabels.Get(controller.GatewayLabel)
+					if gatewayName == "" {
+						gatewayName = obj.GetAnnotations()[controller.GatewayLabel]
+					}
 					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
 					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 						logger.Error(err, "error handling resource update")
@@ -75,7 +78,10 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 			case *corev1.Service:
 				objLabels := labels.Set(obj.GetLabels())
 				if h.labelSelector.Matches(objLabels) {
-					gatewayName := obj.GetAnnotations()[controller.GatewayAnnotation]
+					gatewayName := objLabels.Get(controller.GatewayLabel)
+					if gatewayName == "" {
+						gatewayName = obj.GetAnnotations()[controller.GatewayLabel]
+					}
 					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
 					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 						logger.Error(err, "error handling resource update")
@@ -90,7 +96,10 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 			case *corev1.Secret:
 				objLabels := labels.Set(obj.GetLabels())
 				if h.labelSelector.Matches(objLabels) {
-					gatewayName := obj.GetAnnotations()[controller.GatewayAnnotation]
+					gatewayName := objLabels.Get(controller.GatewayLabel)
+					if gatewayName == "" {
+						gatewayName = obj.GetAnnotations()[controller.GatewayLabel]
+					}
 					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
 					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 						logger.Error(err, "error handling resource update")

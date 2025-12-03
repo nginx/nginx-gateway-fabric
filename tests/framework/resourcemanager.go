@@ -1021,18 +1021,12 @@ func (rm *ResourceManager) GetReadyNginxPodNames(
 				ctx,
 				&podList,
 				client.InNamespace(namespace),
+				client.HasLabels{"gateway.networking.k8s.io/gateway-name"},
 			); err != nil {
 				return false, fmt.Errorf("error getting list of NGINX Pods: %w", err)
 			}
 
-			var filteredPodList core.PodList
-			for _, pod := range podList.Items {
-				if _, ok := pod.Annotations["gateway.networking.k8s.io/gateway-name"]; ok {
-					filteredPodList.Items = append(filteredPodList.Items, pod)
-				}
-			}
-
-			nginxPodNames = getReadyPodNames(filteredPodList, opts...)
+			nginxPodNames = getReadyPodNames(podList, opts...)
 			return len(nginxPodNames) > 0, nil
 		},
 	)

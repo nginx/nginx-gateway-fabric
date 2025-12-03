@@ -42,7 +42,7 @@ func TestCreateNginxResourceName(t *testing.T) {
 			g := NewWithT(t)
 
 			name := CreateNginxResourceName(test.prefix, test.suffix)
-			g.Expect(len(name)).To(BeNumerically("<=", maxServiceNameLen))
+			g.Expect(len(name)).To(BeNumerically("<=", MaxServiceNameLen))
 			g.Expect(name).To(Equal(test.expected), "expected %q, got %q", test.expected, name)
 		})
 	}
@@ -79,7 +79,7 @@ func TestCreateInferencePoolServiceName(t *testing.T) {
 			g := NewWithT(t)
 
 			serviceName := CreateInferencePoolServiceName(test.name)
-			g.Expect(len(serviceName)).To(BeNumerically("<=", maxServiceNameLen))
+			g.Expect(len(serviceName)).To(BeNumerically("<=", MaxServiceNameLen))
 			g.Expect(serviceName).To(Equal(test.expected), "expected %q, got %q", test.expected, serviceName)
 		})
 	}
