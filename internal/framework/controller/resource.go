@@ -8,7 +8,7 @@ import (
 const (
 	// inferencePoolServiceSuffix is the suffix of the headless Service name for an InferencePool.
 	inferencePoolServiceSuffix = "pool-svc"
-	MaxServiceNameLen          = 63
+	maxServiceNameLen          = 63
 	hashLen                    = 8
 )
 
@@ -29,18 +29,16 @@ func CreateInferencePoolServiceName(name string) string {
 func truncateAndHashName(name string, suffix string) string {
 	sep := "-"
 	full := name + sep + suffix
-	if len(full) <= MaxServiceNameLen {
+	if len(full) <= maxServiceNameLen {
 		return full
 	}
 
 	// Always include the suffix, truncate name as needed
 	hash := sha256.Sum256([]byte(full))
 	hashStr := hex.EncodeToString(hash[:])[:hashLen]
-	maxNameLen := MaxServiceNameLen - (len(sep) * 2) - hashLen - len(suffix)
+	maxNameLen := maxServiceNameLen - (len(sep) * 2) - hashLen - len(suffix)
 	truncName := name
-	if maxNameLen < 1 {
-		truncName = ""
-	} else if len(name) > maxNameLen {
+	if len(name) > maxNameLen {
 		truncName = name[:maxNameLen]
 	}
 

@@ -1,8 +1,8 @@
 package controller
 
-// The following labels are added to each nginx resource created by the control plane.
+// The following labels/annotations are added to each nginx resource created by the control plane.
 const (
-	GatewayLabel      = "gateway.networking.k8s.io/gateway-name"
+	GatewayAnnotation = "gateway.networking.k8s.io/gateway-name"
 	AppNameLabel      = "app.kubernetes.io/name"
 	AppInstanceLabel  = "app.kubernetes.io/instance"
 	AppManagedByLabel = "app.kubernetes.io/managed-by"

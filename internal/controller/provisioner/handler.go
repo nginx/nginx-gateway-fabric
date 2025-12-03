@@ -66,9 +66,8 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 				*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
 				objLabels := labels.Set(obj.GetLabels())
 				if h.labelSelector.Matches(objLabels) {
-					gatewayName := objLabels.Get(controller.GatewayLabel)
+					gatewayName := obj.GetAnnotations()[controller.GatewayAnnotation]
 					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
-
 					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 						logger.Error(err, "error handling resource update")
 					}
@@ -76,13 +75,11 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 			case *corev1.Service:
 				objLabels := labels.Set(obj.GetLabels())
 				if h.labelSelector.Matches(objLabels) {
-					gatewayName := objLabels.Get(controller.GatewayLabel)
+					gatewayName := obj.GetAnnotations()[controller.GatewayAnnotation]
 					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
-
 					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 						logger.Error(err, "error handling resource update")
 					}
-
 					statusUpdate := &status.QueueObject{
 						Deployment:     client.ObjectKeyFromObject(obj),
 						UpdateType:     status.UpdateGateway,
@@ -93,9 +90,8 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 			case *corev1.Secret:
 				objLabels := labels.Set(obj.GetLabels())
 				if h.labelSelector.Matches(objLabels) {
-					gatewayName := objLabels.Get(controller.GatewayLabel)
+					gatewayName := obj.GetAnnotations()[controller.GatewayAnnotation]
 					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
-
 					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
 						logger.Error(err, "error handling resource update")
 					}
