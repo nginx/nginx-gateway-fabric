@@ -35,36 +35,36 @@ const (
 
 const (
 	// Kind validation errors.
-	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = `TargetRef Kind must be one of: " +
-	+ "Gateway, HTTPRoute, or GRPCRoute`
-	expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError = `TargetRef Kind must be: HTTPRoute or GRPCRoute`
-	expectedTargetRefKindServiceError                    = `TargetRefs Kind must be: Service`
+	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
+		"Gateway, HTTPRoute, or GRPCRoute"
+	expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError = "TargetRef Kind must be: HTTPRoute or GRPCRoute"
+	expectedTargetRefKindServiceError                    = "TargetRefs Kind must be: Service"
 
 	// Group validation errors.
-	expectedTargetRefGroupError     = `TargetRef Group must be gateway.networking.k8s.io`
-	expectedTargetRefGroupCoreError = `TargetRefs Group must be core`
+	expectedTargetRefGroupError     = "TargetRef Group must be gateway.networking.k8s.io"
+	expectedTargetRefGroupCoreError = "TargetRefs Group must be core"
 
 	// Name uniqueness validation errors.
-	expectedTargetRefNameUniqueError              = `TargetRef Name must be unique`
-	expectedTargetRefKindAndNameComboMustBeUnique = `TargetRef Kind and Name combination must be unique`
+	expectedTargetRefNameUniqueError              = "TargetRef Name must be unique"
+	expectedTargetRefKindAndNameComboMustBeUnique = "TargetRef Kind and Name combination must be unique"
 
 	// Header validation error.
-	expectedHeaderWithoutServerError = `header can only be specified if server is specified`
+	expectedHeaderWithoutServerError = "header can only be specified if server is specified"
 
 	// Deployment/DaemonSet validation error.
-	expectedOneOfDeploymentOrDaemonSetError = `only one of deployment or daemonSet can be set`
+	expectedOneOfDeploymentOrDaemonSetError = "only one of deployment or daemonSet can be set"
 
 	// TrustedAddresses/Mode validation error.
-	expectedIfModeSetTrustedAddressesError = `if mode is set, trustedAddresses is a required field`
+	expectedIfModeSetTrustedAddressesError = "if mode is set, trustedAddresses is a required field"
 
 	// Replicas validation error.
-	expectedMinReplicasLessThanOrEqualError = `minReplicas must be less than or equal to maxReplicas`
+	expectedMinReplicasLessThanOrEqualError = "minReplicas must be less than or equal to maxReplicas"
 
 	// Strategy validation error.
-	expectedStrategyMustBeOfTypeRatio = `ratio can only be specified if strategy is of type ratio`
+	expectedStrategyMustBeOfTypeRatio = "ratio can only be specified if strategy is of type ratio"
 
 	// SnippetsFilter validation errors.
-	expectedSnippetsFilterContextError = `Only one snippet allowed per context`
+	expectedSnippetsFilterContextError = "Only one snippet allowed per context"
 
 	// Namespace for tests.
 	defaultNamespace = "default"
