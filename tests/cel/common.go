@@ -60,14 +60,9 @@ const (
 	expectedSnippetsFilterContextError = `Only one snippet allowed per context`
 
 	// ProxySettingsPolicy validation errors.
-	expectedTargetRefsKindError                = "TargetRefs entries must have kind Gateway, HTTPRoute, or GRPCRoute"
-	expectedTargetRefsGroupError               = "TargetRefs entries must have group gateway.networking.k8s.io"
-	expectedTargetRefsUniqueError              = "TargetRefs must be unique"
-	expectedBufferingMinNumberError            = "number in body should be greater than or equal to 2"
-	expectedBufferingMaxNumberError            = "number in body should be less than or equal to 256"
-	expectedBufferingSizeFormatError           = "size in body should match '^\\d{1,4}(k|m|g)?$'"
-	expectedBufferingBufferSizeFormatError     = "bufferSize in body should match '^\\d{1,4}(k|m|g)?$'"
-	expectedBufferingBusyBufferSizeFormatError = "busyBuffersSize in body should match '^\\d{1,4}(k|m|g)?$'"
+	expectedTargetRefsKindError   = "TargetRefs entries must have kind Gateway, HTTPRoute, or GRPCRoute"
+	expectedTargetRefsGroupError  = "TargetRefs entries must have group gateway.networking.k8s.io"
+	expectedTargetRefsUniqueError = "TargetRefs Kind and Name combination must be unique"
 
 	// Namespace for tests.
 	defaultNamespace = "default"
