@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/dlclark/regexp2"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
@@ -147,4 +148,69 @@ func validatePathInRegexMatch(path string) error {
 	}
 
 	return nil
+}
+
+type HTTPDurationValidator struct{}
+
+func (d HTTPDurationValidator) ValidateDuration(duration string) (string, error) {
+	return d.validateDurationCanBeConvertedToNginxFormat(duration)
+}
+
+// validateDurationCanBeConvertedToNginxFormat parses a Gateway API duration and returns a single-unit,
+// NGINX-friendly duration that matches `^[0-9]{1,4}(ms|s|m|h)?$`
+// The conversion rules are:
+//   - duration must be > 0
+//   - ceil to the next millisecond
+//   - choose the smallest unit (ms→s→m→h) whose ceil value fits in 1–4 digits
+//   - always include a unit suffix
+func (d HTTPDurationValidator) validateDurationCanBeConvertedToNginxFormat(in string) (string, error) {
+	// if the input already matches the NGINX format, return it as is
+	if durationStringFmtRegexp.MatchString(in) {
+		return in, nil
+	}
+
+	td, err := time.ParseDuration(in)
+	if err != nil {
+		return "", fmt.Errorf("invalid duration: %w", err)
+	}
+	if td <= 0 {
+		return "", errors.New("duration must be > 0")
+	}
+
+	ns := td.Nanoseconds()
+	ceilDivision := func(a, b int64) int64 {
+		return (a + b - 1) / b
+	}
+
+	totalMS := ceilDivision(ns, int64(time.Millisecond))
+
+	type unit struct {
+		suffix string
+		step   int64
+	}
+
+	units := []unit{
+		{"ms", 1},
+		{"s", 1000},
+		{"m", 60 * 1000},
+		{"h", 60 * 60 * 1000},
+	}
+
+	const maxValue = 9999
+	var out string
+	for _, u := range units {
+		v := ceilDivision(totalMS, u.step)
+		if v >= 1 && v <= maxValue {
+			out = fmt.Sprintf("%d%s", v, u.suffix)
+			break
+		}
+	}
+	if out == "" {
+		return "", fmt.Errorf("duration is too large for NGINX format (exceeds %dh)", maxValue)
+	}
+
+	if !durationStringFmtRegexp.MatchString(out) {
+		return "", fmt.Errorf("computed duration %q does not match NGINX format", out)
+	}
+	return out, nil
 }
