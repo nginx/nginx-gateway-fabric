@@ -21,98 +21,120 @@ func TestProxySettingsPolicyTargetRefsKind(t *testing.T) {
 		{
 			name: "Validate TargetRef of kind Gateway is allowed",
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  gatewayKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name: "Validate TargetRef of kind HTTPRoute is allowed",
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  httpRouteKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  httpRouteKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name: "Validate TargetRef of kind GRPCRoute is allowed",
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  grpcRouteKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  grpcRouteKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name: "Validate TargetRefs of kind GRPCRoute and HTTPRoute are allowed",
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  grpcRouteKind,
-					Group: gatewayGroup,
-				}, {
-					Kind:  httpRouteKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  grpcRouteKind,
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  httpRouteKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name: "Validate TargetRefs of kind Gateway and HTTPRoute are allowed",
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  gatewayKind,
-					Group: gatewayGroup,
-				}, {
-					Kind:  httpRouteKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  httpRouteKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name:       "Validate invalid TargetRef Kind is not allowed",
 			wantErrors: []string{expectedTargetRefsKindError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  invalidKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  invalidKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name:       "Validate TCPRoute TargetRef Kind is not allowed",
 			wantErrors: []string{expectedTargetRefsKindError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  tcpRouteKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  tcpRouteKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name:       "Validate valid and invalid TargetRefs Kinds is not allowed",
 			wantErrors: []string{expectedTargetRefsKindError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  invalidKind,
-					Group: gatewayGroup,
-				}, {
-					Kind:  grpcRouteKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  invalidKind,
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name:       "Validate more then one invalid TargetRefs Kinds are not allowed",
 			wantErrors: []string{expectedTargetRefsKindError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  invalidKind,
-					Group: gatewayGroup,
-				}, {
-					Kind:  invalidKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  invalidKind,
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  invalidKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 	}
@@ -120,7 +142,7 @@ func TestProxySettingsPolicyTargetRefsKind(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			// populate names
+
 			for i := range tt.spec.TargetRefs {
 				tt.spec.TargetRefs[i].Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
 			}
@@ -148,56 +170,68 @@ func TestProxySettingsPolicyTargetRefsGroup(t *testing.T) {
 		{
 			name: "Validate gateway.networking.k8s.io TargetRef Group is allowed",
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  gatewayKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name:       "Validate invalid.networking.k8s.io TargetRef Group is not allowed",
 			wantErrors: []string{expectedTargetRefsGroupError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  gatewayKind,
-					Group: invalidGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  gatewayKind,
+						Group: invalidGroup,
+					},
+				},
 			},
 		},
 		{
 			name:       "Validate valid and invalid TargetRef Group are not allowed",
 			wantErrors: []string{expectedTargetRefsGroupError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  gatewayKind,
-					Group: invalidGroup,
-				}, {
-					Kind:  gatewayKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  gatewayKind,
+						Group: invalidGroup,
+					},
+					{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name:       "Validate discovery.k8s.io TargetRef Group is not allowed",
 			wantErrors: []string{expectedTargetRefsGroupError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  gatewayKind,
-					Group: discoveryGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  gatewayKind,
+						Group: discoveryGroup,
+					},
+				},
 			},
 		},
 		{
 			name:       "Validate more then one invalid TargetRef Group are not allowed",
 			wantErrors: []string{expectedTargetRefsGroupError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  gatewayKind,
-					Group: invalidGroup,
-				}, {
-					Kind:  gatewayKind,
-					Group: discoveryGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  gatewayKind,
+						Group: invalidGroup,
+					},
+					{
+						Kind:  gatewayKind,
+						Group: discoveryGroup,
+					},
+				},
 			},
 		},
 	}
@@ -232,19 +266,30 @@ func TestProxySettingsPolicyTargetRefsNameUniqueness(t *testing.T) {
 		{
 			name: "Validate single TargetRef with unique name is allowed",
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{{
-					Kind:  gatewayKind,
-					Group: gatewayGroup,
-				}},
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
+				},
 			},
 		},
 		{
 			name: "Validate multiple TargetRefs with unique names are allowed",
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
-					{Kind: gatewayKind, Group: gatewayGroup},
-					{Kind: httpRouteKind, Group: gatewayGroup},
-					{Kind: grpcRouteKind, Group: gatewayGroup},
+					{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  httpRouteKind,
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
+						Group: gatewayGroup,
+					},
 				},
 			},
 		},
