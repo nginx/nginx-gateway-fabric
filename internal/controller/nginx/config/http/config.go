@@ -120,6 +120,7 @@ const (
 
 // Upstream holds all configuration for an HTTP upstream.
 type Upstream struct {
+	SessionPersistence  UpstreamSessionPersistence
 	Name                string
 	ZoneSize            string // format: 512k, 1m
 	StateFile           string
@@ -127,6 +128,14 @@ type Upstream struct {
 	HashMethodKey       string
 	KeepAlive           UpstreamKeepAlive
 	Servers             []UpstreamServer
+}
+
+// UpstreamSessionPersistence holds the session persistence configuration for an upstream.
+type UpstreamSessionPersistence struct {
+	Name        string
+	Expiry      string
+	Path        string
+	SessionType string
 }
 
 // UpstreamKeepAlive holds the keepalive configuration for an HTTP upstream.
