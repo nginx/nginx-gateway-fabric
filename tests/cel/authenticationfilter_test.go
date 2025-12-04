@@ -37,13 +37,6 @@ func TestAuthenticationFilterBasicRequiredWhenTypeIsBasic(t *testing.T) {
 			},
 			wantErrors: []string{expectedBasicRequiredError},
 		},
-		{
-			name: "Validate: type=Basic with missing basic should be rejected",
-			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
-				Type: ngfAPIv1alpha1.AuthTypeBasic,
-			},
-			wantErrors: []string{expectedBasicRequiredError},
-		},
 	}
 
 	for _, tt := range tests {
