@@ -83,7 +83,7 @@ func TestProxySettingsPolicyTargetRefsKind(t *testing.T) {
 		},
 		{
 			name:       "Validate invalid TargetRef Kind is not allowed",
-			wantErrors: []string{expectedTargetRefsKindError},
+			wantErrors: []string{expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -95,7 +95,7 @@ func TestProxySettingsPolicyTargetRefsKind(t *testing.T) {
 		},
 		{
 			name:       "Validate TCPRoute TargetRef Kind is not allowed",
-			wantErrors: []string{expectedTargetRefsKindError},
+			wantErrors: []string{expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -107,7 +107,7 @@ func TestProxySettingsPolicyTargetRefsKind(t *testing.T) {
 		},
 		{
 			name:       "Validate valid and invalid TargetRefs Kinds is not allowed",
-			wantErrors: []string{expectedTargetRefsKindError},
+			wantErrors: []string{expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -122,8 +122,8 @@ func TestProxySettingsPolicyTargetRefsKind(t *testing.T) {
 			},
 		},
 		{
-			name:       "Validate more then one invalid TargetRefs Kinds are not allowed",
-			wantErrors: []string{expectedTargetRefsKindError},
+			name:       "Validate more than one invalid TargetRefs Kinds are not allowed",
+			wantErrors: []string{expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -180,7 +180,7 @@ func TestProxySettingsPolicyTargetRefsGroup(t *testing.T) {
 		},
 		{
 			name:       "Validate invalid.networking.k8s.io TargetRef Group is not allowed",
-			wantErrors: []string{expectedTargetRefsGroupError},
+			wantErrors: []string{expectedTargetRefGroupError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -192,7 +192,7 @@ func TestProxySettingsPolicyTargetRefsGroup(t *testing.T) {
 		},
 		{
 			name:       "Validate valid and invalid TargetRef Group are not allowed",
-			wantErrors: []string{expectedTargetRefsGroupError},
+			wantErrors: []string{expectedTargetRefGroupError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -207,20 +207,8 @@ func TestProxySettingsPolicyTargetRefsGroup(t *testing.T) {
 			},
 		},
 		{
-			name:       "Validate discovery.k8s.io TargetRef Group is not allowed",
-			wantErrors: []string{expectedTargetRefsGroupError},
-			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
-					{
-						Kind:  gatewayKind,
-						Group: discoveryGroup,
-					},
-				},
-			},
-		},
-		{
-			name:       "Validate more then one invalid TargetRef Group are not allowed",
-			wantErrors: []string{expectedTargetRefsGroupError},
+			name:       "Validate more than one invalid TargetRef Group are not allowed",
+			wantErrors: []string{expectedTargetRefGroupError},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -317,7 +305,7 @@ func TestProxySettingsPolicyTargetRefsNameUniqueness(t *testing.T) {
 		},
 		{
 			name:       "Validate duplicate TargetRef names are not allowed",
-			wantErrors: []string{expectedTargetRefsUniqueError},
+			wantErrors: []string{expectedTargetRefKindAndNameComboMustBeUnique},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -335,7 +323,7 @@ func TestProxySettingsPolicyTargetRefsNameUniqueness(t *testing.T) {
 		},
 		{
 			name:       "Validate three TargetRefs with one duplicate name are not allowed",
-			wantErrors: []string{expectedTargetRefsUniqueError},
+			wantErrors: []string{expectedTargetRefKindAndNameComboMustBeUnique},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -358,7 +346,7 @@ func TestProxySettingsPolicyTargetRefsNameUniqueness(t *testing.T) {
 		},
 		{
 			name:       "Validate multiple duplicates are not allowed",
-			wantErrors: []string{expectedTargetRefsUniqueError},
+			wantErrors: []string{expectedTargetRefKindAndNameComboMustBeUnique},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{

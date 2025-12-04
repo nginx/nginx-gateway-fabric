@@ -34,35 +34,37 @@ const (
 )
 
 const (
-	// ClientSettingsPolicy and ProxySettingsPolicy validation errors.
-	expectedTargetRefKindError  = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
-	expectedTargetRefGroupError = `TargetRef Group must be gateway.networking.k8s.io`
+	// Kind validation errors.
+	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = `TargetRef Kind must be one of: " +
+	+ "Gateway, HTTPRoute, or GRPCRoute`
+	expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError = `TargetRef Kind must be: HTTPRoute or GRPCRoute`
+	expectedTargetRefKindServiceError                    = `TargetRefs Kind must be: Service`
 
-	// ClientSettingsPolicy validation errors.
+	// Group validation errors.
+	expectedTargetRefGroupError     = `TargetRef Group must be gateway.networking.k8s.io`
+	expectedTargetRefGroupCoreError = `TargetRefs Group must be core`
+
+	// Name uniqueness validation errors.
+	expectedTargetRefNameUniqueError              = `TargetRef Name must be unique`
+	expectedTargetRefKindAndNameComboMustBeUnique = `TargetRef Kind and Name combination must be unique`
+
+	// Header validation error.
 	expectedHeaderWithoutServerError = `header can only be specified if server is specified`
 
-	// NginxProxy validation errors.
+	// Deployment/DaemonSet validation error.
 	expectedOneOfDeploymentOrDaemonSetError = `only one of deployment or daemonSet can be set`
-	expectedIfModeSetTrustedAddressesError  = `if mode is set, trustedAddresses is a required field`
+
+	// TrustedAddresses/Mode validation error.
+	expectedIfModeSetTrustedAddressesError = `if mode is set, trustedAddresses is a required field`
+
+	// Replicas validation error.
 	expectedMinReplicasLessThanOrEqualError = `minReplicas must be less than or equal to maxReplicas`
 
-	// ObservabilityPolicy validation errors.
-	expectedTargetRefMustBeHTTPRouteOrGrpcRouteError = `TargetRef Kind must be: HTTPRoute or GRPCRoute`
-	expectedTargetRefKindAndNameComboMustBeUnique    = `TargetRef Kind and Name combination must be unique`
-	expectedStrategyMustBeOfTypeRatio                = `ratio can only be specified if strategy is of type ratio`
-
-	// UpstreamSettingsPolicy validation errors.
-	expectedTargetRefKindServiceError = `TargetRefs Kind must be: Service`
-	expectedTargetRefGroupCoreError   = `TargetRefs Group must be core`
-	expectedTargetRefNameUniqueError  = `TargetRef Name must be unique`
+	// Strategy validation error.
+	expectedStrategyMustBeOfTypeRatio = `ratio can only be specified if strategy is of type ratio`
 
 	// SnippetsFilter validation errors.
 	expectedSnippetsFilterContextError = `Only one snippet allowed per context`
-
-	// ProxySettingsPolicy validation errors.
-	expectedTargetRefsKindError   = "TargetRefs entries must have kind Gateway, HTTPRoute, or GRPCRoute"
-	expectedTargetRefsGroupError  = "TargetRefs entries must have group gateway.networking.k8s.io"
-	expectedTargetRefsUniqueError = "TargetRefs Kind and Name combination must be unique"
 
 	// Namespace for tests.
 	defaultNamespace = "default"
