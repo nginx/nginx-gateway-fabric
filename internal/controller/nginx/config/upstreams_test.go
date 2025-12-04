@@ -144,7 +144,6 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				{
 					Address: "10.0.0.0",
 					Port:    80,
-					Resolve: true,
 				},
 			},
 		},
@@ -154,12 +153,10 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				{
 					Address: "11.0.0.0",
 					Port:    80,
-					Resolve: true,
 				},
 				{
 					Address: "11.0.0.1",
 					Port:    80,
-					Resolve: true,
 				},
 				{
 					Address: "11.0.0.2",
@@ -174,7 +171,6 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 					Address: "2001:db8::1",
 					Port:    80,
 					IPv6:    true,
-					Resolve: true,
 				},
 			},
 		},
@@ -185,7 +181,6 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 					Address: "2001:db8::2",
 					Port:    80,
 					IPv6:    true,
-					Resolve: true,
 				},
 				{
 					Address: "2001:db8::3",
@@ -248,7 +243,6 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				{
 					Address: "12.0.0.2",
 					Port:    80,
-					Resolve: true,
 				},
 			},
 			SessionPersistence: dataplane.SessionPersistenceConfig{
@@ -264,7 +258,6 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				{
 					Address: "12.0.0.3",
 					Port:    80,
-					Resolve: true,
 				},
 			},
 			SessionPersistence: dataplane.SessionPersistenceConfig{
@@ -306,18 +299,16 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"keepalive_time 5s;":     1,
 		"keepalive_timeout 10s;": 1,
 
-		"server 10.0.0.0:80 resolve;":                       1,
-		"server 11.0.0.0:80 resolve;":                       1,
-		"server 11.0.0.1:80 resolve;":                       1,
-		"server 11.0.0.2:80;":                               1,
-		"server [2001:db8::1]:80 resolve;":                  1,
-		"server [2001:db8::2]:80 resolve;":                  1,
-		"server [2001:db8::3]:80;":                          1,
-		"server 12.0.0.2:80 resolve;":                       1,
-		"server 12.0.0.3:80 resolve;":                       1,
-		"server unix:/var/run/nginx/nginx-500-server.sock;": 1,
+		"state /var/lib/nginx/state/up1.conf;":      1,
+		"state /var/lib/nginx/state/up2.conf;":      1,
+		"state /var/lib/nginx/state/up3-ipv6.conf;": 1,
+		"state /var/lib/nginx/state/up4-ipv6.conf;": 1,
+		"state /var/lib/nginx/state/up5.conf;":      1,
 
-		"state /var/lib/nginx/state/up6-usp-with-sp.conf": 2,
+		"state /var/lib/nginx/state/up6-usp-with-sp.conf":                    2,
+		"state /var/lib/nginx/state/up7-with-sp.conf;":                       1,
+		"state /var/lib/nginx/state/up8-with-sp-expiry-and-path-empty.conf;": 1,
+		"server unix:/var/run/nginx/nginx-500-server.sock;":                  1,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
@@ -328,6 +319,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 	g.Expect(upstreamResults[0].dest).To(Equal(httpConfigFile))
 
 	nginxUpstreams := string(upstreamResults[0].data)
+	fmt.Println(nginxUpstreams)
 	for expSubString, expectedCount := range expectedSubStrings {
 		actualCount := strings.Count(nginxUpstreams, expSubString)
 		g.Expect(actualCount).To(

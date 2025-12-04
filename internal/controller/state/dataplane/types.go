@@ -118,7 +118,7 @@ type Upstream struct {
 	Name string
 	// ErrorMsg contains the error message if the Upstream is invalid.
 	ErrorMsg string
-	// StateFileKey is the key for naming the state file for the upstream.
+	// StateFileKey is the key for naming the state file for NGINX Plus.
 	StateFileKey string
 	// Endpoints are the endpoints of the Upstream.
 	Endpoints []resolver.Endpoint
