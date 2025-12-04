@@ -178,6 +178,10 @@ func setup(cfg setupConfig, extraInstallArgs ...string) {
 
 	installCfg := createNGFInstallConfig(cfg, extraInstallArgs...)
 
+	if !installCfg.Plus && strings.Contains(GinkgoLabelFilter(), "session-persistence-plus") {
+		Skip("Skipping Session Persistence Plus tests on NGINX OSS deployment")
+	}
+
 	podNames, err := resourceManager.GetReadyNGFPodNames(
 		installCfg.Namespace,
 		installCfg.ReleaseName,

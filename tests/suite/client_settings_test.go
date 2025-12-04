@@ -254,7 +254,13 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 				_, err := rand.Read(payload)
 				Expect(err).ToNot(HaveOccurred())
 
-				resp, err := framework.Post(url, address, bytes.NewReader(payload), timeoutConfig.RequestTimeout, nil, nil)
+				request := framework.Request{
+					URL:     url,
+					Address: address,
+					Body:    bytes.NewReader(payload),
+					Timeout: timeoutConfig.RequestTimeout,
+				}
+				resp, err := framework.Post(request)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp).To(HaveHTTPStatus(expStatus))
 

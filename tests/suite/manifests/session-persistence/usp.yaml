@@ -1,0 +1,21 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: usp-ip-hash
+spec:
+  targetRefs:
+  - group: core
+    kind: Service
+    name: coffee
+  loadBalancingMethod: "ip_hash"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: usp-ip-hash-grpc
+spec:
+  targetRefs:
+  - group: core
+    kind: Service
+    name: grpc-backend
+  loadBalancingMethod: "ip_hash"
