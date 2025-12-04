@@ -1,4 +1,4 @@
-# Enhancement Proposal-4052: Authentiation Filter
+# Enhancement Proposal-4052: Authentication Filter
 
 - Issue: https://github.com/nginx/nginx-gateway-fabric/issues/4052
 - Status: Implementable
