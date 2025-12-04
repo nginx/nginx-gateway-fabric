@@ -17,9 +17,7 @@ spec:
     secretRef:
       name: basic-auth1
     realm: "Restricted basic-auth1"
-    onFailure:
-      statusCode: 401
-      scheme: Basic
+
 ---
 apiVersion: v1
 kind: Secret
@@ -40,6 +38,3 @@ spec:
     secretRef:
       name: basic-auth2
     realm: "Restricted basic-auth2"
-    onFailure:
-      statusCode: 401
-      scheme: Basic
