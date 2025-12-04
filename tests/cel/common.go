@@ -33,44 +33,39 @@ const (
 	emptyGroup     = ""
 )
 
-// ClientSettingsPolicy validation errors.
 const (
-	expectedTargetRefKindError       = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
-	expectedTargetRefGroupError      = `TargetRef Group must be gateway.networking.k8s.io`
-	expectedHeaderWithoutServerError = `header can only be specified if server is specified`
-)
+	// AuthenticationFilter validation errors.
+	expectedBasicRequiredError = `for type=Basic, spec.basic must be set`
 
-// NginxProxy validation errors.
-const (
+	// ClientSettingsPolicy and ProxySettingsPolicy validation errors.
+	expectedTargetRefKindError  = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
+	expectedTargetRefGroupError = `TargetRef Group must be gateway.networking.k8s.io`
+
+	// ClientSettingsPolicy validation errors.
+	expectedHeaderWithoutServerError = `header can only be specified if server is specified`
+
+	// NginxProxy validation errors.
 	expectedOneOfDeploymentOrDaemonSetError = `only one of deployment or daemonSet can be set`
 	expectedIfModeSetTrustedAddressesError  = `if mode is set, trustedAddresses is a required field`
 	expectedMinReplicasLessThanOrEqualError = `minReplicas must be less than or equal to maxReplicas`
-)
 
-// ObservabilityPolicy validation errors.
-const (
+	// ObservabilityPolicy validation errors.
 	expectedTargetRefMustBeHTTPRouteOrGrpcRouteError = `TargetRef Kind must be: HTTPRoute or GRPCRoute`
 	expectedTargetRefKindAndNameComboMustBeUnique    = `TargetRef Kind and Name combination must be unique`
 	expectedStrategyMustBeOfTypeRatio                = `ratio can only be specified if strategy is of type ratio`
-)
 
-// UpstreamSettingsPolicy validation errors.
-const (
+	// UpstreamSettingsPolicy validation errors.
 	expectedTargetRefKindServiceError = `TargetRefs Kind must be: Service`
 	expectedTargetRefGroupCoreError   = `TargetRefs Group must be core`
 	expectedTargetRefNameUniqueError  = `TargetRef Name must be unique`
-)
 
-// SnippetsFilter validation errors.
-const (
+	// SnippetsFilter validation errors.
 	expectedSnippetsFilterContextError = `Only one snippet allowed per context`
-)
 
-const (
+	// Namespace for tests.
 	defaultNamespace = "default"
-)
 
-const (
+	// Test resource names.
 	testResourceName  = "test-resource"
 	testTargetRefName = "test-targetRef"
 )
