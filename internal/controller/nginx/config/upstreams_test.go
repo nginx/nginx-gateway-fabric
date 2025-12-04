@@ -319,7 +319,6 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 	g.Expect(upstreamResults[0].dest).To(Equal(httpConfigFile))
 
 	nginxUpstreams := string(upstreamResults[0].data)
-	fmt.Println(nginxUpstreams)
 	for expSubString, expectedCount := range expectedSubStrings {
 		actualCount := strings.Count(nginxUpstreams, expSubString)
 		g.Expect(actualCount).To(
