@@ -2,6 +2,7 @@ package graph
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -141,7 +142,14 @@ func createInferencePoolBackend(name, namespace string) gatewayv1.BackendRef {
 	}
 }
 
-func getExpRouteBackendRefForPath(path string, spIdx string) RouteBackendRef {
+func getExpRouteBackendRefForPath(path string, spIdx string, sessionName string) RouteBackendRef {
+	var spName string
+	if sessionName == "" {
+		spName = fmt.Sprintf("sp_%s", spIdx)
+	} else {
+		spName = sessionName
+	}
+
 	return RouteBackendRef{
 		BackendRef: gatewayv1.BackendRef{
 			BackendObjectReference: gatewayv1.BackendObjectReference{
@@ -157,7 +165,7 @@ func getExpRouteBackendRefForPath(path string, spIdx string) RouteBackendRef {
 		},
 		SessionPersistence: &SessionPersistenceConfig{
 			Valid:       true,
-			Name:        "http-route-session",
+			Name:        spName,
 			SessionType: gatewayv1.CookieBasedSessionPersistence,
 			Expiry:      "1h",
 			Path:        path,
@@ -197,8 +205,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
 	}
 
-	spConfig := &gatewayv1.SessionPersistence{
-		SessionName:     helpers.GetPointer("http-route-session"),
+	unNamedSPConfig := &gatewayv1.SessionPersistence{
 		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
 		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 		CookieConfig: &gatewayv1.CookieConfig{
@@ -206,7 +213,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		},
 	}
 
-	addElementsToPath(hr, "/", snippetsFilterRef, spConfig)
+	addElementsToPath(hr, "/", snippetsFilterRef, unNamedSPConfig)
 	addElementsToPath(hr, "/", requestRedirectFilter, nil)
 
 	hrWrongGateway := createHTTPRoute("hr-2", "some-gateway", "example.com", "/")
@@ -283,7 +290,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 									},
 								},
 								Matches:          hr.Spec.Rules[0].Matches,
-								RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/", "hr-1_test_0")},
+								RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/", "hr-1_test_0", "")},
 							},
 						},
 					},
@@ -543,7 +550,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hr.Spec.Rules[1].Filters),
 							},
 							Matches:          hr.Spec.Rules[1].Matches,
-							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_1")},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_1", "http-route-session")},
 						},
 					},
 				},
@@ -828,7 +835,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 									hrDroppedInvalidMatchesAndInvalidFilters.Spec.Rules[1].Filters,
 								),
 							},
-							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_1")},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_1", "http-route-session")},
 						},
 						{
 							ValidMatches: true,
@@ -877,7 +884,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrDroppedInvalidFilters.Spec.Rules[0].Filters),
 								Valid:   true,
 							},
-							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_0")},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_0", "http-route-session")},
 						},
 						{
 							ValidMatches: true,
@@ -886,7 +893,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrDroppedInvalidFilters.Spec.Rules[1].Filters),
 								Valid:   false,
 							},
-							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/", "hr_test_1")},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/", "hr_test_1", "http-route-session")},
 						},
 					},
 				},
@@ -930,7 +937,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								},
 								Valid: true,
 							},
-							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_0")},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_0", "http-route-session")},
 						},
 					},
 				},
@@ -2113,10 +2120,13 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteAcceptedUnsupportedField("[spec.rules[0].name: Forbidden: Name, spec.rules[0].timeouts: " +
-					"Forbidden: Timeouts, spec.rules[0].retry: Forbidden: Retry, " +
-					"spec.rules[0].sessionPersistence: Forbidden: " +
-					"SessionPersistence is only supported in NGINX Plus. This configuration will be ignored.]"),
+				conditions.NewRouteAcceptedUnsupportedField(
+					fmt.Sprintf("[spec.rules[0].name: Forbidden: Name, spec.rules[0].timeouts: "+
+						"Forbidden: Timeouts, spec.rules[0].retry: Forbidden: Retry, "+
+						"spec.rules[0].sessionPersistence: Forbidden: "+
+						"%s OSS users can use `ip_hash` load balancing method via the UpstreamSettingsPolicy for session affinity.]",
+						spErrMsg,
+					)),
 			},
 			experimental:  true,
 			plusEnabled:   false,
@@ -2134,8 +2144,8 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].sessionPersistence: Forbidden: " +
-					"SessionPersistence is only supported in experimental mode."),
+				conditions.NewRouteAcceptedUnsupportedField(fmt.Sprintf("spec.rules[0].sessionPersistence: Forbidden: "+
+					"%s", spErrMsg)),
 			},
 			expectedWarns: 1,
 			plusEnabled:   true,

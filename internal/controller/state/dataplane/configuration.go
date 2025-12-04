@@ -874,6 +874,7 @@ func buildUpstream(
 		ErrorMsg:           errMsg,
 		Policies:           upstreamPolicies,
 		SessionPersistence: sp,
+		StateFileKey:       br.BaseServicePortKey(),
 	}
 }
 

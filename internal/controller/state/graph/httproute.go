@@ -225,7 +225,11 @@ func processHTTPRouteRule(
 		errors = errors.append(spErrors)
 
 		if spConfig != nil && spConfig.Valid {
-			spConfig.Idx = getSessionPersistenceKey(ruleIdx, routeNsName)
+			spKey := getSessionPersistenceKey(ruleIdx, routeNsName)
+			spConfig.Idx = spKey
+			if spConfig.Name == "" {
+				spConfig.Name = fmt.Sprintf("sp_%s", spKey)
+			}
 			sp = spConfig
 		}
 	}
@@ -677,14 +681,17 @@ func checkForUnsupportedHTTPFields(
 	if !featureFlags.Plus && rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),
-			"SessionPersistence is only supported in NGINX Plus. This configuration will be ignored.",
+			fmt.Sprintf(
+				"%s OSS users can use `ip_hash` load balancing method via the UpstreamSettingsPolicy for session affinity.",
+				spErrMsg,
+			),
 		))
 	}
 
 	if !featureFlags.Experimental && rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),
-			"SessionPersistence is only supported in experimental mode.",
+			spErrMsg,
 		))
 	}
 

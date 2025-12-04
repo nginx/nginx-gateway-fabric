@@ -156,7 +156,11 @@ func (g GeneratorImpl) createUpstream(
 		// Only set state file if the upstream doesn't have resolve servers
 		// Upstreams with resolve servers can't be managed via NGINX Plus API
 		if !upstreamHasResolveServers(up) {
-			stateFile = fmt.Sprintf("%s/%s.conf", stateDir, up.Name)
+			base := up.StateFileKey
+			if base == "" {
+				base = up.Name
+			}
+			stateFile = fmt.Sprintf("%s/%s.conf", stateDir, base)
 		}
 
 		sp = getSessionPersistenceConfiguration(up.SessionPersistence)

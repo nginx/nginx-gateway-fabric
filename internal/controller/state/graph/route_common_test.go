@@ -3872,7 +3872,7 @@ func TestFindAttachableListenersWithPort(t *testing.T) {
 func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 	t.Parallel()
 
-	createAllValidValidator := func(duration *gatewayv1.Duration) *validationfakes.FakeHTTPFieldsValidator {
+	createDurationValidator := func(duration *gatewayv1.Duration) *validationfakes.FakeHTTPFieldsValidator {
 		v := &validationfakes.FakeHTTPFieldsValidator{}
 		if duration == nil {
 			v.ValidateDurationReturns("", nil)
@@ -3894,11 +3894,15 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 		{
 			name: "session persistence has errors in configuration",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				Type: helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+				Type: helpers.GetPointer(gatewayv1.HeaderBasedSessionPersistence),
 			},
 			expectedErrors: routeRuleErrors{
 				warn: field.ErrorList{
-					field.Required(sessionPersistencePath.Child("sessionName"), "sessionName cannot be empty"),
+					field.NotSupported(
+						sessionPersistencePath.Child("type"),
+						helpers.GetPointer(gatewayv1.HeaderBasedSessionPersistence),
+						[]string{string(gatewayv1.CookieBasedSessionPersistence)},
+					),
 					field.Invalid(
 						sessionPersistencePath,
 						sessionPersistencePath.String(),
@@ -4032,7 +4036,7 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 					test.sessionPersistence,
 					test.httpRouteMatches,
 					sessionPersistencePath,
-					createAllValidValidator(test.sessionPersistence.AbsoluteTimeout),
+					createDurationValidator(test.sessionPersistence.AbsoluteTimeout),
 				)
 			}
 
@@ -4041,7 +4045,7 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 					test.sessionPersistence,
 					test.grpcRouteMatches,
 					sessionPersistencePath,
-					createAllValidValidator(test.sessionPersistence.AbsoluteTimeout),
+					createDurationValidator(test.sessionPersistence.AbsoluteTimeout),
 				)
 			}
 
@@ -4054,7 +4058,7 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 func TestValidateSessionPersistence(t *testing.T) {
 	t.Parallel()
 
-	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
+	createDurationValidator := func() *validationfakes.FakeHTTPFieldsValidator {
 		v := &validationfakes.FakeHTTPFieldsValidator{}
 		v.ValidateDurationReturns("", nil)
 		return v
@@ -4074,22 +4078,9 @@ func TestValidateSessionPersistence(t *testing.T) {
 		expectedErrors     routeRuleErrors
 	}{
 		{
-			name: "session persistence returns error for empty name",
-			sessionPersistence: &gatewayv1.SessionPersistence{
-				Type: helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-			},
-			expectedErrors: routeRuleErrors{
-				warn: field.ErrorList{
-					field.Required(sessionPersistencePath.Child("sessionName"), "sessionName cannot be empty"),
-				},
-			},
-			validator: createAllValidValidator(),
-		},
-		{
 			name: "session persistence returns error for invalid type",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName: helpers.GetPointer("session-persistence"),
-				Type:        helpers.GetPointer(gatewayv1.HeaderBasedSessionPersistence),
+				Type: helpers.GetPointer(gatewayv1.HeaderBasedSessionPersistence),
 			},
 			expectedErrors: routeRuleErrors{
 				warn: field.ErrorList{
@@ -4100,12 +4091,11 @@ func TestValidateSessionPersistence(t *testing.T) {
 					),
 				},
 			},
-			validator: createAllValidValidator(),
+			validator: createDurationValidator(),
 		},
 		{
 			name: "session persistence returns error when idleTimeout is specified",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName: helpers.GetPointer("session-persistence"),
 				Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 				IdleTimeout: helpers.GetPointer(gatewayv1.Duration("10m")),
 			},
@@ -4117,12 +4107,11 @@ func TestValidateSessionPersistence(t *testing.T) {
 					),
 				},
 			},
-			validator: createAllValidValidator(),
+			validator: createDurationValidator(),
 		},
 		{
 			name: "session persistence returns error when absoluteTimeout is invalid",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName:     helpers.GetPointer("session-persistence"),
 				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 				AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("invalid-duration")),
 			},
@@ -4147,7 +4136,7 @@ func TestValidateSessionPersistence(t *testing.T) {
 					LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 				},
 			},
-			validator: createAllValidValidator(),
+			validator: createDurationValidator(),
 		},
 	}
 
@@ -4240,7 +4229,7 @@ func TestGetCookiePath(t *testing.T) {
 			expectedPath: "",
 		},
 		{
-			name: "multiple matches with all predefine path types Exact and PathPrefix " +
+			name: "multiple matches with all predefined path types Exact and PathPrefix " +
 				"returns longest common prefix",
 			matches: []gatewayv1.HTTPRouteMatch{
 				{
@@ -4271,7 +4260,7 @@ func TestGetCookiePath(t *testing.T) {
 			expectedPath: "/app/users",
 		},
 		{
-			name: "multiple matches with all predefine path types Exact and PathPrefix " +
+			name: "multiple matches with all predefined path types Exact and PathPrefix " +
 				"returns empty path when there is no common prefix",
 			matches: []gatewayv1.HTTPRouteMatch{
 				{

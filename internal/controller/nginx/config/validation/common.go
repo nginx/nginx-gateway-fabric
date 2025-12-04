@@ -178,7 +178,7 @@ func (d HTTPDurationValidator) ValidateDuration(duration string) (string, error)
 //   - choose the smallest unit (ms→s→m→h) whose ceil value fits in 1–4 digits
 //   - always include a unit suffix
 func (d HTTPDurationValidator) validateDurationCanBeConvertedToNginxFormat(in string) (string, error) {
-	// before parsing duration, verify if it matches NGINX duration regular expression
+	// if the input already matches the NGINX format, return it as is
 	if durationStringFmtRegexp.MatchString(in) {
 		return in, nil
 	}

@@ -161,11 +161,12 @@ func TestValidateDurationCanBeConvertedToNginxFormat(t *testing.T) {
 	testValidValuesForResultValidator[string, string](
 		t,
 		validator.validateDurationCanBeConvertedToNginxFormat,
+		resultTestCase[string, string]{input: "24h", expected: "24h"},
 		resultTestCase[string, string]{input: "1ms", expected: "1ms"},
 		resultTestCase[string, string]{input: "1.1ms", expected: "2ms"},
 		resultTestCase[string, string]{input: "100s", expected: "100s"},
-		resultTestCase[string, string]{input: "1m", expected: "60s"},
-		resultTestCase[string, string]{input: "1h", expected: "3600s"},
+		resultTestCase[string, string]{input: "1m", expected: "1m"},
+		resultTestCase[string, string]{input: "1h", expected: "1h"},
 		resultTestCase[string, string]{input: "9999s", expected: "9999s"},
 		resultTestCase[string, string]{input: "10000s", expected: "167m"},
 	)
@@ -175,7 +176,6 @@ func TestValidateDurationCanBeConvertedToNginxFormat(t *testing.T) {
 		validator.validateDurationCanBeConvertedToNginxFormat,
 		"",
 		"foo",
-		"0s",
 		"-1s",
 		"1000000h", // too large
 		"9999h1s",  // just over max

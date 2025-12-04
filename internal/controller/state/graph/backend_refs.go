@@ -52,16 +52,19 @@ type BackendRef struct {
 	IsInferencePool bool
 }
 
-// ServicePortReference returns a string representation for the service and port that is referenced by the BackendRef.
+// BaseServicePortKey returns a base unique string key for the Service port of the BackendRef.
+func (b BackendRef) BaseServicePortKey() string {
+	return fmt.Sprintf("%s_%s_%d", b.SvcNsName.Namespace, b.SvcNsName.Name, b.ServicePort.Port)
+}
+
+// ServicePortReference returns a unique string reference for the Service port of the BackendRef including
+// session persistence index if applicable.
 func (b BackendRef) ServicePortReference() string {
 	if !b.Valid {
 		return ""
 	}
-	return b.buildUpstreamNameForBackendRef()
-}
 
-func (b BackendRef) buildUpstreamNameForBackendRef() string {
-	base := fmt.Sprintf("%s_%s_%d", b.SvcNsName.Namespace, b.SvcNsName.Name, b.ServicePort.Port)
+	base := b.BaseServicePortKey()
 	if b.SessionPersistence == nil || b.SessionPersistence.Name == "" {
 		return base
 	}

@@ -23,8 +23,10 @@ import (
 const (
 	wildcardHostname  = "~^"
 	inferenceAPIGroup = "inference.networking.k8s.io"
-	defaultNamespace  = "default"
 )
+
+var spErrMsg = "SessionPersistence is only supported with NGINX Plus " +
+	"and when experimental features are enabled. This configuration will be ignored."
 
 // ParentRef describes a reference to a parent in a Route.
 type ParentRef struct {
@@ -1195,15 +1197,18 @@ func processSessionPersistenceConfig[T any](
 		return &spConfig, errors
 	}
 
+	var sessionName string
+	if sp.SessionName != nil {
+		sessionName = *sp.SessionName
+	}
+
 	var cookieLifetimeType v1.CookieLifetimeType
-	if sp.CookieConfig != nil && sp.CookieConfig.LifetimeType != nil {
+	if sp.CookieConfig != nil {
 		cookieLifetimeType = *sp.CookieConfig.LifetimeType
 	}
 
-	if sp.AbsoluteTimeout != nil {
-		if cookieLifetimeType == v1.SessionCookieLifetimeType {
-			expiry = ""
-		}
+	if sp.AbsoluteTimeout != nil && cookieLifetimeType == v1.SessionCookieLifetimeType {
+		expiry = ""
 	}
 
 	var path string
@@ -1218,7 +1223,7 @@ func processSessionPersistenceConfig[T any](
 
 	spConfig = SessionPersistenceConfig{
 		Valid:       true,
-		Name:        *sp.SessionName,
+		Name:        sessionName,
 		SessionType: *sp.Type,
 		Path:        path,
 		Expiry:      expiry,
@@ -1240,9 +1245,6 @@ func validateSessionPersistenceConfig(
 	}
 
 	var errors routeRuleErrors
-	if sp.SessionName == nil {
-		errors.warn = append(errors.warn, field.Required(path.Child("sessionName"), "sessionName cannot be empty"))
-	}
 
 	if sp.Type != nil && *sp.Type != v1.CookieBasedSessionPersistence {
 		errors.warn = append(errors.warn, field.NotSupported(
@@ -1278,8 +1280,7 @@ func validateSessionPersistenceConfig(
 func deriveCookiePathForHTTPMatches(matches []v1.HTTPRouteMatch) string {
 	paths := make([]string, 0, len(matches))
 	for _, match := range matches {
-		path := getCookiePath(match)
-		paths = append(paths, path)
+		paths = append(paths, getCookiePath(match))
 	}
 
 	return longestCommonPathPrefix(paths)

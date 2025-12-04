@@ -2,6 +2,7 @@ package graph
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -132,8 +133,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		RequestHeaderModifier: &v1.HTTPHeaderFilter{},
 	}
 
-	sessionPersistenceConfig := v1.SessionPersistence{
-		SessionName:     helpers.GetPointer("grpc-route-session"),
+	unNamedSPConfig := v1.SessionPersistence{
 		AbsoluteTimeout: helpers.GetPointer(v1.Duration("10m")),
 		Type:            helpers.GetPointer(v1.CookieBasedSessionPersistence),
 		CookieConfig: &v1.CookieConfig{
@@ -154,7 +154,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 
 	grRuleWithFiltersAndSessionPersistence := v1.GRPCRouteRule{
 		Filters:            []v1.GRPCRouteFilter{snippetsFilterRef, requestHeaderFilter},
-		SessionPersistence: &sessionPersistenceConfig,
+		SessionPersistence: &unNamedSPConfig,
 		BackendRefs:        []v1.GRPCBackendRef{grpcBackendRef},
 	}
 
@@ -241,8 +241,8 @@ func TestBuildGRPCRoutes(t *testing.T) {
 										},
 										SessionPersistence: &SessionPersistenceConfig{
 											Valid:       true,
-											Name:        *sessionPersistenceConfig.SessionName,
-											SessionType: *sessionPersistenceConfig.Type,
+											Name:        "sp_gr-1_test_0",
+											SessionType: *unNamedSPConfig.Type,
 											Expiry:      "10m",
 											Idx:         "gr-1_test_0",
 										},
@@ -589,9 +589,14 @@ func TestBuildGRPCRoute(t *testing.T) {
 		[]v1.GRPCRouteRule{grInvalidAndUnresolvableSnippetsFilterRule},
 	)
 
-	createAllValidValidator := func(duration *v1.Duration) *validationfakes.FakeHTTPFieldsValidator {
+	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
 		v := &validationfakes.FakeHTTPFieldsValidator{}
 		v.ValidateMethodInMatchReturns(true, nil)
+		return v
+	}
+
+	createDurationValidator := func(duration *v1.Duration) *validationfakes.FakeHTTPFieldsValidator {
+		v := &validationfakes.FakeHTTPFieldsValidator{}
 
 		if duration == nil {
 			v.ValidateDurationReturns("", nil)
@@ -641,7 +646,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		plus, experimental bool
 	}{
 		{
-			validator: createAllValidValidator(&durationSP),
+			validator: createDurationValidator(&durationSP),
 			gr:        grBoth,
 			expected: &L7Route{
 				RouteType: RouteTypeGRPC,
@@ -695,7 +700,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name:         "normal case with both",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grEmptyMatch,
 			expected: &L7Route{
 				RouteType: RouteTypeGRPC,
@@ -727,7 +732,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "valid rule with empty match",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grValidFilter,
 			expected: &L7Route{
 				RouteType: RouteTypeGRPC,
@@ -768,7 +773,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "valid path rule, headers with filters",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grInvalidMatchesEmptyMethodFields,
 			expected: &L7Route{
 				RouteType:  RouteTypeGRPC,
@@ -809,7 +814,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		},
 		{
 			validator: func() *validationfakes.FakeHTTPFieldsValidator {
-				validator := createAllValidValidator(nil)
+				validator := createAllValidValidator()
 				validator.ValidatePathInMatchReturns(errors.New("invalid path value"))
 				return validator
 			}(),
@@ -851,7 +856,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "invalid matches with invalid method fields",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grDuplicateSectionName,
 			expected: &L7Route{
 				RouteType: RouteTypeGRPC,
@@ -860,7 +865,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "invalid route with duplicate sectionName",
 		},
 		{
-			validator: createAllValidValidator(&durationSP),
+			validator: createDurationValidator(&durationSP),
 			gr:        grOneInvalid,
 			expected: &L7Route{
 				Source:     grOneInvalid,
@@ -919,7 +924,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name:         "invalid headers and valid method",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grInvalidHeadersInvalidType,
 			expected: &L7Route{
 				Source:     grInvalidHeadersInvalidType,
@@ -957,7 +962,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "invalid headers with invalid type",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grInvalidHeadersEmptyType,
 			expected: &L7Route{
 				Source:     grInvalidHeadersEmptyType,
@@ -995,7 +1000,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "invalid headers with no header type specified",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grInvalidMatchesNilMethodType,
 			expected: &L7Route{
 				Source:     grInvalidMatchesNilMethodType,
@@ -1032,7 +1037,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "invalid method with nil type",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grInvalidFilter,
 			expected: &L7Route{
 				Source:     grInvalidFilter,
@@ -1071,13 +1076,13 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "invalid filter",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grNotNGF,
 			expected:  nil,
 			name:      "not NGF route",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grInvalidHostname,
 			expected: &L7Route{
 				Source:     grInvalidHostname,
@@ -1100,7 +1105,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "invalid hostname",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grInvalidSnippetsFilter,
 			expected: &L7Route{
 				Source:     grInvalidSnippetsFilter,
@@ -1138,7 +1143,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "invalid snippet filter extension ref",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grUnresolvableSnippetsFilter,
 			expected: &L7Route{
 				Source:     grUnresolvableSnippetsFilter,
@@ -1177,7 +1182,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "unresolvable snippet filter extension ref",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grInvalidAndUnresolvableSnippetsFilter,
 			expected: &L7Route{
 				Source:     grInvalidAndUnresolvableSnippetsFilter,
@@ -1220,7 +1225,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "one invalid and one unresolvable snippet filter extension ref",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grValidWithUnsupportedField,
 			expected: &L7Route{
 				RouteType: RouteTypeGRPC,
@@ -1255,7 +1260,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "valid route with unsupported field",
 		},
 		{
-			validator: createAllValidValidator(nil),
+			validator: createAllValidValidator(),
 			gr:        grInvalidWithUnsupportedField,
 			expected: &L7Route{
 				RouteType: RouteTypeGRPC,
@@ -1725,9 +1730,12 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteAcceptedUnsupportedField("[spec.rules[0].name: Forbidden: Name, " +
-					"spec.rules[0].sessionPersistence: Forbidden: " +
-					"SessionPersistence is only supported in NGINX Plus. This configuration will be ignored.]"),
+				conditions.NewRouteAcceptedUnsupportedField(fmt.Sprintf("[spec.rules[0].name: Forbidden: Name, "+
+					"spec.rules[0].sessionPersistence: Forbidden: "+
+					"%s"+
+					" OSS users can use `ip_hash` load balancing method via the UpstreamSettingsPolicy for session affinity.]",
+					spErrMsg,
+				)),
 			},
 			experimental:  true,
 			plusEnabled:   false,
@@ -1745,8 +1753,8 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].sessionPersistence: Forbidden: " +
-					"SessionPersistence is only supported in experimental mode."),
+				conditions.NewRouteAcceptedUnsupportedField(fmt.Sprintf("spec.rules[0].sessionPersistence: Forbidden: "+
+					"%s", spErrMsg)),
 			},
 			expectedWarns: 1,
 			plusEnabled:   true,

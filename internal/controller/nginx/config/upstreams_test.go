@@ -199,12 +199,12 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 			Endpoints: []resolver.Endpoint{},
 		},
 		{
-			Name: "up6-usp-with-sp",
+			Name:         "up6-usp-with-sp",
+			StateFileKey: "up6-usp-with-sp",
 			Endpoints: []resolver.Endpoint{
 				{
 					Address: "12.0.0.1",
 					Port:    80,
-					Resolve: true,
 				},
 			},
 			Policies: []policies.Policy{
@@ -230,6 +230,16 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				Expiry:      "30m",
 				Path:        "/session",
 				SessionType: dataplane.CookieBasedSessionPersistence,
+			},
+		},
+		{
+			Name:         "up6-with-same-state-file-key",
+			StateFileKey: "up6-usp-with-sp",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "12.0.0.1",
+					Port:    80,
+				},
 			},
 		},
 		{
@@ -275,7 +285,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"upstream up8-with-sp-expiry-and-path-empty": 1,
 		"upstream invalid-backend-ref":               1,
 
-		"random two least_conn;": 7,
+		"random two least_conn;": 8,
 		"ip_hash;":               1,
 
 		"zone up1 1m;":                               1,
@@ -303,10 +313,11 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 		"server [2001:db8::1]:80 resolve;":                  1,
 		"server [2001:db8::2]:80 resolve;":                  1,
 		"server [2001:db8::3]:80;":                          1,
-		"server 12.0.0.1:80 resolve;":                       1,
 		"server 12.0.0.2:80 resolve;":                       1,
 		"server 12.0.0.3:80 resolve;":                       1,
 		"server unix:/var/run/nginx/nginx-500-server.sock;": 1,
+
+		"state /var/lib/nginx/state/up6-usp-with-sp.conf": 2,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams, upstreamsettings.NewProcessor())
@@ -874,7 +885,8 @@ func TestCreateUpstreamPlus(t *testing.T) {
 		{
 			msg: "with endpoints",
 			stateUpstream: dataplane.Upstream{
-				Name: "endpoints",
+				Name:         "endpoints",
+				StateFileKey: "endpoints",
 				Endpoints: []resolver.Endpoint{
 					{
 						Address: "10.0.0.1",
@@ -897,8 +909,9 @@ func TestCreateUpstreamPlus(t *testing.T) {
 		{
 			msg: "no endpoints",
 			stateUpstream: dataplane.Upstream{
-				Name:      "no-endpoints",
-				Endpoints: []resolver.Endpoint{},
+				Name:         "no-endpoints",
+				StateFileKey: "no-endpoints",
+				Endpoints:    []resolver.Endpoint{},
 			},
 			expectedUpstream: http.Upstream{
 				Name:      "no-endpoints",
@@ -915,7 +928,8 @@ func TestCreateUpstreamPlus(t *testing.T) {
 		{
 			msg: "session persistence config with endpoints",
 			stateUpstream: dataplane.Upstream{
-				Name: "sp-with-endpoints",
+				Name:         "sp-with-endpoints",
+				StateFileKey: "sp-with-endpoints",
 				Endpoints: []resolver.Endpoint{
 					{
 						Address: "10.0.0.2",

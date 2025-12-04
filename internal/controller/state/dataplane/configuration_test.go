@@ -55,8 +55,9 @@ var (
 	}
 
 	fooUpstream = Upstream{
-		Name:      fooUpstreamName,
-		Endpoints: fooEndpoints,
+		Name:         fooUpstreamName,
+		Endpoints:    fooEndpoints,
+		StateFileKey: fooUpstreamName,
 	}
 
 	// routes.
@@ -172,7 +173,7 @@ func getNormalBackendRef() graph.BackendRef {
 	}
 }
 
-func getExpectedConfiguration() Configuration {
+func getExpectedSPConfiguration() Configuration {
 	return Configuration{
 		BaseHTTPConfig: defaultBaseHTTPConfig,
 		HTTPServers: []VirtualServer{
@@ -237,7 +238,7 @@ func getModifiedGraph(mod func(g *graph.Graph) *graph.Graph) *graph.Graph {
 }
 
 func getModifiedExpectedConfiguration(mod func(conf Configuration) Configuration) Configuration {
-	return mod(getExpectedConfiguration())
+	return mod(getExpectedSPConfiguration())
 }
 
 func createFakePolicy(name string, kind string) policies.Policy {
@@ -3033,7 +3034,7 @@ func TestBuildUpstreams(t *testing.T) {
 
 	refsWithPolicies := createBackendRefs(createSPConfig("policies-sp"), "policies")
 
-	getExpectedConfig := func() SessionPersistenceConfig {
+	getExpectedSPConfig := func() SessionPersistenceConfig {
 		return SessionPersistenceConfig{
 			Name:        "session-persistence",
 			SessionType: CookieBasedSessionPersistence,
@@ -3187,55 +3188,65 @@ func TestBuildUpstreams(t *testing.T) {
 		{
 			Name:               "test_bar_80_foo-bar-sp",
 			Endpoints:          barEndpoints,
-			SessionPersistence: getExpectedConfig(),
+			SessionPersistence: getExpectedSPConfig(),
+			StateFileKey:       "test_bar_80",
 		},
 		{
 			Name:               "test_baz2_80",
 			Endpoints:          baz2Endpoints,
 			SessionPersistence: SessionPersistenceConfig{},
+			StateFileKey:       "test_baz2_80",
 		},
 		{
 			Name:               "test_baz_80",
 			Endpoints:          bazEndpoints,
 			SessionPersistence: SessionPersistenceConfig{},
+			StateFileKey:       "test_baz_80",
 		},
 		{
 			Name:               "test_baz_80_foo-baz-sp",
 			Endpoints:          bazEndpoints,
-			SessionPersistence: getExpectedConfig(),
+			SessionPersistence: getExpectedSPConfig(),
+			StateFileKey:       "test_baz_80",
 		},
 		{
 			Name:               "test_empty-endpoints_80",
 			Endpoints:          []resolver.Endpoint{},
 			ErrorMsg:           emptyEndpointsErrMsg,
 			SessionPersistence: SessionPersistenceConfig{},
+			StateFileKey:       "test_empty-endpoints_80",
 		},
 		{
 			Name:               "test_foo_80_foo-bar-sp",
 			Endpoints:          fooEndpoints,
-			SessionPersistence: getExpectedConfig(),
+			SessionPersistence: getExpectedSPConfig(),
+			StateFileKey:       "test_foo_80",
 		},
 		{
 			Name:               "test_foo_80_foo-baz-sp",
 			Endpoints:          fooEndpoints,
-			SessionPersistence: getExpectedConfig(),
+			SessionPersistence: getExpectedSPConfig(),
+			StateFileKey:       "test_foo_80",
 		},
 		{
 			Name:               "test_ipv6-endpoints_80",
 			Endpoints:          ipv6Endpoints,
 			SessionPersistence: SessionPersistenceConfig{},
+			StateFileKey:       "test_ipv6-endpoints_80",
 		},
 		{
-			Name:      "test_nil-endpoints_80",
-			Endpoints: nil,
-			ErrorMsg:  nilEndpointsErrMsg,
+			Name:         "test_nil-endpoints_80",
+			Endpoints:    nil,
+			ErrorMsg:     nilEndpointsErrMsg,
+			StateFileKey: "test_nil-endpoints_80",
 		},
 
 		{
 			Name:               "test_policies_80_policies-sp",
 			Endpoints:          policyEndpoints,
 			Policies:           []policies.Policy{validPolicy1, validPolicy2},
-			SessionPersistence: getExpectedConfig(),
+			SessionPersistence: getExpectedSPConfig(),
+			StateFileKey:       "test_policies_80",
 		},
 	}
 

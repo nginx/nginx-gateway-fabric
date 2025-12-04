@@ -118,6 +118,8 @@ type Upstream struct {
 	Name string
 	// ErrorMsg contains the error message if the Upstream is invalid.
 	ErrorMsg string
+	// StateFileKey is the key for naming the state file for the upstream.
+	StateFileKey string
 	// Endpoints are the endpoints of the Upstream.
 	Endpoints []resolver.Endpoint
 	// Policies holds all the valid policies that apply to the Upstream.
@@ -132,7 +134,7 @@ type SessionPersistenceConfig struct {
 	Name string
 	// Expiry is the expiration time of the session.
 	Expiry string
-	// Path is the path of the for which session is applied.
+	// Path is the path for which session is applied.
 	Path string
 }
 
