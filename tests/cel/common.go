@@ -37,7 +37,6 @@ const (
 	// AuthenticationFilter validation errors.
 	expectedBasicRequiredError = `for type=Basic, spec.basic must be set`
 
-	// Kind validation errors.
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"
 	expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError = "TargetRef Kind must be: HTTPRoute or GRPCRoute"
@@ -51,17 +50,12 @@ const (
 	expectedTargetRefNameUniqueError              = "TargetRef Name must be unique"
 	expectedTargetRefKindAndNameComboMustBeUnique = "TargetRef Kind and Name combination must be unique"
 
-	// UpstreamSettingsPolicy validation errors.
-	expectedHashKeyLoadBalancingTypeError = "hashMethodKey is required when loadBalancingMethod is" +
-		" 'hash' or 'hash consistent'"
-
 	// Header validation error.
 	expectedHeaderWithoutServerError = "header can only be specified if server is specified"
 
 	// Deployment/DaemonSet validation error.
 	expectedOneOfDeploymentOrDaemonSetError = "only one of deployment or daemonSet can be set"
 
-	// TrustedAddresses/Mode validation error.
 	expectedIfModeSetTrustedAddressesError = "if mode is set, trustedAddresses is a required field"
 
 	// Replicas validation error.
