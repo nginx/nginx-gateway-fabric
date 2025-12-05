@@ -37,30 +37,37 @@ const (
 	// AuthenticationFilter validation errors.
 	expectedBasicRequiredError = `for type=Basic, spec.basic must be set`
 
-	// ClientSettingsPolicy and ProxySettingsPolicy validation errors.
-	expectedTargetRefKindError  = `TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute`
-	expectedTargetRefGroupError = `TargetRef Group must be gateway.networking.k8s.io`
+	// Kind validation errors.
+	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
+		"Gateway, HTTPRoute, or GRPCRoute"
+	expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError = "TargetRef Kind must be: HTTPRoute or GRPCRoute"
+	expectedTargetRefKindServiceError                    = "TargetRefs Kind must be: Service"
 
-	// ClientSettingsPolicy validation errors.
-	expectedHeaderWithoutServerError = `header can only be specified if server is specified`
+	// Group validation errors.
+	expectedTargetRefGroupError     = "TargetRef Group must be gateway.networking.k8s.io"
+	expectedTargetRefGroupCoreError = "TargetRefs Group must be core"
 
-	// NginxProxy validation errors.
-	expectedOneOfDeploymentOrDaemonSetError = `only one of deployment or daemonSet can be set`
-	expectedIfModeSetTrustedAddressesError  = `if mode is set, trustedAddresses is a required field`
-	expectedMinReplicasLessThanOrEqualError = `minReplicas must be less than or equal to maxReplicas`
+	// Name uniqueness validation errors.
+	expectedTargetRefNameUniqueError              = "TargetRef Name must be unique"
+	expectedTargetRefKindAndNameComboMustBeUnique = "TargetRef Kind and Name combination must be unique"
 
-	// ObservabilityPolicy validation errors.
-	expectedTargetRefMustBeHTTPRouteOrGrpcRouteError = `TargetRef Kind must be: HTTPRoute or GRPCRoute`
-	expectedTargetRefKindAndNameComboMustBeUnique    = `TargetRef Kind and Name combination must be unique`
-	expectedStrategyMustBeOfTypeRatio                = `ratio can only be specified if strategy is of type ratio`
+	// Header validation error.
+	expectedHeaderWithoutServerError = "header can only be specified if server is specified"
 
-	// UpstreamSettingsPolicy validation errors.
-	expectedTargetRefKindServiceError = `TargetRefs Kind must be: Service`
-	expectedTargetRefGroupCoreError   = `TargetRefs Group must be core`
-	expectedTargetRefNameUniqueError  = `TargetRef Name must be unique`
+	// Deployment/DaemonSet validation error.
+	expectedOneOfDeploymentOrDaemonSetError = "only one of deployment or daemonSet can be set"
+
+	// TrustedAddresses/Mode validation error.
+	expectedIfModeSetTrustedAddressesError = "if mode is set, trustedAddresses is a required field"
+
+	// Replicas validation error.
+	expectedMinReplicasLessThanOrEqualError = "minReplicas must be less than or equal to maxReplicas"
+
+	// Strategy validation error.
+	expectedStrategyMustBeOfTypeRatio = "ratio can only be specified if strategy is of type ratio"
 
 	// SnippetsFilter validation errors.
-	expectedSnippetsFilterContextError = `Only one snippet allowed per context`
+	expectedSnippetsFilterContextError = "Only one snippet allowed per context"
 
 	// Namespace for tests.
 	defaultNamespace = "default"
