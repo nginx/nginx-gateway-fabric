@@ -14,7 +14,6 @@ import (
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/sort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -116,7 +115,7 @@ func addBackendRefsToRules(
 				}
 
 				poolName := types.NamespacedName{
-					Name:      controller.GetInferencePoolName(string(ref.Name)),
+					Name:      ref.InferencePoolName,
 					Namespace: namespace,
 				}
 
@@ -596,7 +595,7 @@ func validateBackendRefHTTPRoute(
 			inferencePool = true
 			inferencePoolName = types.NamespacedName{
 				Namespace: string(*ref.Namespace),
-				Name:      controller.GetInferencePoolName(string(ref.Name)),
+				Name:      ref.InferencePoolName,
 			}
 		default:
 			refNsName := types.NamespacedName{Namespace: string(*ref.Namespace), Name: string(ref.Name)}

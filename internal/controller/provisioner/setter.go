@@ -119,9 +119,7 @@ func serviceSpecSetter(
 		}
 
 		// Apply NGF-managed annotations (take precedence)
-		for k, v := range objectMeta.Annotations {
-			mergedAnnotations[k] = v
-		}
+		maps.Copy(mergedAnnotations, objectMeta.Annotations)
 
 		// Store current managed keys for next reconciliation
 		if len(currentManagedKeys) > 0 {
