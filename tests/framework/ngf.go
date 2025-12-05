@@ -39,12 +39,12 @@ type InstallationConfig struct {
 
 // InstallGatewayAPI installs the specified version of the Gateway API resources.
 func InstallGatewayAPI(apiVersion string) ([]byte, error) {
-	apiPath := fmt.Sprintf("%s/v%s/standard-install.yaml", gwInstallBasePath, apiVersion)
-	GinkgoWriter.Printf("Installing Gateway API version %q at API path %q\n", apiVersion, apiPath)
+	apiPath := fmt.Sprintf("%s/v%s/experimental-install.yaml", gwInstallBasePath, apiVersion)
+	GinkgoWriter.Printf("Installing Gateway API CRDs from experimental channel %q", apiVersion, apiPath)
 
 	cmd := exec.CommandContext(
 		context.Background(),
-		"kubectl", "apply", "-f", apiPath,
+		"kubectl", "apply", "--server-side", "--force-conflicts", "-f", apiPath,
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -59,8 +59,8 @@ func InstallGatewayAPI(apiVersion string) ([]byte, error) {
 
 // UninstallGatewayAPI uninstalls the specified version of the Gateway API resources.
 func UninstallGatewayAPI(apiVersion string) ([]byte, error) {
-	apiPath := fmt.Sprintf("%s/v%s/standard-install.yaml", gwInstallBasePath, apiVersion)
-	GinkgoWriter.Printf("Uninstalling Gateway API version %q at API path %q\n", apiVersion, apiPath)
+	apiPath := fmt.Sprintf("%s/v%s/experimental-install.yaml", gwInstallBasePath, apiVersion)
+	GinkgoWriter.Printf("Uninstalling Gateway API CRDs from experimental channel for version %q\n", apiVersion)
 
 	output, err := exec.CommandContext(context.Background(), "kubectl", "delete", "-f", apiPath).CombinedOutput()
 	if err != nil && !strings.Contains(string(output), "not found") {
@@ -84,6 +84,7 @@ func InstallNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 		"--namespace", cfg.Namespace,
 		"--wait",
 		"--set", "nginxGateway.snippetsFilters.enable=true",
+		"--set", "nginxGateway.gwAPIExperimentalFeatures.enable=true",
 	}
 	if cfg.ChartVersion != "" {
 		args = append(args, "--version", cfg.ChartVersion)

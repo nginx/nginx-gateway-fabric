@@ -133,19 +133,17 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 		for range count {
 			Eventually(
 				func() error {
-					status, _, err := framework.Get(
-						url,
-						address,
-						timeoutConfig.RequestTimeout,
-						nil,
-						nil,
-						framework.WithLoggingDisabled(),
-					)
+					request := framework.Request{
+						URL:     url,
+						Address: address,
+						Timeout: timeoutConfig.RequestTimeout,
+					}
+					resp, err := framework.Get(request, framework.WithLoggingDisabled())
 					if err != nil {
 						return err
 					}
-					if status != http.StatusOK {
-						return fmt.Errorf("status not 200; got %d", status)
+					if resp.StatusCode != http.StatusOK {
+						return fmt.Errorf("status not 200; got %d", resp.StatusCode)
 					}
 					return nil
 				}).

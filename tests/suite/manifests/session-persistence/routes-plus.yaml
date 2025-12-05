@@ -1,0 +1,81 @@
+# GRPC Route with method match and unnamed session persistence configuration
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: grpc-route
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  rules:
+  - matches:
+    - method:
+        service: helloworld.Greeter
+        method: SayHello
+    backendRefs:
+    - name: grpc-backend
+      port: 8080
+    sessionPersistence:
+      type: Cookie
+      absoluteTimeout: 24h
+      cookieConfig:
+        lifetimeType: Permanent
+---
+# Route with multiple path matches(common prefix /shop) and unnamed session persistence configuration
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: coffee
+spec:
+  parentRefs:
+  - name: gateway
+  hostnames:
+  - cafe.example.com
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /coffee
+    - path:
+        type: PathPrefix
+        value: /coffee/snacks
+    - path:
+        type: PathPrefix
+        value: /coffee/orders/checkout
+    - path:
+        type: PathPrefix
+        value: /coffee/desserts
+    backendRefs:
+    - name: coffee
+      port: 80
+    sessionPersistence:
+      type: Cookie
+      absoluteTimeout: 48h
+      cookieConfig:
+        lifetimeType: Permanent
+---
+# Route with regex path match and named session persistence configuration
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: tea
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "cafe.example.com"
+  rules:
+  - matches:
+    - path:
+        type: RegularExpression
+        value: /tea/[a-z]+/flavors
+    backendRefs:
+    - name: tea
+      port: 80
+    sessionPersistence:
+      sessionName: tea-cookie
+      type: Cookie
+      absoluteTimeout: 48h
+      cookieConfig:
+        lifetimeType: Session

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/exec"
 	"time"
@@ -542,7 +543,12 @@ func CreateResponseChecker(url, address string, requestTimeout time.Duration, op
 	}
 
 	return func() error {
-		status, _, err := Get(url, address, requestTimeout, nil, nil, opts...)
+		request := Request{
+			URL:     url,
+			Address: address,
+			Timeout: requestTimeout,
+		}
+		resp, err := Get(request, opts...)
 		if err != nil {
 			badReqErr := fmt.Errorf("bad response: %w", err)
 			if options.logEnabled {
@@ -552,8 +558,8 @@ func CreateResponseChecker(url, address string, requestTimeout time.Duration, op
 			return badReqErr
 		}
 
-		if status != 200 {
-			statusErr := fmt.Errorf("unexpected status code: %d", status)
+		if resp.StatusCode != http.StatusOK {
+			statusErr := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 			if options.logEnabled {
 				GinkgoWriter.Printf("ERROR during creating response checker: %v\n", statusErr)
 			}

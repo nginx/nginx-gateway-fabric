@@ -13,7 +13,9 @@ func WithLoggingDisabled() Option {
 }
 
 func LogOptions(opts ...Option) *Options {
-	options := &Options{logEnabled: true}
+	options := &Options{
+		logEnabled: true,
+	}
 	for _, opt := range opts {
 		opt(options)
 	}
