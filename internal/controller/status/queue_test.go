@@ -46,7 +46,7 @@ func TestDequeue(t *testing.T) {
 	}
 	q.Enqueue(item)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	dequeuedItem := q.Dequeue(ctx)
@@ -60,7 +60,7 @@ func TestDequeueEmptyQueue(t *testing.T) {
 
 	q := NewQueue()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	dequeuedItem := q.Dequeue(ctx)
@@ -85,7 +85,7 @@ func TestDequeueWithMultipleItems(t *testing.T) {
 	q.Enqueue(item1)
 	q.Enqueue(item2)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	dequeuedItem1 := q.Dequeue(ctx)

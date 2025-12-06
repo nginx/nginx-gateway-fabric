@@ -71,15 +71,16 @@ func createFakeK8sClient(initObjs ...runtime.Object) (client.Client, error) {
 	return fakeClient, nil
 }
 
-func createGrpcContext() context.Context {
-	return grpcContext.NewGrpcContext(context.Background(), grpcContext.GrpcInfo{
+func createGrpcContext(t *testing.T) context.Context {
+	t.Helper()
+	return grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
 		IPAddress: "127.0.0.1",
 	})
 }
 
-func createGrpcContextWithCancel() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(context.Background())
-
+func createGrpcContextWithCancel(t *testing.T) (context.Context, context.CancelFunc) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
 	return grpcContext.NewGrpcContext(ctx, grpcContext.GrpcInfo{
 		IPAddress: "127.0.0.1",
 	}), cancel
@@ -139,7 +140,7 @@ func TestCreateConnection(t *testing.T) {
 	}{
 		{
 			name: "successfully tracks a connection",
-			ctx:  createGrpcContext(),
+			ctx:  createGrpcContext(t),
 			request: &pb.CreateConnectionRequest{
 				Resource: &pb.Resource{
 					Info: &pb.Resource_ContainerInfo{
@@ -197,14 +198,14 @@ func TestCreateConnection(t *testing.T) {
 		},
 		{
 			name:      "context is missing data",
-			ctx:       context.Background(),
+			ctx:       t.Context(),
 			request:   &pb.CreateConnectionRequest{},
 			response:  nil,
 			errString: agentgrpc.ErrStatusInvalidConnection.Error(),
 		},
 		{
 			name: "error getting pod owner",
-			ctx:  createGrpcContext(),
+			ctx:  createGrpcContext(t),
 			request: &pb.CreateConnectionRequest{
 				Resource: &pb.Resource{
 					Info: &pb.Resource_ContainerInfo{
@@ -376,7 +377,7 @@ func TestSubscribe(t *testing.T) {
 	}
 	deployment.SetNGINXPlusActions([]*pb.NGINXPlusAction{initialAction})
 
-	ctx, cancel := createGrpcContextWithCancel()
+	ctx, cancel := createGrpcContextWithCancel(t)
 	defer cancel()
 
 	mockServer := newMockSubscribeServer(ctx)
@@ -517,7 +518,7 @@ func TestSubscribe_Reset(t *testing.T) {
 	deployment.SetFiles(files, []v1.VolumeMount{})
 	deployment.SetImageVersion("nginx:v1.0.0")
 
-	ctx, cancel := createGrpcContextWithCancel()
+	ctx, cancel := createGrpcContextWithCancel(t)
 	defer cancel()
 
 	mockServer := newMockSubscribeServer(ctx)
@@ -558,7 +559,7 @@ func TestSubscribe_Errors(t *testing.T) {
 	}{
 		{
 			name:      "context is missing data",
-			ctx:       context.Background(),
+			ctx:       t.Context(),
 			errString: agentgrpc.ErrStatusInvalidConnection.Error(),
 		},
 		{
@@ -610,7 +611,7 @@ func TestSubscribe_Errors(t *testing.T) {
 			if test.ctx != nil {
 				ctx = test.ctx
 			} else {
-				ctx, cancel = createGrpcContextWithCancel()
+				ctx, cancel = createGrpcContextWithCancel(t)
 				defer cancel()
 			}
 
@@ -745,7 +746,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				test.setup(msgr, deployment)
 			}
 
-			err = cs.setInitialConfig(context.Background(), deployment, conn, msgr)
+			err = cs.setInitialConfig(t.Context(), deployment, conn, msgr)
 
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(test.errString))
@@ -972,7 +973,7 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 	}{
 		{
 			name: "successfully sets the status",
-			ctx:  createGrpcContext(),
+			ctx:  createGrpcContext(t),
 			request: &pb.UpdateDataPlaneStatusRequest{
 				Resource: &pb.Resource{
 					Instances: []*pb.Instance{
@@ -990,7 +991,7 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 		},
 		{
 			name: "successfully sets the status using plus",
-			ctx:  createGrpcContext(),
+			ctx:  createGrpcContext(t),
 			request: &pb.UpdateDataPlaneStatusRequest{
 				Resource: &pb.Resource{
 					Instances: []*pb.Instance{
@@ -1014,14 +1015,14 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 		},
 		{
 			name:      "context is missing data",
-			ctx:       context.Background(),
+			ctx:       t.Context(),
 			request:   &pb.UpdateDataPlaneStatusRequest{},
 			response:  nil,
 			errString: agentgrpc.ErrStatusInvalidConnection.Error(),
 		},
 		{
 			name:      "request does not contain ID",
-			ctx:       createGrpcContext(),
+			ctx:       createGrpcContext(t),
 			request:   &pb.UpdateDataPlaneStatusRequest{},
 			response:  nil,
 			errString: "request does not contain nginx instanceID",
@@ -1083,7 +1084,7 @@ func TestUpdateDataPlaneHealth(t *testing.T) {
 		nil,
 	)
 
-	resp, err := cs.UpdateDataPlaneHealth(context.Background(), &pb.UpdateDataPlaneHealthRequest{})
+	resp, err := cs.UpdateDataPlaneHealth(t.Context(), &pb.UpdateDataPlaneHealthRequest{})
 
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(resp).To(Equal(&pb.UpdateDataPlaneHealthResponse{}))

@@ -1,7 +1,6 @@
 package status
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -422,7 +421,7 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 	k8sClient := createK8sClientFor(&v1.HTTPRoute{})
 
 	for _, r := range routes {
-		err := k8sClient.Create(context.Background(), r.Source)
+		err := k8sClient.Create(t.Context(), r.Source)
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
@@ -435,14 +434,14 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 		gatewayCtlrName,
 	)
 
-	updater.Update(context.Background(), reqs...)
+	updater.Update(t.Context(), reqs...)
 
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
 	for nsname, expected := range expectedStatuses {
 		var hr v1.HTTPRoute
 
-		err := k8sClient.Get(context.Background(), nsname, &hr)
+		err := k8sClient.Get(t.Context(), nsname, &hr)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(hr.Status.Parents))
 	}
@@ -500,7 +499,7 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 	k8sClient := createK8sClientFor(&v1.GRPCRoute{})
 
 	for _, r := range routes {
-		err := k8sClient.Create(context.Background(), r.Source)
+		err := k8sClient.Create(t.Context(), r.Source)
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
@@ -513,14 +512,14 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 		gatewayCtlrName,
 	)
 
-	updater.Update(context.Background(), reqs...)
+	updater.Update(t.Context(), reqs...)
 
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
 	for nsname, expected := range expectedStatuses {
 		var hr v1.GRPCRoute
 
-		err := k8sClient.Get(context.Background(), nsname, &hr)
+		err := k8sClient.Get(t.Context(), nsname, &hr)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(hr.Status.Parents))
 	}
@@ -576,7 +575,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 	k8sClient := createK8sClientFor(&v1alpha2.TLSRoute{})
 
 	for _, r := range routes {
-		err := k8sClient.Create(context.Background(), r.Source)
+		err := k8sClient.Create(t.Context(), r.Source)
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
@@ -589,14 +588,14 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 		gatewayCtlrName,
 	)
 
-	updater.Update(context.Background(), reqs...)
+	updater.Update(t.Context(), reqs...)
 
 	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
 
 	for nsname, expected := range expectedStatuses {
 		var hr v1alpha2.TLSRoute
 
-		err := k8sClient.Get(context.Background(), nsname, &hr)
+		err := k8sClient.Get(t.Context(), nsname, &hr)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(hr.Status.Parents))
 	}
@@ -707,13 +706,13 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 			var expectedTotalReqs int
 
 			if test.gc != nil {
-				err := k8sClient.Create(context.Background(), test.gc.Source)
+				err := k8sClient.Create(t.Context(), test.gc.Source)
 				g.Expect(err).ToNot(HaveOccurred())
 				expectedTotalReqs++
 			}
 
 			for _, gc := range test.ignoredClasses {
-				err := k8sClient.Create(context.Background(), gc)
+				err := k8sClient.Create(t.Context(), gc)
 				g.Expect(err).ToNot(HaveOccurred())
 				expectedTotalReqs++
 			}
@@ -724,12 +723,12 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 
 			g.Expect(reqs).To(HaveLen(expectedTotalReqs))
 
-			updater.Update(context.Background(), reqs...)
+			updater.Update(t.Context(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var gc v1.GatewayClass
 
-				err := k8sClient.Get(context.Background(), nsname, &gc)
+				err := k8sClient.Get(t.Context(), nsname, &gc)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(expected, gc.Status)).To(BeEmpty())
 			}
@@ -1357,7 +1356,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 
 			if test.gateway != nil {
 				test.gateway.Source.ResourceVersion = ""
-				err := k8sClient.Create(context.Background(), test.gateway.Source)
+				err := k8sClient.Create(t.Context(), test.gateway.Source)
 				g.Expect(err).ToNot(HaveOccurred())
 				expectedTotalReqs++
 			}
@@ -1373,12 +1372,12 @@ func TestBuildGatewayStatuses(t *testing.T) {
 
 			g.Expect(reqs).To(HaveLen(expectedTotalReqs))
 
-			updater.Update(context.Background(), reqs...)
+			updater.Update(t.Context(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var gw v1.Gateway
 
-				err := k8sClient.Get(context.Background(), nsname, &gw)
+				err := k8sClient.Get(t.Context(), nsname, &gw)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(expected, gw.Status)).To(BeEmpty())
 			}
@@ -1621,7 +1620,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 			k8sClient := createK8sClientFor(&v1.BackendTLSPolicy{})
 
 			for _, pol := range test.backendTLSPolicies {
-				err := k8sClient.Create(context.Background(), pol.Source)
+				err := k8sClient.Create(t.Context(), pol.Source)
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
@@ -1631,12 +1630,12 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
-			updater.Update(context.Background(), reqs...)
+			updater.Update(t.Context(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var pol v1.BackendTLSPolicy
 
-				err := k8sClient.Get(context.Background(), nsname, &pol)
+				err := k8sClient.Get(t.Context(), nsname, &pol)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(expected, pol.Status)).To(BeEmpty())
 			}
@@ -1715,7 +1714,7 @@ func TestBuildNginxGatewayStatus(t *testing.T) {
 			k8sClient := createK8sClientFor(&ngfAPI.NginxGateway{})
 
 			if test.nginxGateway != nil {
-				err := k8sClient.Create(context.Background(), test.nginxGateway)
+				err := k8sClient.Create(t.Context(), test.nginxGateway)
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
@@ -1727,11 +1726,11 @@ func TestBuildNginxGatewayStatus(t *testing.T) {
 				g.Expect(req).To(BeNil())
 			} else {
 				g.Expect(req).ToNot(BeNil())
-				updater.Update(context.Background(), *req)
+				updater.Update(t.Context(), *req)
 
 				var ngw ngfAPI.NginxGateway
 
-				err := k8sClient.Get(context.Background(), types.NamespacedName{Namespace: "test", Name: "nginx-gateway"}, &ngw)
+				err := k8sClient.Get(t.Context(), types.NamespacedName{Namespace: "test", Name: "nginx-gateway"}, &ngw)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(*test.expected, ngw.Status)).To(BeEmpty())
 			}
@@ -2009,7 +2008,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 			k8sClient := createK8sClientFor(&ngfAPI.ClientSettingsPolicy{})
 
 			for _, pol := range test.policies {
-				err := k8sClient.Create(context.Background(), pol.Source)
+				err := k8sClient.Create(t.Context(), pol.Source)
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
@@ -2019,12 +2018,12 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 
 			g.Expect(reqs).To(HaveLen(len(test.expected)))
 
-			updater.Update(context.Background(), reqs...)
+			updater.Update(t.Context(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var pol ngfAPI.ClientSettingsPolicy
 
-				err := k8sClient.Get(context.Background(), nsname, &pol)
+				err := k8sClient.Get(t.Context(), nsname, &pol)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(expected, pol.Status)).To(BeEmpty())
 			}
@@ -2139,7 +2138,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 			k8sClient := createK8sClientFor(&ngfAPI.SnippetsFilter{})
 
 			for _, snippets := range test.snippetsFilters {
-				err := k8sClient.Create(context.Background(), snippets.Source)
+				err := k8sClient.Create(t.Context(), snippets.Source)
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
@@ -2149,12 +2148,12 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
-			updater.Update(context.Background(), reqs...)
+			updater.Update(t.Context(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var snippetsFilter ngfAPI.SnippetsFilter
 
-				err := k8sClient.Get(context.Background(), nsname, &snippetsFilter)
+				err := k8sClient.Get(t.Context(), nsname, &snippetsFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(expected, snippetsFilter.Status)).To(BeEmpty())
 			}
@@ -2452,7 +2451,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 
 			k8sClient := createK8sClientFor(&inference.InferencePool{})
 			for _, ip := range test.clusterInferencePools.Items {
-				err := k8sClient.Create(context.Background(), &ip)
+				err := k8sClient.Create(t.Context(), &ip)
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
@@ -2464,12 +2463,12 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 				transitionTime,
 			)
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
-			updater.Update(context.Background(), reqs...)
+			updater.Update(t.Context(), reqs...)
 
 			for nsname, expected := range test.expectedPoolWithStatus {
 				var inferencePool inference.InferencePool
 
-				err := k8sClient.Get(context.Background(), nsname, &inferencePool)
+				err := k8sClient.Get(t.Context(), nsname, &inferencePool)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(expected, inferencePool.Status)).To(BeEmpty())
 			}

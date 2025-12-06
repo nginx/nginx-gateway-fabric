@@ -36,7 +36,7 @@ func TestCallFunctionsAfterBecameLeader(t *testing.T) {
 	g := NewWithT(t)
 	g.Expect(callFunctionsAfterBecameLeader.NeedLeaderElection()).To(BeTrue())
 
-	err := callFunctionsAfterBecameLeader.Start(context.Background())
+	err := callFunctionsAfterBecameLeader.Start(t.Context())
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(statusUpdaterEnabled).To(BeTrue())
