@@ -1,0 +1,104 @@
+name: Operator Bundle PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      operator-version:
+        description: "Operator version for bundle generation"
+        required: true
+        default: "0.0.0"
+      submit-to-redhat:
+        description: "Submit bundle to RedHat certified-operators repo"
+        required: false
+        type: boolean
+        default: false
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install operator-sdk
+        run: |
+          OPERATOR_SDK_VERSION=v1.42.0 # renovate: datasource=github-tags depName=operator-framework/operator-sdk
+          curl -sSLo /tmp/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk_linux-amd64
+          chmod +x /tmp/operator-sdk
+          sudo mv /tmp/operator-sdk /usr/local/bin/operator-sdk
+
+      - name: Generate Bundle
+        working-directory: operators
+        run: |
+          make bundle-release
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: Generate operator bundle for v${{ inputs.operator-version }}
+          title: Operator Bundle v${{ inputs.operator-version }}
+          draft: true
+          delete-branch: true
+          branch: operator/bundle-${{ inputs.operator-version }}
+          author: nginx-bot <integrations@nginx.com>
+          committer: nginx-bot <integrations@nginx.com>
+          body: |
+            This automated PR generates the operator bundle for v${{ inputs.operator-version }}.
+
+            ## What's Changed
+            - Updated NGF image versions in sample manifests using image digests
+            - Generated bundle manifests and metadata
+            - Updated ClusterServiceVersion with proper annotations and descriptors
+            - Added OpenShift compatibility annotations
+
+      - name: Checkout certified-operators repo
+        if: ${{ inputs.submit-to-redhat }}
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          token: ${{ secrets.NGINX_PAT }}
+          repository: nginx-bot/certified-operators
+          path: certified-operators
+
+      - name: Update certified-operators repo
+        if: ${{ inputs.submit-to-redhat }}
+        working-directory: certified-operators/operators/nginx-gateway-fabric-operator
+        run: |
+          mkdir v${{ inputs.operator-version }}
+          cp -R ../../../operators/bundle/manifests v${{ inputs.operator-version }}/
+          cp -R ../../../operators/bundle/metadata v${{ inputs.operator-version }}/
+
+      - name: Commit and push to certified-operators
+        if: ${{ inputs.submit-to-redhat }}
+        uses: stefanzweifel/git-auto-commit-action@28e16e81777b558cc906c8750092100bbb34c5e3 # v7.0.0
+        with:
+          commit_message: operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})
+          commit_author: nginx-bot <integrations@nginx.com>
+          commit_user_name: nginx-bot
+          commit_user_email: integrations@nginx.com
+          create_branch: true
+          branch: update-nginx-gateway-fabric-operator-to-v${{ inputs.operator-version }}
+          repository: certified-operators
+
+      - name: Create PR to RedHat certified-operators
+        if: ${{ inputs.submit-to-redhat }}
+        working-directory: certified-operators
+        run: |
+          gh pr create --title "operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})" --body "Update nginx-gateway-fabric-operator to v${{ inputs.operator-version }}" --head nginx-bot:update-nginx-gateway-fabric-operator-to-v${{ inputs.operator-version }} --base main --repo redhat-openshift-ecosystem/certified-operators
+        env:
+          GITHUB_TOKEN: ${{ secrets.NGINX_PAT }}

@@ -145,6 +145,9 @@ jobs:
           filters: |
             charts:
             - charts/nginx-gateway-fabric/**/*
+            rbac:
+            - operators/config/rbac/role.yaml
+            - charts/nginx-gateway-fabric/templates/clusterrole.yaml
 
       - name: Output Variables
         id: vars
@@ -163,6 +166,10 @@ jobs:
 
       - name: Check if all the generated files are up to date
         run: make generate-all && git diff --exit-code
+
+      - name: Verify Operator RBAC Synchronization
+        if: steps.filter.outputs.rbac == 'true'
+        run: ./operators/scripts/verify-rbac-sync.sh
 
   unit-tests:
     name: Unit Tests
@@ -458,6 +465,27 @@ jobs:
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
       packages: write # for docker/build-push-action to push to GHCR
       id-token: write # for docker/login to login to NGINX registry
+    secrets: inherit
+
+  redhat-certification:
+    name: Submit images for RedHat certification
+    needs: [build-oss, build-operator]
+    if: ${{ inputs.is_production_release }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ngf
+            tag: ${{ inputs.release_version }}
+          - image: nginx
+            tag: ${{ inputs.release_version }}
+          - image: operator
+            tag: ${{ inputs.operator_version }}
+    uses: ./.github/workflows/redhat-certification.yml
+    with:
+      image: ${{ matrix.image }}
+      tag: ${{ matrix.tag }}
+      dry_run: ${{ inputs.dry_run }}
     secrets: inherit
 
   functional-tests:
