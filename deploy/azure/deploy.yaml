@@ -338,6 +338,7 @@ spec:
           name: nginx-agent-tls
       nodeSelector:
         kubernetes.io/os: linux
+      priorityClassName: null
       securityContext:
         fsGroup: 1001
         runAsNonRoot: true

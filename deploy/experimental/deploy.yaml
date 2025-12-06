@@ -339,6 +339,7 @@ spec:
         volumeMounts:
         - mountPath: /var/run/secrets/ngf
           name: nginx-agent-tls
+      priorityClassName: null
       securityContext:
         fsGroup: 1001
         runAsNonRoot: true
