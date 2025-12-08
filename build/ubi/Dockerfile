@@ -33,11 +33,11 @@ COPY --link --chown=101:1001 LICENSE /licenses/
 ENTRYPOINT [ "/usr/bin/gateway" ]
 
 FROM ngf-ubi-minimal AS container
-COPY --from=builder /go/src/github.com/nginxinc/nginx-gateway-fabric/build/out/gateway /usr/bin/gateway
+COPY --chmod=0755 --from=builder /go/src/github.com/nginxinc/nginx-gateway-fabric/build/out/gateway /usr/bin/gateway
 
 FROM ngf-ubi-minimal AS local
-COPY ./build/out/gateway /usr/bin/gateway
+COPY --chmod=0755 ./build/out/gateway /usr/bin/gateway
 
 FROM ngf-ubi-minimal AS goreleaser
 ARG TARGETARCH
-COPY dist/gateway_linux_$TARGETARCH*/gateway /usr/bin/gateway
+COPY --chmod=0755 dist/gateway_linux_$TARGETARCH*/gateway /usr/bin/gateway
