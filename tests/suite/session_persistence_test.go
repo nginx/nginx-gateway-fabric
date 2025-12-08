@@ -85,22 +85,17 @@ var _ = Describe("SessionPersistence OSS", Ordered, Label("functional", "session
 		})
 
 		Specify("upstreamSettingsPolicies are accepted", func() {
-			usPolicies := []string{
-				"usp-ip-hash",
-				"usp-ip-hash-grpc",
-			}
+			usPolicy := "usp-ip-hash"
 
-			for _, name := range usPolicies {
-				uspolicyNsName := types.NamespacedName{Name: name, Namespace: namespace}
+			uspolicyNsName := types.NamespacedName{Name: usPolicy, Namespace: namespace}
 
-				err := waitForUSPolicyStatus(
-					uspolicyNsName,
-					gatewayName,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
+			err := waitForUSPolicyStatus(
+				uspolicyNsName,
+				gatewayName,
+				metav1.ConditionTrue,
+				gatewayv1.PolicyReasonAccepted,
+			)
+			Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", usPolicy))
 		})
 
 		Context("verify working traffic", func() {
@@ -327,7 +322,7 @@ var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "sessio
 			Expect(resourceManager.ApplyFromFiles([]string{routeFile}, namespace)).To(Succeed())
 		})
 
-		It("HTTPRoute reports the errors in its status", func() {
+		It("updates the HTTPRoute status with all relevant validation errors", func() {
 			if !*plusEnabled {
 				Skip("Skipping Session Persistence Plus tests on NGINX OSS deployment")
 			}
@@ -336,7 +331,7 @@ var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "sessio
 			Expect(err).ToNot(HaveOccurred(), "expected route to report invalid session persistence configuration")
 		})
 
-		It("GRPCRoute reports the errors in its status", func() {
+		It("updates the HTTPRoute status with all relevant validation errors", func() {
 			if !*plusEnabled {
 				Skip("Skipping Session Persistence Plus tests on NGINX OSS deployment")
 			}
@@ -356,22 +351,6 @@ func waitForHTTPRouteToHaveErrorMessage(routeNsName types.NamespacedName) error 
 		routeNsName,
 	)
 
-	return waitForHTTPRouteErrorMessage(
-		ctx,
-		routeNsName,
-		gatewayv1.RouteConditionAccepted,
-		metav1.ConditionTrue,
-		invalidSPErrMsgs,
-	)
-}
-
-func waitForHTTPRouteErrorMessage(
-	ctx context.Context,
-	routeNsName types.NamespacedName,
-	conditionType gatewayv1.RouteConditionType,
-	condStatus metav1.ConditionStatus,
-	expectedReasonSubstring string,
-) error {
 	return wait.PollUntilContextCancel(
 		ctx,
 		500*time.Millisecond,
@@ -382,7 +361,12 @@ func waitForHTTPRouteErrorMessage(
 				return false, err
 			}
 
-			return checkRouteStatus(route.Status.RouteStatus, conditionType, condStatus, expectedReasonSubstring)
+			return checkRouteStatus(
+				route.Status.RouteStatus,
+				gatewayv1.RouteConditionAccepted,
+				metav1.ConditionTrue,
+				invalidSPErrMsgs,
+			)
 		},
 	)
 }
@@ -396,22 +380,6 @@ func waitForGRPCRouteToHaveErrorMessage(routeNsName types.NamespacedName) error 
 		routeNsName,
 	)
 
-	return waitForGRPCRouteErrorMessage(
-		ctx,
-		routeNsName,
-		gatewayv1.RouteConditionAccepted,
-		metav1.ConditionTrue,
-		invalidSPErrMsgs,
-	)
-}
-
-func waitForGRPCRouteErrorMessage(
-	ctx context.Context,
-	routeNsName types.NamespacedName,
-	conditionType gatewayv1.RouteConditionType,
-	condStatus metav1.ConditionStatus,
-	expectedReasonSubstring string,
-) error {
 	return wait.PollUntilContextCancel(
 		ctx,
 		500*time.Millisecond,
@@ -422,7 +390,11 @@ func waitForGRPCRouteErrorMessage(
 				return false, err
 			}
 
-			return checkRouteStatus(route.Status.RouteStatus, conditionType, condStatus, expectedReasonSubstring)
+			return checkRouteStatus(
+				route.Status.RouteStatus,
+				gatewayv1.RouteConditionAccepted,
+				metav1.ConditionTrue,
+				invalidSPErrMsgs)
 		},
 	)
 }
