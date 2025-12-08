@@ -6,48 +6,34 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.2.2
 
-* Update permissions of gateway binary for UBI (#4404) by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/4416
-
-%%DATE%%
-
-FEATURES:
-
--
+_December 8, 2025_
 
 BUG FIXES:
 
--
-
-DOCUMENTATION:
-
--
+- Fix permission issue with nginx-gateway container for UBI. [4404](https://github.com/nginx/nginx-gateway-fabric/pull/4404)
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.2.2
--
-
-UPGRADE:
-
--
 
 KNOWN ISSUES:
 
--
+- Data plane sometimes does not sync upstream server IPs. [3626](https://github.com/nginx/nginx-gateway-fabric/issues/3626)
 
 COMPATIBILITY:
 
-- Gateway API version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- NGINX Agent version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.3.0`
+- NGINX version: `1.29.2`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.5.0`
+- Kubernetes version: `1.25+`
 
 CONTAINER IMAGES:
 
 - Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.2.2`
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.2.2`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.2.2`
+
 ## Release 2.2.1
 
 _November 12, 2025_
