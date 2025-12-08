@@ -223,6 +223,9 @@ var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "sessio
 
 		Context("verify working traffic", func() {
 			It("should return 200 responses from the same backend for HTTPRoutes `coffee` and `tea`", func() {
+				if !*plusEnabled {
+					Skip("Skipping Session Persistence Plus tests on NGINX OSS deployment")
+				}
 				Eventually(
 					func() error {
 						return expectRequestToSucceedAndReuseCookie(baseCoffeeURL, address, "URI: /coffee", 11)
@@ -252,11 +255,14 @@ var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "sessio
 
 			DescribeTable("are set properly for",
 				func(expCfgs []framework.ExpectedNginxField) {
+					if !*plusEnabled {
+						Skip("Skipping Session Persistence Plus tests on NGINX OSS deployment")
+					}
 					for _, expCfg := range expCfgs {
 						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 					}
 				},
-				Entry("HTTP upstream", []framework.ExpectedNginxField{
+				Entry("HTTP upstreams", []framework.ExpectedNginxField{
 					{
 						Directive: "upstream",
 						Value:     "session-persistence-plus_coffee_80_coffee_session-persistence-plus_0",
@@ -322,12 +328,18 @@ var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "sessio
 		})
 
 		It("HTTPRoute reports the errors in its status", func() {
+			if !*plusEnabled {
+				Skip("Skipping Session Persistence Plus tests on NGINX OSS deployment")
+			}
 			routeNsName := types.NamespacedName{Name: "route-invalid-sp", Namespace: namespace}
 			err := waitForHTTPRouteToHaveErrorMessage(routeNsName)
 			Expect(err).ToNot(HaveOccurred(), "expected route to report invalid session persistence configuration")
 		})
 
 		It("GRPCRoute reports the errors in its status", func() {
+			if !*plusEnabled {
+				Skip("Skipping Session Persistence Plus tests on NGINX OSS deployment")
+			}
 			routeNsName := types.NamespacedName{Name: "grpc-route-invalid-sp", Namespace: namespace}
 			err := waitForGRPCRouteToHaveErrorMessage(routeNsName)
 			Expect(err).ToNot(HaveOccurred(), "expected route to report invalid session persistence configuration")
