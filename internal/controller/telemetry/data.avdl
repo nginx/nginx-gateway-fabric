@@ -105,14 +105,6 @@ attached at the Gateway level. */
 		/** GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway. */
 		long? GatewayAttachedNpCount = null;
 		
-		/** GatewayAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
-attached at the Gateway level. */
-		long? GatewayAttachedProxySettingsPolicyCount = null;
-		
-		/** RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
-attached at the Route level. */
-		long? RouteAttachedProxySettingsPolicyCount = null;
-		
 		/** NginxPodCount is the total number of Nginx data plane Pods. */
 		long? NginxPodCount = null;
 		
@@ -127,6 +119,14 @@ attached at the Route level. */
 		
 		/** BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi). */
 		string? BuildOS = null;
+		
+		/** GatewayAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+attached at the Gateway level. */
+		long? GatewayAttachedProxySettingsPolicyCount = null;
+		
+		/** RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+attached at the Route level. */
+		long? RouteAttachedProxySettingsPolicyCount = null;
 		
 	}
 }

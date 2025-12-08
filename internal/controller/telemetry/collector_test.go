@@ -510,8 +510,6 @@ var _ = Describe("Collector", Ordered, func() {
 					SnippetsFilterCount:                      3,
 					UpstreamSettingsPolicyCount:              1,
 					GatewayAttachedNpCount:                   2,
-					GatewayAttachedProxySettingsPolicyCount:  2,
-					RouteAttachedProxySettingsPolicyCount:    4,
 				}
 				expData.ClusterVersion = "1.29.2"
 				expData.ClusterPlatform = "kind"
@@ -547,6 +545,8 @@ var _ = Describe("Collector", Ordered, func() {
 				expData.BuildOS = "alpine"
 
 				expData.InferencePoolCount = 3
+				expData.GatewayAttachedProxySettingsPolicyCount = 2
+				expData.RouteAttachedProxySettingsPolicyCount = 4
 
 				data, err := dataCollector.Collect(ctx)
 				Expect(err).ToNot(HaveOccurred())
@@ -828,11 +828,11 @@ var _ = Describe("Collector", Ordered, func() {
 					UpstreamSettingsPolicyCount:              1,
 					GatewayAttachedNpCount:                   1,
 					BackendTLSPolicyCount:                    1,
-					GatewayAttachedProxySettingsPolicyCount:  2,
-					RouteAttachedProxySettingsPolicyCount:    3,
 				}
 				expData.NginxPodCount = 1
 				expData.InferencePoolCount = 1
+				expData.GatewayAttachedProxySettingsPolicyCount = 2
+				expData.RouteAttachedProxySettingsPolicyCount = 3
 
 				data, err := dataCollector.Collect(ctx)
 

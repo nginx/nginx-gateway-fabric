@@ -71,6 +71,12 @@ type Data struct { //nolint //required to skip golangci-lint-full fieldalignment
 	InferencePoolCount int64
 	// BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi).
 	BuildOS string
+	// GatewayAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+	// attached at the Gateway level.
+	GatewayAttachedProxySettingsPolicyCount int64
+	// RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+	// attached at the Route level.
+	RouteAttachedProxySettingsPolicyCount int64
 }
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.
@@ -110,12 +116,6 @@ type NGFResourceCounts struct {
 	UpstreamSettingsPolicyCount int64
 	// GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway.
 	GatewayAttachedNpCount int64
-	// GatewayAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
-	// attached at the Gateway level.
-	GatewayAttachedProxySettingsPolicyCount int64
-	// RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
-	// attached at the Route level.
-	RouteAttachedProxySettingsPolicyCount int64
 }
 
 func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
@@ -137,7 +137,16 @@ func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
 			rc.ObservabilityPolicyCount++
 		case kinds.UpstreamSettingsPolicy:
 			rc.UpstreamSettingsPolicyCount++
-		case kinds.ProxySettingsPolicy:
+		}
+	}
+}
+
+func CountProxySettingsPolicies(g *graph.Graph) (int64, int64) {
+	gatewayAttachedProxySettingsPolicyCount := int64(0)
+	routeAttachedProxySettingsPolicyCount := int64(0)
+
+	for policyKey, policy := range g.NGFPolicies {
+		if policyKey.GVK.Kind == kinds.ProxySettingsPolicy {
 			if len(policy.TargetRefs) == 0 {
 				continue
 			}
@@ -145,13 +154,15 @@ func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
 			for _, tr := range policy.TargetRefs {
 				switch tr.Kind {
 				case kinds.Gateway:
-					rc.GatewayAttachedProxySettingsPolicyCount++
+					gatewayAttachedProxySettingsPolicyCount++
 				case kinds.HTTPRoute, kinds.GRPCRoute:
-					rc.RouteAttachedProxySettingsPolicyCount++
+					routeAttachedProxySettingsPolicyCount++
 				}
 			}
 		}
 	}
+
+	return gatewayAttachedProxySettingsPolicyCount, routeAttachedProxySettingsPolicyCount
 }
 
 // DataCollectorConfig holds configuration parameters for DataCollectorImpl.
@@ -228,6 +239,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		buildOs = "alpine"
 	}
 	inferencePoolCount := int64(len(g.ReferencedInferencePools))
+	gatewayAttachedProxySettingsPolicyCount, routeAttachedProxySettingsPolicyCount := CountProxySettingsPolicies(g)
 
 	data := Data{
 		Data: tel.Data{
@@ -240,17 +252,19 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 			InstallationID:      deploymentID,
 			ClusterNodeCount:    int64(clusterInfo.NodeCount),
 		},
-		NGFResourceCounts:              graphResourceCount,
-		ImageSource:                    c.cfg.ImageSource,
-		BuildOS:                        buildOs,
-		FlagNames:                      c.cfg.Flags.Names,
-		FlagValues:                     c.cfg.Flags.Values,
-		SnippetsFiltersDirectives:      snippetsFiltersDirectives,
-		SnippetsFiltersDirectivesCount: snippetsFiltersDirectivesCount,
-		NginxPodCount:                  nginxPodCount,
-		ControlPlanePodCount:           int64(replicaCount),
-		NginxOneConnectionEnabled:      c.cfg.NginxOneConsoleConnection,
-		InferencePoolCount:             inferencePoolCount,
+		NGFResourceCounts:                       graphResourceCount,
+		ImageSource:                             c.cfg.ImageSource,
+		BuildOS:                                 buildOs,
+		FlagNames:                               c.cfg.Flags.Names,
+		FlagValues:                              c.cfg.Flags.Values,
+		SnippetsFiltersDirectives:               snippetsFiltersDirectives,
+		SnippetsFiltersDirectivesCount:          snippetsFiltersDirectivesCount,
+		NginxPodCount:                           nginxPodCount,
+		ControlPlanePodCount:                    int64(replicaCount),
+		NginxOneConnectionEnabled:               c.cfg.NginxOneConsoleConnection,
+		InferencePoolCount:                      inferencePoolCount,
+		GatewayAttachedProxySettingsPolicyCount: gatewayAttachedProxySettingsPolicyCount,
+		RouteAttachedProxySettingsPolicyCount:   routeAttachedProxySettingsPolicyCount,
 	}
 
 	return data, nil
