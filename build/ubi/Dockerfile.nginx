@@ -6,9 +6,9 @@ ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signi
 ADD --link --chown=101:1001 build/ubi/repos/nginx.repo nginx.repo
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:55985e8ef90954271569da91cc33692688404cbbb004c48ee386d8925dc4a4e7 AS ubi9-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:1bde412ee491e03e686f3f8cebe22dad0526e007d0d34829c143f063dca8084f AS ubi9-packages
 
-FROM redhat/ubi9-minimal:9.7-1763362218 AS ubi-nginx
+FROM redhat/ubi9-minimal:9.7-1764794109 AS ubi-nginx
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.5.1

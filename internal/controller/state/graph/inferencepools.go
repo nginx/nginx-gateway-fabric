@@ -10,7 +10,6 @@ import (
 	apiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -101,7 +100,7 @@ func processInferencePoolsForGateway(
 				}
 
 				poolName := types.NamespacedName{
-					Name:      controller.GetInferencePoolName(string(ref.Name)),
+					Name:      ref.InferencePoolName,
 					Namespace: namespace,
 				}
 

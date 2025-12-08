@@ -1038,7 +1038,8 @@ func TestBuildHTTPRoute(t *testing.T) {
 							Matches: hrInferencePool.Spec.Rules[0].Matches,
 							RouteBackendRefs: []RouteBackendRef{
 								{
-									IsInferencePool: true,
+									IsInferencePool:   true,
+									InferencePoolName: "ipool",
 									BackendRef: gatewayv1.BackendRef{
 										BackendObjectReference: gatewayv1.BackendObjectReference{
 											Group:     helpers.GetPointer[gatewayv1.Group](""),

@@ -19,17 +19,6 @@
       "groupName": "NGINX Agent"
     },
     {
-      "groupName": "Go module dependencies",
-      "matchManagers": [
-        "gomod"
-      ],
-      "matchUpdateTypes": [
-        "minor",
-        "patch"
-      ],
-      "matchCurrentVersion": "!/^0/"
-    },
-    {
       "groupName": "Docker digests",
       "matchDatasources": [
         "docker"

@@ -1,0 +1,42 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: backend-cert
+data:
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDWzCCAkOgAwIBAgIULcvHW5CfsuZSwAgUMnCSf+JS7lUwDQYJKoZIhvcNAQEL
+    BQAwPTELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNPMSEwHwYDVQQKDBhJbnRlcm5l
+    dCBXaWRnaXRzIFB0eSBMdGQwHhcNMjUwODIwMjE1NzE3WhcNMjYwODIwMjE1NzE3
+    WjA9MQswCQYDVQQGEwJVUzELMAkGA1UECAwCQ08xITAfBgNVBAoMGEludGVybmV0
+    IFdpZGdpdHMgUHR5IEx0ZDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEB
+    ALF+GOHlmtcSh3oagcA0AdiLGR/MI5FA+1Zp3EkyrbtTM8NFv2YNntpoHQstl1no
+    8eoKzxcnallG6CNQpaOzuApEvoeUxbNtDpZ28dsgMX4QpZ627oob0DweAhSJ8+lL
+    dPmopjWKwWzoYEvvzjsozLg/utrd/ZN5zr1KACPq/hm8jzI0I2oRCQj90vo1T+q0
+    E2saMiPTPLX9cQNPJPhEYLpHuH/EIZNK7++p1qKLneTejWoxtyK1lCP/fPpJojce
+    ninF+Nphu4lEW9Gu7KFKHV9WMptWUa7L1SItoVWK5ydhDXV+bSXB6Wz3AqIIxoyI
+    CCjtfuiXri8jWSHzHsm1RUECAwEAAaNTMFEwHQYDVR0OBBYEFMjwm11Ts1smd9YT
+    K8tbhkabITSqMB8GA1UdIwQYMBaAFMjwm11Ts1smd9YTK8tbhkabITSqMA8GA1Ud
+    EwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBACNsDoUDOWBJq22VsiEeCnW3
+    h5SUn11OstDZiHkD84hZ6THywwEG2y2j28LOJZ71tNqjjCU4c1zmknvd4DddTwdF
+    MMOb1l164GKdSGzXEKMi4TaRnqPS2+PWate3bRTYOHwLMnVM745moQjDO0YHoEu6
+    E8xsKrgeweVIHsunjf76ZGXdN746AXZLryQHvKhxOMn8jZoKSRSfqtNiI9B8rpkG
+    ruHV5m1P9VYQ4HTvUemw+1jgIjtrOWVdT2U1oozCVAumNqPk6FoJ+yOMYXs/40oq
+    cdNQ++hAYJnxspHPnkI0r7q2nCqTxrKSOJt4vogOrn0DLVpS99CgfYrVhKihYKM=
+    -----END CERTIFICATE-----
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: backend-tls
+spec:
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: secure-app
+  validation:
+    caCertificateRefs:
+    - name: backend-cert
+      group: ''
+      kind: ConfigMap
+    hostname: secure-app.example.com

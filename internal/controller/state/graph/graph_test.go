@@ -239,7 +239,8 @@ func TestBuildGraph(t *testing.T) {
 		}
 		rbrs := []RouteBackendRef{
 			{
-				IsInferencePool: true,
+				IsInferencePool:   true,
+				InferencePoolName: "ipool",
 				BackendRef: gatewayv1.BackendRef{
 					BackendObjectReference: gatewayv1.BackendObjectReference{
 						Group:     helpers.GetPointer[gatewayv1.Group](""),
