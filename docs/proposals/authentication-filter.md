@@ -836,21 +836,29 @@ For a filter to be considered "resolved", it must:
 Invalid resolved filter scenarios:
 
 - Resolved filter that references a secret that does not exist
+  - Expected outcome: Filter is marked as Invalid. The route rule that references this filter is also marked as Invalid
 - Resolved filter that references a secret with the incorrect data key
+  - Expected outcome: Filter is marked as Invalid. The route rule that references this filter is also marked as Invalid
 
 Valid reference scenarios:
 
 - Resolved filter referenced by a single route rule within a single HTTP/GRPCRoute
+  - Expected outcome: Requests to this route rule will successfully process authentication requests
 - Resolved filter referenced by multiple route rules within a single HTTP/GRPCRoute
-- Resolved filter referenced by multiple HTTP/GRPCRoutes
+  - Expected outcome: Requests to all route rules referencing the filter successfully process authentication requests
+- Resolved filter referenced by rules in multiple HTTP/GRPCRoutes
+  - Expected outcome: Requests to all route rules across each HTTP/GRPCRoute successfully process authentication requests
 
 Invalid reference scenarios:
 
 - Resolved filter referenced multiple times in a single route rule within a single HTTP/GRPCRoute
-- Resolved filter referenced multiple times in a single route rule within a single HTTP/GRPCRoute
+  - Expected outcome: The route rule referencing multiple filters will be marked as Invalid
 - Resolved filter referenced multiple times by multiple route rules within a single HTTP/GRPCRoute
+  - Expected outcome: Each route rule referencing multiple filters will be marked as Invalid
 - Unresolved filter referenced by a single route rule within a single HTTP/GRPCRoute
+  - Expected outcome: The route rule referencing multiple filters will be marked as Invalid
 - Unresolved filter referenced by multiple route rules within a single HTTP/GRPCRoute
+  - Expected outcome: Each route rule referencing multiple filters will be marked as Invalid
 
 ## Security Considerations
 
