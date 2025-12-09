@@ -6,26 +6,23 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.2.2
 
-_December 8, 2025_
+_December 9, 2025_
 
 BUG FIXES:
 
+- Complete processing in flight requests and ensure only main NGINX process is reloaded. [1319](https://github.com/nginx/agent/pull/1391)
 - Fix permission issue with nginx-gateway container for UBI. [4404](https://github.com/nginx/nginx-gateway-fabric/pull/4404)
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.2.2
 
-KNOWN ISSUES:
-
-- Data plane sometimes does not sync upstream server IPs. [3626](https://github.com/nginx/nginx-gateway-fabric/issues/3626)
-
 COMPATIBILITY:
 
 - Gateway API version: `1.3.0`
 - NGINX version: `1.29.2`
 - NGINX Plus version: `R35`
-- NGINX Agent version: `v3.5.0`
+- NGINX Agent version: `v3.6.0`
 - Kubernetes version: `1.25+`
 
 CONTAINER IMAGES:
