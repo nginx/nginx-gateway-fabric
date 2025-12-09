@@ -478,7 +478,7 @@ http {
 For JWT Auth, there are two options.
 
 1. Local JWKS file stored as a Secret
-2. Remote JWKS from an IdP provider like KeyCloak
+2. Remote JWKS from an IdP provider like Keycloak
 
 #### Example JWT AuthenticationFilter with Local JWKS
 
@@ -919,7 +919,7 @@ This scenario can use the status `RouteConditionPartiallyInvalid` defined in the
 
 The Gateway API defines a means to standardise authentication through use of the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter) available in the HTTPRoute specification.
 
-This allows users to reference an external authentication service, such as KeyCloak, to handle the authentication requests.
+This allows users to reference an external authentication service, such as Keycloak, to handle the authentication requests.
 While this API is available in the experimental channel, it is subject to change.
 
 Our decision to go forward with our own `AuthenticationFilter` was to ensure we could quickly provide authentication to our users while allowing us to closely monitor progress of the ExternalAuthFilter.
@@ -1030,7 +1030,7 @@ spec:
     name: basic-auth-users
 ```
 
-AuthenticationFilter referencing the cross-namespace Secret
+
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
