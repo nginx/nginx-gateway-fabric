@@ -478,7 +478,7 @@ http {
 For JWT Auth, there are two options.
 
 1. Local JWKS file stored as a Secret
-2. Remote JWKS from an IdP provider like Keycloak
+2. Remote JWKS from an IdP provider like KeyCloak
 
 #### Example JWT AuthenticationFilter with Local JWKS
 
@@ -650,7 +650,7 @@ http {
 
 These are some directives the `Remote` mode uses over the `File` mode:
 
-- `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal_jwks_uri` to redirect the request to the external auth provider (e.g. Keycloak)
+- `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal_jwks_uri` to redirect the request to the external auth provider (e.g. KeyCloak)
 - `proxy_cache_path`: This is used to configure caching of the JWKS after an initial request, allowing subsequent requests to avoid re-authentication for a time
 
 ```nginx
@@ -911,7 +911,7 @@ This scenario can use the status `RouteConditionPartiallyInvalid` defined in the
 
 The Gateway API defines a means to standardise authentication through use of the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter) available in the HTTPRoute specification.
 
-This allows users to reference an external authentication service, such as Keycloak, to handle the authentication requests.
+This allows users to reference an external authentication service, such as KeyCloak, to handle the authentication requests.
 While this API is available in the experimental channel, it is subject to change.
 
 Our decision to go forward with our own `AuthenticationFilter` was to ensure we could quickly provide authentication to our users while allowing us to closely monitor progress of the ExternalAuthFilter.
