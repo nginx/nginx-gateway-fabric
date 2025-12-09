@@ -906,7 +906,25 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 ## Testing
 
 - Unit tests
-- Functional tests to validate behavioural scenarios when referencing filters in different combinations. The details of these tests are out of scope for this document.
+- Functional tests to validate behavioural scenarios when referencing filters in different combinations.
+
+### Functional Test Cases
+
+<!-- Note: The keyword "resolved" is used to refer to a filter that is
+
+Invalid filter secnarios: These relate to scenarios where the AuthenticationFilter itself is invalid.
+- Resolved filter that  -->
+
+Valid reference scenarios
+- Resolved filter referenced by a single route rule within a single HTTP/GRPCRoute
+- Resolved filter referenced by multiple route rules within a single HTTP/GRPCRoute
+- Resolved filter reference by multiple HTTP/GRPCRoutes
+
+Invalid reference scenarios
+- Resolved filter referenced multiple times in a single route rule within a single HTTP/GRPCRoute
+- Resolved filter referenced multiple times by multiple route rules within a single HTTP/GRPCRoute
+- Unresolved filter referenced by a single route rule within a single HTTP/GRPCRoute
+- Unresolved filter referenced by multiple route rules within a single HTTP/GRPCRoute
 
 ## Security Considerations
 
