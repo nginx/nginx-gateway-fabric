@@ -24,6 +24,7 @@ COMPATIBILITY:
 - NGINX Plus version: `R35`
 - NGINX Agent version: `v3.6.0`
 - Kubernetes version: `1.25+`
+- Inference Extension version: `1.0.1`
 
 CONTAINER IMAGES:
 

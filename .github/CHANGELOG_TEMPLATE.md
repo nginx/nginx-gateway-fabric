@@ -34,6 +34,7 @@ COMPATIBILITY:
 - NGINX Plus version: ``
 - NGINX Agent version: ``
 - Kubernetes version: ``
+- Inference Extension version: ``
 
 CONTAINER IMAGES:
 
