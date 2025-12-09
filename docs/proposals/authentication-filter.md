@@ -910,17 +910,21 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 
 ### Functional Test Cases
 
-<!-- Note: The keyword "resolved" is used to refer to a filter that is
+Note: The keyword "resolved" is used to refer to a filter that the controller has found, and matches the reference of the route rule.
+For a filter to be considered "resolved", it must:
+1. Exist in the same namespace as the HTTP/GRPCRoute
+2. The group and kind referenced must match
 
-Invalid filter secnarios: These relate to scenarios where the AuthenticationFilter itself is invalid.
-- Resolved filter that  -->
+Invalid resolved filter secnarios:
+- Resolved filter that references a secret that does not exist
+- Resolved filter that referenced a secret with the incorrect data key
 
-Valid reference scenarios
+Valid reference scenarios:
 - Resolved filter referenced by a single route rule within a single HTTP/GRPCRoute
 - Resolved filter referenced by multiple route rules within a single HTTP/GRPCRoute
 - Resolved filter reference by multiple HTTP/GRPCRoutes
 
-Invalid reference scenarios
+Invalid reference scenarios:
 - Resolved filter referenced multiple times in a single route rule within a single HTTP/GRPCRoute
 - Resolved filter referenced multiple times by multiple route rules within a single HTTP/GRPCRoute
 - Unresolved filter referenced by a single route rule within a single HTTP/GRPCRoute
