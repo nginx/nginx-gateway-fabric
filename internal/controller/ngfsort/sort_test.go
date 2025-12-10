@@ -1,4 +1,4 @@
-package sort
+package ngfsort
 
 import (
 	"testing"
