@@ -761,9 +761,8 @@ func createExecuteResultsForAuthBasicUserFile(servers []http.Server) []executeRe
 	for _, server := range servers {
 		for _, location := range server.Locations {
 			if location.AuthBasic != nil {
-				userFilePathAndData := location.AuthBasic.Data.FileName
 				result := executeResult{
-					dest: fmt.Sprintf(basicAuthUserFile, userFilePathAndData),
+					dest: location.AuthBasic.Data.FileName,
 					data: location.AuthBasic.Data.FileData,
 				}
 				results = append(results, result)
