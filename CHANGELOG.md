@@ -11,6 +11,7 @@ _November 13, 2025_
 FEATURES:
 
 - Add support to make endpoint picker communication settings configurable. [4105](https://github.com/nginx/nginx-gateway-fabric/pull/4105)
+- Add support for exposing control plane readiness probe endpoint for external load balancer health checks. [4400](https://github.com/nginx/nginx-gateway-fabric/issues/4400)
 
 BUG FIXES:
 

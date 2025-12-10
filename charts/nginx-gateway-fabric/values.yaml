@@ -63,6 +63,11 @@ nginxGateway:
     # -- The labels of the NGINX Gateway Fabric control plane service.
     labels: {}
 
+    # -- Expose the readiness probe port on the control plane service. When enabled, the readiness probe endpoint
+    # (/readyz) becomes accessible externally, allowing external load balancers (like Azure Application Gateway)
+    # to perform health checks. Requires nginxGateway.readinessProbe.enable to be true.
+    exposeHealthPort: false
+
   # -- The serviceaccount configuration for the NGINX Gateway Fabric control plane.
   serviceAccount:
     # -- Set of custom annotations for the NGINX Gateway Fabric control plane service account.
