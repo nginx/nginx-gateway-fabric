@@ -169,6 +169,7 @@ rules:
   - clientsettingspolicies
   - observabilitypolicies
   - upstreamsettingspolicies
+  - authenticationfilters
   - snippetsfilters
   verbs:
   - list
@@ -180,6 +181,7 @@ rules:
   - clientsettingspolicies/status
   - observabilitypolicies/status
   - upstreamsettingspolicies/status
+  - authenticationfilters/status
   - snippetsfilters/status
   verbs:
   - update
