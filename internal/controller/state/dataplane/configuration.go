@@ -58,7 +58,7 @@ func BuildConfiguration(
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
-	httpServers, sslServers := buildServers(gateway, g.ReferencedServices)
+	httpServers, sslServers := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 	upstreams := buildUpstreams(
 		ctx,
@@ -459,6 +459,7 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 func buildServers(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
 ) (http, ssl []VirtualServer) {
 	rulesForProtocol := map[v1.ProtocolType]portPathRules{
 		v1.HTTPProtocolType:  make(portPathRules),
@@ -476,7 +477,7 @@ func buildServers(
 				rulesForProtocol[l.Source.Protocol][l.Source.Port] = rules
 			}
 
-			rules.upsertListener(l, gateway, referencedServices)
+			rules.upsertListener(l, gateway, referencedServices, referencedSecrets)
 		}
 	}
 
@@ -541,6 +542,7 @@ func (hpr *hostPathRules) upsertListener(
 	l *graph.Listener,
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
 ) {
 	hpr.listenersExist = true
 	hpr.port = l.Source.Port
@@ -554,7 +556,7 @@ func (hpr *hostPathRules) upsertListener(
 			continue
 		}
 
-		hpr.upsertRoute(r, l, gateway, referencedServices)
+		hpr.upsertRoute(r, l, gateway, referencedServices, referencedSecrets)
 	}
 }
 
@@ -563,6 +565,7 @@ func (hpr *hostPathRules) upsertRoute(
 	listener *graph.Listener,
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
 ) {
 	var hostnames []string
 	GRPC := route.RouteType == graph.RouteTypeGRPC
@@ -608,7 +611,7 @@ func (hpr *hostPathRules) upsertRoute(
 
 		var filters HTTPFilters
 		if rule.Filters.Valid {
-			filters = createHTTPFilters(rule.Filters.Filters, idx, routeNsName)
+			filters = createHTTPFilters(rule.Filters.Filters, idx, routeNsName, referencedSecrets)
 		} else {
 			filters = HTTPFilters{
 				InvalidFilter: &InvalidHTTPFilter{},
@@ -893,7 +896,12 @@ func getPath(path *v1.HTTPPathMatch) string {
 	return *path.Value
 }
 
-func createHTTPFilters(filters []graph.Filter, ruleIdx int, routeNsName types.NamespacedName) HTTPFilters {
+func createHTTPFilters(
+	filters []graph.Filter,
+	ruleIdx int,
+	routeNsName types.NamespacedName,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
+) HTTPFilters {
 	var result HTTPFilters
 
 	for _, f := range filters {
@@ -924,11 +932,19 @@ func createHTTPFilters(filters []graph.Filter, ruleIdx int, routeNsName types.Na
 				result.ResponseHeaderModifiers = convertHTTPHeaderFilter(f.ResponseHeaderModifier)
 			}
 		case graph.FilterExtensionRef:
-			if f.ResolvedExtensionRef != nil && f.ResolvedExtensionRef.SnippetsFilter != nil {
-				result.SnippetsFilters = append(
-					result.SnippetsFilters,
-					convertSnippetsFilter(f.ResolvedExtensionRef.SnippetsFilter),
-				)
+			if f.ResolvedExtensionRef != nil {
+				if f.ResolvedExtensionRef.SnippetsFilter != nil {
+					result.SnippetsFilters = append(
+						result.SnippetsFilters,
+						convertSnippetsFilter(f.ResolvedExtensionRef.SnippetsFilter),
+					)
+				}
+				if f.ResolvedExtensionRef.AuthenticationFilter != nil {
+					result.AuthenticationFilter = convertAuthenticationFilter(
+						f.ResolvedExtensionRef.AuthenticationFilter,
+						referencedSecrets,
+					)
+				}
 			}
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	filesHelper "github.com/nginx/agent/v3/pkg/files"
 
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
@@ -67,6 +68,8 @@ const (
 
 	// nginxPlusConfigFile is the path to the file containing the NGINX Plus API config.
 	nginxPlusConfigFile = httpFolder + "/plus-api.conf"
+
+	basicAuthUserFile = configFolder + "/secrets/%s"
 )
 
 // Generator generates NGINX configuration files.
@@ -133,6 +136,19 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 		files = append(files, generateCertBundle(id, bundle))
 	}
 
+	for _, server := range conf.HTTPServers {
+		for _, rule := range server.PathRules {
+			for _, matchRule := range rule.MatchRules {
+				if matchRule.Filters.AuthenticationFilter != nil {
+					if matchRule.Filters.AuthenticationFilter.Basic != nil {
+						id := fmt.Sprintf("%s/%s", matchRule.Filters.AuthenticationFilter.Basic.SecretName, ngfAPI.AuthKeyBasic)
+						data := matchRule.Filters.AuthenticationFilter.Basic.Data
+						files = append(files, generateAuthBasicUserFile(id, data))
+					}
+				}
+			}
+		}
+	}
 	return files
 }
 
@@ -251,4 +267,16 @@ func generateCertBundle(id dataplane.CertBundleID, cert []byte) agent.File {
 
 func generateCertBundleFileName(id dataplane.CertBundleID) string {
 	return filepath.Join(secretsFolder, string(id)+".crt")
+}
+
+func generateAuthBasicUserFile(id string, data []byte) agent.File {
+	return agent.File{
+		Meta: &pb.FileMeta{
+			Name:        fmt.Sprintf(basicAuthUserFile, id),
+			Hash:        filesHelper.GenerateHash(data),
+			Permissions: file.SecretFileMode,
+			Size:        int64(len(data)),
+		},
+		Contents: data,
+	}
 }

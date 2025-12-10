@@ -23,6 +23,8 @@ const (
 	TLSRoute = "TLSRoute"
 	// BackendTLSPolicy is the BackendTLSPolicy kind.
 	BackendTLSPolicy = "BackendTLSPolicy"
+	// AuthenticationFilter is the AuthenticationFilter kind.
+	AuthenticationFilter = "AuthenticationFilter"
 )
 
 // Gateway API Inference Extension kinds.

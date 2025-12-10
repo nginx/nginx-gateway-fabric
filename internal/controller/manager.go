@@ -529,6 +529,12 @@ func registerControllers(
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
 		},
+		{
+			objectType: &ngfAPIv1alpha1.AuthenticationFilter{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
 	}
 
 	if cfg.ExperimentalFeatures {
@@ -770,6 +776,7 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 		&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 		&ngfAPIv1alpha2.ObservabilityPolicyList{},
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+		&ngfAPIv1alpha1.AuthenticationFilterList{},
 		partialObjectMetadataList,
 	}
 

@@ -9,6 +9,9 @@ import (
 	"strings"
 	gotemplate "text/template"
 
+	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
@@ -93,8 +96,11 @@ func (g GeneratorImpl) executeServers(
 
 	includeFileResults := createIncludeExecuteResultsFromServers(servers)
 
+	authBasicUserFileResults := createExecuteResultsForAuthBasicUserFile(servers)
+
 	allResults := make([]executeResult, 0, len(includeFileResults)+2)
 	allResults = append(allResults, includeFileResults...)
+	allResults = append(allResults, authBasicUserFileResults...)
 	allResults = append(allResults, serverResult, httpMatchResult)
 
 	return allResults
@@ -704,6 +710,7 @@ func updateLocation(
 
 	location = updateLocationMirrorRoute(location, pathRule.Path, grpc)
 	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
+	location = updateLocationAuthenticationFilter(location, filters.AuthenticationFilter)
 
 	if filters.RequestRedirect != nil {
 		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
@@ -714,6 +721,56 @@ func updateLocation(
 	location = updateLocationProxySettings(location, matchRule, grpc, inferenceBackend, keepAliveCheck)
 
 	return location
+}
+
+func updateLocationAuthenticationFilter(
+	location http.Location,
+	authenticationFilter *dataplane.AuthenticationFilter,
+) http.Location {
+	logger := ctlrZap.New().WithName("update-location-auth-filter")
+
+	// TODO: Remove logging after debugging
+	if authenticationFilter == nil {
+		logger.Info("Missing AuthenticationFilter for location", "locationPath", location.Path)
+	} else if authenticationFilter.Basic == nil {
+		logger.Info("No Basic authentication configured for location", "locationPath", location.Path)
+	}
+
+	if authenticationFilter != nil {
+		logger.Info("Applying authentication filter to location", "locationPath", location.Path)
+		if authenticationFilter.Basic != nil {
+			userFilePathAndData := fmt.Sprintf("%s/%s", authenticationFilter.Basic.SecretName, ngfAPI.AuthKeyBasic)
+			location.AuthBasic = &http.AuthBasic{
+				Realm: authenticationFilter.Basic.Realm,
+				Data: http.AuthBasicData{
+					FileName: fmt.Sprintf(basicAuthUserFile, userFilePathAndData),
+					FileData: authenticationFilter.Basic.Data,
+				},
+			}
+			logger.Info("location.AuthBasic configured", "locationPath",
+				location.Path,
+				"realm",
+				authenticationFilter.Basic.Realm)
+		}
+	}
+	return location
+}
+
+func createExecuteResultsForAuthBasicUserFile(servers []http.Server) []executeResult {
+	results := []executeResult{}
+	for _, server := range servers {
+		for _, location := range server.Locations {
+			if location.AuthBasic != nil {
+				userFilePathAndData := fmt.Sprintf("%s/%s", location.AuthBasic.Data.FileName, ngfAPI.AuthKeyBasic)
+				result := executeResult{
+					dest: fmt.Sprintf(basicAuthUserFile, userFilePathAndData),
+					data: location.AuthBasic.Data.FileData,
+				}
+				results = append(results, result)
+			}
+		}
+	}
+	return results
 }
 
 func updateLocationMirrorRoute(location http.Location, path string, grpc bool) http.Location {

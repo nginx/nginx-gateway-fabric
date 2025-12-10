@@ -165,6 +165,53 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
+	// AuthenticationFilter to be used in tests
+	refAuthenticationFilterExtensionRef := &gatewayv1.LocalObjectReference{
+		Group: ngfAPIv1alpha1.GroupName,
+		Kind:  kinds.AuthenticationFilter,
+		Name:  "ref-authentication-filter",
+	}
+
+	unreferencedAuthenticationFilter := &ngfAPIv1alpha1.AuthenticationFilter{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "unref-authentication-filter",
+			Namespace: testNs,
+		},
+		Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+			Basic: &ngfAPIv1alpha1.BasicAuth{
+				SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+					Name: "basic-auth-secret",
+				},
+			},
+		},
+	}
+
+	referencedAuthenticationFilter := &ngfAPIv1alpha1.AuthenticationFilter{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ref-authentication-filter",
+			Namespace: testNs,
+		},
+		Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+			Basic: &ngfAPIv1alpha1.BasicAuth{
+				SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+					Name: "basic-auth-secret",
+				},
+			},
+		},
+	}
+
+	processedUnrefAuthenticationFilter := &AuthenticationFilter{
+		Source:     unreferencedAuthenticationFilter,
+		Valid:      true,
+		Referenced: false,
+	}
+
+	processedRefAuthenticationFilter := &AuthenticationFilter{
+		Source:     referencedAuthenticationFilter,
+		Valid:      true,
+		Referenced: true,
+	}
+
 	createValidRuleWithBackendRefs := func(matches []gatewayv1.HTTPRouteMatch) RouteRule {
 		refs := []BackendRef{
 			{
@@ -207,6 +254,15 @@ func TestBuildGraph(t *testing.T) {
 					ResolvedExtensionRef: &ExtensionRefFilter{
 						SnippetsFilter: processedRefSnippetsFilter,
 						Valid:          true,
+					},
+				},
+				{
+					RouteType:    routeType,
+					FilterType:   FilterExtensionRef,
+					ExtensionRef: refAuthenticationFilterExtensionRef,
+					ResolvedExtensionRef: &ExtensionRefFilter{
+						AuthenticationFilter: processedRefAuthenticationFilter,
+						Valid:                true,
 					},
 				},
 			},
@@ -342,6 +398,14 @@ func TestBuildGraph(t *testing.T) {
 			ExtensionRef: refSnippetsFilterExtensionRef,
 		},
 	)
+	addFilterToPath(
+		hr1,
+		"/",
+		gatewayv1.HTTPRouteFilter{
+			Type:         gatewayv1.HTTPRouteFilterExtensionRef,
+			ExtensionRef: refAuthenticationFilterExtensionRef,
+		},
+	)
 
 	hr2 := createRoute("hr-2", "wrong-gateway", "listener-80-1")
 	hr3 := createRoute("hr-3", "gateway-1", "listener-443-1") // https listener; should not conflict with hr1
@@ -379,6 +443,10 @@ func TestBuildGraph(t *testing.T) {
 						{
 							Type:         gatewayv1.GRPCRouteFilterExtensionRef,
 							ExtensionRef: refSnippetsFilterExtensionRef,
+						},
+						{
+							Type:         gatewayv1.GRPCRouteFilterExtensionRef,
+							ExtensionRef: refAuthenticationFilterExtensionRef,
 						},
 					},
 				},
@@ -854,6 +922,10 @@ func TestBuildGraph(t *testing.T) {
 			SnippetsFilters: map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter{
 				client.ObjectKeyFromObject(unreferencedSnippetsFilter): unreferencedSnippetsFilter,
 				client.ObjectKeyFromObject(referencedSnippetsFilter):   referencedSnippetsFilter,
+			},
+			AuthenticationFilters: map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter{
+				client.ObjectKeyFromObject(unreferencedAuthenticationFilter): unreferencedAuthenticationFilter,
+				client.ObjectKeyFromObject(referencedAuthenticationFilter):   referencedAuthenticationFilter,
 			},
 		}
 	}
@@ -1411,6 +1483,10 @@ func TestBuildGraph(t *testing.T) {
 			SnippetsFilters: map[types.NamespacedName]*SnippetsFilter{
 				client.ObjectKeyFromObject(unreferencedSnippetsFilter): processedUnrefSnippetsFilter,
 				client.ObjectKeyFromObject(referencedSnippetsFilter):   processedRefSnippetsFilter,
+			},
+			AuthenticationFilters: map[types.NamespacedName]*AuthenticationFilter{
+				client.ObjectKeyFromObject(unreferencedAuthenticationFilter): processedUnrefAuthenticationFilter,
+				client.ObjectKeyFromObject(referencedAuthenticationFilter):   processedRefAuthenticationFilter,
 			},
 			PlusSecrets: map[types.NamespacedName][]PlusSecretFile{
 				client.ObjectKeyFromObject(plusSecret): {

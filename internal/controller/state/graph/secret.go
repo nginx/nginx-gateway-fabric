@@ -6,6 +6,8 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
 // Secret represents a Secret resource.
@@ -51,10 +53,7 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 	case !exist:
 		validationErr = errors.New("secret does not exist")
 
-	case secret.Type != apiv1.SecretTypeTLS:
-		validationErr = fmt.Errorf("secret type must be %q not %q", apiv1.SecretTypeTLS, secret.Type)
-
-	default:
+	case secret.Type == apiv1.SecretTypeTLS:
 		// A TLS Secret is guaranteed to have these data fields.
 		cert := &Certificate{
 			TLSCert:       secret.Data[apiv1.TLSCertKey],
@@ -62,16 +61,27 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 		}
 		validationErr = validateTLS(cert.TLSCert, cert.TLSPrivateKey)
 
-		// Not always guaranteed to have a ca certificate in the secret.
-		// Cert-Manager puts this at ca.crt and thus this is statically placed like so.
-		// To follow the convention setup by kubernetes for a service account root ca
-		// for optional root certificate authority
+		// Optional CA certificate.
 		if _, exists := secret.Data[CAKey]; exists {
 			cert.CACert = secret.Data[CAKey]
 			validationErr = validateCA(cert.CACert)
 		}
 
 		certBundle = NewCertificateBundle(nsname, "Secret", cert)
+
+	// TODO: Define our own Secret types for other auth methods (e.g., OAuth) as needed.
+	case secret.Type == apiv1.SecretTypeOpaque:
+		// Allow Opaque secrets specifically when they contain the "auth" key.
+		//nolint:revive // may need to consider our own secret types.
+		if _, hasAuth := secret.Data[ngfAPI.AuthKeyBasic]; hasAuth {
+			// Accept: no TLS/CA validation, no CertificateBundle.
+			// Leave validationErr and certBundle as nil.
+		} else {
+			validationErr = fmt.Errorf("secret type must be %q not %q", apiv1.SecretTypeTLS, secret.Type)
+		}
+
+	default:
+		validationErr = fmt.Errorf("secret type must be %q not %q", apiv1.SecretTypeTLS, secret.Type)
 	}
 
 	r.resolvedSecrets[nsname] = &secretEntry{
