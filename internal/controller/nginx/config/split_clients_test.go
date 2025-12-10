@@ -861,7 +861,7 @@ func TestGetSplitClientValue(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := getSplitClientValue(test.backend)
+			result := getSplitClientValue(test.backend, types.NamespacedName{Namespace: "test", Name: "hr"}, 0)
 			g.Expect(result).To(Equal(test.expValue))
 		})
 	}

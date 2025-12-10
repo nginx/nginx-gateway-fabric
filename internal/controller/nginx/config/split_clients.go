@@ -6,6 +6,8 @@ import (
 	"strings"
 	gotemplate "text/template"
 
+	"k8s.io/apimachinery/pkg/types"
+
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -105,18 +107,29 @@ func createBackendGroupSplitClients(backendGroups []dataplane.BackendGroup) []ht
 	splitClients := make([]http.SplitClient, 0, numSplits)
 
 	for _, group := range backendGroups {
+		variableName := convertStringToSafeVariableName(group.Name())
+
 		distributions := createBackendGroupSplitClientDistributions(group)
 		if distributions == nil {
 			continue
 		}
 
+		if group.Backends[0].EndpointPickerConfig != nil {
+			// This is an inferencePool backend group, need to adjust the name.
+			variableName = createInferenceSplitClientsVariableName(variableName)
+		}
+
 		splitClients = append(splitClients, http.SplitClient{
-			VariableName:  convertStringToSafeVariableName(group.Name()),
+			VariableName:  variableName,
 			Distributions: distributions,
 		})
 	}
 
 	return splitClients
+}
+
+func createInferenceSplitClientsVariableName(groupName string) string {
+	return "inference_backend_" + groupName
 }
 
 func createBackendGroupSplitClientDistributions(group dataplane.BackendGroup) []http.SplitClientDistribution {
@@ -155,7 +168,7 @@ func createBackendGroupSplitClientDistributions(group dataplane.BackendGroup) []
 
 		distributions = append(distributions, http.SplitClientDistribution{
 			Percent: fmt.Sprintf("%.2f", percentage),
-			Value:   getSplitClientValue(b),
+			Value:   getSplitClientValue(b, group.Source, group.RuleIdx),
 		})
 	}
 
@@ -165,14 +178,25 @@ func createBackendGroupSplitClientDistributions(group dataplane.BackendGroup) []
 
 	distributions = append(distributions, http.SplitClientDistribution{
 		Percent: fmt.Sprintf("%.2f", availablePercentage),
-		Value:   getSplitClientValue(lastBackend),
+		Value:   getSplitClientValue(lastBackend, group.Source, group.RuleIdx),
 	})
 
 	return distributions
 }
 
-func getSplitClientValue(b dataplane.Backend) string {
+func getSplitClientValue(b dataplane.Backend, source types.NamespacedName, ruleIdx int) string {
 	if b.Valid {
+		if b.EndpointPickerConfig != nil {
+			return fmt.Sprintf(
+				"%s-%s-%s-%s-rule%d",
+				http.InternalRoutePathPrefix,
+				b.UpstreamName,
+				source.Namespace,
+				source.Name,
+				ruleIdx,
+			)
+		}
+
 		return b.UpstreamName
 	}
 	return invalidBackendRef

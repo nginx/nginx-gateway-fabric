@@ -2449,27 +2449,111 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 
 	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
 
-	fooGroup := dataplane.BackendGroup{
-		Source:  hrNsName,
-		RuleIdx: 0,
-		Backends: []dataplane.Backend{
-			{
-				UpstreamName: "test_foo_80",
-				Valid:        true,
-				Weight:       1,
-				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-					EndpointPickerRef: &inference.EndpointPickerRef{
-						Name: "test-epp",
-						Port: &inference.Port{
-							Number: 80,
-						},
-					},
-					NsName: hrNsName.Namespace,
-				},
+	// Reusable backend definitions
+	singleInferenceBackend := dataplane.Backend{
+		UpstreamName: "test_foo_80",
+		Valid:        true,
+		Weight:       1,
+		EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+			EndpointPickerRef: &inference.EndpointPickerRef{
+				Name: "test-epp",
+				Port: &inference.Port{Number: 80},
 			},
+			NsName: hrNsName.Namespace,
 		},
 	}
 
+	singleMatchInferenceBackend := dataplane.Backend{
+		UpstreamName: "test_single_match_pool_80",
+		Valid:        true,
+		Weight:       1,
+		EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+			EndpointPickerRef: &inference.EndpointPickerRef{
+				Name: "single-match-pool",
+				Port: &inference.Port{Number: 80},
+			},
+			NsName: hrNsName.Namespace,
+		},
+	}
+
+	multiInferencePrimaryBackend := dataplane.Backend{
+		UpstreamName: "test_primary_pool_80",
+		Valid:        true,
+		Weight:       70,
+		EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+			EndpointPickerRef: &inference.EndpointPickerRef{
+				Name: "primary-pool",
+				Port: &inference.Port{Number: 80},
+			},
+			NsName: hrNsName.Namespace,
+		},
+	}
+
+	multiInferenceSecondaryBackend := dataplane.Backend{
+		UpstreamName: "test_secondary_pool_80",
+		Valid:        true,
+		Weight:       30,
+		EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+			EndpointPickerRef: &inference.EndpointPickerRef{
+				Name: "secondary-pool",
+				Port: &inference.Port{Number: 80},
+			},
+			NsName: hrNsName.Namespace,
+		},
+	}
+
+	multiMatchPrimaryBackend := dataplane.Backend{
+		UpstreamName: "test_multi_match_primary_80",
+		Valid:        true,
+		Weight:       80,
+		EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+			EndpointPickerRef: &inference.EndpointPickerRef{
+				Name: "multi-match-primary",
+				Port: &inference.Port{Number: 80},
+			},
+			NsName: hrNsName.Namespace,
+		},
+	}
+
+	multiMatchSecondaryBackend := dataplane.Backend{
+		UpstreamName: "test_multi_match_secondary_80",
+		Valid:        true,
+		Weight:       20,
+		EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+			EndpointPickerRef: &inference.EndpointPickerRef{
+				Name: "multi-match-secondary",
+				Port: &inference.Port{Number: 80},
+			},
+			NsName: hrNsName.Namespace,
+		},
+	}
+
+	// Reusable backend groups
+	singleInferenceGroup := dataplane.BackendGroup{
+		Source:   hrNsName,
+		RuleIdx:  0,
+		Backends: []dataplane.Backend{singleInferenceBackend},
+	}
+
+	singleMatchInferenceGroup := dataplane.BackendGroup{
+		Source:   hrNsName,
+		RuleIdx:  1,
+		Backends: []dataplane.Backend{singleMatchInferenceBackend},
+	}
+
+	multipleInferenceGroup := dataplane.BackendGroup{
+		Source:   hrNsName,
+		RuleIdx:  2,
+		Backends: []dataplane.Backend{multiInferencePrimaryBackend, multiInferenceSecondaryBackend},
+	}
+
+	multipleMatchInferenceGroup := dataplane.BackendGroup{
+		Source:   hrNsName,
+		RuleIdx:  3,
+		Backends: []dataplane.Backend{multiMatchPrimaryBackend, multiMatchSecondaryBackend},
+	}
+
+	// Reusable path rules
 	pathRuleInferenceOnly := dataplane.PathRule{
 		Path:                 "/inference",
 		PathType:             dataplane.PathTypeExact,
@@ -2477,7 +2561,7 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 		MatchRules: []dataplane.MatchRule{
 			{
 				Match:        dataplane.Match{},
-				BackendGroup: fooGroup,
+				BackendGroup: singleInferenceGroup,
 			},
 		},
 	}
@@ -2491,9 +2575,46 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				Match: dataplane.Match{
 					Method: helpers.GetPointer("POST"),
 				},
-				BackendGroup: fooGroup,
+				BackendGroup: singleMatchInferenceGroup,
 			},
 		},
+	}
+
+	pathRuleMultipleInferenceBackends := dataplane.PathRule{
+		Path:                 "/weighted-inference",
+		PathType:             dataplane.PathTypeExact,
+		HasInferenceBackends: true,
+		MatchRules: []dataplane.MatchRule{
+			{
+				Match:        dataplane.Match{},
+				BackendGroup: multipleInferenceGroup,
+			},
+		},
+	}
+
+	pathRuleMultipleInferenceWithMatch := dataplane.PathRule{
+		Path:                 "/weighted-inference-match",
+		PathType:             dataplane.PathTypeExact,
+		HasInferenceBackends: true,
+		MatchRules: []dataplane.MatchRule{
+			{
+				Match: dataplane.Match{
+					Method: helpers.GetPointer("GET"),
+				},
+				BackendGroup: multipleMatchInferenceGroup,
+			},
+		},
+	}
+
+	proxySetHeaders := []http.Header{
+		{Name: "Host", Value: "$gw_api_compliant_host"},
+		{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
+		{Name: "X-Real-IP", Value: "$remote_addr"},
+		{Name: "X-Forwarded-Proto", Value: "$scheme"},
+		{Name: "X-Forwarded-Host", Value: "$host"},
+		{Name: "X-Forwarded-Port", Value: "$server_port"},
+		{Name: "Upgrade", Value: "$http_upgrade"},
+		{Name: "Connection", Value: "$connection_upgrade"},
 	}
 
 	tests := []struct {
@@ -2507,24 +2628,15 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 			pathRules: []dataplane.PathRule{pathRuleInferenceOnly},
 			expLocs: []http.Location{
 				{
-					Path:      "/_ngf-internal-rule0-route0-inference",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://$inference_backend_test_foo_80$request_uri",
-					ProxySetHeaders: []http.Header{
-						{Name: "Host", Value: "$gw_api_compliant_host"},
-						{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
-						{Name: "X-Real-IP", Value: "$remote_addr"},
-						{Name: "X-Forwarded-Proto", Value: "$scheme"},
-						{Name: "X-Forwarded-Host", Value: "$host"},
-						{Name: "X-Forwarded-Port", Value: "$server_port"},
-						{Name: "Upgrade", Value: "$http_upgrade"},
-						{Name: "Connection", Value: "$connection_upgrade"},
-					},
+					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_foo_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
 				},
 				{
 					Path:            "= /inference",
 					Type:            http.InferenceExternalLocationType,
-					EPPInternalPath: "/_ngf-internal-rule0-route0-inference",
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
 					EPPHost:         "test-epp.test",
 					EPPPort:         80,
 				},
@@ -2542,32 +2654,235 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 					HTTPMatchKey: "1_0",
 				},
 				{
-					Path:            "/_ngf-internal-rule0-route0-inference",
-					Type:            http.InferenceInternalLocationType,
-					EPPInternalPath: "/_ngf-internal-rule0-route0",
-					EPPHost:         "test-epp.test",
-					EPPPort:         80,
+					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_single_match_pool_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
 				},
 				{
-					Path:      "/_ngf-internal-rule0-route0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://$inference_backend_test_foo_80$request_uri",
-					ProxySetHeaders: []http.Header{
-						{Name: "Host", Value: "$gw_api_compliant_host"},
-						{Name: "X-Forwarded-For", Value: "$proxy_add_x_forwarded_for"},
-						{Name: "X-Real-IP", Value: "$remote_addr"},
-						{Name: "X-Forwarded-Proto", Value: "$scheme"},
-						{Name: "X-Forwarded-Host", Value: "$host"},
-						{Name: "X-Forwarded-Port", Value: "$server_port"},
-						{Name: "Upgrade", Value: "$http_upgrade"},
-						{Name: "Connection", Value: "$connection_upgrade"},
-					},
+					Path:            "/_ngf-internal-test_single_match_pool_80-test-route1-rule1",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					EPPHost:         "single-match-pool.test",
+					EPPPort:         80,
 				},
 				createDefaultRootLocation(),
 			},
 			expMatches: httpMatchPairs{
 				"1_0": {
-					{Method: "POST", RedirectPath: "/_ngf-internal-rule0-route0-inference"},
+					{Method: "POST", RedirectPath: "/_ngf-internal-test_single_match_pool_80-test-route1-rule1"},
+				},
+			},
+		},
+		{
+			name:      "multiple weighted inference backends, no match conditions",
+			pathRules: []dataplane.PathRule{pathRuleMultipleInferenceBackends},
+			expLocs: []http.Location{
+				{
+					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_primary_pool_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+				},
+				{
+					Path:            "/_ngf-internal-test_primary_pool_80-test-route1-rule2",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					EPPHost:         "primary-pool.test",
+					EPPPort:         80,
+				},
+				{
+					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend1-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_secondary_pool_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+				},
+				{
+					Path:            "/_ngf-internal-test_secondary_pool_80-test-route1-rule2",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend1-inference",
+					EPPHost:         "secondary-pool.test",
+					EPPPort:         80,
+				},
+				{
+					Path:     "= /weighted-inference",
+					Type:     http.ExternalLocationType,
+					Rewrites: []string{"^ $inference_backend_group_test__route1_rule2 last"},
+				},
+				createDefaultRootLocation(),
+			},
+			expMatches: httpMatchPairs{},
+		},
+		{
+			name:      "multiple weighted inference backends with match conditions",
+			pathRules: []dataplane.PathRule{pathRuleMultipleInferenceWithMatch},
+			expLocs: []http.Location{
+				{
+					Path:         "= /weighted-inference-match",
+					Type:         http.RedirectLocationType,
+					HTTPMatchKey: "1_0",
+				},
+				{
+					Path:     "/_ngf-internal-split-clients-rule0-route0-inference",
+					Type:     http.InternalLocationType,
+					Rewrites: []string{"^ $inference_backend_group_test__route1_rule3 last"},
+				},
+				{
+					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_multi_match_primary_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+				},
+				{
+					Path:            "/_ngf-internal-test_multi_match_primary_80-test-route1-rule3",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					EPPHost:         "multi-match-primary.test",
+					EPPPort:         80,
+				},
+				{
+					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend1-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_multi_match_secondary_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+				},
+				{
+					Path:            "/_ngf-internal-test_multi_match_secondary_80-test-route1-rule3",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend1-inference",
+					EPPHost:         "multi-match-secondary.test",
+					EPPPort:         80,
+				},
+				createDefaultRootLocation(),
+			},
+			expMatches: httpMatchPairs{
+				"1_0": {
+					{Method: "GET", RedirectPath: "/_ngf-internal-split-clients-rule0-route0-inference"},
+				},
+			},
+		},
+		{
+			name: "mixed multiple path rules with different inference configurations",
+			pathRules: []dataplane.PathRule{
+				pathRuleInferenceOnly,
+				pathRuleInferenceWithMatch,
+				pathRuleMultipleInferenceBackends,
+				pathRuleMultipleInferenceWithMatch,
+			},
+			expLocs: []http.Location{
+				// 1. Single inference pool locations (pathRuleInferenceOnly - rule index 0)
+				{
+					Path:            "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_foo_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+				},
+				{
+					Path:            "= /inference",
+					Type:            http.InferenceExternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule0-route0-backend0-inference",
+					EPPHost:         "test-epp.test",
+					EPPPort:         80,
+				},
+				// 2. Single inference pool with match (pathRuleInferenceWithMatch - rule index 1)
+				{
+					Path:         "= /inference-match",
+					Type:         http.RedirectLocationType,
+					HTTPMatchKey: "1_1",
+				},
+				{
+					Path:            "/_ngf-internal-proxy-pass-rule1-route0-backend0-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_single_match_pool_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+				},
+				{
+					Path:            "/_ngf-internal-test_single_match_pool_80-test-route1-rule1",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule1-route0-backend0-inference",
+					EPPHost:         "single-match-pool.test",
+					EPPPort:         80,
+				},
+				// 3. Multiple inference pools, no match (pathRuleMultipleInferenceBackends - rule index 2)
+				{
+					Path:            "/_ngf-internal-proxy-pass-rule2-route0-backend0-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_primary_pool_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+				},
+				{
+					Path:            "/_ngf-internal-test_primary_pool_80-test-route1-rule2",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule2-route0-backend0-inference",
+					EPPHost:         "primary-pool.test",
+					EPPPort:         80,
+				},
+				{
+					Path:            "/_ngf-internal-proxy-pass-rule2-route0-backend1-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_secondary_pool_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+				},
+				{
+					Path:            "/_ngf-internal-test_secondary_pool_80-test-route1-rule2",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule2-route0-backend1-inference",
+					EPPHost:         "secondary-pool.test",
+					EPPPort:         80,
+				},
+				{
+					Path:     "= /weighted-inference",
+					Type:     http.ExternalLocationType,
+					Rewrites: []string{"^ $inference_backend_group_test__route1_rule2 last"},
+				},
+				// 4. Multiple inference pools with match (pathRuleMultipleInferenceWithMatch - rule index 3)
+				{
+					Path:         "= /weighted-inference-match",
+					Type:         http.RedirectLocationType,
+					HTTPMatchKey: "1_3",
+				},
+				{
+					Path:     "/_ngf-internal-split-clients-rule3-route0-inference",
+					Type:     http.InternalLocationType,
+					Rewrites: []string{"^ $inference_backend_group_test__route1_rule3 last"},
+				},
+				{
+					Path:            "/_ngf-internal-proxy-pass-rule3-route0-backend0-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_multi_match_primary_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+				},
+				{
+					Path:            "/_ngf-internal-test_multi_match_primary_80-test-route1-rule3",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule3-route0-backend0-inference",
+					EPPHost:         "multi-match-primary.test",
+					EPPPort:         80,
+				},
+				{
+					Path:            "/_ngf-internal-proxy-pass-rule3-route0-backend1-inference",
+					Type:            http.InternalLocationType,
+					ProxyPass:       "http://$inference_backend_test_multi_match_secondary_80$request_uri",
+					ProxySetHeaders: proxySetHeaders,
+				},
+				{
+					Path:            "/_ngf-internal-test_multi_match_secondary_80-test-route1-rule3",
+					Type:            http.InferenceInternalLocationType,
+					EPPInternalPath: "/_ngf-internal-proxy-pass-rule3-route0-backend1-inference",
+					EPPHost:         "multi-match-secondary.test",
+					EPPPort:         80,
+				},
+				createDefaultRootLocation(),
+			},
+			expMatches: httpMatchPairs{
+				"1_1": {
+					{Method: "POST", RedirectPath: "/_ngf-internal-test_single_match_pool_80-test-route1-rule1"},
+				},
+				"1_3": {
+					{
+						Method:       "GET",
+						RedirectPath: "/_ngf-internal-split-clients-rule3-route0-inference",
+					},
 				},
 			},
 		},
