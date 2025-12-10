@@ -6,7 +6,7 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.2.2
 
-_December 9, 2025_
+_December 10, 2025_
 
 BUG FIXES:
 
