@@ -827,11 +827,13 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 
 ### Functional Test Cases
 
-Note: The keyword "resolved" is used to refer to a filter that the controller has found, and matches the reference of the route rule.
+The keyword "resolved" is used to refer to a filter that the controller has found, and matches the reference of the route rule.
 For a filter to be considered "resolved", it must:
 
 1. Exist in the same namespace as the HTTP/GRPCRoute
 2. The group and kind referenced must match
+
+For each test, we aim to ensure the NGINX configuration is always correct for each scenario.
 
 Invalid resolved filter scenarios:
 
