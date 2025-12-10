@@ -1,4 +1,4 @@
-package http
+package http //nolint:revive // ignoring conflicting package name
 
 import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
