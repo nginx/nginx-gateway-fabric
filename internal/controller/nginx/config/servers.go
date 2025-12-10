@@ -761,7 +761,7 @@ func createExecuteResultsForAuthBasicUserFile(servers []http.Server) []executeRe
 	for _, server := range servers {
 		for _, location := range server.Locations {
 			if location.AuthBasic != nil {
-				userFilePathAndData := fmt.Sprintf("%s/%s", location.AuthBasic.Data.FileName, ngfAPI.AuthKeyBasic)
+				userFilePathAndData := location.AuthBasic.Data.FileName
 				result := executeResult{
 					dest: fmt.Sprintf(basicAuthUserFile, userFilePathAndData),
 					data: location.AuthBasic.Data.FileData,
