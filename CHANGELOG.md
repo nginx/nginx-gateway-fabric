@@ -31,6 +31,7 @@ CONTAINER IMAGES:
 - Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.2.2`
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.2.2`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.2.2`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.0.2`
 
 ## Release 2.2.1
 
