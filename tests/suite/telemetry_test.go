@@ -98,6 +98,8 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 				"NginxOneConnectionEnabled: Bool(false)",
 				"InferencePoolCount: Int(0)",
 				"BuildOS:",
+				"GatewayAttachedProxySettingsPolicyCount: Int(0)",
+				"RouteAttachedProxySettingsPolicyCount: Int(0)",
 			},
 		)
 	})
