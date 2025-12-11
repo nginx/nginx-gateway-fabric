@@ -257,7 +257,9 @@ func BuildGraph(
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 
-	processedAuthenticationFilters := processAuthenticationFilters(state.AuthenticationFilters, secretResolver)
+	referencedSecrets := secretResolver.getResolvedSecrets()
+
+	processedAuthenticationFilters := processAuthenticationFilters(state.AuthenticationFilters, referencedSecrets)
 
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
@@ -313,7 +315,7 @@ func BuildGraph(
 		Routes:                     routes,
 		L4Routes:                   l4routes,
 		IgnoredGatewayClasses:      processedGwClasses.Ignored,
-		ReferencedSecrets:          secretResolver.getResolvedSecrets(),
+		ReferencedSecrets:          referencedSecrets,
 		ReferencedNamespaces:       referencedNamespaces,
 		ReferencedServices:         referencedServices,
 		ReferencedInferencePools:   referencedInferencePools,
