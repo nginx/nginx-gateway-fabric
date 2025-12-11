@@ -298,10 +298,10 @@ External location calls inference NJS module. The module gets the AI endpoint to
 then redirects to the internal inference location that proxies to the backend.
 
 location /coffee {
-	set $epp_internal_path /_ngf-internal-rule0-route0-inference;
-	js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-rule0-route0-inference
+    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
+    js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
 }
-location /_ngf-internal-rule0-route0-inference {
+location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
 	internal;
 	proxy_pass http://$inference-backend;
 }
@@ -309,7 +309,7 @@ location /_ngf-internal-rule0-route0-inference {
 Inference extension with multiple inference backends.
 
 location /coffee {
-	rewrite $inference_backend_group_inference_conformance_app_backend__httproute_weighted_two_pools_rule0 last;
+	rewrite $inference_backend_group_routeNS__routeName_rule0 last;
 	proxy_http_version 1.1;
 }
 
@@ -318,7 +318,7 @@ location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
 	proxy_pass http://$inference-backend0;
 }
 
-location /_ngf-internal-inference-conformance-app-backend_primary-inference-pool-pool-svc_3000-backend-0 {
+location /_ngf-internal-upstreamNamePrimary-routeNS-routeName-rule0 {
 	set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
 	js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
 }
@@ -328,14 +328,14 @@ location /_ngf-internal-proxy-pass-rule0-route0-backend1-inference {
 	proxy_pass http://$inference-backend1;
 }
 
-location /_ngf-internal-inference-conformance-app-backend_primary-inference-pool-pool-svc_3000-backend-1 {
+location /_ngf-internal-upstreamNameSecondary-routeNS-routeName-rule0 {
 	set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend1-inference;
 	js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend1-inference
 }
 
-split_clients $request_id $inference_backend_group_inference_conformance_app_backend__httproute_weighted_two_pools_rule0 {
-    70.00% /_ngf-internal-inference-conformance-app-backend_primary-inference-pool-pool-svc_3000-backend-0;
-    30.00% /_ngf-internal-inference-conformance-app-backend_secondary-inference-pool-pool-svc_3000-backend-1;
+split_clients $request_id $inference_backend_group_routeNS__routeName_rule0 {
+    70.00% /_ngf-internal-upstreamNamePrimary-routeNS-routeName-rule0;
+    30.00% /_ngf-internal-upstreamNameSecondary-routeNS-routeName-rule0;
 }
 ---------------
 Inference extension with HTTP matching conditions.
@@ -353,7 +353,7 @@ it was the final location that had -inference in the name.
 location /coffee {
 	js_content httpmatches.match; // chooses backend and redirects to appropriate internal inference location
 }
-location /_ngf-internal-test_coffee_80-backend-0 {
+location /_ngf-internal-upstreamNamePrimary-routeNS-routeName-rule0 {
 	internal;
 
 	set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
@@ -378,7 +378,7 @@ location /coffee {
 location /_ngf-internal-split-clients-rule0-route0-inference  {
 	internal;
 
-	rewrite $inference_backend_group_inference_conformance_app_backend__httproute_weighted_two_pools_rule0 last;
+	rewrite $inference_backend_group_routeNS__routeName_rule0 last;
 	proxy_http_version 1.1;
 }
 
@@ -387,7 +387,7 @@ location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
 	proxy_pass http://$inference-backend0;
 }
 
-location /_ngf-internal-inference-conformance-app-backend_primary-inference-pool-pool-svc_3000-backend-0 {
+location /_ngf-internal-upstreamNamePrimary-routeNS-routeName-rule0 {
 	set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
 	js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
 }
@@ -397,14 +397,14 @@ location /_ngf-internal-proxy-pass-rule0-route0-backend1-inference {
 	proxy_pass http://$inference-backend1;
 }
 
-location /_ngf-internal-inference-conformance-app-backend_primary-inference-pool-pool-svc_3000-backend-1 {
+location /_ngf-internal-upstreamNameSecondary-routeNS-routeName-rule0 {
 	set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend1-inference;
 	js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend1-inference
 }
 
-split_clients $request_id $inference_backend_group_inference_conformance_app_backend__httproute_weighted_two_pools_rule0 {
-    70.00% /_ngf-internal-inference-conformance-app-backend_primary-inference-pool-pool-svc_3000-backend-0;
-    30.00% /_ngf-internal-inference-conformance-app-backend_secondary-inference-pool-pool-svc_3000-backend-1;
+split_clients $request_id $inference_backend_group_routeNS__routeName_rule0 {
+    70.00% /_ngf-internal-upstreamNamePrimary-routeNS-routeName-rule0;
+    30.00% /_ngf-internal-upstreamNameSecondary-routeNS-routeName-rule0;
 }
 */
 
