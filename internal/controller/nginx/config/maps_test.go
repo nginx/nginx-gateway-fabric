@@ -408,25 +408,25 @@ func TestBuildInferenceMaps(t *testing.T) {
 		expectedMaps  int
 	}{
 		{
-			name: "unique backends with different failure modes",
+			name: "unique backends with different failure modes, result is ordered by upstream name",
 			backendGroups: []dataplane.BackendGroup{
 				{
 					Backends: []dataplane.Backend{
-						{
-							UpstreamName: "upstream1",
-							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-								NsName: "default",
-								EndpointPickerRef: &inference.EndpointPickerRef{
-									FailureMode: inference.EndpointPickerFailClose,
-								},
-							},
-						},
 						{
 							UpstreamName: "upstream2",
 							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
 								NsName: "default",
 								EndpointPickerRef: &inference.EndpointPickerRef{
 									FailureMode: inference.EndpointPickerFailOpen,
+								},
+							},
+						},
+						{
+							UpstreamName: "upstream1",
+							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+								NsName: "default",
+								EndpointPickerRef: &inference.EndpointPickerRef{
+									FailureMode: inference.EndpointPickerFailClose,
 								},
 							},
 						},

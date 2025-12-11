@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	gotemplate "text/template"
 
@@ -245,9 +246,17 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 		}
 	}
 
+	// Sort the map keys to ensure deterministic ordering
+	mapKeys := make([]string, 0, len(uniqueMaps))
+	for key := range uniqueMaps {
+		mapKeys = append(mapKeys, key)
+	}
+	sort.Strings(mapKeys)
+
+	// Build the result slice in sorted order
 	inferenceMaps := make([]shared.Map, 0, len(uniqueMaps))
-	for _, inferenceMap := range uniqueMaps {
-		inferenceMaps = append(inferenceMaps, inferenceMap)
+	for _, key := range mapKeys {
+		inferenceMaps = append(inferenceMaps, uniqueMaps[key])
 	}
 
 	return inferenceMaps
