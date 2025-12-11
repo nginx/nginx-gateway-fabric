@@ -156,5 +156,8 @@ func TestValidatePathInRegexMatch(t *testing.T) {
 		`(\w+)\2$`,                  // invalid backref: group 2 doesn't exist
 		`/foo/(?P<bad-name>[0-9]+)`, // invalid group name: hyphen not allowed
 		`/foo/(?P<bad name>[0-9]+)`, // invalid group name: space not allowed
+		`(\w+)\2$`,                  // invalid backref: group 2 doesn't exist
+		`/users/\k<nonexistent>`,    // invalid named backreference
+		`^(([a-z])+)+$`,             // nested quantifiers not allowed
 	)
 }
