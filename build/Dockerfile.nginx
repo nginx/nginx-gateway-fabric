@@ -12,6 +12,8 @@ ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
+RUN apk update && apk upgrade --no-cache
+
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     printf "%s\n" "https://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
     && apk add --no-cache nginx-agent=${NGINX_AGENT_VERSION#v}

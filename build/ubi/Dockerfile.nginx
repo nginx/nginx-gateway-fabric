@@ -43,7 +43,7 @@ RUN --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_s
     && microdnf --nodocs install -y nginx nginx-module-njs nginx-module-otel \
     # Install nginx-agent
     && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
-    # Clean up (only remove what we can)
+    # Clean up
     && microdnf clean all \
     && rm -rf /var/cache/yum
 
