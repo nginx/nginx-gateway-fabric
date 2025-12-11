@@ -487,8 +487,6 @@ func createLocations(
 		locs = append(locs, createDefaultRootLocation())
 	}
 
-	// fmt.Println("These are all the locations", locs)
-
 	return locs, matchPairs, grpcServer
 }
 
@@ -521,7 +519,22 @@ func createInternalLocationsForRule(
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
 ) ([]http.Location, []routeMatch) {
-	internalLocations := make([]http.Location, 0, len(rule.MatchRules))
+	// Calculate the exact capacity needed
+	capacity := 0
+	for _, r := range rule.MatchRules {
+		if !rule.HasInferenceBackends {
+			capacity++ // intLocation (always created for non-inference)
+		} else {
+			// For inference backends with matches
+			if len(r.BackendGroup.Backends) > 1 {
+				capacity++ // intSplitClientsLocation (created for multiple backends)
+			}
+
+			capacity += len(r.BackendGroup.Backends) * 2 // intEPPLocation and intProxyPassLocation per backend
+		}
+	}
+
+	internalLocations := make([]http.Location, 0, capacity)
 	matches := make([]routeMatch, 0, len(rule.MatchRules))
 	for matchRuleIdx, r := range rule.MatchRules {
 		var intLocation http.Location

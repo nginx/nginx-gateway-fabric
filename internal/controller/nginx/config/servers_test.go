@@ -2449,7 +2449,6 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 
 	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
 
-	// Reusable backend definitions
 	singleInferenceBackend := dataplane.Backend{
 		UpstreamName: "test_foo_80",
 		Valid:        true,
@@ -2528,7 +2527,6 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 		},
 	}
 
-	// Reusable backend groups
 	singleInferenceGroup := dataplane.BackendGroup{
 		Source:   hrNsName,
 		RuleIdx:  0,
@@ -2553,7 +2551,6 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 		Backends: []dataplane.Backend{multiMatchPrimaryBackend, multiMatchSecondaryBackend},
 	}
 
-	// Reusable path rules
 	pathRuleInferenceOnly := dataplane.PathRule{
 		Path:                 "/inference",
 		PathType:             dataplane.PathTypeExact,

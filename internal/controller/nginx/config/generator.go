@@ -173,11 +173,6 @@ func (g GeneratorImpl) executeConfigTemplates(
 		}
 	}
 
-	// for fp, bytes := range fileBytes {
-	// 	fmt.Println("Generated NGINX configuration file: " + fp)
-	// 	fmt.Println(string(bytes))
-	// }
-
 	var mgmtFiles []agent.File
 	if g.plus {
 		mgmtFiles = g.generateMgmtFiles(conf)
