@@ -834,10 +834,14 @@ func TestCreateBackendGroupSplitClientDistributions(t *testing.T) {
 
 func TestGetSplitClientValue(t *testing.T) {
 	t.Parallel()
+	hrNsName := types.NamespacedName{Namespace: "test", Name: "hr"}
+
 	tests := []struct {
+		source   types.NamespacedName
 		msg      string
 		expValue string
 		backend  dataplane.Backend
+		ruleIdx  int
 	}{
 		{
 			msg: "valid backend",
@@ -845,6 +849,8 @@ func TestGetSplitClientValue(t *testing.T) {
 				UpstreamName: "valid",
 				Valid:        true,
 			},
+			source:   hrNsName,
+			ruleIdx:  0,
 			expValue: "valid",
 		},
 		{
@@ -853,6 +859,34 @@ func TestGetSplitClientValue(t *testing.T) {
 				UpstreamName: "invalid",
 				Valid:        false,
 			},
+			source:   hrNsName,
+			ruleIdx:  0,
+			expValue: invalidBackendRef,
+		},
+		{
+			msg: "valid backend with endpoint picker config",
+			backend: dataplane.Backend{
+				UpstreamName: "inference-backend",
+				Valid:        true,
+				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+					NsName: "test-namespace",
+				},
+			},
+			source:   hrNsName,
+			ruleIdx:  2,
+			expValue: "/_ngf-internal-inference-backend-test-hr-rule2",
+		},
+		{
+			msg: "invalid backend with endpoint picker config",
+			backend: dataplane.Backend{
+				UpstreamName: "invalid-inference-backend",
+				Valid:        false,
+				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+					NsName: "test-namespace",
+				},
+			},
+			source:   hrNsName,
+			ruleIdx:  1,
 			expValue: invalidBackendRef,
 		},
 	}
@@ -861,7 +895,7 @@ func TestGetSplitClientValue(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := getSplitClientValue(test.backend, types.NamespacedName{Namespace: "test", Name: "hr"}, 0)
+			result := getSplitClientValue(test.backend, test.source, test.ruleIdx)
 			g.Expect(result).To(Equal(test.expValue))
 		})
 	}
