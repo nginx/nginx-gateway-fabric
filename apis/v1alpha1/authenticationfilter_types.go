@@ -57,10 +57,6 @@ const (
 	AuthTypeBasic AuthType = "Basic"
 )
 
-const (
-	AuthKeyBasic = "auth" // Key in the Secret data for Basic Auth credentials.
-)
-
 // BasicAuth configures HTTP Basic Authentication.
 type BasicAuth struct {
 	// SecretRef allows referencing a Secret in the same namespace.

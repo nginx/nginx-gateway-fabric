@@ -9,7 +9,6 @@ import (
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	filesHelper "github.com/nginx/agent/v3/pkg/files"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
@@ -18,6 +17,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
 
@@ -141,7 +141,7 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 			for _, matchRule := range rule.MatchRules {
 				if matchRule.Filters.AuthenticationFilter != nil {
 					if matchRule.Filters.AuthenticationFilter.Basic != nil {
-						id := fmt.Sprintf("%s/%s", matchRule.Filters.AuthenticationFilter.Basic.SecretName, ngfAPI.AuthKeyBasic)
+						id := fmt.Sprintf("%s/%s", matchRule.Filters.AuthenticationFilter.Basic.SecretName, graph.AuthKeyBasic)
 						data := matchRule.Filters.AuthenticationFilter.Basic.Data
 						files = append(files, generateAuthBasicUserFile(id, data))
 					}

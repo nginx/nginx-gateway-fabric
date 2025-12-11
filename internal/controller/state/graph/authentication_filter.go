@@ -103,7 +103,7 @@ func validateAuthenticationFilter(
 					allErrs = append(allErrs, field.Invalid(field.NewPath("spec.basic.secretRef"), af.Spec.Basic.SecretRef.Name, msg))
 					break
 				}
-				if _, exists := secret.Source.Data[ngfAPI.AuthKeyBasic]; !exists {
+				if _, exists := secret.Source.Data[AuthKeyBasic]; !exists {
 					msg = "referenced secret does not contain required 'auth' key"
 					allErrs = append(allErrs, field.Invalid(field.NewPath("spec.basic.secretRef"), af.Spec.Basic.SecretRef.Name, msg))
 				}

@@ -11,11 +11,11 @@ import (
 
 	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -739,7 +739,7 @@ func updateLocationAuthenticationFilter(
 	if authenticationFilter != nil {
 		logger.Info("Applying authentication filter to location", "locationPath", location.Path)
 		if authenticationFilter.Basic != nil {
-			userFilePathAndData := fmt.Sprintf("%s/%s", authenticationFilter.Basic.SecretName, ngfAPI.AuthKeyBasic)
+			userFilePathAndData := fmt.Sprintf("%s/%s", authenticationFilter.Basic.SecretName, graph.AuthKeyBasic)
 			location.AuthBasic = &http.AuthBasic{
 				Realm: authenticationFilter.Basic.Realm,
 				Data: http.AuthBasicData{

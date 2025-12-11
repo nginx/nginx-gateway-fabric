@@ -6,8 +6,6 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
 // Secret represents a Secret resource.
@@ -24,6 +22,18 @@ type secretEntry struct {
 	// err holds the corresponding error if the Secret is invalid or does not exist.
 	err error
 }
+
+type SecretType string
+
+const (
+	// SecretTypeHtpasswd represents a Secret containing an htpasswd file for Basic Auth.
+	SecretTypeHtpasswd SecretType = "nginx.org/htpasswd"
+)
+
+const (
+	// Key in the Secret data for Basic Auth credentials.
+	AuthKeyBasic = "auth"
+)
 
 // secretResolver wraps the cluster Secrets so that they can be resolved (includes validation). All resolved
 // Secrets are saved to be used later.
@@ -72,19 +82,13 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 
 		certBundle = NewCertificateBundle(nsname, "Secret", cert)
 
-	// TODO: Define our own Secret types for other auth methods (e.g., OAuth) as needed.
-	case secret.Type == apiv1.SecretTypeOpaque:
-		// Allow Opaque secrets specifically when they contain the "auth" key.
-		//nolint:revive // may need to consider our own secret types.
-		if _, hasAuth := secret.Data[ngfAPI.AuthKeyBasic]; hasAuth {
-			// Accept: no TLS/CA validation, no CertificateBundle.
-			// Leave validationErr and certBundle as nil.
-		} else {
-			validationErr = fmt.Errorf("secret type must be %q not %q", apiv1.SecretTypeTLS, secret.Type)
+	case secret.Type == apiv1.SecretType(SecretTypeHtpasswd):
+		// Validate Htpasswd secret
+		if _, exists := secret.Data[AuthKeyBasic]; !exists {
+			validationErr = fmt.Errorf("missing required key %q in secret type %q", AuthKeyBasic, secret.Type)
 		}
-
 	default:
-		validationErr = fmt.Errorf("secret type must be %q not %q", apiv1.SecretTypeTLS, secret.Type)
+		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)
 	}
 
 	r.resolvedSecrets[nsname] = &secretEntry{

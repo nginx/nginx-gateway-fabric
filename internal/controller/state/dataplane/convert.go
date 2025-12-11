@@ -211,7 +211,7 @@ func convertAuthenticationFilter(
 
 		result.Basic = &BasicAuth{
 			SecretName: specBasic.SecretRef.Name,
-			Data:       referencedSecret.Source.Data[ngfAPI.AuthKeyBasic],
+			Data:       referencedSecret.Source.Data[graph.AuthKeyBasic],
 			Realm:      specBasic.Realm,
 		}
 	}
