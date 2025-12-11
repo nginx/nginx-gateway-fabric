@@ -762,26 +762,78 @@ func needsInternalLocationsForMatches(rule dataplane.PathRule) bool {
 // for example, {/foo: {exact: {}, prefix: {}}}.
 type pathAndTypeMap map[string]map[dataplane.PathType]struct{}
 
-// To calculate the maximum number of locations, we need to take into account the following:
-// 1. Each match rule for a path rule will have one location.
-// 2. Each path rule may have an additional location if it contains non-path-only matches.
-// 3. Each prefix path rule may have an additional location if it doesn't contain trailing slash.
-// 4. There may be an additional location for the default root path.
-// 5. There may be an additional location per parent location for the inference extension.
-// We also return a map of all paths and their types.
 func getMaxLocationCountAndPathMap(pathRules []dataplane.PathRule) (int, pathAndTypeMap) {
-	maxLocs := 1
+	// To calculate the maximum number of locations, we need to take into account the following:
+	// 1. Each path rule will have at least one external location.
+	// 2. Each path rule may have an additional external location if it's a non-slashed prefix path.
+	// 3. There may be an additional location for the default root path.
+	// 4. For inference backends:
+	//    - Single backend without matches: 2 locations (external EPP + internal proxy pass)
+	//    - Single backend with matches: 3 locations (external redirect + internal EPP + internal proxy pass)
+	//    - Multiple backends without matches: 1 external + (2 * numBackends) internal locations
+	//    - Multiple backends with matches: 1 external + 1 split clients + (2 * numBackends) internal locations
+	// 5. For non-inference backends with matches:
+	//    - Each match rule gets an internal location
+	// We also return a map of all paths and their types.
+
+	maxLocs := 0
 	pathsAndTypes := make(pathAndTypeMap)
+
 	for _, rule := range pathRules {
-		maxLocs += (len(rule.MatchRules) * 2) + 2
+		// External locations calculation
+		maxLocs++ // Base external location for the path
+
+		// Add the path to the map
 		if pathsAndTypes[rule.Path] == nil {
-			pathsAndTypes[rule.Path] = map[dataplane.PathType]struct{}{
-				rule.PathType: {},
+			pathsAndTypes[rule.Path] = make(map[dataplane.PathType]struct{})
+		}
+		pathsAndTypes[rule.Path][rule.PathType] = struct{}{}
+
+		// Check if we need an additional external location for non-slashed prefix paths
+		if isNonSlashedPrefixPath(rule.PathType, rule.Path) {
+			maxLocs++ // Additional external location for exact match
+		}
+
+		// Determine if we need internal locations for matches
+		needsInternalMatches := needsInternalLocationsForMatches(rule)
+
+		// Internal locations calculation
+		for _, matchRule := range rule.MatchRules {
+			if !rule.HasInferenceBackends {
+				// Non-inference backends with matches need internal locations
+				if needsInternalMatches {
+					maxLocs++ // Internal match location per match rule
+				}
+			} else {
+				// Inference backends calculation
+				numBackends := len(matchRule.BackendGroup.Backends)
+
+				if needsInternalMatches {
+					// Has HTTP matching conditions
+					if numBackends > 1 {
+						// Multiple backends with matches: split clients + 2 locations per backend
+						maxLocs++                  // Internal split clients location
+						maxLocs += numBackends * 2 // EPP + proxy pass per backend
+					} else {
+						// Single backend with matches: EPP + proxy pass
+						maxLocs += 2
+					}
+				} else {
+					// No HTTP matching conditions
+					if numBackends > 1 {
+						// Multiple backends without matches: 2 locations per backend (no split clients for external)
+						maxLocs += numBackends * 2 // EPP + proxy pass per backend
+					} else {
+						// Single backend without matches: proxy pass only (external becomes EPP)
+						maxLocs++ // Just the internal proxy pass location
+					}
+				}
 			}
-		} else {
-			pathsAndTypes[rule.Path][rule.PathType] = struct{}{}
 		}
 	}
+
+	// Add 1 for potential default root location
+	maxLocs++
 
 	return maxLocs, pathsAndTypes
 }
