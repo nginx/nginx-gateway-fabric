@@ -61,7 +61,10 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 		}
 		validationErr = validateTLS(cert.TLSCert, cert.TLSPrivateKey)
 
-		// Optional CA certificate.
+		// Not always guaranteed to have a ca certificate in the secret.
+		// Cert-Manager puts this at ca.crt and thus this is statically placed like so.
+		// To follow the convention setup by kubernetes for a service account root ca
+		// for optional root certificate authority
 		if _, exists := secret.Data[CAKey]; exists {
 			cert.CACert = secret.Data[CAKey]
 			validationErr = validateCA(cert.CACert)
