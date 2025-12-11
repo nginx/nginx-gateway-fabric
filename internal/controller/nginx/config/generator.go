@@ -68,10 +68,6 @@ const (
 
 	// nginxPlusConfigFile is the path to the file containing the NGINX Plus API config.
 	nginxPlusConfigFile = httpFolder + "/plus-api.conf"
-
-	// basicAuthUserFile is the path to the file containing basic authentication user credentials.
-	// Example format: /etc/nginx/secrets/namespace/secretname/auth
-	basicAuthUserFile = secretsFolder + "/%s"
 )
 
 // Generator generates NGINX configuration files.
@@ -272,6 +268,7 @@ func generateCertBundleFileName(id dataplane.CertBundleID) string {
 }
 
 func generateAuthBasicUserFile(id string, data []byte) agent.File {
+	basicAuthUserFile := secretsFolder + "/%s"
 	return agent.File{
 		Meta: &pb.FileMeta{
 			Name:        fmt.Sprintf(basicAuthUserFile, id),

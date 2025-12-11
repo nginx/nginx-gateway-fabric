@@ -739,11 +739,16 @@ func updateLocationAuthenticationFilter(
 	if authenticationFilter != nil {
 		logger.Info("Applying authentication filter to location", "locationPath", location.Path)
 		if authenticationFilter.Basic != nil {
-			userFilePathAndData := fmt.Sprintf("%s/%s", authenticationFilter.Basic.SecretName, graph.AuthKeyBasic)
+			// TODO: Include namespace
+			userFilePathAndData := fmt.Sprintf("%s/%s/%s",
+				secretsFolder,
+				authenticationFilter.Basic.SecretName,
+				graph.AuthKeyBasic,
+			)
 			location.AuthBasic = &http.AuthBasic{
 				Realm: authenticationFilter.Basic.Realm,
 				Data: http.AuthBasicData{
-					FileName: fmt.Sprintf(basicAuthUserFile, userFilePathAndData),
+					FileName: userFilePathAndData,
 					FileData: authenticationFilter.Basic.Data,
 				},
 			}

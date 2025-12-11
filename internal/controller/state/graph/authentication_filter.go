@@ -50,6 +50,7 @@ func getAuthenticationFilterResolverForNamespace(
 
 func processAuthenticationFilters(
 	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
+	secretResolver *secretResolver,
 	resolvedSecrets map[types.NamespacedName]*Secret,
 ) map[types.NamespacedName]*AuthenticationFilter {
 	if len(authenticationFilters) == 0 {
@@ -59,7 +60,7 @@ func processAuthenticationFilters(
 	processed := make(map[types.NamespacedName]*AuthenticationFilter)
 
 	for nsname, af := range authenticationFilters {
-		if cond := validateAuthenticationFilter(af, resolvedSecrets); cond != nil {
+		if cond := validateAuthenticationFilter(af, secretResolver, resolvedSecrets); cond != nil {
 			processed[nsname] = &AuthenticationFilter{
 				Source:     af,
 				Conditions: []conditions.Condition{*cond},
@@ -79,6 +80,7 @@ func processAuthenticationFilters(
 
 func validateAuthenticationFilter(
 	af *ngfAPI.AuthenticationFilter,
+	secretResolver *secretResolver,
 	resolvedSecrets map[types.NamespacedName]*Secret,
 ) *conditions.Condition {
 	var allErrs field.ErrorList
@@ -87,10 +89,17 @@ func validateAuthenticationFilter(
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
 
-		allErrs = append(allErrs, field.Invalid(
-			field.NewPath("spec.basic.secretRef"),
-			af.Spec.Basic.SecretRef.Name,
-			validateReferencedSecret(af, resolvedSecrets).Error()))
+		secretNsName := &types.NamespacedName{
+			Namespace: af.Namespace,
+			Name:      af.Spec.Basic.SecretRef.Name,
+		}
+
+		if err := secretResolver.resolve(*secretNsName); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.basic.secretRef"),
+				af.Spec.Basic.SecretRef.Name,
+				resolveReferencedSecret(secretNsName, resolvedSecrets).Error()))
+		}
 
 		for nsname, secret := range resolvedSecrets {
 			if nsname.Namespace == af.Namespace && nsname.Name == af.Spec.Basic.SecretRef.Name {
@@ -126,14 +135,10 @@ func validateAuthenticationFilter(
 	return nil
 }
 
-func validateReferencedSecret(
-	af *ngfAPI.AuthenticationFilter,
+func resolveReferencedSecret(
+	secretNsName *types.NamespacedName,
 	resolvedSecrets map[types.NamespacedName]*Secret,
 ) error {
-	secretNsName := &types.NamespacedName{
-		Namespace: af.Namespace,
-		Name:      af.Spec.Basic.SecretRef.Name,
-	}
 	if _, exists := resolvedSecrets[*secretNsName]; !exists {
 		return fmt.Errorf("referenced secret is invalid or missing")
 	}

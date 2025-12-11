@@ -259,7 +259,11 @@ func BuildGraph(
 
 	referencedSecrets := secretResolver.getResolvedSecrets()
 
-	processedAuthenticationFilters := processAuthenticationFilters(state.AuthenticationFilters, referencedSecrets)
+	processedAuthenticationFilters := processAuthenticationFilters(
+		state.AuthenticationFilters,
+		secretResolver,
+		referencedSecrets,
+	)
 
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
