@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/dlclark/regexp2"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -15,7 +16,7 @@ const (
 )
 
 var (
-	pathRegexp   = regexp.MustCompile("^" + pathFmt + "$")
+	pathRegexp   = regexp2.MustCompile("^"+pathFmt+"$", 0)
 	pathExamples = []string{"/", "/path", "/path/subpath-123"}
 )
 
@@ -91,7 +92,9 @@ func validatePath(path string) error {
 		return nil
 	}
 
-	if !pathRegexp.MatchString(path) {
+	if valid, err := pathRegexp.MatchString(path); err != nil {
+		return fmt.Errorf("failed to validate path %q: %w", path, err)
+	} else if !valid {
 		msg := k8svalidation.RegexError(pathErrMsg, pathFmt, pathExamples...)
 		return errors.New(msg)
 	}
@@ -108,8 +111,9 @@ func validatePathInMatch(path string) error {
 	if path == "" {
 		return errors.New("cannot be empty")
 	}
-
-	if !pathRegexp.MatchString(path) {
+	if valid, err := pathRegexp.MatchString(path); err != nil {
+		return fmt.Errorf("failed to validate path in match %q: %w", path, err)
+	} else if !valid {
 		msg := k8svalidation.RegexError(pathErrMsg, pathFmt, pathExamples...)
 		return errors.New(msg)
 	}
@@ -117,47 +121,29 @@ func validatePathInMatch(path string) error {
 	return nil
 }
 
-// validatePathInRegexMatch a path used in a regex location directive.
-// 1. Must be non-empty and start with '/'
-// 2. Forbidden characters in NGINX location context: {}, ;, whitespace
-// 3. Must compile under Go's regexp (RE2)
-// 4. Disallow unescaped '$' (NGINX variables / PCRE backrefs)
-// 5. Disallow lookahead/lookbehind (unsupported in RE2)
-// 6. Disallow backreferences like \1, \2 (RE2 unsupported).
+// validatePathInRegexMatch validates a path used in a regex location directive.
+//
+// It uses Perl5 compatible regexp2 package along with RE2 compatibility.
+//
+// Checks:
+//  1. Non-empty.
+//  2. Satisfies NGINX location path shape.
+//  3. Compiles as a regexp2 regular expression with RE2 option to support named capturing group.
+//     No extra bans on backrefs, lookarounds, '$'.
 func validatePathInRegexMatch(path string) error {
 	if path == "" {
 		return errors.New("cannot be empty")
 	}
 
-	if !pathRegexp.MatchString(path) {
-		return errors.New(k8svalidation.RegexError(pathErrMsg, pathFmt, pathExamples...))
+	if valid, err := pathRegexp.MatchString(path); err != nil {
+		return fmt.Errorf("failed to validate path %q: %w", path, err)
+	} else if !valid {
+		msg := k8svalidation.RegexError(pathErrMsg, pathFmt, pathExamples...)
+		return errors.New(msg)
 	}
 
-	if _, err := regexp.Compile(path); err != nil {
-		return fmt.Errorf("invalid RE2 regex for path '%s': %w", path, err)
-	}
-
-	for i := range len(path) {
-		if path[i] == '$' && (i == 0 || path[i-1] != '\\') {
-			return fmt.Errorf("invalid unescaped `$` at position %d in path '%s'", i, path)
-		}
-	}
-
-	lookarounds := []string{"(?=", "(?!", "(?<=", "(?<!"}
-	for _, la := range lookarounds {
-		if strings.Contains(path, la) {
-			return fmt.Errorf("lookahead/lookbehind '%s' found in path '%s' which is not supported in RE2", la, path)
-		}
-	}
-
-	backref := regexp.MustCompile(`\\[0-9]+`)
-	matches := backref.FindAllStringIndex(path, -1)
-	if len(matches) > 0 {
-		var positions []string
-		for _, m := range matches {
-			positions = append(positions, fmt.Sprintf("[%d-%d]", m[0], m[1]))
-		}
-		return fmt.Errorf("backreference(s) %v found in path '%s' which are not supported in RE2", positions, path)
+	if _, err := regexp2.Compile(path, regexp2.RE2); err != nil {
+		return fmt.Errorf("invalid regex for path %q: %w", path, err)
 	}
 
 	return nil

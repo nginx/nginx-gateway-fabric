@@ -3,6 +3,7 @@ module github.com/nginx/nginx-gateway-fabric/v2
 go 1.24.2
 
 require (
+	github.com/dlclark/regexp2 v1.11.5
 	github.com/envoyproxy/go-control-plane/envoy v1.36.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-logr/logr v1.4.3
