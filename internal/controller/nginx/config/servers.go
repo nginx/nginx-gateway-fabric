@@ -737,8 +737,9 @@ func updateLocationAuthenticationFilter(
 		logger.Info("Applying authentication filter to location", "locationPath", location.Path)
 		if authenticationFilter.Basic != nil {
 			// TODO: Include namespace
-			userFilePathAndData := fmt.Sprintf("%s/%s/%s",
+			userFilePathAndData := fmt.Sprintf("%s/%s/%s/%s",
 				secretsFolder,
+				authenticationFilter.Basic.SecretNamespace,
 				authenticationFilter.Basic.SecretName,
 				graph.AuthKeyBasic,
 			)

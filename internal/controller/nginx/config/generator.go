@@ -139,7 +139,8 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 			for _, matchRule := range rule.MatchRules {
 				if matchRule.Filters.AuthenticationFilter != nil {
 					if matchRule.Filters.AuthenticationFilter.Basic != nil {
-						id := fmt.Sprintf("%s/%s", matchRule.Filters.AuthenticationFilter.Basic.SecretName, graph.AuthKeyBasic)
+						ns := matchRule.Filters.AuthenticationFilter.Basic.SecretNamespace
+						id := fmt.Sprintf("%s/%s/%s", ns, matchRule.Filters.AuthenticationFilter.Basic.SecretName, graph.AuthKeyBasic)
 						data := matchRule.Filters.AuthenticationFilter.Basic.Data
 						files = append(files, generateAuthBasicUserFile(id, data))
 					}

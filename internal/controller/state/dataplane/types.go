@@ -188,9 +188,10 @@ type AuthenticationFilter struct {
 
 // BasicAuth holds the basic authentication configuration.
 type BasicAuth struct {
-	SecretName string
-	Realm      string
-	Data       []byte
+	SecretName      string
+	SecretNamespace string
+	Realm           string
+	Data            []byte
 }
 
 // HTTPHeader represents an HTTP header.
