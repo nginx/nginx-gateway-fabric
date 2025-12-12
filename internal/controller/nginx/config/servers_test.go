@@ -2469,21 +2469,36 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 	multiInferencePrimaryBackend := createInferenceBackend("test_primary_pool_80", 70, "primary-pool")
 	multiInferenceSecondaryBackend := createInferenceBackend("test_secondary_pool_80", 30, "secondary-pool")
 
-	createBackendGroup := func(backends []dataplane.Backend, ruleIdx int, pathRuleIdx int) dataplane.BackendGroup {
+	createBackendGroup := func(backends []dataplane.Backend) dataplane.BackendGroup {
 		return dataplane.BackendGroup{
-			Source:      hrNsName,
-			RuleIdx:     ruleIdx,
-			PathRuleIdx: pathRuleIdx,
-			Backends:    backends,
+			Source:   hrNsName,
+			Backends: backends,
 		}
 	}
 
-	singleInferenceGroup := createBackendGroup([]dataplane.Backend{singleInferenceBackend}, 0, 0)
-	multipleInferenceGroup := createBackendGroup(
-		[]dataplane.Backend{multiInferencePrimaryBackend, multiInferenceSecondaryBackend},
-		0,
-		0,
-	)
+	singleInferenceGroup := createBackendGroup([]dataplane.Backend{singleInferenceBackend})
+	multipleInferenceGroup := createBackendGroup([]dataplane.Backend{
+		multiInferencePrimaryBackend,
+		multiInferenceSecondaryBackend,
+	})
+
+	// setBackendGroupIndices returns a new PathRule with updated RuleIdx and PathRuleIdx in all BackendGroups
+	setBackendGroupIndices := func(pathRule dataplane.PathRule, ruleIdx int, pathRuleIdx int) dataplane.PathRule {
+		// Create a copy of the PathRule
+		newPathRule := pathRule
+
+		// Create a copy of the MatchRules slice
+		newPathRule.MatchRules = make([]dataplane.MatchRule, len(pathRule.MatchRules))
+		copy(newPathRule.MatchRules, pathRule.MatchRules)
+
+		// Update the BackendGroup indices in the copied MatchRules
+		for matchRuleIdx := range newPathRule.MatchRules {
+			newPathRule.MatchRules[matchRuleIdx].BackendGroup.RuleIdx = ruleIdx
+			newPathRule.MatchRules[matchRuleIdx].BackendGroup.PathRuleIdx = pathRuleIdx
+		}
+
+		return newPathRule
+	}
 
 	// Helper function to create path rules
 	createPathRule := func(path string, matchRules []dataplane.MatchRule) dataplane.PathRule {
@@ -2552,45 +2567,6 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				BackendGroup: multipleInferenceGroup,
 			},
 		})
-
-	combinedPathRules := []dataplane.PathRule{
-		createPathRule("/inference", []dataplane.MatchRule{
-			{
-				Match:        dataplane.Match{},
-				BackendGroup: createBackendGroup([]dataplane.Backend{singleInferenceBackend}, 0, 0),
-			},
-		}),
-		createPathRule("/inference-match", []dataplane.MatchRule{
-			{
-				Match: dataplane.Match{
-					Method: helpers.GetPointer("POST"),
-				},
-				BackendGroup: createBackendGroup([]dataplane.Backend{singleInferenceBackend}, 1, 1),
-			},
-		}),
-		createPathRule("/weighted-inference", []dataplane.MatchRule{
-			{
-				Match: dataplane.Match{},
-				BackendGroup: createBackendGroup(
-					[]dataplane.Backend{multiInferencePrimaryBackend, multiInferenceSecondaryBackend},
-					2,
-					2,
-				),
-			},
-		}),
-		createPathRule("/weighted-inference-match", []dataplane.MatchRule{
-			{
-				Match: dataplane.Match{
-					Method: helpers.GetPointer("GET"),
-				},
-				BackendGroup: createBackendGroup(
-					[]dataplane.Backend{multiInferencePrimaryBackend, multiInferenceSecondaryBackend},
-					3,
-					3,
-				),
-			},
-		}),
-	}
 
 	proxySetHeaders := []http.Header{
 		{Name: "Host", Value: "$gw_api_compliant_host"},
@@ -2826,8 +2802,13 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 			},
 		},
 		{
-			name:      "mixed multiple path rules with different inference configurations",
-			pathRules: combinedPathRules,
+			name: "mixed multiple path rules with different inference configurations",
+			pathRules: []dataplane.PathRule{
+				setBackendGroupIndices(pathRuleInferenceOnly, 0, 0),
+				setBackendGroupIndices(pathRuleInferenceWithMatch, 1, 1),
+				setBackendGroupIndices(pathRuleMultipleInferenceBackends, 2, 2),
+				setBackendGroupIndices(pathRuleMultipleInferenceWithMatch, 3, 3),
+			},
 			expLocs: []http.Location{
 				// 1. Single inference pool locations (rule index 0)
 				{
