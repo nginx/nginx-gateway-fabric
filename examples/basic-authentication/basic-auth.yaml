@@ -23,7 +23,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: basic-auth2
-type: nginx.org/htpasswd
+type: Opaque
 data:
   # Base64 of "htpasswd -bn user2 password2"
   auth: dXNlcjI6JGFwcjEkd0lKUUpjZEUkSXUuYjVhMlBGODdtQi5zT0x4aUg5MQ==

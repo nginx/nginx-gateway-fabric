@@ -49,7 +49,6 @@ func getAuthenticationFilterResolverForNamespace(
 
 func processAuthenticationFilters(
 	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
-	resolvedSecrets map[types.NamespacedName]*Secret,
 ) map[types.NamespacedName]*AuthenticationFilter {
 	if len(authenticationFilters) == 0 {
 		return nil
@@ -58,7 +57,7 @@ func processAuthenticationFilters(
 	processed := make(map[types.NamespacedName]*AuthenticationFilter)
 
 	for nsname, af := range authenticationFilters {
-		if cond := validateAuthenticationFilter(af, resolvedSecrets); cond != nil {
+		if cond := validateAuthenticationFilter(af); cond != nil {
 			processed[nsname] = &AuthenticationFilter{
 				Source:     af,
 				Conditions: []conditions.Condition{*cond},
@@ -78,33 +77,12 @@ func processAuthenticationFilters(
 
 func validateAuthenticationFilter(
 	af *ngfAPI.AuthenticationFilter,
-	resolvedSecrets map[types.NamespacedName]*Secret,
 ) *conditions.Condition {
 	var allErrs field.ErrorList
 
 	//revive:disable-next-line:unnecessary-stmt future-proof switch form; additional auth types will be added
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
-
-		for nsname, secret := range resolvedSecrets {
-			if nsname.Namespace == af.Namespace && nsname.Name == af.Spec.Basic.SecretRef.Name {
-				msg := "referenced secret is invalid or missing"
-				if secret == nil {
-					allErrs = append(allErrs, field.Invalid(field.NewPath("spec.basic.secretRef"), af.Spec.Basic.SecretRef.Name, msg))
-					break
-				}
-				if secret.Source == nil {
-					allErrs = append(allErrs, field.Invalid(field.NewPath("spec.basic.secretRef"), af.Spec.Basic.SecretRef.Name, msg))
-					break
-				}
-				if _, exists := secret.Source.Data[AuthKeyBasic]; !exists {
-					msg = "referenced secret does not contain required 'auth' key"
-					allErrs = append(allErrs, field.Invalid(field.NewPath("spec.basic.secretRef"), af.Spec.Basic.SecretRef.Name, msg))
-				}
-				break
-			}
-		}
-
 		if af.Spec.Basic.Realm == "" {
 			allErrs = append(allErrs, field.Required(field.NewPath("spec.basic.realm"), "realm cannot be empty"))
 		}
@@ -123,13 +101,14 @@ func validateAuthenticationFilter(
 func resolveAuthenticationFilterSecrets(
 	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
 	secretResolver *secretResolver,
-) {
+) error {
+	var err error
 	for nsname, af := range authenticationFilters {
 		if af.Spec.Type == ngfAPIv1alpha1.AuthTypeBasic && af.Spec.Basic != nil {
 			sec := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
 			// resolve populates resolvedSecrets whether valid or invalid; errors are stored per-entry
-			_ = secretResolver.resolve(sec)
+			err = secretResolver.resolve(sec)
 		}
 	}
-
+	return err
 }
