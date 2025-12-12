@@ -207,6 +207,21 @@ func processHTTPRouteRule(
 
 	backendRefs := make([]RouteBackendRef, 0, len(specRule.BackendRefs))
 
+	if checkForMixedBackendTypes(specRule, routeNamespace, inferencePools) {
+		err := field.Forbidden(
+			rulePath.Child("backendRefs"),
+			"mixing InferencePool and non-InferencePool backends in a rule is not supported",
+		)
+		errors.invalid = append(errors.invalid, err)
+
+		return RouteRule{
+			ValidMatches:     validMatches,
+			Matches:          specRule.Matches,
+			Filters:          routeFilters,
+			RouteBackendRefs: backendRefs,
+		}, errors
+	}
+
 	// rule.BackendRefs are validated separately because of their special requirements
 	for _, b := range specRule.BackendRefs {
 		var interfaceFilters []any
@@ -225,18 +240,6 @@ func processHTTPRouteRule(
 		// headless Service backend (that we created), so nginx config can be built properly.
 		// Only do this if the InferencePool actually exists.
 		if ok, key := inferencePoolBackend(b, routeNamespace, inferencePools); ok {
-			// We don't support traffic splitting at the Route level for
-			// InferencePool backends, so if there's more than one backendRef, and one of them
-			// is an InferencePool, we mark the rule as invalid.
-			if len(specRule.BackendRefs) > 1 {
-				err := field.Forbidden(
-					rulePath.Child("backendRefs"),
-					"cannot use InferencePool backend when multiple backendRefs are specified in a single rule",
-				)
-				errors.invalid = append(errors.invalid, err)
-				break
-			}
-
 			svcName := controller.CreateInferencePoolServiceName(string(b.Name))
 			rbr = RouteBackendRef{
 				IsInferencePool:   true,
@@ -642,4 +645,29 @@ func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) 
 	}
 
 	return ruleErrors
+}
+
+// checkForMixedBackendTypes returns true if the rule contains a mix of
+// InferencePool and non-InferencePool backends.
+func checkForMixedBackendTypes(
+	specRule v1.HTTPRouteRule,
+	routeNamespace string,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
+) bool {
+	var hasInferencePool, hasNonInferencePool bool
+
+	for _, backendRef := range specRule.BackendRefs {
+		if ok, _ := inferencePoolBackend(backendRef, routeNamespace, inferencePools); ok {
+			hasInferencePool = true
+		} else {
+			hasNonInferencePool = true
+		}
+
+		// Early exit if we find both types
+		if hasInferencePool && hasNonInferencePool {
+			return true
+		}
+	}
+
+	return false
 }

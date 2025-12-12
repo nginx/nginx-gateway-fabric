@@ -1256,63 +1256,144 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 
 func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
 	validator := &validationfakes.FakeHTTPFieldsValidator{}
-	inferencePoolName := "ipool"
+	inferencePoolName1 := "primary-pool"
+	inferencePoolName2 := "secondary-pool"
 	routeNamespace := "test"
 	inferencePools := map[types.NamespacedName]*inference.InferencePool{
-		{Namespace: routeNamespace, Name: inferencePoolName}: {},
+		{Namespace: routeNamespace, Name: inferencePoolName1}: {},
+		{Namespace: routeNamespace, Name: inferencePoolName2}: {},
 	}
 
-	// BackendRef 1: InferencePool
-	backendRef1 := gatewayv1.HTTPBackendRef{
-		BackendRef: gatewayv1.BackendRef{
-			BackendObjectReference: gatewayv1.BackendObjectReference{
-				Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
-				Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
-				Name:      gatewayv1.ObjectName(inferencePoolName),
-				Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNamespace)),
-			},
-		},
-	}
-	// BackendRef 2: Service
-	backendRef2 := gatewayv1.HTTPBackendRef{
-		BackendRef: gatewayv1.BackendRef{
-			BackendObjectReference: gatewayv1.BackendObjectReference{
-				Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
-				Name: "backend",
-			},
-		},
-	}
-
-	specRule := gatewayv1.HTTPRouteRule{
-		Matches: []gatewayv1.HTTPRouteMatch{
-			{
-				Path: &gatewayv1.HTTPPathMatch{
-					Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-					Value: helpers.GetPointer("/"),
+	tests := []struct {
+		specRule        gatewayv1.HTTPRouteRule
+		name            string
+		expectErrorMsg  string
+		expectedBackend int
+		expectValid     bool
+	}{
+		{
+			name: "multiple weighted InferencePool backends (valid)",
+			specRule: gatewayv1.HTTPRouteRule{
+				Matches: []gatewayv1.HTTPRouteMatch{
+					{
+						Path: &gatewayv1.HTTPPathMatch{
+							Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
+							Value: helpers.GetPointer("/inference"),
+						},
+					},
+				},
+				BackendRefs: []gatewayv1.HTTPBackendRef{
+					{
+						BackendRef: gatewayv1.BackendRef{
+							BackendObjectReference: gatewayv1.BackendObjectReference{
+								Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
+								Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+								Name:      gatewayv1.ObjectName(inferencePoolName1),
+								Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNamespace)),
+							},
+							Weight: helpers.GetPointer(int32(70)),
+						},
+					},
+					{
+						BackendRef: gatewayv1.BackendRef{
+							BackendObjectReference: gatewayv1.BackendObjectReference{
+								Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
+								Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+								Name:      gatewayv1.ObjectName(inferencePoolName2),
+								Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNamespace)),
+							},
+							Weight: helpers.GetPointer(int32(30)),
+						},
+					},
 				},
 			},
+			expectValid:     true,
+			expectedBackend: 2,
 		},
-		BackendRefs: []gatewayv1.HTTPBackendRef{backendRef1, backendRef2},
+		{
+			name: "InferencePool mixed with Service backend (invalid)",
+			specRule: gatewayv1.HTTPRouteRule{
+				Matches: []gatewayv1.HTTPRouteMatch{
+					{
+						Path: &gatewayv1.HTTPPathMatch{
+							Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
+							Value: helpers.GetPointer("/mixed"),
+						},
+					},
+				},
+				BackendRefs: []gatewayv1.HTTPBackendRef{
+					{
+						BackendRef: gatewayv1.BackendRef{
+							BackendObjectReference: gatewayv1.BackendObjectReference{
+								Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
+								Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
+								Name:      gatewayv1.ObjectName(inferencePoolName1),
+								Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNamespace)),
+							},
+						},
+					},
+					{
+						BackendRef: gatewayv1.BackendRef{
+							BackendObjectReference: gatewayv1.BackendObjectReference{
+								Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
+								Name: "service-backend",
+							},
+						},
+					},
+				},
+			},
+			expectValid:     false,
+			expectErrorMsg:  "mixing InferencePool and non-InferencePool backends in a rule is not supported",
+			expectedBackend: 0,
+		},
 	}
 
-	rulePath := field.NewPath("spec").Child("rules").Index(0)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-	routeRule, errs := processHTTPRouteRule(
-		specRule,
-		rulePath,
-		validator,
-		nil,
-		inferencePools,
-		routeNamespace,
-	)
+			rulePath := field.NewPath("spec").Child("rules").Index(0)
 
-	g.Expect(routeRule.RouteBackendRefs).To(BeEmpty())
-	g.Expect(errs.invalid).To(HaveLen(1))
-	errMsg := "cannot use InferencePool backend when multiple backendRefs are specified in a single rule"
-	g.Expect(errs.invalid[0].Error()).To(ContainSubstring(errMsg))
+			routeRule, errs := processHTTPRouteRule(
+				tc.specRule,
+				rulePath,
+				validator,
+				nil,
+				inferencePools,
+				routeNamespace,
+			)
+
+			if tc.expectValid {
+				g.Expect(errs.invalid).To(BeEmpty())
+				g.Expect(routeRule.RouteBackendRefs).To(HaveLen(tc.expectedBackend))
+
+				if tc.expectedBackend == 2 {
+					// Verify both backends are converted to services with weights
+					g.Expect(routeRule.RouteBackendRefs[0].IsInferencePool).To(BeTrue())
+					g.Expect(routeRule.RouteBackendRefs[1].IsInferencePool).To(BeTrue())
+
+					// Verify service name conversion (primary-pool -> primary-pool-pool-svc)
+					g.Expect(string(routeRule.RouteBackendRefs[0].BackendRef.Name)).To(Equal("primary-pool-pool-svc"))
+					g.Expect(string(routeRule.RouteBackendRefs[1].BackendRef.Name)).To(Equal("secondary-pool-pool-svc"))
+
+					// Verify weights are preserved
+					g.Expect(routeRule.RouteBackendRefs[0].BackendRef.Weight).To(Equal(helpers.GetPointer(int32(70))))
+					g.Expect(routeRule.RouteBackendRefs[1].BackendRef.Weight).To(Equal(helpers.GetPointer(int32(30))))
+
+					// Verify kind is converted to Service
+					g.Expect(*routeRule.RouteBackendRefs[0].BackendRef.Kind).To(Equal(gatewayv1.Kind(kinds.Service)))
+					g.Expect(*routeRule.RouteBackendRefs[1].BackendRef.Kind).To(Equal(gatewayv1.Kind(kinds.Service)))
+				}
+			} else {
+				g.Expect(errs.invalid).To(HaveLen(1))
+				g.Expect(errs.invalid[0].Error()).To(ContainSubstring(tc.expectErrorMsg))
+				g.Expect(routeRule.RouteBackendRefs).To(HaveLen(tc.expectedBackend))
+			}
+		})
+	}
 }
 
 func TestValidateMatch(t *testing.T) {

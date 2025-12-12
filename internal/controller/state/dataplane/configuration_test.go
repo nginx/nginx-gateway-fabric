@@ -401,6 +401,19 @@ func assertBuildConfiguration(g *WithT, result, expected Configuration) {
 }
 
 func TestBuildConfiguration(t *testing.T) {
+	// setPathRuleIdx creates a new BackendGroup with the specified PathRuleIdx
+	// This is needed because pathRuleIdx cannot be determined in createTestResources when
+	// the BackendGroup is created, but can only be determined when the VirtualServer's PathRules are
+	// being defined in the Configuration.
+	setPathRuleIdx := func(bg BackendGroup, pathRuleIdx int) BackendGroup {
+		return BackendGroup{
+			Source:      bg.Source,
+			RuleIdx:     bg.RuleIdx,
+			PathRuleIdx: pathRuleIdx,
+			Backends:    bg.Backends,
+		}
+	}
+
 	t.Parallel()
 
 	fakeResolver := &resolverfakes.FakeServiceResolver{}
@@ -669,7 +682,6 @@ func TestBuildConfiguration(t *testing.T) {
 		"listener-8443",
 		pathAndType{path: "/", pathType: prefix}, pathAndType{path: "/third", pathType: prefix},
 	)
-
 	httpsHR8, expHTTPSHR8Groups, httpsRouteHR8 := createTestResources(
 		"https-hr-8",
 		"foo.example.com",
@@ -1257,11 +1269,11 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR3Groups[0],
+										BackendGroup: setPathRuleIdx(expHR3Groups[0], 0),
 										Source:       &hr3.ObjectMeta,
 									},
 									{
-										BackendGroup: expHR4Groups[1],
+										BackendGroup: setPathRuleIdx(expHR4Groups[1], 0),
 										Source:       &hr4.ObjectMeta,
 									},
 								},
@@ -1271,7 +1283,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR4Groups[0],
+										BackendGroup: setPathRuleIdx(expHR4Groups[0], 1),
 										Source:       &hr4.ObjectMeta,
 									},
 								},
@@ -1281,7 +1293,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR3Groups[1],
+										BackendGroup: setPathRuleIdx(expHR3Groups[1], 2),
 										Source:       &hr3.ObjectMeta,
 									},
 								},
@@ -1300,11 +1312,11 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR3Groups[0],
+										BackendGroup: setPathRuleIdx(expHTTPSHR3Groups[0], 0),
 										Source:       &httpsHR3.ObjectMeta,
 									},
 									{
-										BackendGroup: expHTTPSHR4Groups[1],
+										BackendGroup: setPathRuleIdx(expHTTPSHR4Groups[1], 0),
 										Source:       &httpsHR4.ObjectMeta,
 									},
 								},
@@ -1314,7 +1326,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR4Groups[0],
+										BackendGroup: setPathRuleIdx(expHTTPSHR4Groups[0], 1),
 										Source:       &httpsHR4.ObjectMeta,
 									},
 								},
@@ -1324,7 +1336,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR3Groups[1],
+										BackendGroup: setPathRuleIdx(expHTTPSHR3Groups[1], 2),
 										Source:       &httpsHR3.ObjectMeta,
 									},
 								},
@@ -1340,14 +1352,14 @@ func TestBuildConfiguration(t *testing.T) {
 				}...)
 				conf.Upstreams = append(conf.Upstreams, fooUpstream)
 				conf.BackendGroups = []BackendGroup{
-					expHR3Groups[0],
-					expHR3Groups[1],
-					expHR4Groups[0],
-					expHR4Groups[1],
-					expHTTPSHR3Groups[0],
-					expHTTPSHR3Groups[1],
-					expHTTPSHR4Groups[0],
-					expHTTPSHR4Groups[1],
+					setPathRuleIdx(expHR3Groups[0], 0),
+					setPathRuleIdx(expHR3Groups[1], 2),
+					setPathRuleIdx(expHR4Groups[0], 1),
+					setPathRuleIdx(expHR4Groups[1], 0),
+					setPathRuleIdx(expHTTPSHR3Groups[0], 0),
+					setPathRuleIdx(expHTTPSHR3Groups[1], 2),
+					setPathRuleIdx(expHTTPSHR4Groups[0], 1),
+					setPathRuleIdx(expHTTPSHR4Groups[1], 0),
 				}
 				return conf
 			}),
@@ -1417,7 +1429,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR3Groups[0],
+										BackendGroup: setPathRuleIdx(expHR3Groups[0], 0),
 										Source:       &hr3.ObjectMeta,
 									},
 								},
@@ -1427,7 +1439,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR3Groups[1],
+										BackendGroup: setPathRuleIdx(expHR3Groups[1], 1),
 										Source:       &hr3.ObjectMeta,
 									},
 								},
@@ -1447,7 +1459,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR8Groups[0],
+										BackendGroup: setPathRuleIdx(expHR8Groups[0], 0),
 										Source:       &hr8.ObjectMeta,
 									},
 								},
@@ -1457,7 +1469,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR8Groups[1],
+										BackendGroup: setPathRuleIdx(expHR8Groups[1], 1),
 										Source:       &hr8.ObjectMeta,
 									},
 								},
@@ -1476,7 +1488,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR3Groups[0],
+										BackendGroup: setPathRuleIdx(expHTTPSHR3Groups[0], 0),
 										Source:       &httpsHR3.ObjectMeta,
 									},
 								},
@@ -1486,7 +1498,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR3Groups[1],
+										BackendGroup: setPathRuleIdx(expHTTPSHR3Groups[1], 1),
 										Source:       &httpsHR3.ObjectMeta,
 									},
 								},
@@ -1512,7 +1524,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR7Groups[0],
+										BackendGroup: setPathRuleIdx(expHTTPSHR7Groups[0], 0),
 										Source:       &httpsHR7.ObjectMeta,
 									},
 								},
@@ -1522,7 +1534,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHTTPSHR7Groups[1],
+										BackendGroup: setPathRuleIdx(expHTTPSHR7Groups[1], 1),
 										Source:       &httpsHR7.ObjectMeta,
 									},
 								},
@@ -1538,14 +1550,14 @@ func TestBuildConfiguration(t *testing.T) {
 				}...)
 				conf.Upstreams = append(conf.Upstreams, fooUpstream)
 				conf.BackendGroups = []BackendGroup{
-					expHR3Groups[0],
-					expHR3Groups[1],
-					expHR8Groups[0],
-					expHR8Groups[1],
-					expHTTPSHR3Groups[0],
-					expHTTPSHR3Groups[1],
-					expHTTPSHR7Groups[0],
-					expHTTPSHR7Groups[1],
+					setPathRuleIdx(expHR3Groups[0], 0),
+					setPathRuleIdx(expHR3Groups[1], 1),
+					setPathRuleIdx(expHR8Groups[0], 0),
+					setPathRuleIdx(expHR8Groups[1], 1),
+					setPathRuleIdx(expHTTPSHR3Groups[0], 0),
+					setPathRuleIdx(expHTTPSHR3Groups[1], 1),
+					setPathRuleIdx(expHTTPSHR7Groups[0], 0),
+					setPathRuleIdx(expHTTPSHR7Groups[1], 1),
 				}
 				return conf
 			}),
@@ -1609,7 +1621,7 @@ func TestBuildConfiguration(t *testing.T) {
 								MatchRules: []MatchRule{
 									{
 										Source:       &hr5.ObjectMeta,
-										BackendGroup: expHR5Groups[1],
+										BackendGroup: setPathRuleIdx(expHR5Groups[1], 1),
 										Filters: HTTPFilters{
 											InvalidFilter: &InvalidHTTPFilter{},
 										},
@@ -1622,7 +1634,7 @@ func TestBuildConfiguration(t *testing.T) {
 				}...)
 				conf.SSLServers = []VirtualServer{}
 				conf.Upstreams = []Upstream{fooUpstream}
-				conf.BackendGroups = []BackendGroup{expHR5Groups[0], expHR5Groups[1]}
+				conf.BackendGroups = []BackendGroup{expHR5Groups[0], setPathRuleIdx(expHR5Groups[1], 1)}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
 				return conf
 			}),
@@ -1815,7 +1827,7 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: expHR7Groups[0],
+										BackendGroup: setPathRuleIdx(expHR7Groups[0], 1),
 										Source:       &hr7.ObjectMeta,
 									},
 								},
@@ -1826,7 +1838,7 @@ func TestBuildConfiguration(t *testing.T) {
 				}...)
 				conf.SSLServers = []VirtualServer{}
 				conf.Upstreams = []Upstream{fooUpstream}
-				conf.BackendGroups = []BackendGroup{expHR7Groups[0], expHR7Groups[1]}
+				conf.BackendGroups = []BackendGroup{setPathRuleIdx(expHR7Groups[0], 1), expHR7Groups[1]}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
 				return conf
 			}),
@@ -3323,7 +3335,7 @@ func TestBackendGroupName(t *testing.T) {
 	t.Parallel()
 	backendGroup := createBackendGroup("route1", 2, "foo", "bar")
 
-	expectedGroupName := "group_test__route1_rule2"
+	expectedGroupName := "group_test__route1_rule2_pathRule0"
 
 	g := NewWithT(t)
 	g.Expect(backendGroup.Name()).To(Equal(expectedGroupName))

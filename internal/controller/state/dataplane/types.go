@@ -311,6 +311,9 @@ type BackendGroup struct {
 	Backends []Backend
 	// RuleIdx is the index of the corresponding rule in the HTTPRoute.
 	RuleIdx int
+	// PathRuleIdx is the index of the corresponding path rule when attached to a VirtualServer.
+	// BackendGroups attached to a MatchRule that have the same Path match will have the same PathRuleIdx.
+	PathRuleIdx int
 }
 
 // Name returns the name of the backend group.
@@ -321,7 +324,7 @@ type BackendGroup struct {
 // The RuleIdx may change for a given rule if an update is made to the HTTPRoute, but it will always match the index
 // of the rule in the stored HTTPRoute.
 func (bg *BackendGroup) Name() string {
-	return fmt.Sprintf("group_%s__%s_rule%d", bg.Source.Namespace, bg.Source.Name, bg.RuleIdx)
+	return fmt.Sprintf("group_%s__%s_rule%d_pathRule%d", bg.Source.Namespace, bg.Source.Name, bg.RuleIdx, bg.PathRuleIdx)
 }
 
 // Backend represents a Backend for a routing rule.
