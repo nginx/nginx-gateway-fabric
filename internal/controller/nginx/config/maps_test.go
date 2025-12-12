@@ -397,55 +397,183 @@ func TestCreateStreamMapsWithEmpty(t *testing.T) {
 
 func TestBuildInferenceMaps(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	group := dataplane.BackendGroup{
-		Backends: []dataplane.Backend{
-			{
-				UpstreamName: "upstream1",
-				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-					NsName: "default",
-					EndpointPickerRef: &inference.EndpointPickerRef{
-						FailureMode: inference.EndpointPickerFailClose,
+	tests := []struct {
+		expectedConfig map[string]struct {
+			failureMode   inference.EndpointPickerFailureMode
+			defaultResult string
+		}
+		name          string
+		backendGroups []dataplane.BackendGroup
+		expectedMaps  int
+	}{
+		{
+			name: "unique backends with different failure modes, result is ordered by upstream name",
+			backendGroups: []dataplane.BackendGroup{
+				{
+					Backends: []dataplane.Backend{
+						{
+							UpstreamName: "upstream2",
+							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+								NsName: "default",
+								EndpointPickerRef: &inference.EndpointPickerRef{
+									FailureMode: inference.EndpointPickerFailOpen,
+								},
+							},
+						},
+						{
+							UpstreamName: "upstream1",
+							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+								NsName: "default",
+								EndpointPickerRef: &inference.EndpointPickerRef{
+									FailureMode: inference.EndpointPickerFailClose,
+								},
+							},
+						},
+						{
+							UpstreamName:         "upstream3",
+							EndpointPickerConfig: nil,
+						},
 					},
 				},
 			},
-			{
-				UpstreamName: "upstream2",
-				EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-					NsName: "default",
-					EndpointPickerRef: &inference.EndpointPickerRef{
-						FailureMode: inference.EndpointPickerFailOpen,
+			expectedMaps: 2,
+			expectedConfig: map[string]struct {
+				failureMode   inference.EndpointPickerFailureMode
+				defaultResult string
+			}{
+				"upstream1": {
+					failureMode:   inference.EndpointPickerFailClose,
+					defaultResult: "invalid-backend-ref",
+				},
+				"upstream2": {
+					failureMode:   inference.EndpointPickerFailOpen,
+					defaultResult: "upstream2",
+				},
+			},
+		},
+		{
+			name: "duplicate upstreams should be deduplicated",
+			backendGroups: []dataplane.BackendGroup{
+				{
+					Backends: []dataplane.Backend{
+						{
+							UpstreamName: "upstream1",
+							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+								NsName: "default",
+								EndpointPickerRef: &inference.EndpointPickerRef{
+									FailureMode: inference.EndpointPickerFailClose,
+								},
+							},
+						},
+						{
+							UpstreamName: "upstream1", // Duplicate
+							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+								NsName: "default",
+								EndpointPickerRef: &inference.EndpointPickerRef{
+									FailureMode: inference.EndpointPickerFailClose,
+								},
+							},
+						},
+					},
+				},
+				{
+					Backends: []dataplane.Backend{
+						{
+							UpstreamName: "upstream1", // Another duplicate
+							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+								NsName: "default",
+								EndpointPickerRef: &inference.EndpointPickerRef{
+									FailureMode: inference.EndpointPickerFailClose,
+								},
+							},
+						},
+						{
+							UpstreamName: "upstream2",
+							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
+								NsName: "default",
+								EndpointPickerRef: &inference.EndpointPickerRef{
+									FailureMode: inference.EndpointPickerFailOpen,
+								},
+							},
+						},
 					},
 				},
 			},
-			{
-				UpstreamName:         "upstream3",
-				EndpointPickerConfig: nil,
+			expectedMaps: 2, // Only 2 unique upstreams
+			expectedConfig: map[string]struct {
+				failureMode   inference.EndpointPickerFailureMode
+				defaultResult string
+			}{
+				"upstream1": {
+					failureMode:   inference.EndpointPickerFailClose,
+					defaultResult: "invalid-backend-ref",
+				},
+				"upstream2": {
+					failureMode:   inference.EndpointPickerFailOpen,
+					defaultResult: "upstream2",
+				},
 			},
+		},
+		{
+			name: "no endpoint picker configs",
+			backendGroups: []dataplane.BackendGroup{
+				{
+					Backends: []dataplane.Backend{
+						{
+							UpstreamName:         "upstream1",
+							EndpointPickerConfig: nil,
+						},
+						{
+							UpstreamName:         "upstream2",
+							EndpointPickerConfig: nil,
+						},
+					},
+				},
+			},
+			expectedMaps: 0,
 		},
 	}
 
-	maps := buildInferenceMaps([]dataplane.BackendGroup{group})
-	g.Expect(maps).To(HaveLen(2))
-	g.Expect(maps[0].Source).To(Equal("$inference_workload_endpoint"))
-	g.Expect(maps[0].Variable).To(Equal("$inference_backend_upstream1"))
-	g.Expect(maps[0].Parameters).To(HaveLen(3))
-	g.Expect(maps[0].Parameters[0].Value).To(Equal("\"\""))
-	g.Expect(maps[0].Parameters[0].Result).To(Equal("upstream1"))
-	g.Expect(maps[0].Parameters[1].Value).To(Equal("~.+"))
-	g.Expect(maps[0].Parameters[1].Result).To(Equal("$inference_workload_endpoint"))
-	g.Expect(maps[0].Parameters[2].Value).To(Equal("default"))
-	g.Expect(maps[0].Parameters[2].Result).To(Equal("invalid-backend-ref"))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-	// Check the second map
-	g.Expect(maps[1].Source).To(Equal("$inference_workload_endpoint"))
-	g.Expect(maps[1].Variable).To(Equal("$inference_backend_upstream2"))
-	g.Expect(maps[1].Parameters).To(HaveLen(3))
-	g.Expect(maps[1].Parameters[0].Value).To(Equal("\"\""))
-	g.Expect(maps[1].Parameters[0].Result).To(Equal("upstream2"))
-	g.Expect(maps[1].Parameters[1].Value).To(Equal("~.+"))
-	g.Expect(maps[1].Parameters[1].Result).To(Equal("$inference_workload_endpoint"))
-	g.Expect(maps[1].Parameters[2].Value).To(Equal("default"))
-	g.Expect(maps[1].Parameters[2].Result).To(Equal("upstream2"))
+			maps := buildInferenceMaps(tc.backendGroups)
+			g.Expect(maps).To(HaveLen(tc.expectedMaps))
+
+			// Verify each map has the correct structure
+			seenUpstreams := make(map[string]bool)
+			for _, m := range maps {
+				g.Expect(m.Source).To(Equal("$inference_workload_endpoint"))
+				g.Expect(m.Parameters).To(HaveLen(3))
+
+				// Extract upstream name from variable name
+				varName := strings.TrimPrefix(m.Variable, "$inference_backend_")
+				upstreamName := strings.ReplaceAll(varName, "_", "-")
+
+				// Verify we haven't seen this upstream before (no duplicates)
+				g.Expect(seenUpstreams[upstreamName]).To(BeFalse(), "Duplicate upstream found: %s", upstreamName)
+				seenUpstreams[upstreamName] = true
+
+				// Verify parameter structure
+				g.Expect(m.Parameters[0].Value).To(Equal("\"\""))
+				g.Expect(m.Parameters[0].Result).To(Equal(upstreamName))
+				g.Expect(m.Parameters[1].Value).To(Equal("~.+"))
+				g.Expect(m.Parameters[1].Result).To(Equal("$inference_workload_endpoint"))
+				g.Expect(m.Parameters[2].Value).To(Equal("default"))
+
+				// Verify the default result matches expected failure mode
+				if expectedConfig, exists := tc.expectedConfig[upstreamName]; exists {
+					g.Expect(m.Parameters[2].Result).To(Equal(expectedConfig.defaultResult))
+				}
+			}
+
+			// Verify all expected upstreams are present
+			for expectedUpstream := range tc.expectedConfig {
+				g.Expect(seenUpstreams[expectedUpstream]).To(BeTrue(), "Expected upstream not found: %s", expectedUpstream)
+			}
+		})
+	}
 }

@@ -19,8 +19,8 @@ CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the 
 SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes # Doesn't work on OpenShift due to security restrictions
 SKIP_TESTS =
 CEL_TEST_TARGET =
-INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting,EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService,InferencePoolResolvedRefsCondition
-INFERENCE_SKIP_TESTS = GatewayWeightedAcrossTwoInferencePools
+INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting,EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService,InferencePoolResolvedRefsCondition,GatewayWeightedAcrossTwoInferencePools
+INFERENCE_SKIP_TESTS =
 
 # Check if ENABLE_EXPERIMENTAL is true
 ifeq ($(ENABLE_EXPERIMENTAL),true)
@@ -115,9 +115,9 @@ run-inference-conformance-tests: ## Run inference conformance tests
 
 .PHONY: cleanup-conformance-tests
 cleanup-conformance-tests: ## Clean up conformance tests fixtures
-	kubectl delete pod conformance
+	kubectl delete pod conformance --ignore-not-found
 	kubectl delete pod conformance-inference --ignore-not-found
-	kubectl delete -f conformance/conformance-rbac.yaml
+	kubectl delete -f conformance/conformance-rbac.yaml --ignore-not-found
 
 .PHONY: reset-go-modules
 reset-go-modules: ## Reset the go modules changes

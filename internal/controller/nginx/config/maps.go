@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	gotemplate "text/template"
 
@@ -185,7 +186,7 @@ func createAddHeadersMap(name string) shared.Map {
 
 // buildInferenceMaps creates maps for InferencePool Backends.
 func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
-	inferenceMaps := make([]shared.Map, 0, len(groups))
+	uniqueMaps := make(map[string]shared.Map)
 
 	for _, group := range groups {
 		for _, backend := range group.Backends {
@@ -193,6 +194,13 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 				continue
 			}
 
+			backendVarName := strings.ReplaceAll(backend.UpstreamName, "-", "_")
+			mapKey := backendVarName // Use this as the key to detect duplicates
+
+			// Skip if we've already processed this upstream
+			if _, exists := uniqueMaps[mapKey]; exists {
+				continue
+			}
 			// Decide what the map must return when the picker didn’t set a value.
 			var defaultResult string
 			switch backend.EndpointPickerConfig.EndpointPickerRef.FailureMode {
@@ -230,14 +238,26 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 				Result: defaultResult,
 			})
 
-			backendVarName := strings.ReplaceAll(backend.UpstreamName, "-", "_")
-
-			inferenceMaps = append(inferenceMaps, shared.Map{
+			uniqueMaps[mapKey] = shared.Map{
 				Source:     `$inference_workload_endpoint`,
 				Variable:   fmt.Sprintf("$inference_backend_%s", backendVarName),
 				Parameters: params,
-			})
+			}
 		}
 	}
+
+	// Sort the map keys to ensure deterministic ordering
+	mapKeys := make([]string, 0, len(uniqueMaps))
+	for key := range uniqueMaps {
+		mapKeys = append(mapKeys, key)
+	}
+	sort.Strings(mapKeys)
+
+	// Build the result slice in sorted order
+	inferenceMaps := make([]shared.Map, 0, len(uniqueMaps))
+	for _, key := range mapKeys {
+		inferenceMaps = append(inferenceMaps, uniqueMaps[key])
+	}
+
 	return inferenceMaps
 }
