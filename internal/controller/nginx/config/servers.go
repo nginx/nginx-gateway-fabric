@@ -594,8 +594,17 @@ func createInternalLocationsForRule(
 				// we need to update the rule to only have that backend for the location.
 				// This ensures the correct name gets generated to correlate with the split clients generation.
 				// If there is only one backend, this is effectively a no-op.
-				tempRule := r
-				tempRule.BackendGroup.Backends = []dataplane.Backend{b}
+				tempRule := dataplane.MatchRule{
+					Source:  r.Source,
+					Match:   r.Match,
+					Filters: r.Filters,
+					BackendGroup: dataplane.BackendGroup{
+						Source:      r.BackendGroup.Source,
+						RuleIdx:     r.BackendGroup.RuleIdx,
+						PathRuleIdx: r.BackendGroup.PathRuleIdx,
+						Backends:    []dataplane.Backend{b}, // Only include the current backend
+					},
+				}
 				intProxyPassLocation = updateLocation(
 					tempRule,
 					rule,
@@ -726,8 +735,17 @@ func createInferenceLocationsForRule(
 			// we need to update the rule to only have that backend for the location.
 			// This ensures the correct name gets generated to correlate with the split clients generation.
 			// If there is only one backend, this is effectively a no-op.
-			tempRule := r
-			tempRule.BackendGroup.Backends = []dataplane.Backend{b}
+			tempRule := dataplane.MatchRule{
+				Source:  r.Source,
+				Match:   r.Match,
+				Filters: r.Filters,
+				BackendGroup: dataplane.BackendGroup{
+					Source:      r.BackendGroup.Source,
+					RuleIdx:     r.BackendGroup.RuleIdx,
+					PathRuleIdx: r.BackendGroup.PathRuleIdx,
+					Backends:    []dataplane.Backend{b}, // Only include the current backend
+				},
+			}
 			intProxyPassLocation = updateLocation(
 				tempRule,
 				rule,
