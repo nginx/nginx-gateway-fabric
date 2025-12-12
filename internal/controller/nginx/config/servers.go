@@ -284,12 +284,12 @@ location /coffee {
     js_content httpmatches.match; // chooses backend1 or backend2, and redirects to appropriate internal location
 }
 location /_ngf-internal-rule0-route0 {
-	internal;
-	proxy_pass http://backend1;
+    internal;
+    proxy_pass http://backend1;
 }
 location /_ngf-internal-rule1-route0 {
-	internal;
-	proxy_pass http://backend2;
+    internal;
+    proxy_pass http://backend2;
 }
 ---------------
 Inference extension, no HTTP matching conditions.
@@ -302,42 +302,41 @@ location /coffee {
     js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
 }
 location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
-	internal;
-	proxy_pass http://$inference-backend;
+    internal;
+    proxy_pass http://$inference_backend_test_foo_80;
 }
 ---------------
 Inference extension with multiple inference backends.
 
 location /coffee {
-	rewrite $inference_backend_group_routeNS__routeName_rule0 last;
-	proxy_http_version 1.1;
+    rewrite ^ $inference_backend_group_routeNS__routeName_rule0_pathRule0 last;
 }
 
 location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
-	internal;
-	proxy_pass http://$inference-backend0;
+    internal;
+    proxy_pass http://$inference_backend_test_primary_pool_80;
 }
 
-location /_ngf-internal-upstreamNamePrimary-routeNS-routeName-rule0 {
-	internal;
-	set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
-	js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
+location /_ngf-internal-test_primary_pool_80-routeNS-routeName-routeRule0-pathRule0 {
+    internal;
+    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
+    js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
 }
 
 location /_ngf-internal-proxy-pass-rule0-route0-backend1-inference {
-	internal;
-	proxy_pass http://$inference-backend1;
+    internal;
+    proxy_pass http://$inference_backend_test_secondary_pool_80;
 }
 
-location /_ngf-internal-upstreamNameSecondary-routeNS-routeName-rule0 {
-	internal;
-	set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend1-inference;
-	js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend1-inference
+location /_ngf-internal-test_secondary_pool_80-routeNS-routeName-routeRule0-pathRule0 {
+    internal;
+    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend1-inference;
+    js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend1-inference
 }
 
-split_clients $request_id $inference_backend_group_routeNS__routeName_rule0 {
-    70.00% /_ngf-internal-upstreamNamePrimary-routeNS-routeName-rule0;
-    30.00% /_ngf-internal-upstreamNameSecondary-routeNS-routeName-rule0;
+split_clients $request_id $inference_backend_group_routeNS__routeName_rule0_pathRule0 {
+    70.00% /_ngf-internal-test_primary_pool_80-routeNS-routeName-routeRule0-pathRule0;
+    30.00% /_ngf-internal-test_secondary_pool_80-routeNS-routeName-routeRule0-pathRule0;
 }
 ---------------
 Inference extension with HTTP matching conditions.
@@ -347,23 +346,17 @@ and which backend to use, then redirects to the internal inference location. The
 location calls the inference NJS module to get the AI endpoint to proxy to, then redirects to the
 internal location that proxies to the backend.
 
-Note that the location path naming here is a little different than the previous example.
-The final location that proxy_passes has the non-inference name to avoid too much refactoring
-in the code, and the intermediate location has -inference in the name, whereas in the previous example
-it was the final location that had -inference in the name.
-
 location /coffee {
-	js_content httpmatches.match; // chooses backend and redirects to appropriate internal inference location
+    js_content httpmatches.match; // chooses backend and redirects to appropriate internal inference location
 }
-location /_ngf-internal-upstreamNamePrimary-routeNS-routeName-rule0 {
-	internal;
-
-	set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
-	js_content epp.getEndpoint; // redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
+location /_ngf-internal-test_foo_80-routeNS-routeName-routeRule0-pathRule0 {
+    internal;
+    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
+    js_content epp.getEndpoint; // redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
 }
 location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
-	internal;
-	proxy_pass http://$inference-backend;
+    internal;
+    proxy_pass http://$inference_backend_test_foo_80;
 }
 ---------------
 Inference extension with multiple backends with HTTP matching conditions.
@@ -374,41 +367,39 @@ location based on a split clients variable. That internal inference location cal
 to get the AI endpoint to proxy to, then redirects to the internal location that proxies to the backend.
 
 location /coffee {
-	js_content httpmatches.match; // chooses backend and redirects to appropriate internal inference location
+    js_content httpmatches.match; // chooses backend and redirects to appropriate internal inference location
 }
 
 location /_ngf-internal-split-clients-rule0-route0-inference  {
-	internal;
-
-	rewrite $inference_backend_group_routeNS__routeName_rule0 last;
-	proxy_http_version 1.1;
+    internal;
+    rewrite ^ $inference_backend_group_routeNS__routeName_rule0_pathRule0 last;
 }
 
 location /_ngf-internal-proxy-pass-rule0-route0-backend0-inference {
-	internal;
-	proxy_pass http://$inference-backend0;
+    internal;
+    proxy_pass http://$inference_backend_test_primary_pool_80;
 }
 
-location /_ngf-internal-upstreamNamePrimary-routeNS-routeName-rule0 {
-	internal;
-	set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
-	js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
+location /_ngf-internal-test_primary_pool_80-routeNS-routeName-routeRule0-pathRule0 {
+    internal;
+    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend0-inference;
+    js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend0-inference
 }
 
 location /_ngf-internal-proxy-pass-rule0-route0-backend1-inference {
-	internal;
-	proxy_pass http://$inference-backend1;
+    internal;
+    proxy_pass http://$inference_backend_test_secondary_pool_80;
 }
 
-location /_ngf-internal-upstreamNameSecondary-routeNS-routeName-rule0 {
-	internal;
-	set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend1-inference;
-	js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend1-inference
+location /_ngf-internal-test_secondary_pool_80-routeNS-routeName-routeRule0-pathRule0 {
+    internal;
+    set $epp_internal_path /_ngf-internal-proxy-pass-rule0-route0-backend1-inference;
+    js_content epp.getEndpoint; // gets endpoint and redirects to /_ngf-internal-proxy-pass-rule0-route0-backend1-inference
 }
 
-split_clients $request_id $inference_backend_group_routeNS__routeName_rule0 {
-    70.00% /_ngf-internal-upstreamNamePrimary-routeNS-routeName-rule0;
-    30.00% /_ngf-internal-upstreamNameSecondary-routeNS-routeName-rule0;
+split_clients $request_id $inference_backend_group_routeNS__routeName_rule0_pathRule0 {
+    70.00% /_ngf-internal-test_primary_pool_80-routeNS-routeName-routeRule0-pathRule0;
+    30.00% /_ngf-internal-test_secondary_pool_80-routeNS-routeName-routeRule0-pathRule0;
 }
 */
 
