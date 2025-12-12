@@ -6,7 +6,7 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/files/plus-9.repo nginx-
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:1bde412ee491e03e686f3f8cebe22dad0526e007d0d34829c143f063dca8084f AS ubi9-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:c69c8a1d3255d5adaa30de233293d76fa3d903a5583c5933e26567d4e4c6f877 AS ubi9-packages
 
 FROM redhat/ubi9-minimal:9.7-1764794109 AS ubi-nginx-plus
 
@@ -36,9 +36,8 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     --mount=type=bind,from=ubi9-packages,src=/,target=/ubi-bin/ \
     --mount=type=secret,id=nginx-repo.crt,dst=/etc/ssl/nginx/nginx-repo.crt,mode=0644 \
 	--mount=type=secret,id=nginx-repo.key,dst=/etc/ssl/nginx/nginx-repo.key,mode=0644 \
-    # Install shadow-utils for useradd
-    microdnf --nodocs install -y shadow-utils  \
-    && rpm --import /tmp/nginx_signing.key \
+    # Import NGINX signing key
+    rpm --import /tmp/nginx_signing.key \
     # Install c-ares from the dependencies image (contains required libs)
     && rpm -Uvh /ubi-bin/c-ares-*.rpm \
     # Create nginx user with consistent UID/GID
@@ -50,7 +49,6 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     # Install nginx-agent
     && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
     # Clean up
-    && microdnf remove -y shadow-utils \
     && microdnf clean all \
     && rm -rf /var/cache/yum
 
