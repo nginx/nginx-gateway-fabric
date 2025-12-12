@@ -32,6 +32,8 @@ type Configuration struct {
 	BaseStreamConfig BaseStreamConfig
 	// SSLKeyPairs holds all unique SSLKeyPairs.
 	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
+	// AuthBasicSecrets holds all unique secrets for basic authentication.
+	AuthBasicSecrets map[AuthBasicUserFileID]AuthBasicUserData
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
@@ -71,8 +73,15 @@ type SSLKeyPairID string
 // The ID is safe to use as a file name.
 type CertBundleID string
 
+// AuthBasicUserFileID is a unique identifier for a basic auth user file.
+// The ID is safe to use as a file name.
+type AuthBasicUserFileID string
+
 // CertBundle is a Certificate bundle.
 type CertBundle []byte
+
+// AuthBasicUserData is the data for a basic auth user file.
+type AuthBasicUserData []byte
 
 // SSLKeyPair is an SSL private/public key pair.
 type SSLKeyPair struct {
@@ -149,22 +158,14 @@ type InvalidHTTPFilter struct{}
 
 // HTTPFilters hold the filters for a MatchRule.
 type HTTPFilters struct {
-	// InvalidFilter is a special filter that indicates whether the filters are invalid. If this is the case,
-	// the data plane must return 500 error, and all other filters are nil.
-	InvalidFilter *InvalidHTTPFilter
-	// RequestRedirect holds the HTTPRequestRedirectFilter.
-	RequestRedirect *HTTPRequestRedirectFilter
-	// RequestURLRewrite holds the HTTPURLRewriteFilter.
-	RequestURLRewrite *HTTPURLRewriteFilter
-	// RequestMirrors holds the HTTPRequestMirrorFilters. There could be more than one specified.
-	RequestMirrors []*HTTPRequestMirrorFilter
-	// RequestHeaderModifiers holds the HTTPHeaderFilter.
-	RequestHeaderModifiers *HTTPHeaderFilter
-	// ResponseHeaderModifiers holds the HTTPHeaderFilter.
+	InvalidFilter           *InvalidHTTPFilter
+	RequestRedirect         *HTTPRequestRedirectFilter
+	RequestURLRewrite       *HTTPURLRewriteFilter
+	RequestHeaderModifiers  *HTTPHeaderFilter
 	ResponseHeaderModifiers *HTTPHeaderFilter
-	// SnippetsFilters holds all the SnippetsFilters for the MatchRule.
-	// Unlike the core and extended filters, there can be more than one SnippetsFilters defined on a routing rule.
-	SnippetsFilters []SnippetsFilter
+	AuthenticationFilter    *AuthenticationFilter
+	RequestMirrors          []*HTTPRequestMirrorFilter
+	SnippetsFilters         []SnippetsFilter
 }
 
 // SnippetsFilter holds the location and server snippets in a SnippetsFilter.
@@ -174,6 +175,28 @@ type SnippetsFilter struct {
 	LocationSnippet *Snippet
 	// ServerSnippet holds the snippet for the server context.
 	ServerSnippet *Snippet
+}
+
+// Snippet is a snippet of configuration.
+type Snippet struct {
+	// Name is the name of the snippet.
+	Name string
+	// Contents is the content of the snippet.
+	Contents string
+}
+
+// AuthenticationFilter represents an authentication filter.
+type AuthenticationFilter struct {
+	// This is where the data is extracted to.
+	Basic *AuthBasic
+}
+
+// AuthBasic holds the basic authentication configuration.
+type AuthBasic struct {
+	SecretName      string
+	SecretNamespace string
+	Realm           string
+	Data            []byte
 }
 
 // HTTPHeader represents an HTTP header.
@@ -411,14 +434,6 @@ type BaseHTTPConfig struct {
 type BaseStreamConfig struct {
 	// DNSResolver specifies the DNS resolver configuration for ExternalName services.
 	DNSResolver *DNSResolverConfig
-}
-
-// Snippet is a snippet of configuration.
-type Snippet struct {
-	// Name is the name of the snippet.
-	Name string
-	// Contents is the content of the snippet.
-	Contents string
 }
 
 // RewriteClientIPSettings defines configuration for rewriting the client IP to the original client's IP.

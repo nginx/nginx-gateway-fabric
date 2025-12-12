@@ -277,6 +277,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 				test.gateways,
 				snippetsFilters,
 				nil,
+				nil,
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
 		})
@@ -1109,7 +1110,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 				{Namespace: "test", Name: "ipool"}: {},
 			}
 
-			route := buildHTTPRoute(test.validator, test.hr, gws, snippetsFilters, inferencePools)
+			route := buildHTTPRoute(test.validator, test.hr, gws, snippetsFilters, nil, inferencePools)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
 	}
@@ -1241,7 +1242,7 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 	g := NewWithT(t)
 
 	routes := map[RouteKey]*L7Route{}
-	l7route := buildHTTPRoute(validator, hr, gateways, snippetsFilters, nil)
+	l7route := buildHTTPRoute(validator, hr, gateways, snippetsFilters, nil, nil)
 	g.Expect(l7route).NotTo(BeNil())
 
 	buildHTTPMirrorRoutes(routes, l7route, hr, gateways, snippetsFilters)

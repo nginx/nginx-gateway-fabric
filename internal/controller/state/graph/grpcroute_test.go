@@ -233,6 +233,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 				test.gateways,
 				snippetsFilters,
 				nil,
+				nil,
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
 		})
@@ -1199,7 +1200,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			snippetsFilters := map[types.NamespacedName]*SnippetsFilter{
 				{Namespace: "test", Name: "sf"}: {Valid: true},
 			}
-			route := buildGRPCRoute(test.validator, test.gr, gws, snippetsFilters)
+			route := buildGRPCRoute(test.validator, test.gr, gws, snippetsFilters, nil)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
 	}
@@ -1352,7 +1353,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 	g := NewWithT(t)
 
 	routes := map[RouteKey]*L7Route{}
-	l7route := buildGRPCRoute(validator, gr, gateways, snippetsFilters)
+	l7route := buildGRPCRoute(validator, gr, gateways, snippetsFilters, nil)
 	g.Expect(l7route).NotTo(BeNil())
 
 	buildGRPCMirrorRoutes(routes, l7route, gr, gateways, snippetsFilters)

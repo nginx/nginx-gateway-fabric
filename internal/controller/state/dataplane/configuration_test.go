@@ -2485,7 +2485,7 @@ func TestUpsertRoute_PathRuleHasInferenceBackend(t *testing.T) {
 	}
 
 	hpr := newHostPathRules()
-	hpr.upsertRoute(route, listener, gateway, nil)
+	hpr.upsertRoute(route, listener, gateway, nil, nil)
 
 	// Find the PathRule for "/infer"
 	found := false
@@ -2829,7 +2829,7 @@ func TestCreateFilters(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			routeNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
-			result := createHTTPFilters(test.filters, 0, routeNsName)
+			result := createHTTPFilters(test.filters, 0, routeNsName, nil)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})

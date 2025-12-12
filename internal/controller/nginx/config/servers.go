@@ -9,10 +9,13 @@ import (
 	"strings"
 	gotemplate "text/template"
 
+	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -704,6 +707,7 @@ func updateLocation(
 
 	location = updateLocationMirrorRoute(location, pathRule.Path, grpc)
 	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
+	location = updateLocationAuthenticationFilter(location, filters.AuthenticationFilter)
 
 	if filters.RequestRedirect != nil {
 		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
@@ -713,6 +717,45 @@ func updateLocation(
 	location = updateLocationMirrorFilters(location, filters.RequestMirrors, pathRule.Path, mirrorPercentage)
 	location = updateLocationProxySettings(location, matchRule, grpc, inferenceBackend, keepAliveCheck)
 
+	return location
+}
+
+func updateLocationAuthenticationFilter(
+	location http.Location,
+	authenticationFilter *dataplane.AuthenticationFilter,
+) http.Location {
+	logger := ctlrZap.New().WithName("update-location-auth-filter")
+
+	// TODO: Remove logging after debugging
+	if authenticationFilter == nil {
+		logger.Info("Missing AuthenticationFilter for location", "locationPath", location.Path)
+	} else if authenticationFilter.Basic == nil {
+		logger.Info("No Basic authentication configured for location", "locationPath", location.Path)
+	}
+
+	if authenticationFilter != nil {
+		logger.Info("Applying authentication filter to location", "locationPath", location.Path)
+		if authenticationFilter.Basic != nil {
+			// TODO: Include namespace
+			userFilePathAndData := fmt.Sprintf("%s/%s/%s/%s",
+				secretsFolder,
+				authenticationFilter.Basic.SecretNamespace,
+				authenticationFilter.Basic.SecretName,
+				graph.AuthKeyBasic,
+			)
+			location.AuthBasic = &http.AuthBasic{
+				Realm: authenticationFilter.Basic.Realm,
+				Data: http.AuthBasicData{
+					FileName: userFilePathAndData,
+					FileData: authenticationFilter.Basic.Data,
+				},
+			}
+			logger.Info("location.AuthBasic configured", "locationPath",
+				location.Path,
+				"realm",
+				authenticationFilter.Basic.Realm)
+		}
+	}
 	return location
 }
 

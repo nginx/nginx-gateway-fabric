@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
+	coreV1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -58,7 +59,7 @@ func BuildConfiguration(
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
-	httpServers, sslServers := buildServers(gateway, g.ReferencedServices)
+	httpServers, sslServers := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 	upstreams := buildUpstreams(
 		ctx,
@@ -93,6 +94,7 @@ func BuildConfiguration(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
 		),
+		AuthBasicSecrets:  buildAuthBasicSecrets(g.ReferencedSecrets),
 		Telemetry:         buildTelemetry(g, gateway),
 		BaseHTTPConfig:    baseHTTPConfig,
 		BaseStreamConfig:  baseStreamConfig,
@@ -345,6 +347,36 @@ func buildCertBundles(
 	return bundles
 }
 
+func buildAuthBasicSecrets(secrets map[types.NamespacedName]*graph.Secret) map[AuthBasicUserFileID]AuthBasicUserData {
+	authBasics := make(map[AuthBasicUserFileID]AuthBasicUserData)
+
+	for nsname, secret := range secrets {
+		if secret.Source.Type == coreV1.SecretType(graph.SecretTypeHtpasswd) {
+			id := generateAuthBasicUserFileID(fmt.Sprintf("%s/%s/%s", nsname.Namespace, nsname.Name, graph.AuthKeyBasic))
+			authBasics[id] = secret.Source.Data[graph.AuthKeyBasic]
+		}
+	}
+	return authBasics
+}
+
+// func getAuthBasicSecretIDsFromServers(authBasics map[AuthBasicUserFileID]AuthBasicUserData, servers []VirtualServer) []AuthBasicUserFileID {
+// 	userFileIDs := make([]AuthBasicUserFileID, 0)
+// 	for _, server := range servers {
+// 		for _, rule := range server.PathRules {
+// 			for _, matchRule := range rule.MatchRules {
+// 				if matchRule.Filters.AuthenticationFilter != nil {
+// 					if matchRule.Filters.AuthenticationFilter.Basic != nil {
+// 						ns := matchRule.Filters.AuthenticationFilter.Basic.SecretNamespace
+// 						name := matchRule.Filters.AuthenticationFilter.Basic.SecretName
+// 						id := generateAuthBasicUserFileID(fmt.Sprintf("%s/%s/%s", ns, name, graph.AuthKeyBasic))
+// 						userFileIDs = append(userFileIDs, id)
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+// }
+
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 	type key struct {
 		nsname  types.NamespacedName
@@ -459,6 +491,7 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 func buildServers(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
 ) (http, ssl []VirtualServer) {
 	rulesForProtocol := map[v1.ProtocolType]portPathRules{
 		v1.HTTPProtocolType:  make(portPathRules),
@@ -476,7 +509,7 @@ func buildServers(
 				rulesForProtocol[l.Source.Protocol][l.Source.Port] = rules
 			}
 
-			rules.upsertListener(l, gateway, referencedServices)
+			rules.upsertListener(l, gateway, referencedServices, referencedSecrets)
 		}
 	}
 
@@ -541,6 +574,7 @@ func (hpr *hostPathRules) upsertListener(
 	l *graph.Listener,
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
 ) {
 	hpr.listenersExist = true
 	hpr.port = l.Source.Port
@@ -554,7 +588,7 @@ func (hpr *hostPathRules) upsertListener(
 			continue
 		}
 
-		hpr.upsertRoute(r, l, gateway, referencedServices)
+		hpr.upsertRoute(r, l, gateway, referencedServices, referencedSecrets)
 	}
 }
 
@@ -563,6 +597,7 @@ func (hpr *hostPathRules) upsertRoute(
 	listener *graph.Listener,
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
 ) {
 	var hostnames []string
 	GRPC := route.RouteType == graph.RouteTypeGRPC
@@ -608,7 +643,7 @@ func (hpr *hostPathRules) upsertRoute(
 
 		var filters HTTPFilters
 		if rule.Filters.Valid {
-			filters = createHTTPFilters(rule.Filters.Filters, idx, routeNsName)
+			filters = createHTTPFilters(rule.Filters.Filters, idx, routeNsName, referencedSecrets)
 		} else {
 			filters = HTTPFilters{
 				InvalidFilter: &InvalidHTTPFilter{},
@@ -893,7 +928,12 @@ func getPath(path *v1.HTTPPathMatch) string {
 	return *path.Value
 }
 
-func createHTTPFilters(filters []graph.Filter, ruleIdx int, routeNsName types.NamespacedName) HTTPFilters {
+func createHTTPFilters(
+	filters []graph.Filter,
+	ruleIdx int,
+	routeNsName types.NamespacedName,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
+) HTTPFilters {
 	var result HTTPFilters
 
 	for _, f := range filters {
@@ -924,11 +964,19 @@ func createHTTPFilters(filters []graph.Filter, ruleIdx int, routeNsName types.Na
 				result.ResponseHeaderModifiers = convertHTTPHeaderFilter(f.ResponseHeaderModifier)
 			}
 		case graph.FilterExtensionRef:
-			if f.ResolvedExtensionRef != nil && f.ResolvedExtensionRef.SnippetsFilter != nil {
-				result.SnippetsFilters = append(
-					result.SnippetsFilters,
-					convertSnippetsFilter(f.ResolvedExtensionRef.SnippetsFilter),
-				)
+			if f.ResolvedExtensionRef != nil {
+				if f.ResolvedExtensionRef.SnippetsFilter != nil {
+					result.SnippetsFilters = append(
+						result.SnippetsFilters,
+						convertSnippetsFilter(f.ResolvedExtensionRef.SnippetsFilter),
+					)
+				}
+				if f.ResolvedExtensionRef.AuthenticationFilter != nil {
+					result.AuthenticationFilter = convertAuthenticationFilter(
+						f.ResolvedExtensionRef.AuthenticationFilter,
+						referencedSecrets,
+					)
+				}
 			}
 		}
 	}
@@ -962,6 +1010,10 @@ func generateSSLKeyPairID(secret types.NamespacedName) SSLKeyPairID {
 // The ID is safe to use as a file name.
 func generateCertBundleID(caCertRef types.NamespacedName) CertBundleID {
 	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", caCertRef.Namespace, caCertRef.Name))
+}
+
+func generateAuthBasicUserFileID(id string) AuthBasicUserFileID {
+	return AuthBasicUserFileID(id)
 }
 
 func telemetryEnabled(gw *graph.Gateway) bool {

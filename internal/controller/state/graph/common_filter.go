@@ -112,7 +112,7 @@ func processRouteRuleFilters(
 	filters []Filter,
 	path *field.Path,
 	validator validation.HTTPFieldsValidator,
-	resolveExtRefFunc resolveExtRefFilter,
+	extRefFilterResolvers map[string]resolveExtRefFilter,
 ) (RouteRuleFilters, routeRuleErrors) {
 	errors := routeRuleErrors{}
 	valid := true
@@ -128,7 +128,9 @@ func processRouteRuleFilters(
 		}
 
 		if f.FilterType == FilterExtensionRef && f.ExtensionRef != nil {
-			resolved := resolveExtRefFunc(*f.ExtensionRef)
+			// Will need to test how this behaves if we don't get a match.
+			extRefFilterResolver := extRefFilterResolvers[string(f.ExtensionRef.Kind)]
+			resolved := extRefFilterResolver(*f.ExtensionRef)
 
 			if resolved == nil {
 				err := field.NotFound(filterPath.Child("extensionRef"), f.ExtensionRef)

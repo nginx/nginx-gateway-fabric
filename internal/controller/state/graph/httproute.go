@@ -30,6 +30,7 @@ func buildHTTPRoute(
 	ghr *v1.HTTPRoute,
 	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	authenticationFilters map[types.NamespacedName]*AuthenticationFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 ) *L7Route {
 	r := &L7Route{
@@ -63,10 +64,22 @@ func buildHTTPRoute(
 	r.Spec.Hostnames = ghr.Spec.Hostnames
 	r.Attachable = true
 
+	extRefFilterResolvers := make(map[string]resolveExtRefFilter)
+
+	extRefFilterResolvers[kinds.SnippetsFilter] = getSnippetsFilterResolverForNamespace(
+		snippetsFilters,
+		r.Source.GetNamespace(),
+	)
+
+	extRefFilterResolvers[kinds.AuthenticationFilter] = getAuthenticationFilterResolverForNamespace(
+		authenticationFilters,
+		r.Source.GetNamespace(),
+	)
+
 	rules, valid, conds := processHTTPRouteRules(
 		ghr.Spec.Rules,
 		validator,
-		getSnippetsFilterResolverForNamespace(snippetsFilters, r.Source.GetNamespace()),
+		extRefFilterResolvers,
 		inferencePools,
 		r.Source.GetNamespace(),
 	)
@@ -121,6 +134,7 @@ func buildHTTPMirrorRoutes(
 					gateways,
 					snippetsFilters,
 					nil,
+					nil,
 				)
 
 				if mirrorRoute != nil {
@@ -173,7 +187,7 @@ func processHTTPRouteRule(
 	specRule v1.HTTPRouteRule,
 	rulePath *field.Path,
 	validator validation.HTTPFieldsValidator,
-	resolveExtRefFunc resolveExtRefFilter,
+	extRefFilterResolvers map[string]resolveExtRefFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 	routeNamespace string,
 ) (RouteRule, routeRuleErrors) {
@@ -200,7 +214,7 @@ func processHTTPRouteRule(
 		convertHTTPRouteFilters(specRule.Filters),
 		rulePath.Child("filters"),
 		validator,
-		resolveExtRefFunc,
+		extRefFilterResolvers,
 	)
 
 	errors = errors.append(filterErrors)
@@ -283,7 +297,7 @@ func processHTTPRouteRule(
 func processHTTPRouteRules(
 	specRules []v1.HTTPRouteRule,
 	validator validation.HTTPFieldsValidator,
-	resolveExtRefFunc resolveExtRefFilter,
+	extRefFilterResolvers map[string]resolveExtRefFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 	routeNamespace string,
 ) (rules []RouteRule, valid bool, conds []conditions.Condition) {
@@ -301,7 +315,7 @@ func processHTTPRouteRules(
 			rule,
 			rulePath,
 			validator,
-			resolveExtRefFunc,
+			extRefFilterResolvers,
 			inferencePools,
 			routeNamespace,
 		)

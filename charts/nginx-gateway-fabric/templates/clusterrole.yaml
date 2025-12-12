@@ -129,6 +129,7 @@ rules:
   - clientsettingspolicies
   - observabilitypolicies
   - upstreamsettingspolicies
+  - authenticationfilters
   {{- if .Values.nginxGateway.snippetsFilters.enable }}
   - snippetsfilters
   {{- end }}
@@ -142,6 +143,7 @@ rules:
   - clientsettingspolicies/status
   - observabilitypolicies/status
   - upstreamsettingspolicies/status
+  - authenticationfilters/status
   {{- if .Values.nginxGateway.snippetsFilters.enable }}
   - snippetsfilters/status
   {{- end }}
