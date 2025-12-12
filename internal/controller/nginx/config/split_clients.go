@@ -168,7 +168,7 @@ func createBackendGroupSplitClientDistributions(group dataplane.BackendGroup) []
 
 		distributions = append(distributions, http.SplitClientDistribution{
 			Percent: fmt.Sprintf("%.2f", percentage),
-			Value:   getSplitClientValue(b, group.Source, group.RuleIdx),
+			Value:   getSplitClientValue(b, group.Source, group.RuleIdx, group.PathRuleIdx),
 		})
 	}
 
@@ -178,22 +178,23 @@ func createBackendGroupSplitClientDistributions(group dataplane.BackendGroup) []
 
 	distributions = append(distributions, http.SplitClientDistribution{
 		Percent: fmt.Sprintf("%.2f", availablePercentage),
-		Value:   getSplitClientValue(lastBackend, group.Source, group.RuleIdx),
+		Value:   getSplitClientValue(lastBackend, group.Source, group.RuleIdx, group.PathRuleIdx),
 	})
 
 	return distributions
 }
 
-func getSplitClientValue(b dataplane.Backend, source types.NamespacedName, ruleIdx int) string {
+func getSplitClientValue(b dataplane.Backend, source types.NamespacedName, ruleIdx, pathRuleIdx int) string {
 	if b.Valid {
 		if b.EndpointPickerConfig != nil {
 			return fmt.Sprintf(
-				"%s-%s-%s-%s-rule%d",
+				"%s-%s-%s-%s-routeRule%d-pathRule%d",
 				http.InternalRoutePathPrefix,
 				b.UpstreamName,
 				source.Namespace,
 				source.Name,
 				ruleIdx,
+				pathRuleIdx,
 			)
 		}
 

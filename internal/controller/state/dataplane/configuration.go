@@ -347,8 +347,9 @@ func buildCertBundles(
 
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 	type key struct {
-		nsname  types.NamespacedName
-		ruleIdx int
+		nsname      types.NamespacedName
+		ruleIdx     int
+		pathRuleIdx int
 	}
 
 	// There can be duplicate backend groups if a route is attached to multiple listeners.
@@ -361,8 +362,9 @@ func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 				group := mr.BackendGroup
 
 				k := key{
-					nsname:  group.Source,
-					ruleIdx: group.RuleIdx,
+					nsname:      group.Source,
+					ruleIdx:     group.RuleIdx,
+					pathRuleIdx: group.PathRuleIdx,
 				}
 
 				uniqueGroups[k] = group
@@ -693,6 +695,12 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 
 			return s.PathRules[i].PathType < s.PathRules[j].PathType
 		})
+
+		for pathRuleIdx := range s.PathRules {
+			for matchRuleIdx := range s.PathRules[pathRuleIdx].MatchRules {
+				s.PathRules[pathRuleIdx].MatchRules[matchRuleIdx].BackendGroup.PathRuleIdx = pathRuleIdx
+			}
+		}
 
 		servers = append(servers, s)
 	}
