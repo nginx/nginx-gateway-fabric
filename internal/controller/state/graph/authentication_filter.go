@@ -6,7 +6,6 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
-	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -49,6 +48,7 @@ func getAuthenticationFilterResolverForNamespace(
 
 func processAuthenticationFilters(
 	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
+	secretResolver *secretResolver,
 ) map[types.NamespacedName]*AuthenticationFilter {
 	if len(authenticationFilters) == 0 {
 		return nil
@@ -57,7 +57,7 @@ func processAuthenticationFilters(
 	processed := make(map[types.NamespacedName]*AuthenticationFilter)
 
 	for nsname, af := range authenticationFilters {
-		if cond := validateAuthenticationFilter(af); cond != nil {
+		if cond := validateAuthenticationFilter(af, nsname, secretResolver); cond != nil {
 			processed[nsname] = &AuthenticationFilter{
 				Source:     af,
 				Conditions: []conditions.Condition{*cond},
@@ -77,6 +77,8 @@ func processAuthenticationFilters(
 
 func validateAuthenticationFilter(
 	af *ngfAPI.AuthenticationFilter,
+	nsname types.NamespacedName,
+	secretResolver *secretResolver,
 ) *conditions.Condition {
 	var allErrs field.ErrorList
 
@@ -85,6 +87,18 @@ func validateAuthenticationFilter(
 	case ngfAPI.AuthTypeBasic:
 		if af.Spec.Basic.Realm == "" {
 			allErrs = append(allErrs, field.Required(field.NewPath("spec.basic.realm"), "realm cannot be empty"))
+		}
+		if af.Spec.Basic.SecretRef.Name == "" {
+			allErrs = append(allErrs, field.Required(field.NewPath("spec.basic.secretRef.name"), "secretRef.name cannot be empty"))
+		} else {
+			sec := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
+			if err := secretResolver.resolve(sec); err != nil {
+				allErrs = append(allErrs, field.Invalid(
+					field.NewPath("spec.basic.secretRef"),
+					af.Spec.Basic.SecretRef.Name,
+					err.Error(),
+				))
+			}
 		}
 	default:
 		// Currently, only Basic auth is supported.
@@ -96,19 +110,4 @@ func validateAuthenticationFilter(
 	}
 
 	return nil
-}
-
-func resolveAuthenticationFilterSecrets(
-	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
-	secretResolver *secretResolver,
-) error {
-	var err error
-	for nsname, af := range authenticationFilters {
-		if af.Spec.Type == ngfAPIv1alpha1.AuthTypeBasic && af.Spec.Basic != nil {
-			sec := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
-			// resolve populates resolvedSecrets whether valid or invalid; errors are stored per-entry
-			err = secretResolver.resolve(sec)
-		}
-	}
-	return err
 }

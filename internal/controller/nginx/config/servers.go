@@ -96,11 +96,8 @@ func (g GeneratorImpl) executeServers(
 
 	includeFileResults := createIncludeExecuteResultsFromServers(servers)
 
-	authBasicUserFileResults := createExecuteResultsForAuthBasicUserFile(servers)
-
 	allResults := make([]executeResult, 0, len(includeFileResults)+2)
 	allResults = append(allResults, includeFileResults...)
-	allResults = append(allResults, authBasicUserFileResults...)
 	allResults = append(allResults, serverResult, httpMatchResult)
 
 	return allResults
@@ -759,22 +756,6 @@ func updateLocationAuthenticationFilter(
 		}
 	}
 	return location
-}
-
-func createExecuteResultsForAuthBasicUserFile(servers []http.Server) []executeResult {
-	results := []executeResult{}
-	for _, server := range servers {
-		for _, location := range server.Locations {
-			if location.AuthBasic != nil {
-				result := executeResult{
-					dest: location.AuthBasic.Data.FileName,
-					data: location.AuthBasic.Data.FileData,
-				}
-				results = append(results, result)
-			}
-		}
-	}
-	return results
 }
 
 func updateLocationMirrorRoute(location http.Location, path string, grpc bool) http.Location {
