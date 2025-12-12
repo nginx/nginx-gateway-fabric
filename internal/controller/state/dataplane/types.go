@@ -311,7 +311,8 @@ type BackendGroup struct {
 	Backends []Backend
 	// RuleIdx is the index of the corresponding rule in the HTTPRoute.
 	RuleIdx int
-	// PathRuleIdx is the index of the corresponding path rule in the HTTPRoute.
+	// PathRuleIdx is the index of the corresponding path rule when attached to a VirtualServer.
+	// BackendGroups attached to a MatchRule that have the same Path match will have the same PathRuleIdx.
 	PathRuleIdx int
 }
 

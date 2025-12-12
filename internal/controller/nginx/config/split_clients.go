@@ -187,12 +187,9 @@ func createBackendGroupSplitClientDistributions(group dataplane.BackendGroup) []
 func getSplitClientValue(b dataplane.Backend, source types.NamespacedName, ruleIdx, pathRuleIdx int) string {
 	if b.Valid {
 		if b.EndpointPickerConfig != nil {
-			return fmt.Sprintf(
-				"%s-%s-%s-%s-routeRule%d-pathRule%d",
-				http.InternalRoutePathPrefix,
+			return generateInternalInferenceEPPLocationPath(
 				b.UpstreamName,
-				source.Namespace,
-				source.Name,
+				source,
 				ruleIdx,
 				pathRuleIdx,
 			)

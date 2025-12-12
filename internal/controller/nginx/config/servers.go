@@ -634,7 +634,7 @@ func createInternalLocationsForRule(
 				}
 			}
 
-			// skip adding match and creating split clients location if its a duplicate intEPPLocation.Path
+			// skip adding match and creating split clients location if it's a duplicate intEPPLocation.Path
 			if skipMatch {
 				continue
 			}
@@ -973,17 +973,31 @@ func initializeInternalInferenceEPPLocation(
 ) http.Location {
 	return http.Location{
 		// This path needs to be recreated in the split_clients directive generation to match correctly.
-		Path: fmt.Sprintf(
-			"%s-%s-%s-%s-routeRule%d-pathRule%d",
-			http.InternalRoutePathPrefix,
+		Path: generateInternalInferenceEPPLocationPath(
 			b.UpstreamName,
-			source.Namespace,
-			source.Name,
+			source,
 			ruleIdx,
 			pathruleIdx,
 		),
 		Type: http.InferenceInternalLocationType,
 	}
+}
+
+func generateInternalInferenceEPPLocationPath(
+	upstreamName string,
+	source types.NamespacedName,
+	ruleIdx int,
+	pathRuleIdx int,
+) string {
+	return fmt.Sprintf(
+		"%s-%s-%s-%s-routeRule%d-pathRule%d",
+		http.InternalRoutePathPrefix,
+		upstreamName,
+		source.Namespace,
+		source.Name,
+		ruleIdx,
+		pathRuleIdx,
+	)
 }
 
 // initializeInternalInferenceProxyPassLocation initializes the internal inference location that does the final
