@@ -430,7 +430,7 @@ func snippetsStatusEqual(status1, status2 ngfAPI.ControllerStatus) bool {
 	return ConditionsEqual(status1.Conditions, status2.Conditions)
 }
 
-func newAuthenticationFilterStatusSetter(status ngfAPI.AuthenticationFilterStatus, gatewayCtlrName string) Setter {
+func newAuthenticationFilterStatusSetter(afStatus ngfAPI.AuthenticationFilterStatus, gatewayCtlrName string) Setter {
 	return func(obj client.Object) (wasSet bool) {
 		af := helpers.MustCastObject[*ngfAPI.AuthenticationFilter](obj)
 
@@ -443,14 +443,14 @@ func newAuthenticationFilterStatusSetter(status ngfAPI.AuthenticationFilterStatu
 			}
 		}
 
-		controllerStatuses = append(controllerStatuses, status.Controllers...)
-		status.Controllers = controllerStatuses
+		controllerStatuses = append(controllerStatuses, afStatus.Controllers...)
+		afStatus.Controllers = controllerStatuses
 
-		if authenticationFilterStatusEqual(gatewayCtlrName, status.Controllers, af.Status.Controllers) {
+		if authenticationFilterStatusEqual(gatewayCtlrName, afStatus.Controllers, af.Status.Controllers) {
 			return false
 		}
 
-		af.Status = status
+		af.Status = afStatus
 		return true
 	}
 }
