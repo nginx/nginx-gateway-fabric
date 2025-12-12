@@ -825,42 +825,45 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 - Unit tests
 - Functional tests to validate behavioural scenarios when referencing filters in different combinations.
 
-### Functional Test Cases
+## Functional Test Cases
 
-The keyword "resolved" is used to refer to a filter that the controller has found, and matches the reference of the route rule.
-For a filter to be considered "resolved", it must:
+### Valid scenarios
 
-1. Exist in the same namespace as the HTTP/GRPCRoute
-2. The group and kind referenced must match
+This sections covers deployment scenarios that are considered valid
 
-For each test, we aim to ensure the NGINX configuration is always correct for each scenario.
+- Single route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+- Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+- Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+- Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+- Two or more HTTPRoute/GRPCRoute resource each with single route rule with a single path referencing a valid AuthenticationFilter.
+- Two or more HTTPRoute/GRPCRoute resource each with single route rule, each with two or more paths referencing a valid AuthenticationFilter.
+- Two or more HTTPRoute/GRPCRoute resource each with two or more route rules each with a single path referencing a valid AuthenticationFilter.
 
-Invalid resolved filter scenarios:
+### Invalid scenarios
 
-- Resolved filter that references a secret that does not exist
-  - Expected outcome: Filter is marked as Invalid. The route rule that references this filter is also marked as Invalid
-- Resolved filter that references a secret with the incorrect data key
-  - Expected outcome: Filter is marked as Invalid. The route rule that references this filter is also marked as Invalid
+This sections covers deployment scenarios that are considered valid
 
-Valid reference scenarios:
+- Single route rule with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
+- Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
+- Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
+- Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
+- Two or more HTTPRoute/GRPCRoute resource each with single route rule with a single path referencing an invalid AuthenticationFilter.
+- Two or more HTTPRoute/GRPCRoute resource each with single route rule, each with two or more paths referencing an invalid AuthenticationFilter.
+- Two or more HTTPRoute/GRPCRoute resource each with two or more route rules each with a single path referencing an invalid AuthenticationFilter.
+- Two or more route rules each with a single path in an HTTPRoute/GRPCRoute, where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter.
+- Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter.
+- Two or more valid or invalid AuthenticationFilters referenced in a route rule.
 
-- Resolved filter referenced by a single route rule within a single HTTP/GRPCRoute
-  - Expected outcome: Requests to this route rule will successfully process authentication requests
-- Resolved filter referenced by multiple route rules within a single HTTP/GRPCRoute
-  - Expected outcome: Requests to all route rules referencing the filter successfully process authentication requests
-- Resolved filter referenced by rules in multiple HTTP/GRPCRoutes
-  - Expected outcome: Requests to all route rules across each HTTP/GRPCRoute successfully process authentication requests
+### Invalid AuthenticationFilter scenarios
 
-Invalid reference scenarios:
+This section covers configuation scenarios for an AuthenticationFilter resource that would be considered invalid
 
-- Resolved filter referenced multiple times in a single route rule within a single HTTP/GRPCRoute
-  - Expected outcome: The route rule referencing multiple filters will be marked as Invalid
-- Resolved filter referenced multiple times by multiple route rules within a single HTTP/GRPCRoute
-  - Expected outcome: Each route rule referencing multiple filters will be marked as Invalid
-- Unresolved filter referenced by a single route rule within a single HTTP/GRPCRoute
-  - Expected outcome: The route rule referencing multiple filters will be marked as Invalid
-- Unresolved filter referenced by multiple route rules within a single HTTP/GRPCRoute
-  - Expected outcome: Each route rule referencing multiple filters will be marked as Invalid
+- An AuthenticationFilter deployed with an empty `Realm` value
+- An AuthenticationFilter deployed with an empty `secretRef.Name` value
+- An AuthenticationFilter referencing a secret that does not exist
+- An AuthenticationFilter referencing a secret in a different namespace
+- An AuthenticationFilter referencing a secret with an incorrect type (e.g Opaque)
+- An AuthenticationFilter referencing a secret with an incorrect keyd
 
 ## Security Considerations
 
