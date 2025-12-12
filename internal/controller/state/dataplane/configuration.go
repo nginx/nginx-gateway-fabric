@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
+	coreV1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -93,6 +94,7 @@ func BuildConfiguration(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
 		),
+		AuthBasicSecrets:  buildAuthBasicSecrets(g.ReferencedSecrets),
 		Telemetry:         buildTelemetry(g, gateway),
 		BaseHTTPConfig:    baseHTTPConfig,
 		BaseStreamConfig:  baseStreamConfig,
@@ -344,6 +346,36 @@ func buildCertBundles(
 
 	return bundles
 }
+
+func buildAuthBasicSecrets(secrets map[types.NamespacedName]*graph.Secret) map[AuthBasicUserFileID]AuthBasicUserData {
+	authBasics := make(map[AuthBasicUserFileID]AuthBasicUserData)
+
+	for nsname, secret := range secrets {
+		if secret.Source.Type == coreV1.SecretType(graph.SecretTypeHtpasswd) {
+			id := generateAuthBasicUserFileID(fmt.Sprintf("%s/%s/%s", nsname.Namespace, nsname.Name, graph.AuthKeyBasic))
+			authBasics[id] = secret.Source.Data[graph.AuthKeyBasic]
+		}
+	}
+	return authBasics
+}
+
+// func getAuthBasicSecretIDsFromServers(authBasics map[AuthBasicUserFileID]AuthBasicUserData, servers []VirtualServer) []AuthBasicUserFileID {
+// 	userFileIDs := make([]AuthBasicUserFileID, 0)
+// 	for _, server := range servers {
+// 		for _, rule := range server.PathRules {
+// 			for _, matchRule := range rule.MatchRules {
+// 				if matchRule.Filters.AuthenticationFilter != nil {
+// 					if matchRule.Filters.AuthenticationFilter.Basic != nil {
+// 						ns := matchRule.Filters.AuthenticationFilter.Basic.SecretNamespace
+// 						name := matchRule.Filters.AuthenticationFilter.Basic.SecretName
+// 						id := generateAuthBasicUserFileID(fmt.Sprintf("%s/%s/%s", ns, name, graph.AuthKeyBasic))
+// 						userFileIDs = append(userFileIDs, id)
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+// }
 
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 	type key struct {
@@ -978,6 +1010,10 @@ func generateSSLKeyPairID(secret types.NamespacedName) SSLKeyPairID {
 // The ID is safe to use as a file name.
 func generateCertBundleID(caCertRef types.NamespacedName) CertBundleID {
 	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", caCertRef.Namespace, caCertRef.Name))
+}
+
+func generateAuthBasicUserFileID(id string) AuthBasicUserFileID {
+	return AuthBasicUserFileID(id)
 }
 
 func telemetryEnabled(gw *graph.Gateway) bool {

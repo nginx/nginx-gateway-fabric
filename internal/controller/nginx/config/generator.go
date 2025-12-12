@@ -17,7 +17,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
 
@@ -134,19 +133,8 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 		files = append(files, generateCertBundle(id, bundle))
 	}
 
-	for _, server := range conf.HTTPServers {
-		for _, rule := range server.PathRules {
-			for _, matchRule := range rule.MatchRules {
-				if matchRule.Filters.AuthenticationFilter != nil {
-					if matchRule.Filters.AuthenticationFilter.Basic != nil {
-						ns := matchRule.Filters.AuthenticationFilter.Basic.SecretNamespace
-						id := fmt.Sprintf("%s/%s/%s", ns, matchRule.Filters.AuthenticationFilter.Basic.SecretName, graph.AuthKeyBasic)
-						data := matchRule.Filters.AuthenticationFilter.Basic.Data
-						files = append(files, generateAuthBasicUserFile(id, data))
-					}
-				}
-			}
-		}
+	for id, data := range conf.AuthBasicSecrets {
+		files = append(files, generateAuthBasicUserFile(id, data))
 	}
 	return files
 }
@@ -268,15 +256,18 @@ func generateCertBundleFileName(id dataplane.CertBundleID) string {
 	return filepath.Join(secretsFolder, string(id)+".crt")
 }
 
-func generateAuthBasicUserFile(id string, data []byte) agent.File {
-	basicAuthUserFile := secretsFolder + "/%s"
+func generateAuthBasicUserFile(id dataplane.AuthBasicUserFileID, data []byte) agent.File {
 	return agent.File{
 		Meta: &pb.FileMeta{
-			Name:        fmt.Sprintf(basicAuthUserFile, id),
+			Name:        generateAuthBasicUserFileName(id),
 			Hash:        filesHelper.GenerateHash(data),
 			Permissions: file.SecretFileMode,
 			Size:        int64(len(data)),
 		},
 		Contents: data,
 	}
+}
+
+func generateAuthBasicUserFileName(id dataplane.AuthBasicUserFileID) string {
+	return filepath.Join(secretsFolder, string(id))
 }

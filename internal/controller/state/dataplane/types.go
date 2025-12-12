@@ -32,6 +32,8 @@ type Configuration struct {
 	BaseStreamConfig BaseStreamConfig
 	// SSLKeyPairs holds all unique SSLKeyPairs.
 	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
+	// AuthBasicSecrets holds all unique secrets for basic authentication.
+	AuthBasicSecrets map[AuthBasicUserFileID]AuthBasicUserData
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
@@ -77,6 +79,9 @@ type AuthBasicUserFileID string
 
 // CertBundle is a Certificate bundle.
 type CertBundle []byte
+
+// AuthBasicUserData is the data for a basic auth user file.
+type AuthBasicUserData []byte
 
 // SSLKeyPair is an SSL private/public key pair.
 type SSLKeyPair struct {
@@ -183,11 +188,11 @@ type Snippet struct {
 // AuthenticationFilter represents an authentication filter.
 type AuthenticationFilter struct {
 	// This is where the data is extracted to.
-	Basic *BasicAuth
+	Basic *AuthBasic
 }
 
-// BasicAuth holds the basic authentication configuration.
-type BasicAuth struct {
+// AuthBasic holds the basic authentication configuration.
+type AuthBasic struct {
 	SecretName      string
 	SecretNamespace string
 	Realm           string
