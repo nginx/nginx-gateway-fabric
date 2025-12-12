@@ -1,13 +1,12 @@
 package graph
 
 import (
-	"fmt"
-
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -50,7 +49,6 @@ func getAuthenticationFilterResolverForNamespace(
 
 func processAuthenticationFilters(
 	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
-	secretResolver *secretResolver,
 	resolvedSecrets map[types.NamespacedName]*Secret,
 ) map[types.NamespacedName]*AuthenticationFilter {
 	if len(authenticationFilters) == 0 {
@@ -60,7 +58,7 @@ func processAuthenticationFilters(
 	processed := make(map[types.NamespacedName]*AuthenticationFilter)
 
 	for nsname, af := range authenticationFilters {
-		if cond := validateAuthenticationFilter(af, secretResolver, resolvedSecrets); cond != nil {
+		if cond := validateAuthenticationFilter(af, resolvedSecrets); cond != nil {
 			processed[nsname] = &AuthenticationFilter{
 				Source:     af,
 				Conditions: []conditions.Condition{*cond},
@@ -80,7 +78,6 @@ func processAuthenticationFilters(
 
 func validateAuthenticationFilter(
 	af *ngfAPI.AuthenticationFilter,
-	secretResolver *secretResolver,
 	resolvedSecrets map[types.NamespacedName]*Secret,
 ) *conditions.Condition {
 	var allErrs field.ErrorList
@@ -88,18 +85,6 @@ func validateAuthenticationFilter(
 	//revive:disable-next-line:unnecessary-stmt future-proof switch form; additional auth types will be added
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
-
-		secretNsName := &types.NamespacedName{
-			Namespace: af.Namespace,
-			Name:      af.Spec.Basic.SecretRef.Name,
-		}
-
-		if err := secretResolver.resolve(*secretNsName); err != nil {
-			allErrs = append(allErrs, field.Invalid(
-				field.NewPath("spec.basic.secretRef"),
-				af.Spec.Basic.SecretRef.Name,
-				resolveReferencedSecret(secretNsName, resolvedSecrets).Error()))
-		}
 
 		for nsname, secret := range resolvedSecrets {
 			if nsname.Namespace == af.Namespace && nsname.Name == af.Spec.Basic.SecretRef.Name {
@@ -135,12 +120,16 @@ func validateAuthenticationFilter(
 	return nil
 }
 
-func resolveReferencedSecret(
-	secretNsName *types.NamespacedName,
-	resolvedSecrets map[types.NamespacedName]*Secret,
-) error {
-	if _, exists := resolvedSecrets[*secretNsName]; !exists {
-		return fmt.Errorf("referenced secret is invalid or missing")
+func resolveAuthenticationFilterSecrets(
+	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
+	secretResolver *secretResolver,
+) {
+	for nsname, af := range authenticationFilters {
+		if af.Spec.Type == ngfAPIv1alpha1.AuthTypeBasic && af.Spec.Basic != nil {
+			sec := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
+			// resolve populates resolvedSecrets whether valid or invalid; errors are stored per-entry
+			_ = secretResolver.resolve(sec)
+		}
 	}
-	return nil
+
 }

@@ -257,11 +257,12 @@ func BuildGraph(
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 
+	resolveAuthenticationFilterSecrets(state.AuthenticationFilters, secretResolver)
+
 	referencedSecrets := secretResolver.getResolvedSecrets()
 
 	processedAuthenticationFilters := processAuthenticationFilters(
 		state.AuthenticationFilters,
-		secretResolver,
 		referencedSecrets,
 	)
 
