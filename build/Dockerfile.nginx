@@ -12,6 +12,9 @@ ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
+# Fixes for CVEs; can be removed once base image is updated
+RUN apk update && apk add --no-cache 'libpng>=1.6.53-r0' 'ssl_client>=1.37.0-r20' 'busybox-binsh>=1.37.0-r20'
+
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     printf "%s\n" "https://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
     && apk add --no-cache nginx-agent=${NGINX_AGENT_VERSION#v}
