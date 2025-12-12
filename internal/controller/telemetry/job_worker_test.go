@@ -31,7 +31,7 @@ func TestCreateTelemetryJobWorker_Succeeds(t *testing.T) {
 	dataCollector.CollectReturns(expData, nil)
 
 	timeout := 10 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 
 	worker(ctx)
@@ -52,7 +52,7 @@ func TestCreateTelemetryJobWorker_CollectFails(t *testing.T) {
 	dataCollector.CollectReturns(expData, errors.New("failed to collect cluster information"))
 
 	timeout := 10 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 
 	worker(ctx)

@@ -72,7 +72,7 @@ func TestCollect_Success(t *testing.T) {
 	k8sClientReader.GetCalls(baseGetCalls)
 
 	c := telemetry.NewLabelCollector(cfg)
-	labels, err := c.Collect(context.TODO())
+	labels, err := c.Collect(t.Context())
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(labels).To(Equal(map[string]string{
@@ -217,7 +217,7 @@ func TestCollect_Errors(t *testing.T) {
 
 			c := telemetry.NewLabelCollector(cfg)
 
-			labels, err := c.Collect(context.TODO())
+			labels, err := c.Collect(t.Context())
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(tt.wantErrContain))
 			g.Expect(labels).To(BeNil())

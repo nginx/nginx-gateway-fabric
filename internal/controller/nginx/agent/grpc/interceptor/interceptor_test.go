@@ -234,9 +234,9 @@ func TestInterceptor(t *testing.T) {
 
 			ctx := t.Context()
 			if test.md != nil {
-				peerCtx := context.Background()
+				peerCtx := t.Context()
 				if test.peer != nil {
-					peerCtx = peer.NewContext(context.Background(), test.peer)
+					peerCtx = peer.NewContext(t.Context(), test.peer)
 				}
 				ctx = metadata.NewIncomingContext(peerCtx, test.md)
 			}
