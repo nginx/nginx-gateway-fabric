@@ -1086,6 +1086,13 @@
               "title": "annotations",
               "type": "object"
             },
+            "exposeHealthPort": {
+              "default": false,
+              "description": "Expose the readiness probe port on the control plane service. When enabled, the readiness probe endpoint\n(/readyz) becomes accessible externally, allowing external load balancers (like Azure Application Gateway)\nto perform health checks. Requires nginxGateway.readinessProbe.enable to be true.",
+              "required": [],
+              "title": "exposeHealthPort",
+              "type": "boolean"
+            },
             "labels": {
               "description": "The labels of the NGINX Gateway Fabric control plane service.",
               "required": [],
