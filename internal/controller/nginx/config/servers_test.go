@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
 	"k8s.io/apimachinery/pkg/types"
@@ -220,8 +221,7 @@ func TestExecuteServers(t *testing.T) {
 		},
 	)
 
-	gen := GeneratorImpl{}
-	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker)
+	results := executeServers(conf, false, fakeGenerator, logr.Discard(), alwaysFalseKeepAliveChecker)
 	g.Expect(results).To(HaveLen(len(expectedResults)))
 
 	for _, res := range results {
@@ -359,9 +359,7 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			gen := GeneratorImpl{}
-			results := gen.executeServers(test.config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
-
+			results := executeServers(test.config, false, &policiesfakes.FakeGenerator{}, logr.Discard(), alwaysFalseKeepAliveChecker)
 			g.Expect(results).To(HaveLen(2))
 			serverConf := string(results[0].data)
 			httpMatchConf := string(results[1].data)
@@ -478,8 +476,7 @@ func TestExecuteServers_RewriteClientIP(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			gen := GeneratorImpl{}
-			results := gen.executeServers(test.config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			results := executeServers(test.config, false, &policiesfakes.FakeGenerator{}, logr.Discard(), alwaysFalseKeepAliveChecker)
 			g.Expect(results).To(HaveLen(2))
 			serverConf := string(results[0].data)
 			httpMatchConf := string(results[1].data)
@@ -520,8 +517,7 @@ func TestExecuteServers_Plus(t *testing.T) {
 
 	g := NewWithT(t)
 
-	gen := GeneratorImpl{plus: true}
-	results := gen.executeServers(config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+	results := executeServers(config, true, &policiesfakes.FakeGenerator{}, logr.Discard(), alwaysFalseKeepAliveChecker)
 	g.Expect(results).To(HaveLen(2))
 
 	serverConf := string(results[0].data)
@@ -604,8 +600,7 @@ func TestExecuteForDefaultServers(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			gen := GeneratorImpl{}
-			serverResults := gen.executeServers(tc.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			serverResults := executeServers(tc.conf, false, &policiesfakes.FakeGenerator{}, logr.Discard(), alwaysFalseKeepAliveChecker)
 			g.Expect(serverResults).To(HaveLen(2))
 			serverConf := string(serverResults[0].data)
 			httpMatchConf := string(serverResults[1].data)
@@ -1898,7 +1893,7 @@ func TestCreateServers(t *testing.T) {
 	}
 	keepAliveCheck := newKeepAliveChecker([]http.Upstream{keepAliveEnabledUpstream})
 
-	result, httpMatchPair := createServers(conf, fakeGenerator, keepAliveCheck)
+	result, httpMatchPair := createServers(conf, false, fakeGenerator, logr.Discard(), keepAliveCheck)
 
 	format.MaxLength = 10000
 	g.Expect(httpMatchPair).To(Equal(allExpMatchPair))
@@ -2119,7 +2114,9 @@ func TestCreateServersConflicts(t *testing.T) {
 
 			result, _ := createServers(
 				dataplane.Configuration{HTTPServers: httpServers},
+				false,
 				&policiesfakes.FakeGenerator{},
+				logr.Discard(),
 				alwaysFalseKeepAliveChecker,
 			)
 			g.Expect(helpers.Diff(expectedServers, result)).To(BeEmpty())
@@ -2271,7 +2268,7 @@ func TestCreateServers_Includes(t *testing.T) {
 
 	conf := dataplane.Configuration{HTTPServers: httpServers, SSLServers: sslServers}
 
-	actualServers, matchPairs := createServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker)
+	actualServers, matchPairs := createServers(conf, false, fakeGenerator, logr.Discard(), alwaysFalseKeepAliveChecker)
 	g.Expect(matchPairs).To(BeEmpty())
 	g.Expect(actualServers).To(HaveLen(len(expServers)))
 
@@ -2432,7 +2429,7 @@ func TestCreateLocations_Includes(t *testing.T) {
 		},
 	})
 
-	locations, matches, grpc := createLocations(&httpServer, "1", fakeGenerator, alwaysFalseKeepAliveChecker)
+	locations, matches, grpc := createLocations(&httpServer, "1", false, fakeGenerator, logr.Discard(), alwaysFalseKeepAliveChecker)
 
 	g := NewWithT(t)
 	g.Expect(grpc).To(BeFalse())
@@ -2940,7 +2937,9 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 					Port:      80,
 				},
 				"1",
+				false,
 				&policiesfakes.FakeGenerator{},
+				logr.Discard(),
 				alwaysFalseKeepAliveChecker,
 			)
 
@@ -3131,7 +3130,9 @@ func TestCreateLocationsRootPath(t *testing.T) {
 					Port:      80,
 				},
 				"1",
+				false,
 				&policiesfakes.FakeGenerator{},
+				logr.Discard(),
 				alwaysFalseKeepAliveChecker,
 			)
 			g.Expect(locs).To(Equal(test.expLocations))
@@ -3261,7 +3262,9 @@ func TestCreateLocationsPath(t *testing.T) {
 					Port:      80,
 				},
 				"1",
+				false,
 				&policiesfakes.FakeGenerator{},
+				logr.Discard(),
 				alwaysFalseKeepAliveChecker,
 			)
 			g.Expect(locs).To(Equal(test.expLocations))
@@ -4918,8 +4921,6 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 		},
 		Port: 8443,
 	}
-	gen := GeneratorImpl{}
-
 	// Case 1: DisableSNIHostValidation = false (default)
 	confWithValidation := dataplane.Configuration{
 		SSLServers: []dataplane.VirtualServer{sslServer},
@@ -4927,7 +4928,7 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 			DisableSNIHostValidation: false,
 		},
 	}
-	results := gen.executeServers(confWithValidation, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+	results := executeServers(confWithValidation, false, &policiesfakes.FakeGenerator{}, logr.Discard(), alwaysFalseKeepAliveChecker)
 	serverConf := string(results[0].data)
 	g.Expect(serverConf).To(ContainSubstring("if ($ssl_server_name != $host)"),
 		"Expected SNI host validation block to be present when DisableSNIHostValidation is false")
@@ -4939,7 +4940,7 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 			DisableSNIHostValidation: true,
 		},
 	}
-	results = gen.executeServers(confWithoutValidation, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+	results = executeServers(confWithoutValidation, false, &policiesfakes.FakeGenerator{}, logr.Discard(), alwaysFalseKeepAliveChecker)
 	serverConf = string(results[0].data)
 	g.Expect(serverConf).NotTo(ContainSubstring("if ($ssl_server_name != $host)"),
 		"Expected SNI host validation block to be absent when DisableSNIHostValidation is true")

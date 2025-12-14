@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/gomega"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
@@ -69,7 +70,7 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 				Logging: dataplane.Logging{AccessLog: tt.accessLog},
 			}
 
-			res := executeBaseHTTPConfig(conf)
+			res := executeBaseHTTPConfig(conf, &policiesfakes.FakeGenerator{})
 			g.Expect(res).To(HaveLen(1))
 			httpConfig := string(res[0].data)
 			for _, expectedOutput := range tt.expectedOutputs {
@@ -120,7 +121,7 @@ func TestExecuteBaseHttp_HTTP2(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf)
+			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(test.expCount).To(Equal(strings.Count(string(res[0].data), expSubStr)))
 			g.Expect(strings.Count(string(res[0].data), "map $http_host $gw_api_compliant_host {")).To(Equal(1))
@@ -150,7 +151,7 @@ func TestExecuteBaseHttp_Snippets(t *testing.T) {
 
 	g := NewWithT(t)
 
-	res := executeBaseHTTPConfig(conf)
+	res := executeBaseHTTPConfig(conf, &policiesfakes.FakeGenerator{})
 	g.Expect(res).To(HaveLen(3))
 
 	sort.Slice(
@@ -261,7 +262,7 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf)
+			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
 			g.Expect(res).To(HaveLen(1))
 
 			httpConfig := string(res[0].data)
@@ -377,7 +378,7 @@ func TestExecuteBaseHttp_DNSResolver(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf)
+			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
 			g.Expect(res).To(HaveLen(1))
 
 			httpConfig := string(res[0].data)
@@ -435,7 +436,7 @@ func TestExecuteBaseHttp_GatewaySecretID(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf)
+			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
 			g.Expect(res).To(HaveLen(1))
 
 			httpConfig := string(res[0].data)

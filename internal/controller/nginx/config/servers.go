@@ -11,6 +11,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/go-logr/logr"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
@@ -52,26 +53,30 @@ var httpUpgradeHeader = http.Header{
 	Value: "$http_upgrade",
 }
 
-func (g GeneratorImpl) newExecuteServersFunc(
+func newExecuteServersFunc(
+	plus bool,
 	generator policies.Generator,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 ) executeFunc {
 	return func(configuration dataplane.Configuration) []executeResult {
-		return g.executeServers(configuration, generator, keepAliveCheck)
+		return executeServers(configuration, plus, generator, logger, keepAliveCheck)
 	}
 }
 
-func (g GeneratorImpl) executeServers(
+func executeServers(
 	conf dataplane.Configuration,
+	plus bool,
 	generator policies.Generator,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 ) []executeResult {
-	servers, httpMatchPairs := createServers(conf, generator, keepAliveCheck)
+	servers, httpMatchPairs := createServers(conf, plus, generator, logger, keepAliveCheck)
 
 	serverConfig := http.ServerConfig{
 		Servers:                  servers,
 		IPFamily:                 getIPFamily(conf.BaseHTTPConfig),
-		Plus:                     g.plus,
+		Plus:                     plus,
 		RewriteClientIP:          getRewriteClientIPSettings(conf.BaseHTTPConfig.RewriteClientIPSettings),
 		DisableSNIHostValidation: conf.BaseHTTPConfig.DisableSNIHostValidation,
 	}
@@ -116,7 +121,9 @@ func getIPFamily(baseHTTPConfig dataplane.BaseHTTPConfig) shared.IPFamily {
 
 func createServers(
 	conf dataplane.Configuration,
+	plus bool,
 	generator policies.Generator,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 ) ([]http.Server, httpMatchPairs) {
 	servers := make([]http.Server, 0, len(conf.HTTPServers)+len(conf.SSLServers))
@@ -129,7 +136,7 @@ func createServers(
 
 	for idx, s := range conf.HTTPServers {
 		serverID := fmt.Sprintf("%d", idx)
-		httpServer, matchPairs := createServer(s, serverID, generator, keepAliveCheck)
+		httpServer, matchPairs := createServer(s, serverID, plus, generator, logger, keepAliveCheck)
 		servers = append(servers, httpServer)
 		maps.Copy(finalMatchPairs, matchPairs)
 	}
@@ -137,7 +144,7 @@ func createServers(
 	for idx, s := range conf.SSLServers {
 		serverID := fmt.Sprintf("SSL_%d", idx)
 
-		sslServer, matchPairs := createSSLServer(s, serverID, generator, keepAliveCheck)
+		sslServer, matchPairs := createSSLServer(s, serverID, plus, generator, logger, keepAliveCheck)
 		if _, portInUse := sharedTLSPorts[s.Port]; portInUse {
 			sslServer.Listen = getSocketNameHTTPS(s.Port)
 			sslServer.IsSocket = true
@@ -152,7 +159,9 @@ func createServers(
 func createSSLServer(
 	virtualServer dataplane.VirtualServer,
 	serverID string,
+	plus bool,
 	generator policies.Generator,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
@@ -163,7 +172,7 @@ func createSSLServer(
 		}, nil
 	}
 
-	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
+	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, plus, generator, logger, keepAliveCheck)
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
@@ -191,7 +200,9 @@ func createSSLServer(
 func createServer(
 	virtualServer dataplane.VirtualServer,
 	serverID string,
+	plus bool,
 	generator policies.Generator,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 ) (http.Server, httpMatchPairs) {
 	listen := fmt.Sprint(virtualServer.Port)
@@ -203,7 +214,7 @@ func createServer(
 		}, nil
 	}
 
-	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, generator, keepAliveCheck)
+	locs, matchPairs, grpc := createLocations(&virtualServer, serverID, plus, generator, logger, keepAliveCheck)
 
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
@@ -408,7 +419,9 @@ type httpMatchPairs map[string][]routeMatch
 func createLocations(
 	server *dataplane.VirtualServer,
 	serverID string,
+	plus bool,
 	generator policies.Generator,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 ) ([]http.Location, httpMatchPairs, bool) {
 	maxLocs, pathsAndTypes := getMaxLocationCountAndPathMap(server.PathRules)
@@ -443,6 +456,8 @@ func createLocations(
 				rule,
 				extLocations,
 				server.Port,
+				plus,
+				logger,
 				keepAliveCheck,
 				mirrorPercentage)...,
 			)
@@ -450,8 +465,10 @@ func createLocations(
 			internalLocations, matches := createInternalLocationsForRule(
 				pathRuleIdx,
 				rule,
-				generator,
 				server.Port,
+				plus,
+				generator,
+				logger,
 				keepAliveCheck,
 				mirrorPercentage,
 			)
@@ -470,12 +487,15 @@ func createLocations(
 				pathRuleIdx,
 				rule,
 				extLocations,
-				generator,
 				server.Port,
+				plus,
+				generator,
+				logger,
 				keepAliveCheck,
 				mirrorPercentage)...,
 			)
 		}
+
 	}
 
 	if !rootPathExists {
@@ -489,6 +509,8 @@ func updateExternalLocationsForRule(
 	rule dataplane.PathRule,
 	extLocations []http.Location,
 	port int32,
+	plus bool,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
 ) []http.Location {
@@ -498,6 +520,8 @@ func updateExternalLocationsForRule(
 			rule,
 			extLocations,
 			port,
+			plus,
+			logger,
 			keepAliveCheck,
 			mirrorPercentage,
 		)
@@ -509,8 +533,10 @@ func updateExternalLocationsForRule(
 func createInternalLocationsForRule(
 	pathRuleIdx int,
 	rule dataplane.PathRule,
-	generator policies.Generator,
 	port int32,
+	plus bool,
+	generator policies.Generator,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
 ) ([]http.Location, []routeMatch) {
@@ -551,6 +577,8 @@ func createInternalLocationsForRule(
 				rule,
 				intLocation,
 				port,
+				plus,
+				logger,
 				keepAliveCheck,
 				mirrorPercentage,
 			)
@@ -601,6 +629,8 @@ func createInternalLocationsForRule(
 					rule,
 					intProxyPassLocation,
 					port,
+					plus,
+					logger,
 					keepAliveCheck,
 					mirrorPercentage,
 				)
@@ -669,8 +699,10 @@ func createInferenceLocationsForRule(
 	pathRuleIdx int,
 	rule dataplane.PathRule,
 	extLocations []http.Location,
-	generator policies.Generator,
 	port int32,
+	plus bool,
+	generator policies.Generator,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
 ) []http.Location {
@@ -742,12 +774,15 @@ func createInferenceLocationsForRule(
 				rule,
 				intProxyPassLocation,
 				port,
+				plus,
+				logger,
 				keepAliveCheck,
 				mirrorPercentage,
 			)
 			locs = append(locs, intProxyPassLocation)
 
 			if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
+
 				eppHost, portNum := extractEPPConfig(b)
 
 				if len(r.BackendGroup.Backends) > 1 {
@@ -1035,6 +1070,8 @@ func updateLocation(
 	pathRule dataplane.PathRule,
 	location http.Location,
 	listenerPort int32,
+	plus bool,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
 ) http.Location {
@@ -1186,6 +1223,8 @@ func updateLocations(
 	pathRule dataplane.PathRule,
 	buildLocations []http.Location,
 	listenerPort int32,
+	plus bool,
+	logger logr.Logger,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
 ) []http.Location {
@@ -1197,6 +1236,8 @@ func updateLocations(
 			pathRule,
 			loc,
 			listenerPort,
+			plus,
+			logger,
 			keepAliveCheck,
 			mirrorPercentage,
 		)
