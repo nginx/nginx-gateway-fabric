@@ -185,18 +185,24 @@ type Snippet struct {
 	Contents string
 }
 
-// AuthenticationFilter represents an authentication filter.
+// AuthenticationFilter holds the top level spec for each kind of authentication (e.g. Basic, JWT, etc...).
 type AuthenticationFilter struct {
-	// This is where the data is extracted to.
+	// Basic contains fields related to basic authentication.
 	Basic *AuthBasic
 }
 
-// AuthBasic holds the basic authentication configuration.
+// AuthBasic contains fields related to basic authentication.
+// such as the secret data for authentication, and the name/namespace of the secret.
 type AuthBasic struct {
-	SecretName      string
+	// SecretName is the name of the secret containing the basic authentication data.
+	SecretName string
+	// SecretNamespace is the namespace of the secret containing the basic authentication data.
 	SecretNamespace string
-	Realm           string
-	Data            []byte
+	// Realm is the authentication realm. This is an arbitrary string
+	// displayed to users when prompting for credentials.
+	Realm string
+	// Data contains the user data required for authentication.
+	Data []byte
 }
 
 // HTTPHeader represents an HTTP header.
