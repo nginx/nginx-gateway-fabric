@@ -73,7 +73,7 @@ func createFakeK8sClient(initObjs ...runtime.Object) (client.Client, error) {
 
 func createGrpcContext() context.Context {
 	return grpcContext.NewGrpcContext(context.Background(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 }
 
@@ -81,7 +81,7 @@ func createGrpcContextWithCancel() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return grpcContext.NewGrpcContext(ctx, grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	}), cancel
 }
 
@@ -144,32 +144,6 @@ func TestCreateConnection(t *testing.T) {
 				Resource: &pb.Resource{
 					Info: &pb.Resource_ContainerInfo{
 						ContainerInfo: &pb.ContainerInfo{
-							Hostname: "nginx-pod",
-						},
-					},
-					Instances: []*pb.Instance{
-						{
-							InstanceMeta: &pb.InstanceMeta{
-								InstanceId:   "nginx-id",
-								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_NGINX,
-							},
-						},
-					},
-				},
-			},
-			response: &pb.CreateConnectionResponse{
-				Response: &pb.CommandResponse{
-					Status: pb.CommandResponse_COMMAND_STATUS_OK,
-				},
-			},
-		},
-		{
-			name: "uses regular hostname if container info not set",
-			ctx:  createGrpcContext(),
-			request: &pb.CreateConnectionRequest{
-				Resource: &pb.Resource{
-					Info: &pb.Resource_HostInfo{
-						HostInfo: &pb.HostInfo{
 							Hostname: "nginx-pod",
 						},
 					},
@@ -268,7 +242,7 @@ func TestCreateConnection(t *testing.T) {
 			}
 
 			key, conn := connTracker.TrackArgsForCall(0)
-			g.Expect(key).To(Equal("127.0.0.1"))
+			g.Expect(key).To(Equal("1234567"))
 			g.Expect(conn).To(Equal(expConn))
 		})
 	}
@@ -1062,7 +1036,7 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 			g.Expect(connTracker.SetInstanceIDCallCount()).To(Equal(1))
 
 			key, id := connTracker.SetInstanceIDArgsForCall(0)
-			g.Expect(key).To(Equal("127.0.0.1"))
+			g.Expect(key).To(Equal("1234567"))
 			g.Expect(id).To(Equal(test.expID))
 		})
 	}
