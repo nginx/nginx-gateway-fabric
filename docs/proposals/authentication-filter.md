@@ -439,7 +439,7 @@ spec:
 #### Generated NGINX config
 
 Note: For Basic Auth, NGF will store the file used by `auth_basic_user_file` in `/etc/nginx/secrets/`
-The full path will use the `name` , `namespace` and `key` of the secret referenced by `AuthenticationFilter`
+The full path will use the `name`, `namespace`, and `key` of the secret referenced by `AuthenticationFilter`
 In this case, the full path will be `/etc/nginx/secrets/default/basic-auth-users/auth`
 
 ```nginx
@@ -494,7 +494,7 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    # Key verification mode. Local file or Remote JWKs
+    # Key verification mode. Local file or Remote JWKS
     mode: File
     file:
       secretRef:
@@ -506,7 +506,7 @@ spec:
     type: signed # signed | encrypted | nested
 ```
 
-#### Example JWT AuthenticationFilter with Remote JWKs
+#### Example JWT AuthenticationFilter with Remote JWKS
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -517,7 +517,7 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    # Key verification mode. Local file or Remote JWKs
+    # Key verification mode. Local file or Remote JWKS
     mode: Remote
     remote:
       url: https://issuer.example.com/.well-known/jwks.json
@@ -537,7 +537,7 @@ This will allow us to be more confident that the user is providing us with the a
 To create the example secret, run the following command:
 
 ```bash
-kubectl create secret generic jwt-keys-secure --type='nginx.org/htpasswd' --from-file=jwks.json
+kubectl create secret generic jwt-keys-secure --type='nginx.org/jwt' --from-file=jwks.json
 ```
 
 Note: `jwks.json` will be the default key for secrets referenced by `AuthenticationFilters` of `Type: JWT`.
@@ -656,7 +656,7 @@ http {
 
 These are some directives the `Remote` mode uses over the `File` mode:
 
-- `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal_jwks_uri` to redirect the request to the external auth provider (e.g. KeyCloak)
+- `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal_jwks_uri` to redirect the request to the external auth provider (e.g. Keycloak)
 - `proxy_cache_path`: This is used to configure caching of the JWKS after an initial request, allowing subsequent requests to avoid re-authentication for a time
 
 ```nginx
@@ -835,41 +835,41 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 
 ### Valid scenarios
 
-This sections covers deployment scenarios that are considered valid
+This section covers deployment scenarios that are considered valid
 
 - Single route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
 - Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
 - Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
 - Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
-- Two or more HTTPRoute/GRPCRoute resource each with single route rule with a single path referencing a valid AuthenticationFilter.
-- Two or more HTTPRoute/GRPCRoute resource each with single route rule, each with two or more paths referencing a valid AuthenticationFilter.
-- Two or more HTTPRoute/GRPCRoute resource each with two or more route rules each with a single path referencing a valid AuthenticationFilter.
+- Two or more HTTPRoute/GRPCRoute resources each with a single route rule with a single path referencing a valid AuthenticationFilter.
+- Two or more HTTPRoute/GRPCRoute resources each with a single route rule, each with two or more paths referencing a valid AuthenticationFilter.
+- Two or more HTTPRoute/GRPCRoute resources each with two or more route rules, each with a single path referencing a valid AuthenticationFilter.
 
 ### Invalid scenarios
 
-This sections covers deployment scenarios that are considered valid
+This section covers deployment scenarios that are considered invalid
 
 - Single route rule with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
 - Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
 - Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
 - Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
-- Two or more HTTPRoute/GRPCRoute resource each with single route rule with a single path referencing an invalid AuthenticationFilter.
-- Two or more HTTPRoute/GRPCRoute resource each with single route rule, each with two or more paths referencing an invalid AuthenticationFilter.
-- Two or more HTTPRoute/GRPCRoute resource each with two or more route rules each with a single path referencing an invalid AuthenticationFilter.
+- Two or more HTTPRoute/GRPCRoute resources each with a single route rule with a single path referencing an invalid AuthenticationFilter.
+- Two or more HTTPRoute/GRPCRoute resources each with a single route rule, each with two or more paths referencing an invalid AuthenticationFilter.
+- Two or more HTTPRoute/GRPCRoute resources each with two or more route rules, each with a single path referencing an invalid AuthenticationFilter.
 - Two or more route rules each with a single path in an HTTPRoute/GRPCRoute, where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter.
 - Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter.
 - Two or more valid or invalid AuthenticationFilters referenced in a route rule.
 
 ### Invalid AuthenticationFilter scenarios
 
-This section covers configuation scenarios for an AuthenticationFilter resource that would be considered invalid
+This section covers configuration scenarios for an AuthenticationFilter resource that would be considered invalid
 
 - An AuthenticationFilter deployed with an empty `Realm` value
 - An AuthenticationFilter deployed with an empty `secretRef.Name` value
 - An AuthenticationFilter referencing a secret that does not exist
 - An AuthenticationFilter referencing a secret in a different namespace
-- An AuthenticationFilter referencing a secret with an incorrect type (e.g Opaque)
-- An AuthenticationFilter referencing a secret with an incorrect keyd
+- An AuthenticationFilter referencing a secret with an incorrect type (e.g., Opaque)
+- An AuthenticationFilter referencing a secret with an incorrect key
 
 ## Security Considerations
 
@@ -1000,7 +1000,7 @@ If we support this configuration, 3xx response codes should not be allowed and A
 
 We should only allow 401 and 403 response codes.
 
-### Cross namespace access
+### Cross-namespace access
 
 When referencing secrets for Basic Auth and JWT Auth, the initial implementation will use `LocalObjectReference`.
 
@@ -1109,7 +1109,7 @@ spec:
       stripAuthorization: true # Optionally remove client Authorization header before proxy_pass
 ```
 
-Example GoLang API changes:
+Example Golang API changes:
 
 ```go
 type JWTAuth struct {
