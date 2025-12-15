@@ -9,8 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func int32Ptr(i int32) *int32 { return &i }
-
 func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
 	t.Parallel()
 
@@ -155,123 +153,123 @@ func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
 	}
 }
 
+var testCasesDeploymentAndDaemonSet = []struct {
+	existingAnnotations map[string]string
+	desiredAnnotations  map[string]string
+	expectedAnnotations map[string]string
+	name                string
+}{
+	{
+		name: "preserves external annotations while adding NGF annotations",
+		existingAnnotations: map[string]string{
+			"deployment.kubernetes.io/revision": "1",
+			"field.cattle.io/publicEndpoints":   "192.61.0.19",
+			"field.cattle.io/ports":             "80/tcp",
+		},
+		desiredAnnotations: map[string]string{
+			"custom.annotation": "from-ngf",
+		},
+		expectedAnnotations: map[string]string{
+			"deployment.kubernetes.io/revision":                  "1",
+			"field.cattle.io/publicEndpoints":                    "192.61.0.19",
+			"field.cattle.io/ports":                              "80/tcp",
+			"custom.annotation":                                  "from-ngf",
+			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+		},
+	},
+	{
+		name: "preserves existing NGF-managed annotations when still desired",
+		existingAnnotations: map[string]string{
+			"custom.annotation":                                  "keep-me",
+			"argocd.argoproj.io/sync-options":                    "Prune=false",
+			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+		},
+		desiredAnnotations: map[string]string{
+			"custom.annotation": "keep-me",
+		},
+		expectedAnnotations: map[string]string{
+			"custom.annotation":                                  "keep-me",
+			"argocd.argoproj.io/sync-options":                    "Prune=false",
+			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+		},
+	},
+	{
+		name: "NGF annotations take precedence on conflicts",
+		existingAnnotations: map[string]string{
+			"custom.annotation":                "old-value",
+			"daemonSet.kubernetes.io/revision": "7",
+		},
+		desiredAnnotations: map[string]string{
+			"custom.annotation": "new-value",
+		},
+		expectedAnnotations: map[string]string{
+			"custom.annotation":                                  "new-value",
+			"daemonSet.kubernetes.io/revision":                   "7",
+			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+		},
+	},
+	{
+		name:                "creates new deployment with annotations",
+		existingAnnotations: nil,
+		desiredAnnotations: map[string]string{
+			"custom.annotation": "value",
+		},
+		expectedAnnotations: map[string]string{
+			"custom.annotation": "value",
+			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+		},
+	},
+	{
+		name: "removes NGF-managed annotations when no longer desired",
+		existingAnnotations: map[string]string{
+			"custom.annotation":                                  "should-be-removed",
+			"deployment.kubernetes.io/revision":                  "2",
+			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+		},
+		desiredAnnotations: map[string]string{},
+		expectedAnnotations: map[string]string{
+			"deployment.kubernetes.io/revision": "2",
+		},
+	},
+	{
+		name: "updates tracking annotation when managed keys change",
+		existingAnnotations: map[string]string{
+			"annotation-to-keep":                                 "keep-value",
+			"annotation-to-remove":                               "remove-value",
+			"argocd.argoproj.io/sync-options":                    "Validate=true",
+			"gateway.nginx.org/internal-managed-annotation-keys": "annotation-to-keep,annotation-to-remove",
+		},
+		desiredAnnotations: map[string]string{
+			"annotation-to-keep": "updated-keep-value",
+		},
+		expectedAnnotations: map[string]string{
+			"annotation-to-keep":                                 "updated-keep-value",
+			"argocd.argoproj.io/sync-options":                    "Validate=true",
+			"gateway.nginx.org/internal-managed-annotation-keys": "annotation-to-keep",
+		},
+	},
+	{
+		name: "preserves external annotations while adding NGF annotations",
+		existingAnnotations: map[string]string{
+			"field.cattle.io/publicEndpoints": "192.61.0.19",
+			"field.cattle.io/ports":           "80/tcp",
+		},
+		desiredAnnotations: map[string]string{
+			"custom.annotation": "from-ngf",
+		},
+		expectedAnnotations: map[string]string{
+			"field.cattle.io/publicEndpoints":                    "192.61.0.19",
+			"field.cattle.io/ports":                              "80/tcp",
+			"custom.annotation":                                  "from-ngf",
+			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+		},
+	},
+}
+
 func TestDeploymentSpecSetter_PreservesExternalObjectAnnotations(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		existingAnnotations map[string]string
-		desiredAnnotations  map[string]string
-		expectedAnnotations map[string]string
-		name                string
-	}{
-		{
-			name: "preserves external annotations while adding NGF annotations",
-			existingAnnotations: map[string]string{
-				"deployment.kubernetes.io/revision": "1",
-				"field.cattle.io/publicEndpoints":   "192.61.0.19",
-				"field.cattle.io/ports":             "80/tcp",
-			},
-			desiredAnnotations: map[string]string{
-				"custom.annotation": "from-ngf",
-			},
-			expectedAnnotations: map[string]string{
-				"deployment.kubernetes.io/revision":                  "1",
-				"field.cattle.io/publicEndpoints":                    "192.61.0.19",
-				"field.cattle.io/ports":                              "80/tcp",
-				"custom.annotation":                                  "from-ngf",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-		},
-		{
-			name: "preserves existing NGF-managed annotations when still desired",
-			existingAnnotations: map[string]string{
-				"custom.annotation":                                  "keep-me",
-				"argocd.argoproj.io/sync-options":                    "Prune=false",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-			desiredAnnotations: map[string]string{
-				"custom.annotation": "keep-me",
-			},
-			expectedAnnotations: map[string]string{
-				"custom.annotation":                                  "keep-me",
-				"argocd.argoproj.io/sync-options":                    "Prune=false",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-		},
-		{
-			name: "NGF annotations take precedence on conflicts",
-			existingAnnotations: map[string]string{
-				"custom.annotation":                 "old-value",
-				"deployment.kubernetes.io/revision": "7",
-			},
-			desiredAnnotations: map[string]string{
-				"custom.annotation": "new-value",
-			},
-			expectedAnnotations: map[string]string{
-				"custom.annotation":                                  "new-value",
-				"deployment.kubernetes.io/revision":                  "7",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-		},
-		{
-			name:                "creates new deployment with annotations",
-			existingAnnotations: nil,
-			desiredAnnotations: map[string]string{
-				"custom.annotation": "value",
-			},
-			expectedAnnotations: map[string]string{
-				"custom.annotation": "value",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-		},
-		{
-			name: "removes NGF-managed annotations when no longer desired",
-			existingAnnotations: map[string]string{
-				"custom.annotation":                                  "should-be-removed",
-				"deployment.kubernetes.io/revision":                  "2",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-			desiredAnnotations: map[string]string{},
-			expectedAnnotations: map[string]string{
-				"deployment.kubernetes.io/revision": "2",
-			},
-		},
-		{
-			name: "updates tracking annotation when managed keys change",
-			existingAnnotations: map[string]string{
-				"annotation-to-keep":                                 "keep-value",
-				"annotation-to-remove":                               "remove-value",
-				"argocd.argoproj.io/sync-options":                    "Validate=true",
-				"gateway.nginx.org/internal-managed-annotation-keys": "annotation-to-keep,annotation-to-remove",
-			},
-			desiredAnnotations: map[string]string{
-				"annotation-to-keep": "updated-keep-value",
-			},
-			expectedAnnotations: map[string]string{
-				"annotation-to-keep":                                 "updated-keep-value",
-				"argocd.argoproj.io/sync-options":                    "Validate=true",
-				"gateway.nginx.org/internal-managed-annotation-keys": "annotation-to-keep",
-			},
-		},
-		{
-			name: "preserves external annotations while adding NGF annotations",
-			existingAnnotations: map[string]string{
-				"field.cattle.io/publicEndpoints": "192.61.0.19",
-				"field.cattle.io/ports":           "80/tcp",
-			},
-			desiredAnnotations: map[string]string{
-				"custom.annotation": "from-ngf",
-			},
-			expectedAnnotations: map[string]string{
-				"field.cattle.io/publicEndpoints":                    "192.61.0.19",
-				"field.cattle.io/ports":                              "80/tcp",
-				"custom.annotation":                                  "from-ngf",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-		},
-	}
-
-	for _, tt := range tests {
+	for _, tt := range testCasesDeploymentAndDaemonSet {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
@@ -330,120 +328,7 @@ func TestDeploymentSpecSetter_PreservesExternalObjectAnnotations(t *testing.T) {
 func TestDaemonSetSpecSetter_PreservesExternalObjectAnnotations(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		existingAnnotations map[string]string
-		desiredAnnotations  map[string]string
-		expectedAnnotations map[string]string
-		name                string
-	}{
-		{
-			name: "preserves external annotations while adding NGF annotations",
-			existingAnnotations: map[string]string{
-				"deployment.kubernetes.io/revision": "1",
-				"field.cattle.io/publicEndpoints":   "192.61.0.19",
-				"field.cattle.io/ports":             "80/tcp",
-			},
-			desiredAnnotations: map[string]string{
-				"custom.annotation": "from-ngf",
-			},
-			expectedAnnotations: map[string]string{
-				"deployment.kubernetes.io/revision":                  "1",
-				"field.cattle.io/publicEndpoints":                    "192.61.0.19",
-				"field.cattle.io/ports":                              "80/tcp",
-				"custom.annotation":                                  "from-ngf",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-		},
-		{
-			name: "preserves existing NGF-managed annotations when still desired",
-			existingAnnotations: map[string]string{
-				"custom.annotation":                                  "keep-me",
-				"argocd.argoproj.io/sync-options":                    "Prune=false",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-			desiredAnnotations: map[string]string{
-				"custom.annotation": "keep-me",
-			},
-			expectedAnnotations: map[string]string{
-				"custom.annotation":                                  "keep-me",
-				"argocd.argoproj.io/sync-options":                    "Prune=false",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-		},
-		{
-			name: "NGF annotations take precedence on conflicts",
-			existingAnnotations: map[string]string{
-				"custom.annotation":                 "old-value",
-				"deployment.kubernetes.io/revision": "7",
-			},
-			desiredAnnotations: map[string]string{
-				"custom.annotation": "new-value",
-			},
-			expectedAnnotations: map[string]string{
-				"custom.annotation":                                  "new-value",
-				"deployment.kubernetes.io/revision":                  "7",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-		},
-		{
-			name:                "creates new deployment with annotations",
-			existingAnnotations: nil,
-			desiredAnnotations: map[string]string{
-				"custom.annotation": "value",
-			},
-			expectedAnnotations: map[string]string{
-				"custom.annotation": "value",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-		},
-		{
-			name: "removes NGF-managed annotations when no longer desired",
-			existingAnnotations: map[string]string{
-				"custom.annotation":                                  "should-be-removed",
-				"deployment.kubernetes.io/revision":                  "2",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-			desiredAnnotations: map[string]string{},
-			expectedAnnotations: map[string]string{
-				"deployment.kubernetes.io/revision": "2",
-			},
-		},
-		{
-			name: "updates tracking annotation when managed keys change",
-			existingAnnotations: map[string]string{
-				"annotation-to-keep":                                 "keep-value",
-				"annotation-to-remove":                               "remove-value",
-				"argocd.argoproj.io/sync-options":                    "Validate=true",
-				"gateway.nginx.org/internal-managed-annotation-keys": "annotation-to-keep,annotation-to-remove",
-			},
-			desiredAnnotations: map[string]string{
-				"annotation-to-keep": "updated-keep-value",
-			},
-			expectedAnnotations: map[string]string{
-				"annotation-to-keep":                                 "updated-keep-value",
-				"argocd.argoproj.io/sync-options":                    "Validate=true",
-				"gateway.nginx.org/internal-managed-annotation-keys": "annotation-to-keep",
-			},
-		},
-		{
-			name: "preserves external annotations while adding NGF annotations",
-			existingAnnotations: map[string]string{
-				"field.cattle.io/publicEndpoints": "192.61.0.19",
-				"field.cattle.io/ports":           "80/tcp",
-			},
-			desiredAnnotations: map[string]string{
-				"custom.annotation": "from-ngf",
-			},
-			expectedAnnotations: map[string]string{
-				"field.cattle.io/publicEndpoints":                    "192.61.0.19",
-				"field.cattle.io/ports":                              "80/tcp",
-				"custom.annotation":                                  "from-ngf",
-				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-			},
-		},
-	}
-
-	for _, tt := range tests {
+	for _, tt := range testCasesDeploymentAndDaemonSet {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
@@ -497,3 +382,5 @@ func TestDaemonSetSpecSetter_PreservesExternalObjectAnnotations(t *testing.T) {
 		})
 	}
 }
+
+func int32Ptr(i int32) *int32 { return &i }

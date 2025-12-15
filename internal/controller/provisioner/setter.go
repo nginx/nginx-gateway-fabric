@@ -40,10 +40,6 @@ func objectSpecSetter(object client.Object) controllerutil.MutateFn {
 	return nil
 }
 
-const (
-	managedKeysAnnotation = "gateway.nginx.org/internal-managed-annotation-keys"
-)
-
 func deploymentSpecSetter(
 	deployment *appsv1.Deployment,
 	spec appsv1.DeploymentSpec,
@@ -51,7 +47,7 @@ func deploymentSpecSetter(
 ) controllerutil.MutateFn {
 	return func() error {
 		deployment.Labels = objectMeta.Labels
-		deployment.Annotations = mergeAnnotations(deployment.Annotations, objectMeta.Annotations, managedKeysAnnotation)
+		deployment.Annotations = mergeAnnotations(deployment.Annotations, objectMeta.Annotations)
 		deployment.Spec = spec
 		return nil
 	}
@@ -77,7 +73,7 @@ func daemonSetSpecSetter(
 ) controllerutil.MutateFn {
 	return func() error {
 		daemonSet.Labels = objectMeta.Labels
-		daemonSet.Annotations = mergeAnnotations(daemonSet.Annotations, objectMeta.Annotations, managedKeysAnnotation)
+		daemonSet.Annotations = mergeAnnotations(daemonSet.Annotations, objectMeta.Annotations)
 		daemonSet.Spec = spec
 		return nil
 	}
@@ -90,7 +86,7 @@ func serviceSpecSetter(
 ) controllerutil.MutateFn {
 	return func() error {
 		service.Labels = objectMeta.Labels
-		service.Annotations = mergeAnnotations(service.Annotations, objectMeta.Annotations, managedKeysAnnotation)
+		service.Annotations = mergeAnnotations(service.Annotations, objectMeta.Annotations)
 		service.Spec = spec
 		return nil
 	}
@@ -169,7 +165,8 @@ func roleBindingSpecSetter(
 	}
 }
 
-func mergeAnnotations(existing, desired map[string]string, trackingKey string) map[string]string {
+func mergeAnnotations(existing, desired map[string]string) map[string]string {
+	trackingKey := "gateway.nginx.org/internal-managed-annotation-keys"
 	desiredKeys := make(map[string]struct{}, len(desired))
 	for key := range desired {
 		desiredKeys[key] = struct{}{}
