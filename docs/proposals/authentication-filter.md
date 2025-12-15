@@ -952,7 +952,7 @@ If implementations choose a strict interpretation of filter ordering, they MUST 
 document that behavior.
 ```
 
-## Stretch Goals
+## Future updates
 
 ### Custom authentication failure response
 
