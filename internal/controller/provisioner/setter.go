@@ -166,7 +166,7 @@ func roleBindingSpecSetter(
 }
 
 func mergeAnnotations(existing, desired map[string]string) map[string]string {
-	trackingKey := "gateway.nginx.org/internal-managed-annotation-keys"
+	const trackingKey = "gateway.nginx.org/internal-managed-annotation-keys"
 	desiredKeys := make(map[string]struct{}, len(desired))
 	for key := range desired {
 		desiredKeys[key] = struct{}{}
