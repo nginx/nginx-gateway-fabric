@@ -71,6 +71,14 @@ func TestExecuteServers(t *testing.T) {
 											Percent:   helpers.GetPointer(float64(50)),
 										},
 									},
+									AuthenticationFilter: &dataplane.AuthenticationFilter{
+										Basic: &dataplane.AuthBasic{
+											SecretName:      "auth-basic-filter",
+											SecretNamespace: "test-ns",
+											Realm:           "Restricted",
+											Data:            []byte("user:$apr1$cred"),
+										},
+									},
 								},
 								Match: dataplane.Match{},
 								BackendGroup: dataplane.BackendGroup{
@@ -162,20 +170,22 @@ func TestExecuteServers(t *testing.T) {
 	}
 
 	expSubStrings := map[string]int{
-		"listen 8080 default_server;":                                       1,
-		"listen 8080;":                                                      2,
-		"listen 8443 ssl;":                                                  2,
-		"listen 8443 ssl default_server;":                                   1,
-		"server_name example.com;":                                          2,
-		"server_name cafe.example.com;":                                     2,
-		"ssl_certificate /etc/nginx/secrets/test-keypair.pem;":              2,
-		"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;":          2,
-		"proxy_ssl_server_name on;":                                         1,
-		"status_zone":                                                       0,
-		"include /etc/nginx/includes/location-snippet.conf":                 1,
-		"include /etc/nginx/includes/server-snippet.conf":                   1,
-		"mirror /_ngf-internal-mirror-my-backend-test/route1-0;":            1,
-		"if ($__ngf_internal_mirror_my_backend_test_route1_0_50_00 = \"\")": 1,
+		"listen 8080 default_server;":                                             1,
+		"listen 8080;":                                                            2,
+		"listen 8443 ssl;":                                                        2,
+		"listen 8443 ssl default_server;":                                         1,
+		"server_name example.com;":                                                2,
+		"server_name cafe.example.com;":                                           2,
+		"ssl_certificate /etc/nginx/secrets/test-keypair.pem;":                    2,
+		"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;":                2,
+		"proxy_ssl_server_name on;":                                               1,
+		"status_zone":                                                             0,
+		"include /etc/nginx/includes/location-snippet.conf":                       1,
+		"include /etc/nginx/includes/server-snippet.conf":                         1,
+		"auth_basic \"Restricted\";":                                              1,
+		"auth_basic_user_file /etc/nginx/secrets/test-ns/auth-basic-filter/auth;": 1,
+		"mirror /_ngf-internal-mirror-my-backend-test/route1-0;":                  1,
+		"if ($__ngf_internal_mirror_my_backend_test_route1_0_50_00 = \"\")":       1,
 		"return 204": 1,
 	}
 
