@@ -161,13 +161,8 @@ type ProxySSLVerify struct {
 }
 
 type AuthBasic struct {
-	Realm string
-	Data  AuthBasicData
-}
-
-type AuthBasicData struct {
-	FileName string
-	FileData []byte
+	Realm    string
+	UserFile string
 }
 
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.

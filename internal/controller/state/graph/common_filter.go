@@ -128,7 +128,6 @@ func processRouteRuleFilters(
 		}
 
 		if f.FilterType == FilterExtensionRef && f.ExtensionRef != nil {
-			// Will need to test how this behaves if we don't get a match.
 			extRefFilterResolver := extRefFilterResolvers[string(f.ExtensionRef.Kind)]
 			resolved := extRefFilterResolver(*f.ExtensionRef)
 

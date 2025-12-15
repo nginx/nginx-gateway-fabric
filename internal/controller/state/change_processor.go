@@ -229,7 +229,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			{
 				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.AuthenticationFilter{}),
 				store:     newObjectStoreMapAdapter(clusterStore.AuthenticationFilters),
-				predicate: nil, // Not sure if this should be nil or if we should track references
+				predicate: nil, // we always want to write status to AuthenticationFilters so we don't filter them out
 			},
 		},
 	)

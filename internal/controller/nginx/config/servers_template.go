@@ -108,7 +108,7 @@ server {
 
         {{- if $l.AuthBasic }}
         auth_basic "{{ $l.AuthBasic.Realm }}";
-        auth_basic_user_file {{ $l.AuthBasic.Data.FileName }};
+        auth_basic_user_file {{ $l.AuthBasic.UserFile }};
         {{- end }}
 
         {{ range $r := $l.Rewrites }}

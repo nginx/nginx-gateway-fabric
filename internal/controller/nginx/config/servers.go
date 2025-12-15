@@ -9,8 +9,6 @@ import (
 	"strings"
 	gotemplate "text/template"
 
-	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
-
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
@@ -724,36 +722,18 @@ func updateLocationAuthenticationFilter(
 	location http.Location,
 	authenticationFilter *dataplane.AuthenticationFilter,
 ) http.Location {
-	logger := ctlrZap.New().WithName("update-location-auth-filter")
-
-	// TODO: Remove logging after debugging
-	if authenticationFilter == nil {
-		logger.Info("Missing AuthenticationFilter for location", "locationPath", location.Path)
-	} else if authenticationFilter.Basic == nil {
-		logger.Info("No Basic authentication configured for location", "locationPath", location.Path)
-	}
-
 	if authenticationFilter != nil {
-		logger.Info("Applying authentication filter to location", "locationPath", location.Path)
 		if authenticationFilter.Basic != nil {
-			// TODO: Include namespace
-			userFilePathAndData := fmt.Sprintf("%s/%s/%s/%s",
+			userFilePathAndName := fmt.Sprintf("%s/%s/%s/%s",
 				secretsFolder,
 				authenticationFilter.Basic.SecretNamespace,
 				authenticationFilter.Basic.SecretName,
 				graph.AuthKeyBasic,
 			)
 			location.AuthBasic = &http.AuthBasic{
-				Realm: authenticationFilter.Basic.Realm,
-				Data: http.AuthBasicData{
-					FileName: userFilePathAndData,
-					FileData: authenticationFilter.Basic.Data,
-				},
+				Realm:    authenticationFilter.Basic.Realm,
+				UserFile: userFilePathAndName,
 			}
-			logger.Info("location.AuthBasic configured", "locationPath",
-				location.Path,
-				"realm",
-				authenticationFilter.Basic.Realm)
 		}
 	}
 	return location
