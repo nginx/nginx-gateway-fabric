@@ -52,7 +52,7 @@ This document also focuses on HTTP Basic Authentication and JWT Authentication. 
 ```text
 The realm value is a free-form string
 that can only be compared for equality with other realms on that
-server.  The server will service the request only if it can validate
+server. The server will service the request only if it can validate
 the user-id and password for the protection space applying to the
 requested resource.
 ```
