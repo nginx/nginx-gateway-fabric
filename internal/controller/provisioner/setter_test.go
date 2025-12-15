@@ -153,234 +153,199 @@ func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
 	}
 }
 
-var testCasesDeploymentAndDaemonSet = []struct {
-	existingAnnotations map[string]string
-	desiredAnnotations  map[string]string
-	expectedAnnotations map[string]string
-	name                string
-}{
-	{
-		name: "preserves external annotations while adding NGF annotations",
-		existingAnnotations: map[string]string{
-			"deployment.kubernetes.io/revision": "1",
-			"field.cattle.io/publicEndpoints":   "192.61.0.19",
-			"field.cattle.io/ports":             "80/tcp",
-		},
-		desiredAnnotations: map[string]string{
-			"custom.annotation": "from-ngf",
-		},
-		expectedAnnotations: map[string]string{
-			"deployment.kubernetes.io/revision":                  "1",
-			"field.cattle.io/publicEndpoints":                    "192.61.0.19",
-			"field.cattle.io/ports":                              "80/tcp",
-			"custom.annotation":                                  "from-ngf",
-			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-		},
-	},
-	{
-		name: "preserves existing NGF-managed annotations when still desired",
-		existingAnnotations: map[string]string{
-			"custom.annotation":                                  "keep-me",
-			"argocd.argoproj.io/sync-options":                    "Prune=false",
-			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-		},
-		desiredAnnotations: map[string]string{
-			"custom.annotation": "keep-me",
-		},
-		expectedAnnotations: map[string]string{
-			"custom.annotation":                                  "keep-me",
-			"argocd.argoproj.io/sync-options":                    "Prune=false",
-			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-		},
-	},
-	{
-		name: "NGF annotations take precedence on conflicts",
-		existingAnnotations: map[string]string{
-			"custom.annotation":                "old-value",
-			"daemonSet.kubernetes.io/revision": "7",
-		},
-		desiredAnnotations: map[string]string{
-			"custom.annotation": "new-value",
-		},
-		expectedAnnotations: map[string]string{
-			"custom.annotation":                                  "new-value",
-			"daemonSet.kubernetes.io/revision":                   "7",
-			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-		},
-	},
-	{
-		name:                "creates new deployment with annotations",
-		existingAnnotations: nil,
-		desiredAnnotations: map[string]string{
-			"custom.annotation": "value",
-		},
-		expectedAnnotations: map[string]string{
-			"custom.annotation": "value",
-			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-		},
-	},
-	{
-		name: "removes NGF-managed annotations when no longer desired",
-		existingAnnotations: map[string]string{
-			"custom.annotation":                                  "should-be-removed",
-			"deployment.kubernetes.io/revision":                  "2",
-			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-		},
-		desiredAnnotations: map[string]string{},
-		expectedAnnotations: map[string]string{
-			"deployment.kubernetes.io/revision": "2",
-		},
-	},
-	{
-		name: "updates tracking annotation when managed keys change",
-		existingAnnotations: map[string]string{
-			"annotation-to-keep":                                 "keep-value",
-			"annotation-to-remove":                               "remove-value",
-			"argocd.argoproj.io/sync-options":                    "Validate=true",
-			"gateway.nginx.org/internal-managed-annotation-keys": "annotation-to-keep,annotation-to-remove",
-		},
-		desiredAnnotations: map[string]string{
-			"annotation-to-keep": "updated-keep-value",
-		},
-		expectedAnnotations: map[string]string{
-			"annotation-to-keep":                                 "updated-keep-value",
-			"argocd.argoproj.io/sync-options":                    "Validate=true",
-			"gateway.nginx.org/internal-managed-annotation-keys": "annotation-to-keep",
-		},
-	},
-	{
-		name: "preserves external annotations while adding NGF annotations",
-		existingAnnotations: map[string]string{
-			"field.cattle.io/publicEndpoints": "192.61.0.19",
-			"field.cattle.io/ports":           "80/tcp",
-		},
-		desiredAnnotations: map[string]string{
-			"custom.annotation": "from-ngf",
-		},
-		expectedAnnotations: map[string]string{
-			"field.cattle.io/publicEndpoints":                    "192.61.0.19",
-			"field.cattle.io/ports":                              "80/tcp",
-			"custom.annotation":                                  "from-ngf",
-			"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
-		},
-	},
-}
-
-func TestDeploymentSpecSetter_PreservesExternalObjectAnnotations(t *testing.T) {
-	t.Parallel()
-
-	for _, tt := range testCasesDeploymentAndDaemonSet {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			existing := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        "nginx-gateway",
-					Namespace:   "nginx-gateway",
-					Annotations: tt.existingAnnotations,
-				},
-			}
-
-			desiredMeta := metav1.ObjectMeta{
-				Labels: map[string]string{
-					"app.kubernetes.io/name":     "nginx-gateway-fabric",
-					"app.kubernetes.io/instance": "nginx-gateway",
-				},
-				Annotations: tt.desiredAnnotations,
-			}
-
-			inputSpec := appsv1.DeploymentSpec{
-				Replicas: int32Ptr(1),
-				Selector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"app.kubernetes.io/name":     "nginx-gateway-fabric",
-						"app.kubernetes.io/instance": "nginx-gateway",
-					},
-				},
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{
-							"app.kubernetes.io/name":     "nginx-gateway-fabric",
-							"app.kubernetes.io/instance": "nginx-gateway",
-						},
-					},
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{
-							Name:  "nginx-gateway",
-							Image: "nginx:1.25",
-						}},
-					},
-				},
-			}
-
-			setter := deploymentSpecSetter(existing, inputSpec, desiredMeta)
-			err := setter()
-
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(existing.Annotations).To(Equal(tt.expectedAnnotations))
-			g.Expect(existing.Labels).To(Equal(desiredMeta.Labels))
-			g.Expect(existing.Spec).To(Equal(inputSpec))
-		})
-	}
-}
-
-func TestDaemonSetSpecSetter_PreservesExternalObjectAnnotations(t *testing.T) {
-	t.Parallel()
-
-	for _, tt := range testCasesDeploymentAndDaemonSet {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			existing := &appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        "nginx-gateway",
-					Namespace:   "nginx-gateway",
-					Annotations: tt.existingAnnotations,
-				},
-			}
-
-			desiredMeta := metav1.ObjectMeta{
-				Labels: map[string]string{
-					"app.kubernetes.io/name":     "nginx-gateway-fabric",
-					"app.kubernetes.io/instance": "nginx-gateway",
-				},
-				Annotations: tt.desiredAnnotations,
-			}
-
-			inputSpec := appsv1.DaemonSetSpec{
-				Selector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"app.kubernetes.io/name":     "nginx-gateway-fabric",
-						"app.kubernetes.io/instance": "nginx-gateway",
-					},
-				},
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{
-							"app.kubernetes.io/name":     "nginx-gateway-fabric",
-							"app.kubernetes.io/instance": "nginx-gateway",
-						},
-					},
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{
-							Name:  "nginx-gateway",
-							Image: "nginx:1.25",
-						}},
-					},
-				},
-			}
-
-			setter := daemonSetSpecSetter(existing, inputSpec, desiredMeta)
-			err := setter()
-
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(existing.Annotations).To(Equal(tt.expectedAnnotations))
-			g.Expect(existing.Labels).To(Equal(desiredMeta.Labels))
-			g.Expect(existing.Spec).To(Equal(inputSpec))
-		})
-	}
-}
-
 func int32Ptr(i int32) *int32 { return &i }
+
+func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
+	t.Parallel()
+
+	type testCase struct {
+		existingAnnotations map[string]string
+		desiredAnnotations  map[string]string
+		expectedAnnotations map[string]string
+		name                string
+	}
+
+	tests := []testCase{
+		{
+			name: "preserves external annotations while adding NGF annotations",
+			existingAnnotations: map[string]string{
+				"deployment.kubernetes.io/revision": "1",
+				"field.cattle.io/publicEndpoints":   "192.61.0.19",
+				"field.cattle.io/ports":             "80/tcp",
+			},
+			desiredAnnotations: map[string]string{
+				"custom.annotation": "from-ngf",
+			},
+			expectedAnnotations: map[string]string{
+				"deployment.kubernetes.io/revision":                  "1",
+				"field.cattle.io/publicEndpoints":                    "192.61.0.19",
+				"field.cattle.io/ports":                              "80/tcp",
+				"custom.annotation":                                  "from-ngf",
+				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+			},
+		},
+		{
+			name: "preserves existing NGF-managed annotations when still desired",
+			existingAnnotations: map[string]string{
+				"custom.annotation":                                  "keep-me",
+				"argocd.argoproj.io/sync-options":                    "Prune=false",
+				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+			},
+			desiredAnnotations: map[string]string{
+				"custom.annotation": "keep-me",
+			},
+			expectedAnnotations: map[string]string{
+				"custom.annotation":                                  "keep-me",
+				"argocd.argoproj.io/sync-options":                    "Prune=false",
+				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+			},
+		},
+		{
+			name: "removes NGF-managed annotations when no longer desired",
+			existingAnnotations: map[string]string{
+				"custom.annotation":                                  "should-be-removed",
+				"deployment.kubernetes.io/revision":                  "2",
+				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+			},
+			desiredAnnotations: map[string]string{},
+			expectedAnnotations: map[string]string{
+				"deployment.kubernetes.io/revision": "2",
+			},
+		},
+		{
+			name: "NGF annotations take precedence on conflicts",
+			existingAnnotations: map[string]string{
+				"custom.annotation":                "old-value",
+				"daemonSet.kubernetes.io/revision": "7",
+			},
+			desiredAnnotations: map[string]string{
+				"custom.annotation": "new-value",
+			},
+			expectedAnnotations: map[string]string{
+				"custom.annotation":                                  "new-value",
+				"daemonSet.kubernetes.io/revision":                   "7",
+				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+			},
+		},
+		{
+			name:                "creates new deployment with annotations",
+			existingAnnotations: nil,
+			desiredAnnotations: map[string]string{
+				"custom.annotation": "value",
+			},
+			expectedAnnotations: map[string]string{
+				"custom.annotation": "value",
+				"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
+			},
+		},
+		{
+			name: "updates tracking annotation when managed keys change",
+			existingAnnotations: map[string]string{
+				"annotation-to-keep":                                 "keep-value",
+				"annotation-to-remove":                               "remove-value",
+				"argocd.argoproj.io/sync-options":                    "Validate=true",
+				"gateway.nginx.org/internal-managed-annotation-keys": "annotation-to-keep,annotation-to-remove",
+			},
+			desiredAnnotations: map[string]string{
+				"annotation-to-keep": "updated-keep-value",
+			},
+			expectedAnnotations: map[string]string{
+				"annotation-to-keep":                                 "updated-keep-value",
+				"argocd.argoproj.io/sync-options":                    "Validate=true",
+				"gateway.nginx.org/internal-managed-annotation-keys": "annotation-to-keep",
+			},
+		},
+	}
+
+	labels := map[string]string{
+		"app.kubernetes.io/name":     "nginx-gateway-fabric",
+		"app.kubernetes.io/instance": "nginx-gateway",
+	}
+
+	makeDesiredMeta := func(ann map[string]string) metav1.ObjectMeta {
+		return metav1.ObjectMeta{
+			Labels:      labels,
+			Annotations: ann,
+		}
+	}
+
+	podTemplate := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{Labels: labels},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{
+				Name:  "nginx-gateway",
+				Image: "nginx:1.25",
+			}},
+		},
+	}
+
+	runners := []struct {
+		run  func(t *testing.T, tc testCase)
+		name string
+	}{
+		{
+			name: "Deployment",
+			run: func(t *testing.T, tc testCase) {
+				t.Helper()
+				g := NewWithT(t)
+
+				existing := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        "nginx-gateway",
+						Namespace:   "nginx-gateway",
+						Annotations: tc.existingAnnotations,
+					},
+				}
+
+				spec := appsv1.DeploymentSpec{
+					Replicas: int32Ptr(1),
+					Selector: &metav1.LabelSelector{MatchLabels: labels},
+					Template: podTemplate,
+				}
+
+				err := deploymentSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations))()
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existing.Annotations).To(Equal(tc.expectedAnnotations))
+				g.Expect(existing.Labels).To(Equal(labels))
+				g.Expect(existing.Spec).To(Equal(spec))
+			},
+		},
+		{
+			name: "DaemonSet",
+			run: func(t *testing.T, tc testCase) {
+				t.Helper()
+				g := NewWithT(t)
+
+				existing := &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        "nginx-gateway",
+						Namespace:   "nginx-gateway",
+						Annotations: tc.existingAnnotations,
+					},
+				}
+
+				spec := appsv1.DaemonSetSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: labels},
+					Template: podTemplate,
+				}
+
+				err := daemonSetSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations))()
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existing.Annotations).To(Equal(tc.expectedAnnotations))
+				g.Expect(existing.Labels).To(Equal(labels))
+				g.Expect(existing.Spec).To(Equal(spec))
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, r := range runners {
+				t.Run(r.name, func(t *testing.T) {
+					r.run(t, tc)
+				})
+			}
+		})
+	}
+}
