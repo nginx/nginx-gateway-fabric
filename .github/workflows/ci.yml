@@ -149,7 +149,7 @@ jobs:
       - name: Output Variables
         id: vars
         run: |
-          K8S_KIND_VERSION=v1.34.0 # renovate: datasource=docker depName=kindest/node
+          K8S_KIND_VERSION=v1.34.2 # renovate: datasource=docker depName=kindest/node
           echo "go_path=$(go env GOPATH)" >> $GITHUB_OUTPUT
           echo "min_k8s_version=v1.25.16" >> $GITHUB_OUTPUT
           echo "k8s_latest=${K8S_KIND_VERSION}" >> $GITHUB_OUTPUT
@@ -199,7 +199,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: cover-${{ github.run_id }}.html
           path: ${{ github.workspace }}/cover.html
@@ -324,7 +324,7 @@ jobs:
           echo "json=$json" >> $GITHUB_OUTPUT
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: dist-${{ github.run_id }}
           path: ${{ github.workspace }}/dist
@@ -359,7 +359,7 @@ jobs:
           go-version: stable
 
       - name: Download Artifacts
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: dist-${{ github.run_id }}
           path: ${{ github.workspace }}/dist
