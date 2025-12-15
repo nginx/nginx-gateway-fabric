@@ -359,24 +359,6 @@ func buildAuthBasicSecrets(secrets map[types.NamespacedName]*graph.Secret) map[A
 	return authBasics
 }
 
-// func getAuthBasicSecretIDsFromServers(authBasics map[AuthBasicUserFileID]AuthBasicUserData, servers []VirtualServer) []AuthBasicUserFileID {
-// 	userFileIDs := make([]AuthBasicUserFileID, 0)
-// 	for _, server := range servers {
-// 		for _, rule := range server.PathRules {
-// 			for _, matchRule := range rule.MatchRules {
-// 				if matchRule.Filters.AuthenticationFilter != nil {
-// 					if matchRule.Filters.AuthenticationFilter.Basic != nil {
-// 						ns := matchRule.Filters.AuthenticationFilter.Basic.SecretNamespace
-// 						name := matchRule.Filters.AuthenticationFilter.Basic.SecretName
-// 						id := generateAuthBasicUserFileID(fmt.Sprintf("%s/%s/%s", ns, name, graph.AuthKeyBasic))
-// 						userFileIDs = append(userFileIDs, id)
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
-// }
-
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 	type key struct {
 		nsname  types.NamespacedName

@@ -27,7 +27,7 @@ type SecretType string
 
 const (
 	// SecretTypeHtpasswd represents a Secret containing an htpasswd file for Basic Auth.
-	SecretTypeHtpasswd SecretType = "nginx.org/htpasswd"
+	SecretTypeHtpasswd SecretType = "nginx.org/htpasswd" // #nosec G101
 )
 
 const (

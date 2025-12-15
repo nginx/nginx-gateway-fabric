@@ -86,10 +86,12 @@ func validateAuthenticationFilter(
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
 		if af.Spec.Basic.Realm == "" {
-			allErrs = append(allErrs, field.Required(field.NewPath("spec.basic.realm"), "realm cannot be empty"))
+			msg := "realm cannot be empty"
+			allErrs = append(allErrs, field.Required(field.NewPath("spec.basic.realm"), msg))
 		}
 		if af.Spec.Basic.SecretRef.Name == "" {
-			allErrs = append(allErrs, field.Required(field.NewPath("spec.basic.secretRef.name"), "secretRef.name cannot be empty"))
+			msg := "secretRef.name cannot be empty"
+			allErrs = append(allErrs, field.Required(field.NewPath("spec.basic.secretRef.name"), msg))
 		} else {
 			sec := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
 			if err := secretResolver.resolve(sec); err != nil {
