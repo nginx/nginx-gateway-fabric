@@ -160,6 +160,8 @@ type ProxySSLVerify struct {
 	Name               string
 }
 
+// AuthBasic holds the values for the auth_basic and auth_basic_user_file directives.
+// See https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html
 type AuthBasic struct {
 	Realm    string
 	UserFile string
