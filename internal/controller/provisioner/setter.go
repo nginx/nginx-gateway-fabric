@@ -40,6 +40,10 @@ func objectSpecSetter(object client.Object) controllerutil.MutateFn {
 	return nil
 }
 
+const (
+	managedKeysAnnotation = "gateway.nginx.org/internal-managed-annotation-keys"
+)
+
 func deploymentSpecSetter(
 	deployment *appsv1.Deployment,
 	spec appsv1.DeploymentSpec,
@@ -47,7 +51,7 @@ func deploymentSpecSetter(
 ) controllerutil.MutateFn {
 	return func() error {
 		deployment.Labels = objectMeta.Labels
-		deployment.Annotations = objectMeta.Annotations
+		deployment.Annotations = mergeAnnotations(deployment.Annotations, objectMeta.Annotations, managedKeysAnnotation)
 		deployment.Spec = spec
 		return nil
 	}
@@ -73,7 +77,7 @@ func daemonSetSpecSetter(
 ) controllerutil.MutateFn {
 	return func() error {
 		daemonSet.Labels = objectMeta.Labels
-		daemonSet.Annotations = objectMeta.Annotations
+		daemonSet.Annotations = mergeAnnotations(daemonSet.Annotations, objectMeta.Annotations, managedKeysAnnotation)
 		daemonSet.Spec = spec
 		return nil
 	}
@@ -85,54 +89,8 @@ func serviceSpecSetter(
 	objectMeta metav1.ObjectMeta,
 ) controllerutil.MutateFn {
 	return func() error {
-		const managedKeysAnnotation = "gateway.nginx.org/internal-managed-annotation-keys"
-
-		// Track which annotation keys NGF currently manages
-		currentManagedKeys := make(map[string]bool)
-		for k := range objectMeta.Annotations {
-			currentManagedKeys[k] = true
-		}
-
-		// Get previously managed keys from existing service
-		var previousManagedKeys map[string]bool
-		if prevKeysStr, ok := service.Annotations[managedKeysAnnotation]; ok {
-			previousManagedKeys = make(map[string]bool)
-			for _, k := range strings.Split(prevKeysStr, ",") {
-				if k != "" {
-					previousManagedKeys[k] = true
-				}
-			}
-		}
-
-		// Start with existing annotations (preserves external controller annotations)
-		mergedAnnotations := make(map[string]string)
-		for k, v := range service.Annotations {
-			// Skip the internal tracking annotation
-			if k == managedKeysAnnotation {
-				continue
-			}
-			// Remove annotations that NGF previously managed but no longer wants
-			if previousManagedKeys != nil && previousManagedKeys[k] && !currentManagedKeys[k] {
-				continue // Remove this annotation
-			}
-			mergedAnnotations[k] = v
-		}
-
-		// Apply NGF-managed annotations (take precedence)
-		maps.Copy(mergedAnnotations, objectMeta.Annotations)
-
-		// Store current managed keys for next reconciliation
-		if len(currentManagedKeys) > 0 {
-			var managedKeysList []string
-			for k := range currentManagedKeys {
-				managedKeysList = append(managedKeysList, k)
-			}
-			slices.Sort(managedKeysList) // Sort for deterministic output
-			mergedAnnotations[managedKeysAnnotation] = strings.Join(managedKeysList, ",")
-		}
-
 		service.Labels = objectMeta.Labels
-		service.Annotations = mergedAnnotations
+		service.Annotations = mergeAnnotations(service.Annotations, objectMeta.Annotations, managedKeysAnnotation)
 		service.Spec = spec
 		return nil
 	}
@@ -209,4 +167,55 @@ func roleBindingSpecSetter(
 		roleBinding.Subjects = subjects
 		return nil
 	}
+}
+
+func mergeAnnotations(existing, desired map[string]string, trackingKey string) map[string]string {
+	desiredKeys := make(map[string]struct{}, len(desired))
+	for key := range desired {
+		desiredKeys[key] = struct{}{}
+	}
+
+	previousKeys := make(map[string]struct{}, len(existing))
+	if existing != nil {
+		if prev, ok := existing[trackingKey]; ok {
+			for splitKey := range strings.SplitSeq(prev, ",") {
+				if splitKey != "" {
+					previousKeys[splitKey] = struct{}{}
+				}
+			}
+		}
+	}
+
+	annotations := make(map[string]string)
+
+	// Start with existing annotations (preserves external controller annotations)
+	for key, value := range existing {
+		if key == trackingKey {
+			continue
+		}
+
+		// if this key was previously managed and is no longer desired, drop it
+		if _, wasManaged := previousKeys[key]; wasManaged {
+			if _, stillDesired := desiredKeys[key]; !stillDesired {
+				continue
+			}
+		}
+
+		annotations[key] = value
+	}
+
+	// Apply desired annotations (NGF-managed wins)
+	maps.Copy(annotations, desired)
+
+	// Store current managed keys
+	if len(desiredKeys) > 0 {
+		keys := make([]string, 0, len(desiredKeys))
+		for key := range desiredKeys {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		annotations[trackingKey] = strings.Join(keys, ",")
+	}
+
+	return annotations
 }
