@@ -833,36 +833,10 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 
 ## Functional Test Cases
 
-### Valid scenarios
-
-This section covers deployment scenarios that are considered valid
-
-- Single route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
-- Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
-- Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
-- Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
-- Two or more HTTPRoute/GRPCRoute resources each with a single route rule with a single path referencing a valid AuthenticationFilter.
-- Two or more HTTPRoute/GRPCRoute resources each with a single route rule, each with two or more paths referencing a valid AuthenticationFilter.
-- Two or more HTTPRoute/GRPCRoute resources each with two or more route rules, each with a single path referencing a valid AuthenticationFilter.
-
-### Invalid scenarios
-
-This section covers deployment scenarios that are considered invalid
-
-- Single route rule with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
-- Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
-- Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
-- Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
-- Two or more HTTPRoute/GRPCRoute resources each with a single route rule with a single path referencing an invalid AuthenticationFilter.
-- Two or more HTTPRoute/GRPCRoute resources each with a single route rule, each with two or more paths referencing an invalid AuthenticationFilter.
-- Two or more HTTPRoute/GRPCRoute resources each with two or more route rules, each with a single path referencing an invalid AuthenticationFilter.
-- Two or more route rules each with a single path in an HTTPRoute/GRPCRoute, where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter.
-- Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter.
-- Two or more valid or invalid AuthenticationFilters referenced in a route rule.
-
 ### Invalid AuthenticationFilter scenarios
 
-This section covers configuration scenarios for an AuthenticationFilter resource that would be considered invalid
+This section covers configuration deployment scenarios for an AuthenticationFilter resource that would be considered invalid.
+When an AuthenticationFilter is described as invalid, it could be for these reasons:
 
 - An AuthenticationFilter deployed with an empty `Realm` value
 - An AuthenticationFilter deployed with an empty `secretRef.Name` value
@@ -870,6 +844,83 @@ This section covers configuration scenarios for an AuthenticationFilter resource
 - An AuthenticationFilter referencing a secret in a different namespace
 - An AuthenticationFilter referencing a secret with an incorrect type (e.g., Opaque)
 - An AuthenticationFilter referencing a secret with an incorrect key
+
+### Valid scenarios
+
+This section covers deployment scenarios that are considered valid
+
+Single route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+- Expected outcomes:
+  The route rule is makred as valid.
+  Request to the path will return a 200 response when correctly authenticated.
+  Request to the path will return a 401 reponse when incorrectly authenticated.
+
+Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+- Expected outcomes:
+  The route rule is makred as valid.
+  Requests to any path in the valid route rule return a 200 response when correctly authenticated.
+  Requests to any path in the valid route rule return a 401 reponse when incorrectly authenticated.
+
+Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+- Expected outcomes:
+  All route rules are marked as valid.
+  Request to a path in each route rule will return a 200 response when correctly authenticated.
+  Request to a path in each route rule will return a 401 reponse when incorrectly authenticated.
+
+Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+- Expected outcomes:
+  All route rules are marked as valid.
+  Requests to any path in the valid route rule return a 200 response when correctly authenticated.
+  Requests to any path in the valid route rule return a 401 reponse when incorrectly authenticated.
+
+### Invalid scenarios
+
+This section covers deployment scenarios that are considered invalid
+
+Single route rule with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
+- Expected outcomes:
+  The route rule is maked as invalid.
+  Request to the path will return a 500 error.
+
+Single route rule with two or more paths in an HTTPRoute/GRPCRoute each referencing an invalid AuthenticationFilter
+- Expected outcomes:
+  The route rules are maked as invalid.
+  Requets to both paths in will return a 500 error.
+
+Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
+- Expected outcomes:
+  Both route rules are marked as invalid.
+  Requets to each paths in each route rule will return a 500 error.
+
+Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
+- Expected outcomes:
+  Both route rules are marked as invalid.
+  Requets to each paths in each route rule will return a 500 error.
+
+
+Two or more route rules each with a single path in an HTTPRoute/GRPCRoute, where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter
+- Expected outcomes:
+  The route rule referencing the invald AuthentiationFilter is marked as invalid.
+  Requests to the path in the invalid route rule will return a 500 error.
+  The roue rule referencing the valid AuthenticationFilter is marked as valid.
+  Requests to the path in the valid route rule will return a 200 reponse when correctly authenticated.
+  Requests to the path in the valid route rule will return a 401 reponse when incorrectly authenticated.
+
+
+Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter
+- Expected outcomes:
+  The route rules referencing the invald AuthentiationFilter is marked as invalid.
+  Requests to any path in the invalid route rule will return a 500 error.
+  The roue rules referencing the valid AuthenticationFilter is marked as valid.
+  Requests to any path in the valid route rule will return a 200 reponse when correctly authenticated.
+  Requests to any path in the valid route rule will return a 401 reponse when incorrectly authenticated.
+
+
+Two or more AuthenticationFilters referenced in a route rule.
+- Expected outcomes:
+  The route rule referencing multiple AuthenticationFilters is marked as invalid.
+  Requests to any path in the invalid route rule will return a 500 error.
+
 
 ## Security Considerations
 
