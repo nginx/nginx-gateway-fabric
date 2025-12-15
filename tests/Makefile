@@ -20,7 +20,7 @@ SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes # Doesn't work on OpenShift due to 
 SKIP_TESTS =
 CEL_TEST_TARGET =
 INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting,EppUnAvailableFailOpen,HTTPRouteInvalidInferencePoolRef,InferencePoolAccepted,HTTPRouteMultipleGatewaysDifferentPools,HTTPRouteMultipleRulesDifferentPools,InferencePoolHTTPRoutePortValidation,InferencePoolInvalidEPPService,InferencePoolResolvedRefsCondition,GatewayWeightedAcrossTwoInferencePools
-INFERENCE_SKIP_TESTS =
+INFERENCE_SKIP_TESTS = GatewayFollowingEPPRoutingWithDataParallelism
 
 # Check if ENABLE_EXPERIMENTAL is true
 ifeq ($(ENABLE_EXPERIMENTAL),true)
