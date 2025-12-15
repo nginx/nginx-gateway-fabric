@@ -9,6 +9,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 // RouteRuleFilters holds the Filters for a RouteRule.
@@ -116,9 +117,26 @@ func processRouteRuleFilters(
 ) (RouteRuleFilters, routeRuleErrors) {
 	errors := routeRuleErrors{}
 	valid := true
+	seenAuth := false
 
 	for i, f := range filters {
 		filterPath := path.Index(i)
+
+		isExtRef := f.FilterType == FilterExtensionRef && f.ExtensionRef != nil
+
+		if isExtRef && f.ExtensionRef.Kind == kinds.AuthenticationFilter {
+			if seenAuth {
+				err := field.Invalid(
+					filterPath.Child("extensionRef"),
+					f.ExtensionRef,
+					"only one AuthenticationFilter is allowed per Route rule",
+				)
+				errors.invalid = append(errors.invalid, err)
+				valid = false
+				continue
+			}
+			seenAuth = true
+		}
 
 		validateErrs := validateFilter(validator, f, filterPath)
 		if len(validateErrs) > 0 {
@@ -127,7 +145,7 @@ func processRouteRuleFilters(
 			continue
 		}
 
-		if f.FilterType == FilterExtensionRef && f.ExtensionRef != nil {
+		if isExtRef {
 			extRefFilterResolver := extRefFilterResolvers[string(f.ExtensionRef.Kind)]
 			resolved := extRefFilterResolver(*f.ExtensionRef)
 
