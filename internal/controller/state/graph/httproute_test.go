@@ -2,6 +2,7 @@ package graph
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -59,6 +60,7 @@ func createHTTPRoute(
 						BackendObjectReference: gatewayv1.BackendObjectReference{
 							Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
 							Name: "backend",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](80),
 						},
 					},
 					Filters: []gatewayv1.HTTPRouteFilter{
@@ -92,7 +94,12 @@ func createHTTPRoute(
 	}
 }
 
-func addFilterToPath(hr *gatewayv1.HTTPRoute, path string, filter gatewayv1.HTTPRouteFilter) {
+func addElementsToPath(
+	hr *gatewayv1.HTTPRoute,
+	path string,
+	filter gatewayv1.HTTPRouteFilter,
+	sp *gatewayv1.SessionPersistence,
+) {
 	for i := range hr.Spec.Rules {
 		for _, match := range hr.Spec.Rules[i].Matches {
 			if match.Path == nil {
@@ -100,6 +107,10 @@ func addFilterToPath(hr *gatewayv1.HTTPRoute, path string, filter gatewayv1.HTTP
 			}
 			if *match.Path.Value == path {
 				hr.Spec.Rules[i].Filters = append(hr.Spec.Rules[i].Filters, filter)
+
+				if sp != nil {
+					hr.Spec.Rules[i].SessionPersistence = sp
+				}
 			}
 		}
 	}
@@ -110,6 +121,7 @@ var expRouteBackendRef = RouteBackendRef{
 		BackendObjectReference: gatewayv1.BackendObjectReference{
 			Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
 			Name: "backend",
+			Port: helpers.GetPointer[gatewayv1.PortNumber](80),
 		},
 	},
 	Filters: []any{
@@ -126,6 +138,38 @@ func createInferencePoolBackend(name, namespace string) gatewayv1.BackendRef {
 			Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
 			Name:      gatewayv1.ObjectName(name),
 			Namespace: helpers.GetPointer(gatewayv1.Namespace(namespace)),
+		},
+	}
+}
+
+func getExpRouteBackendRefForPath(path string, spIdx string, sessionName string) RouteBackendRef {
+	var spName string
+	if sessionName == "" {
+		spName = fmt.Sprintf("sp_%s", spIdx)
+	} else {
+		spName = sessionName
+	}
+
+	return RouteBackendRef{
+		BackendRef: gatewayv1.BackendRef{
+			BackendObjectReference: gatewayv1.BackendObjectReference{
+				Kind: helpers.GetPointer[gatewayv1.Kind](kinds.Service),
+				Name: "backend",
+				Port: helpers.GetPointer[gatewayv1.PortNumber](80),
+			},
+		},
+		Filters: []any{
+			gatewayv1.HTTPRouteFilter{
+				Type: gatewayv1.HTTPRouteFilterExtensionRef,
+			},
+		},
+		SessionPersistence: &SessionPersistenceConfig{
+			Valid:       true,
+			Name:        spName,
+			SessionType: gatewayv1.CookieBasedSessionPersistence,
+			Expiry:      "1h",
+			Path:        path,
+			Idx:         spIdx,
 		},
 	}
 }
@@ -161,8 +205,16 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
 	}
 
-	addFilterToPath(hr, "/", snippetsFilterRef)
-	addFilterToPath(hr, "/", requestRedirectFilter)
+	unNamedSPConfig := &gatewayv1.SessionPersistence{
+		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
+		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+		CookieConfig: &gatewayv1.CookieConfig{
+			LifetimeType: helpers.GetPointer((gatewayv1.PermanentCookieLifetimeType)),
+		},
+	}
+
+	addElementsToPath(hr, "/", snippetsFilterRef, unNamedSPConfig)
+	addElementsToPath(hr, "/", requestRedirectFilter, nil)
 
 	hrWrongGateway := createHTTPRoute("hr-2", "some-gateway", "example.com", "/")
 
@@ -238,7 +290,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 									},
 								},
 								Matches:          hr.Spec.Rules[0].Matches,
-								RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+								RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/", "hr-1_test_0", "")},
 							},
 						},
 					},
@@ -253,7 +305,11 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		},
 	}
 
-	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
+		v := &validationfakes.FakeHTTPFieldsValidator{}
+		v.ValidateDurationReturns("1h", nil)
+		return v
+	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -271,12 +327,16 @@ func TestBuildHTTPRoutes(t *testing.T) {
 			}
 
 			routes := buildRoutesForGateways(
-				validator,
+				createAllValidValidator(),
 				hrRoutes,
 				map[types.NamespacedName]*gatewayv1.GRPCRoute{},
 				test.gateways,
 				snippetsFilters,
 				nil,
+				FeatureFlags{
+					Plus:         true,
+					Experimental: true,
+				},
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
 		})
@@ -305,13 +365,21 @@ func TestBuildHTTPRoute(t *testing.T) {
 	hrValidWithUnsupportedField := createHTTPRoute("hr-valid-unsupported", gatewayNsName.Name, "example.com", "/")
 	hrValidWithUnsupportedField.Spec.Rules[0].Name = helpers.GetPointer[gatewayv1.SectionName]("unsupported-name")
 
+	sp := &gatewayv1.SessionPersistence{
+		SessionName:     helpers.GetPointer("http-route-session"),
+		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
+		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+		CookieConfig: &gatewayv1.CookieConfig{
+			LifetimeType: helpers.GetPointer((gatewayv1.PermanentCookieLifetimeType)),
+		},
+	}
 	// route with valid filter
 	validFilter := gatewayv1.HTTPRouteFilter{
 		Type:            gatewayv1.HTTPRouteFilterRequestRedirect,
 		RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
 	}
 	hr := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/", "/filter")
-	addFilterToPath(hr, "/filter", validFilter)
+	addElementsToPath(hr, "/filter", validFilter, sp)
 
 	// invalid routes without filters
 	hrInvalidHostname := createHTTPRoute("hr", gatewayNsName.Name, "", "/")
@@ -329,7 +397,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 		},
 	}
 	hrInvalidFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
-	addFilterToPath(hrInvalidFilters, "/filter", invalidFilter)
+	addElementsToPath(hrInvalidFilters, "/filter", invalidFilter, nil)
 
 	// route with invalid matches and filters
 	hrDroppedInvalidMatchesAndInvalidFilters := createHTTPRoute(
@@ -340,12 +408,12 @@ func TestBuildHTTPRoute(t *testing.T) {
 		"/filter",
 		"/",
 	)
-	addFilterToPath(hrDroppedInvalidMatchesAndInvalidFilters, "/filter", invalidFilter)
+	addElementsToPath(hrDroppedInvalidMatchesAndInvalidFilters, "/filter", invalidFilter, sp)
 
 	// route with both invalid and valid filters in the same rule
 	hrDroppedInvalidFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter", "/")
-	addFilterToPath(hrDroppedInvalidFilters, "/filter", validFilter)
-	addFilterToPath(hrDroppedInvalidFilters, "/", invalidFilter)
+	addElementsToPath(hrDroppedInvalidFilters, "/filter", validFilter, sp)
+	addElementsToPath(hrDroppedInvalidFilters, "/", invalidFilter, sp)
 
 	// route with duplicate section names
 	hrDuplicateSectionName := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
@@ -364,7 +432,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "sf",
 		},
 	}
-	addFilterToPath(hrValidSnippetsFilter, "/filter", validSnippetsFilterExtRef)
+	addElementsToPath(hrValidSnippetsFilter, "/filter", validSnippetsFilterExtRef, sp)
 
 	// route with invalid snippets filter extension ref
 	hrInvalidSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
@@ -376,7 +444,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "sf",
 		},
 	}
-	addFilterToPath(hrInvalidSnippetsFilter, "/filter", invalidSnippetsFilterExtRef)
+	addElementsToPath(hrInvalidSnippetsFilter, "/filter", invalidSnippetsFilterExtRef, nil)
 
 	// route with unresolvable snippets filter extension ref
 	hrUnresolvableSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
@@ -388,12 +456,12 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "does-not-exist",
 		},
 	}
-	addFilterToPath(hrUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef)
+	addElementsToPath(hrUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef, nil)
 
 	// route with two invalid snippets filter extensions refs: (1) invalid group (2) unresolvable
 	hrInvalidAndUnresolvableSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
-	addFilterToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", invalidSnippetsFilterExtRef)
-	addFilterToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef)
+	addElementsToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", invalidSnippetsFilterExtRef, nil)
+	addElementsToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef, nil)
 
 	// routes with an inference pool backend
 	hrInferencePool := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
@@ -402,6 +470,9 @@ func TestBuildHTTPRoute(t *testing.T) {
 			BackendRef: createInferencePoolBackend("ipool", gatewayNsName.Namespace),
 		},
 	}
+
+	// session persistence should not be added for inference pool backends
+	hrInferencePool.Spec.Rules[0].SessionPersistence = sp
 	// route with an inference pool backend that does not exist
 	hrInferencePoolDoesNotExist := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
 	hrInferencePoolDoesNotExist.Spec.Rules[0].BackendRefs = []gatewayv1.HTTPBackendRef{
@@ -423,16 +494,30 @@ func TestBuildHTTPRoute(t *testing.T) {
 			}
 			return nil
 		},
+		ValidateDurationStub: func(_ string) (string, error) {
+			return "1h", nil
+		},
+	}
+
+	createHTTPValidValidator := func(duration *gatewayv1.Duration) *validationfakes.FakeHTTPFieldsValidator {
+		v := &validationfakes.FakeHTTPFieldsValidator{}
+		if duration == nil {
+			v.ValidateDurationReturns("", nil)
+		} else {
+			v.ValidateDurationReturns(string(*duration), nil)
+		}
+		return v
 	}
 
 	tests := []struct {
-		validator *validationfakes.FakeHTTPFieldsValidator
-		hr        *gatewayv1.HTTPRoute
-		expected  *L7Route
-		name      string
+		validator          *validationfakes.FakeHTTPFieldsValidator
+		hr                 *gatewayv1.HTTPRoute
+		expected           *L7Route
+		name               string
+		plus, experimental bool
 	}{
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(sp.AbsoluteTimeout),
 			hr:        hr,
 			expected: &L7Route{
 				RouteType: RouteTypeHTTP,
@@ -465,12 +550,14 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hr.Spec.Rules[1].Filters),
 							},
 							Matches:          hr.Spec.Rules[1].Matches,
-							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_1", "http-route-session")},
 						},
 					},
 				},
 			},
-			name: "normal case",
+			plus:         true,
+			experimental: true,
+			name:         "normal case",
 		},
 		{
 			validator: &validationfakes.FakeHTTPFieldsValidator{},
@@ -705,7 +792,6 @@ func TestBuildHTTPRoute(t *testing.T) {
 			},
 			name: "dropped invalid rule with invalid matches",
 		},
-
 		{
 			validator: validatorInvalidFieldsInRule,
 			hr:        hrDroppedInvalidMatchesAndInvalidFilters,
@@ -749,7 +835,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 									hrDroppedInvalidMatchesAndInvalidFilters.Spec.Rules[1].Filters,
 								),
 							},
-							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_1", "http-route-session")},
 						},
 						{
 							ValidMatches: true,
@@ -763,7 +849,9 @@ func TestBuildHTTPRoute(t *testing.T) {
 					},
 				},
 			},
-			name: "dropped invalid rule with invalid filters and invalid rule with invalid matches",
+			plus:         true,
+			experimental: true,
+			name:         "dropped invalid rule with invalid filters and invalid rule with invalid matches",
 		},
 		{
 			validator: validatorInvalidFieldsInRule,
@@ -796,7 +884,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrDroppedInvalidFilters.Spec.Rules[0].Filters),
 								Valid:   true,
 							},
-							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_0", "http-route-session")},
 						},
 						{
 							ValidMatches: true,
@@ -805,12 +893,14 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrDroppedInvalidFilters.Spec.Rules[1].Filters),
 								Valid:   false,
 							},
-							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/", "hr_test_1", "http-route-session")},
 						},
 					},
 				},
 			},
-			name: "dropped invalid rule with invalid filters",
+			plus:         true,
+			experimental: true,
+			name:         "dropped invalid rule with invalid filters",
 		},
 		{
 			validator: validatorInvalidFieldsInRule,
@@ -847,12 +937,14 @@ func TestBuildHTTPRoute(t *testing.T) {
 								},
 								Valid: true,
 							},
-							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_0", "http-route-session")},
 						},
 					},
 				},
 			},
-			name: "rule with valid snippets filter extension ref filter",
+			plus:         true,
+			experimental: true,
+			name:         "rule with valid snippets filter extension ref filter",
 		},
 		{
 			validator: validatorInvalidFieldsInRule,
@@ -1054,7 +1146,9 @@ func TestBuildHTTPRoute(t *testing.T) {
 					},
 				},
 			},
-			name: "route with an inference pool backend gets converted to service",
+			plus:         true,
+			experimental: true,
+			name:         "route with an inference pool backend gets converted to service",
 		},
 		{
 			validator: &validationfakes.FakeHTTPFieldsValidator{},
@@ -1109,8 +1203,17 @@ func TestBuildHTTPRoute(t *testing.T) {
 			inferencePools := map[types.NamespacedName]*inference.InferencePool{
 				{Namespace: "test", Name: "ipool"}: {},
 			}
-
-			route := buildHTTPRoute(test.validator, test.hr, gws, snippetsFilters, inferencePools)
+			route := buildHTTPRoute(
+				test.validator,
+				test.hr,
+				gws,
+				snippetsFilters,
+				inferencePools,
+				FeatureFlags{
+					Plus:         test.plus,
+					Experimental: test.experimental,
+				},
+			)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
 	}
@@ -1152,8 +1255,8 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 		},
 	}
 	hr := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/mirror")
-	addFilterToPath(hr, "/mirror", mirrorFilter)
-	addFilterToPath(hr, "/mirror", urlRewriteFilter)
+	addElementsToPath(hr, "/mirror", mirrorFilter, nil)
+	addElementsToPath(hr, "/mirror", urlRewriteFilter, nil)
 
 	// Expected mirror route
 	expectedMirrorRoute := &L7Route{
@@ -1241,11 +1344,23 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 
 	g := NewWithT(t)
 
+	featureFlags := FeatureFlags{
+		Plus:         false,
+		Experimental: false,
+	}
+
 	routes := map[RouteKey]*L7Route{}
-	l7route := buildHTTPRoute(validator, hr, gateways, snippetsFilters, nil)
+	l7route := buildHTTPRoute(
+		validator,
+		hr,
+		gateways,
+		snippetsFilters,
+		nil,
+		featureFlags,
+	)
 	g.Expect(l7route).NotTo(BeNil())
 
-	buildHTTPMirrorRoutes(routes, l7route, hr, gateways, snippetsFilters)
+	buildHTTPMirrorRoutes(routes, l7route, hr, gateways, snippetsFilters, featureFlags)
 
 	obj, ok := expectedMirrorRoute.Source.(*gatewayv1.HTTPRoute)
 	g.Expect(ok).To(BeTrue())
@@ -1260,10 +1375,10 @@ func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T)
 	validator := &validationfakes.FakeHTTPFieldsValidator{}
 	inferencePoolName1 := "primary-pool"
 	inferencePoolName2 := "secondary-pool"
-	routeNamespace := "test"
+	routeNsName := types.NamespacedName{Namespace: "test", Name: "hr"}
 	inferencePools := map[types.NamespacedName]*inference.InferencePool{
-		{Namespace: routeNamespace, Name: inferencePoolName1}: {},
-		{Namespace: routeNamespace, Name: inferencePoolName2}: {},
+		{Namespace: routeNsName.Namespace, Name: inferencePoolName1}: {},
+		{Namespace: routeNsName.Namespace, Name: inferencePoolName2}: {},
 	}
 
 	tests := []struct {
@@ -1291,7 +1406,7 @@ func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T)
 								Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
 								Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
 								Name:      gatewayv1.ObjectName(inferencePoolName1),
-								Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNamespace)),
+								Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNsName.Namespace)),
 							},
 							Weight: helpers.GetPointer(int32(70)),
 						},
@@ -1302,7 +1417,7 @@ func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T)
 								Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
 								Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
 								Name:      gatewayv1.ObjectName(inferencePoolName2),
-								Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNamespace)),
+								Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNsName.Namespace)),
 							},
 							Weight: helpers.GetPointer(int32(30)),
 						},
@@ -1330,7 +1445,7 @@ func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T)
 								Group:     helpers.GetPointer[gatewayv1.Group](inferenceAPIGroup),
 								Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.InferencePool),
 								Name:      gatewayv1.ObjectName(inferencePoolName1),
-								Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNamespace)),
+								Namespace: helpers.GetPointer(gatewayv1.Namespace(routeNsName.Namespace)),
 							},
 						},
 					},
@@ -1355,15 +1470,18 @@ func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T)
 			t.Parallel()
 			g := NewWithT(t)
 
-			rulePath := field.NewPath("spec").Child("rules").Index(0)
-
+			ruleIdx := 0
 			routeRule, errs := processHTTPRouteRule(
 				tc.specRule,
-				rulePath,
+				ruleIdx,
 				validator,
 				nil,
 				inferencePools,
-				routeNamespace,
+				routeNsName,
+				FeatureFlags{
+					Plus:         false,
+					Experimental: false,
+				},
 			)
 
 			if tc.expectValid {
@@ -2002,7 +2120,7 @@ func TestUnsupportedFieldsErrors(t *testing.T) {
 					Type: helpers.GetPointer(gatewayv1.SessionPersistenceType("unsupported-session-persistence")),
 				}),
 			},
-			expectedErrors: 4,
+			expectedErrors: 5,
 		},
 	}
 
@@ -2014,7 +2132,14 @@ func TestUnsupportedFieldsErrors(t *testing.T) {
 			rulePath := field.NewPath("spec").Child("rules")
 			var errors routeRuleErrors
 
-			unsupportedFieldsErrors := checkForUnsupportedHTTPFields(test.specRule, rulePath)
+			unsupportedFieldsErrors := checkForUnsupportedHTTPFields(
+				test.specRule,
+				rulePath,
+				FeatureFlags{
+					Plus:         false,
+					Experimental: false,
+				},
+			)
 			if len(unsupportedFieldsErrors) > 0 {
 				errors.warn = append(errors.warn, unsupportedFieldsErrors...)
 			}
@@ -2026,7 +2151,10 @@ func TestUnsupportedFieldsErrors(t *testing.T) {
 
 func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 	t.Parallel()
-	routeNamespace := "test"
+	routeNsName := types.NamespacedName{
+		Namespace: "test",
+		Name:      "route",
+	}
 
 	tests := []struct {
 		name          string
@@ -2034,6 +2162,8 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 		expectedConds []conditions.Condition
 		expectedWarns int
 		expectedValid bool
+		plusEnabled   bool
+		experimental  bool
 	}{
 		{
 			name:          "No unsupported fields",
@@ -2065,17 +2195,59 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 					}),
 					Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: helpers.GetPointer(3)}),
 					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
-						Type: helpers.GetPointer(gatewayv1.SessionPersistenceType("unsupported-session-persistence")),
+						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						SessionName: helpers.GetPointer("session_id"),
 					}),
 				},
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteAcceptedUnsupportedField("[spec.rules[0].name: Forbidden: Name, spec.rules[0].timeouts: " +
-					"Forbidden: Timeouts, spec.rules[0].retry: Forbidden: Retry, " +
-					"spec.rules[0].sessionPersistence: Forbidden: SessionPersistence]"),
+				conditions.NewRouteAcceptedUnsupportedField(
+					fmt.Sprintf("[spec.rules[0].name: Forbidden: Name, spec.rules[0].timeouts: "+
+						"Forbidden: Timeouts, spec.rules[0].retry: Forbidden: Retry, "+
+						"spec.rules[0].sessionPersistence: Forbidden: "+
+						"%s OSS users can use `ip_hash` load balancing method via the UpstreamSettingsPolicy for session affinity.]",
+						spErrMsg,
+					)),
 			},
+			experimental:  true,
+			plusEnabled:   false,
 			expectedWarns: 4,
+		},
+		{
+			name: "Session persistence unsupported with experimental disabled",
+			specRules: []gatewayv1.HTTPRouteRule{
+				{
+					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
+						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						SessionName: helpers.GetPointer("session_id"),
+					}),
+				},
+			},
+			expectedValid: true,
+			expectedConds: []conditions.Condition{
+				conditions.NewRouteAcceptedUnsupportedField(fmt.Sprintf("spec.rules[0].sessionPersistence: Forbidden: "+
+					"%s", spErrMsg)),
+			},
+			expectedWarns: 1,
+			plusEnabled:   true,
+			experimental:  false,
+		},
+		{
+			name: "SessionPersistence field with Plus enabled and experimental enabled",
+			specRules: []gatewayv1.HTTPRouteRule{
+				{
+					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
+						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						SessionName: helpers.GetPointer("session_id"),
+					}),
+				},
+			},
+			expectedValid: true,
+			expectedConds: nil,
+			expectedWarns: 0,
+			plusEnabled:   true,
+			experimental:  true,
 		},
 	}
 
@@ -2089,7 +2261,11 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 				validation.SkipValidator{},
 				nil,
 				nil,
-				routeNamespace,
+				routeNsName,
+				FeatureFlags{
+					Plus:         test.plusEnabled,
+					Experimental: test.experimental,
+				},
 			)
 
 			g.Expect(valid).To(Equal(test.expectedValid))

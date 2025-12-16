@@ -13,6 +13,10 @@ type Processor struct{}
 type UpstreamSettings struct {
 	// ZoneSize is the zone size setting.
 	ZoneSize string
+	// LoadBalancingMethod is the load balancing method setting.
+	LoadBalancingMethod string
+	// HashMethodKey is the key to be used for hash-based load balancing methods.
+	HashMethodKey string
 	// KeepAlive contains the keepalive settings.
 	KeepAlive http.UpstreamKeepAlive
 }
@@ -60,6 +64,14 @@ func processPolicies(pols []policies.Policy) UpstreamSettings {
 			if usp.Spec.KeepAlive.Timeout != nil {
 				upstreamSettings.KeepAlive.Timeout = string(*usp.Spec.KeepAlive.Timeout)
 			}
+		}
+
+		if usp.Spec.LoadBalancingMethod != nil {
+			upstreamSettings.LoadBalancingMethod = string(*usp.Spec.LoadBalancingMethod)
+		}
+
+		if usp.Spec.HashMethodKey != nil {
+			upstreamSettings.HashMethodKey = string(*usp.Spec.HashMethodKey)
 		}
 	}
 

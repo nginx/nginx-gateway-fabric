@@ -10,9 +10,17 @@ package config
 const upstreamsTemplateText = `
 {{ range $u := . }}
 upstream {{ $u.Name }} {
-    random two least_conn;
+    {{ if $u.LoadBalancingMethod -}}
+    {{ $u.LoadBalancingMethod }};
+    {{- end }}
     {{ if $u.ZoneSize -}}
     zone {{ $u.Name }} {{ $u.ZoneSize }};
+    {{ end -}}
+
+    {{ if $u.SessionPersistence.Name -}}
+    sticky {{ $u.SessionPersistence.SessionType }} {{ $u.SessionPersistence.Name }}
+    {{- if $u.SessionPersistence.Expiry }} expires={{ $u.SessionPersistence.Expiry }}{{- end }}
+    {{- if $u.SessionPersistence.Path }} path={{ $u.SessionPersistence.Path }}{{- end }};
     {{ end -}}
 
     {{- if $u.StateFile }}

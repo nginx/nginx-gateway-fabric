@@ -64,16 +64,21 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 
 		Eventually(
 			func() error {
-				status, body, err := framework.Get(url, address, timeoutConfig.RequestTimeout, nil, nil)
+				request := framework.Request{
+					URL:     url,
+					Address: address,
+					Timeout: timeoutConfig.RequestTimeout,
+				}
+				resp, err := framework.Get(request)
 				if err != nil {
 					return err
 				}
-				if status != http.StatusOK {
-					return fmt.Errorf("status not 200; got %d", status)
+				if resp.StatusCode != http.StatusOK {
+					return fmt.Errorf("status not 200; got %d", resp.StatusCode)
 				}
 				expBody := "URI: /hello"
-				if !strings.Contains(body, expBody) {
-					return fmt.Errorf("bad body: got %s; expected %s", body, expBody)
+				if !strings.Contains(resp.Body, expBody) {
+					return fmt.Errorf("bad body: got %s; expected %s", resp.Body, expBody)
 				}
 				return nil
 			}).
