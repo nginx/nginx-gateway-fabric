@@ -65,7 +65,7 @@ func (fs *fileService) GetFile(
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	contents, err := fs.getFileContents(req, gi.IPAddress)
+	contents, err := fs.getFileContents(req, gi.UUID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (fs *fileService) GetFileStream(
 		return status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	contents, err := fs.getFileContents(req, gi.IPAddress)
+	contents, err := fs.getFileContents(req, gi.UUID)
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func (fs *fileService) UpdateOverview(
 		return &pb.UpdateOverviewResponse{}, agentgrpc.ErrStatusInvalidConnection
 	}
 
-	conn := fs.connTracker.GetConnection(gi.IPAddress)
+	conn := fs.connTracker.GetConnection(gi.UUID)
 	if conn.PodName == "" {
 		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "connection not found")
 	}

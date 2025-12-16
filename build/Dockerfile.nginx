@@ -31,6 +31,9 @@ COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf
 
+# Create empty /run/.containerenv file so agent can identify that it's running in a container
+RUN mkdir -p /run && touch /run/.containerenv
+
 RUN chown -R 101:1001 /etc/nginx /var/cache/nginx
 
 LABEL org.nginx.ngf.image.build.agent="${BUILD_AGENT}"

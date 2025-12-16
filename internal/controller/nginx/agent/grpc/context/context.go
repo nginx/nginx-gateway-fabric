@@ -6,8 +6,8 @@ import (
 
 // GrpcInfo for storing identity information for the gRPC client.
 type GrpcInfo struct {
-	Token     string `json:"token"`      // auth token that was provided by the gRPC client
-	IPAddress string `json:"ip_address"` // ip address of the agent
+	UUID  string `json:"uuid"`  // unique identifier for the gRPC client
+	Token string `json:"token"` // auth token that was provided by the gRPC client
 }
 
 type contextGRPCKey struct{}
