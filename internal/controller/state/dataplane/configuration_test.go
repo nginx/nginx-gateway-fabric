@@ -506,13 +506,46 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	}
 
+	authBasicSecretNsName := types.NamespacedName{Namespace: "test", Name: "auth-basic-secret"}
+	authBasicSecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      authBasicSecretNsName.Name,
+				Namespace: authBasicSecretNsName.Namespace,
+			},
+			Type: apiv1.SecretType("nginx.org/htpasswd"),
+			Data: map[string][]byte{
+				"auth": []byte("user:$apr1$cred"),
+			},
+		},
+	}
+
+	af1 := &graph.AuthenticationFilter{
+		Source: &ngfAPIv1alpha1.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "af",
+				Namespace: "test",
+			},
+			Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Basic: &ngfAPIv1alpha1.BasicAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: authBasicSecretNsName.Name,
+					},
+					Realm: "",
+				},
+			},
+		},
+		Valid:      true,
+		Referenced: true,
+	}
+
 	redirect := graph.Filter{
 		FilterType: graph.FilterRequestRedirect,
 		RequestRedirect: &v1.HTTPRequestRedirectFilter{
 			Hostname: (*v1.PreciseHostname)(helpers.GetPointer("foo.example.com")),
 		},
 	}
-	extRefFilter := graph.Filter{
+	extRefFilterSnippetsFilter := graph.Filter{
 		FilterType: graph.FilterExtensionRef,
 		ExtensionRef: &v1.LocalObjectReference{
 			Group: ngfAPIv1alpha1.GroupName,
@@ -524,24 +557,48 @@ func TestBuildConfiguration(t *testing.T) {
 			SnippetsFilter: sf1,
 		},
 	}
-	addFilters(routeHR5, []graph.Filter{redirect, extRefFilter})
+
+	extRefFilterAuthenticationFilter := graph.Filter{
+		FilterType: graph.FilterExtensionRef,
+		ExtensionRef: &v1.LocalObjectReference{
+			Group: ngfAPIv1alpha1.GroupName,
+			Kind:  kinds.AuthenticationFilter,
+			Name:  "af",
+		},
+		ResolvedExtensionRef: &graph.ExtensionRefFilter{
+			Valid:                true,
+			AuthenticationFilter: af1,
+		},
+	}
+
+	addFilters(routeHR5, []graph.Filter{redirect, extRefFilterSnippetsFilter, extRefFilterAuthenticationFilter})
 	expRedirect := HTTPRequestRedirectFilter{
 		Hostname: helpers.GetPointer("foo.example.com"),
 	}
-	expExtRefFilter := SnippetsFilter{
+
+	expExtRefFiltersSf := SnippetsFilter{
 		LocationSnippet: &Snippet{
 			Name: createSnippetName(
 				ngfAPIv1alpha1.NginxContextHTTPServerLocation,
-				client.ObjectKeyFromObject(extRefFilter.ResolvedExtensionRef.SnippetsFilter.Source),
+				client.ObjectKeyFromObject(extRefFilterSnippetsFilter.ResolvedExtensionRef.SnippetsFilter.Source),
 			),
 			Contents: "location snippet",
 		},
 		ServerSnippet: &Snippet{
 			Name: createSnippetName(
 				ngfAPIv1alpha1.NginxContextHTTPServer,
-				client.ObjectKeyFromObject(extRefFilter.ResolvedExtensionRef.SnippetsFilter.Source),
+				client.ObjectKeyFromObject(extRefFilterSnippetsFilter.ResolvedExtensionRef.SnippetsFilter.Source),
 			),
 			Contents: "server snippet",
+		},
+	}
+
+	expExtRefFiltersAf := &AuthenticationFilter{
+		Basic: &AuthBasic{
+			SecretName:      authBasicSecretNsName.Name,
+			SecretNamespace: authBasicSecretNsName.Namespace,
+			Realm:           "",
+			Data:            authBasicSecret.Source.Data["auth"],
 		},
 	}
 
@@ -1582,6 +1639,9 @@ func TestBuildConfiguration(t *testing.T) {
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(hr5): routeHR5,
 				}
+				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+					authBasicSecretNsName: authBasicSecret,
+				}
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
@@ -1597,8 +1657,9 @@ func TestBuildConfiguration(t *testing.T) {
 										Source:       &hr5.ObjectMeta,
 										BackendGroup: expHR5Groups[0],
 										Filters: HTTPFilters{
-											RequestRedirect: &expRedirect,
-											SnippetsFilters: []SnippetsFilter{expExtRefFilter},
+											RequestRedirect:      &expRedirect,
+											SnippetsFilters:      []SnippetsFilter{expExtRefFiltersSf},
+											AuthenticationFilter: expExtRefFiltersAf,
 										},
 									},
 								},
