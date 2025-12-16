@@ -28,7 +28,7 @@ Rate limiting is a feature in NGINX which allows users to limit the request proc
 
 Local Rate Limiting refers to rate limiting per NGINX instance. Meaning each NGINX instance will have independent limits and these limits are not affected by requests sent to other NGINX instances in a replica fleet.
 
-In NGINX, this can be done using the `ngx_http_limit_req_module`, using the `limit_req_zone` and `limit_req` directives. Below is a simple example configuration where a `zone` named `one` is created with a size of `10 megabytes` and an average request processing rate for this zone cannot exceed 1 request per second. This zone also keys on the variable `$binary_remote_addr` which is the client IP address, meaning each client IP address will be tracked by a separate rate limit. Finally, the `limit_req` directive is used in the `location /search/` to put a limit on requests targeting that path.
+In NGINX, this can be done using the `ngx_http_limit_req_module`, using the `limit_req_zone` and `limit_req` directives. Below is a simple example configuration where a `zone` named `one` is created with a size of `10 megabytes` and an average request processing rate for this zone cannot exceed 1 request per second. This zone keys on the variable `$binary_remote_addr`, which is the client IP address, meaning each client IP address will be tracked by a separate rate limit. Finally, the `limit_req` directive is used in the `location /search/` to put a limit on requests targeting that path.
 
 ```nginx
 limit_req_zone $binary_remote_addr zone=one:10m rate=1r/s;
@@ -54,7 +54,7 @@ Downsides:
 
 Global Rate Limiting refers to rate limiting across an entire NGINX Plus fleet. Meaning NGINX Plus instances will share state and centralize their limits.
 
-In NGINX Plus, this can be done by using the `ngx_stream_zone_sync_module` to extend the solution for Local Rate Limiting and provide a way for synchronizing contents of shared memory zones across NGINX Plus instances. Below is a simple example configuration where the `sync` parameter is attached to the `limit_req_zone` directive. The other `zone_sync` directives living in a separate `stream` block starts the global synchronization engine and lets this NGINX Plus instance connect and share state with the other specified NGINX Plus instances.
+In NGINX Plus, this can be done by using the `ngx_stream_zone_sync_module` to extend the solution for Local Rate Limiting and provide a way for synchronizing contents of shared memory zones across NGINX Plus instances. Below is a simple example configuration where the `sync` parameter is attached to the `limit_req_zone` directive. The other `zone_sync` directives, living in a separate `stream` block, start the global synchronization engine and lets this NGINX Plus instance connect and share state with the other specified NGINX Plus instances.
 
 ```nginx
 stream {
@@ -397,17 +397,17 @@ type RateLimitPolicyList struct {
 type RateLimitLogLevel string
 
 const (
-	// AgentLogLevelInfo is the info level rate limit logs.
-	AgentLogLevelInfo RateLimitLogLevel = "info"
+	// RateLimitLogLevelInfo is the info level rate limit logs.
+	RateLimitLogLevelInfo RateLimitLogLevel = "info"
 
-	// AgentLogLevelNotice is the notice level rate limit logs.
-	AgentLogLevelNotice RateLimitLogLevel = "notice"
+	// RateLimitLogLevelNotice is the notice level rate limit logs.
+	RateLimitLogLevelNotice RateLimitLogLevel = "notice"
 
-	// AgentLogLevelWarn is the warn level rate limit logs.
-	AgentLogLevelWarn RateLimitLogLevel = "warn"
+	// RateLimitLogLevelWarn is the warn level rate limit logs.
+	RateLimitLogLevelWarn RateLimitLogLevel = "warn"
 
-	// AgentLogLevelError is the error level rate limit logs.
-	AgentLogLevelError RateLimitLogLevel = "error"
+	// RateLimitLogLevelError is the error level rate limit logs.
+	RateLimitLogLevelError RateLimitLogLevel = "error"
 )
 ```
 
@@ -435,14 +435,27 @@ The following Conditions must be populated on the `RateLimitPolicy` CRD:
 
 Note: The `Programmed` condition is part of the updated GEP-713 specification and should be implemented for this policy. Existing policies (ClientSettingsPolicy, UpstreamSettingsPolicy, ObservabilityPolicy) may not have implemented this condition yet and should be updated in future work.
 
-<!-- Additionally, when a Route-level policy specifies buffer size fields (`bufferSize`, `buffers`, or `busyBuffersSize`) but inherits `disable: true` from a Gateway-level policy without explicitly setting `disable: false`, the following condition will be set:
+##### ZoneName conflicts
+
+Since the `limit_req_zone` directive can only be at the `http` context level, and `zoneNames` need to be unique, this introduces the potential for `zoneName` conflicts in `RateLimitPolicies` that contain a `RateLimitZone` with the same `zoneName`. The general strategy for resolving conflicts is that `RateLimitZones` defined at the Gateway-level will take priority over Route-level `RateLimitZones`, and conflicting `RateLimitZones` defined at equal `targetRef` level will prioritize the `RateLimitZone` of the `RateLimitPolicy` that was created before the other. When a `RateLimitZone` is taken "priority" over another, its settings will be generated in the NGINX configuration, and a `PartiallyInvalid` Condition will be shown on the "ignored/losing" `RateLimitPolicy`.
+
+When a Route-level policy specifies a `RateLimitZone` that has a `zoneName` that conflicts with an existing `zoneName` set at the Gateway level, the following condition will be set on the `RateLimitPolicy` attached to the Route:
 
 - **Condition Type**: `Programmed`
 - **Status**: `False`
 - **Reason**: `PartiallyInvalid` (implementation-specific reason)
-- **Message**: "Policy is not fully programmed: buffer size fields (bufferSize, buffers, busyBuffersSize) are ignored because buffering is disabled by an ancestor policy. Set disable to false to enable buffering and apply buffer size settings."
+- **Message**: "Policy is not fully programmed: RateLimitZone(s) with zoneName(s): (zoneName(s) here) are ignored because of a conflict by an ancestor policy. Remove this conflict to enable the RateLimitZone(s)."
 
-This condition informs users that their policy configuration has not been fully programmed to the data plane due to inherited configuration conflicts. -->
+When there is a `zoneName` conflict between two `RateLimitPolicies` at the same level (Gateway-Gateway, or Route-Route), the following condition will be set on the `RateLimitPolicy` which was created after the other:
+
+- **Condition Type**: `Programmed`
+- **Status**: `False`
+- **Reason**: `PartiallyInvalid` (implementation-specific reason)
+- **Message**: "Policy is not fully programmed: RateLimitZone(s) with zoneName(s): (zoneName(s) here) are in conflict with an existing RateLimitZone with the same zoneName. Remove this conflict to enable the RateLimitZone(s)"
+
+No condition will be set on the winning `RateLimitPolicy` which has its `RateLimitZone` generated in NGINX configuration.
+
+These conditions informs users that their policy configuration has not been fully programmed to the data plane due to `RateLimitZone` conflicts.
 
 #### Setting Status on Objects Affected by a Policy
 
@@ -623,7 +636,18 @@ For more information on how to calculate effective policies, see the [hierarchy]
 
 ### NGINX Inheritance Behavior
 
+The `limit_req_zone` directive is only available at the `http` context, so any `RateLimitPolicy` that is attached to a Gateway or Route will have that zone inherited/available to other RateLimitPolicies in the same context.
+
+Although the `limit_req` directive is available at these three NGINX contexts: `http`, `server`, and `location`, the directive will only be placed in the `location` directive. This is to make inheritance from the Gateway level downwards to the final locations easier if there are other `limit_req` directives added at the Route level which want to overwrite the Gateway level one.
+
 ### Creating the Effective Policy in NGINX Config
+
+The strategy for implementing the effective policy is:
+
+- When a `RateLimitPolicy` is attached to a Gateway, add the `limit_req_zone` directive at the `http` block, and the `limit_req` directive at each of the `location` blocks generated by Routes attached to the Gateway.
+- When a `RateLimitPolicy` is attached to an HTTPRoute or GRPCRoute, add the `limit_req_zone` directive at the `http` block, and the `limit_req` directive at each of the `location` blocks generated for the Route.
+
+For both local and global rate limiting, NGINX rate limit configuration should not be generated on internal location blocks generated for the purpose of internal rewriting logic. If done so, a request directed to an external location might be counted multiple times if there are internal locations.
 
 ## Testing
 
@@ -650,8 +674,24 @@ Key validation rules:
 
 ### Resource Limits
 
+Due to how NGINX Plus configures zone synchronization under the hood, users with many NGINX Plus instances sharing state through Global Rate Limiting could an increase in consumed network bandwidth and CPU usage. More details on zone synchronization are provided in the official NGINX Plus documentation in [How NGINX Plus Performs Zone Synchronization](https://docs.nginx.com/nginx/admin-guide/high-availability/zone_sync_details/#scaling).
+
 ## Alternatives
+
+- **Direct Policy**: If there's no strong use case for the Cluster Operator setting defaults for these settings on a Gateway, we could use a Direct Policy. However, since Rate Limit rules should be able to be defined on both Gateway and Routes, an Inherited Policy is the only Policy type for our solution.
+- **ExtensionRef approach**: We could use Gateway API's extensionRef mechanism instead of a Policy. However, Policy attachment is more appropriate for this use case as it follows the established pattern in NGINX Gateway Fabric, provides better status reporting, and allows for Rate Limit rules to be set by the Cluster Operator on a Gateway.
 
 ## Future Work
 
+- Add support for configuring NGINX Plus `zone_sync` settings. The defaults we set may not be a one size fits all for users with ranging sizes of NGINX Plus instances.
+
 ## References
+
+- [NGINX Extensions Enhancement Proposal](nginx-extensions.md)
+- [Policy Attachment GEP (GEP-713)](https://gateway-api.sigs.k8s.io/geps/gep-713/)
+- [NGINX limit_req documentation](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html)
+- [NGINX zone_sync documentation](https://nginx.org/en/docs/stream/ngx_stream_zone_sync_module.html)
+- [NGINX Plus guide on runtime state sharing](https://docs.nginx.com/nginx/admin-guide/high-availability/zone_sync)
+- [NGINX Plus guide detailing how zone sync works](https://docs.nginx.com/nginx/admin-guide/high-availability/zone_sync_details)
+- [NGINX Plus guide on Rate Limiting](https://docs.nginx.com/nginx/admin-guide/security-controls/controlling-access-proxied-http/#limiting-the-request-rate)
+- [Kubernetes API Conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md)
