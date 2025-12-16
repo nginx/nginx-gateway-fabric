@@ -1,4 +1,4 @@
 /*
-Package context contains the functions for storing extra information in the gRPC context.
+Package grpcinfo contains helpers for storing and retrieving gRPC identity information in a context.Context.
 */
-package context //nolint:revive // ignoring conflicting package name
+package grpcinfo

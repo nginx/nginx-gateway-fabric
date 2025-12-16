@@ -1,4 +1,4 @@
-package context
+package grpcinfo
 
 import (
 	"context"
@@ -17,9 +17,9 @@ func NewGrpcContext(ctx context.Context, r GrpcInfo) context.Context {
 	return context.WithValue(ctx, contextGRPCKey{}, r)
 }
 
-// GrpcInfoFromContext returns the GrpcInfo saved in ctx if it exists.
+// FromContext returns the GrpcInfo saved in ctx if it exists.
 // Returns false if there's no GrpcInfo in the context.
-func GrpcInfoFromContext(ctx context.Context) (GrpcInfo, bool) {
+func FromContext(ctx context.Context) (GrpcInfo, bool) {
 	v, ok := ctx.Value(contextGRPCKey{}).(GrpcInfo)
 	return v, ok
 }

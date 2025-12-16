@@ -77,7 +77,7 @@ func (cs *commandService) CreateConnection(
 		return nil, errors.New("empty connection request")
 	}
 
-	gi, ok := grpcContext.GrpcInfoFromContext(ctx)
+	gi, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return nil, agentgrpc.ErrStatusInvalidConnection
 	}
@@ -126,7 +126,7 @@ func (cs *commandService) CreateConnection(
 func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error {
 	ctx := in.Context()
 
-	gi, ok := grpcContext.GrpcInfoFromContext(ctx)
+	gi, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
@@ -562,7 +562,7 @@ func (cs *commandService) UpdateDataPlaneStatus(
 		return nil, errors.New("empty UpdateDataPlaneStatus request")
 	}
 
-	gi, ok := grpcContext.GrpcInfoFromContext(ctx)
+	gi, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return nil, agentgrpc.ErrStatusInvalidConnection
 	}

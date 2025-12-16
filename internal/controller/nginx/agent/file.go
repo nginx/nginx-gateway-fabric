@@ -56,7 +56,7 @@ func (fs *fileService) GetFile(
 	ctx context.Context,
 	req *pb.GetFileRequest,
 ) (*pb.GetFileResponse, error) {
-	gi, ok := grpcContext.GrpcInfoFromContext(ctx)
+	gi, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return nil, agentgrpc.ErrStatusInvalidConnection
 	}
@@ -84,7 +84,7 @@ func (fs *fileService) GetFileStream(
 	req *pb.GetFileRequest,
 	server grpc.ServerStreamingServer[pb.FileDataChunk],
 ) error {
-	gi, ok := grpcContext.GrpcInfoFromContext(server.Context())
+	gi, ok := grpcContext.FromContext(server.Context())
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
@@ -187,7 +187,7 @@ func (fs *fileService) UpdateOverview(
 	ctx context.Context,
 	req *pb.UpdateOverviewRequest,
 ) (*pb.UpdateOverviewResponse, error) {
-	gi, ok := grpcContext.GrpcInfoFromContext(ctx)
+	gi, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return &pb.UpdateOverviewResponse{}, agentgrpc.ErrStatusInvalidConnection
 	}
