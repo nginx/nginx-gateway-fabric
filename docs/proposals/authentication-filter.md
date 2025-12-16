@@ -27,7 +27,7 @@ This new filter should eventually expose all forms of authentication available t
 
 This document focuses explicitly on Authentication (AuthN) and not Authorization (AuthZ). Authentication (AuthN) defines the verification of identity. It asks the question, "Who are you?". This is different from Authorization (AuthZ), which follows Authentication. It asks the question, "What are you allowed to do?"
 
-This document also focuses on HTTP Basic Authentication and JWT Authentication. Other authentication methods such as OpenID Connect (OIDC) are mentioned, but are not part of the CRD design. These will be covered in future design and implementation tasks.
+This document also focuses on HTTP Basic Authentication and JWT Authentication. Other authentication methods such as OpenID Connect (OIDC) are mentioned but are not part of the CRD design. These will be covered in future design and implementation tasks.
 
 
 ## Use Cases
@@ -829,7 +829,7 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 ## Testing
 
 - Unit tests
-- Functional tests to validate behavioural scenarios when referencing filters in different combinations.
+- Functional tests to validate behavioral scenarios when referencing filters in different combinations.
 
 ## Functional Test Cases
 
@@ -851,27 +851,27 @@ This section covers deployment scenarios that are considered valid
 
 Single route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
 - Expected outcomes:
-  The route rule is makred as valid.
+  The route rule is marked as valid.
   Request to the path will return a 200 response when correctly authenticated.
-  Request to the path will return a 401 reponse when incorrectly authenticated.
+  Request to the path will return a 401 response when incorrectly authenticated.
 
 Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
 - Expected outcomes:
-  The route rule is makred as valid.
+  The route rule is marked as valid.
   Requests to any path in the valid route rule return a 200 response when correctly authenticated.
-  Requests to any path in the valid route rule return a 401 reponse when incorrectly authenticated.
+  Requests to any path in the valid route rule return a 401 response when incorrectly authenticated.
 
 Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
 - Expected outcomes:
   All route rules are marked as valid.
   Request to a path in each route rule will return a 200 response when correctly authenticated.
-  Request to a path in each route rule will return a 401 reponse when incorrectly authenticated.
+  Request to a path in each route rule will return a 401 response when incorrectly authenticated.
 
 Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
 - Expected outcomes:
   All route rules are marked as valid.
   Requests to any path in the valid route rule return a 200 response when correctly authenticated.
-  Requests to any path in the valid route rule return a 401 reponse when incorrectly authenticated.
+  Requests to any path in the valid route rule return a 401 response when incorrectly authenticated.
 
 ### Invalid scenarios
 
@@ -879,32 +879,32 @@ This section covers deployment scenarios that are considered invalid
 
 Single route rule with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
 - Expected outcomes:
-  The route rule is maked as invalid.
+  The route rule is marked as invalid.
   Request to the path will return a 500 error.
 
 Single route rule with two or more paths in an HTTPRoute/GRPCRoute each referencing an invalid AuthenticationFilter
 - Expected outcomes:
-  The route rules are maked as invalid.
-  Requets to both paths in will return a 500 error.
+  The route rules are marked as invalid.
+  Requests to both paths in will return a 500 error.
 
 Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
 - Expected outcomes:
   Both route rules are marked as invalid.
-  Requets to each paths in each route rule will return a 500 error.
+  Requests to each paths in each route rule will return a 500 error.
 
 Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
 - Expected outcomes:
   Both route rules are marked as invalid.
-  Requets to each paths in each route rule will return a 500 error.
+  Requests to each paths in each route rule will return a 500 error.
 
 
 Two or more route rules each with a single path in an HTTPRoute/GRPCRoute, where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter
 - Expected outcomes:
-  The route rule referencing the invald AuthentiationFilter is marked as invalid.
+  The route rule referencing the invalid AuthentiationFilter is marked as invalid.
   Requests to the path in the invalid route rule will return a 500 error.
   The roue rule referencing the valid AuthenticationFilter is marked as valid.
-  Requests to the path in the valid route rule will return a 200 reponse when correctly authenticated.
-  Requests to the path in the valid route rule will return a 401 reponse when incorrectly authenticated.
+  Requests to the path in the valid route rule will return a 200 response when correctly authenticated.
+  Requests to the path in the valid route rule will return a 401 response when incorrectly authenticated.
 
 
 Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter
@@ -912,8 +912,8 @@ Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute wh
   The route rules referencing the invald AuthentiationFilter is marked as invalid.
   Requests to any path in the invalid route rule will return a 500 error.
   The roue rules referencing the valid AuthenticationFilter is marked as valid.
-  Requests to any path in the valid route rule will return a 200 reponse when correctly authenticated.
-  Requests to any path in the valid route rule will return a 401 reponse when incorrectly authenticated.
+  Requests to any path in the valid route rule will return a 200 response when correctly authenticated.
+  Requests to any path in the valid route rule will return a 401 response when incorrectly authenticated.
 
 
 Two or more AuthenticationFilters referenced in a route rule.
@@ -929,7 +929,7 @@ Two or more AuthenticationFilters referenced in a route rule.
 Basic Auth sends credentials in an Authorization header that is base64-encoded.
 JWT Auth requires users to provide a bearer token through the Authorization header.
 
-Both of these methods can be easily intercepted over HTTP.
+Both methods can be easily intercepted over HTTP.
 
 Users that attach an `AuthenticationFilter` to an HTTPRoute/GRPCRoute should be advised to enable HTTPS traffic at the Gateway level for the routes.
 
@@ -979,7 +979,7 @@ This scenario can use the status `RouteConditionPartiallyInvalid` defined in the
 
 ## Alternatives
 
-The Gateway API defines a means to standardise authentication through use of the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter) available in the HTTPRoute specification.
+The Gateway API defines a means to standardize authentication through use of the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter) available in the HTTPRoute specification.
 
 This allows users to reference an external authentication service, such as Keycloak, to handle the authentication requests.
 While this API is available in the experimental channel, it is subject to change.
@@ -992,7 +992,7 @@ It is certainly possible for us to provide an External Authentication Service th
 
 ### Documenting filter behavior
 
-In regards to documentation of filter behavior with the `AuthenticationFilter`, the Gateway API documentation on filters states the following:
+In regard to documentation of filter behavior with the `AuthenticationFilter`, the Gateway API documentation on filters states the following:
 
 ```text
 Wherever possible, implementations SHOULD implement filters in the order they are specified.
