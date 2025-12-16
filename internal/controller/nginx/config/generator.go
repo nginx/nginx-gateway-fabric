@@ -69,7 +69,7 @@ const (
 	nginxPlusConfigFile = httpFolder + "/plus-api.conf"
 
 	// authBasicUserFileFmt is the format for the auth files used for basic authentication.
-	// For example: /etc/nginx/secrets/<secret-namespace>_<secret-name>
+	// For example: /etc/nginx/secrets/<secret-namespace>_<secret-name>.
 	authBasicUserFileFmt = secretsFolder + "/%s_%s"
 )
 

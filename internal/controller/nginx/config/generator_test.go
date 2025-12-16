@@ -90,7 +90,7 @@ func TestGenerate(t *testing.T) {
 			"test-certbundle": []byte("test-cert"),
 		},
 		AuthBasicSecrets: map[dataplane.AuthBasicUserFileID]dataplane.AuthBasicUserData{
-			"default/auth-basic/auth": []byte("user:$apr1$cred"),
+			"default_auth-basic-user": []byte("user:$apr1$cred"),
 		},
 		Telemetry: dataplane.Telemetry{
 			Endpoint:    "1.2.3.4:123",
@@ -156,10 +156,6 @@ func TestGenerate(t *testing.T) {
 	}
 	sort.Slice(files, arrange)
 
-	// for _, f := range files {
-	// 	t.Logf("Generated file: %s", f.Meta.Name)
-	// }
-
 	/*
 		Order of files:
 		/etc/nginx/conf.d/http.conf
@@ -173,7 +169,7 @@ func TestGenerate(t *testing.T) {
 		/etc/nginx/main-includes/deployment_ctx.json
 		/etc/nginx/main-includes/main.conf
 		/etc/nginx/main-includes/mgmt.conf
-		/etc/nginx/secrets/default/auth-basic/auth
+		/etc/nginx/secrets/default_auth-basic-user
 		/etc/nginx/secrets/license.jwt
 		/etc/nginx/secrets/mgmt-ca.crt
 		/etc/nginx/secrets/mgmt-tls.crt
@@ -185,7 +181,7 @@ func TestGenerate(t *testing.T) {
 
 	g.Expect(files[0].Meta.Permissions).To(Equal(file.RegularFileMode))
 	g.Expect(files[0].Meta.Name).To(Equal("/etc/nginx/conf.d/http.conf"))
-	httpCfg := string(files[0].Contents) // converting to string so that on failure gomega prints strings not byte arrays
+	httpCfg := string(files[0].Contents) // Converting to string so that on failure gomega prints strings not byte arrays
 	// Note: this only verifies that Generate() returns a byte array with upstream, server, and split_client blocks.
 	// It does not test the correctness of those blocks. That functionality is covered by other tests in this package.
 	g.Expect(httpCfg).To(ContainSubstring("listen 80"))
@@ -253,7 +249,7 @@ func TestGenerate(t *testing.T) {
 	g.Expect(mgmtConf).To(ContainSubstring("ssl_certificate /etc/nginx/secrets/mgmt-tls.crt"))
 	g.Expect(mgmtConf).To(ContainSubstring("ssl_certificate_key /etc/nginx/secrets/mgmt-tls.key"))
 
-	g.Expect(files[11].Meta.Name).To(Equal("/etc/nginx/secrets/default/auth-basic/auth"))
+	g.Expect(files[11].Meta.Name).To(Equal("/etc/nginx/secrets/default_auth-basic-user"))
 	authBasicSecrets := string(files[11].Contents)
 	g.Expect(authBasicSecrets).To(Equal("user:$apr1$cred"))
 
