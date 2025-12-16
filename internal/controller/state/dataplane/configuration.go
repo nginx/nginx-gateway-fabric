@@ -352,7 +352,7 @@ func buildAuthBasicSecrets(secrets map[types.NamespacedName]*graph.Secret) map[A
 
 	for nsname, secret := range secrets {
 		if secret.Source.Type == coreV1.SecretType(graph.SecretTypeHtpasswd) {
-			id := generateAuthBasicUserFileID(fmt.Sprintf("%s/%s/%s", nsname.Namespace, nsname.Name, graph.AuthKeyBasic))
+			id := generateAuthBasicUserFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
 			authBasics[id] = secret.Source.Data[graph.AuthKeyBasic]
 		}
 	}

@@ -13,7 +13,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -724,11 +723,10 @@ func updateLocationAuthenticationFilter(
 ) http.Location {
 	if authenticationFilter != nil {
 		if authenticationFilter.Basic != nil {
-			userFilePathAndName := fmt.Sprintf("%s/%s/%s/%s",
-				secretsFolder,
+			userFilePathAndName := fmt.Sprintf(
+				authBasicUserFileFmt,
 				authenticationFilter.Basic.SecretNamespace,
 				authenticationFilter.Basic.SecretName,
-				graph.AuthKeyBasic,
 			)
 			location.AuthBasic = &http.AuthBasic{
 				Realm:    authenticationFilter.Basic.Realm,

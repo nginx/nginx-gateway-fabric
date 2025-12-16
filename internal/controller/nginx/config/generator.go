@@ -67,6 +67,10 @@ const (
 
 	// nginxPlusConfigFile is the path to the file containing the NGINX Plus API config.
 	nginxPlusConfigFile = httpFolder + "/plus-api.conf"
+
+	// authBasicUserFileFmt is the format for the auth files used for basic authentication.
+	// For example: /etc/nginx/secrets/<secret-namespace>_<secret-name>
+	authBasicUserFileFmt = secretsFolder + "/%s_%s"
 )
 
 // Generator generates NGINX configuration files.
