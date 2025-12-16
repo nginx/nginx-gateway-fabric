@@ -12,7 +12,6 @@ FEATURES:
 
 - Support Gateway API v1.4, moving BackendTLSPolicy from experimental to standard. [4166](https://github.com/nginx/nginx-gateway-fabric/pull/4166)
 - Add SupportedFeatures to GatewayClassStatus. [4236](https://github.com/nginx/nginx-gateway-fabric/pull/4236)
-- Remove deprecated v1alpha1 ObservabilityPolicy API. [4215](https://github.com/nginx/nginx-gateway-fabric/pull/4215)
 - Add ability to configure access log format or turn logging off. [4102](https://github.com/nginx/nginx-gateway-fabric/pull/4102)
 - Added support for configuring backend TLS on Gateways to enable secure communication between the gateway and upstream. [3900](https://github.com/nginx/nginx-gateway-fabric/pull/3900)
 - Updated validation for pathType RegularExpression to support PCRE-style patterns while remaining RE2-friendly, improving compatibility with other projects. [4450](https://github.com/nginx/nginx-gateway-fabric/pull/4450)
@@ -31,6 +30,11 @@ BUG FIXES:
 HELM CHART:
 
 - The version of the Helm chart is now 2.3.0
+
+UPGRADE:
+
+- The Gateway API version has been updated to 1.4. This version of Gateway API must be installed before installing NGINX Gateway Fabric v2.3.0 [4166](https://github.com/nginx/nginx-gateway-fabric/pull/4166)
+- Remove deprecated v1alpha1 ObservabilityPolicy API. [4215](https://github.com/nginx/nginx-gateway-fabric/pull/4215)
 
 KNOWN ISSUES:
 
