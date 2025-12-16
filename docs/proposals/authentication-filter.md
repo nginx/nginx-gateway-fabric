@@ -35,7 +35,7 @@ This document also focuses on HTTP Basic Authentication and JWT Authentication. 
 - As an Application Developer, I want to secure access to my APIs and Backend Applications.
 - As an Application Developer, I want to enforce authentication on specific routes and matches.
 
-### Understanding NGINX authentication methods
+### Understanding NGINX Authentication Methods
 
 | **Authentication Method** | **OSS** | **Plus** | **NGINX Module** | **Details** |
 | ------------------------------- | -------------- | ---------------- | ---------------------------------- | -------------------------------------------------------------------- |
@@ -43,7 +43,7 @@ This document also focuses on HTTP Basic Authentication and JWT Authentication. 
 | **JWT (JSON Web Token)** | ❌ | ✅ | [ngx_http_auth_jwt_module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html) | Tokens are used for stateless authentication between client and server. |
 | **OpenID Connect** | ❌ | ✅ | [ngx_http_oidc_module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html) | Allows authentication through third-party providers like Google. |
 
-### Understanding authentication terminology
+### Understanding Authentication Terminology
 
 #### Realms
 
@@ -345,7 +345,7 @@ const (
 )
 ```
 
-### Example spec for Basic Auth
+### Example Spec for Basic Auth
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -362,7 +362,7 @@ spec:
 
 In the case of Basic Auth, the deployed Secret and HTTPRoute may look like this:
 
-#### Secret referenced by filter
+#### Secret Referenced by Filter
 
 For Basic Auth, we will process a custom secret type of `nginx.org/htpasswd`.
 This will allow us to be more confident that the user is providing us with the appropriate kind of secret for this use case.
@@ -436,7 +436,7 @@ spec:
       port: 80
 ```
 
-#### Generated NGINX config
+#### Generated NGINX Config
 
 For Basic Auth, NGF will store the file used by `auth_basic_user_file` in `/etc/nginx/secrets/`
 The full path to the file will be `/etc/nginx/secrets/basic_auth_<secret-namespace>_<secret-name>`
@@ -529,7 +529,7 @@ spec:
     keyCache: 10m
 ```
 
-#### Secret referenced by filter
+#### Secret Referenced by Filter
 
 For JWT Auth, we will process a custom secret type of `nginx.org/jwt`.
 This will allow us to be more confident that the user is providing us with the appropriate kind of secret for this use case.
@@ -552,7 +552,7 @@ data:
   jwks.json: ewogICJrZXlzIjogWwogICAgewogICAgICAia3R5IjogIlJTQSIsCiAgICAgICJ1c2UiOiAic2lnIiwKICAgICAgImtpZCI6ICJleGFtcGxlLWtleS1pZCIsCiAgICAgICJhbGciOiAiUlMyNTYiLAogICAgICAibiI6ICJiYXNlNjR1cmwtbW9kdWx1cyIsCiAgICAgICJlIjogIkFRQUIiCiAgICB9CiAgXQp9Cg==
 ```
 
-#### HTTPRoute that will reference this filter
+#### HTTPRoute that Will Reference this Filter
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -732,7 +732,7 @@ http {
 }
 ```
 
-### Caching configuration
+### Caching Configuration
 
 Users may also choose to change the caching configuration set by `proxy_cache_path`.
 This can be made available in the `cache` configuration under `jwt.remote.cache`
@@ -770,7 +770,7 @@ This example shows a single HTTPRoute, with a single `filter` defined in a `rule
 
 ### Status
 
-#### Referencing multiple AuthenticationFilter resources in a single rule
+#### Referencing multiple AuthenticationFilter Resources in a Single Rule
 
 Only a single `AuthenticationFilter` may be referenced in a single rule.
 
@@ -780,7 +780,7 @@ All other route rules will remain working.
 
 The HTTPRoute/GRPCRoute resource will display an `UnresolvedRef` message to inform the user that the rule has been `Rejected`.
 
-This behaviour falls in line with the expected behaviour of filters in the Gateway API, which generally allows only one type of a specific filter (authentication, rewriting, etc.) within a rule.
+This behavior falls in line with the expected behavior of filters in the Gateway API, which generally allows only one type of a specific filter (authentication, rewriting, etc.) within a rule.
 
 Below is an example of an **invalid** HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule:
 
@@ -815,14 +815,14 @@ spec:
       port: 80
 ```
 
-#### Referencing an AuthenticationFilter resource that is invalid
+#### Referencing an AuthenticationFilter Resource that Is Invalid
 
-Note: With appropriate use of CEL validation, we are less likely to encounter a scenario where an AuthenticationFilter has been deployed to the cluster with an invalid configuration.
-If this does happen, and a route rule references this AuthenticationFilter, the route rule will be set to `Invalid` and the HTTPRoute/GRPCRoute will display the `UnresolvedRef` status.
+Note: With appropriate use of CEL validation, we are less likely to encounter a scenario where an `AuthenticationFilter` has been deployed to the cluster with an invalid configuration.
+If this does happen, and a route rule references this `AuthenticationFilter`, the route rule will be set to `Invalid` and the HTTPRoute/GRPCRoute will display the `UnresolvedRef` status.
 
-#### Attaching a JWT AuthenticationFilter to a route when using NGINX OSS
+#### Attaching a JWT AuthenticationFilter to a Route When Using NGINX OSS
 
-If a user attempts to attach a JWT type AuthenticationFilter while using NGINX OSS, the rule referencing the filter will be `Rejected`.
+If a user attempts to attach a JWT type `AuthenticationFilter` while using NGINX OSS, the rule referencing the filter will be `Rejected`.
 
 This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway API here: https://github.com/nginx/nginx-gateway-fabric/blob/3934c5c8c60b5aea91be4337d63d4e1d8640baa8/internal/controller/state/conditions/conditions.go#L402
 
@@ -833,39 +833,39 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 
 ## Functional Test Cases
 
-### Invalid AuthenticationFilter scenarios
+### Invalid AuthenticationFilter Scenarios
 
-This section covers configuration deployment scenarios for an AuthenticationFilter resource that would be considered invalid.
-When an AuthenticationFilter is described as invalid, it could be for these reasons:
+This section covers configuration deployment scenarios for an `AuthenticationFilter` resource that would be considered invalid.
+When an `AuthenticationFilter` is described as invalid, it could be for these reasons:
 
-- An AuthenticationFilter referencing a secret that does not exist
-- An AuthenticationFilter referencing a secret in a different namespace
-- An AuthenticationFilter referencing a secret with an incorrect type (e.g., Opaque)
-- An AuthenticationFilter referencing a secret with an incorrect key
+- An `AuthenticationFilter` referencing a secret that does not exist
+- An `AuthenticationFilter` referencing a secret in a different namespace
+- An `AuthenticationFilter` referencing a secret with an incorrect type (e.g., Opaque)
+- An `AuthenticationFilter` referencing a secret with an incorrect key
 
-### Valid scenarios
+### Valid Scenarios
 
 This section covers deployment scenarios that are considered valid
 
-Single route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+Single route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter`
 - Expected outcomes:
   The route rule is marked as valid.
   Request to the path will return a 200 response when correctly authenticated.
   Request to the path will return a 401 response when incorrectly authenticated.
 
-Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter`
 - Expected outcomes:
   The route rule is marked as valid.
   Requests to any path in the valid route rule return a 200 response when correctly authenticated.
   Requests to any path in the valid route rule return a 401 response when incorrectly authenticated.
 
-Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter`
 - Expected outcomes:
   All route rules are marked as valid.
   Request to a path in each route rule will return a 200 response when correctly authenticated.
   Request to a path in each route rule will return a 401 response when incorrectly authenticated.
 
-Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing a valid AuthenticationFilter
+Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter`
 - Expected outcomes:
   All route rules are marked as valid.
   Requests to any path in the valid route rule return a 200 response when correctly authenticated.
@@ -875,48 +875,48 @@ Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute re
 
 This section covers deployment scenarios that are considered invalid
 
-Single route rule with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
+Single route rule with a single path in an HTTPRoute/GRPCRoute referencing an invalid `AuthenticationFilter`
 - Expected outcomes:
   The route rule is marked as invalid.
   Request to the path will return a 500 error.
 
-Single route rule with two or more paths in an HTTPRoute/GRPCRoute each referencing an invalid AuthenticationFilter
+Single route rule with two or more paths in an HTTPRoute/GRPCRoute where each route rule references an invalid Authe`nticationFilter
 - Expected outcomes:
   The route rules are marked as invalid.
   Requests to both paths in will return a 500 error.
 
-Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
+Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing an invalid `AuthenticationFilter`
 - Expected outcomes:
   Both route rules are marked as invalid.
   Requests to each paths in each route rule will return a 500 error.
 
-Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid AuthenticationFilter
+Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid `AuthenticationFilter`
 - Expected outcomes:
   Both route rules are marked as invalid.
   Requests to each paths in each route rule will return a 500 error.
 
 
-Two or more route rules each with a single path in an HTTPRoute/GRPCRoute, where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter
+Two or more route rules each with a single path in an HTTPRoute/GRPCRoute, where one rule references a valid `AuthenticationFilter`, and the other references an invalid `AuthenticationFilter`
 - Expected outcomes:
-  The route rule referencing the invalid AuthentiationFilter is marked as invalid.
+  The route rule referencing the invalid `AuthentiationFilter` is marked as invalid.
   Requests to the path in the invalid route rule will return a 500 error.
-  The roue rule referencing the valid AuthenticationFilter is marked as valid.
+  The roue rule referencing the valid `AuthenticationFilter` is marked as valid.
   Requests to the path in the valid route rule will return a 200 response when correctly authenticated.
   Requests to the path in the valid route rule will return a 401 response when incorrectly authenticated.
 
 
-Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute where one rule references a valid AuthenticationFilter, and the other references an invalid AuthenticationFilter
+Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute where one rule references a valid `AuthenticationFilter`, and the other references an invalid `AuthenticationFilter`
 - Expected outcomes:
-  The route rules referencing the invald AuthentiationFilter is marked as invalid.
+  The route rules referencing the invalid `AuthentiationFilter` is marked as invalid.
   Requests to any path in the invalid route rule will return a 500 error.
-  The roue rules referencing the valid AuthenticationFilter is marked as valid.
+  The roue rules referencing the valid `AuthenticationFilter` is marked as valid.
   Requests to any path in the valid route rule will return a 200 response when correctly authenticated.
   Requests to any path in the valid route rule will return a 401 response when incorrectly authenticated.
 
 
-Two or more AuthenticationFilters referenced in a route rule.
+Two or more `AuthenticationFilters` referenced in a route rule.
 - Expected outcomes:
-  The route rule referencing multiple AuthenticationFilters is marked as invalid.
+  The route rule referencing multiple `AuthenticationFilters` is marked as invalid.
   Requests to any path in the invalid route rule will return a 500 error.
 
 
@@ -924,7 +924,7 @@ Two or more AuthenticationFilters referenced in a route rule.
 
 ### Basic Auth and Local JWKS
 
-Basic Auth sends credentials in an Authorization header that is base64-encoded.
+Basic Auth sends credentials in an Authorization header which is `base64` encoded.
 JWT Auth requires users to provide a bearer token through the Authorization header.
 
 Both methods can be easily intercepted over HTTP.
@@ -937,11 +937,11 @@ Any example configurations and deployments for the `AuthenticationFilter` should
 
 Proxy cache TTL should be configurable and set to a reasonable default, reducing periods of stale cached JWKs.
 
-### Key rotation
+### Key Rotation
 
 Users should be advised to regularly rotate their JWKS keys in cases where they choose to reference a local JWKS via a `secretRef`.
 
-### Optional headers
+### Optional Headers
 
 Below are a list of optional defensive headers that users may choose to include.
 In certain scenarios, these headers may be deployed to improve overall security from client responses.
@@ -986,9 +986,9 @@ Our decision to go forward with our own `AuthenticationFilter` was to ensure we 
 
 It is certainly possible for us to provide an External Authentication Service that leverages NGINX and is something we can further investigate as the API progresses.
 
-## Additional considerations
+## Additional Considerations
 
-### Documenting filter behavior
+### Documenting Filter Behavior
 
 In regard to documentation of filter behavior with the `AuthenticationFilter`, the Gateway API documentation on filters states the following:
 
@@ -1001,9 +1001,9 @@ If implementations choose a strict interpretation of filter ordering, they MUST 
 document that behavior.
 ```
 
-## Future updates
+## Future Updates
 
-### Custom authentication failure response
+### Custom Authentication Failure Response
 
 By default, authentication failures return a 401 response.
 If a user wanted to change this response code, or include additional headers in this response, we can include a custom named location that can be called by the [error_page](https://nginx.org/en/docs/http/ngx_http_core_module.html#error_page) directive.
@@ -1045,11 +1045,11 @@ server{
 }
 ```
 
-If we support this configuration, 3xx response codes should not be allowed and AuthenticationFilter.onFailure must not support redirect targets. This is to prevent open-redirect abuse.
+If we support this configuration, 3xx response codes should not be allowed and `AuthenticationFilter.onFailure` must not support redirect targets. This is to prevent open-redirect abuse.
 
 We should only allow 401 and 403 response codes.
 
-### Cross-namespace access
+### Cross-Namespace Access
 
 When referencing secrets for Basic Auth and JWT Auth, the initial implementation will use `LocalObjectReference`.
 
