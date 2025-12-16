@@ -1,6 +1,7 @@
 package http //nolint:revive // ignoring conflicting package name
 
 import (
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 )
 
@@ -119,11 +120,22 @@ const (
 
 // Upstream holds all configuration for an HTTP upstream.
 type Upstream struct {
-	Name      string
-	ZoneSize  string // format: 512k, 1m
-	StateFile string
-	KeepAlive UpstreamKeepAlive
-	Servers   []UpstreamServer
+	SessionPersistence  UpstreamSessionPersistence
+	Name                string
+	ZoneSize            string // format: 512k, 1m
+	StateFile           string
+	LoadBalancingMethod string
+	HashMethodKey       string
+	KeepAlive           UpstreamKeepAlive
+	Servers             []UpstreamServer
+}
+
+// UpstreamSessionPersistence holds the session persistence configuration for an upstream.
+type UpstreamSessionPersistence struct {
+	Name        string
+	Expiry      string
+	Path        string
+	SessionType string
 }
 
 // UpstreamKeepAlive holds the keepalive configuration for an HTTP upstream.
@@ -166,3 +178,33 @@ type ServerConfig struct {
 	Plus                     bool
 	DisableSNIHostValidation bool
 }
+
+var (
+	OSSAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
+		ngfAPI.LoadBalancingTypeRoundRobin:               {},
+		ngfAPI.LoadBalancingTypeLeastConnection:          {},
+		ngfAPI.LoadBalancingTypeIPHash:                   {},
+		ngfAPI.LoadBalancingTypeRandom:                   {},
+		ngfAPI.LoadBalancingTypeHash:                     {},
+		ngfAPI.LoadBalancingTypeHashConsistent:           {},
+		ngfAPI.LoadBalancingTypeRandomTwo:                {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection: {},
+	}
+
+	PlusAllowedLBMethods = map[ngfAPI.LoadBalancingType]struct{}{
+		ngfAPI.LoadBalancingTypeRoundRobin:                 {},
+		ngfAPI.LoadBalancingTypeLeastConnection:            {},
+		ngfAPI.LoadBalancingTypeIPHash:                     {},
+		ngfAPI.LoadBalancingTypeRandom:                     {},
+		ngfAPI.LoadBalancingTypeHash:                       {},
+		ngfAPI.LoadBalancingTypeHashConsistent:             {},
+		ngfAPI.LoadBalancingTypeRandomTwo:                  {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastConnection:   {},
+		ngfAPI.LoadBalancingTypeLeastTimeHeader:            {},
+		ngfAPI.LoadBalancingTypeLeastTimeLastByte:          {},
+		ngfAPI.LoadBalancingTypeLeastTimeHeaderInflight:    {},
+		ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight:  {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader:   {},
+		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte: {},
+	}
+)

@@ -37,6 +37,8 @@ func TestProcess(t *testing.T) {
 							Time:        helpers.GetPointer[ngfAPIv1alpha1.Duration]("5s"),
 							Timeout:     helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
 						}),
+						LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
+						HashMethodKey:       helpers.GetPointer[ngfAPIv1alpha1.HashMethodKey]("$upstream_addr"),
 					},
 				},
 			},
@@ -48,6 +50,44 @@ func TestProcess(t *testing.T) {
 					Time:        "5s",
 					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
+				HashMethodKey:       "$upstream_addr",
+			},
+		},
+		{
+			name: "load balancing method set",
+			policies: []policies.Policy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeRandomTwoLeastConnection),
+					},
+				},
+			},
+			expUpstreamSettings: UpstreamSettings{
+				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeRandomTwoLeastConnection),
+			},
+		},
+		{
+			name: "load balancing method set with hash key",
+			policies: []policies.Policy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeHashConsistent),
+						HashMethodKey:       helpers.GetPointer[ngfAPIv1alpha1.HashMethodKey]("$request_time"),
+					},
+				},
+			},
+			expUpstreamSettings: UpstreamSettings{
+				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeHashConsistent),
+				HashMethodKey:       "$request_time",
 			},
 		},
 		{
@@ -220,6 +260,16 @@ func TestProcess(t *testing.T) {
 						}),
 					},
 				},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp-loadBalancingMethod",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeHashConsistent),
+						HashMethodKey:       helpers.GetPointer[ngfAPIv1alpha1.HashMethodKey]("$upstream_addr"),
+					},
+				},
 			},
 			expUpstreamSettings: UpstreamSettings{
 				ZoneSize: "2m",
@@ -229,6 +279,8 @@ func TestProcess(t *testing.T) {
 					Time:        "5s",
 					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeHashConsistent),
+				HashMethodKey:       "$upstream_addr",
 			},
 		},
 		{
@@ -310,6 +362,16 @@ func TestProcess(t *testing.T) {
 						},
 					},
 				},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp-lb-method",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeHash),
+						HashMethodKey:       helpers.GetPointer[ngfAPIv1alpha1.HashMethodKey]("$remote_addr"),
+					},
+				},
 			},
 			expUpstreamSettings: UpstreamSettings{
 				ZoneSize: "2m",
@@ -319,6 +381,8 @@ func TestProcess(t *testing.T) {
 					Time:        "5s",
 					Timeout:     "10s",
 				},
+				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeHash),
+				HashMethodKey:       "$remote_addr",
 			},
 		},
 	}

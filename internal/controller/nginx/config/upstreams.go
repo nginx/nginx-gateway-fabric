@@ -4,6 +4,7 @@ import (
 	"fmt"
 	gotemplate "text/template"
 
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
@@ -32,6 +33,8 @@ const (
 	plusZoneSizeStream = "1m"
 	// stateDir is the directory for storing state files.
 	stateDir = "/var/lib/nginx/state"
+	// default load balancing method.
+	defaultLBMethod = "random two least_conn"
 )
 
 // keepAliveChecker takes an upstream name and returns if it has keep alive settings enabled.
@@ -144,6 +147,7 @@ func (g GeneratorImpl) createUpstream(
 	processor upstreamsettings.Processor,
 ) http.Upstream {
 	var stateFile string
+	var sp http.UpstreamSessionPersistence
 	upstreamPolicySettings := processor.Process(up.Policies)
 
 	zoneSize := ossZoneSize
@@ -152,12 +156,34 @@ func (g GeneratorImpl) createUpstream(
 		// Only set state file if the upstream doesn't have resolve servers
 		// Upstreams with resolve servers can't be managed via NGINX Plus API
 		if !upstreamHasResolveServers(up) {
-			stateFile = fmt.Sprintf("%s/%s.conf", stateDir, up.Name)
+			base := up.StateFileKey
+			if base == "" {
+				base = up.Name
+			}
+			stateFile = fmt.Sprintf("%s/%s.conf", stateDir, base)
 		}
+
+		sp = getSessionPersistenceConfiguration(up.SessionPersistence)
 	}
 
 	if upstreamPolicySettings.ZoneSize != "" {
 		zoneSize = upstreamPolicySettings.ZoneSize
+	}
+
+	chosenLBMethod := defaultLBMethod
+	if upstreamPolicySettings.LoadBalancingMethod != "" {
+		lbMethod := upstreamPolicySettings.LoadBalancingMethod
+
+		if lbMethod == string(ngfAPI.LoadBalancingTypeHash) {
+			lbMethod = fmt.Sprintf("hash %s", upstreamPolicySettings.HashMethodKey)
+		}
+		if lbMethod == string(ngfAPI.LoadBalancingTypeHashConsistent) {
+			lbMethod = fmt.Sprintf("hash %s consistent", upstreamPolicySettings.HashMethodKey)
+		}
+		if lbMethod == string(ngfAPI.LoadBalancingTypeRoundRobin) {
+			lbMethod = ""
+		}
+		chosenLBMethod = lbMethod
 	}
 
 	if len(up.Endpoints) == 0 {
@@ -170,6 +196,7 @@ func (g GeneratorImpl) createUpstream(
 					Address: types.Nginx503Server,
 				},
 			},
+			LoadBalancingMethod: chosenLBMethod,
 		}
 	}
 
@@ -186,11 +213,13 @@ func (g GeneratorImpl) createUpstream(
 	}
 
 	return http.Upstream{
-		Name:      up.Name,
-		ZoneSize:  zoneSize,
-		StateFile: stateFile,
-		Servers:   upstreamServers,
-		KeepAlive: upstreamPolicySettings.KeepAlive,
+		Name:                up.Name,
+		ZoneSize:            zoneSize,
+		StateFile:           stateFile,
+		Servers:             upstreamServers,
+		KeepAlive:           upstreamPolicySettings.KeepAlive,
+		LoadBalancingMethod: chosenLBMethod,
+		SessionPersistence:  sp,
 	}
 }
 
@@ -214,4 +243,18 @@ func upstreamHasResolveServers(upstream dataplane.Upstream) bool {
 		}
 	}
 	return false
+}
+
+// getSessionPersistenceConfiguration gets the session persistence configuration for an upstream.
+// Supported only for NGINX Plus and cookie-based type.
+func getSessionPersistenceConfiguration(sp dataplane.SessionPersistenceConfig) http.UpstreamSessionPersistence {
+	if sp.Name == "" {
+		return http.UpstreamSessionPersistence{}
+	}
+	return http.UpstreamSessionPersistence{
+		Name:        sp.Name,
+		Expiry:      sp.Expiry,
+		Path:        sp.Path,
+		SessionType: string(sp.SessionType),
+	}
 }
