@@ -18,7 +18,6 @@ FEATURES:
 - Updated validation for pathType RegularExpression to support PCRE-style patterns while remaining RE2-friendly, improving compatibility with other projects. [4450](https://github.com/nginx/nginx-gateway-fabric/pull/4450)
 - Add support for multiple InferencePool backends on a Route. [4439](https://github.com/nginx/nginx-gateway-fabric/pull/4439)
 
-
 BUG FIXES:
 
 - Fix an issue where duplicate status entries could be written on routes. [4250](https://github.com/nginx/nginx-gateway-fabric/pull/4250)
@@ -28,7 +27,6 @@ BUG FIXES:
 - Fix an issue where NginxProxy config might not be honored if applied at the same time as the Gateway. [4399](https://github.com/nginx/nginx-gateway-fabric/pull/4399)
 - Fix issue where agent's Pod IP cannot be used to track the connecting data plane Pod. [4470](https://github.com/nginx/nginx-gateway-fabric/pull/4470)
 - Fix a bug to preserve external controller annotations for Deployment and DaemonSets to avoid constant updates. [4468](https://github.com/nginx/nginx-gateway-fabric/pull/4468)
-
 
 HELM CHART:
 
