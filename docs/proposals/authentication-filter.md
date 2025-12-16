@@ -838,8 +838,6 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 This section covers configuration deployment scenarios for an AuthenticationFilter resource that would be considered invalid.
 When an AuthenticationFilter is described as invalid, it could be for these reasons:
 
-- An AuthenticationFilter deployed with an empty `Realm` value
-- An AuthenticationFilter deployed with an empty `secretRef.Name` value
 - An AuthenticationFilter referencing a secret that does not exist
 - An AuthenticationFilter referencing a secret in a different namespace
 - An AuthenticationFilter referencing a secret with an incorrect type (e.g., Opaque)
