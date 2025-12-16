@@ -6,71 +6,54 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.3.0
 
-* Support mixed externalname and local services in single route by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4188
-* Allow disabling cert-generator with a Helm value by @fabian4 in https://github.com/nginx/nginx-gateway-fabric/pull/4186
-* Fix bug where user mounted files were being removed by agent by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/4178
-* Preserve external controller state during reconciliation by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4182
-* Update GatewayAPI to v1.4.0 by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4166
-* Fix HPA race condition by reading deployment replicas instead of HPA status by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4214
-* Remove observability from alpha1 by @tataruty in https://github.com/nginx/nginx-gateway-fabric/pull/4215
-* Allow HPA to work when Inference is enabled by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4247
-* Adding nginx_proxy access_log format ability by @tataruty in https://github.com/nginx/nginx-gateway-fabric/pull/4102
-* Deduplicate route status entries by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4250
-* Add SupportedFeatures to GatewayClassStatus by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4236
-* Add support for backend tls config for Gateways by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/3900
-* Fix empty pod owner name when connecting to agent by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4367
-* Remove k8s API access from NGINX pod by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4368
-* fix: pass IPv6 DNS resolvers correctly by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4378
-* Truncate long resource names when provisioning by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4387
-* Retry NGINX provisioning on all errors by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4399
-* Update permissions of gateway binary for UBI by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/4404
-* Allow RegularExpression for path match be RE2/PCRE friendly. by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4450
-* Add support for multiple InferencePool backends by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/4439
-* Use UUID instead of IP address for tracking agent (#4470) by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4472
-* Preserve external controller annotations for deployment and daemonSet (#4468) by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4473
-
-%%DATE%%
+_December 18, 2025_
 
 FEATURES:
 
--
+- Support Gateway API v1.4, moving BackendTLSPolicy from experimental to standard. [4166](https://github.com/nginx/nginx-gateway-fabric/pull/4166)
+- Add SupportedFeatures to GatewayClassStatus. [4236](https://github.com/nginx/nginx-gateway-fabric/pull/4236)
+- Remove deprecated v1alpha1 ObservabilityPolicy API. [4215](https://github.com/nginx/nginx-gateway-fabric/pull/4215)
+- Add ability to configure access log format or turn logging off. [4102](https://github.com/nginx/nginx-gateway-fabric/pull/4102)
+- Added support for configuring backend TLS on Gateways to enable secure communication between the gateway and upstream. [3900](https://github.com/nginx/nginx-gateway-fabric/pull/3900)
+- Updated validation for pathType RegularExpression to support PCRE-style patterns while remaining RE2-friendly, improving compatibility with other projects. [4450](https://github.com/nginx/nginx-gateway-fabric/pull/4450)
+- Add support for multiple InferencePool backends on a Route. [4439](https://github.com/nginx/nginx-gateway-fabric/pull/4439)
+
 
 BUG FIXES:
 
--
+- Fix an issue where duplicate status entries could be written on routes. [4250](https://github.com/nginx/nginx-gateway-fabric/pull/4250)
+- Removed k8s API access from the NGINX data plane pod. [4368](https://github.com/nginx/nginx-gateway-fabric/pull/4368)
+- Fix an issue regarding configuring IPv6 DNS resolvers for ExternalName services. Thanks to [lucasl0st](https://github.com/lucasl0st). [4378](https://github.com/nginx/nginx-gateway-fabric/pull/4378)
+- Fix a bug where NGINX Service could not be created if the Gateway name was very long. [4387](https://github.com/nginx/nginx-gateway-fabric/pull/4387)
+- Fix an issue where NginxProxy config might not be honored if applied at the same time as the Gateway. [4399](https://github.com/nginx/nginx-gateway-fabric/pull/4399)
+- Fix issue where agent's Pod IP cannot be used to track the connecting data plane Pod. [4470](https://github.com/nginx/nginx-gateway-fabric/pull/4470)
+- Fix a bug to preserve external controller annotations for Deployment and DaemonSets to avoid constant updates. [4468](https://github.com/nginx/nginx-gateway-fabric/pull/4468)
 
-DOCUMENTATION:
-
--
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.3.0
--
-
-UPGRADE:
-
--
 
 KNOWN ISSUES:
 
--
+- If running with `hostNetwork: true`, NGINX data plane Pod cannot connect to the control plane. [4426](https://github.com/nginx/nginx-gateway-fabric/issues/4426)
 
 COMPATIBILITY:
 
-- Gateway API version: ``
-- Gateway API Inference Extension version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- NGINX Agent version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.4.1`
+- Gateway API Inference Extension version: `1.1.0`
+- NGINX version: `1.29.3`
+- NGINX Plus version: `R36`
+- NGINX Agent version: `v3.6.0`
+- Kubernetes version: `1.25+`
 
 CONTAINER IMAGES:
 
 - Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.3.0`
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.3.0`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.3.0`
-- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:2.3.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.1.0`
+
 ## Release 2.2.2
 
 _December 10, 2025_
