@@ -4,6 +4,73 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.3.0
+
+* Support mixed externalname and local services in single route by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4188
+* Allow disabling cert-generator with a Helm value by @fabian4 in https://github.com/nginx/nginx-gateway-fabric/pull/4186
+* Fix bug where user mounted files were being removed by agent by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/4178
+* Preserve external controller state during reconciliation by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4182
+* Update GatewayAPI to v1.4.0 by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4166
+* Fix HPA race condition by reading deployment replicas instead of HPA status by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4214
+* Remove observability from alpha1 by @tataruty in https://github.com/nginx/nginx-gateway-fabric/pull/4215
+* Allow HPA to work when Inference is enabled by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4247
+* Adding nginx_proxy access_log format ability by @tataruty in https://github.com/nginx/nginx-gateway-fabric/pull/4102
+* Deduplicate route status entries by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4250
+* Add SupportedFeatures to GatewayClassStatus by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4236
+* Add support for backend tls config for Gateways by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/3900
+* Fix empty pod owner name when connecting to agent by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4367
+* Remove k8s API access from NGINX pod by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4368
+* fix: pass IPv6 DNS resolvers correctly by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4378
+* Truncate long resource names when provisioning by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4387
+* Retry NGINX provisioning on all errors by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4399
+* Update permissions of gateway binary for UBI by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/4404
+* Allow RegularExpression for path match be RE2/PCRE friendly. by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4450
+* Add support for multiple InferencePool backends by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/4439
+* Use UUID instead of IP address for tracking agent (#4470) by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4472
+* Preserve external controller annotations for deployment and daemonSet (#4468) by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4473
+
+%%DATE%%
+
+FEATURES:
+
+-
+
+BUG FIXES:
+
+-
+
+DOCUMENTATION:
+
+-
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.3.0
+-
+
+UPGRADE:
+
+-
+
+KNOWN ISSUES:
+
+-
+
+COMPATIBILITY:
+
+- Gateway API version: ``
+- Gateway API Inference Extension version: ``
+- NGINX version: ``
+- NGINX Plus version: ``
+- NGINX Agent version: ``
+- Kubernetes version: ``
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.3.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.3.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.3.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:2.3.0`
 ## Release 2.2.2
 
 _December 10, 2025_
