@@ -13,7 +13,7 @@ func TestGrpcInfoInContext(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	grpcInfo := grpcContext.GrpcInfo{IPAddress: "192.168.1.1"}
+	grpcInfo := grpcContext.GrpcInfo{Token: "test"}
 
 	newCtx := grpcContext.NewGrpcContext(context.Background(), grpcInfo)
 	info, ok := grpcContext.GrpcInfoFromContext(newCtx)

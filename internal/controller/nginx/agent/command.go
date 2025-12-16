@@ -84,9 +84,6 @@ func (cs *commandService) CreateConnection(
 
 	resource := req.GetResource()
 	podName := resource.GetContainerInfo().GetHostname()
-	if podName == "" {
-		podName = resource.GetHostInfo().GetHostname()
-	}
 	cs.logger.Info(fmt.Sprintf("Creating connection for nginx pod: %s", podName))
 
 	owner, _, err := cs.getPodOwner(podName)
@@ -107,7 +104,7 @@ func (cs *commandService) CreateConnection(
 		PodName:    podName,
 		InstanceID: getNginxInstanceID(resource.GetInstances()),
 	}
-	cs.connTracker.Track(gi.IPAddress, conn)
+	cs.connTracker.Track(gi.UUID, conn)
 
 	return &pb.CreateConnectionResponse{
 		Response: &pb.CommandResponse{
@@ -133,7 +130,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
-	defer cs.connTracker.RemoveConnection(gi.IPAddress)
+	defer cs.connTracker.RemoveConnection(gi.UUID)
 
 	// wait for the agent to report itself and nginx
 	conn, deployment, err := cs.waitForConnection(ctx, gi)
@@ -261,7 +258,7 @@ func (cs *commandService) waitForConnection(
 		case <-timer.C:
 			return nil, nil, err
 		case <-ticker.C:
-			if conn := cs.connTracker.GetConnection(gi.IPAddress); conn.Ready() {
+			if conn := cs.connTracker.GetConnection(gi.UUID); conn.Ready() {
 				// connection has been established, now ensure that the deployment exists in the store
 				if deployment := cs.nginxDeployments.Get(conn.Parent); deployment != nil {
 					return &conn, deployment, nil
@@ -575,7 +572,7 @@ func (cs *commandService) UpdateDataPlaneStatus(
 		return nil, grpcStatus.Errorf(codes.InvalidArgument, "request does not contain nginx instanceID")
 	}
 
-	cs.connTracker.SetInstanceID(gi.IPAddress, instanceID)
+	cs.connTracker.SetInstanceID(gi.UUID, instanceID)
 
 	return &pb.UpdateDataPlaneStatusResponse{}, nil
 }

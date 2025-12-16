@@ -68,7 +68,7 @@ func TestGetFile(t *testing.T) {
 	fs := newFileService(logr.Discard(), depStore, connTracker)
 
 	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 
 	req := &pb.GetFileRequest{
@@ -121,7 +121,7 @@ func TestGetFile_InvalidRequest(t *testing.T) {
 	fs := newFileService(logr.Discard(), depStore, connTracker)
 
 	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 
 	req := &pb.GetFileRequest{
@@ -148,7 +148,7 @@ func TestGetFile_ConnectionNotFound(t *testing.T) {
 	}
 
 	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 
 	resp, err := fs.GetFile(ctx, req)
@@ -181,7 +181,7 @@ func TestGetFile_DeploymentNotFound(t *testing.T) {
 	}
 
 	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 
 	resp, err := fs.GetFile(ctx, req)
@@ -217,7 +217,7 @@ func TestGetFile_FileNotFound(t *testing.T) {
 	}
 
 	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 
 	resp, err := fs.GetFile(ctx, req)
@@ -264,7 +264,7 @@ func TestGetFileStream(t *testing.T) {
 	fs := newFileService(logr.Discard(), depStore, connTracker)
 
 	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 
 	req := &pb.GetFileRequest{
@@ -324,7 +324,7 @@ func TestGetFileStream_InvalidRequest(t *testing.T) {
 	fs := newFileService(logr.Discard(), depStore, connTracker)
 
 	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 
 	// no filemeta
@@ -397,7 +397,7 @@ func TestUpdateOverview(t *testing.T) {
 	}
 
 	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 
 	fs := newFileService(logr.Discard(), depStore, connTracker)
@@ -487,7 +487,7 @@ func TestUpdateOverview_ConnectionNotFound(t *testing.T) {
 	}
 
 	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 
 	resp, err := fs.UpdateOverview(ctx, req)
@@ -526,7 +526,7 @@ func TestUpdateOverview_DeploymentNotFound(t *testing.T) {
 	}
 
 	ctx := grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		IPAddress: "127.0.0.1",
+		UUID: "1234567",
 	})
 
 	resp, err := fs.UpdateOverview(ctx, req)
