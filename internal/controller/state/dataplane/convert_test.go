@@ -4,9 +4,13 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	apiv1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -618,4 +622,79 @@ func TestConvertMatchType(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConvertAuthenticationFilter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		filter            *graph.AuthenticationFilter
+		referencedSecrets map[types.NamespacedName]*graph.Secret
+		expected          *AuthenticationFilter
+	}{
+		{
+			name:              "nil filter",
+			filter:            nil,
+			referencedSecrets: nil,
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "invalid filter (Valid=false)",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{},
+				Valid:  false,
+			},
+			referencedSecrets: nil,
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "basic auth valid",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Basic: &ngfAPIv1alpha1.BasicAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-basic"},
+							Realm:     "Restricted",
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*graph.Secret{
+				{Namespace: "test", Name: "auth-basic"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "auth-basic"},
+						Data: map[string][]byte{
+							graph.AuthKeyBasic: []byte("user:$apr1$cred"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				Basic: &AuthBasic{
+					SecretName:      "auth-basic",
+					SecretNamespace: "test",
+					Data:            []byte("user:$apr1$cred"),
+					Realm:           "",
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := convertAuthenticationFilter(tc.filter, tc.referencedSecrets)
+			g.Expect(result).To(Equal(tc.expected))
+		})
+	}
+
 }
