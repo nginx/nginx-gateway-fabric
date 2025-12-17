@@ -24,6 +24,7 @@ import (
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
@@ -451,6 +452,14 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		metricsPort = *port
 	}
 
+	depType := nginxTypes.DeploymentType
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.DaemonSet != nil {
+		depType = nginxTypes.DaemonSetType
+	}
+
+	p.cfg.AgentLabels[nginxTypes.AgentOwnerNameLabel] = fmt.Sprintf("%s_%s", objectMeta.Namespace, objectMeta.Name)
+	p.cfg.AgentLabels[nginxTypes.AgentOwnerTypeLabel] = depType
+
 	agentFields := map[string]interface{}{
 		"Plus":          p.cfg.Plus,
 		"ServiceName":   p.cfg.GatewayPodConfig.ServiceName,
@@ -865,10 +874,8 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	tokenAudience := fmt.Sprintf("%s.%s.svc", p.cfg.GatewayPodConfig.ServiceName, p.cfg.GatewayPodConfig.Namespace)
 
 	clusterID := "unknown"
-	if p.cfg.AgentLabels != nil {
-		if val, ok := p.cfg.AgentLabels["cluster-id"]; ok {
-			clusterID = val
-		}
+	if val, ok := p.cfg.AgentLabels["cluster-id"]; ok {
+		clusterID = val
 	}
 
 	spec := corev1.PodTemplateSpec{

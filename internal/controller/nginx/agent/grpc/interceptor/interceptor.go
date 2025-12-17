@@ -84,12 +84,12 @@ func (c ContextSetter) Unary(logger logr.Logger) grpc.UnaryServerInterceptor {
 // validateConnection checks that the connection is valid and returns a new
 // context containing information used by the gRPC command/file services.
 func (c ContextSetter) validateConnection(ctx context.Context) (context.Context, error) {
-	gi, err := getGrpcInfo(ctx)
+	grpcInfo, err := getGrpcInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.validateToken(ctx, gi)
+	return c.validateToken(ctx, grpcInfo)
 }
 
 func getGrpcInfo(ctx context.Context) (*grpcContext.GrpcInfo, error) {
@@ -114,11 +114,11 @@ func getGrpcInfo(ctx context.Context) (*grpcContext.GrpcInfo, error) {
 	}, nil
 }
 
-func (c ContextSetter) validateToken(ctx context.Context, gi *grpcContext.GrpcInfo) (context.Context, error) {
+func (c ContextSetter) validateToken(ctx context.Context, grpcInfo *grpcContext.GrpcInfo) (context.Context, error) {
 	tokenReview := &authv1.TokenReview{
 		Spec: authv1.TokenReviewSpec{
 			Audiences: []string{c.audience},
-			Token:     gi.Token,
+			Token:     grpcInfo.Token,
 		},
 	}
 
@@ -169,5 +169,5 @@ func (c ContextSetter) validateToken(ctx context.Context, gi *grpcContext.GrpcIn
 		return nil, status.Error(codes.Unauthenticated, msg)
 	}
 
-	return grpcContext.NewGrpcContext(ctx, *gi), nil
+	return grpcContext.NewGrpcContext(ctx, *grpcInfo), nil
 }
