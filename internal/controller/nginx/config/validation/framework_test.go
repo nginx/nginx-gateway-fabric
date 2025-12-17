@@ -149,3 +149,45 @@ func TestGetSortedKeysAsString(t *testing.T) {
 	result := getSortedKeysAsString(values)
 	g.Expect(result).To(Equal(expected))
 }
+
+type resultValidatorFunc[T configValue, R any] func(v T) (R, error)
+
+type resultTestCase[T configValue, R any] struct {
+	input    T
+	expected R
+}
+
+func testInvalidValuesForResultValidator[T configValue, R any](
+	t *testing.T,
+	f resultValidatorFunc[T, R],
+	values ...T,
+) {
+	t.Helper()
+	runValidatorTests(
+		t,
+		func(g *WithT, v T) {
+			_, err := f(v)
+			g.Expect(err).To(HaveOccurred(), createFailureMessage(v))
+		},
+		"invalid_value",
+		values...,
+	)
+}
+
+func testValidValuesForResultValidator[T configValue, R any](
+	t *testing.T,
+	f resultValidatorFunc[T, R],
+	cases ...resultTestCase[T, R],
+) {
+	t.Helper()
+	for i, tc := range cases {
+		name := fmt.Sprintf("test-case=%d", i)
+
+		t.Run(name, func(t *testing.T) {
+			g := NewWithT(t)
+			got, err := f(tc.input)
+			g.Expect(err).ToNot(HaveOccurred(), createFailureMessage(tc.input))
+			g.Expect(got).To(Equal(tc.expected), createFailureMessage(tc.input))
+		})
+	}
+}

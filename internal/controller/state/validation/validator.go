@@ -37,6 +37,7 @@ type HTTPFieldsValidator interface {
 	ValidateFilterHeaderName(name string) error
 	ValidateFilterHeaderValue(value string) error
 	ValidatePath(path string) error
+	ValidateDuration(duration string) (string, error)
 }
 
 // GenericValidator validates any generic values from NGF API resources from the perspective of a data-plane.
@@ -49,6 +50,7 @@ type GenericValidator interface {
 	ValidateNginxDuration(duration string) error
 	ValidateNginxSize(size string) error
 	ValidateEndpoint(endpoint string) error
+	ValidateNginxVariableName(name string) error
 }
 
 // PolicyValidator validates an NGF Policy.
@@ -82,3 +84,4 @@ func (SkipValidator) ValidateHostname(string) error                   { return n
 func (SkipValidator) ValidateFilterHeaderName(string) error           { return nil }
 func (SkipValidator) ValidateFilterHeaderValue(string) error          { return nil }
 func (SkipValidator) ValidatePath(string) error                       { return nil }
+func (SkipValidator) ValidateDuration(string) (string, error)         { return "", nil }

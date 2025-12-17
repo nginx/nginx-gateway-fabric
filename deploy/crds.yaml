@@ -9578,6 +9578,12 @@ spec:
           spec:
             description: Spec defines the desired state of the UpstreamSettingsPolicy.
             properties:
+              hashMethodKey:
+                description: |-
+                  HashMethodKey defines the key used for hash-based load balancing methods.
+                  This field is required when `LoadBalancingMethod` is set to `hash` or `hash consistent`.
+                pattern: ^\$[a-z_]+$
+                type: string
               keepAlive:
                 description: KeepAlive defines the keep-alive settings.
                 properties:
@@ -9612,6 +9618,27 @@ spec:
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
                 type: object
+              loadBalancingMethod:
+                description: |-
+                  LoadBalancingMethod specifies the load balancing algorithm to be used for the upstream.
+                  If not specified, NGINX Gateway Fabric defaults to `random two least_conn`,
+                  which differs from the standard NGINX default `round-robin`.
+                enum:
+                - round_robin
+                - least_conn
+                - ip_hash
+                - hash
+                - hash consistent
+                - random
+                - random two
+                - random two least_conn
+                - random two least_time=header
+                - random two least_time=last_byte
+                - least_time header
+                - least_time last_byte
+                - least_time header inflight
+                - least_time last_byte inflight
+                type: string
               targetRefs:
                 description: |-
                   TargetRefs identifies API object(s) to apply the policy to.
@@ -9670,6 +9697,12 @@ spec:
             required:
             - targetRefs
             type: object
+            x-kubernetes-validations:
+            - message: hashMethodKey is required when loadBalancingMethod is 'hash'
+                or 'hash consistent'
+              rule: '!(has(self.loadBalancingMethod) && (self.loadBalancingMethod
+                == ''hash'' || self.loadBalancingMethod == ''hash consistent'')) ||
+                has(self.hashMethodKey)'
           status:
             description: Status defines the state of the UpstreamSettingsPolicy.
             properties:

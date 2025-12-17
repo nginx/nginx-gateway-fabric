@@ -3,7 +3,6 @@ package interceptor
 import (
 	"context"
 	"fmt"
-	"net"
 	"strings"
 	"time"
 
@@ -11,11 +10,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -111,19 +108,9 @@ func getGrpcInfo(ctx context.Context) (*grpcContext.GrpcInfo, error) {
 		return nil, status.Error(codes.Unauthenticated, "no authorization")
 	}
 
-	p, ok := peer.FromContext(ctx)
-	if !ok {
-		return nil, status.Error(codes.InvalidArgument, "no peer data")
-	}
-
-	addr, ok := p.Addr.(*net.TCPAddr)
-	if !ok {
-		panic(fmt.Sprintf("address %q was not of type net.TCPAddr", p.Addr.String()))
-	}
-
 	return &grpcContext.GrpcInfo{
-		Token:     auths[0],
-		IPAddress: addr.IP.String(),
+		UUID:  id[0],
+		Token: auths[0],
 	}, nil
 }
 
@@ -160,8 +147,7 @@ func (c ContextSetter) validateToken(ctx context.Context, gi *grpcContext.GrpcIn
 
 	var podList corev1.PodList
 	opts := &client.ListOptions{
-		FieldSelector: fields.SelectorFromSet(fields.Set{"status.podIP": gi.IPAddress}),
-		Namespace:     usernameItems[2],
+		Namespace: usernameItems[2],
 		LabelSelector: labels.Set(map[string]string{
 			controller.AppNameLabel: usernameItems[3],
 		}).AsSelector(),
@@ -178,8 +164,8 @@ func (c ContextSetter) validateToken(ctx context.Context, gi *grpcContext.GrpcIn
 		}
 	}
 
-	if runningCount != 1 {
-		msg := fmt.Sprintf("expected a single Running pod with IP address %q, but found %d", gi.IPAddress, runningCount)
+	if runningCount < 1 {
+		msg := fmt.Sprintf("no running pods found for service account %s/%s", usernameItems[2], usernameItems[3])
 		return nil, status.Error(codes.Unauthenticated, msg)
 	}
 

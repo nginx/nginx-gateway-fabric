@@ -14,7 +14,7 @@ This new filter should eventually expose all forms of authentication available t
 - Design Authentication CRD with Basic Auth and JWT Auth in mind
 - Determine initial resource specification
 - Evaluate filter early in request processing, occurring before URLRewrite, header modifiers and backend selection
-- Authentication failures returns 401 Unauthorized by default
+- Authentication failures return 401 Unauthorized by default
 - Ensure response codes are configurable
 
 ## Non-Goals
@@ -25,9 +25,9 @@ This new filter should eventually expose all forms of authentication available t
 
 ## Introduction
 
-This document focuses explicitly on Authentication (AuthN) and not Authorization (AuthZ). Authentication (AuthN) defines the verification of identity. It asks the question, "Who are you?". This is different from Authorization (AuthZ), which preceeds Authentication. It asks the question, "What are you allowed to do".
+This document focuses explicitly on Authentication (AuthN) and not Authorization (AuthZ). Authentication (AuthN) defines the verification of identity. It asks the question, "Who are you?". This is different from Authorization (AuthZ), which follows Authentication. It asks the question, "What are you allowed to do?"
 
-This document also focus on HTTP Basic Authentication and JWT Authentication. Other authentication methods such as OpenID Connect (OIDC) are mentioned, but are not part of the CRD design. These will be covered in future design and implementation tasks.
+This document also focuses on HTTP Basic Authentication and JWT Authentication. Other authentication methods such as OpenID Connect (OIDC) are mentioned but are not part of the CRD design. These will be covered in future design and implementation tasks.
 
 
 ## Use Cases
@@ -35,7 +35,7 @@ This document also focus on HTTP Basic Authentication and JWT Authentication. Ot
 - As an Application Developer, I want to secure access to my APIs and Backend Applications.
 - As an Application Developer, I want to enforce authentication on specific routes and matches.
 
-### Understanding NGINX authentication methods
+### Understanding NGINX Authentication Methods
 
 | **Authentication Method** | **OSS** | **Plus** | **NGINX Module** | **Details** |
 | ------------------------------- | -------------- | ---------------- | ---------------------------------- | -------------------------------------------------------------------- |
@@ -43,7 +43,7 @@ This document also focus on HTTP Basic Authentication and JWT Authentication. Ot
 | **JWT (JSON Web Token)** | ❌ | ✅ | [ngx_http_auth_jwt_module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html) | Tokens are used for stateless authentication between client and server. |
 | **OpenID Connect** | ❌ | ✅ | [ngx_http_oidc_module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html) | Allows authentication through third-party providers like Google. |
 
-### Understanding authentication terminology
+### Understanding Authentication Terminology
 
 #### Realms
 
@@ -52,7 +52,7 @@ This document also focus on HTTP Basic Authentication and JWT Authentication. Ot
 ```text
 The realm value is a free-form string
 that can only be compared for equality with other realms on that
-server.  The server will service the request only if it can validate
+server. The server will service the request only if it can validate
 the user-id and password for the protection space applying to the
 requested resource.
 ```
@@ -68,7 +68,7 @@ This portion also contains:
     - Example HTTPRoutes and NGINX configuration
 3. Example spec for JWT Auth
     - Example HTTPRoutes
-    - Examples for Local & Remote JWKS configration
+    - Examples for Local & Remote JWKS configuration
     - Example NGINX configuration for both Local & Remote JWKS
     - Example of additional optional fields
 
@@ -80,7 +80,7 @@ Below is the Golang API for the `AuthenticationFilter` API:
 package v1alpha1
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+  metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
   "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
@@ -111,9 +111,9 @@ type AuthenticationFilter struct {
 
 // AuthenticationFilterList contains a list of AuthenticationFilter resources.
 type AuthenticationFilterList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []AuthenticationFilter `json:"items"`
+  metav1.TypeMeta `json:",inline"`
+  metav1.ListMeta `json:"metadata,omitempty"`
+  Items           []AuthenticationFilter `json:"items"`
 }
 
 // AuthenticationFilterSpec defines the desired configuration.
@@ -151,18 +151,19 @@ const (
 
 // BasicAuth configures HTTP Basic Authentication.
 type BasicAuth struct {
-  // SecretRef allows referencing a Secret in the same namespace
+  // SecretRef allows referencing a Secret in the same namespace.
   SecretRef LocalObjectReference `json:"secretRef"`
 
   // Realm used by NGINX `auth_basic` directive.
   // https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html#auth_basic
   // Also configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
   Realm string `json:"realm"`
+}
 
-  // OnFailure customizes the 401 response for failed authentication.
-  //
-  // +optional
-  OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
+// LocalObjectReference specifies a local Kubernetes object.
+type LocalObjectReference struct {
+  // Name is the referenced object.
+  Name string `json:"name"`
 }
 
 // JWTKeyMode selects where JWT keys come from.
@@ -225,11 +226,6 @@ type JWTAuth struct {
   //
   // +optional
   KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
-
-  // OnFailure customizes the 401 response for failed authentication.
-  //
-  // +optional
-  OnFailure *AuthFailureResponse `json:"onFailure,omitempty"`
 }
 
 // JWTFileKeySource specifies local JWKS key configuration.
@@ -245,13 +241,6 @@ type JWTFileKeySource struct {
   // +optional
   KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
 }
-
-// LocalObjectReference specifies a local Kubernetes object
-// with a required `key` field to extract data.
-type LocalObjectReference struct {
-    Name string: `json:"name"`
-}
-
 
  // RemoteKeySource specifies remote JWKS configuration.
 type RemoteKeySource struct {
@@ -307,9 +296,9 @@ type JWKSCache struct {
 type JWTType string
 
 const (
-	JWTTypeSigned    JWTType = "signed"
-	JWTTypeEncrypted JWTType = "encrypted"
-	JWTTypeNested    JWTType = "nested"
+  JWTTypeSigned    JWTType = "signed"
+  JWTTypeEncrypted JWTType = "encrypted"
+  JWTTypeNested    JWTType = "nested"
 )
 
 // AuthScheme enumerates supported WWW-Authenticate schemes.
@@ -320,41 +309,6 @@ const (
   AuthSchemeBasic  AuthScheme = "Basic"
   AuthSchemeBearer AuthScheme = "Bearer"
 )
-
-// AuthFailureBodyPolicy controls the failure response body behavior.
-// +kubebuilder:validation:Enum=Unauthorized;Forbidden;Empty
-type AuthFailureBodyPolicy string
-
-const (
-  AuthFailureBodyPolicyUnauthorized AuthFailureBodyPolicy = "Unauthorized"
-  AuthFailureBodyPolicyForbidden    AuthFailureBodyPolicy = "Forbidden"
-  AuthFailureBodyPolicyEmpty        AuthFailureBodyPolicy = "Empty"
-)
-
-// AuthFailureResponse customizes 401/403 failures.
-type AuthFailureResponse struct {
-  // Allowed: 401, 403.
-  // Default: 401.
-  //
-  // +optional
-  // +kubebuilder:default=401
-  // +kubebuilder:validation:XValidation:message="statusCode must be 401 or 403",rule="self == null || self in [401, 403]"
-  StatusCode *int32 `json:"statusCode,omitempty"`
-
-  // Challenge scheme. If omitted, inferred from filter Type (Basic|Bearer).
-  // Configures WWW-Authenticate header in error page location.
-  //
-  // +optional
-  // +kubebuilder:default=Basic
-  Scheme *AuthScheme `json:"scheme,omitempty"`
-
-  // Controls whether a default canned body is sent or an empty body.
-  // Default: Unauthorized.
-  //
-  // +optional
-  // +kubebuilder:default=Unauthorized
-  BodyPolicy *AuthFailureBodyPolicy `json:"bodyPolicy,omitempty"`
-}
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
 type AuthenticationFilterStatus struct {
@@ -391,7 +345,7 @@ const (
 )
 ```
 
-### Example spec for Basic Auth
+### Example Spec for Basic Auth
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -404,29 +358,29 @@ spec:
     secretRef:
       name: basic-auth-users   # Secret containing auth data.
     realm: "Restricted"
-    onFailure:                 # Optional. These setting may be defaults.
-      statusCode: 401
-      scheme: Basic
 ```
 
 In the case of Basic Auth, the deployed Secret and HTTPRoute may look like this:
 
-#### Secret referenced by filter
+#### Secret Referenced by Filter
 
-To create this kind of secreet for Basic Auth first run this command:
+For Basic Auth, we will process a custom secret type of `nginx.org/htpasswd`.
+This will allow us to be more confident that the user is providing us with the appropriate kind of secret for this use case.
+
+To create this kind of secret for Basic Auth first run this command:
 
 ```bash
 htpasswd -c auth user
 ```
 
-This will create a file called `auth` with the user name and an MD5 hashes password:
+This will create a file called `auth` with the username and an MD5-hashed password:
 
 ```bash
 cat auth
 user:$apr1$prQ3Bh4t$A6bmTv7VgmemGe5eqR61j0
 ```
 
-Use these options in the `htpasswd` command for stronger hashing algorithims:
+Use these options in the `htpasswd` command for stronger hashing algorithms:
 
 ```bash
  -2  Force SHA-256 hashing of the password (secure).
@@ -437,10 +391,10 @@ Use these options in the `htpasswd` command for stronger hashing algorithims:
 You can then run this command to generate the secret from the `auth` file:
 
 ```bash
-kubectl create secret generic basic-auth --from-file=auth
+kubectl create secret generic auth-basic-test --type='nginx.org/htpasswd' --from-file=auth
 ```
 
-Note: `auth` will be the default key for secrets referenced `AuthenticationFilters` of `Type: Basic`.
+Note: `auth` will be the default key for secrets referenced by `AuthenticationFilters` of `Type: Basic`.
 
 Example secret:
 
@@ -449,7 +403,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: basic-auth-users
-type: Opaque
+type: nginx.org/htpasswd
 data:
   auth: YWRtaW46JGFwcjEkWnhZMTIzNDUkYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4Lwp1c2VyOiRhcHIxJEFiQzk4NzY1JG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpSktMLwo=
 ```
@@ -482,11 +436,11 @@ spec:
       port: 80
 ```
 
-#### Generated NGINX config
+#### Generated NGINX Config
 
-Note: For Basic Auth, NGF will store the file used by `auth_basic_user_file` in `/etc/nginx/secrets/`
-The full path will use the `name` and `key` of the secret referenced by `AuthenticationFilter`
-In this case, the full path will be `/etc/nginx/secrets/basic-auth-users/htpasswd`
+For Basic Auth, NGF will store the file used by `auth_basic_user_file` in `/etc/nginx/secrets/`
+The full path to the file will be `/etc/nginx/secrets/basic_auth_<secret-namespace>_<secret-name>`
+In this case, the full path will be `/etc/nginx/secrets/basic_auth_default_basic-auth-user`
 
 ```nginx
 http {
@@ -504,11 +458,7 @@ http {
             auth_basic "Restricted";
 
             # Path is generated by NGF using the name and key from the secret
-            auth_basic_user_file /etc/nginx/secrets/basic-auth-users/auth;
-
-            # Optional: customize failure per filter onFailure
-            # Ensures a consistent body and explicit WWW-Authenticate header
-            error_page 401 = @basic_auth_failure;
+            auth_basic_user_file /etc/nginx/secrets/basic_auth_default_basic_auth_user;
 
             # Optional: do not forward client Authorization header to upstream
             proxy_set_header Authorization "";
@@ -522,21 +472,15 @@ http {
             # Pass traffic to upstream
             proxy_pass http://backend_default;
         }
-
-        # Internal location for custom 401 response
-        location @basic_auth_failure {
-            add_header WWW-Authenticate 'Basic realm="Restricted"' always;
-            return 401 'Unauthorized';
-        }
     }
 }
 ```
 
 ### Example spec for JWT Auth
 
-For JWT Auth, there is two options.
+For JWT Auth, there are two options.
 
-1. Local JWKS file stored as as a Secret
+1. Local JWKS file stored as a Secret
 2. Remote JWKS from an IdP provider like Keycloak
 
 #### Example JWT AuthenticationFilter with Local JWKS
@@ -550,7 +494,7 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    # Key verification mode. Local file or Remote JWKs
+    # Key verification mode. Local file or Remote JWKS
     mode: File
     file:
       secretRef:
@@ -560,12 +504,9 @@ spec:
     leeway: 60s # Configures auth_jwt_leeway
     # Sets auth_jwt_type
     type: signed # signed | encrypted | nested
-    onFailure:
-      statusCode: 403 # Set to 403 for example purposes. Defaults to 401.
-      scheme: Bearer
 ```
 
-#### Example JWT AuthenticationFilter with Remote JWKs
+#### Example JWT AuthenticationFilter with Remote JWKS
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -576,7 +517,7 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    # Key verification mode. Local file or Remote JWKs
+    # Key verification mode. Local file or Remote JWKS
     mode: Remote
     remote:
       url: https://issuer.example.com/.well-known/jwks.json
@@ -586,32 +527,32 @@ spec:
     type: signed # signed | encrypted | nested
     # Optional cache duration for keys (auth_jwt_key_cache)
     keyCache: 10m
-    onFailure:
-      statusCode: 403 # Set to 403 for example purposes. Defaults to 401.
-      scheme: Bearer
 ```
 
-#### Secret referenced by filter
+#### Secret Referenced by Filter
+
+For JWT Auth, we will process a custom secret type of `nginx.org/jwt`.
+This will allow us to be more confident that the user is providing us with the appropriate kind of secret for this use case.
 
 To create the example secret, run the following command:
 
 ```bash
-kubectl create secret generic basic-auth --from-file=jwks.json
+kubectl create secret generic jwt-keys-secure --type='nginx.org/jwt' --from-file=jwks.json
 ```
 
-Note: `jwks.json` will be the default key for secrets referenced `AuthenticationFilters` of `Type: JWT`.
+Note: `jwks.json` will be the default key for secrets referenced by `AuthenticationFilters` of `Type: JWT`.
 
 ```yaml
 apiVersion: v1
 kind: Secret
 metadata:
   name: jwt-keys-secure
-type: Opaque
+type: nginx.org/jwt
 data:
   jwks.json: ewogICJrZXlzIjogWwogICAgewogICAgICAia3R5IjogIlJTQSIsCiAgICAgICJ1c2UiOiAic2lnIiwKICAgICAgImtpZCI6ICJleGFtcGxlLWtleS1pZCIsCiAgICAgICJhbGciOiAiUlMyNTYiLAogICAgICAibiI6ICJiYXNlNjR1cmwtbW9kdWx1cyIsCiAgICAgICJlIjogIkFRQUIiCiAgICB9CiAgXQp9Cg==
 ```
 
-#### HTTPRoute that will reference this filter
+#### HTTPRoute that Will Reference this Filter
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -645,9 +586,9 @@ Below are `two` potential NGINX configurations based on the mode used.
 
 1. NGINX Config when using `Mode: File` (i.e. locally referenced JWKS key)
 
-Note: For JWT Auth, NGF will store the file used by `auth_jwt_key_file` in `/etc/nginx/keys/`
-The full path will use the `name` and `key` of the secret referenced by `AuthenticationFilter`
-In this case, the full path will be `/etc/nginx/keys/jwt-keys-secure/jwks.json`
+or JWT Auth, NGF will store the file used by `auth_jwt_key_file` in `/etc/nginx/keys/`
+The full path to the file will be `/etc/nginx/secrets/jwt_auth_<secret-namespace>_<secret-name>`
+In this case, the full path will be `/etc/nginx/keys/jwt_auth_default_jwt-keys-secure`
 
 ```nginx
 http {
@@ -675,7 +616,7 @@ http {
 
             # File-based JWKS
             # Path is generated by NGF using the name and key from the secret
-            auth_jwt_key_file /etc/nginx/keys/jwt-keys-secure/jwks;
+            auth_jwt_key_file /etc/nginx/keys/jwt_auth_default_jwt-keys-secure;
 
             # Optional: key cache duration
             auth_jwt_key_cache 10m;
@@ -695,9 +636,6 @@ http {
             add_header X-User-Email     $jwt_claim_email always;
             add_header X-Auth-Mechanism "jwt" always;
 
-            # Optional: customize failure per filter onFailure
-            error_page 401 = @jwt_auth_failure;
-
             # Optional: do not forward client Authorization header to upstream
             proxy_set_header Authorization "";
 
@@ -710,12 +648,6 @@ http {
             # Pass traffic to upstream
             proxy_pass http://backend_default;
         }
-
-        # Internal location for custom 401 response
-        location @jwt_auth_failure {
-            add_header WWW-Authenticate 'Bearer realm="Restricted", error="insufficient_scope"' always;
-            return 403 'Forbidden';
-        }
     }
 }
 ```
@@ -724,8 +656,8 @@ http {
 
 These are some directives the `Remote` mode uses over the `File` mode:
 
-- `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal_jwks_uri` to redirect the request to the external auth provider (e.g. KeyCloak)
-- `proxy_cache_path`: This is used to configuring caching of the JWKS after an initial request allowing subsequent requests to not request re-authenticaiton for a time
+- `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal_jwks_uri` to redirect the request to the external auth provider (e.g. Keycloak)
+- `proxy_cache_path`: This is used to configure caching of the JWKS after an initial request, allowing subsequent requests to avoid re-authentication for a time
 
 ```nginx
 http {
@@ -776,9 +708,6 @@ http {
             add_header X-User-Email     $jwt_claim_email always;
             add_header X-Auth-Mechanism "jwt" always;
 
-            # Optional: customize failure per filter onFailure
-            error_page 401 = @jwt_auth_failure;
-
             # Optional: do not forward client Authorization header to upstream
             proxy_set_header Authorization "";
 
@@ -799,17 +728,11 @@ http {
             proxy_cache jwks_jwt_auth;
             proxy_pass  https://issuer.example.com/.well-known/jwks.json;
         }
-
-        # Internal location for custom 401 response
-        location @jwt_auth_failure {
-            add_header WWW-Authenticate 'Bearer realm="Restricted", error="invalid_token"' always;
-            return 401 'Unauthorized';
-        }
     }
 }
 ```
 
-### Caching configuration
+### Caching Configuration
 
 Users may also choose to change the caching configuration set by `proxy_cache_path`.
 This can be made available in the `cache` configuration under `jwt.remote.cache`
@@ -836,8 +759,8 @@ spec:
 
 ### Attachment
 
-Filters must be attached to a HTTPRoute at the `rules.matches` level.
-This means that a single `AuthenticationFilter` may be attached mutliple times to a single HTTPRoute.
+Filters must be attached to an HTTPRoute at the `rules.matches` level.
+This means that a single `AuthenticationFilter` may be attached multiple times to a single HTTPRoute.
 
 #### Basic example
 
@@ -847,17 +770,17 @@ This example shows a single HTTPRoute, with a single `filter` defined in a `rule
 
 ### Status
 
-#### Referencing multiple AuthenticationFilter resources in a single rule
+#### Referencing multiple AuthenticationFilter Resources in a Single Rule
 
-Only a single `AuthenticationFilter` may be referened in a single rule.
+Only a single `AuthenticationFilter` may be referenced in a single rule.
 
-The `Status` the HTTPRoute/GRPCRoute in this scenario should be set to `Invalid`, and the resource should be `Rejected`.
-In this scenario, the route rule that is referencing multiple `AuthenticationFilter` resources will be `Rejected`/
+The Status of the HTTPRoute/GRPCRoute in this scenario should be set to `Invalid`, and the resource should be `Rejected`.
+In this scenario, the route rule that is referencing multiple `AuthenticationFilter` resources will be `Rejected`.
 All other route rules will remain working.
 
 The HTTPRoute/GRPCRoute resource will display an `UnresolvedRef` message to inform the user that the rule has been `Rejected`.
 
-This behaviour falls in line with the expected behaviour of filters in the Gateway API, which generally allows only one type of a specific filter (authentication, rewriting, etc.) within a rule.
+This behavior falls in line with the expected behavior of filters in the Gateway API, which generally allows only one type of a specific filter (authentication, rewriting, etc.) within a rule.
 
 Below is an example of an **invalid** HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule:
 
@@ -892,30 +815,119 @@ spec:
       port: 80
 ```
 
-#### Referencing an AuthenticationFilter resource that is invalid
+#### Referencing an AuthenticationFilter Resource that Is Invalid
 
-Note: With appropriate use of CEL validation, we are less likely to encounter a scenario where an AuthenticationFilter has been deployed to the cluster with an invalid configuration.
-If this does happen, and a route rule references this AuthenticationFilter, the route rule will be set to `Invalid` and the the HTTPRoute/GRPCRoute will display the `UnresolvedRef` status.
+Note: With appropriate use of CEL validation, we are less likely to encounter a scenario where an `AuthenticationFilter` has been deployed to the cluster with an invalid configuration.
+If this does happen, and a route rule references this `AuthenticationFilter`, the route rule will be set to `Invalid` and the HTTPRoute/GRPCRoute will display the `UnresolvedRef` status.
 
-#### Attaching a JWT AuthenticationFilter to a route when using NGINX OSS
+#### Attaching a JWT AuthenticationFilter to a Route When Using NGINX OSS
 
-If a user attempts to attach a JWT type AuthenticationFilter while using NGINX OSS, the rule referencing the filter will be `Rejected`.
+If a user attempts to attach a JWT type `AuthenticationFilter` while using NGINX OSS, the rule referencing the filter will be `Rejected`.
 
 This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway API here: https://github.com/nginx/nginx-gateway-fabric/blob/3934c5c8c60b5aea91be4337d63d4e1d8640baa8/internal/controller/state/conditions/conditions.go#L402
 
 ## Testing
 
 - Unit tests
-- Functional tests to validate behavioural scenarios when referencing filters in different combinations. The details of these tests are out of scope for this document.
+- Functional tests to validate behavioral scenarios when referencing filters in different combinations.
+
+## Functional Test Cases
+
+### Invalid AuthenticationFilter Scenarios
+
+This section covers configuration deployment scenarios for an `AuthenticationFilter` resource that would be considered invalid.
+When an `AuthenticationFilter` is described as invalid, it could be for these reasons:
+
+- An `AuthenticationFilter` referencing a secret that does not exist
+- An `AuthenticationFilter` referencing a secret in a different namespace
+- An `AuthenticationFilter` referencing a secret with an incorrect type (e.g., Opaque)
+- An `AuthenticationFilter` referencing a secret with an incorrect key
+
+### Valid Scenarios
+
+This section covers deployment scenarios that are considered valid
+
+Single route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter`
+- Expected outcomes:
+  The route rule is marked as valid.
+  Request to the path will return a 200 response when correctly authenticated.
+  Request to the path will return a 401 response when incorrectly authenticated.
+
+Single route rule with two or more paths in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter`
+- Expected outcomes:
+  The route rule is marked as valid.
+  Requests to any path in the valid route rule return a 200 response when correctly authenticated.
+  Requests to any path in the valid route rule return a 401 response when incorrectly authenticated.
+
+Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter`
+- Expected outcomes:
+  All route rules are marked as valid.
+  Request to a path in each route rule will return a 200 response when correctly authenticated.
+  Request to a path in each route rule will return a 401 response when incorrectly authenticated.
+
+Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter`
+- Expected outcomes:
+  All route rules are marked as valid.
+  Requests to any path in the valid route rule return a 200 response when correctly authenticated.
+  Requests to any path in the valid route rule return a 401 response when incorrectly authenticated.
+
+### Invalid scenarios
+
+This section covers deployment scenarios that are considered invalid
+
+Single route rule with a single path in an HTTPRoute/GRPCRoute referencing an invalid `AuthenticationFilter`
+- Expected outcomes:
+  The route rule is marked as invalid.
+  Request to the path will return a 500 error.
+
+Single route rule with two or more paths in an HTTPRoute/GRPCRoute where each route rule references an invalid Authe`nticationFilter
+- Expected outcomes:
+  The route rules are marked as invalid.
+  Requests to both paths in will return a 500 error.
+
+Two or more route rules each with a single path in an HTTPRoute/GRPCRoute referencing an invalid `AuthenticationFilter`
+- Expected outcomes:
+  Both route rules are marked as invalid.
+  Requests to each paths in each route rule will return a 500 error.
+
+Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute referencing an invalid `AuthenticationFilter`
+- Expected outcomes:
+  Both route rules are marked as invalid.
+  Requests to each paths in each route rule will return a 500 error.
+
+
+Two or more route rules each with a single path in an HTTPRoute/GRPCRoute, where one rule references a valid `AuthenticationFilter`, and the other references an invalid `AuthenticationFilter`
+- Expected outcomes:
+  The route rule referencing the invalid `AuthentiationFilter` is marked as invalid.
+  Requests to the path in the invalid route rule will return a 500 error.
+  The roue rule referencing the valid `AuthenticationFilter` is marked as valid.
+  Requests to the path in the valid route rule will return a 200 response when correctly authenticated.
+  Requests to the path in the valid route rule will return a 401 response when incorrectly authenticated.
+
+
+Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute where one rule references a valid `AuthenticationFilter`, and the other references an invalid `AuthenticationFilter`
+- Expected outcomes:
+  The route rules referencing the invalid `AuthentiationFilter` is marked as invalid.
+  Requests to any path in the invalid route rule will return a 500 error.
+  The roue rules referencing the valid `AuthenticationFilter` is marked as valid.
+  Requests to any path in the valid route rule will return a 200 response when correctly authenticated.
+  Requests to any path in the valid route rule will return a 401 response when incorrectly authenticated.
+
+
+Two or more `AuthenticationFilters` referenced in a route rule.
+- Expected outcomes:
+  The route rule referencing multiple `AuthenticationFilters` is marked as invalid.
+  Requests to any path in the invalid route rule will return a 500 error.
+
 
 ## Security Considerations
 
 ### Basic Auth and Local JWKS
 
-Basic Auth sends credentials in an Authorization header that is base64-encoded.
+Basic Auth sends credentials in an Authorization header which is `base64` encoded.
 JWT Auth requires users to provide a bearer token through the Authorization header.
 
-Both of these methods can be easily intercepted over HTTP.
+Both methods can be easily intercepted over HTTP.
 
 Users that attach an `AuthenticationFilter` to an HTTPRoute/GRPCRoute should be advised to enable HTTPS traffic at the Gateway level for the routes.
 
@@ -925,20 +937,14 @@ Any example configurations and deployments for the `AuthenticationFilter` should
 
 Proxy cache TTL should be configurable and set to a reasonable default, reducing periods of stale cached JWKs.
 
-### Key rotation
+### Key Rotation
 
-Users should be advised to regularly rotate their JWKS keys in cases where they chose to reference a local JWKS via a `secrefRef`
+Users should be advised to regularly rotate their JWKS keys in cases where they choose to reference a local JWKS via a `secretRef`.
 
-### Auth failure behaviour
+### Optional Headers
 
-3xx response codes should not be allowed and AuthenticationFilter.onFailure must not support redirect targets. This is to prevent to prevent open-redirect abuse.
-
-401 and 403 should be the only allowable auth failure codes.
-
-### Optional headers
-
-Below are a list of optional defensive headers that user's may choose to include.
-In certain scenarios, these headers may be deployed to improve overall security from client reponses.
+Below are a list of optional defensive headers that users may choose to include.
+In certain scenarios, these headers may be deployed to improve overall security from client responses.
 
 ```nginx
 add_header Content-Type "text/plain; charset=utf-8" always;
@@ -949,44 +955,42 @@ add_header Cache-Control "no-store" always;
 Detailed header breakdown:
 
 - Content-Type: "text/plain; charset=utf-8"
-  - This header explicitly set the body as plain text. This prevents browsers from treating the response as HTML or JavaScript, and is effective at mitigating Cross-side scrpting (XSS) through error pages
+  - This header explicitly sets the body as plain text. This prevents browsers from treating the response as HTML or JavaScript, and is effective at mitigating Cross-site scripting (XSS) through error pages
 
 - X-Content-Type-Options: "nosniff"
-  - This header prevents content type confusion. This occurrs when browsers guesses HTML & JavaScript, and executes it despite a benign type.
+  - This header prevents content type confusion. This occurs when browsers guess HTML and JavaScript, and execute it despite a benign type.
 
 - Cache-Control: "no-store"
-  - This header informs browsers and proxies not to cache the response. Avoids sensitive, auth-related content, from being being stored and served later to unintended recipients.
+  - This header informs browsers and proxies not to cache the response. Avoids sensitive, auth-related content from being stored and served later to unintended recipients.
 
 
 ### Validation
 
-When referencing an `AuthenticationFilter` in either a HTTPRoute or GRPCRoute, it is important that we ensure all configurable fields are validated, and that the resulting NGINX configuration is correct and secure.
+When referencing an `AuthenticationFilter` in either an HTTPRoute or GRPCRoute, it is important that we ensure all configurable fields are validated, and that the resulting NGINX configuration is correct and secure.
 
-All fields in the `AuthenticationFilter` will be validated with Open API Schema.
+All fields in the `AuthenticationFilter` will be validated with OpenAPI Schema.
 We should also include [CEL](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules) validation where required.
 
-We should validated that only one `AuthenticationFilter` is referenced per-rule. Multiple references to an `AuthenticationFilter` in a single rule should result in an `Invalid` HTTPRoute/GRPCRoute, and the rule should be `Rejected`.
+We should validate that only one `AuthenticationFilter` is referenced per-rule. Multiple references to an `AuthenticationFilter` in a single rule should result in an `Invalid` HTTPRoute/GRPCRoute, and the rule should be `Rejected`.
 
 This scenario can use the status `RouteConditionPartiallyInvalid` defined in the Gateway API here: https://github.com/nginx/nginx-gateway-fabric/blob/3934c5c8c60b5aea91be4337d63d4e1d8640baa8/internal/controller/state/conditions/conditions.go#L402
 
-An `AuthenticationFilter` that sets a `onFailure.statusCode` to anything other than `401` or `403` should be rejected. This relates to the "Auth failure behaviour" section in the Security Considerations section.
-
 ## Alternatives
 
-The Gateway API defines a means to standardise authentication through use of the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter) available in the HTTPRoute specification.
+The Gateway API defines a means to standardize authentication through use of the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter) available in the HTTPRoute specification.
 
-This allows users to reference an external authentication services, such as Keycloak, to handle the authentication requests.
+This allows users to reference an external authentication service, such as Keycloak, to handle the authentication requests.
 While this API is available in the experimental channel, it is subject to change.
 
 Our decision to go forward with our own `AuthenticationFilter` was to ensure we could quickly provide authentication to our users while allowing us to closely monitor progress of the ExternalAuthFilter.
 
-It is certainly possible for us to provide an External Authentication Services that leverages NGINX and is something we can further investigate as the API progresses.
+It is certainly possible for us to provide an External Authentication Service that leverages NGINX and is something we can further investigate as the API progresses.
 
-## Additional considerations
+## Additional Considerations
 
-### Documenting filter behavour
+### Documenting Filter Behavior
 
-In regards to documentation of filter behaviour with the `AuthenticationFilter`, the Gateway API documentation on filters states the following:
+In regard to documentation of filter behavior with the `AuthenticationFilter`, the Gateway API documentation on filters states the following:
 
 ```text
 Wherever possible, implementations SHOULD implement filters in the order they are specified.
@@ -997,13 +1001,59 @@ If implementations choose a strict interpretation of filter ordering, they MUST 
 document that behavior.
 ```
 
-## Stretch Goals
+## Future Updates
 
-### Cross namespace access
+### Custom Authentication Failure Response
+
+By default, authentication failures return a 401 response.
+If a user wanted to change this response code, or include additional headers in this response, we can include a custom named location that can be called by the [error_page](https://nginx.org/en/docs/http/ngx_http_core_module.html#error_page) directive.
+
+Example AuthenticationFilter configuration:
+
+```yaml
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      name: basic-auth-users
+    realm: "Restricted"
+    onFailure:
+      statusCode: 401
+      scheme: Basic
+```
+
+Example NGINX configuration:
+
+```nginx
+server{
+  location /api {
+      auth_basic "Restricted";
+      auth_basic_user_file /etc/nginx/secrets/basic_auth_default_basic_auth_user;
+
+      # Calls named location
+      error_page 401 = @basic_auth_failure;
+    }
+
+    location @basic_auth_failure {
+        add_header WWW-Authenticate 'Basic realm="Restricted"' always;
+        return 401 'Unauthorized';
+    }
+}
+```
+
+If we support this configuration, 3xx response codes should not be allowed and `AuthenticationFilter.onFailure` must not support redirect targets. This is to prevent open-redirect abuse.
+
+We should only allow 401 and 403 response codes.
+
+### Cross-Namespace Access
 
 When referencing secrets for Basic Auth and JWT Auth, the initial implementation will use `LocalObjectReference`.
 
-Future updates to this will use the `NamespacedSecretKeyReference` in conjunction with `ReferenceGrants` to support access to secrets in different namespace`
+Future updates to this will use the `NamespacedSecretKeyReference` in conjunction with `ReferenceGrants` to support access to secrets in different namespaces.
 
 Struct for `NamespacedSecretKeyReference`:
 
@@ -1019,9 +1069,8 @@ type NamespacedSecretKeyReference struct {
 }
 ```
 
-For initial implementaion, both Basic Auth and Local JWKS should will only  have access to Secrets in the same namespace.
+For the initial implementation, both Basic Auth and Local JWKS will only have access to Secrets in the same namespace.
 
-Example: Grant BasicAuth in app-ns to read a Secret in security-ns
 Example: Grant BasicAuth in app-ns to read a Secret in security-ns
 
 ```yaml
@@ -1041,8 +1090,7 @@ spec:
     name: basic-auth-users
 ```
 
-AuthenticationFilter referencing the cross-namespace Secret
-AuthenticationFilter referencing the cross-namespace Secret
+
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -1061,10 +1109,9 @@ spec:
 
 ### Additional Fields for JWT
 
-`require`, `tokenSource` and `propagation` are some additional fields that may be incldued in future updates to the API.
+`require`, `tokenSource` and `propagation` are some additional fields that may be included in future updates to the API.
 These fields allow for more customization of how the JWT auth behaves, but aren't required for the minimal delivery of JWT Auth.
 
-Example of what implementation of these fields might look like:
 Example of what implementation of these fields might look like:
 
 ```yaml
@@ -1091,7 +1138,7 @@ spec:
         - "cli"
 
     # Where client presents the token
-    # By defaults to reading from Authorization header (Bearer)
+    # By default, reading from Authorization header (Bearer)
     tokenSource:
       type: Header
       # Alternative: read from a cookie named tokenName
@@ -1111,7 +1158,7 @@ spec:
       stripAuthorization: true # Optionally remove client Authorization header before proxy_pass
 ```
 
-Example GoLang API changes:
+Example Golang API changes:
 
 ```go
 type JWTAuth struct {
@@ -1212,7 +1259,7 @@ type HeaderValue struct {
 
 - [Gateway API ExternalAuthFilter GEP](https://gateway-api.sigs.k8s.io/geps/gep-1494/)
 - [HTTPExternalAuthFilter Specification](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter)
-- [Kubernetes documentation on CEL validaton](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules)
+- [Kubernetes documentation on CEL validation](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules)
 - [NGINX HTTP Basic Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html)
 - [NGINX JWT Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html)
 - [NGINX OIDC Module](https://nginx.org/en/docs/http/ngx_http_oidc_module.html)

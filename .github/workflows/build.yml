@@ -53,7 +53,7 @@ jobs:
           ref: ${{ (inputs.tag != '' && !inputs.dry_run && inputs.image != 'operator') && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
       - name: Download Artifacts
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: dist-${{ github.run_id }}
           path: ${{ github.workspace }}/dist
@@ -193,7 +193,7 @@ jobs:
           fail-build: false
 
       - name: Upload scan result to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@cf1bb45a277cb3c205638b2cd5c984db1c46a412 # v4.31.7
+        uses: github/codeql-action/upload-sarif@1b168cd39490f61582a9beae412bb7057a6b2c4e # v4.31.8
         if: ${{ !inputs.dry_run }}
         continue-on-error: true
         with:
