@@ -66,6 +66,10 @@ const (
 	// SnippetsFilter validation errors.
 	expectedSnippetsFilterContextError = "Only one snippet allowed per context"
 
+	// HashMethodKey validation error.
+	expectedHashKeyLoadBalancingTypeError = `hashMethodKey is required when loadBalancingMethod ` +
+		`is 'hash' or 'hash consistent'`
+
 	// Namespace for tests.
 	defaultNamespace = "default"
 

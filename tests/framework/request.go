@@ -34,7 +34,7 @@ type Request struct {
 // It resolves to the specified address instead of using DNS.
 // It returns the response body, headers, and status code.
 func Get(request Request, opts ...Option) (Response, error) {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 
 	resp, err := makeRequest(http.MethodGet, request, opts...)
 	if err != nil {
@@ -56,7 +56,7 @@ func Get(request Request, opts ...Option) (Response, error) {
 		return Response{StatusCode: resp.StatusCode}, err
 	}
 	if options.logEnabled {
-		GinkgoWriter.Printf("Successfully received response and parsed body: %s\n", body.String())
+		printResponseBody(body)
 	}
 
 	return Response{
@@ -64,6 +64,21 @@ func Get(request Request, opts ...Option) (Response, error) {
 		Headers:    resp.Header,
 		StatusCode: resp.StatusCode,
 	}, nil
+}
+
+func printResponseBody(body *bytes.Buffer) {
+	maxLogBodyBytes := 2048
+	bs := body.Bytes()
+	if len(bs) <= maxLogBodyBytes {
+		GinkgoWriter.Printf("Successfully received response and parsed body (%d bytes): %s\n", len(bs), string(bs))
+	} else {
+		GinkgoWriter.Printf(
+			"Successfully received response and parsed body (%d bytes, showing first %d): %s...\n",
+			len(bs),
+			maxLogBodyBytes,
+			string(bs[:maxLogBodyBytes]),
+		)
+	}
 }
 
 // Post sends a POST request to the specified url with the body as the payload.
@@ -96,10 +111,7 @@ func makeRequest(method string, request Request, opts ...Option) (*http.Response
 		return dialer.DialContext(ctx, network, fmt.Sprintf("%s:%s", request.Address, port))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), request.Timeout)
-	defer cancel()
-
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if options.logEnabled {
 		requestDetails := fmt.Sprintf(
 			"Method: %s, URL: %s, Address: %s, Headers: %v, QueryParams: %v\n",
@@ -109,10 +121,24 @@ func makeRequest(method string, request Request, opts ...Option) (*http.Response
 			request.Headers,
 			request.QueryParams,
 		)
-		GinkgoWriter.Printf("Sending request: %s", requestDetails)
+		GinkgoWriter.Printf("\nSending request: %s", requestDetails)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, request.URL, request.Body)
+	var (
+		req *http.Request
+		err error
+	)
+	if options.withContext {
+		ctx, cancel := context.WithTimeout(context.Background(), request.Timeout)
+		defer cancel()
+
+		req, err = http.NewRequestWithContext(ctx, method, request.URL, request.Body)
+	} else {
+		// Create request without a short-lived context; rely on http.Client.Timeout
+		// so that the response body can be fully read by the caller without
+		// being canceled when this function returns.
+		req, err = http.NewRequest(method, request.URL, request.Body) //nolint:noctx
+	}
 	if err != nil {
 		return nil, err
 	}
