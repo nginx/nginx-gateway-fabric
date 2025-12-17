@@ -477,17 +477,17 @@ func TestBuildHTTPRoute(t *testing.T) {
 	}
 	addFilterToPath(hrUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
 
-	// route with two invalid authentication filter extensions refs
+	// route with two invalid authentication filter extensions refs: (1) invalid group (2) unresolvable
 	hrInvalidAndUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
 	addFilterToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef)
 	addFilterToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
 
-	// route with one valid and one unresolvable authentication filter extensions refs
+	// route with one valid and one unresolvable authentication filter extensions refs: (1) valid group (2) unresolvable
 	hrValidAndUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
 	addFilterToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", validAuthenticationFilterExtRef)
 	addFilterToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
 
-	// route with one valid and one invalid authentication filter extensions refs
+	// route with one valid and one invalid authentication filter extensions refs: (1) valid group (2) invalid group
 	hrValidAndInvalidAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
 	addFilterToPath(hrValidAndInvalidAuthenticationFilter, "/filter", validAuthenticationFilterExtRef)
 	addFilterToPath(hrValidAndInvalidAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef)
@@ -500,7 +500,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "af2",
 		},
 	}
-	// route with one valid and one invalid authentication filter extensions refs
+	// route with two valid authentication filter extensions refs
 	hrTwoValidAuthenticationFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
 	addFilterToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef)
 	addFilterToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef2)
@@ -1412,7 +1412,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 					},
 				},
 			},
-			name: "rule with two valid authentications filter extension ref filter",
+			name: "rule with two valid authentications filter extension ref filters",
 		},
 		{
 			validator: &validationfakes.FakeHTTPFieldsValidator{},
