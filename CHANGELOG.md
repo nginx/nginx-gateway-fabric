@@ -26,6 +26,7 @@ BUG FIXES:
 - Fix an issue where NginxProxy config might not be honored if applied at the same time as the Gateway. [4399](https://github.com/nginx/nginx-gateway-fabric/pull/4399)
 - Fix issue where agent's Pod IP cannot be used to track the connecting data plane Pod. [4470](https://github.com/nginx/nginx-gateway-fabric/pull/4470)
 - Fix a bug to preserve external controller annotations for Deployment and DaemonSets to avoid constant updates. [4468](https://github.com/nginx/nginx-gateway-fabric/pull/4468)
+- Fix an issue where nginx pod could not connect to control plane when hostnetwork is enabled. [4481](https://github.com/nginx/nginx-gateway-fabric/pull/4481)
 
 HELM CHART:
 
@@ -35,10 +36,6 @@ UPGRADE:
 
 - The Gateway API version has been updated to 1.4. This version of Gateway API must be installed before installing NGINX Gateway Fabric v2.3.0 [4166](https://github.com/nginx/nginx-gateway-fabric/pull/4166)
 - Remove deprecated v1alpha1 ObservabilityPolicy API. [4215](https://github.com/nginx/nginx-gateway-fabric/pull/4215)
-
-KNOWN ISSUES:
-
-- If running with `hostNetwork: true`, NGINX data plane Pod cannot connect to the control plane. [4426](https://github.com/nginx/nginx-gateway-fabric/issues/4426)
 
 COMPATIBILITY:
 
