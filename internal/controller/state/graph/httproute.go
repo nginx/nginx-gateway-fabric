@@ -133,7 +133,7 @@ func buildHTTPMirrorRoutes(
 					tmpMirrorRoute,
 					gateways,
 					snippetsFilters,
-					nil,
+					nil, // Mirror routes can't use NGINX auth directives.
 					nil,
 				)
 

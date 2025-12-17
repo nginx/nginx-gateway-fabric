@@ -66,7 +66,8 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 					Source: invalidFilter,
 					Conditions: []conditions.Condition{
 						conditions.NewAuthenticationFilterInvalid(
-							"spec.basic.secretRef: Invalid value: \"unresolved\": secret does not exist",
+							"spec.basic.secretRef: Invalid value: \"unresolved\": " +
+								"secret does not exist",
 						),
 					},
 					Valid: false,

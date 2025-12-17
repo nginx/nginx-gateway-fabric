@@ -156,12 +156,21 @@ func TestBuildHTTPRoutes(t *testing.T) {
 			Group: ngfAPI.GroupName,
 		},
 	}
+	authenticationFilterRef := gatewayv1.HTTPRouteFilter{
+		Type: gatewayv1.HTTPRouteFilterExtensionRef,
+		ExtensionRef: &gatewayv1.LocalObjectReference{
+			Name:  "af",
+			Kind:  kinds.AuthenticationFilter,
+			Group: ngfAPI.GroupName,
+		},
+	}
 	requestRedirectFilter := gatewayv1.HTTPRouteFilter{
 		Type:            gatewayv1.HTTPRouteFilterRequestRedirect,
 		RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
 	}
 
 	addFilterToPath(hr, "/", snippetsFilterRef)
+	addFilterToPath(hr, "/", authenticationFilterRef)
 	addFilterToPath(hr, "/", requestRedirectFilter)
 
 	hrWrongGateway := createHTTPRoute("hr-2", "some-gateway", "example.com", "/")
@@ -182,6 +191,21 @@ func TestBuildHTTPRoutes(t *testing.T) {
 					Context: ngfAPI.NginxContextHTTP,
 					Value:   "http snippet",
 				},
+			},
+		},
+	}
+
+	af := &ngfAPI.AuthenticationFilter{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test",
+			Name:      "af",
+		},
+		Spec: ngfAPI.AuthenticationFilterSpec{
+			Basic: &ngfAPI.BasicAuth{
+				SecretRef: ngfAPI.LocalObjectReference{
+					Name: "test-secret",
+				},
+				Realm: "test-realm",
 			},
 		},
 	}
@@ -231,6 +255,19 @@ func TestBuildHTTPRoutes(t *testing.T) {
 											FilterType: FilterExtensionRef,
 										},
 										{
+											ExtensionRef: authenticationFilterRef.ExtensionRef,
+											ResolvedExtensionRef: &ExtensionRefFilter{
+												AuthenticationFilter: &AuthenticationFilter{
+													Source:     af,
+													Valid:      true,
+													Referenced: true,
+												},
+												Valid: true,
+											},
+											RouteType:  RouteTypeHTTP,
+											FilterType: FilterExtensionRef,
+										},
+										{
 											RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
 											RouteType:       RouteTypeHTTP,
 											FilterType:      FilterRequestRedirect,
@@ -270,13 +307,21 @@ func TestBuildHTTPRoutes(t *testing.T) {
 				},
 			}
 
+			authtenticationFilters := map[types.NamespacedName]*AuthenticationFilter{
+				client.ObjectKeyFromObject(af): {
+					Source:     af,
+					Valid:      true,
+					Referenced: true,
+				},
+			}
+
 			routes := buildRoutesForGateways(
 				validator,
 				hrRoutes,
 				map[types.NamespacedName]*gatewayv1.GRPCRoute{},
 				test.gateways,
 				snippetsFilters,
-				nil,
+				authtenticationFilters,
 				nil,
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
@@ -395,6 +440,70 @@ func TestBuildHTTPRoute(t *testing.T) {
 	hrInvalidAndUnresolvableSnippetsFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
 	addFilterToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", invalidSnippetsFilterExtRef)
 	addFilterToPath(hrInvalidAndUnresolvableSnippetsFilter, "/filter", unresolvableSnippetsFilterExtRef)
+
+	// route with valid authentication filter extension ref
+	hrValidAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	validAuthenticationFilterExtRef := gatewayv1.HTTPRouteFilter{
+		Type: gatewayv1.HTTPRouteFilterExtensionRef,
+		ExtensionRef: &gatewayv1.LocalObjectReference{
+			Group: ngfAPI.GroupName,
+			Kind:  kinds.AuthenticationFilter,
+			Name:  "af",
+		},
+	}
+	addFilterToPath(hrValidAuthenticationFilter, "/filter", validAuthenticationFilterExtRef)
+
+	// route with invalid authentication filter extension ref
+	hrInvalidAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	invalidAuthenticationFilterExtRef := gatewayv1.HTTPRouteFilter{
+		Type: gatewayv1.HTTPRouteFilterExtensionRef,
+		ExtensionRef: &gatewayv1.LocalObjectReference{
+			Group: "wrong",
+			Kind:  kinds.AuthenticationFilter,
+			Name:  "af",
+		},
+	}
+	addFilterToPath(hrInvalidAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef)
+
+	// route with unresolvable authentication filter extension ref
+	hrUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	unresolvableAuthenticationFilterExtRef := gatewayv1.HTTPRouteFilter{
+		Type: gatewayv1.HTTPRouteFilterExtensionRef,
+		ExtensionRef: &gatewayv1.LocalObjectReference{
+			Group: ngfAPI.GroupName,
+			Kind:  kinds.AuthenticationFilter,
+			Name:  "does-not-exist",
+		},
+	}
+	addFilterToPath(hrUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
+
+	// route with two invalid authentication filter extensions refs: (1) invalid group (2) unresolvable
+	hrInvalidAndUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	addFilterToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef)
+	addFilterToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
+
+	// route with one valid and one unresolvable authentication filter extensions refs: (1) valid group (2) unresolvable
+	hrValidAndUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	addFilterToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", validAuthenticationFilterExtRef)
+	addFilterToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
+
+	// route with one valid and one invalid authentication filter extensions refs: (1) valid group (2) invalid group
+	hrValidAndInvalidAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	addFilterToPath(hrValidAndInvalidAuthenticationFilter, "/filter", validAuthenticationFilterExtRef)
+	addFilterToPath(hrValidAndInvalidAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef)
+
+	validAuthenticationFilterExtRef2 := gatewayv1.HTTPRouteFilter{
+		Type: gatewayv1.HTTPRouteFilterExtensionRef,
+		ExtensionRef: &gatewayv1.LocalObjectReference{
+			Group: ngfAPI.GroupName,
+			Kind:  kinds.AuthenticationFilter,
+			Name:  "af2",
+		},
+	}
+	// route with one valid and one invalid authentication filter extensions refs: (1) valid group (2) invalid group
+	hrTwoValidAuthenticationFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
+	addFilterToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef)
+	addFilterToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef2)
 
 	// routes with an inference pool backend
 	hrInferencePool := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
@@ -706,7 +815,6 @@ func TestBuildHTTPRoute(t *testing.T) {
 			},
 			name: "dropped invalid rule with invalid matches",
 		},
-
 		{
 			validator: validatorInvalidFieldsInRule,
 			hr:        hrDroppedInvalidMatchesAndInvalidFilters,
@@ -857,6 +965,48 @@ func TestBuildHTTPRoute(t *testing.T) {
 		},
 		{
 			validator: validatorInvalidFieldsInRule,
+			hr:        hrValidAuthenticationFilter,
+			expected: &L7Route{
+				RouteType:  RouteTypeHTTP,
+				Source:     hrValidAuthenticationFilter,
+				Valid:      true,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Spec: L7RouteSpec{
+					Hostnames: hrValidAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Matches:      hrValidAuthenticationFilter.Spec.Rules[0].Matches,
+							Filters: RouteRuleFilters{
+								Filters: []Filter{
+									{
+										RouteType:    RouteTypeHTTP,
+										FilterType:   FilterExtensionRef,
+										ExtensionRef: validAuthenticationFilterExtRef.ExtensionRef,
+										ResolvedExtensionRef: &ExtensionRefFilter{
+											Valid:                true,
+											AuthenticationFilter: &AuthenticationFilter{Valid: true, Referenced: true},
+										},
+									},
+								},
+								Valid: true,
+							},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+			},
+			name: "rule with valid authentication filter extension ref filter",
+		},
+		{
+			validator: validatorInvalidFieldsInRule,
 			hr:        hrInvalidSnippetsFilter,
 			expected: &L7Route{
 				RouteType:  RouteTypeHTTP,
@@ -892,6 +1042,44 @@ func TestBuildHTTPRoute(t *testing.T) {
 				},
 			},
 			name: "rule with invalid snippets filter extension ref filter",
+		},
+		{
+			validator: validatorInvalidFieldsInRule,
+			hr:        hrInvalidAuthenticationFilter,
+			expected: &L7Route{
+				RouteType:  RouteTypeHTTP,
+				Source:     hrInvalidAuthenticationFilter,
+				Valid:      false,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedValue(
+						"All rules are invalid: spec.rules[0].filters[0].extensionRef: " +
+							"Unsupported value: \"wrong\": supported values: \"gateway.nginx.org\"",
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: hrInvalidAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Matches:      hrInvalidAuthenticationFilter.Spec.Rules[0].Matches,
+							Filters: RouteRuleFilters{
+								Filters: convertHTTPRouteFilters(hrInvalidAuthenticationFilter.Spec.Rules[0].Filters),
+								Valid:   false,
+							},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+			},
+			name: "rule with invalid authentication filter extension ref filter",
 		},
 		{
 			validator: validatorInvalidFieldsInRule,
@@ -931,6 +1119,45 @@ func TestBuildHTTPRoute(t *testing.T) {
 				},
 			},
 			name: "rule with unresolvable snippets filter extension ref filter",
+		},
+		{
+			validator: validatorInvalidFieldsInRule,
+			hr:        hrUnresolvableAuthenticationFilter,
+			expected: &L7Route{
+				RouteType:  RouteTypeHTTP,
+				Source:     hrUnresolvableAuthenticationFilter,
+				Valid:      true,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteResolvedRefsInvalidFilter(
+						"Spec.rules[0].filters[0].extensionRef: Not found: " +
+							`{"group":"gateway.nginx.org","kind":"AuthenticationFilter",` +
+							`"name":"does-not-exist"}`,
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: hrUnresolvableAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Matches:      hrUnresolvableAuthenticationFilter.Spec.Rules[0].Matches,
+							Filters: RouteRuleFilters{
+								Filters: convertHTTPRouteFilters(hrUnresolvableAuthenticationFilter.Spec.Rules[0].Filters),
+								Valid:   false,
+							},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+			},
+			name: "rule with unresolvable authentication filter extension ref filter",
 		},
 		{
 			validator: validatorInvalidFieldsInRule,
@@ -976,6 +1203,216 @@ func TestBuildHTTPRoute(t *testing.T) {
 				},
 			},
 			name: "rule with one invalid and one unresolvable snippets filter extension ref filter",
+		},
+		{
+			validator: validatorInvalidFieldsInRule,
+			hr:        hrInvalidAndUnresolvableAuthenticationFilter,
+			expected: &L7Route{
+				RouteType:  RouteTypeHTTP,
+				Source:     hrInvalidAndUnresolvableAuthenticationFilter,
+				Valid:      false,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedValue(
+						`All rules are invalid: [` +
+							`spec.rules[0].filters[0].extensionRef: Unsupported value: "wrong": supported values: "gateway.nginx.org", ` +
+							`spec.rules[0].filters[1].extensionRef: Invalid value: ` +
+							`{"group":"gateway.nginx.org","kind":"AuthenticationFilter","name":"does-not-exist"}: ` +
+							`only one AuthenticationFilter is allowed per Route rule` +
+							`]`,
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: hrInvalidAndUnresolvableAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Matches:      hrInvalidAndUnresolvableAuthenticationFilter.Spec.Rules[0].Matches,
+							Filters: RouteRuleFilters{
+								Filters: convertHTTPRouteFilters(
+									hrInvalidAndUnresolvableAuthenticationFilter.Spec.Rules[0].Filters,
+								),
+								Valid: false,
+							},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+			},
+			name: "rule with one invalid and one unresolvable authentication filter extension ref filter",
+		},
+		{
+			validator: validatorInvalidFieldsInRule,
+			hr:        hrValidAndUnresolvableAuthenticationFilter,
+			expected: &L7Route{
+				RouteType:  RouteTypeHTTP,
+				Source:     hrValidAndUnresolvableAuthenticationFilter,
+				Valid:      false,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrValidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedValue(
+						`All rules are invalid: ` +
+							`spec.rules[0].filters[1].extensionRef: Invalid value: ` +
+							`{"group":"gateway.nginx.org","kind":"AuthenticationFilter","name":"does-not-exist"}: ` +
+							`only one AuthenticationFilter is allowed per Route rule`,
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: hrValidAndUnresolvableAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Matches:      hrValidAndUnresolvableAuthenticationFilter.Spec.Rules[0].Matches,
+							Filters: RouteRuleFilters{
+								Filters: []Filter{
+									{
+										RouteType:    RouteTypeHTTP,
+										FilterType:   FilterExtensionRef,
+										ExtensionRef: validAuthenticationFilterExtRef.ExtensionRef,
+										ResolvedExtensionRef: &ExtensionRefFilter{
+											Valid:                true,
+											AuthenticationFilter: &AuthenticationFilter{Valid: true, Referenced: true},
+										},
+									},
+									{
+										RouteType:    RouteTypeHTTP,
+										FilterType:   FilterExtensionRef,
+										ExtensionRef: unresolvableAuthenticationFilterExtRef.ExtensionRef,
+									},
+								},
+								Valid: false,
+							},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+			},
+			name: "rule with one valid and one unresolvable authentication filter extension ref filter",
+		},
+		{
+			validator: validatorInvalidFieldsInRule,
+			hr:        hrValidAndInvalidAuthenticationFilter,
+			expected: &L7Route{
+				RouteType:  RouteTypeHTTP,
+				Source:     hrValidAndInvalidAuthenticationFilter,
+				Valid:      false,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrValidAndInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedValue(
+						`All rules are invalid: ` +
+							`spec.rules[0].filters[1].extensionRef: Invalid value: ` +
+							`{"group":"wrong","kind":"AuthenticationFilter","name":"af"}: ` +
+							`only one AuthenticationFilter is allowed per Route rule`,
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: hrValidAndInvalidAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Matches:      hrValidAndInvalidAuthenticationFilter.Spec.Rules[0].Matches,
+							Filters: RouteRuleFilters{
+								Filters: []Filter{
+									{
+										RouteType:    RouteTypeHTTP,
+										FilterType:   FilterExtensionRef,
+										ExtensionRef: validAuthenticationFilterExtRef.ExtensionRef,
+										ResolvedExtensionRef: &ExtensionRefFilter{
+											Valid:                true,
+											AuthenticationFilter: &AuthenticationFilter{Valid: true, Referenced: true},
+										},
+									},
+									{
+										RouteType:    RouteTypeHTTP,
+										FilterType:   FilterExtensionRef,
+										ExtensionRef: invalidAuthenticationFilterExtRef.ExtensionRef,
+									},
+								},
+								Valid: false,
+							},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+			},
+			name: "rule with one valid and one invalid authentication filter extension ref filter",
+		},
+		{
+			validator: validatorInvalidFieldsInRule,
+			hr:        hrTwoValidAuthenticationFilters,
+			expected: &L7Route{
+				RouteType:  RouteTypeHTTP,
+				Source:     hrTwoValidAuthenticationFilters,
+				Valid:      false,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: hrTwoValidAuthenticationFilters.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedValue(
+						`All rules are invalid: ` +
+							`spec.rules[0].filters[1].extensionRef: Invalid value: ` +
+							`{"group":"gateway.nginx.org","kind":"AuthenticationFilter","name":"af2"}: ` +
+							`only one AuthenticationFilter is allowed per Route rule`,
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: hrTwoValidAuthenticationFilters.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Matches:      hrTwoValidAuthenticationFilters.Spec.Rules[0].Matches,
+							Filters: RouteRuleFilters{
+								Filters: []Filter{
+									{
+										RouteType:    RouteTypeHTTP,
+										FilterType:   FilterExtensionRef,
+										ExtensionRef: validAuthenticationFilterExtRef.ExtensionRef,
+										ResolvedExtensionRef: &ExtensionRefFilter{
+											Valid:                true,
+											AuthenticationFilter: &AuthenticationFilter{Valid: true, Referenced: true},
+										},
+									},
+									{
+										ResolvedExtensionRef: nil,
+										RouteType:            "http",
+										FilterType:           "ExtensionRef",
+										ExtensionRef:         validAuthenticationFilterExtRef2.ExtensionRef,
+									},
+								},
+								Valid: false,
+							},
+							RouteBackendRefs: []RouteBackendRef{expRouteBackendRef},
+						},
+					},
+				},
+			},
+			name: "rule with two valid authentications filter extension ref filter",
 		},
 		{
 			validator: &validationfakes.FakeHTTPFieldsValidator{},
@@ -1106,11 +1543,14 @@ func TestBuildHTTPRoute(t *testing.T) {
 			snippetsFilters := map[types.NamespacedName]*SnippetsFilter{
 				{Namespace: "test", Name: "sf"}: {Valid: true},
 			}
+			authenticationFilters := map[types.NamespacedName]*AuthenticationFilter{
+				{Namespace: "test", Name: "af"}: {Valid: true},
+			}
 			inferencePools := map[types.NamespacedName]*inference.InferencePool{
 				{Namespace: "test", Name: "ipool"}: {},
 			}
 
-			route := buildHTTPRoute(test.validator, test.hr, gws, snippetsFilters, nil, inferencePools)
+			route := buildHTTPRoute(test.validator, test.hr, gws, snippetsFilters, authenticationFilters, inferencePools)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
 	}
