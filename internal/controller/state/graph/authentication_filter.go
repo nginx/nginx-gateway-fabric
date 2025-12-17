@@ -85,22 +85,13 @@ func validateAuthenticationFilter(
 	//revive:disable-next-line:unnecessary-stmt future-proof switch form; additional auth types will be added
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
-		if af.Spec.Basic.Realm == "" {
-			msg := "realm cannot be empty"
-			allErrs = append(allErrs, field.Required(field.NewPath("spec.basic.realm"), msg))
-		}
-		if af.Spec.Basic.SecretRef.Name == "" {
-			msg := "secretRef.name cannot be empty"
-			allErrs = append(allErrs, field.Required(field.NewPath("spec.basic.secretRef.name"), msg))
-		} else {
-			sec := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
-			if err := secretResolver.resolve(sec); err != nil {
-				allErrs = append(allErrs, field.Invalid(
-					field.NewPath("spec.basic.secretRef"),
-					af.Spec.Basic.SecretRef.Name,
-					err.Error(),
-				))
-			}
+		sec := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
+		if err := secretResolver.resolve(sec); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.basic.secretRef"),
+				af.Spec.Basic.SecretRef.Name,
+				err.Error(),
+			))
 		}
 	default:
 		// Currently, only Basic auth is supported.

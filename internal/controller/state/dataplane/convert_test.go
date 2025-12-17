@@ -659,7 +659,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
 						Basic: &ngfAPIv1alpha1.BasicAuth{
 							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-basic"},
-							Realm:     "Restricted",
+							Realm:     "",
 						},
 					},
 				},
