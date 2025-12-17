@@ -477,17 +477,17 @@ func TestBuildHTTPRoute(t *testing.T) {
 	}
 	addFilterToPath(hrUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
 
-	// route with two invalid authentication filter extensions refs: (1) invalid group (2) unresolvable
+	// route with two invalid authentication filter extensions refs
 	hrInvalidAndUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
 	addFilterToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef)
 	addFilterToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
 
-	// route with one valid and one unresolvable authentication filter extensions refs: (1) valid group (2) unresolvable
+	// route with one valid and one unresolvable authentication filter extensions refs
 	hrValidAndUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
 	addFilterToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", validAuthenticationFilterExtRef)
 	addFilterToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
 
-	// route with one valid and one invalid authentication filter extensions refs: (1) valid group (2) invalid group
+	// route with one valid and one invalid authentication filter extensions refs
 	hrValidAndInvalidAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
 	addFilterToPath(hrValidAndInvalidAuthenticationFilter, "/filter", validAuthenticationFilterExtRef)
 	addFilterToPath(hrValidAndInvalidAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef)
@@ -500,7 +500,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "af2",
 		},
 	}
-	// route with one valid and one invalid authentication filter extensions refs: (1) valid group (2) invalid group
+	// route with one valid and one invalid authentication filter extensions refs
 	hrTwoValidAuthenticationFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
 	addFilterToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef)
 	addFilterToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef2)
