@@ -11,7 +11,7 @@ FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:c69c8a1d3255d5adaa30de2332
 FROM redhat/ubi9-minimal:9.7-1764794109 AS ubi-nginx
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.6.0
+ARG NGINX_AGENT_VERSION=v3.6.1
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
