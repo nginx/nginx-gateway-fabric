@@ -5,24 +5,24 @@
 
 ## Summary
 
-This Enhancement Proposal introduces the "RateLimitPolicy" API that allows Cluster Operators and Application Developers to configure NGINX's rate limiting settings for Local Rate Limiting (RL per instance) and Global Rate Limiting (RL across all instances). Local Rate Limiting will be available on OSS through the `ngx_http_limit_req_module` while Global Rate Limiting will only be available through NGINX Plus, building off the OSS implementation but also using the `ngx_stream_zone_sync_module` to share state between NGINX instances. In addition to rate limiting on a key, which tells NGINX which rate limit bucket a request goes to, users should also be able to define Conditions on the RateLimitPolicy which decide if the request should be affected by the policy. This will allow for rate limiting on JWT Claim and other NGINX variables.
+This Enhancement Proposal introduces the "RateLimitPolicy" API that allows Cluster Operators and Application Developers to configure NGINX's rate limiting settings for Local Rate Limiting (RL per instance) and Global Rate Limiting (RL across all instances). Local Rate Limiting will be available on OSS through the `ngx_http_limit_req_module`. Global Rate Limiting will only be available through NGINX Plus, building off the OSS implementation but also using the `ngx_stream_zone_sync_module` to share state between NGINX instances, however that is out of scope for the current design.
 
 ## Goals
 
 - Define rate limiting settings.
 - Outline attachment points (Gateway and HTTPRoute/GRPCRoute) for the rate limit policy.
 - Describe inheritance behavior of rate limiting settings when multiple policies exist at different levels.
-- Define how Conditions on the rate limit policy work.
 
 ## Non-Goals
 
 - Champion a Rate Limiting Gateway API contribution.
-- Expose Zone Sync settings.
 - Support for attachment to TLSRoute.
+- Support Global Rate Limiting
+- Support Conditional Rate Limiting
 
 ## Introduction
 
-Rate limiting is a feature in NGINX which allows users to limit the request processing rate per a defined key, which usually refers to processing rate of requests coming from a single IP address. However, this key can contain text, variables, or a combination of them. Rate limiting through a reverse proxy can be broadly broken down into two different categories: Local Rate Limiting, and Global Rate Limiting.
+Rate limiting is a feature in NGINX which allows users to limit the request processing rate per a defined key, which usually refers to processing rate of requests coming from a single IP address. However, this key can contain text, variables, or a combination of them. Rate limiting through a reverse proxy can be broadly broken down into two different categories: Local Rate Limiting, and Global Rate Limiting. Global Rate Limiting is out of scope for this enhancement proposal.
 
 ### Local Rate Limiting
 
@@ -40,114 +40,18 @@ server {
     ...
 ```
 
-Benefits of local limiting:
-
-- Lightweight and does not require any external state tracking
-- Fast enforcement with rate limiting at the edge
-- Effective as a first line of defense against traffic bursts
-
-Downsides:
-
-- Harder to reason about capacity of fleet, especially when auto-scaling is enabled
-
-### Global Rate Limiting
-
-Global Rate Limiting refers to rate limiting across an entire NGINX Plus fleet. Meaning NGINX Plus instances will share state and centralize their limits.
-
-In NGINX Plus, this can be done by using the `ngx_stream_zone_sync_module` to extend the solution for Local Rate Limiting and provide a way for synchronizing contents of shared memory zones across NGINX Plus instances. Below is a simple example configuration where the `sync` parameter is attached to the `limit_req_zone` directive. The other `zone_sync` directives, living in a separate `stream` block, start the global synchronization engine and lets this NGINX Plus instance connect and share state with the other specified NGINX Plus instances.
-
-```nginx
-stream {
-    server {
-        listen 0.0.0.0:12345;      # any free TCP port for sync traffic
-        zone_sync;                 # turns the engine on
-
-        # full list of cluster peers (including yourself is harmless)
-        zone_sync_server  nginx-0.example.com:12345;
-        zone_sync_server  nginx-1.example.com:12345;
-        zone_sync_server  nginx-2.example.com:12345;
-    }
-}
-
-http {
-
-    limit_req_zone $binary_remote_addr zone=one:10m rate=1r/s sync;
-
-    server {
-        location /search/ {
-            limit_req zone=one;
-        }
-        ...
-}
-```
-
-Benefits of global limiting:
-
-- Centralized control across instances
-- Fair sharing of backend capacity
-- Burst resistance during autoscaling
-
-Downsides:
-
-- Additional resource consumption, the NGINX Plus sync module is complicated and when instances scale, memory consumption is greatly increased
-- Eventually consistent, the sync module does not work on a real-time timeline, but instead propogates state every few seconds
-- As NGINX Plus instances scale, zone_sync settings may need to be tuned
-- NGINX Plus only
-
-### Combining Local and Global Rate Limiting
-
-NGINX Gateway Fabric will support configuring both global and local rate limits simultaneously on the same route. When combined, local and global rate limiting should work together, where a request is evaluated first at the local rate limit, then gets evaluated at the global rate limit, and only if both pass does the request be allowed through.
-
-This should provide comprehensive protection by combining the benefits of both strategies.
-
 ## Use Cases
 
 - As a Cluster Operator:
-  - I want to set Global Rate Limits on NGINX Plus instances to:
-    - Protect the whole Kubernetes Cluster.
-    - Fit my commercial API license caps.
-    - Ensure autoscaling is handled correctly.
-    - Create Multi-tenant fairness.
   - I want to set Local Rate Limits on NGINX instances to:
     - Provide a default for NGINX instances.
     - Create protection for non-critical paths that don't need expensive Global Rate Limits.
 - As an Application Operator:
-  - I want to set Global Rate Limits for my specific application to:
-    - Align with my specific End-user API plans. (Only 10 req/s per API key no matter which gateway replica the user hits).
-    - Login / Auth brute-force defense.
-    - Shared micro-service budget.
-    - Fit my specific needs.
   - I want to set Local Rate Limits for my specific application to:
     - Act as a circuit-breaker for heavy endpoints.
-    - Enable Canary / blue-green saftey.
+    - Enable Canary / blue-green safety.
     - Add additional security to developer namespaces.
     - Fit my specific needs.
-  - I want to override the defaults for Local and Global Rate Limits set by the Cluster Operator because they do not satisfy my application's requirements or behaviors
-
-## Design
-
-Rate limiting allows users to limit the request processing rate per a defined key or bucket, and this can all be achieved through native NGINX OSS and Plus modules as shown above. However, users would also like to set conditions for a rate limit policy, where if a certain condition isn't met, the request would either go to a default rate limit policy, or would not be rate limited. This is designed to be used in combination with one or more rate limit policies. For example, multiple rate limit policies with that condition on JWT level can be used to apply different tiers of rate limit based on the value of a JWT claim (ie. more req/s for a higher level, less req/s for a lower level).
-
-### Variable Condition
-
-Variable Condition on a RateLimitPolicy would define a condition for a rate limit by NGINX variable. For example, a condition could be on the variable `$request_method` and the match could be `GET`, meaning this RateLimitPolicy would only apply to requests with the request method with a value `GET`.
-
-### JWT Claim Condition
-
-JWT Claim Condition on a RateLimitPolicy would define a condition for a rate limit by JWT claim. For example, a condition could be on the claim `user_details.level` and the match could be `premium`, meaning this RateLimitPolicy would only apply to requests with a JWT claim `user_details.level` with a value `premium`. The following JWT payload would match the condition:
-
-```JSON
-{
-  "user_details": {
-    "level": "premium"
-  },
-  "sub": "client1"
-}
-```
-
-### NJS Support
-
-Adding support for Conditions on the RateLimitPolicy will not be possible through native NGINX OSS and Plus modules and will need to be done through a separate NJS module.
 
 ## API
 
@@ -171,7 +75,7 @@ import (
     gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-// RateLimitPolicy is an Inherited Attached Policy. It provides a way to set local and global rate limiting rules in NGINX.
+// RateLimitPolicy is an Inherited Attached Policy. It provides a way to set local rate limiting rules in NGINX.
 //
 // +genclient
 // +kubebuilder:object:root=true
@@ -211,17 +115,12 @@ type RateLimitPolicySpec struct {
     RateLimit *RateLimit `json:"rateLimit,omitempty"`
 }
 
-// RateLimit contains settings for Rate Limitting.
+// RateLimit contains settings for Rate Limiting.
 type RateLimit struct {
     // Local defines the local rate limit rules for this policy.
     //
     // +optional
     Local *LocalRateLimit `json:"local,omitempty"`
-
-    // Global defines the global rate limit rules for this policy.
-    //
-    // +optional
-    Global *GlobalRateLimit `json:"global,omitempty"`
 }
 
 // LocalRateLimit contains the local rate limit rules.
@@ -230,26 +129,10 @@ type LocalRateLimit struct {
     //
     // +optional
     Rules *RateLimitRule[] `json:"rules,omitempty"`
-
-    // Zones contains the list of rate limit zones. Multiple rate limit rules can target the same zone.
-    //
-    // +optional
-    Zones *RateLimitZone[] `json:"zones,omitempty"`
 }
 
-// GlobalRateLimit contains the global rate limit rules.
-type GlobalRateLimit struct {
-    // Rules contains the list of rate limit rules.
-    Rules *RateLimitRule[] `json:"rules,omitempty"`
-
-    // Zones contains the list of rate limit zones. Multiple rate limit rules can target the same zone.
-    //
-    // +optional
-    Zones *RateLimitZone[] `json:"zones,omitempty"`
-}
-
-// RateLimitZone contains the settings for a rate limit zone. Multiple rate limit rules can target the same zone.
-type RateLimitZone struct {
+// RateLimitRule contains settings for a RateLimit Rule.
+type RateLimitRule struct {
     // Rate represents the rate of requests permitted. The rate is specified in requests per second (r/s)
     // or requests per minute (r/m).
     //
@@ -265,19 +148,6 @@ type RateLimitZone struct {
     //
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
     ZoneSize Size `json:"zoneSize"`
-
-    // ZoneName is the name of the zone.
-    //
-    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    ZoneName string `json:"zoneName"`
-}
-
-// RateLimitRule contains settings for a RateLimit Rule.
-type RateLimitRule struct {
-    // ZoneName is the name of the zone.
-    //
-    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    ZoneName string `json:"zoneName"`
 
     // Delay specifies a limit at which excessive requests become delayed. Default value is zero, i.e. all excessive requests are delayed.
     //
@@ -331,43 +201,17 @@ type RateLimitRule struct {
     // +kubebuilder:validation:Maximum=599
     RejectCode *int32 `json:"rejectCode,omitempty"`
 
-    // Condition represents a condition to determine if the request should be rate limited by this rule.
+    // Scale enables a constant rate-limit by dividing the configured rate by the number of NGINX
+    // replicas for a Gateway. This adjustment ensures that the rate-limit remains consistent,
+    // even as the number of NGINX replicas fluctuates due to autoscaling. NGINX pods belonging to a separate Gateway
+    // will not have an affect on the calculated rate. This will not work properly if requests
+    // from a client are not evenly distributed across all NGINX pods (Such as with sticky sessions, long
+    // lived TCP Connections with many requests, and so forth).
+    //
+    // Default: false
     //
     // +optional
-    Condition *RateLimitCondition `json:"condition,omitempty"`
-}
-
-// RateLimitCondition represents a condition to determine if the request should be rate limited.
-type RateLimitCondition struct {
-    // JWT defines a JWT condition to determine if the request should be rate limited.
-    //
-    // +optional
-    JWT *RateLimitJWTCondition `json:"jwt,omitempty"`
-    // Variable defines a Variable condition to determine if the request should be rate limited.
-    //
-    // +optional
-    Variable *RateLimitVariableCondition `json:"variable,omitempty"`
-    // Default sets the rate limit in this policy to be the default if no conditions are met. In a group of policies with the same condition,
-    // only one policy can be the default.
-    //
-    // +optional
-    Default *bool `json:"default,omitempty"`
-}
-
-// RateLimitJWTCondition represents a condition against a JWT claim.
-type RateLimitJWTCondition struct {
-    // Claim is the JWT claim that the conditional will check against. Nested claims should be separated by ".".
-    Claim string `json:"claim"`
-    // Match is the value of the claim to match against.
-    Match string `json:"match"`
-}
-
-// RateLimitVariableCondition represents a condition against an NGINX variable.
-type RateLimitVariableCondition struct {
-    // Name is the name of the NGINX variable that the conditional will check against.
-    Name string `json:"name"`
-    // Match is the value of the NGINX variable to match against. Values prefixed with the ~ character denote the following is a regular expression.
-    Match string `json:"match"`
+    Scale *bool `json:"scale,omitempty"`
 }
 
 // Size is a string value representing a size. Size can be specified in bytes, kilobytes (k), megabytes (m).
@@ -376,7 +220,7 @@ type RateLimitVariableCondition struct {
 // +kubebuilder:validation:Pattern=`^\d{1,4}(k|m)?$`
 type Size string
 
-// Rate is a string value representing a rate. Rate can be specifid in r/s or r/m.
+// Rate is a string value representing a rate. Rate can be specified in r/s or r/m.
 //
 // +kubebuilder:validation:Pattern=`^\d+r/[sm]$`
 type Rate string
@@ -435,28 +279,6 @@ The following Conditions must be populated on the `RateLimitPolicy` CRD:
 
 Note: The `Programmed` condition is part of the updated GEP-713 specification and should be implemented for this policy. Existing policies (ClientSettingsPolicy, UpstreamSettingsPolicy, ObservabilityPolicy) may not have implemented this condition yet and should be updated in future work.
 
-##### ZoneName conflicts
-
-Since the `limit_req_zone` directive can only be at the `http` context level, and `zoneNames` need to be unique, this introduces the potential for `zoneName` conflicts in `RateLimitPolicies` that contain a `RateLimitZone` with the same `zoneName`. The general strategy for resolving conflicts is that `RateLimitZones` defined at the Gateway-level will take priority over Route-level `RateLimitZones`, and conflicting `RateLimitZones` defined at equal `targetRef` level will prioritize the `RateLimitZone` of the `RateLimitPolicy` that was created before the other. When a `RateLimitZone` is taken "priority" over another, its settings will be generated in the NGINX configuration, and a `PartiallyInvalid` Condition will be shown on the "ignored/losing" `RateLimitPolicy`.
-
-When a Route-level policy specifies a `RateLimitZone` that has a `zoneName` that conflicts with an existing `zoneName` set at the Gateway level, the following condition will be set on the `RateLimitPolicy` attached to the Route:
-
-- **Condition Type**: `Programmed`
-- **Status**: `False`
-- **Reason**: `PartiallyInvalid` (implementation-specific reason)
-- **Message**: "Policy is not fully programmed: RateLimitZone(s) with zoneName(s): (zoneName(s) here) are ignored because of a conflict by an ancestor policy. Remove this conflict to enable the RateLimitZone(s)."
-
-When there is a `zoneName` conflict between two `RateLimitPolicies` at the same level (Gateway-Gateway, or Route-Route), the following condition will be set on the `RateLimitPolicy` which was created after the other:
-
-- **Condition Type**: `Programmed`
-- **Status**: `False`
-- **Reason**: `PartiallyInvalid` (implementation-specific reason)
-- **Message**: "Policy is not fully programmed: RateLimitZone(s) with zoneName(s): (zoneName(s) here) are in conflict with an existing RateLimitZone with the same zoneName. Remove this conflict to enable the RateLimitZone(s)"
-
-No condition will be set on the winning `RateLimitPolicy` which has its `RateLimitZone` generated in NGINX configuration.
-
-These conditions informs users that their policy configuration has not been fully programmed to the data plane due to `RateLimitZone` conflicts.
-
 #### Setting Status on Objects Affected by a Policy
 
 In the Policy Attachment GEP, there's a provisional status described [here](https://gateway-api.sigs.k8s.io/geps/gep-713/#target-object-status) that involves adding a Condition to all objects affected by a Policy.
@@ -514,43 +336,17 @@ spec:
     name: example-gateway
   rateLimit:
     local:
-      zones:
-      - zoneName: zone_one
-        rate: 5r/s
+      rules:
+      - rate: 5r/s
         key: $binary_remote_addr
         zoneSize: 10m
-      rules:
-      - zoneName: zone_one
         delay: 5
         noDelay: false
         burst: 5
         dryRun: false
         logLevel: error
         rejectCode: 503
-        condition:
-          jwt:
-            claim: user_details.level
-            match: premium
-          default: false
-    global:
-      zones:
-      - zoneName: global_zone_one
-        rate: 100r/s
-        key: $binary_remote_addr
-        zoneSize: 10m
-      rules:
-      - zoneName: global_zone_one
-        delay: 5
-        noDelay: false
-        burst: 5
-        dryRun: false
-        logLevel: error
-        rejectCode: 503
-        condition:
-          jwt:
-            claim: user_details.level
-            match: premium
-          default: false
+        scale: false
 status:
   ancestors:
   - ancestorRef:
@@ -575,7 +371,7 @@ And an example attached to an HTTPRoute and GRPCRoute:
 apiVersion: gateway.nginx.org/v1alpha1
 kind: RateLimitPolicy
 metadata:
-  name: example-rl-policy
+  name: example-rl-policy-routes
   namespace: default
 spec:
   targetRefs:
@@ -588,18 +384,16 @@ spec:
   rateLimit:
     local:
       rules:
-      - zoneName: zone_one
+      - rate: 5r/s
+        key: $binary_remote_addr
+        zoneSize: 10m
         delay: 5
         noDelay: false
         burst: 5
         dryRun: false
         logLevel: error
         rejectCode: 503
-        condition:
-          variable:
-            name: $request_method
-            match: GET
-          default: false
+        scale: true
 ```
 
 ## Attachment and Inheritance
@@ -610,7 +404,7 @@ There are three possible attachment scenarios:
 
 **1. Gateway Attachment**
 
-When a `RateLimitPolicy` is attached to a Gateway only, all the HTTPRoutes and GRPCRoutes attached to the Gateway inherit the rate limit settings. However, the rate limit zone in the policy is only created once at the top level `http` directive. All the rate limit rules are propogated downwards to the `location` directives of the HTTPRoutes and GRPCRoutes attached to the Gateway.
+When a `RateLimitPolicy` is attached to a Gateway only, all the HTTPRoutes and GRPCRoutes attached to the Gateway inherit the rate limit settings. A singular rate limit zone is created for the Gateway, and `limit_req` directives targeting the zone are propagated downwards to the `location` directives of the HTTPRoutes and GRPCRoutes attached to the Gateway.
 
 **2: Route Attachment**
 
@@ -618,36 +412,21 @@ When a `RateLimitPolicy` is attached to an HTTPRoute or GRPCRoute only, the sett
 
 **3: Gateway and Route Attachment**
 
-When a `RateLimitPolicy` is attached to a Gateway and one or more of the Routes that are attached to that Gateway, the effective policy is calculated by doing a Patch overrides merge strategy for rate limit zones based on conflicts in `zoneName`, and an Atomic defaults merge strategy for rate limit rules if there exist rate limit rules defined in both the Gateway and Route level.
+When a `RateLimitPolicy` is attached to a Gateway and one or more of the Routes that are attached to that Gateway, there is no conflict in policies. The `RateLimitPolicy` attached to the Gateway will generate its rate limit rule that gets applied to all the Routes attached to the Gateway and the `RateLimitPolicy` attached to the Route will generate its rate limit rule that gets applied to its specific `location` directives. In this case, the Route would end up with its own rate limit rule, in addition to the rate limit rule passed down from the Gateway.
 
-When calculating conflicts in `zoneName` for a rate limit zone between a policy attached on a Gateway and a different one attached to the Route, the policy attached to the Gateway will have it's defined rate limit zone be the effective one for that `zoneName`.
-
-However for rate limit rules, when there exists a rate limit rule in a policy attached on a Gateway and a different one attached to the Route, the policy attached to the Route will have it's defined rate limit rule(s) be the effective one(s).
-
-This allows a `RateLimitPolicy` attached to a Route to overwrite any settings on a rate limit rule for their specific upstreams, while protecting any rate limit zones set by a `RateLimitPolicy` on a Gateway. If a `RateLimitPolicy` on a Route needs to define a new zone, it will need to find a name that does not conflict with a `RateLimitPolicy` on another Gateway or Route, meaning it can create a separate zone and rate limit rule if a zone created by a `RateLimitPolicy` attached to a Gateway or different Route don't fit its needs.
-
-For example:
-
-- When there is a a Route with a `RateLimitPolicy` attached that sets a rate limit zone named `zone_one` with `rate = 3r/s` and `zoneSize = 5m`, and a Gateway that also has a `RateLimitPolicy` attached that sets a rate limit zone named `zone_one` with `rate = 5/rs` and `zoneSize = 100m`, the effective policy will choose the rate limit zone settings from the Gateway.
-- When there is a Route with a `RateLimitPolicy` attached that sets a rate limit rule with `zoneName = default_zone_five` and `burst=5`, and a Gateway that also has a `RateLimitPolicy` attached that sets a rate limit rule with `zoneName = default_zone_three` and `burst = 2` and `noDelay = true`, the effective policy will choose the rate limit rule settings from the HTTPRoute.
-- A Route without a policy attached will inherit all settings from the Gateway's policy.
-
-For more information on how to calculate effective policies, see the [hierarchy](https://gateway-api.sigs.k8s.io/geps/gep-713/#hierarchy-of-target-kinds) and [merge strategies](https://gateway-api.sigs.k8s.io/geps/gep-713/#designing-a-merge-strategy) sections in the Policy Attachment GEP. This merge strategy falls into the [custom merge strategy](https://gateway-api.sigs.k8s.io/geps/gep-713/#custom-merge-strategies)
-
-### NGINX Inheritance Behavior
-
-The `limit_req_zone` directive is only available at the `http` context, so any `RateLimitPolicy` that is attached to a Gateway or Route will have that zone inherited/available to other RateLimitPolicies in the same context.
-
-Although the `limit_req` directive is available at these three NGINX contexts: `http`, `server`, and `location`, the directive will only be placed in the `location` directive. This is to make inheritance from the Gateway level downwards to the final locations easier if there are other `limit_req` directives added at the Route level which want to overwrite the Gateway level one.
+As a consequence, there is no way to overwrite / negate a `RateLimitPolicy` from a Gateway by attaching another policy to the Route.
 
 ### Creating the Effective Policy in NGINX Config
 
 The strategy for implementing the effective policy is:
 
-- When a `RateLimitPolicy` is attached to a Gateway, add the `limit_req_zone` directive at the `http` block, and the `limit_req` directive at each of the `location` blocks generated by Routes attached to the Gateway.
-- When a `RateLimitPolicy` is attached to an HTTPRoute or GRPCRoute, add the `limit_req_zone` directive at the `http` block, and the `limit_req` directive at each of the `location` blocks generated for the Route.
+- When a `RateLimitPolicy` is attached to a Gateway, generate a singular `limit_req_zone` directive, unique to that policy and Gateway, at the `http` block, and a `limit_req` directive at each of the `location` blocks generated by Routes attached to the Gateway.
+- When a `RateLimitPolicy` is attached to an HTTPRoute or GRPCRoute, generate a singular `limit_req_zone`, unique to that policy and Route, directive at the `http` block, and a `limit_req` directive at each of the `location` blocks generated for the Route.
+- When multiple `RateLimitPolicies` are attached to a Gateway, generate a unique `limit_req_zone` for each policy-gateway pair.
+- When a `RateLimitPolicy` is attached to a Gateway, and there exists a Route which is attached to that Gateway which also has a `RateLimitPolicy` attached to it, the `location` blocks generated for that Route will have the `limit_req` directive with the Gateway `RateLimitPolicy` zone, and whatever `limit_req` directives generated by the `RateLimitPolicy` attached to the Route.
+- When a `RateLimitPolicy` is targeting a Gateway and Routes that are attached to the same Gateway, only a singular `limit_req_zone`, unique to that policy and Gateway is generated, and the `location` blocks from the Routes contain a `limit_req` directive targeting that zone.
 
-For both local and global rate limiting, NGINX rate limit configuration should not be generated on internal location blocks generated for the purpose of internal rewriting logic. If done so, a request directed to an external location might be counted multiple times if there are internal locations.
+NGINX rate limit configuration should not be generated on internal location blocks generated for the purpose of internal rewriting logic. If done so, a request directed to an external location might be counted multiple times if there are internal locations.
 
 ## Testing
 
@@ -655,8 +434,8 @@ For both local and global rate limiting, NGINX rate limit configuration should n
 - Functional tests that test the attachment and inheritance behavior, including:
   - Policy attached to Gateway only
   - Policy attached to Route only
-  - Policy attached to both Gateway and Route (with inheritance and override scenarios)
-  - Policy with various rate limit zone and rules configurations
+  - Policy attached to both Gateway and Route
+  - Policy with various rate rule configurations
   - Validation tests for invalid configurations
 
 ## Security Considerations
@@ -672,26 +451,21 @@ Key validation rules:
 - `Size` fields must match the pattern `^\d{1,4}(k|m)?$` to ensure valid NGINX size values
 - TargetRef must reference Gateway, HTTPRoute, or GRPCRoute only
 
-### Resource Limits
-
-Due to how NGINX Plus configures zone synchronization under the hood, users with many NGINX Plus instances sharing state through Global Rate Limiting could an increase in consumed network bandwidth and CPU usage. More details on zone synchronization are provided in the official NGINX Plus documentation in [How NGINX Plus Performs Zone Synchronization](https://docs.nginx.com/nginx/admin-guide/high-availability/zone_sync_details/#scaling).
-
 ## Alternatives
 
 - **Direct Policy**: If there's no strong use case for the Cluster Operator setting defaults for these settings on a Gateway, we could use a Direct Policy. However, since Rate Limit rules should be able to be defined on both Gateway and Routes, an Inherited Policy is the only Policy type for our solution.
 - **ExtensionRef approach**: We could use Gateway API's extensionRef mechanism instead of a Policy. However, Policy attachment is more appropriate for this use case as it follows the established pattern in NGINX Gateway Fabric, provides better status reporting, and allows for Rate Limit rules to be set by the Cluster Operator on a Gateway.
+- Allow `RateLimitPolicies` attached at the Route level to overwrite rules set at the Gateway level. Currently if a Route `location` inherits a rate limit rule from a Gateway, there is no way to disable it or override it. The workaround around this problem is to either remove the Route from the Gateway, or remove the `RateLimitPolicy` from attaching at the Gateway level, and instead attach to the Routes on the Gateway. However, this is inconvinient and may be a common scenario warranting supporting through either a field in the `RateLimitRule` or changing how `RateLimitPolicies` interact with each other.
 
 ## Future Work
 
-- Add support for configuring NGINX Plus `zone_sync` settings. The defaults we set may not be a one size fits all for users with ranging sizes of NGINX Plus instances.
+- Add support for global rate limiting. In NGINX Plus, this can be done by using the `ngx_stream_zone_sync_module` to extend the solution for Local Rate Limiting and provide a way for synchronizing contents of shared memory zones across NGINX Plus instances. Support for `zone_sync` is a separate enhancement and can either be completed along side global rate limiting support or separately.
+- Add Conditional Rate Limiting. Users would also like to set conditions for a rate limit policy, where if a certain condition isn't met, the request would either go to a default rate limit policy, or would not be rate limited. This is designed to be used in combination with one or more rate limit policies. For example, multiple rate limit policies with that condition on JWT level can be used to apply different tiers of rate limit based on the value of a JWT claim (ie. more req/s for a higher level, less req/s for a lower level).
 
 ## References
 
 - [NGINX Extensions Enhancement Proposal](nginx-extensions.md)
 - [Policy Attachment GEP (GEP-713)](https://gateway-api.sigs.k8s.io/geps/gep-713/)
 - [NGINX limit_req documentation](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html)
-- [NGINX zone_sync documentation](https://nginx.org/en/docs/stream/ngx_stream_zone_sync_module.html)
-- [NGINX Plus guide on runtime state sharing](https://docs.nginx.com/nginx/admin-guide/high-availability/zone_sync)
-- [NGINX Plus guide detailing how zone sync works](https://docs.nginx.com/nginx/admin-guide/high-availability/zone_sync_details)
 - [NGINX Plus guide on Rate Limiting](https://docs.nginx.com/nginx/admin-guide/security-controls/controlling-access-proxied-http/#limiting-the-request-rate)
 - [Kubernetes API Conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md)
