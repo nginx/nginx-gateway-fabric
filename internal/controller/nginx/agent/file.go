@@ -56,7 +56,7 @@ func (fs *fileService) GetFile(
 	ctx context.Context,
 	req *pb.GetFileRequest,
 ) (*pb.GetFileResponse, error) {
-	gi, ok := grpcContext.GrpcInfoFromContext(ctx)
+	grpcInfo, ok := grpcContext.GrpcInfoFromContext(ctx)
 	if !ok {
 		return nil, agentgrpc.ErrStatusInvalidConnection
 	}
@@ -65,7 +65,7 @@ func (fs *fileService) GetFile(
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	contents, err := fs.getFileContents(req, gi.UUID)
+	contents, err := fs.getFileContents(req, grpcInfo.UUID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (fs *fileService) GetFileStream(
 	req *pb.GetFileRequest,
 	server grpc.ServerStreamingServer[pb.FileDataChunk],
 ) error {
-	gi, ok := grpcContext.GrpcInfoFromContext(server.Context())
+	grpcInfo, ok := grpcContext.GrpcInfoFromContext(server.Context())
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
@@ -93,7 +93,7 @@ func (fs *fileService) GetFileStream(
 		return status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	contents, err := fs.getFileContents(req, gi.UUID)
+	contents, err := fs.getFileContents(req, grpcInfo.UUID)
 	if err != nil {
 		return err
 	}
@@ -133,11 +133,11 @@ func (fs *fileService) GetFileStream(
 
 func (fs *fileService) getFileContents(req *pb.GetFileRequest, connKey string) ([]byte, error) {
 	conn := fs.connTracker.GetConnection(connKey)
-	if conn.PodName == "" {
+	if conn.InstanceID == "" {
 		return nil, status.Errorf(codes.NotFound, "connection not found")
 	}
 
-	deployment := fs.nginxDeployments.Get(conn.Parent)
+	deployment := fs.nginxDeployments.Get(conn.ParentName)
 	if deployment == nil {
 		return nil, status.Errorf(codes.NotFound, "deployment not found in store")
 	}
@@ -187,17 +187,17 @@ func (fs *fileService) UpdateOverview(
 	ctx context.Context,
 	req *pb.UpdateOverviewRequest,
 ) (*pb.UpdateOverviewResponse, error) {
-	gi, ok := grpcContext.GrpcInfoFromContext(ctx)
+	grpcInfo, ok := grpcContext.GrpcInfoFromContext(ctx)
 	if !ok {
 		return &pb.UpdateOverviewResponse{}, agentgrpc.ErrStatusInvalidConnection
 	}
 
-	conn := fs.connTracker.GetConnection(gi.UUID)
-	if conn.PodName == "" {
+	conn := fs.connTracker.GetConnection(grpcInfo.UUID)
+	if conn.InstanceID == "" {
 		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "connection not found")
 	}
 
-	deployment := fs.nginxDeployments.Get(conn.Parent)
+	deployment := fs.nginxDeployments.Get(conn.ParentName)
 	if deployment == nil {
 		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "deployment not found in store")
 	}

@@ -11,6 +11,7 @@ import (
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/structpb"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +26,7 @@ import (
 	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
 	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/grpcfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/messenger/messengerfakes"
+	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
@@ -85,25 +87,19 @@ func createGrpcContextWithCancel() (context.Context, context.CancelFunc) {
 	}), cancel
 }
 
-func getDefaultPodList() []runtime.Object {
-	pod := &v1.PodList{
-		Items: []v1.Pod{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "nginx-pod",
-					Namespace: "test",
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							Kind: "ReplicaSet",
-							Name: "nginx-replicaset",
-						},
-					},
-				},
+func getDefaultResources() []runtime.Object {
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nginx-deployment",
+			Namespace: "test",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
-							Image: "nginx:v1.0.0",
 							Name:  "nginx",
+							Image: "nginx:v1.0.0",
 						},
 					},
 				},
@@ -111,20 +107,7 @@ func getDefaultPodList() []runtime.Object {
 		},
 	}
 
-	replicaSet := &appsv1.ReplicaSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "nginx-replicaset",
-			Namespace: "test",
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					Kind: "Deployment",
-					Name: "nginx-deployment",
-				},
-			},
-		},
-	}
-
-	return []runtime.Object{pod, replicaSet}
+	return []runtime.Object{deployment}
 }
 
 func TestCreateConnection(t *testing.T) {
@@ -152,6 +135,33 @@ func TestCreateConnection(t *testing.T) {
 							InstanceMeta: &pb.InstanceMeta{
 								InstanceId:   "nginx-id",
 								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_NGINX,
+							},
+						},
+						{
+							InstanceMeta: &pb.InstanceMeta{
+								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_AGENT,
+							},
+							InstanceConfig: &pb.InstanceConfig{
+								Config: &pb.InstanceConfig_AgentConfig{
+									AgentConfig: &pb.AgentConfig{
+										Labels: []*structpb.Struct{
+											{
+												Fields: map[string]*structpb.Value{
+													nginxTypes.AgentOwnerNameLabel: {
+														Kind: &structpb.Value_StringValue{
+															StringValue: "test_nginx-deployment",
+														},
+													},
+													nginxTypes.AgentOwnerTypeLabel: {
+														Kind: &structpb.Value_StringValue{
+															StringValue: nginxTypes.DeploymentType,
+														},
+													},
+												},
+											},
+										},
+									},
+								},
 							},
 						},
 					},
@@ -192,7 +202,7 @@ func TestCreateConnection(t *testing.T) {
 				Response: &pb.CommandResponse{
 					Status:  pb.CommandResponse_COMMAND_STATUS_ERROR,
 					Message: "error getting pod owner",
-					Error:   "no pods found with name \"nginx-pod\"",
+					Error:   "agent labels missing",
 				},
 			},
 			errString: "error getting pod owner",
@@ -208,7 +218,7 @@ func TestCreateConnection(t *testing.T) {
 
 			var objs []runtime.Object
 			if test.errString != "error getting pod owner" {
-				objs = getDefaultPodList()
+				objs = getDefaultResources()
 			}
 			fakeClient, err := createFakeK8sClient(objs...)
 			g.Expect(err).ToNot(HaveOccurred())
@@ -236,8 +246,8 @@ func TestCreateConnection(t *testing.T) {
 			g.Expect(connTracker.TrackCallCount()).To(Equal(1))
 
 			expConn := agentgrpc.Connection{
-				Parent:     types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
-				PodName:    "nginx-pod",
+				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
+				ParentType: nginxTypes.DeploymentType,
 				InstanceID: "nginx-id",
 			}
 
@@ -303,13 +313,13 @@ func TestSubscribe(t *testing.T) {
 
 	connTracker := agentgrpcfakes.FakeConnectionsTracker{}
 	conn := agentgrpc.Connection{
-		Parent:     types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
-		PodName:    "nginx-pod",
+		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
+		ParentType: nginxTypes.DeploymentType,
 		InstanceID: "nginx-id",
 	}
 	connTracker.GetConnectionReturns(conn)
 
-	fakeClient, err := createFakeK8sClient(getDefaultPodList()...)
+	fakeClient, err := createFakeK8sClient(getDefaultResources()...)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	store := NewDeploymentStore(&connTracker)
@@ -332,7 +342,7 @@ func TestSubscribe(t *testing.T) {
 	broadcaster.SubscribeReturns(subChannels)
 
 	// set the initial files and actions to be applied by the Subscription
-	deployment := store.StoreWithBroadcaster(conn.Parent, broadcaster)
+	deployment := store.StoreWithBroadcaster(conn.ParentName, broadcaster)
 	files := []File{
 		{
 			Meta: &pb.FileMeta{
@@ -431,7 +441,7 @@ func TestSubscribe(t *testing.T) {
 
 	g.Eventually(func() map[string]error {
 		return deployment.podStatuses
-	}).Should(HaveKey("nginx-pod"))
+	}).Should(HaveKey("1234567"))
 
 	cancel()
 
@@ -439,7 +449,7 @@ func TestSubscribe(t *testing.T) {
 		return <-errCh
 	}).Should(MatchError(ContainSubstring("context canceled")))
 
-	g.Expect(deployment.podStatuses).ToNot(HaveKey("nginx-pod"))
+	g.Expect(deployment.podStatuses).ToNot(HaveKey("1234567"))
 }
 
 func TestSubscribe_Reset(t *testing.T) {
@@ -448,13 +458,13 @@ func TestSubscribe_Reset(t *testing.T) {
 
 	connTracker := agentgrpcfakes.FakeConnectionsTracker{}
 	conn := agentgrpc.Connection{
-		Parent:     types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
-		PodName:    "nginx-pod",
+		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
+		ParentType: nginxTypes.DeploymentType,
 		InstanceID: "nginx-id",
 	}
 	connTracker.GetConnectionReturns(conn)
 
-	fakeClient, err := createFakeK8sClient(getDefaultPodList()...)
+	fakeClient, err := createFakeK8sClient(getDefaultResources()...)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	store := NewDeploymentStore(&connTracker)
@@ -478,7 +488,7 @@ func TestSubscribe_Reset(t *testing.T) {
 	broadcaster.SubscribeReturns(subChannels)
 
 	// set the initial files to be applied by the Subscription
-	deployment := store.StoreWithBroadcaster(conn.Parent, broadcaster)
+	deployment := store.StoreWithBroadcaster(conn.ParentName, broadcaster)
 	files := []File{
 		{
 			Meta: &pb.FileMeta{
@@ -612,7 +622,6 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 		setup     func(msgr *messengerfakes.FakeMessenger, deployment *Deployment)
 		name      string
 		errString string
-		podList   []runtime.Object
 	}{
 		{
 			name: "error sending initial config",
@@ -677,7 +686,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			setup: func(_ *messengerfakes.FakeMessenger, deployment *Deployment) {
 				deployment.SetImageVersion("nginx:v2.0.0")
 			},
-			errString: "nginx image version mismatch: pod has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
 		},
 	}
 
@@ -689,12 +698,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
 			msgr := &messengerfakes.FakeMessenger{}
 
-			podList := test.podList
-			if len(podList) == 0 {
-				podList = getDefaultPodList()
-			}
-
-			fakeClient, err := createFakeK8sClient(podList...)
+			fakeClient, err := createFakeK8sClient(getDefaultResources()...)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			cs := newCommandService(
@@ -707,9 +711,9 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			)
 
 			conn := &agentgrpc.Connection{
-				Parent:     types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
-				PodName:    "nginx-pod",
+				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 				InstanceID: "nginx-id",
+				ParentType: nginxTypes.DeploymentType,
 			}
 
 			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{})
@@ -719,216 +723,10 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				test.setup(msgr, deployment)
 			}
 
-			err = cs.setInitialConfig(context.Background(), deployment, conn, msgr)
+			err = cs.setInitialConfig(context.Background(), &grpcContext.GrpcInfo{}, deployment, conn, msgr)
 
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(test.errString))
-		})
-	}
-}
-
-func TestGetPodOwner(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		podName    string
-		podList    *v1.PodList
-		replicaSet *appsv1.ReplicaSet
-		errString  string
-		expected   types.NamespacedName
-	}{
-		{
-			name:    "successfully gets pod owner; ReplicaSet",
-			podName: "nginx-pod",
-			podList: &v1.PodList{
-				Items: []v1.Pod{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "nginx-pod",
-							Namespace: "test",
-							OwnerReferences: []metav1.OwnerReference{
-								{
-									Kind: "ReplicaSet",
-									Name: "nginx-replicaset",
-								},
-							},
-						},
-					},
-				},
-			},
-			replicaSet: &appsv1.ReplicaSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "nginx-replicaset",
-					Namespace: "test",
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							Kind: "Deployment",
-							Name: "nginx-deployment",
-						},
-					},
-				},
-			},
-			expected: types.NamespacedName{
-				Namespace: "test",
-				Name:      "nginx-deployment",
-			},
-		},
-		{
-			name:    "successfully gets pod owner; DaemonSet",
-			podName: "nginx-pod",
-			podList: &v1.PodList{
-				Items: []v1.Pod{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "nginx-pod",
-							Namespace: "test",
-							OwnerReferences: []metav1.OwnerReference{
-								{
-									Kind: "DaemonSet",
-									Name: "nginx-daemonset",
-								},
-							},
-						},
-					},
-				},
-			},
-			replicaSet: &appsv1.ReplicaSet{},
-			expected: types.NamespacedName{
-				Namespace: "test",
-				Name:      "nginx-daemonset",
-			},
-		},
-		{
-			name:       "error listing pods",
-			podName:    "nginx-pod",
-			podList:    &v1.PodList{},
-			replicaSet: &appsv1.ReplicaSet{},
-			errString:  "no pods found",
-		},
-		{
-			name:    "multiple pods with same name",
-			podName: "nginx-pod",
-			podList: &v1.PodList{
-				Items: []v1.Pod{
-					{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "nginx-pod"}},
-					{ObjectMeta: metav1.ObjectMeta{Namespace: "test2", Name: "nginx-pod"}},
-				},
-			},
-			replicaSet: &appsv1.ReplicaSet{},
-			errString:  "should only be one pod with name",
-		},
-		{
-			name:    "pod owner reference is not ReplicaSet or DaemonSet",
-			podName: "nginx-pod",
-			podList: &v1.PodList{
-				Items: []v1.Pod{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "nginx-pod",
-							OwnerReferences: []metav1.OwnerReference{
-								{
-									Kind: "Owner",
-									Name: "nginx-owner",
-								},
-							},
-						},
-					},
-				},
-			},
-			replicaSet: &appsv1.ReplicaSet{},
-			errString:  "expected pod owner reference to be ReplicaSet or DaemonSet",
-		},
-		{
-			name:    "pod has multiple owners",
-			podName: "nginx-pod",
-			podList: &v1.PodList{
-				Items: []v1.Pod{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "nginx-pod",
-							OwnerReferences: []metav1.OwnerReference{
-								{
-									Kind: "ReplicaSet",
-									Name: "nginx-replicaset",
-								},
-								{
-									Kind: "ReplicaSet",
-									Name: "nginx-replicaset2",
-								},
-							},
-						},
-					},
-				},
-			},
-			replicaSet: &appsv1.ReplicaSet{},
-			errString:  "expected one owner reference of the nginx Pod",
-		},
-		{
-			name:    "replicaSet has multiple owners",
-			podName: "nginx-pod",
-			podList: &v1.PodList{
-				Items: []v1.Pod{
-					{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "nginx-pod",
-							OwnerReferences: []metav1.OwnerReference{
-								{
-									Kind: "ReplicaSet",
-									Name: "nginx-replicaset",
-								},
-							},
-						},
-					},
-				},
-			},
-			replicaSet: &appsv1.ReplicaSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "nginx-replicaset",
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							Kind: "Deployment",
-							Name: "nginx-deployment",
-						},
-						{
-							Kind: "Deployment",
-							Name: "nginx-deployment2",
-						},
-					},
-				},
-			},
-			errString: "expected one owner reference of the nginx ReplicaSet",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			fakeClient, err := createFakeK8sClient(test.podList, test.replicaSet)
-			g.Expect(err).ToNot(HaveOccurred())
-
-			cs := newCommandService(
-				logr.Discard(),
-				fakeClient,
-				NewDeploymentStore(nil),
-				nil,
-				status.NewQueue(),
-				nil,
-			)
-
-			owner, _, err := cs.getPodOwner(test.podName)
-
-			if test.errString != "" {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(test.errString))
-				g.Expect(owner).To(Equal(types.NamespacedName{}))
-				return
-			}
-
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(owner).To(Equal(test.expected))
 		})
 	}
 }
