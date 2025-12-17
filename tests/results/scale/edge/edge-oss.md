@@ -6,8 +6,8 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 89aee48bf6e660a828ffd32ca35fc7f52e358e00
-- Date: 2025-12-12T20:04:38Z
+- Commit: e8ee7c1c4f14e249927a5447a1af2615ddbe0f87
+- Date: 2025-12-17T20:04:03Z
 - Dirty: false
 
 GKE Cluster:
@@ -24,19 +24,19 @@ GKE Cluster:
 
 ### Event Batch Processing
 
-- Total: 301
+- Total: 299
 - Average Time: 11ms
 - Event Batch Processing distribution:
-	- 500.0ms: 300
-	- 1000.0ms: 301
-	- 5000.0ms: 301
-	- 10000.0ms: 301
-	- 30000.0ms: 301
-	- +Infms: 301
+	- 500.0ms: 298
+	- 1000.0ms: 299
+	- 5000.0ms: 299
+	- 10000.0ms: 299
+	- 30000.0ms: 299
+	- +Infms: 299
 
 ### Errors
 
-- NGF errors: 3
+- NGF errors: 2
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -50,19 +50,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 338
-- Average Time: 10ms
+- Total: 336
+- Average Time: 9ms
 - Event Batch Processing distribution:
-	- 500.0ms: 338
-	- 1000.0ms: 338
-	- 5000.0ms: 338
-	- 10000.0ms: 338
-	- 30000.0ms: 338
-	- +Infms: 338
+	- 500.0ms: 336
+	- 1000.0ms: 336
+	- 5000.0ms: 336
+	- 10000.0ms: 336
+	- 30000.0ms: 336
+	- +Infms: 336
 
 ### Errors
 
-- NGF errors: 2
+- NGF errors: 1
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -76,15 +76,15 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 1255
-- Average Time: 136ms
+- Total: 1259
+- Average Time: 126ms
 - Event Batch Processing distribution:
-	- 500.0ms: 1176
-	- 1000.0ms: 1255
-	- 5000.0ms: 1255
-	- 10000.0ms: 1255
-	- 30000.0ms: 1255
-	- +Infms: 1255
+	- 500.0ms: 1192
+	- 1000.0ms: 1259
+	- 5000.0ms: 1259
+	- 10000.0ms: 1259
+	- 30000.0ms: 1259
+	- +Infms: 1259
 
 ### Errors
 
@@ -102,19 +102,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 138
-- Average Time: 140ms
+- Total: 96
+- Average Time: 113ms
 - Event Batch Processing distribution:
-	- 500.0ms: 122
-	- 1000.0ms: 137
-	- 5000.0ms: 138
-	- 10000.0ms: 138
-	- 30000.0ms: 138
-	- +Infms: 138
+	- 500.0ms: 86
+	- 1000.0ms: 96
+	- 5000.0ms: 96
+	- 10000.0ms: 96
+	- 30000.0ms: 96
+	- +Infms: 96
 
 ### Errors
 
-- NGF errors: 0
+- NGF errors: 2
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -127,20 +127,20 @@ The logs are attached only if there are errors.
 ## Test TestScale_HTTPMatches
 
 ```text
-Requests      [total, rate, throughput]         29999, 1000.00, 999.97
-Duration      [total, attack, wait]             30s, 29.999s, 1.04ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  733.443µs, 996µs, 970.279µs, 1.097ms, 1.145ms, 1.295ms, 28.664ms
-Bytes In      [total, mean]                     4769841, 159.00
+Requests      [total, rate, throughput]         30000, 1000.04, 1000.00
+Duration      [total, attack, wait]             30s, 29.999s, 965.322µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  751.912µs, 970.822µs, 940.82µs, 1.083ms, 1.15ms, 1.341ms, 26.998ms
+Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
-Status Codes  [code:count]                      200:29999  
+Status Codes  [code:count]                      200:30000  
 Error Set:
 ```
 ```text
-Requests      [total, rate, throughput]         30000, 1000.02, 999.97
-Duration      [total, attack, wait]             30.001s, 29.999s, 1.383ms
-Latencies     [min, mean, 50, 90, 95, 99, max]  833.3µs, 1.062ms, 1.042ms, 1.16ms, 1.213ms, 1.372ms, 18.505ms
-Bytes In      [total, mean]                     4770000, 159.00
+Requests      [total, rate, throughput]         30000, 1000.03, 999.99
+Duration      [total, attack, wait]             30s, 29.999s, 1.086ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  816.972µs, 1.064ms, 1.044ms, 1.17ms, 1.231ms, 1.407ms, 21.352ms
+Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:30000  

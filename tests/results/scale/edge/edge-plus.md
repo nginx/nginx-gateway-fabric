@@ -6,8 +6,8 @@ NGINX Plus: true
 
 NGINX Gateway Fabric:
 
-- Commit: 89aee48bf6e660a828ffd32ca35fc7f52e358e00
-- Date: 2025-12-12T20:04:38Z
+- Commit: e8ee7c1c4f14e249927a5447a1af2615ddbe0f87
+- Date: 2025-12-17T20:04:03Z
 - Dirty: false
 
 GKE Cluster:
@@ -24,19 +24,19 @@ GKE Cluster:
 
 ### Event Batch Processing
 
-- Total: 249
-- Average Time: 16ms
+- Total: 257
+- Average Time: 15ms
 - Event Batch Processing distribution:
-	- 500.0ms: 243
-	- 1000.0ms: 249
-	- 5000.0ms: 249
-	- 10000.0ms: 249
-	- 30000.0ms: 249
-	- +Infms: 249
+	- 500.0ms: 253
+	- 1000.0ms: 257
+	- 5000.0ms: 257
+	- 10000.0ms: 257
+	- 30000.0ms: 257
+	- +Infms: 257
 
 ### Errors
 
-- NGF errors: 3
+- NGF errors: 2
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -50,19 +50,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 321
-- Average Time: 14ms
+- Total: 323
+- Average Time: 12ms
 - Event Batch Processing distribution:
-	- 500.0ms: 315
-	- 1000.0ms: 320
-	- 5000.0ms: 321
-	- 10000.0ms: 321
-	- 30000.0ms: 321
-	- +Infms: 321
+	- 500.0ms: 317
+	- 1000.0ms: 323
+	- 5000.0ms: 323
+	- 10000.0ms: 323
+	- 30000.0ms: 323
+	- +Infms: 323
 
 ### Errors
 
-- NGF errors: 1
+- NGF errors: 3
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -76,15 +76,15 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 1310
-- Average Time: 166ms
+- Total: 1313
+- Average Time: 142ms
 - Event Batch Processing distribution:
-	- 500.0ms: 1235
-	- 1000.0ms: 1310
-	- 5000.0ms: 1310
-	- 10000.0ms: 1310
-	- 30000.0ms: 1310
-	- +Infms: 1310
+	- 500.0ms: 1285
+	- 1000.0ms: 1313
+	- 5000.0ms: 1313
+	- 10000.0ms: 1313
+	- 30000.0ms: 1313
+	- +Infms: 1313
 
 ### Errors
 
@@ -102,19 +102,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 83
-- Average Time: 209ms
+- Total: 89
+- Average Time: 255ms
 - Event Batch Processing distribution:
-	- 500.0ms: 69
-	- 1000.0ms: 81
-	- 5000.0ms: 83
-	- 10000.0ms: 83
-	- 30000.0ms: 83
-	- +Infms: 83
+	- 500.0ms: 73
+	- 1000.0ms: 87
+	- 5000.0ms: 89
+	- 10000.0ms: 89
+	- 30000.0ms: 89
+	- +Infms: 89
 
 ### Errors
 
-- NGF errors: 1
+- NGF errors: 2
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -127,20 +127,20 @@ The logs are attached only if there are errors.
 ## Test TestScale_HTTPMatches
 
 ```text
-Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
-Duration      [total, attack, wait]             30s, 29.999s, 951.219µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  728.696µs, 964.757µs, 943.409µs, 1.057ms, 1.107ms, 1.273ms, 13.167ms
-Bytes In      [total, mean]                     4830000, 161.00
+Requests      [total, rate, throughput]         30000, 1000.04, 999.99
+Duration      [total, attack, wait]             30s, 29.999s, 1.34ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  799.971µs, 1.061ms, 1.034ms, 1.186ms, 1.254ms, 1.457ms, 22.102ms
+Bytes In      [total, mean]                     4860000, 162.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:30000  
 Error Set:
 ```
 ```text
-Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
-Duration      [total, attack, wait]             30s, 29.999s, 965.495µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  828.389µs, 1.069ms, 1.046ms, 1.169ms, 1.226ms, 1.407ms, 16.348ms
-Bytes In      [total, mean]                     4830000, 161.00
+Requests      [total, rate, throughput]         30000, 1000.04, 999.99
+Duration      [total, attack, wait]             30s, 29.999s, 1.275ms
+Latencies     [min, mean, 50, 90, 95, 99, max]  879.885µs, 1.167ms, 1.139ms, 1.313ms, 1.381ms, 1.604ms, 8.99ms
+Bytes In      [total, mean]                     4860000, 162.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
 Status Codes  [code:count]                      200:30000  

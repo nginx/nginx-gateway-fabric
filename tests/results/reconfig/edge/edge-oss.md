@@ -6,8 +6,8 @@ NGINX Plus: false
 
 NGINX Gateway Fabric:
 
-- Commit: 89aee48bf6e660a828ffd32ca35fc7f52e358e00
-- Date: 2025-12-12T20:04:38Z
+- Commit: e8ee7c1c4f14e249927a5447a1af2615ddbe0f87
+- Date: 2025-12-17T20:04:03Z
 - Dirty: false
 
 GKE Cluster:
@@ -25,19 +25,19 @@ GKE Cluster:
 ### Time to Ready
 
 Time To Ready Description: From when NGF starts to when the NGINX configuration is fully configured
-- TimeToReadyTotal: 11s
+- TimeToReadyTotal: 23s
 
 ### Event Batch Processing
 
-- Event Batch Total: 46
+- Event Batch Total: 42
 - Event Batch Processing Average Time: 0ms
 - Event Batch Processing distribution:
-	- 500.0ms: 46
-	- 1000.0ms: 46
-	- 5000.0ms: 46
-	- 10000.0ms: 46
-	- 30000.0ms: 46
-	- +Infms: 46
+	- 500.0ms: 42
+	- 1000.0ms: 42
+	- 5000.0ms: 42
+	- 10000.0ms: 42
+	- 30000.0ms: 42
+	- +Infms: 42
 
 ### NGINX Error Logs
 
@@ -46,19 +46,19 @@ Time To Ready Description: From when NGF starts to when the NGINX configuration 
 ### Time to Ready
 
 Time To Ready Description: From when NGF starts to when the NGINX configuration is fully configured
-- TimeToReadyTotal: 20s
+- TimeToReadyTotal: 22s
 
 ### Event Batch Processing
 
-- Event Batch Total: 55
+- Event Batch Total: 44
 - Event Batch Processing Average Time: 1ms
 - Event Batch Processing distribution:
-	- 500.0ms: 55
-	- 1000.0ms: 55
-	- 5000.0ms: 55
-	- 10000.0ms: 55
-	- 30000.0ms: 55
-	- +Infms: 55
+	- 500.0ms: 44
+	- 1000.0ms: 44
+	- 5000.0ms: 44
+	- 10000.0ms: 44
+	- 30000.0ms: 44
+	- +Infms: 44
 
 ### NGINX Error Logs
 
@@ -71,15 +71,15 @@ Time To Ready Description: From when NGINX receives the first configuration crea
 
 ### Event Batch Processing
 
-- Event Batch Total: 378
-- Event Batch Processing Average Time: 18ms
+- Event Batch Total: 418
+- Event Batch Processing Average Time: 14ms
 - Event Batch Processing distribution:
-	- 500.0ms: 373
-	- 1000.0ms: 378
-	- 5000.0ms: 378
-	- 10000.0ms: 378
-	- 30000.0ms: 378
-	- +Infms: 378
+	- 500.0ms: 417
+	- 1000.0ms: 418
+	- 5000.0ms: 418
+	- 10000.0ms: 418
+	- 30000.0ms: 418
+	- +Infms: 418
 
 ### NGINX Error Logs
 
@@ -88,18 +88,18 @@ Time To Ready Description: From when NGINX receives the first configuration crea
 ### Time to Ready
 
 Time To Ready Description: From when NGINX receives the first configuration created by NGF to when the NGINX configuration is fully configured
-- TimeToReadyTotal: 133s
+- TimeToReadyTotal: 123s
 
 ### Event Batch Processing
 
-- Event Batch Total: 1861
+- Event Batch Total: 1853
 - Event Batch Processing Average Time: 15ms
 - Event Batch Processing distribution:
-	- 500.0ms: 1858
-	- 1000.0ms: 1861
-	- 5000.0ms: 1861
-	- 10000.0ms: 1861
-	- 30000.0ms: 1861
-	- +Infms: 1861
+	- 500.0ms: 1853
+	- 1000.0ms: 1853
+	- 5000.0ms: 1853
+	- 10000.0ms: 1853
+	- 30000.0ms: 1853
+	- +Infms: 1853
 
 ### NGINX Error Logs
