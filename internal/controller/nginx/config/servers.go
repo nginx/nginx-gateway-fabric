@@ -724,7 +724,8 @@ func updateLocationAuthenticationFilter(
 	if authenticationFilter != nil {
 		if authenticationFilter.Basic != nil {
 			userFilePathAndName := fmt.Sprintf(
-				authBasicUserFileFmt,
+				"%s/%s_%s",
+				secretsFolder,
 				authenticationFilter.Basic.SecretNamespace,
 				authenticationFilter.Basic.SecretName,
 			)
