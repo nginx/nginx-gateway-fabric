@@ -4,16 +4,13 @@ FROM scratch AS nginx-files
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
-FROM nginx:1.29.3-alpine-otel
+FROM nginx:1.29.4-alpine-otel
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.6.0
+ARG NGINX_AGENT_VERSION=v3.6.1
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
-
-# Fixes for CVEs; can be removed once base image is updated
-RUN apk update && apk add --no-cache 'libpng>=1.6.53-r0' 'ssl_client>=1.37.0-r20' 'busybox-binsh>=1.37.0-r20'
 
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     printf "%s\n" "https://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
