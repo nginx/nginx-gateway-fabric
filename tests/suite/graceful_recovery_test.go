@@ -554,8 +554,11 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 	})
 })
 
-func expectRequestToSucceed(appURL, address string, responseBodyMessage string) error {
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
+func expectRequestToSucceed(appURL, address string, responseBodyMessage string, opts ...framework.Option) error {
+	timeBeforeReq := time.Now()
+	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil, opts...)
+	timeAfterReq := time.Now()
+	GinkgoWriter.Printf("Request duration: %v\n", timeAfterReq.Sub(timeBeforeReq))
 
 	if status != http.StatusOK {
 		return fmt.Errorf("http status was not 200, got %d: %w", status, err)

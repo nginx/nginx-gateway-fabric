@@ -30,6 +30,7 @@ rules:
     ignore: |
       operators/**/*
       examples/proxy-settings-policy/app.yaml
+      tests/suite/manifests/proxy-settings-policy/app.yaml
   key-duplicates: enable
   key-ordering: disable
   line-length:

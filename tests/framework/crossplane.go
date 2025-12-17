@@ -102,7 +102,7 @@ func fieldExistsInUpstream(
 	directive Directive,
 	opts ...Option,
 ) bool {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if options.logEnabled {
 		GinkgoWriter.Printf(
 			"Checking upstream for directive %q with value %q\n",
@@ -131,7 +131,7 @@ func getServerName(serverBlock Directives) string {
 }
 
 func (e ExpectedNginxField) fieldFound(directive *Directive, opts ...Option) bool {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	arg := strings.Join(directive.Args, " ")
 
 	valueMatch := arg == e.Value
