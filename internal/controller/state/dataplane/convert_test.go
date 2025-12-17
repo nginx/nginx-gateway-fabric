@@ -628,10 +628,10 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name              string
 		filter            *graph.AuthenticationFilter
 		referencedSecrets map[types.NamespacedName]*graph.Secret
 		expected          *AuthenticationFilter
+		name              string
 	}{
 		{
 			name:              "nil filter",
@@ -696,5 +696,4 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			g.Expect(result).To(Equal(tc.expected))
 		})
 	}
-
 }

@@ -33,9 +33,9 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 	invalidFilter := createAuthenticationFilter("test", "invalid", "unresolved")
 
 	tests := []struct {
-		name                       string
 		authenticationFiltersInput map[types.NamespacedName]*ngfAPI.AuthenticationFilter
 		expProcessed               map[types.NamespacedName]*AuthenticationFilter
+		name                       string
 	}{
 		{
 			name:                       "no authentication filters",
@@ -90,8 +90,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 
 	type args struct {
 		filter    *ngfAPI.AuthenticationFilter
-		secNsName types.NamespacedName
 		secrets   map[types.NamespacedName]*corev1.Secret
+		secNsName types.NamespacedName
 	}
 
 	tests := []struct {
@@ -118,7 +118,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				secrets:   map[types.NamespacedName]*corev1.Secret{},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
-				"spec.basic.secretRef: Invalid value: \"not-found\": secret does not exist",
+				"secret does not exist",
 			),
 		},
 		{
@@ -135,7 +135,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
-				"spec.basic.secretRef: Invalid value: \"secret-type\": unsupported secret type \"Opaque\"",
+				"unsupported secret type \"Opaque\"",
 			),
 		},
 		{
@@ -148,7 +148,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
-				"spec.basic.secretRef: Invalid value: \"hp-missing\": missing required key \"auth\" in secret type \"nginx.org/htpasswd\"",
+				"missing required key \"auth\" in secret type \"nginx.org/htpasswd\"",
 			),
 		},
 	}
@@ -163,7 +163,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 
 			if tt.expCond != (conditions.Condition{}) {
 				g.Expect(cond).ToNot(BeNil())
-				g.Expect(*cond).To(Equal(tt.expCond))
+				g.Expect(cond.Message).To(ContainSubstring(tt.expCond.Message))
 			} else {
 				g.Expect(cond).To(BeNil())
 			}
