@@ -21,9 +21,9 @@ type ConnectionsTracker interface {
 
 // Connection contains the data about a single nginx agent connection.
 type Connection struct {
-	PodName    string
 	InstanceID string
-	Parent     types.NamespacedName
+	ParentType string
+	ParentName types.NamespacedName
 }
 
 // Ready returns if the connection is ready to be used. In other words, agent

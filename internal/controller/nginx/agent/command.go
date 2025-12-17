@@ -17,7 +17,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,6 +25,7 @@ import (
 	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
 	grpcContext "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/context"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/messenger"
+	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
@@ -77,7 +77,7 @@ func (cs *commandService) CreateConnection(
 		return nil, errors.New("empty connection request")
 	}
 
-	gi, ok := grpcContext.FromContext(ctx)
+	grpcInfo, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return nil, agentgrpc.ErrStatusInvalidConnection
 	}
@@ -86,8 +86,9 @@ func (cs *commandService) CreateConnection(
 	podName := resource.GetContainerInfo().GetHostname()
 	cs.logger.Info(fmt.Sprintf("Creating connection for nginx pod: %s", podName))
 
-	owner, _, err := cs.getPodOwner(podName)
-	if err != nil {
+	name, depType := getAgentDeploymentNameAndType(resource.GetInstances())
+	if name == (types.NamespacedName{}) || depType == "" {
+		err := errors.New("agent labels missing")
 		response := &pb.CreateConnectionResponse{
 			Response: &pb.CommandResponse{
 				Status:  pb.CommandResponse_COMMAND_STATUS_ERROR,
@@ -96,15 +97,15 @@ func (cs *commandService) CreateConnection(
 			},
 		}
 		cs.logger.Error(err, "error getting pod owner")
-		return response, grpcStatus.Errorf(codes.Internal, "error getting pod owner %s", err.Error())
+		return response, grpcStatus.Errorf(codes.InvalidArgument, "error getting pod owner: %s", err.Error())
 	}
 
 	conn := agentgrpc.Connection{
-		Parent:     owner,
-		PodName:    podName,
+		ParentName: name,
+		ParentType: depType,
 		InstanceID: getNginxInstanceID(resource.GetInstances()),
 	}
-	cs.connTracker.Track(gi.UUID, conn)
+	cs.connTracker.Track(grpcInfo.UUID, conn)
 
 	return &pb.CreateConnectionResponse{
 		Response: &pb.CommandResponse{
@@ -126,27 +127,31 @@ func (cs *commandService) CreateConnection(
 func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error {
 	ctx := in.Context()
 
-	gi, ok := grpcContext.FromContext(ctx)
+	grpcInfo, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
-	defer cs.connTracker.RemoveConnection(gi.UUID)
+	defer cs.connTracker.RemoveConnection(grpcInfo.UUID)
 
 	// wait for the agent to report itself and nginx
-	conn, deployment, err := cs.waitForConnection(ctx, gi)
+	conn, deployment, err := cs.waitForConnection(ctx, grpcInfo)
 	if err != nil {
 		cs.logger.Error(err, "error waiting for connection")
 		return err
 	}
-	defer deployment.RemovePodStatus(conn.PodName)
+	defer deployment.RemovePodStatus(grpcInfo.UUID)
 
-	cs.logger.Info(fmt.Sprintf("Successfully connected to nginx agent %s", conn.PodName))
+	cs.logger.Info(
+		"Successfully connected to nginx agent",
+		conn.ParentType, conn.ParentName,
+		"uuid", grpcInfo.UUID,
+	)
 
 	msgr := messenger.New(in)
 	go msgr.Run(ctx)
 
 	// apply current config before starting event loop
-	if err := cs.setInitialConfig(ctx, deployment, conn, msgr); err != nil {
+	if err := cs.setInitialConfig(ctx, &grpcInfo, deployment, conn, msgr); err != nil {
 		return err
 	}
 
@@ -188,7 +193,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			cs.logger.V(1).Info("Sending configuration to agent", "requestType", msg.Type)
 			if err := msgr.Send(ctx, req); err != nil {
 				cs.logger.Error(err, "error sending request to agent")
-				deployment.SetPodErrorStatus(conn.PodName, err)
+				deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 				channels.ResponseCh <- struct{}{}
 
 				return grpcStatus.Error(codes.Internal, err.Error())
@@ -198,8 +203,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			// Only broadcast operations should signal ResponseCh for coordination.
 			pendingBroadcastRequest = &msg
 		case err = <-msgr.Errors():
-			cs.logger.Error(err, "connection error", "pod", conn.PodName)
-			deployment.SetPodErrorStatus(conn.PodName, err)
+			cs.logger.Error(err, "connection error", conn.ParentType, conn.ParentName, "uuid", grpcInfo.UUID)
+			deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 			select {
 			case channels.ResponseCh <- struct{}{}:
 			default:
@@ -220,9 +225,9 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 					continue
 				}
 				err := fmt.Errorf("msg: %s; error: %s", res.GetMessage(), res.GetError())
-				deployment.SetPodErrorStatus(conn.PodName, err)
+				deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 			} else {
-				deployment.SetPodErrorStatus(conn.PodName, nil)
+				deployment.SetPodErrorStatus(grpcInfo.UUID, nil)
 			}
 
 			// Signal broadcast completion only for tracked broadcast operations.
@@ -231,7 +236,11 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 				pendingBroadcastRequest = nil
 				channels.ResponseCh <- struct{}{}
 			} else {
-				cs.logger.V(1).Info("Received response for non-broadcast request (likely initial config)", "pod", conn.PodName)
+				cs.logger.V(1).Info(
+					"Received response for non-broadcast request (likely initial config)",
+					conn.ParentType, conn.ParentName,
+					"uuid", grpcInfo.UUID,
+				)
 			}
 		}
 	}
@@ -239,7 +248,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 
 func (cs *commandService) waitForConnection(
 	ctx context.Context,
-	gi grpcContext.GrpcInfo,
+	grpcInfo grpcContext.GrpcInfo,
 ) (*agentgrpc.Connection, *Deployment, error) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -258,9 +267,9 @@ func (cs *commandService) waitForConnection(
 		case <-timer.C:
 			return nil, nil, err
 		case <-ticker.C:
-			if conn := cs.connTracker.GetConnection(gi.UUID); conn.Ready() {
+			if conn := cs.connTracker.GetConnection(grpcInfo.UUID); conn.Ready() {
 				// connection has been established, now ensure that the deployment exists in the store
-				if deployment := cs.nginxDeployments.Get(conn.Parent); deployment != nil {
+				if deployment := cs.nginxDeployments.Get(conn.ParentName); deployment != nil {
 					return &conn, deployment, nil
 				}
 				err = deploymentStoreErr
@@ -274,6 +283,7 @@ func (cs *commandService) waitForConnection(
 // setInitialConfig gets the initial configuration for this connection and applies it.
 func (cs *commandService) setInitialConfig(
 	ctx context.Context,
+	grpcInfo *grpcContext.GrpcInfo,
 	deployment *Deployment,
 	conn *agentgrpc.Connection,
 	msgr messenger.Messenger,
@@ -281,23 +291,22 @@ func (cs *commandService) setInitialConfig(
 	deployment.FileLock.Lock()
 	defer deployment.FileLock.Unlock()
 
-	_, pod, err := cs.getPodOwner(conn.PodName)
-	if err != nil {
-		cs.logAndSendErrorStatus(deployment, conn, err)
-
-		return grpcStatus.Error(codes.Internal, err.Error())
-	}
-	if err := cs.validatePodImageVersion(pod, deployment.imageVersion); err != nil {
-		cs.logAndSendErrorStatus(deployment, conn, err)
+	if err := cs.validatePodImageVersion(conn.ParentName, conn.ParentType, deployment.imageVersion); err != nil {
+		cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
 		return grpcStatus.Errorf(codes.FailedPrecondition, "nginx image version validation failed: %s", err.Error())
 	}
 
 	fileOverviews, configVersion := deployment.GetFileOverviews()
 
-	cs.logger.Info("Sending initial configuration to agent", "pod", conn.PodName, "configVersion", configVersion)
+	cs.logger.Info(
+		"Sending initial configuration to agent",
+		conn.ParentType, conn.ParentName,
+		"uuid", grpcInfo.UUID,
+		"configVersion", configVersion,
+	)
 
 	if err := msgr.Send(ctx, buildRequest(fileOverviews, conn.InstanceID, configVersion)); err != nil {
-		cs.logAndSendErrorStatus(deployment, conn, err)
+		cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
 
 		return grpcStatus.Error(codes.Internal, err.Error())
 	}
@@ -321,7 +330,7 @@ func (cs *commandService) setInitialConfig(
 			true, // poll immediately
 			func(ctx context.Context) (bool, error) {
 				if err := msgr.Send(ctx, buildPlusAPIRequest(action, conn.InstanceID)); err != nil {
-					cs.logAndSendErrorStatus(deployment, conn, err)
+					cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
 
 					return false, grpcStatus.Error(codes.Internal, err.Error())
 				}
@@ -350,7 +359,7 @@ func (cs *commandService) setInitialConfig(
 		cancel()
 	}
 	// send the status (error or nil) to the status queue
-	cs.logAndSendErrorStatus(deployment, conn, errors.Join(errs...))
+	cs.logAndSendErrorStatus(grpcInfo, deployment, conn, errors.Join(errs...))
 
 	return nil
 }
@@ -393,16 +402,25 @@ func (cs *commandService) waitForInitialConfigApply(
 // the full Deployment error status to the status queue. This ensures that any other Pod errors that already
 // exist on the Deployment are not overwritten.
 // If the error is nil, then we just enqueue the nil value and don't log it, which indicates success.
-func (cs *commandService) logAndSendErrorStatus(deployment *Deployment, conn *agentgrpc.Connection, err error) {
+func (cs *commandService) logAndSendErrorStatus(
+	grpcInfo *grpcContext.GrpcInfo,
+	deployment *Deployment,
+	conn *agentgrpc.Connection,
+	err error,
+) {
 	if err != nil {
 		cs.logger.Error(err, "error sending request to agent")
 	} else {
-		cs.logger.Info("Successfully configured nginx for new subscription", "pod", conn.PodName)
+		cs.logger.Info(
+			"Successfully configured nginx for new subscription",
+			conn.ParentType, conn.ParentName,
+			"uuid", grpcInfo.UUID,
+		)
 	}
-	deployment.SetPodErrorStatus(conn.PodName, err)
+	deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 
 	queueObj := &status.QueueObject{
-		Deployment: conn.Parent,
+		Deployment: conn.ParentName,
 		Error:      deployment.GetConfigurationStatus(),
 		UpdateType: status.UpdateAll,
 	}
@@ -454,99 +472,56 @@ func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.Mana
 	}
 }
 
-func (cs *commandService) getPodOwner(podName string) (types.NamespacedName, *v1.Pod, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	var pods v1.PodList
-	listOpts := &client.ListOptions{
-		FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": podName}),
-	}
-	if err := cs.k8sReader.List(ctx, &pods, listOpts); err != nil {
-		return types.NamespacedName{}, nil, fmt.Errorf("error listing pods: %w", err)
-	}
-
-	if len(pods.Items) == 0 {
-		return types.NamespacedName{}, nil, fmt.Errorf("no pods found with name %q", podName)
-	}
-
-	if len(pods.Items) > 1 {
-		return types.NamespacedName{}, nil, fmt.Errorf("should only be one pod with name %q", podName)
-	}
-	pod := &pods.Items[0]
-
-	podOwnerRefs := pod.GetOwnerReferences()
-	if len(podOwnerRefs) != 1 {
-		tooManyOwnersError := "expected one owner reference of the nginx Pod, got %d"
-		return types.NamespacedName{}, nil, fmt.Errorf(tooManyOwnersError, len(podOwnerRefs))
-	}
-
-	if podOwnerRefs[0].Kind != "ReplicaSet" && podOwnerRefs[0].Kind != "DaemonSet" {
-		err := fmt.Errorf("expected pod owner reference to be ReplicaSet or DaemonSet, got %s", podOwnerRefs[0].Kind)
-		return types.NamespacedName{}, nil, err
-	}
-
-	if podOwnerRefs[0].Kind == "DaemonSet" {
-		return types.NamespacedName{Namespace: pod.Namespace, Name: podOwnerRefs[0].Name}, pod, nil
-	}
-
-	var replicaSet appsv1.ReplicaSet
-	var replicaSetErr error
-	if err := wait.PollUntilContextCancel(
-		ctx,
-		500*time.Millisecond,
-		true, /* poll immediately */
-		func(ctx context.Context) (bool, error) {
-			if err := cs.k8sReader.Get(
-				ctx,
-				types.NamespacedName{Namespace: pod.Namespace, Name: podOwnerRefs[0].Name},
-				&replicaSet,
-			); err != nil {
-				replicaSetErr = err
-				return false, nil //nolint:nilerr // error is returned at the end
-			}
-
-			return true, nil
-		},
-	); err != nil {
-		return types.NamespacedName{}, nil, fmt.Errorf("failed to get nginx Pod's ReplicaSet: %w", replicaSetErr)
-	}
-
-	replicaOwnerRefs := replicaSet.GetOwnerReferences()
-	if len(replicaOwnerRefs) != 1 {
-		err := fmt.Errorf("expected one owner reference of the nginx ReplicaSet, got %d", len(replicaOwnerRefs))
-		return types.NamespacedName{}, nil, err
-	}
-
-	return types.NamespacedName{Namespace: pod.Namespace, Name: replicaOwnerRefs[0].Name}, pod, nil
-}
-
 // validatePodImageVersion checks if the pod's nginx container image version matches the expected version
 // from its deployment. Returns an error if versions don't match.
 func (cs *commandService) validatePodImageVersion(
-	pod *v1.Pod,
+	parent types.NamespacedName,
+	parentType string,
 	expectedImage string,
 ) error {
-	var podNginxImage string
+	var nginxImage string
+	var found bool
 
-	for _, container := range pod.Spec.Containers {
-		if container.Name == "nginx" {
-			podNginxImage = container.Image
-			break
+	getNginxContainerImage := func(containers []v1.Container) (string, bool) {
+		for _, c := range containers {
+			if c.Name == "nginx" {
+				return c.Image, true
+			}
 		}
-	}
-	if podNginxImage == "" {
-		return fmt.Errorf("nginx container not found in pod %q", pod.Name)
+		return "", false
 	}
 
-	// Compare images
-	if podNginxImage != expectedImage {
-		return fmt.Errorf("nginx image version mismatch: pod has %q but expected %q", podNginxImage, expectedImage)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	switch parentType {
+	case nginxTypes.DaemonSetType:
+		ds := &appsv1.DaemonSet{}
+		if err := cs.k8sReader.Get(ctx, parent, ds); err != nil {
+			return fmt.Errorf("failed to get DaemonSet %s: %w", parent.String(), err)
+		}
+		nginxImage, found = getNginxContainerImage(ds.Spec.Template.Spec.Containers)
+	case nginxTypes.DeploymentType:
+		deploy := &appsv1.Deployment{}
+		if err := cs.k8sReader.Get(ctx, parent, deploy); err != nil {
+			return fmt.Errorf("failed to get Deployment %s: %w", parent.String(), err)
+		}
+		nginxImage, found = getNginxContainerImage(deploy.Spec.Template.Spec.Containers)
+	default:
+		return fmt.Errorf("unknown parentType: %s", parentType)
 	}
 
-	cs.logger.V(1).Info("Pod nginx image version validated successfully",
-		"podName", pod.Name,
-		"image", podNginxImage)
+	if !found {
+		return fmt.Errorf("nginx container not found in %s %q", parentType, parent.Name)
+	}
+
+	if nginxImage != expectedImage {
+		return fmt.Errorf("nginx image version mismatch: has %q but expected %q", nginxImage, expectedImage)
+	}
+
+	cs.logger.V(1).Info("nginx image version validated successfully",
+		"parent", parent.String(),
+		"image", nginxImage)
 
 	return nil
 }
@@ -562,7 +537,7 @@ func (cs *commandService) UpdateDataPlaneStatus(
 		return nil, errors.New("empty UpdateDataPlaneStatus request")
 	}
 
-	gi, ok := grpcContext.FromContext(ctx)
+	grpcInfo, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return nil, agentgrpc.ErrStatusInvalidConnection
 	}
@@ -572,7 +547,7 @@ func (cs *commandService) UpdateDataPlaneStatus(
 		return nil, grpcStatus.Errorf(codes.InvalidArgument, "request does not contain nginx instanceID")
 	}
 
-	cs.connTracker.SetInstanceID(gi.UUID, instanceID)
+	cs.connTracker.SetInstanceID(grpcInfo.UUID, instanceID)
 
 	return &pb.UpdateDataPlaneStatusResponse{}, nil
 }
@@ -587,6 +562,35 @@ func getNginxInstanceID(instances []*pb.Instance) string {
 	}
 
 	return ""
+}
+
+func getAgentDeploymentNameAndType(instances []*pb.Instance) (types.NamespacedName, string) {
+	var nsName types.NamespacedName
+	var depType string
+
+	for _, instance := range instances {
+		instanceType := instance.GetInstanceMeta().GetInstanceType()
+		if instanceType == pb.InstanceMeta_INSTANCE_TYPE_AGENT {
+			labels := instance.GetInstanceConfig().GetAgentConfig().GetLabels()
+
+			for _, label := range labels {
+				fields := label.GetFields()
+
+				if val, ok := fields[nginxTypes.AgentOwnerNameLabel]; ok {
+					fullName := val.GetStringValue()
+					parts := strings.SplitN(fullName, "_", 2)
+					if len(parts) == 2 {
+						nsName = types.NamespacedName{Namespace: parts[0], Name: parts[1]}
+					}
+				}
+				if val, ok := fields[nginxTypes.AgentOwnerTypeLabel]; ok {
+					depType = val.GetStringValue()
+				}
+			}
+		}
+	}
+
+	return nsName, depType
 }
 
 // UpdateDataPlaneHealth includes full health information about the data plane as reported by the agent.

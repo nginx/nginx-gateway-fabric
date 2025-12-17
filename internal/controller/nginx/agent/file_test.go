@@ -43,9 +43,8 @@ func TestGetFile(t *testing.T) {
 
 	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
 	conn := agentgrpc.Connection{
-		PodName:    "nginx-pod",
 		InstanceID: "12345",
-		Parent:     deploymentName,
+		ParentName: deploymentName,
 	}
 	connTracker.GetConnectionReturns(conn)
 
@@ -109,9 +108,8 @@ func TestGetFile_InvalidRequest(t *testing.T) {
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
 	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
 	conn := agentgrpc.Connection{
-		PodName:    "nginx-pod",
 		InstanceID: "12345",
-		Parent:     deploymentName,
+		ParentName: deploymentName,
 	}
 	connTracker.GetConnectionReturns(conn)
 
@@ -165,9 +163,8 @@ func TestGetFile_DeploymentNotFound(t *testing.T) {
 
 	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
 	conn := agentgrpc.Connection{
-		PodName:    "nginx-pod",
 		InstanceID: "12345",
-		Parent:     deploymentName,
+		ParentName: deploymentName,
 	}
 	connTracker.GetConnectionReturns(conn)
 
@@ -198,9 +195,8 @@ func TestGetFile_FileNotFound(t *testing.T) {
 
 	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
 	conn := agentgrpc.Connection{
-		PodName:    "nginx-pod",
 		InstanceID: "12345",
-		Parent:     deploymentName,
+		ParentName: deploymentName,
 	}
 	connTracker.GetConnectionReturns(conn)
 
@@ -234,9 +230,8 @@ func TestGetFileStream(t *testing.T) {
 
 	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
 	conn := agentgrpc.Connection{
-		PodName:    "nginx-pod",
 		InstanceID: "12345",
-		Parent:     deploymentName,
+		ParentName: deploymentName,
 	}
 	connTracker.GetConnectionReturns(conn)
 
@@ -312,9 +307,8 @@ func TestGetFileStream_InvalidRequest(t *testing.T) {
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
 	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
 	conn := agentgrpc.Connection{
-		PodName:    "nginx-pod",
 		InstanceID: "12345",
-		Parent:     deploymentName,
+		ParentName: deploymentName,
 	}
 	connTracker.GetConnectionReturns(conn)
 
@@ -369,9 +363,8 @@ func TestUpdateOverview(t *testing.T) {
 
 	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
 	conn := agentgrpc.Connection{
-		PodName:    "nginx-pod",
 		InstanceID: "12345",
-		Parent:     deploymentName,
+		ParentName: deploymentName,
 	}
 	connTracker.GetConnectionReturns(conn)
 
@@ -504,9 +497,8 @@ func TestUpdateOverview_DeploymentNotFound(t *testing.T) {
 
 	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
 	conn := agentgrpc.Connection{
-		PodName:    "nginx-pod",
 		InstanceID: "12345",
-		Parent:     deploymentName,
+		ParentName: deploymentName,
 	}
 	connTracker.GetConnectionReturns(conn)
 

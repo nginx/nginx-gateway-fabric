@@ -16,9 +16,8 @@ func TestGetConnection(t *testing.T) {
 	tracker := agentgrpc.NewConnectionsTracker()
 
 	conn := agentgrpc.Connection{
-		PodName:    "pod1",
 		InstanceID: "instance1",
-		Parent:     types.NamespacedName{Namespace: "default", Name: "parent1"},
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
 	}
 	tracker.Track("key1", conn)
 
@@ -34,9 +33,8 @@ func TestConnectionIsReady(t *testing.T) {
 	g := NewWithT(t)
 
 	conn := agentgrpc.Connection{
-		PodName:    "pod1",
 		InstanceID: "instance1",
-		Parent:     types.NamespacedName{Namespace: "default", Name: "parent1"},
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
 	}
 
 	g.Expect(conn.Ready()).To(BeTrue())
@@ -47,8 +45,7 @@ func TestConnectionIsNotReady(t *testing.T) {
 	g := NewWithT(t)
 
 	conn := agentgrpc.Connection{
-		PodName: "pod1",
-		Parent:  types.NamespacedName{Namespace: "default", Name: "parent1"},
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
 	}
 
 	g.Expect(conn.Ready()).To(BeFalse())
@@ -60,8 +57,7 @@ func TestSetInstanceID(t *testing.T) {
 
 	tracker := agentgrpc.NewConnectionsTracker()
 	conn := agentgrpc.Connection{
-		PodName: "pod1",
-		Parent:  types.NamespacedName{Namespace: "default", Name: "parent1"},
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
 	}
 	tracker.Track("key1", conn)
 
@@ -81,9 +77,8 @@ func TestRemoveConnection(t *testing.T) {
 
 	tracker := agentgrpc.NewConnectionsTracker()
 	conn := agentgrpc.Connection{
-		PodName:    "pod1",
 		InstanceID: "instance1",
-		Parent:     types.NamespacedName{Namespace: "default", Name: "parent1"},
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
 	}
 	tracker.Track("key1", conn)
 
