@@ -2162,6 +2162,127 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 	}
 }
 
+func TestBuildAuthenticationFilterStatuses(t *testing.T) {
+	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
+
+	validAuthenticationFilter := &graph.AuthenticationFilter{
+		Source: &ngfAPI.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "valid-auth",
+				Namespace:  "test",
+				Generation: 1,
+			},
+		},
+		Valid: true,
+	}
+
+	invalidAuthenticationFilter := &graph.AuthenticationFilter{
+		Source: &ngfAPI.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "invalid-auth",
+				Namespace:  "test",
+				Generation: 1,
+			},
+		},
+		Conditions: []conditions.Condition{conditions.NewAuthenticationFilterInvalid("Invalid AuthenticationFilter")},
+		Valid:      false,
+	}
+
+	tests := []struct {
+		authenticationFilters map[types.NamespacedName]*graph.AuthenticationFilter
+		expected              map[types.NamespacedName]ngfAPI.AuthenticationFilterStatus
+		name                  string
+		expectedReqs          int
+	}{
+		{
+			name:         "nil authenticationFilters",
+			expectedReqs: 0,
+			expected:     map[types.NamespacedName]ngfAPI.AuthenticationFilterStatus{},
+		},
+		{
+			name: "valid authenticationFilter",
+			authenticationFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "valid-auth"}: validAuthenticationFilter,
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]ngfAPI.AuthenticationFilterStatus{
+				{Namespace: "test", Name: "valid-auth"}: {
+					Controllers: []ngfAPI.ControllerStatus{
+						{
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+									Status:             metav1.ConditionTrue,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(ngfAPI.AuthenticationFilterConditionReasonAccepted),
+									Message:            "The AuthenticationFilter is accepted",
+								},
+							},
+							ControllerName: gatewayCtlrName,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "invalid authenticationFilter",
+			authenticationFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "invalid-auth"}: invalidAuthenticationFilter,
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]ngfAPI.AuthenticationFilterStatus{
+				{Namespace: "test", Name: "invalid-auth"}: {
+					Controllers: []ngfAPI.ControllerStatus{
+						{
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(ngfAPI.AuthenticationFilterConditionReasonInvalid),
+									Message:            "Invalid AuthenticationFilter",
+								},
+							},
+							ControllerName: gatewayCtlrName,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			k8sClient := createK8sClientFor(&ngfAPI.AuthenticationFilter{})
+
+			for _, af := range test.authenticationFilters {
+				err := k8sClient.Create(context.Background(), af.Source)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			updater := NewUpdater(k8sClient, logr.Discard())
+
+			reqs := PrepareAuthenticationFilterRequests(test.authenticationFilters, transitionTime, gatewayCtlrName)
+
+			g.Expect(reqs).To(HaveLen(test.expectedReqs))
+
+			updater.Update(context.Background(), reqs...)
+
+			for nsname, expected := range test.expected {
+				var authFilter ngfAPI.AuthenticationFilter
+
+				err := k8sClient.Get(context.Background(), nsname, &authFilter)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(helpers.Diff(expected, authFilter.Status)).To(BeEmpty())
+			}
+		})
+	}
+}
+
 func TestBuildInferencePoolStatuses(t *testing.T) {
 	t.Parallel()
 	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
