@@ -1,4 +1,4 @@
-package context_test
+package grpcinfo_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ func TestGrpcInfoInContext(t *testing.T) {
 	grpcInfo := grpcContext.GrpcInfo{Token: "test"}
 
 	newCtx := grpcContext.NewGrpcContext(context.Background(), grpcInfo)
-	info, ok := grpcContext.GrpcInfoFromContext(newCtx)
+	info, ok := grpcContext.FromContext(newCtx)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(info).To(Equal(grpcInfo))
 }
@@ -25,7 +25,7 @@ func TestGrpcInfoNotInContext(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	info, ok := grpcContext.GrpcInfoFromContext(context.Background())
+	info, ok := grpcContext.FromContext(context.Background())
 	g.Expect(ok).To(BeFalse())
 	g.Expect(info).To(Equal(grpcContext.GrpcInfo{}))
 }
