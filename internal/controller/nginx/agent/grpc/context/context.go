@@ -1,4 +1,4 @@
-package context
+package grpcinfo
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 
 // GrpcInfo for storing identity information for the gRPC client.
 type GrpcInfo struct {
-	Token     string `json:"token"`      // auth token that was provided by the gRPC client
-	IPAddress string `json:"ip_address"` // ip address of the agent
+	UUID  string `json:"uuid"`  // unique identifier for the gRPC client
+	Token string `json:"token"` // auth token that was provided by the gRPC client
 }
 
 type contextGRPCKey struct{}
@@ -17,9 +17,9 @@ func NewGrpcContext(ctx context.Context, r GrpcInfo) context.Context {
 	return context.WithValue(ctx, contextGRPCKey{}, r)
 }
 
-// GrpcInfoFromContext returns the GrpcInfo saved in ctx if it exists.
+// FromContext returns the GrpcInfo saved in ctx if it exists.
 // Returns false if there's no GrpcInfo in the context.
-func GrpcInfoFromContext(ctx context.Context) (GrpcInfo, bool) {
+func FromContext(ctx context.Context) (GrpcInfo, bool) {
 	v, ok := ctx.Value(contextGRPCKey{}).(GrpcInfo)
 	return v, ok
 }

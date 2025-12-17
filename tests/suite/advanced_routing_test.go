@@ -120,19 +120,28 @@ func expectRequestToRespondFromExpectedServer(
 	headers, queryParams map[string]string,
 ) error {
 	GinkgoWriter.Printf("Expecting request to respond from the server %q\n", expServerName)
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, headers, queryParams)
+
+	request := framework.Request{
+		URL:         appURL,
+		Address:     address,
+		Timeout:     timeoutConfig.RequestTimeout,
+		Headers:     headers,
+		QueryParams: queryParams,
+	}
+
+	resp, err := framework.Get(request)
 	if err != nil {
 		return err
 	}
 
-	if status != http.StatusOK {
+	if resp.StatusCode != http.StatusOK {
 		statusErr := errors.New("http status was not 200")
 		GinkgoWriter.Printf("ERROR: %v\n", statusErr)
 
 		return statusErr
 	}
 
-	actualServerName, err := extractServerName(body)
+	actualServerName, err := extractServerName(resp.Body)
 	if err != nil {
 		GinkgoWriter.Printf("ERROR extracting server name from response body: %v\n", err)
 

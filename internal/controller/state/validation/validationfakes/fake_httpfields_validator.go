@@ -18,6 +18,19 @@ type FakeHTTPFieldsValidator struct {
 	skipValidationReturnsOnCall map[int]struct {
 		result1 bool
 	}
+	ValidateDurationStub        func(string) (string, error)
+	validateDurationMutex       sync.RWMutex
+	validateDurationArgsForCall []struct {
+		arg1 string
+	}
+	validateDurationReturns struct {
+		result1 string
+		result2 error
+	}
+	validateDurationReturnsOnCall map[int]struct {
+		result1 string
+		result2 error
+	}
 	ValidateFilterHeaderNameStub        func(string) error
 	validateFilterHeaderNameMutex       sync.RWMutex
 	validateFilterHeaderNameArgsForCall []struct {
@@ -233,6 +246,70 @@ func (fake *FakeHTTPFieldsValidator) SkipValidationReturnsOnCall(i int, result1 
 	fake.skipValidationReturnsOnCall[i] = struct {
 		result1 bool
 	}{result1}
+}
+
+func (fake *FakeHTTPFieldsValidator) ValidateDuration(arg1 string) (string, error) {
+	fake.validateDurationMutex.Lock()
+	ret, specificReturn := fake.validateDurationReturnsOnCall[len(fake.validateDurationArgsForCall)]
+	fake.validateDurationArgsForCall = append(fake.validateDurationArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateDurationStub
+	fakeReturns := fake.validateDurationReturns
+	fake.recordInvocation("ValidateDuration", []interface{}{arg1})
+	fake.validateDurationMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fakeReturns.result1, fakeReturns.result2
+}
+
+func (fake *FakeHTTPFieldsValidator) ValidateDurationCallCount() int {
+	fake.validateDurationMutex.RLock()
+	defer fake.validateDurationMutex.RUnlock()
+	return len(fake.validateDurationArgsForCall)
+}
+
+func (fake *FakeHTTPFieldsValidator) ValidateDurationCalls(stub func(string) (string, error)) {
+	fake.validateDurationMutex.Lock()
+	defer fake.validateDurationMutex.Unlock()
+	fake.ValidateDurationStub = stub
+}
+
+func (fake *FakeHTTPFieldsValidator) ValidateDurationArgsForCall(i int) string {
+	fake.validateDurationMutex.RLock()
+	defer fake.validateDurationMutex.RUnlock()
+	argsForCall := fake.validateDurationArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeHTTPFieldsValidator) ValidateDurationReturns(result1 string, result2 error) {
+	fake.validateDurationMutex.Lock()
+	defer fake.validateDurationMutex.Unlock()
+	fake.ValidateDurationStub = nil
+	fake.validateDurationReturns = struct {
+		result1 string
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *FakeHTTPFieldsValidator) ValidateDurationReturnsOnCall(i int, result1 string, result2 error) {
+	fake.validateDurationMutex.Lock()
+	defer fake.validateDurationMutex.Unlock()
+	fake.ValidateDurationStub = nil
+	if fake.validateDurationReturnsOnCall == nil {
+		fake.validateDurationReturnsOnCall = make(map[int]struct {
+			result1 string
+			result2 error
+		})
+	}
+	fake.validateDurationReturnsOnCall[i] = struct {
+		result1 string
+		result2 error
+	}{result1, result2}
 }
 
 func (fake *FakeHTTPFieldsValidator) ValidateFilterHeaderName(arg1 string) error {

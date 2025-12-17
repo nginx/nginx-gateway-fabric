@@ -56,7 +56,7 @@ func (fs *fileService) GetFile(
 	ctx context.Context,
 	req *pb.GetFileRequest,
 ) (*pb.GetFileResponse, error) {
-	gi, ok := grpcContext.GrpcInfoFromContext(ctx)
+	gi, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return nil, agentgrpc.ErrStatusInvalidConnection
 	}
@@ -65,7 +65,7 @@ func (fs *fileService) GetFile(
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	contents, err := fs.getFileContents(req, gi.IPAddress)
+	contents, err := fs.getFileContents(req, gi.UUID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (fs *fileService) GetFileStream(
 	req *pb.GetFileRequest,
 	server grpc.ServerStreamingServer[pb.FileDataChunk],
 ) error {
-	gi, ok := grpcContext.GrpcInfoFromContext(server.Context())
+	gi, ok := grpcContext.FromContext(server.Context())
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
@@ -93,7 +93,7 @@ func (fs *fileService) GetFileStream(
 		return status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	contents, err := fs.getFileContents(req, gi.IPAddress)
+	contents, err := fs.getFileContents(req, gi.UUID)
 	if err != nil {
 		return err
 	}
@@ -187,12 +187,12 @@ func (fs *fileService) UpdateOverview(
 	ctx context.Context,
 	req *pb.UpdateOverviewRequest,
 ) (*pb.UpdateOverviewResponse, error) {
-	gi, ok := grpcContext.GrpcInfoFromContext(ctx)
+	gi, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return &pb.UpdateOverviewResponse{}, agentgrpc.ErrStatusInvalidConnection
 	}
 
-	conn := fs.connTracker.GetConnection(gi.IPAddress)
+	conn := fs.connTracker.GetConnection(gi.UUID)
 	if conn.PodName == "" {
 		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "connection not found")
 	}
