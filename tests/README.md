@@ -15,6 +15,7 @@ This directory contains the tests for NGINX Gateway Fabric. The tests are divide
 - [Common steps for all tests](#common-steps-for-all-tests)
   - [Step 1 - Create a Kubernetes cluster](#step-1---create-a-kubernetes-cluster)
   - [Step 2 - Build and Load Images](#step-2---build-and-load-images)
+    - [GKE](#gke)
 - [Conformance Testing](#conformance-testing)
   - [Step 1 - Install NGINX Gateway Fabric to configured kind cluster](#step-1---install-nginx-gateway-fabric-to-configured-kind-cluster)
     - [Option 1 - Build and install NGINX Gateway Fabric from local to configured kind cluster](#option-1---build-and-install-nginx-gateway-fabric-from-local-to-configured-kind-cluster)
@@ -58,7 +59,7 @@ All the commands below are executed from the `tests` directory. You can see all 
 
 ### Step 1 - Create a Kubernetes cluster
 
-**Important**: Functional tests can only be run on a `kind` cluster. Conformance tests can be run on `kind` or OpenShift clusters (see [OPENSHIFT_CONFORMANCE.md](OPENSHIFT_CONFORMANCE.md) for OpenShift instructions). NFR tests can only be run on a GKE cluster.
+**Important**: Functional tests can only be run on a `kind` cluster. Conformance tests can be run on `kind` or OpenShift clusters (see [OPENSHIFT_CONFORMANCE.md](OPENSHIFT_CONFORMANCE.md) for OpenShift instructions). NFR and longevity tests can only be run on a GKE cluster.
 
 To create a local `kind` cluster:
 
@@ -102,8 +103,7 @@ make update-firewall-with-local-ip
 
 ### Step 2 - Build and Load Images
 
-Loading the images only applies to a `kind` cluster. If using GKE, you will need to tag and push
-your images to a registry that is accessible from GKE.
+Loading the images only applies to a `kind` cluster. If using GKE, see below
 
 ```makefile
 make build-images load-images TAG=$(whoami)
@@ -115,12 +115,23 @@ Or, to build NGF with NGINX Plus enabled (NGINX Plus cert and key must exist in 
 make build-images-with-plus load-images-with-plus TAG=$(whoami)
 ```
 
-When building images to run on GKE, you'll need to specify `GOARCH=amd64` in the build command if your local system doesn't default to that architecture.
-
 For the telemetry test, which requires a OTel collector, build an image with the following variables set:
 
 ```makefile
 TELEMETRY_ENDPOINT=otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317 TELEMETRY_ENDPOINT_INSECURE=true
+```
+
+#### GKE
+
+If running tests on GKE, you will need to tag and push your images to a registry that is accessible from GKE. When building images to run on GKE, you'll need to specify `GOARCH=amd64` in the build command if your local system doesn't default to that architecture.
+
+If running the longevity tests for a release, you should use the `-rc` images that were pushed as part of the release branch pipeline instead. For example, in your `vars.env` file
+
+```text
+TAG=release-2.3-rc
+PREFIX=ghcr.io/nginx/nginx-gateway-fabric
+NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx
+NGINX_PLUS_PREFIX=us-docker.pkg.dev/<GCP-PROJECT-ID>/nginx-gateway-fabric/nginx-plus
 ```
 
 ## Conformance Testing
@@ -242,13 +253,13 @@ The system tests are meant to be run on a live Kubernetes environment to verify 
 are similar to the existing conformance tests, but will verify things such as:
 
 - NGF-specific functionality
-- Non-Functional requirements (NFR) testing (such as performance, scale, etc.)
+- Non-Functional requirements (NFR) testing (such as performance, scale, longevity, etc.)
 
-When running locally, the tests create a port-forward from your NGF Pod to localhost using a port chosen by the
-test framework. Traffic is sent over this port. If running on a GCP VM targeting a GKE cluster, the tests will create an
+When running locally (functional tests), the tests create a port-forward from your NGF Pod to localhost using a port chosen by the
+test framework. Traffic is sent over this port. If running on a GCP VM targeting a GKE cluster (NFR/longevity), the tests will create an
 internal LoadBalancer service which will receive the test traffic.
 
-**Important**: Functional tests can only be run on a `kind` cluster. NFR tests can only be run on a GKE cluster.
+**Important**: Functional tests can only be run on a `kind` cluster. NFR/longevity tests can only be run on a GKE cluster.
 
 Directory structure is as follows:
 
