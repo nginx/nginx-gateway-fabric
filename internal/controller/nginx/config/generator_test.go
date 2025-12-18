@@ -89,7 +89,7 @@ func TestGenerate(t *testing.T) {
 		CertBundles: map[dataplane.CertBundleID]dataplane.CertBundle{
 			"test-certbundle": []byte("test-cert"),
 		},
-		AuthSecrets: map[dataplane.AuthUserFileID]dataplane.AuthUserData{
+		AuthSecrets: map[dataplane.AuthFileID]dataplane.AuthFileData{
 			"default_auth-basic-user": []byte("user:$apr1$cred"),
 		},
 		Telemetry: dataplane.Telemetry{

@@ -723,13 +723,13 @@ func updateLocationAuthenticationFilter(
 ) http.Location {
 	if authenticationFilter != nil {
 		if authenticationFilter.Basic != nil {
-			id := dataplane.GenerateAuthUserFileID(
+			id := dataplane.GenerateAuthFileID(
 				authenticationFilter.Basic.SecretNamespace,
 				authenticationFilter.Basic.SecretName,
 			)
 			location.AuthBasic = &http.AuthBasic{
-				Realm:    authenticationFilter.Basic.Realm,
-				UserFile: generateAuthBasicUserFileName(id),
+				Realm: authenticationFilter.Basic.Realm,
+				File:  generateAuthBasicFileName(id),
 			}
 		}
 	}
