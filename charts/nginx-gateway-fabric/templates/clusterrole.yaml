@@ -137,6 +137,9 @@ rules:
   {{- if .Values.nginxGateway.snippetsFilters.enable }}
   - snippetsfilters
   {{- end }}
+  {{- if .Values.nginxGateway.snippetsPolicies.enable }}
+  - snippetspolicies
+  {{- end }}
   verbs:
   - list
   - watch
@@ -150,6 +153,9 @@ rules:
   - authenticationfilters/status
   {{- if .Values.nginxGateway.snippetsFilters.enable }}
   - snippetsfilters/status
+  {{- end }}
+  {{- if .Values.nginxGateway.snippetsPolicies.enable }}
+  - snippetspolicies/status
   {{- end }}
   verbs:
   - update

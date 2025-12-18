@@ -1064,6 +1064,20 @@
           "title": "snippetsFilters",
           "type": "object"
         },
+        "snippetsPolicies": {
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable SnippetsPolicies feature. SnippetsPolicies allow inserting NGINX configuration into the generated NGINX\nconfig for Gateway resources.",
+              "required": [],
+              "title": "enable",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "snippetsPolicies",
+          "type": "object"
+        },
         "terminationGracePeriodSeconds": {
           "default": 30,
           "description": "The termination grace period of the NGINX Gateway Fabric control plane pod.",

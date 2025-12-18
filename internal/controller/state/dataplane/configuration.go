@@ -103,6 +103,7 @@ func BuildConfiguration(
 		Logging:           buildLogging(gateway),
 		NginxPlus:         nginxPlus,
 		MainSnippets:      buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
+		Policies:          buildPolicies(gateway, gateway.Policies),
 		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections: buildWorkerConnections(gateway),
 	}

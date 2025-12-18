@@ -64,6 +64,8 @@ type ChangeProcessorConfig struct {
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
 	GatewayClassName string
+	// SnippetsPolicies indicates if SnippetsPolicies are enabled.
+	SnippetsPolicies bool
 	// FeaturesFlags holds the feature flags for building the Graph.
 	FeatureFlags graph.FeatureFlags
 }
@@ -130,9 +132,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 	// Use this object store for all NGF policies
 	commonPolicyObjectStore := newNGFPolicyObjectStore(clusterStore.NGFPolicies, cfg.MustExtractGVK)
 
-	trackingUpdater := newChangeTrackingUpdater(
-		cfg.MustExtractGVK,
-		[]changeTrackingUpdaterObjectTypeCfg{
+	trackingUpdaterCfg := []changeTrackingUpdaterObjectTypeCfg{
 			{
 				gvk:       cfg.MustExtractGVK(&v1.GatewayClass{}),
 				store:     newObjectStoreMapAdapter(clusterStore.GatewayClasses),
@@ -243,7 +243,19 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 				store:     newObjectStoreMapAdapter(clusterStore.AuthenticationFilters),
 				predicate: nil, // we always want to write status to AuthenticationFilters so we don't filter them out
 			},
-		},
+		}
+
+	if cfg.SnippetsPolicies {
+		trackingUpdaterCfg = append(trackingUpdaterCfg, changeTrackingUpdaterObjectTypeCfg{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.SnippetsPolicy{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		})
+	}
+
+	trackingUpdater := newChangeTrackingUpdater(
+		cfg.MustExtractGVK,
+		trackingUpdaterCfg,
 	)
 
 	processor.getAndResetClusterStateChanged = trackingUpdater.getAndResetChangedStatus

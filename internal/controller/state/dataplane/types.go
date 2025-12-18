@@ -45,6 +45,8 @@ type Configuration struct {
 	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
 	MainSnippets []Snippet
+	// Policies holds the policies attached to the Gateway.
+	Policies []policies.Policy
 	// Upstreams holds all unique http Upstreams.
 	Upstreams []Upstream
 	// NginxPlus specifies NGINX Plus additional settings.

@@ -1,0 +1,12 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsPolicy
+metadata:
+  name: invalid-duplicate-sp
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  snippets:
+  - context: main
+    value: "worker_processes 1;"

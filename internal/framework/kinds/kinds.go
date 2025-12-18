@@ -51,6 +51,8 @@ const (
 	NginxProxy = "NginxProxy"
 	// SnippetsFilter is the SnippetsFilter kind.
 	SnippetsFilter = "SnippetsFilter"
+	// SnippetsPolicy is the SnippetsPolicy kind.
+	SnippetsPolicy = "SnippetsPolicy"
 	// AuthenticationFilter is the AuthenticationFilter kind.
 	AuthenticationFilter = "AuthenticationFilter"
 	// UpstreamSettingsPolicy is the UpstreamSettingsPolicy kind.

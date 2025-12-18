@@ -235,6 +235,11 @@ nginxGateway:
     # config for HTTPRoute and GRPCRoute resources.
     enable: false
 
+  snippetsPolicies:
+    # -- Enable SnippetsPolicies feature. SnippetsPolicies allow inserting NGINX configuration into the generated NGINX
+    # config for Gateway resources.
+    enable: false
+
 # -- The nginx section contains the configuration for all NGINX data plane deployments
 # installed by the NGINX Gateway Fabric control plane.
 nginx:

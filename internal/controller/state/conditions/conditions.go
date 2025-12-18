@@ -131,6 +131,10 @@ const (
 	// ObservabilityPolicy is applied to a HTTPRoute, or GRPCRoute.
 	ObservabilityPolicyAffected v1.PolicyConditionType = "ObservabilityPolicyAffected"
 
+	// SnippetsPolicyAffected is used with the "PolicyAffected" condition when a
+	// SnippetsPolicy is applied to a Gateway.
+	SnippetsPolicyAffected v1.PolicyConditionType = "SnippetsPolicyAffected"
+
 	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
 	// ObservabilityPolicy or ClientSettingsPolicy is applied to Gateways or Routes.
 	PolicyAffectedReason v1.PolicyConditionReason = "PolicyAffected"
@@ -1179,6 +1183,17 @@ func NewClientSettingsPolicyAffected() Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
 		Message: "The ClientSettingsPolicy is applied to the resource",
+	}
+}
+
+// NewSnippetsPolicyAffected returns a Condition that indicates that a SnippetsPolicy
+// is applied to the resource.
+func NewSnippetsPolicyAffected() Condition {
+	return Condition{
+		Type:    string(SnippetsPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "The SnippetsPolicy is applied to the resource",
 	}
 }
 

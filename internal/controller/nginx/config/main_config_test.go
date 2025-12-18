@@ -6,6 +6,7 @@ import (
 
 	. "github.com/onsi/gomega"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
@@ -44,7 +45,7 @@ func TestExecuteMainConfig_Telemetry(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf)
+			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			if test.expLoadModuleDirective {
@@ -67,7 +68,7 @@ func TestExecuteMainConfig_Logging(t *testing.T) {
 
 	g := NewWithT(t)
 
-	res := executeMainConfig(conf)
+	res := executeMainConfig(conf, &policiesfakes.FakeGenerator{})
 	g.Expect(res).To(HaveLen(1))
 	g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 
@@ -96,7 +97,7 @@ func TestExecuteMainConfig_Snippets(t *testing.T) {
 
 	g := NewWithT(t)
 
-	res := executeMainConfig(conf)
+	res := executeMainConfig(conf, &policiesfakes.FakeGenerator{})
 	g.Expect(res).To(HaveLen(4))
 
 	// sort results by filename
@@ -170,7 +171,7 @@ func TestExecuteMainConfig_WorkerConnections(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf)
+			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			g.Expect(string(res[0].data)).To(ContainSubstring("error_log stderr"))

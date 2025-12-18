@@ -7,6 +7,7 @@ import (
 	filesHelper "github.com/nginx/agent/v3/pkg/files"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
@@ -25,8 +26,17 @@ type mainConfig struct {
 	Conf     dataplane.Configuration
 }
 
-func executeMainConfig(conf dataplane.Configuration) []executeResult {
+func newExecuteMainConfigFunc(generator policies.Generator) executeFunc {
+	return func(conf dataplane.Configuration) []executeResult {
+		return executeMainConfig(conf, generator)
+	}
+}
+
+func executeMainConfig(conf dataplane.Configuration, generator policies.Generator) []executeResult {
 	includes := createIncludesFromSnippets(conf.MainSnippets)
+
+	policyIncludes := createIncludesFromPolicyGenerateResult(generator.GenerateForMain(conf.Policies))
+	includes = append(includes, policyIncludes...)
 
 	mc := mainConfig{
 		Conf:     conf,

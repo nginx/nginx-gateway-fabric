@@ -275,7 +275,6 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.name` | The name of the NGINX Gateway Fabric deployment - if not present, then by default uses release name given during installation. | string | `""` |
 | `nginxGateway.nodeSelector` | The nodeSelector of the NGINX Gateway Fabric control plane pod. | object | `{}` |
 | `nginxGateway.podAnnotations` | Set of custom annotations for the NGINX Gateway Fabric pods. | object | `{}` |
-| `nginxGateway.priorityClassName` | The priority class name for the NGINX Gateway Fabric control plane pod. | string | `""` |
 | `nginxGateway.productTelemetry.enable` | Enable the collection of product telemetry. | bool | `true` |
 | `nginxGateway.readinessProbe.enable` | Enable the /readyz endpoint on the control plane. | bool | `true` |
 | `nginxGateway.readinessProbe.initialDelaySeconds` | The number of seconds after the Pod has started before the readiness probes are initiated. | int | `3` |
