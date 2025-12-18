@@ -94,7 +94,7 @@ func BuildConfiguration(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
 		),
-		AuthBasicSecrets:  buildAuthBasicSecrets(g.ReferencedSecrets),
+		AuthSecrets:       buildAuthSecrets(g.ReferencedSecrets),
 		Telemetry:         buildTelemetry(g, gateway),
 		BaseHTTPConfig:    baseHTTPConfig,
 		BaseStreamConfig:  baseStreamConfig,
@@ -347,12 +347,12 @@ func buildCertBundles(
 	return bundles
 }
 
-func buildAuthBasicSecrets(secrets map[types.NamespacedName]*graph.Secret) map[AuthBasicUserFileID]AuthBasicUserData {
-	authBasics := make(map[AuthBasicUserFileID]AuthBasicUserData)
+func buildAuthSecrets(secrets map[types.NamespacedName]*graph.Secret) map[AuthUserFileID]AuthUserData {
+	authBasics := make(map[AuthUserFileID]AuthUserData)
 
 	for nsname, secret := range secrets {
 		if secret.Source.Type == coreV1.SecretType(graph.SecretTypeHtpasswd) {
-			id := generateAuthBasicUserFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
+			id := AuthUserFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
 			authBasics[id] = secret.Source.Data[graph.AuthKeyBasic]
 		}
 	}
@@ -994,8 +994,9 @@ func generateCertBundleID(caCertRef types.NamespacedName) CertBundleID {
 	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", caCertRef.Namespace, caCertRef.Name))
 }
 
-func generateAuthBasicUserFileID(id string) AuthBasicUserFileID {
-	return AuthBasicUserFileID(id)
+// GenerateAuthUserFileID is used to generate IDs for both basic auth and jwt auth user files.
+func GenerateAuthUserFileID(namespace, name string) AuthUserFileID {
+	return AuthUserFileID(fmt.Sprintf("%s_%s", namespace, name))
 }
 
 func telemetryEnabled(gw *graph.Gateway) bool {

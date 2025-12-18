@@ -133,7 +133,7 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 		files = append(files, generateCertBundle(id, bundle))
 	}
 
-	for id, data := range conf.AuthBasicSecrets {
+	for id, data := range conf.AuthSecrets {
 		files = append(files, generateAuthBasicUserFile(id, data))
 	}
 	return files
@@ -256,7 +256,7 @@ func generateCertBundleFileName(id dataplane.CertBundleID) string {
 	return filepath.Join(secretsFolder, string(id)+".crt")
 }
 
-func generateAuthBasicUserFile(id dataplane.AuthBasicUserFileID, data []byte) agent.File {
+func generateAuthBasicUserFile(id dataplane.AuthUserFileID, data []byte) agent.File {
 	return agent.File{
 		Meta: &pb.FileMeta{
 			Name:        generateAuthBasicUserFileName(id),
@@ -268,6 +268,6 @@ func generateAuthBasicUserFile(id dataplane.AuthBasicUserFileID, data []byte) ag
 	}
 }
 
-func generateAuthBasicUserFileName(id dataplane.AuthBasicUserFileID) string {
+func generateAuthBasicUserFileName(id dataplane.AuthUserFileID) string {
 	return filepath.Join(secretsFolder, string(id))
 }

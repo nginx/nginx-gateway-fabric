@@ -32,8 +32,8 @@ type Configuration struct {
 	BaseStreamConfig BaseStreamConfig
 	// SSLKeyPairs holds all unique SSLKeyPairs.
 	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
-	// AuthBasicSecrets holds all unique secrets for basic authentication.
-	AuthBasicSecrets map[AuthBasicUserFileID]AuthBasicUserData
+	// AuthSecrets holds all unique secrets for authentication.
+	AuthSecrets map[AuthUserFileID]AuthUserData
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
@@ -73,15 +73,16 @@ type SSLKeyPairID string
 // The ID is safe to use as a file name.
 type CertBundleID string
 
-// AuthBasicUserFileID is a unique identifier for a basic auth user file.
+// AuthUserFileID is a unique identifier for an auth user file.
+// This can be both for basic auth and jwt auth user files.
 // The ID is safe to use as a file name.
-type AuthBasicUserFileID string
+type AuthUserFileID string
 
 // CertBundle is a Certificate bundle.
 type CertBundle []byte
 
-// AuthBasicUserData is the data for a basic auth user file.
-type AuthBasicUserData []byte
+// AuthUserData is the data for a basic auth user file.
+type AuthUserData []byte
 
 // SSLKeyPair is an SSL private/public key pair.
 type SSLKeyPair struct {

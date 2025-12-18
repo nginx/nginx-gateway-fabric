@@ -89,7 +89,7 @@ func TestGenerate(t *testing.T) {
 		CertBundles: map[dataplane.CertBundleID]dataplane.CertBundle{
 			"test-certbundle": []byte("test-cert"),
 		},
-		AuthBasicSecrets: map[dataplane.AuthBasicUserFileID]dataplane.AuthBasicUserData{
+		AuthSecrets: map[dataplane.AuthUserFileID]dataplane.AuthUserData{
 			"default_auth-basic-user": []byte("user:$apr1$cred"),
 		},
 		Telemetry: dataplane.Telemetry{
@@ -250,8 +250,8 @@ func TestGenerate(t *testing.T) {
 	g.Expect(mgmtConf).To(ContainSubstring("ssl_certificate_key /etc/nginx/secrets/mgmt-tls.key"))
 
 	g.Expect(files[11].Meta.Name).To(Equal("/etc/nginx/secrets/default_auth-basic-user"))
-	authBasicSecrets := string(files[11].Contents)
-	g.Expect(authBasicSecrets).To(Equal("user:$apr1$cred"))
+	AuthSecrets := string(files[11].Contents)
+	g.Expect(AuthSecrets).To(Equal("user:$apr1$cred"))
 
 	g.Expect(files[12].Meta.Name).To(Equal("/etc/nginx/secrets/license.jwt"))
 	g.Expect(string(files[12].Contents)).To(Equal("license"))
