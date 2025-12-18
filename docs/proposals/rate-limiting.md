@@ -51,7 +51,6 @@ server {
     - Act as a circuit-breaker for heavy endpoints.
     - Enable Canary / blue-green safety.
     - Add additional security to developer namespaces.
-    - Fit my specific needs.
 
 ## API
 
@@ -147,9 +146,11 @@ type RateLimitRule struct {
     // ZoneSize is the size of the shared memory zone.
     //
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    ZoneSize Size `json:"zoneSize"`
+    //
+    // +optional
+    ZoneSize *Size `json:"zoneSize"`
 
-    // Delay specifies a limit at which excessive requests become delayed. Default value is zero, i.e. all excessive requests are delayed.
+    // Delay specifies a limit at which excessive requests become delayed. Default value is zero, which means all excessive requests are delayed.
     //
     // Default: 0
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
@@ -440,7 +441,7 @@ Key validation rules:
 ## Alternatives
 
 - **Direct Policy**: If there's no strong use case for the Cluster Operator setting defaults for these settings on a Gateway, we could use a Direct Policy. However, since Rate Limit rules should be able to be defined on both Gateway and Routes, an Inherited Policy is the only Policy type for our solution.
-- **ExtensionRef approach**: We could use Gateway API's extensionRef mechanism instead of a Policy. However, Policy attachment is more appropriate for this use case as it follows the established pattern in NGINX Gateway Fabric, provides better status reporting, and allows for Rate Limit rules to be set by the Cluster Operator on a Gateway.
+- **ExtensionRef approach**: We could use Gateway API's extensionRef, aka Filter option, mechanism instead of a Policy. However, Policy attachment is more appropriate for this use case as it follows the established pattern in NGINX Gateway Fabric, provides better status reporting, and allows for Rate Limit rules to be set by the Cluster Operator on a Gateway.
 - Allow `RateLimitPolicies` attached at the Route level to overwrite rules set at the Gateway level. Currently if a Route `location` inherits a rate limit rule from a Gateway, there is no way to disable it or override it. The workaround around this problem is to either remove the Route from the Gateway, or remove the `RateLimitPolicy` from attaching at the Gateway level, and instead attach to the Routes on the Gateway. However, this is inconvinient and may be a common scenario warranting supporting through either a field in the `RateLimitRule` or changing how `RateLimitPolicies` interact with each other.
 
 ## Future Work
