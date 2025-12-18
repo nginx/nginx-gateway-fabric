@@ -103,9 +103,9 @@ type RateLimitPolicySpec struct {
     //
     // +kubebuilder:validation:MinItems=1
     // +kubebuilder:validation:MaxItems=16
-    // +kubebuilder:validation:XValidation:message="TargetRefs entries must have kind Gateway, HTTPRoute, or GRPCRoute",rule="self.all(t, t.kind == 'Gateway' || t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute')"
-    // +kubebuilder:validation:XValidation:message="TargetRefs entries must have group gateway.networking.k8s.io",rule="self.all(t, t.group == 'gateway.networking.k8s.io')"
-    // +kubebuilder:validation:XValidation:message="TargetRefs must be unique",rule="self.all(t1, self.exists_one(t2, t1.group == t2.group && t1.kind == t2.kind && t1.name == t2.name))"
+    // +kubebuilder:validation:XValidation:message="TargetRefs entries Kind must be one of: Gateway, HTTPRoute, or GRPCRoute",rule="self.all(t, t.kind == 'Gateway' || t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute')"
+	  // +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.all(t, t.group=='gateway.networking.k8s.io')"
+	  // +kubebuilder:validation:XValidation:message="TargetRef Kind and Name combination must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name) && (p1.kind == p2.kind)))"
     TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 
     // RateLimit defines the Rate Limit settings.
@@ -148,7 +148,7 @@ type RateLimitRule struct {
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
     //
     // +optional
-    ZoneSize *Size `json:"zoneSize"`
+    ZoneSize *Size `json:"zoneSize,omitempty"`
 
     // Delay specifies a limit at which excessive requests become delayed. Default value is zero, which means all excessive requests are delayed.
     //
