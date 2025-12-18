@@ -200,18 +200,6 @@ type RateLimitRule struct {
     // +kubebuilder:validation:Minimum=400
     // +kubebuilder:validation:Maximum=599
     RejectCode *int32 `json:"rejectCode,omitempty"`
-
-    // Scale enables a constant rate-limit by dividing the configured rate by the number of NGINX
-    // replicas for a Gateway. This adjustment ensures that the rate-limit remains consistent,
-    // even as the number of NGINX replicas fluctuates due to autoscaling. NGINX pods belonging to a separate Gateway
-    // will not have an affect on the calculated rate. This will not work properly if requests
-    // from a client are not evenly distributed across all NGINX pods (Such as with sticky sessions, long
-    // lived TCP Connections with many requests, and so forth).
-    //
-    // Default: false
-    //
-    // +optional
-    Scale *bool `json:"scale,omitempty"`
 }
 
 // Size is a string value representing a size. Size can be specified in bytes, kilobytes (k), megabytes (m).
@@ -346,7 +334,6 @@ spec:
         dryRun: false
         logLevel: error
         rejectCode: 503
-        scale: false
 status:
   ancestors:
   - ancestorRef:
@@ -393,7 +380,6 @@ spec:
         dryRun: false
         logLevel: error
         rejectCode: 503
-        scale: true
 ```
 
 ## Attachment and Inheritance
@@ -461,6 +447,7 @@ Key validation rules:
 
 - Add support for global rate limiting. In NGINX Plus, this can be done by using the `ngx_stream_zone_sync_module` to extend the solution for Local Rate Limiting and provide a way for synchronizing contents of shared memory zones across NGINX Plus instances. Support for `zone_sync` is a separate enhancement and can either be completed along side global rate limiting support or separately.
 - Add Conditional Rate Limiting. Users would also like to set conditions for a rate limit policy, where if a certain condition isn't met, the request would either go to a default rate limit policy, or would not be rate limited. This is designed to be used in combination with one or more rate limit policies. For example, multiple rate limit policies with that condition on JWT level can be used to apply different tiers of rate limit based on the value of a JWT claim (ie. more req/s for a higher level, less req/s for a lower level).
+- Add some sort of Scale field for local rate limiting. This would dynamically calculate the rate of a `RateLimitPolicy` based on number of NGINX replicas.
 
 ## References
 
