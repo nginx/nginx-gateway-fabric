@@ -571,7 +571,11 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	}
 
-	addFilters(routeHR5, []graph.Filter{redirect, extRefFilterSnippetsFilter, extRefFilterAuthenticationFilter})
+	addFilters(routeHR5, []graph.Filter{
+		redirect,
+		extRefFilterSnippetsFilter,
+		extRefFilterAuthenticationFilter,
+	})
 	expRedirect := HTTPRequestRedirectFilter{
 		Hostname: helpers.GetPointer("foo.example.com"),
 	}

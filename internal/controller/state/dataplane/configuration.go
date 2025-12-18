@@ -348,7 +348,7 @@ func buildCertBundles(
 }
 
 func buildAuthSecrets(secrets map[types.NamespacedName]*graph.Secret) map[AuthUserFileID]AuthUserData {
-	authBasics := make(map[AuthUserFileID]AuthUserData)
+	authBasics := make(map[AuthUserFileID]AuthUserData, len(secrets))
 
 	for nsname, secret := range secrets {
 		if secret.Source.Type == coreV1.SecretType(graph.SecretTypeHtpasswd) {

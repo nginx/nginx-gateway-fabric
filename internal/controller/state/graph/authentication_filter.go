@@ -54,7 +54,7 @@ func processAuthenticationFilters(
 		return nil
 	}
 
-	processed := make(map[types.NamespacedName]*AuthenticationFilter)
+	processed := make(map[types.NamespacedName]*AuthenticationFilter, len(authenticationFilters))
 
 	for nsname, af := range authenticationFilters {
 		if cond := validateAuthenticationFilter(af, nsname, secretResolver); cond != nil {
