@@ -54,7 +54,7 @@ jobs:
         id: goproxy
         run: |
           if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
-          GOPROXY_VALUE="direct"
+          GOPROXY_VALUE="https://proxy.golang.org,direct"
           else
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
