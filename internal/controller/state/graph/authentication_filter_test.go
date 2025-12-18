@@ -3,12 +3,11 @@ package graph
 import (
 	"testing"
 
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-
-	. "github.com/onsi/gomega"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -28,9 +27,9 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 	}
 	secretResolver := newSecretResolver(secrets)
 
-	filter1 := createAuthenticationFilter("test", "filter-1", "secret1")
-	filter2 := createAuthenticationFilter("other", "filter-2", "secret2")
-	invalidFilter := createAuthenticationFilter("test", "invalid", "unresolved")
+	filter1 := createAuthenticationFilter(filter1NsName, "secret1", true)
+	filter2 := createAuthenticationFilter(filter2NsName, "secret2", true)
+	invalidFilter := createAuthenticationFilter(invalidFilterNsName, "unresolved", false)
 
 	tests := []struct {
 		authenticationFiltersInput map[types.NamespacedName]*ngfAPI.AuthenticationFilter
@@ -45,25 +44,25 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 		{
 			name: "mix valid and invalid authentication filters",
 			authenticationFiltersInput: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{
-				filter1NsName:       filter1,
-				filter2NsName:       filter2,
-				invalidFilterNsName: invalidFilter,
+				filter1NsName:       filter1.Source,
+				filter2NsName:       filter2.Source,
+				invalidFilterNsName: invalidFilter.Source,
 			},
 			expProcessed: map[types.NamespacedName]*AuthenticationFilter{
 				filter1NsName: {
-					Source:     filter1,
+					Source:     filter1.Source,
 					Conditions: nil,
 					Valid:      true,
 					Referenced: false,
 				},
 				filter2NsName: {
-					Source:     filter2,
+					Source:     filter2.Source,
 					Conditions: nil,
 					Valid:      true,
 					Referenced: false,
 				},
 				invalidFilterNsName: {
-					Source: invalidFilter,
+					Source: invalidFilter.Source,
 					Conditions: []conditions.Condition{
 						conditions.NewAuthenticationFilterInvalid(
 							"spec.basic.secretRef: Invalid value: \"unresolved\": " +
@@ -104,7 +103,10 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			name: "valid Basic auth filter",
 			args: args{
 				secNsName: types.NamespacedName{Namespace: "test", Name: "af"},
-				filter:    createAuthenticationFilter("test", "af", "hp"),
+				filter: createAuthenticationFilter(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"hp",
+					true).Source,
 				secrets: map[types.NamespacedName]*corev1.Secret{
 					{Namespace: "test", Name: "hp"}: createHtpasswdSecret("test", "hp", true),
 				},
@@ -114,7 +116,10 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 		{
 			name: "invalid: secret does not exist",
 			args: args{
-				filter:    createAuthenticationFilter("test", "af", "not-found"),
+				filter: createAuthenticationFilter(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"not-found",
+					false).Source,
 				secNsName: types.NamespacedName{Namespace: "test", Name: "af"},
 				secrets:   map[types.NamespacedName]*corev1.Secret{},
 			},
@@ -125,7 +130,10 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 		{
 			name: "invalid: unsupported secret type",
 			args: args{
-				filter:    createAuthenticationFilter("test", "af", "secret-type"),
+				filter: createAuthenticationFilter(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"secret-type",
+					false).Source,
 				secNsName: types.NamespacedName{Namespace: "test", Name: "secret-type"},
 				secrets: map[types.NamespacedName]*corev1.Secret{
 					{Namespace: "test", Name: "secret-type"}: {
@@ -142,7 +150,10 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 		{
 			name: "invalid: htpasswd secret missing required key",
 			args: args{
-				filter:    createAuthenticationFilter("test", "af", "hp-missing"),
+				filter: createAuthenticationFilter(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"hp-missing",
+					false).Source,
 				secNsName: types.NamespacedName{Namespace: "test", Name: "af"},
 				secrets: map[types.NamespacedName]*corev1.Secret{
 					{Namespace: "test", Name: "hp-missing"}: createHtpasswdSecret("test", "hp-missing", false),
@@ -179,30 +190,11 @@ func TestGetAuthenticationFilterResolverForNamespace(t *testing.T) {
 	fooAf1NsName := types.NamespacedName{Name: "af1", Namespace: "foo"}
 	fooAf2InvalidNsName := types.NamespacedName{Name: "af2-invalid", Namespace: "foo"}
 
-	createAuthenticationFilter := func(nsname types.NamespacedName, valid bool) *AuthenticationFilter {
-		return &AuthenticationFilter{
-			Source: &ngfAPI.AuthenticationFilter{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      nsname.Name,
-					Namespace: nsname.Namespace,
-				},
-				Spec: ngfAPI.AuthenticationFilterSpec{
-					Type: ngfAPI.AuthTypeBasic,
-					Basic: &ngfAPI.BasicAuth{
-						Realm:     "realm",
-						SecretRef: ngfAPI.LocalObjectReference{Name: "hp"},
-					},
-				},
-			},
-			Valid: valid,
-		}
-	}
-
 	createAuthenticationFilterMap := func() map[types.NamespacedName]*AuthenticationFilter {
 		return map[types.NamespacedName]*AuthenticationFilter{
-			defaultAf1NsName:    createAuthenticationFilter(defaultAf1NsName, true),
-			fooAf1NsName:        createAuthenticationFilter(fooAf1NsName, true),
-			fooAf2InvalidNsName: createAuthenticationFilter(fooAf2InvalidNsName, false),
+			defaultAf1NsName:    createAuthenticationFilter(defaultAf1NsName, "hp", true),
+			fooAf1NsName:        createAuthenticationFilter(fooAf1NsName, "hp", true),
+			fooAf2InvalidNsName: createAuthenticationFilter(fooAf2InvalidNsName, "hp", false),
 		}
 	}
 
@@ -341,18 +333,21 @@ func createHtpasswdSecret(ns, name string, withAuth bool) *corev1.Secret {
 	return sec
 }
 
-func createAuthenticationFilter(ns, name, secretName string) *ngfAPI.AuthenticationFilter {
-	return &ngfAPI.AuthenticationFilter{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: ns,
-			Name:      name,
-		},
-		Spec: ngfAPI.AuthenticationFilterSpec{
-			Type: ngfAPI.AuthTypeBasic,
-			Basic: &ngfAPI.BasicAuth{
-				Realm:     "realm",
-				SecretRef: ngfAPI.LocalObjectReference{Name: secretName},
+func createAuthenticationFilter(nsname types.NamespacedName, secretName string, valid bool) *AuthenticationFilter {
+	return &AuthenticationFilter{
+		Source: &ngfAPI.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: nsname.Namespace,
+				Name:      nsname.Name,
+			},
+			Spec: ngfAPI.AuthenticationFilterSpec{
+				Type: ngfAPI.AuthTypeBasic,
+				Basic: &ngfAPI.BasicAuth{
+					Realm:     "realm",
+					SecretRef: ngfAPI.LocalObjectReference{Name: secretName},
+				},
 			},
 		},
+		Valid: valid,
 	}
 }
