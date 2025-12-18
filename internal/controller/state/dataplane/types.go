@@ -176,7 +176,7 @@ type HTTPFilters struct {
 	// Unlike the core and extended filters, there can be more than one SnippetsFilters defined on a routing rule.
 	SnippetsFilters []SnippetsFilter
 	// AuthenticationFilter holds the AuthenticationFilter for the MatchRule.
-	// Unlike SnippetsFilters, there can be only one AuthenticationFilter defined per MatchRule.
+	// Similar to other core and extended filter, there can be only one AuthenticationFilter defined on a route rule.
 	AuthenticationFilter *AuthenticationFilter
 }
 
