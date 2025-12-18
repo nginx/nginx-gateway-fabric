@@ -31,3 +31,15 @@ func (p *UpstreamSettingsPolicy) GetPolicyStatus() gatewayv1.PolicyStatus {
 func (p *UpstreamSettingsPolicy) SetPolicyStatus(status gatewayv1.PolicyStatus) {
 	p.Status = status
 }
+
+func (p *SnippetsPolicy) GetTargetRefs() []gatewayv1.LocalPolicyTargetReference {
+	return p.Spec.TargetRefs
+}
+
+func (p *SnippetsPolicy) GetPolicyStatus() gatewayv1.PolicyStatus {
+	return p.Status
+}
+
+func (p *SnippetsPolicy) SetPolicyStatus(status gatewayv1.PolicyStatus) {
+	p.Status = status
+}

@@ -1,0 +1,16 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsPolicy
+metadata:
+  name: valid-sp
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  snippets:
+  - context: main
+    value: "worker_priority 0;"
+  - context: http
+    value: "aio off;"
+  - context: http.server
+    value: "auth_delay 0s;"

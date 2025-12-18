@@ -1,0 +1,140 @@
+/*
+Copyright 2025 The NGINX Gateway Fabric Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package snippetspolicy
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+)
+
+const (
+	mainTemplate = `
+# SnippetsPolicy %s for Gateway %s main context
+%s
+`
+	httpTemplate = `
+# SnippetsPolicy %s for Gateway %s http context
+%s
+`
+	serverTemplate = `
+# SnippetsPolicy %s for Gateway %s server context in listener %s
+%s
+`
+	locationTemplate = `
+# SnippetsPolicy %s for Gateway %s location context with match key %s
+%s
+`
+)
+
+// Generator generates NGINX configuration snippets for SnippetsPolicies.
+type Generator struct {
+	policies.UnimplementedGenerator
+}
+
+// NewGenerator returns a new instance of Generator.
+func NewGenerator() *Generator {
+	return &Generator{}
+}
+
+// GenerateForMain generates policy configuration for the main block.
+func (g *Generator) GenerateForMain(pols []policies.Policy) policies.GenerateResultFiles {
+	return g.generate(pols, v1alpha1.NginxContextMain, "")
+}
+
+// GenerateForHTTP generates policy configuration for the http block.
+func (g *Generator) GenerateForHTTP(pols []policies.Policy) policies.GenerateResultFiles {
+	return g.generate(pols, v1alpha1.NginxContextHTTP, "")
+}
+
+// GenerateForServer generates policy configuration for the server block.
+func (g *Generator) GenerateForServer(pols []policies.Policy, server http.Server) policies.GenerateResultFiles {
+	return g.generate(pols, v1alpha1.NginxContextHTTPServer, server.Listen)
+}
+
+// GenerateForLocation generates policy configuration for the location block.
+func (g *Generator) GenerateForLocation(pols []policies.Policy, location http.Location) policies.GenerateResultFiles {
+	return g.generate(pols, v1alpha1.NginxContextHTTPServerLocation, location.HTTPMatchKey)
+}
+
+func (g *Generator) generate(
+	pols []policies.Policy,
+	context v1alpha1.NginxContext,
+	id string,
+) policies.GenerateResultFiles {
+	var files policies.GenerateResultFiles
+
+	for _, policy := range pols {
+		sp, ok := policy.(*v1alpha1.SnippetsPolicy)
+		if !ok {
+			continue
+		}
+
+		for _, snippet := range sp.Spec.Snippets {
+			if snippet.Context != context {
+				continue
+			}
+
+			for _, gwRef := range sp.Spec.TargetRefs {
+				// TargetRef info for file path and comment
+				gwNsName := fmt.Sprintf("%s-%s", sp.GetNamespace(), gwRef.Name) // Assuming local target ref implies same namespace
+
+				policyNsName := fmt.Sprintf("%s/%s", sp.GetNamespace(), sp.GetName())
+
+				// Build content and filename
+				var content string
+				var filename string
+
+				switch context {
+				case v1alpha1.NginxContextMain:
+					content = fmt.Sprintf(mainTemplate, policyNsName, gwNsName, snippet.Value)
+					filename = filepath.Join(
+						"includes", "policy", gwNsName,
+						fmt.Sprintf("SnippetsPolicy_main_%s.conf", sp.GetName()),
+					)
+				case v1alpha1.NginxContextHTTP:
+					content = fmt.Sprintf(httpTemplate, policyNsName, gwNsName, snippet.Value)
+					filename = filepath.Join(
+						"includes", "policy", gwNsName,
+						fmt.Sprintf("SnippetsPolicy_http_%s.conf", sp.GetName()),
+					)
+				case v1alpha1.NginxContextHTTPServer:
+					content = fmt.Sprintf(serverTemplate, policyNsName, gwNsName, id, snippet.Value)
+					filename = filepath.Join(
+						"includes", "policy", gwNsName, id,
+						fmt.Sprintf("SnippetsPolicy_server_%s.conf", sp.GetName()),
+					)
+				case v1alpha1.NginxContextHTTPServerLocation:
+					content = fmt.Sprintf(locationTemplate, policyNsName, gwNsName, id, snippet.Value)
+					filename = filepath.Join(
+						"includes", "policy", gwNsName, id,
+						fmt.Sprintf("SnippetsPolicy_location_%s.conf", sp.GetName()),
+					)
+				}
+
+				files = append(files, policies.File{
+					Name:    filename,
+					Content: []byte(content),
+				})
+			}
+		}
+	}
+	return files
+}

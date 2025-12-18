@@ -156,6 +156,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--usage-report-client-ssl-secret=client-secret",
 				"--usage-report-enforce-initial-report",
 				"--snippets-filters",
+				"--snippets-policies",
 				"--nginx-scc=nginx-sscc-name",
 				"--nginx-one-dataplane-key-secret=dataplane-key-secret",
 				"--nginx-one-telemetry-endpoint-host=telemetry-endpoint-host",
@@ -414,6 +415,15 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				` parsing "not-a-bool": invalid syntax`,
 			args: []string{
 				"--snippets-filters=not-a-bool",
+			},
+			wantErr: true,
+		},
+		{
+			name: "snippets-policies is not a bool",
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets-policies" flag: strconv.ParseBool:` +
+				` parsing "not-a-bool": invalid syntax`,
+			args: []string{
+				"--snippets-policies=not-a-bool",
 			},
 			wantErr: true,
 		},

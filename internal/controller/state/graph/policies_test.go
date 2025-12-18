@@ -1660,6 +1660,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 
 	cspGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "ClientSettingsPolicy"}
 	opGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "ObservabilityPolicy"}
+	snipGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "SnippetsPolicy"}
 
 	gw1Ref := createTestRef(kinds.Gateway, v1.GroupName, "gw1")
 	gw1TargetRef := createTestPolicyTargetRef(
@@ -1675,6 +1676,11 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 	gw3TargetRef := createTestPolicyTargetRef(
 		kinds.Gateway,
 		types.NamespacedName{Namespace: testNs, Name: "gw3"},
+	)
+	gwSnipRef := createTestRef(kinds.Gateway, v1.GroupName, "gw-snip")
+	gwSnipTargetRef := createTestPolicyTargetRef(
+		kinds.Gateway,
+		types.NamespacedName{Namespace: testNs, Name: "gw-snip"},
 	)
 
 	hr1Ref := createTestRef(kinds.HTTPRoute, v1.GroupName, "hr1")
@@ -1751,13 +1757,23 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", gw2Ref),
 					TargetRefs: []PolicyTargetRef{gw2TargetRef},
 				},
+				createTestPolicyKey(snipGVK, "snippetsPolicy1"): {
+					Source:     createTestPolicy(snipGVK, "snippetsPolicy1", gwSnipRef),
+					TargetRefs: []PolicyTargetRef{gwSnipTargetRef},
+				},
 			},
-			gws:    createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw2"}),
+			gws: createGatewayMap(
+				types.NamespacedName{Namespace: testNs, Name: "gw2"},
+				types.NamespacedName{Namespace: testNs, Name: "gw-snip"},
+			),
 			routes: nil,
 			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "gw2"}: {
 					conditions.NewClientSettingsPolicyAffected(),
 					conditions.NewObservabilityPolicyAffected(),
+				},
+				{Namespace: testNs, Name: "gw-snip"}: {
+					conditions.NewSnippetsPolicyAffected(),
 				},
 			},
 		},
@@ -1848,6 +1864,9 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				},
 				{Namespace: testNs, Name: "gr2"}: {
 					conditions.NewObservabilityPolicyAffected(),
+				},
+				{Namespace: testNs, Name: "gw-snip"}: {
+					conditions.NewSnippetsPolicyAffected(),
 				},
 			},
 		},
