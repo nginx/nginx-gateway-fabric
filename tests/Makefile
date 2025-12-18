@@ -56,11 +56,12 @@ run-conformance-tests: ## Run conformance tests
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
 	sed -e '1,/CONFORMANCE PROFILE/d' output.txt > conformance-profile.yaml
+	rm output.txt
 	grpc_core_result=`yq '.profiles[0].core.result' conformance-profile.yaml`; \
 	http_core_result=`yq '.profiles[1].core.result' conformance-profile.yaml`; \
 	http_extended_result=`yq '.profiles[1].extended.result' conformance-profile.yaml`; \
@@ -76,7 +77,7 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Always \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES_OPENSHIFT) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS_OPENSHIFT) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--service-type=$(GW_SERVICE_TYPE) --report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
@@ -98,7 +99,7 @@ run-inference-conformance-tests: ## Run inference conformance tests
 	kubectl run -i conformance-inference \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -run TestInferenceExtensionConformance . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
 		--version=$(NGF_VERSION) \
 		--skip-tests=$(INFERENCE_SKIP_TESTS) \
 		--supported-features=$(INFERENCE_SUPPORTED_FEATURES) \
