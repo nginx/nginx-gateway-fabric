@@ -62,12 +62,6 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 	switch {
 	case !exist:
 		validationErr = errors.New("secret does not exist")
-		r.resolvedSecrets[nsname] = &secretEntry{
-			Secret: Secret{
-				Source: secret,
-			},
-			err: validationErr,
-		}
 
 	case secret.Type == apiv1.SecretTypeTLS:
 		// A TLS Secret is guaranteed to have these data fields.
@@ -87,33 +81,21 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 		}
 
 		certBundle = NewCertificateBundle(nsname, "Secret", cert)
-
-		r.resolvedSecrets[nsname] = &secretEntry{
-			Secret: Secret{
-				Source:     secret,
-				CertBundle: certBundle,
-			},
-			err: validationErr,
-		}
 	case secret.Type == apiv1.SecretType(SecretTypeHtpasswd):
 		// Validate Htpasswd secret
 		if _, exists := secret.Data[AuthKeyBasic]; !exists {
 			validationErr = fmt.Errorf("missing required key %q in secret type %q", AuthKeyBasic, secret.Type)
 		}
-		r.resolvedSecrets[nsname] = &secretEntry{
-			Secret: Secret{
-				Source: secret,
-			},
-			err: validationErr,
-		}
 	default:
 		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)
-		r.resolvedSecrets[nsname] = &secretEntry{
-			Secret: Secret{
-				Source: secret,
-			},
-			err: validationErr,
-		}
+	}
+
+	r.resolvedSecrets[nsname] = &secretEntry{
+		Secret: Secret{
+			Source:     secret,
+			CertBundle: certBundle, // Set to nil when not a TLS secret.
+		},
+		err: validationErr,
 	}
 
 	return validationErr
