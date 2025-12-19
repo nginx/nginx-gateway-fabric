@@ -202,13 +202,9 @@ func (in *LocalRateLimit) DeepCopyInto(out *LocalRateLimit) {
 	*out = *in
 	if in.Rules != nil {
 		in, out := &in.Rules, &out.Rules
-		*out = make([]*RateLimitRule, len(*in))
+		*out = make([]RateLimitRule, len(*in))
 		for i := range *in {
-			if (*in)[i] != nil {
-				in, out := &(*in)[i], &(*out)[i]
-				*out = new(RateLimitRule)
-				(*in).DeepCopyInto(*out)
-			}
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 }
