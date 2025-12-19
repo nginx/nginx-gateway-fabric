@@ -103,7 +103,7 @@ type RateLimitPolicySpec struct {
     //
     // +kubebuilder:validation:MinItems=1
     // +kubebuilder:validation:MaxItems=16
-    // +kubebuilder:validation:XValidation:message="TargetRef Kind must be: Gateway, HTTPRoute, or GRPCRoute",rule="self.all(t, t.kind == 'Gateway' || t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute')"
+    // +kubebuilder:validation:XValidation:message="TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute",rule="self.all(t, t.kind == 'Gateway' || t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute')"
 	  // +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.all(t, t.group=='gateway.networking.k8s.io')"
 	  // +kubebuilder:validation:XValidation:message="TargetRef Kind and Name combination must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name) && (p1.kind == p2.kind)))"
     TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
