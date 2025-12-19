@@ -1123,6 +1123,28 @@ func NewSnippetsFilterAccepted() Condition {
 	}
 }
 
+// NewAuthenticationFilterInvalid returns a Condition that indicates that the AuthenticationFilter is not accepted
+// because it is syntactically or semantically invalid.
+func NewAuthenticationFilterInvalid(msg string) Condition {
+	return Condition{
+		Type:    string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(ngfAPI.AuthenticationFilterConditionReasonInvalid),
+		Message: msg,
+	}
+}
+
+// NewAuthenticationFilterAccepted returns a Condition that indicates that the AuthenticationFilter is accepted
+// because it is valid.
+func NewAuthenticationFilterAccepted() Condition {
+	return Condition{
+		Type:    string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(ngfAPI.AuthenticationFilterConditionReasonAccepted),
+		Message: "The AuthenticationFilter is accepted",
+	}
+}
+
 // NewObservabilityPolicyAffected returns a Condition that indicates that an ObservabilityPolicy
 // is applied to the resource.
 func NewObservabilityPolicyAffected() Condition {

@@ -10,10 +10,13 @@ import (
 
 // ExtensionRefFilter are NGF-specific extensions to the "filter" behavior.
 type ExtensionRefFilter struct {
-	// SnippetsFilter contains the SnippetsFilter. Will be non-nil if the Ref.Kind is SnippetsFilter and the
-	// SnippetsFilter exists.
+	// SnippetsFilter contains the SnippetsFilter.
+	// Will be non-nil if the Ref.Kind is SnippetsFilter and the SnippetsFilter exists.
 	// Once we support more filters, we can extend this struct with more filter kinds.
 	SnippetsFilter *SnippetsFilter
+	// AuthenticationFilter contains the AuthenticationFilter.
+	// Will be non-nil if the Ref.Kind is AuthenticationFilter and the AuthenticationFilter exists.
+	AuthenticationFilter *AuthenticationFilter
 	// Valid indicates whether the filter is valid.
 	Valid bool
 }
@@ -41,8 +44,14 @@ func validateExtensionRefFilter(ref *v1.LocalObjectReference, path *field.Path) 
 
 	switch ref.Kind {
 	case kinds.SnippetsFilter:
+	case kinds.AuthenticationFilter:
 	default:
-		allErrs = append(allErrs, field.NotSupported(extRefPath, ref.Kind, []string{kinds.SnippetsFilter}))
+		allErrs = append(allErrs,
+			field.NotSupported(
+				extRefPath,
+				ref.Kind,
+				[]string{kinds.SnippetsFilter, kinds.AuthenticationFilter}),
+		)
 	}
 
 	return allErrs

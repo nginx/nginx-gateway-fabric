@@ -35,8 +35,10 @@ func TestValidateExtensionRefFilter(t *testing.T) {
 			expErrCount: 3,
 			errSubString: []string{
 				`test.extensionRef: Required value: name cannot be empty`,
-				`test.extensionRef: Unsupported value: "": supported values: "gateway.nginx.org"`,
-				`test.extensionRef: Unsupported value: "": supported values: "SnippetsFilter"`,
+				`test.extensionRef: Unsupported value: ""`,
+				`supported values: "gateway.nginx.org"`,
+				`test.extensionRef: Unsupported value: ""`,
+				`supported values: "SnippetsFilter", "AuthenticationFilter"`,
 			},
 		},
 		{
@@ -59,7 +61,8 @@ func TestValidateExtensionRefFilter(t *testing.T) {
 			},
 			expErrCount: 1,
 			errSubString: []string{
-				`test.extensionRef: Unsupported value: "unsupported": supported values: "gateway.nginx.org"`,
+				`test.extensionRef: Unsupported value: "unsupported"`,
+				`supported values: "gateway.nginx.org"`,
 			},
 		},
 		{
@@ -71,7 +74,8 @@ func TestValidateExtensionRefFilter(t *testing.T) {
 			},
 			expErrCount: 1,
 			errSubString: []string{
-				`test.extensionRef: Unsupported value: "unsupported": supported values: "SnippetsFilter"`,
+				`test.extensionRef: Unsupported value: "unsupported"`,
+				`supported values: "SnippetsFilter", "AuthenticationFilter"`,
 			},
 		},
 		{

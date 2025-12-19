@@ -704,6 +704,7 @@ func updateLocation(
 
 	location = updateLocationMirrorRoute(location, pathRule.Path, grpc)
 	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
+	location = updateLocationAuthenticationFilter(location, filters.AuthenticationFilter)
 
 	if filters.RequestRedirect != nil {
 		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
@@ -713,6 +714,25 @@ func updateLocation(
 	location = updateLocationMirrorFilters(location, filters.RequestMirrors, pathRule.Path, mirrorPercentage)
 	location = updateLocationProxySettings(location, matchRule, grpc, inferenceBackend, keepAliveCheck)
 
+	return location
+}
+
+func updateLocationAuthenticationFilter(
+	location http.Location,
+	authenticationFilter *dataplane.AuthenticationFilter,
+) http.Location {
+	if authenticationFilter != nil {
+		if authenticationFilter.Basic != nil {
+			id := dataplane.GenerateAuthFileID(
+				authenticationFilter.Basic.SecretNamespace,
+				authenticationFilter.Basic.SecretName,
+			)
+			location.AuthBasic = &http.AuthBasic{
+				Realm: authenticationFilter.Basic.Realm,
+				File:  generateAuthBasicFileName(id),
+			}
+		}
+	}
 	return location
 }
 
