@@ -644,7 +644,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			attachPolicyToGateway(test.policy, test.policy.TargetRefs[0], test.gws, "nginx-gateway", logr.Discard())
+			attachPolicyToGateway(test.policy, test.policy.TargetRefs[0], test.gws, nil, "nginx-gateway", logr.Discard())
 
 			if test.expAttached {
 				for _, gw := range test.gws {

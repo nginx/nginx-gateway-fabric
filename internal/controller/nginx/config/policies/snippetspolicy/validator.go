@@ -47,6 +47,7 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 	supportedGroups := []gatewayv1.Group{gatewayv1.GroupName}
 
 	// Validate TargetRef
+	seenTargetRefs := make(map[string]struct{})
 	for i, targetRef := range sp.Spec.TargetRefs {
 		if err := policies.ValidateTargetRef(
 			targetRef,
@@ -56,6 +57,12 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 		); err != nil {
 			return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
 		}
+
+		if _, exists := seenTargetRefs[string(targetRef.Name)]; exists {
+			msg := fmt.Sprintf("duplicate targetRef name %q", targetRef.Name)
+			return []conditions.Condition{conditions.NewPolicyInvalid(msg)}
+		}
+		seenTargetRefs[string(targetRef.Name)] = struct{}{}
 	}
 
 	// Validate Snippets
