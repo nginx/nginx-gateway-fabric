@@ -2033,6 +2033,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 }
 
 func TestBuildSnippetsFilterStatuses(t *testing.T) {
+	t.Parallel()
 	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
 	const gatewayCtlrName = "controller"
 
@@ -2134,6 +2135,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			k8sClient := createK8sClientFor(&ngfAPI.SnippetsFilter{})
@@ -2163,6 +2165,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 }
 
 func TestBuildAuthenticationFilterStatuses(t *testing.T) {
+	t.Parallel()
 	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
 
 	validAuthenticationFilter := &graph.AuthenticationFilter{
@@ -2255,6 +2258,7 @@ func TestBuildAuthenticationFilterStatuses(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			k8sClient := createK8sClientFor(&ngfAPI.AuthenticationFilter{})

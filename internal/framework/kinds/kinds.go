@@ -23,8 +23,6 @@ const (
 	TLSRoute = "TLSRoute"
 	// BackendTLSPolicy is the BackendTLSPolicy kind.
 	BackendTLSPolicy = "BackendTLSPolicy"
-	// AuthenticationFilter is the AuthenticationFilter kind.
-	AuthenticationFilter = "AuthenticationFilter"
 )
 
 // Gateway API Inference Extension kinds.
@@ -49,6 +47,8 @@ const (
 	NginxProxy = "NginxProxy"
 	// SnippetsFilter is the SnippetsFilter kind.
 	SnippetsFilter = "SnippetsFilter"
+	// AuthenticationFilter is the AuthenticationFilter kind.
+	AuthenticationFilter = "AuthenticationFilter"
 	// UpstreamSettingsPolicy is the UpstreamSettingsPolicy kind.
 	UpstreamSettingsPolicy = "UpstreamSettingsPolicy"
 )
