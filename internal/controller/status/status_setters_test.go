@@ -1613,6 +1613,7 @@ func TestPolicyStatusEqual(t *testing.T) {
 }
 
 func TestNewSnippetsFilterStatusSetter(t *testing.T) {
+	t.Parallel()
 	const (
 		controllerName      = "controller"
 		otherControllerName = "other-controller"
@@ -1753,6 +1754,7 @@ func TestNewSnippetsFilterStatusSetter(t *testing.T) {
 }
 
 func TestNewAuthenticationFilterStatusSetter(t *testing.T) {
+	t.Parallel()
 	const (
 		controllerName      = "controller"
 		otherControllerName = "other-controller"
