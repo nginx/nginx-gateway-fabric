@@ -1738,6 +1738,7 @@ func TestNewSnippetsFilterStatusSetter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			setter := newSnippetsFilterStatusSetter(test.newStatus, controllerName)
@@ -1877,6 +1878,7 @@ func TestNewAuthenticationFilterStatusSetter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			setter := newAuthenticationFilterStatusSetter(test.newStatus, controllerName)

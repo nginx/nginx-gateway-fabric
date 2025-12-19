@@ -1537,7 +1537,6 @@ func TestBuildGRPCRoute(t *testing.T) {
 							ValidMatches: true,
 							Filters: RouteRuleFilters{
 								Valid: false,
-								// Filters: convertGRPCRouteFilters(grTwoValidAuthenticationFilter.Spec.Rules[0].Filters),
 								Filters: []Filter{
 									{
 										RouteType:    RouteTypeGRPC,
