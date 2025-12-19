@@ -158,7 +158,7 @@ type PathRule struct {
 type InvalidHTTPFilter struct{}
 
 // HTTPFilters hold the filters for a MatchRule.
-type HTTPFilters struct { //nolint:govet // fieldalignment: preserve field order.
+type HTTPFilters struct {
 	// InvalidFilter is a special filter that indicates whether the filters are invalid. If this is the case,
 	// the data plane must return 500 error, and all other filters are nil.
 	InvalidFilter *InvalidHTTPFilter
@@ -166,18 +166,17 @@ type HTTPFilters struct { //nolint:govet // fieldalignment: preserve field order
 	RequestRedirect *HTTPRequestRedirectFilter
 	// RequestURLRewrite holds the HTTPURLRewriteFilter.
 	RequestURLRewrite *HTTPURLRewriteFilter
-	// RequestMirrors holds the HTTPRequestMirrorFilters. There could be more than one specified.
-	RequestMirrors []*HTTPRequestMirrorFilter
 	// RequestHeaderModifiers holds the HTTPHeaderFilter.
 	RequestHeaderModifiers *HTTPHeaderFilter
 	// ResponseHeaderModifiers holds the HTTPHeaderFilter.
 	ResponseHeaderModifiers *HTTPHeaderFilter
+	// AuthenticationFilter holds the AuthenticationFilter for the MatchRule.
+	AuthenticationFilter *AuthenticationFilter
+	// RequestMirrors holds the HTTPRequestMirrorFilters. There could be more than one specified.
+	RequestMirrors []*HTTPRequestMirrorFilter
 	// SnippetsFilters holds all the SnippetsFilters for the MatchRule.
 	// Unlike the core and extended filters, there can be more than one SnippetsFilters defined on a routing rule.
 	SnippetsFilters []SnippetsFilter
-	// AuthenticationFilter holds the AuthenticationFilter for the MatchRule.
-	// Similar to other core and extended filter, there can be only one AuthenticationFilter defined on a route rule.
-	AuthenticationFilter *AuthenticationFilter
 }
 
 // SnippetsFilter holds the location and server snippets in a SnippetsFilter.
