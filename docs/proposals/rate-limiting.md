@@ -127,7 +127,7 @@ type LocalRateLimit struct {
     // Rules contains the list of rate limit rules.
     //
     // +optional
-    Rules *RateLimitRule[] `json:"rules,omitempty"`
+    Rules []*RateLimitRule `json:"rules,omitempty"`
 }
 
 // RateLimitRule contains settings for a RateLimit Rule.

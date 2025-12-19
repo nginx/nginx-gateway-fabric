@@ -7,3 +7,4 @@ resources:
   - bases/gateway.nginx.org_observabilitypolicies.yaml
   - bases/gateway.nginx.org_snippetsfilters.yaml
   - bases/gateway.nginx.org_upstreamsettingspolicies.yaml
+  - bases/gateway.nginx.org_ratelimitpolicies.yaml
