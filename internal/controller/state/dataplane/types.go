@@ -158,7 +158,7 @@ type PathRule struct {
 type InvalidHTTPFilter struct{}
 
 // HTTPFilters hold the filters for a MatchRule.
-type HTTPFilters struct {
+type HTTPFilters struct { //nolint:govet // fieldalignment: preserve field order.
 	// InvalidFilter is a special filter that indicates whether the filters are invalid. If this is the case,
 	// the data plane must return 500 error, and all other filters are nil.
 	InvalidFilter *InvalidHTTPFilter
