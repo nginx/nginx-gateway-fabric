@@ -71,7 +71,7 @@ package v1alpha1
 
 import (
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-    gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+    gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // RateLimitPolicy is an Inherited Attached Policy. It provides a way to set local rate limiting rules in NGINX.
@@ -80,7 +80,7 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:categories=gateway-api,scope=Namespaced
+// +kubebuilder:resource:categories=nginx-gateway-fabric,shortName=rlpolicy,scope=Namespaced
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
 type RateLimitPolicy struct {
@@ -280,12 +280,12 @@ Implementing this involves defining a new Condition type and reason:
 package conditions
 
 import (
-    gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+    v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 const (
-    RateLimitPolicyAffected gatewayv1alpha2.PolicyConditionType = "gateway.nginx.org/RateLimitPolicyAffected"
-    PolicyAffectedReason gatewayv1alpha2.PolicyConditionReason = "RateLimitPolicyAffectedAffected"
+    RateLimitPolicyAffected v1.PolicyConditionType = "gateway.nginx.org/RateLimitPolicyAffected"
+    PolicyAffectedReason v1.PolicyConditionReason = "RateLimitPolicyAffectedAffected"
 )
 ```
 
