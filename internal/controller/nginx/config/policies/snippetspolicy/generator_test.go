@@ -57,7 +57,7 @@ func TestGenerator(t *testing.T) {
 		gWithT := NewWithT(t)
 		files := g.GenerateForMain(pols)
 		gWithT.Expect(files).To(HaveLen(1))
-		gWithT.Expect(files[0].Name).To(Equal("includes/policy/default-gateway-1/SnippetsPolicy_main_policy-1.conf"))
+		gWithT.Expect(files[0].Name).To(Equal("SnippetsPolicy_main_default-policy-1.conf"))
 		gWithT.Expect(string(files[0].Content)).To(ContainSubstring("worker_processes 1;"))
 	})
 
@@ -65,7 +65,7 @@ func TestGenerator(t *testing.T) {
 		gWithT := NewWithT(t)
 		files := g.GenerateForHTTP(pols)
 		gWithT.Expect(files).To(HaveLen(1))
-		gWithT.Expect(files[0].Name).To(Equal("includes/policy/default-gateway-1/SnippetsPolicy_http_policy-1.conf"))
+		gWithT.Expect(files[0].Name).To(Equal("SnippetsPolicy_http_default-policy-1.conf"))
 		gWithT.Expect(string(files[0].Content)).To(ContainSubstring("log_format custom '...';"))
 	})
 
@@ -76,7 +76,7 @@ func TestGenerator(t *testing.T) {
 		}
 		files := g.GenerateForServer(pols, server)
 		gWithT.Expect(files).To(HaveLen(1))
-		gWithT.Expect(files[0].Name).To(Equal("includes/policy/default-gateway-1/80/SnippetsPolicy_server_policy-1.conf"))
+		gWithT.Expect(files[0].Name).To(Equal("SnippetsPolicy_server_default-policy-1.conf"))
 		gWithT.Expect(string(files[0].Content)).To(ContainSubstring("client_max_body_size 10m;"))
 	})
 
@@ -88,9 +88,27 @@ func TestGenerator(t *testing.T) {
 		files := g.GenerateForLocation(pols, location)
 		gWithT.Expect(files).To(HaveLen(1))
 		gWithT.Expect(files[0].Name).To(Equal(
-			"includes/policy/default-gateway-1/12345/SnippetsPolicy_location_policy-1.conf",
+			"SnippetsPolicy_location_default-policy-1.conf",
 		))
 		gWithT.Expect(string(files[0].Content)).To(ContainSubstring("location_snippet;"))
+	})
+
+	t.Run("GenerateForMain with empty snippets", func(t *testing.T) {
+		gWithT := NewWithT(t)
+		policy := &v1alpha1.SnippetsPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "p-empty", Namespace: "default"},
+			Spec: v1alpha1.SnippetsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Name: "gw",
+					},
+				},
+				Snippets: nil,
+			},
+		}
+
+		files := g.GenerateForMain([]policies.Policy{policy})
+		gWithT.Expect(files).To(BeEmpty())
 	})
 
 	t.Run("GenerateForMain with multiple policies", func(t *testing.T) {
@@ -148,12 +166,8 @@ func TestGenerator(t *testing.T) {
 		}
 
 		files := g.GenerateForMain([]policies.Policy{policy})
-		gWithT.Expect(files).To(HaveLen(2))
-		gWithT.Expect(files[0].Name).To(ContainSubstring("gw1"))
-		gWithT.Expect(files[1].Name).To(ContainSubstring("gw2"))
+		gWithT.Expect(files).To(HaveLen(1))
+		gWithT.Expect(files[0].Name).To(Equal("SnippetsPolicy_main_default-policy-multi.conf"))
 		gWithT.Expect(string(files[0].Content)).To(ContainSubstring("data;"))
-		gWithT.Expect(string(files[1].Content)).To(ContainSubstring("data;"))
-		gWithT.Expect(string(files[0].Content)).To(ContainSubstring("gw1"))
-		gWithT.Expect(string(files[1].Content)).To(ContainSubstring("gw2"))
 	})
 }

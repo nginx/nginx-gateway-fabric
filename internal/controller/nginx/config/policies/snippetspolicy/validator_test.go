@@ -119,6 +119,28 @@ func TestValidator_Validate(t *testing.T) {
 				conditions.NewPolicyInvalid("duplicate context \"main\""),
 			},
 		},
+		{
+			name: "duplicate target ref name",
+			policy: createModifiedPolicy(func(p *ngfAPI.SnippetsPolicy) *ngfAPI.SnippetsPolicy {
+				p.Spec.TargetRefs = append(p.Spec.TargetRefs, gatewayv1.LocalPolicyTargetReference{
+					Group: gatewayv1.GroupName,
+					Kind:  kinds.Gateway,
+					Name:  "test-gateway",
+				})
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("duplicate targetRef name \"test-gateway\""),
+			},
+		},
+		{
+			name: "valid policy with empty snippets",
+			policy: createModifiedPolicy(func(p *ngfAPI.SnippetsPolicy) *ngfAPI.SnippetsPolicy {
+				p.Spec.Snippets = nil
+				return p
+			}),
+			expConditions: nil,
+		},
 	}
 
 	v := snippetspolicy.NewValidator()

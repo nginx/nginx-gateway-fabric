@@ -116,10 +116,11 @@ spec:
                 x-kubernetes-validations:
                 - message: TargetRefs Kind must be Gateway
                   rule: self.all(t, t.kind == 'Gateway')
+                - message: TargetRefs Name must be unique
+                  rule: self.all(p1, self.exists_one(p2, (p1.name == p2.name)))
                 - message: TargetRefs Group must be gateway.networking.k8s.io
                   rule: self.all(t, t.group == 'gateway.networking.k8s.io')
             required:
-            - snippets
             - targetRefs
             type: object
           status:

@@ -56,6 +56,7 @@ type SnippetsPolicySpec struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=16
 	// +kubebuilder:validation:XValidation:message="TargetRefs Kind must be Gateway",rule="self.all(t, t.kind == 'Gateway')"
+	// +kubebuilder:validation:XValidation:message="TargetRefs Name must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name)))"
 	// +kubebuilder:validation:XValidation:message="TargetRefs Group must be gateway.networking.k8s.io",rule="self.all(t, t.group == 'gateway.networking.k8s.io')"
 	//nolint:lll
 	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
@@ -64,5 +65,7 @@ type SnippetsPolicySpec struct {
 	// +kubebuilder:validation:MaxItems=4
 	// +kubebuilder:validation:XValidation:message="Only one snippet allowed per context",rule="self.all(s1, self.exists_one(s2, s1.context == s2.context))"
 	//nolint:lll
-	Snippets []Snippet `json:"snippets"`
+	//
+	// +optional
+	Snippets []Snippet `json:"snippets,omitempty"`
 }
