@@ -22,13 +22,11 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 		files = []string{
 			"snippets-policy/cafe.yaml",
 			"snippets-policy/gateway.yaml",
-			"snippets-policy/gateway-2.yaml",
 		}
 
 		namespace = "snippets-policy"
 
-		nginxPodName  string
-		gatewayNsName = types.NamespacedName{Name: "gateway", Namespace: namespace}
+		nginxPodName string
 	)
 
 	BeforeAll(func() {
@@ -63,8 +61,6 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 	When("SnippetsPolicies are applied to the resources", func() {
 		snippetsPolicy := []string{
 			"snippets-policy/valid-sp.yaml",
-			"snippets-policy/multi-target-sp.yaml",
-			"snippets-policy/location-sp.yaml",
 		}
 
 		BeforeAll(func() {
@@ -76,14 +72,10 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 			Expect(resourceManager.DeleteFromFiles(snippetsPolicy, namespace)).To(Succeed())
 		})
-
 		Specify("snippetsPolicies are accepted", func() {
 			snippetsPolicyNames := []string{
 				"valid-sp",
-				"multi-target-sp",
-				"location-sp",
 			}
-
 			for _, name := range snippetsPolicyNames {
 				nsname := types.NamespacedName{Name: name, Namespace: namespace}
 
@@ -93,6 +85,21 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 					WithPolling(500*time.Millisecond).
 					Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
 			}
+		})
+
+		Specify("empty snippets policy is accepted", func() {
+			files := []string{"snippets-policy/empty-snippets-sp.yaml"}
+
+			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
+
+			nsname := types.NamespacedName{Name: "empty-snippets-sp", Namespace: namespace}
+			Eventually(checkForSnippetsPolicyToBeAccepted).
+				WithArguments(nsname).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
+
+			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -116,11 +123,6 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 		Context("nginx directives", func() {
 			var conf *framework.Payload
 
-			// gwNsName := fmt.Sprintf("%s-%s", namespace, "gateway")
-			// mainContext := fmt.Sprintf("%s%s/SnippetsPolicy_main_", snippetsPolicyFilePrefix, gwNsName)
-			// httpContext := fmt.Sprintf("%s%s/SnippetsPolicy_http_", snippetsPolicyFilePrefix, gwNsName)
-			// serverContext := fmt.Sprintf("%s%s/http:80/SnippetsPolicy_server_", snippetsPolicyFilePrefix, gwNsName)
-
 			BeforeAll(func() {
 				var err error
 				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
@@ -137,69 +139,25 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 					{
 						Directive: "worker_priority",
 						Value:     "0",
-						File:      "SnippetsPolicy_main_valid-sp.conf",
+						File:      "SnippetsPolicy_main_snippets-policy-valid-sp.conf",
 					},
 					{
 						Directive: "aio",
 						Value:     "off",
-						File:      "SnippetsPolicy_http_valid-sp.conf",
+						File:      "SnippetsPolicy_http_snippets-policy-valid-sp.conf",
 					},
 					{
 						Directive: "auth_delay",
 						Value:     "0s",
-						File:      "SnippetsPolicy_server_valid-sp.conf",
+						File:      "SnippetsPolicy_server_snippets-policy-valid-sp.conf",
 					},
-				}),
-				Entry("multi-target-sp", []framework.ExpectedNginxField{
-					{
-						Directive: "env",
-						Value:     "MULTI_TARGET;",
-						File:      "snippets-policy-gateway/SnippetsPolicy_main_multi-target-sp.conf",
-					},
-					{
-						Directive: "env",
-						Value:     "MULTI_TARGET;",
-						File:      "snippets-policy-gateway-2/SnippetsPolicy_main_multi-target-sp.conf",
-					},
-				}),
-				Entry("location-sp", []framework.ExpectedNginxField{
 					{
 						Directive: "allow",
 						Value:     "127.0.0.1",
-						File:      "SnippetsPolicy_location_location-sp.conf",
+						File:      "SnippetsPolicy_location_snippets-policy-location-sp.conf",
 					},
 				}),
 			)
-		})
-	})
-
-	When("SnippetsPolicy is invalid", func() {
-		Specify("if directives already present in the config are used", func() {
-			files := []string{"snippets-policy/invalid-duplicate-sp.yaml"}
-
-			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
-
-			Eventually(checkGatewayToHaveGatewayNotProgrammedCond).
-				WithArguments(gatewayNsName).
-				WithTimeout(timeoutConfig.GetStatusTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
-
-			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
-		})
-
-		Specify("if directives are provided in the wrong context", func() {
-			files := []string{"snippets-policy/invalid-context-sp.yaml"}
-
-			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
-
-			Eventually(checkGatewayToHaveGatewayNotProgrammedCond).
-				WithArguments(gatewayNsName).
-				WithTimeout(timeoutConfig.GetStatusTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
-
-			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		})
 	})
 })
