@@ -14,3 +14,5 @@ spec:
     value: "aio off;"
   - context: http.server
     value: "auth_delay 0s;"
+  - context: http.server.location
+    value: "allow 127.0.0.1;"
