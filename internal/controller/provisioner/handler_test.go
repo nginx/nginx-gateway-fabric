@@ -1,7 +1,6 @@
 package provisioner
 
 import (
-	"context"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -35,7 +34,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 	handler, err := newEventHandler(store, provisioner, labelSelector, gcName)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	ctx := context.TODO()
+	ctx := t.Context()
 	logger := logr.Discard()
 
 	gateway := &gatewayv1.Gateway{
@@ -226,7 +225,7 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	handler, err := newEventHandler(store, provisioner, labelSelector, gcName)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	ctx := context.TODO()
+	ctx := t.Context()
 	logger := logr.Discard()
 
 	// initialize resources
