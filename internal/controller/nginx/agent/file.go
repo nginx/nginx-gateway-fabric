@@ -157,8 +157,8 @@ func (fs *fileService) getFileContents(req *pb.GetFileRequest, connKey string) (
 		if fileFoundHash != "" {
 			fs.logger.V(1).Info(
 				"File found had wrong hash",
-				"hashWanted", req.GetFileMeta().GetHash(),
-				"hashFound", fileFoundHash,
+				"hash_wanted", req.GetFileMeta().GetHash(),
+				"hash_found", fileFoundHash,
 				"correlation_id", req.GetMessageMeta().GetCorrelationId(),
 			)
 		}
@@ -168,7 +168,7 @@ func (fs *fileService) getFileContents(req *pb.GetFileRequest, connKey string) (
 	fs.logger.V(1).Info(
 		"Getting file for agent",
 		"file", filename,
-		"fileHash", fileFoundHash,
+		"file_hash", fileFoundHash,
 		"correlation_id", req.GetMessageMeta().GetCorrelationId(),
 	)
 
