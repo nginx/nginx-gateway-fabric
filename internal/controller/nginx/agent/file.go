@@ -106,7 +106,11 @@ func (fs *fileService) GetFileStream(
 	sizeUint32 = uint32(size) //nolint:gosec // validation check performed on previous line
 	hash := req.GetFileMeta().GetHash()
 
-	fs.logger.V(1).Info("Sending chunked file to agent", "file", req.GetFileMeta().GetName())
+	fs.logger.V(1).Info(
+		"Sending chunked file to agent",
+		"file", req.GetFileMeta().GetName(),
+		"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+	)
 
 	if err := files.SendChunkedFile(
 		req.GetMessageMeta(),
@@ -145,20 +149,28 @@ func (fs *fileService) getFileContents(req *pb.GetFileRequest, connKey string) (
 	filename := req.GetFileMeta().GetName()
 	contents, fileFoundHash := deployment.GetFile(filename, req.GetFileMeta().GetHash())
 	if len(contents) == 0 {
-		fs.logger.V(1).Info("Error getting file for agent", "file", filename)
+		fs.logger.V(1).Info(
+			"Error getting file for agent",
+			"file", filename,
+			"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+		)
 		if fileFoundHash != "" {
 			fs.logger.V(1).Info(
 				"File found had wrong hash",
-				"hashWanted",
-				req.GetFileMeta().GetHash(),
-				"hashFound",
-				fileFoundHash,
+				"hashWanted", req.GetFileMeta().GetHash(),
+				"hashFound", fileFoundHash,
+				"correlation_id", req.GetMessageMeta().GetCorrelationId(),
 			)
 		}
 		return nil, status.Errorf(codes.NotFound, "file not found")
 	}
 
-	fs.logger.V(1).Info("Getting file for agent", "file", filename, "fileHash", fileFoundHash)
+	fs.logger.V(1).Info(
+		"Getting file for agent",
+		"file", filename,
+		"fileHash", fileFoundHash,
+		"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+	)
 
 	return contents, nil
 }

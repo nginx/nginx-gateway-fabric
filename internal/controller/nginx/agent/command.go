@@ -84,7 +84,10 @@ func (cs *commandService) CreateConnection(
 
 	resource := req.GetResource()
 	podName := resource.GetContainerInfo().GetHostname()
-	cs.logger.Info(fmt.Sprintf("Creating connection for nginx pod: %s", podName))
+	cs.logger.Info(
+		fmt.Sprintf("Creating connection for nginx pod: %s", podName),
+		"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+	)
 
 	name, depType := getAgentDeploymentNameAndType(resource.GetInstances())
 	if name == (types.NamespacedName{}) || depType == "" {
@@ -96,7 +99,7 @@ func (cs *commandService) CreateConnection(
 				Error:   err.Error(),
 			},
 		}
-		cs.logger.Error(err, "error getting pod owner")
+		cs.logger.Error(err, "error getting pod owner", "correlation_id", req.GetMessageMeta().GetCorrelationId())
 		return response, grpcStatus.Errorf(codes.InvalidArgument, "error getting pod owner: %s", err.Error())
 	}
 
