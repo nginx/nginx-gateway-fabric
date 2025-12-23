@@ -120,5 +120,13 @@ attached at the Gateway level. */
 		/** BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi). */
 		string? BuildOS = null;
 		
+		/** GatewayAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+attached at the Gateway level. */
+		long? GatewayAttachedProxySettingsPolicyCount = null;
+		
+		/** RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+attached at the Route level. */
+		long? RouteAttachedProxySettingsPolicyCount = null;
+		
 	}
 }
