@@ -154,7 +154,29 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 					{
 						Directive: "allow",
 						Value:     "127.0.0.1",
-						File:      "SnippetsPolicy_location_snippets-policy-location-sp.conf",
+						File:      "SnippetsPolicy_location_snippets-policy-valid-sp.conf",
+					},
+					{
+						Directive: "include",
+						Value:     "/etc/nginx/includes/SnippetsPolicy_main_snippets-policy-valid-sp.conf",
+						File:      "main.conf",
+					},
+					{
+						Directive: "include",
+						Value:     "/etc/nginx/includes/SnippetsPolicy_http_snippets-policy-valid-sp.conf",
+						File:      "http.conf",
+					},
+					{
+						Directive: "include",
+						Value:     "/etc/nginx/includes/SnippetsPolicy_server_snippets-policy-valid-sp.conf",
+						File:      "http.conf",
+						Server:    "cafe.example.com",
+					},
+					{
+						Directive: "include",
+						Value:     "/etc/nginx/includes/SnippetsPolicy_location_snippets-policy-valid-sp.conf",
+						File:      "http.conf",
+						Location:  "/coffee",
 					},
 				}),
 			)
