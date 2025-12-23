@@ -2413,3 +2413,128 @@ func createFakePolicyWithAncestors(
 	}
 	return policy
 }
+
+func TestSnippetsPolicyPropagation(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	snippetsGVK := schema.GroupVersionKind{Group: v1.GroupName, Version: "v1alpha1", Kind: kinds.SnippetsPolicy}
+	otherGVK := schema.GroupVersionKind{Group: v1.GroupName, Version: "v1alpha1", Kind: "OtherPolicy"}
+
+	gwNsName := types.NamespacedName{Namespace: testNs, Name: "gateway"}
+	otherGwNsName := types.NamespacedName{Namespace: testNs, Name: "other-gateway"}
+
+	// Create SnippetsPolicy
+	snippetsPolicy := &Policy{
+		Source: createTestPolicy(snippetsGVK, "snippets-policy", v1.LocalPolicyTargetReference{
+			Group: v1.GroupName,
+			Kind:  kinds.Gateway,
+			Name:  v1.ObjectName(gwNsName.Name),
+		}),
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.Gateway,
+				Group:  v1.GroupName,
+				Nsname: gwNsName,
+			},
+		},
+		InvalidForGateways: make(map[types.NamespacedName]struct{}),
+	}
+
+	// Create OtherPolicy
+	otherPolicy := &Policy{
+		Source: createTestPolicy(otherGVK, "other-policy", v1.LocalPolicyTargetReference{
+			Group: v1.GroupName,
+			Kind:  kinds.Gateway,
+			Name:  v1.ObjectName(gwNsName.Name),
+		}),
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.Gateway,
+				Group:  v1.GroupName,
+				Nsname: gwNsName,
+			},
+		},
+		InvalidForGateways: make(map[types.NamespacedName]struct{}),
+	}
+
+	// Create Gateways
+	gateways := map[types.NamespacedName]*Gateway{
+		gwNsName: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: gwNsName.Name, Namespace: gwNsName.Namespace},
+			},
+			Valid: true,
+		},
+		otherGwNsName: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: otherGwNsName.Name, Namespace: otherGwNsName.Namespace},
+			},
+			Valid: true,
+		},
+	}
+
+	// Create Routes
+	// Route 1: Attached to target gateway
+	route1Key := RouteKey{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route1"}, RouteType: RouteTypeHTTP}
+	route1 := &L7Route{
+		Source: &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route1", Namespace: testNs}},
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{NamespacedName: gwNsName},
+			},
+		},
+	}
+
+	// Route 2: Attached to other gateway
+	route2Key := RouteKey{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route2"}, RouteType: RouteTypeHTTP}
+	route2 := &L7Route{
+		Source: &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route2", Namespace: testNs}},
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{NamespacedName: otherGwNsName},
+			},
+		},
+	}
+
+	// Route 3: Attached to both gateways
+	route3Key := RouteKey{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route3"}, RouteType: RouteTypeHTTP}
+	route3 := &L7Route{
+		Source: &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route3", Namespace: testNs}},
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{NamespacedName: gwNsName},
+			},
+			{
+				Gateway: &ParentRefGateway{NamespacedName: otherGwNsName},
+			},
+		},
+	}
+
+	routes := map[RouteKey]*L7Route{
+		route1Key: route1,
+		route2Key: route2,
+		route3Key: route3,
+	}
+
+	// Test 1: SnippetsPolicy Propagation
+	attachPolicyToGateway(snippetsPolicy, snippetsPolicy.TargetRefs[0], gateways, routes, "nginx-gateway", logr.Discard())
+
+	// Verify Gateway attachment
+	g.Expect(gateways[gwNsName].Policies).To(ContainElement(snippetsPolicy))
+
+	// Verify Route Propagation
+	g.Expect(route1.Policies).To(ContainElement(snippetsPolicy), "Route1 attached to gateway should have policy")
+	g.Expect(route2.Policies).To(Not(ContainElement(snippetsPolicy)), "Route2 attached to other gateway should NOT have policy")
+	g.Expect(route3.Policies).To(ContainElement(snippetsPolicy), "Route3 attached to gateway should have policy")
+
+	// Test 2: Other Policy (Non-Snippets) Propagation
+	attachPolicyToGateway(otherPolicy, otherPolicy.TargetRefs[0], gateways, routes, "nginx-gateway", logr.Discard())
+
+	// Verify Gateway attachment
+	g.Expect(gateways[gwNsName].Policies).To(ContainElement(otherPolicy))
+
+	// Verify NO Route Propagation
+	g.Expect(route1.Policies).To(Not(ContainElement(otherPolicy)), "Route1 should NOT have other policy")
+	g.Expect(route3.Policies).To(Not(ContainElement(otherPolicy)), "Route3 should NOT have other policy")
+}
