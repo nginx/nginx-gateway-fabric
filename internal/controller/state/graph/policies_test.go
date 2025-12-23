@@ -2476,7 +2476,10 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 
 	// Create Routes
 	// Route 1: Attached to target gateway
-	route1Key := RouteKey{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route1"}, RouteType: RouteTypeHTTP}
+	route1Key := RouteKey{
+		NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route1"},
+		RouteType:      RouteTypeHTTP,
+	}
 	route1 := &L7Route{
 		Source: &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route1", Namespace: testNs}},
 		ParentRefs: []ParentRef{
@@ -2487,7 +2490,10 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 	}
 
 	// Route 2: Attached to other gateway
-	route2Key := RouteKey{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route2"}, RouteType: RouteTypeHTTP}
+	route2Key := RouteKey{
+		NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route2"},
+		RouteType:      RouteTypeHTTP,
+	}
 	route2 := &L7Route{
 		Source: &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route2", Namespace: testNs}},
 		ParentRefs: []ParentRef{
@@ -2498,7 +2504,10 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 	}
 
 	// Route 3: Attached to both gateways
-	route3Key := RouteKey{NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route3"}, RouteType: RouteTypeHTTP}
+	route3Key := RouteKey{
+		NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route3"},
+		RouteType:      RouteTypeHTTP,
+	}
 	route3 := &L7Route{
 		Source: &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route3", Namespace: testNs}},
 		ParentRefs: []ParentRef{
@@ -2525,7 +2534,10 @@ func TestSnippetsPolicyPropagation(t *testing.T) {
 
 	// Verify Route Propagation
 	g.Expect(route1.Policies).To(ContainElement(snippetsPolicy), "Route1 attached to gateway should have policy")
-	g.Expect(route2.Policies).To(Not(ContainElement(snippetsPolicy)), "Route2 attached to other gateway should NOT have policy")
+	g.Expect(route2.Policies).To(
+		Not(ContainElement(snippetsPolicy)),
+		"Route2 attached to other gateway should NOT have policy",
+	)
 	g.Expect(route3.Policies).To(ContainElement(snippetsPolicy), "Route3 attached to gateway should have policy")
 
 	// Test 2: Other Policy (Non-Snippets) Propagation
