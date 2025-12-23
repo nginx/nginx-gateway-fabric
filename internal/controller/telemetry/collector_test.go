@@ -384,6 +384,22 @@ var _ = Describe("Collector", Ordered, func() {
 							NsName: types.NamespacedName{Namespace: "test", Name: "UpstreamSettingsPolicy-1"},
 							GVK:    schema.GroupVersionKind{Kind: kinds.UpstreamSettingsPolicy},
 						}: {},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "ProxySettingsPolicy-1"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.ProxySettingsPolicy},
+						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "ProxySettingsPolicy-2"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.ProxySettingsPolicy},
+						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.HTTPRoute}}},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "ProxySettingsPolicy-3"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.ProxySettingsPolicy},
+						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.GRPCRoute}}},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "ProxySettingsPolicy-4"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.ProxySettingsPolicy},
+						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}, {Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
 					},
 					ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
 						{Namespace: "test", Name: "NginxProxy-1"}: &gcNP,
@@ -529,6 +545,8 @@ var _ = Describe("Collector", Ordered, func() {
 				expData.BuildOS = "alpine"
 
 				expData.InferencePoolCount = 3
+				expData.GatewayAttachedProxySettingsPolicyCount = 2
+				expData.RouteAttachedProxySettingsPolicyCount = 4
 
 				data, err := dataCollector.Collect(ctx)
 				Expect(err).ToNot(HaveOccurred())
@@ -700,6 +718,22 @@ var _ = Describe("Collector", Ordered, func() {
 						NsName: types.NamespacedName{Namespace: "test", Name: "UpstreamSettingsPolicy-1"},
 						GVK:    schema.GroupVersionKind{Kind: kinds.UpstreamSettingsPolicy},
 					}: {},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "ProxySettingsPolicy-1"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.ProxySettingsPolicy},
+					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "ProxySettingsPolicy-2"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.ProxySettingsPolicy},
+					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.HTTPRoute}}},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "ProxySettingsPolicy-plural"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.ProxySettingsPolicy},
+					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}, {Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "ProxySettingsPolicy-empty"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.ProxySettingsPolicy},
+					}: {},
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
 					{Namespace: "test", Name: "NginxProxy-1"}: {Valid: true},
@@ -797,6 +831,8 @@ var _ = Describe("Collector", Ordered, func() {
 				}
 				expData.NginxPodCount = 1
 				expData.InferencePoolCount = 1
+				expData.GatewayAttachedProxySettingsPolicyCount = 2
+				expData.RouteAttachedProxySettingsPolicyCount = 3
 
 				data, err := dataCollector.Collect(ctx)
 
