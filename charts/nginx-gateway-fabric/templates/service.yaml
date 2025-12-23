@@ -23,3 +23,9 @@ spec:
     port: 443
     protocol: TCP
     targetPort: 8443
+  {{- if and .Values.nginxGateway.readinessProbe.enable .Values.nginxGateway.service.exposeHealthPort }}
+  - name: health
+    port: {{ .Values.nginxGateway.readinessProbe.port }}
+    protocol: TCP
+    targetPort: {{ .Values.nginxGateway.readinessProbe.port }}
+  {{- end }}
