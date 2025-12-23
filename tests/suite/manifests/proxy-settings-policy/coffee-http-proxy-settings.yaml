@@ -1,0 +1,19 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: coffee-http-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  buffering:
+    # Increase buffer size to handle large response headers (>10KB)
+    bufferSize: "16k"
+    # Configure more and larger buffers to handle 5MB response body
+    buffers:
+      number: 16
+      size: "64k"
+    # Set busy buffers size to allow more data to be sent to client
+    # while still receiving from upstream
+    busyBuffersSize: "128k"

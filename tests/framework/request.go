@@ -24,7 +24,7 @@ func Get(
 	headers, queryParams map[string]string,
 	opts ...Option,
 ) (int, string, error) {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 
 	resp, err := makeRequest(http.MethodGet, url, address, nil, timeout, headers, queryParams, opts...)
 	if err != nil {
@@ -46,10 +46,25 @@ func Get(
 		return resp.StatusCode, "", err
 	}
 	if options.logEnabled {
-		GinkgoWriter.Printf("Successfully received response and parsed body: %s\n", body.String())
+		printResponseBody(body)
 	}
 
 	return resp.StatusCode, body.String(), nil
+}
+
+func printResponseBody(body *bytes.Buffer) {
+	maxLogBodyBytes := 2048
+	bs := body.Bytes()
+	if len(bs) <= maxLogBodyBytes {
+		GinkgoWriter.Printf("Successfully received response and parsed body (%d bytes): %s\n", len(bs), string(bs))
+	} else {
+		GinkgoWriter.Printf(
+			"Successfully received response and parsed body (%d bytes, showing first %d): %s...\n",
+			len(bs),
+			maxLogBodyBytes,
+			string(bs[:maxLogBodyBytes]),
+		)
+	}
 }
 
 // Post sends a POST request to the specified url with the body as the payload.
@@ -93,10 +108,7 @@ func makeRequest(
 		return dialer.DialContext(ctx, network, fmt.Sprintf("%s:%s", address, port))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if options.logEnabled {
 		requestDetails := fmt.Sprintf(
 			"Method: %s, URL: %s, Address: %s, Headers: %v, QueryParams: %v\n",
@@ -106,10 +118,24 @@ func makeRequest(
 			headers,
 			queryParams,
 		)
-		GinkgoWriter.Printf("Sending request: %s", requestDetails)
+		GinkgoWriter.Printf("\nSending request: %s", requestDetails)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	var (
+		req *http.Request
+		err error
+	)
+	if options.withContext {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		req, err = http.NewRequestWithContext(ctx, method, url, body)
+	} else {
+		// Create request without a short-lived context; rely on http.Client.Timeout
+		// so that the response body can be fully read by the caller without
+		// being canceled when this function returns.
+		req, err = http.NewRequest(method, url, body) //nolint:noctx
+	}
 	if err != nil {
 		return nil, err
 	}

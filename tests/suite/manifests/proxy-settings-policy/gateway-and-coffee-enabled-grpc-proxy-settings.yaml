@@ -1,0 +1,33 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: gateway-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  buffering:
+    disable: false
+    bufferSize: "16k"
+    buffers:
+      number: 16
+      size: "64k"
+    busyBuffersSize: "128k"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: coffee-grpc-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpc-route
+  buffering:
+    disable: false
+    bufferSize: "4k"
+    buffers:
+      number: 8
+      size: "4k"
+    busyBuffersSize: "16k"

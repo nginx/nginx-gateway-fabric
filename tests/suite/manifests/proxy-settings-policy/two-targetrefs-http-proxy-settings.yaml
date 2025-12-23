@@ -1,0 +1,18 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: coffee-http-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: tea
+  buffering:
+    bufferSize: "16k"
+    buffers:
+      number: 16
+      size: "64k"
+    busyBuffersSize: "128k"

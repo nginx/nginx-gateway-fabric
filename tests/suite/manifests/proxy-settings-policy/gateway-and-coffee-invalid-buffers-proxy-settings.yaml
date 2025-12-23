@@ -1,0 +1,31 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: gateway-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  buffering:
+    bufferSize: "16k"
+    buffers:
+      number: 16
+      size: "64k"
+    busyBuffersSize: "8k" # Invalid: busyBuffersSize less than bufferSize
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: coffee-http-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  buffering:
+    bufferSize: "4k"
+    buffers:
+      number: 8
+      size: "4k"
+    busyBuffersSize: "128k" # Invalid: busyBuffersSize bigger than (buffers.number * buffers.size) - buffers.size
