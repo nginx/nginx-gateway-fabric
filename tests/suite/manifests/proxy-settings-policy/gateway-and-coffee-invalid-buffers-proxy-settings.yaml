@@ -12,16 +12,20 @@ spec:
     buffers:
       number: 16
       size: "64k"
-    busyBuffersSize: "128k"
+    busyBuffersSize: "8k" # Invalid: busyBuffersSize less than bufferSize
 ---
 apiVersion: gateway.nginx.org/v1alpha1
 kind: ProxySettingsPolicy
 metadata:
-  name: coffee-proxy-settings
+  name: coffee-http-proxy-settings
 spec:
   targetRefs:
   - group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: coffee
   buffering:
-    disabled: true
+    bufferSize: "4k"
+    buffers:
+      number: 8
+      size: "4k"
+    busyBuffersSize: "128k" # Invalid: busyBuffersSize bigger than (buffers.number * buffers.size) - buffers.size

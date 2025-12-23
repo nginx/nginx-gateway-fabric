@@ -1,5 +1,3 @@
-# Gateway policy disables buffering,
-# Route policy explicitly sets disable: false and specifies buffer sizes (should work correctly)
 apiVersion: gateway.nginx.org/v1alpha1
 kind: ProxySettingsPolicy
 metadata:
@@ -10,21 +8,26 @@ spec:
     kind: Gateway
     name: gateway
   buffering:
-    disabled: true
----
-apiVersion: gateway.nginx.org/v1alpha1
-kind: ProxySettingsPolicy
-metadata:
-  name: coffee-proxy-settings
-spec:
-  targetRefs:
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: coffee
-  buffering:
-    disabled: false
+    disable: false
     bufferSize: "16k"
     buffers:
       number: 16
       size: "64k"
     busyBuffersSize: "128k"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: coffee-grpc-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpc-route
+  buffering:
+    disable: false
+    bufferSize: "4k"
+    buffers:
+      number: 8
+      size: "4k"
+    busyBuffersSize: "16k"

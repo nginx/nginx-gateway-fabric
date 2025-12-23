@@ -119,7 +119,7 @@ func (v *Validator) validateBufferSizes(buffering ngfAPI.ProxyBuffering, fieldPa
 //
 // NGINX constraints validated:
 // 1. proxy_busy_buffers_size > proxy_buffer_size (when both are set)
-// 2. proxy_busy_buffers_size < (proxy_buffers.number * proxy_buffers.size) - proxy_buffers.size (when buffers is set)
+// 2. proxy_busy_buffers_size < (proxy_buffers.number * proxy_buffers.size) - proxy_buffers.size (when buffers are set)
 //
 // Note: We only validate when fields are set in the same merged policy (same NGINX context level).
 // We do not validate cross-level inheritance because NGINX handles that automatically.

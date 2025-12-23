@@ -1,0 +1,44 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: http-proxy-settings-1
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  buffering:
+    disable: false
+    bufferSize: "16k"
+    buffers:
+      number: 16
+      size: "64k"
+    busyBuffersSize: "128k"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: http-proxy-settings-2
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  buffering: # Conflicting on buffer sizes presence
+    bufferSize: "16k"
+    buffers:
+      number: 16
+      size: "64k"
+    busyBuffersSize: "128k"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: http-proxy-settings-3
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  buffering:
+    disable: false # Conflicting on disabel != nil
