@@ -306,6 +306,8 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&inference.InferencePoolList{},
 				&gatewayv1.BackendTLSPolicyList{},
 				&gatewayv1alpha2.TLSRouteList{},
+				&gatewayv1alpha2.TCPRouteList{},
+				&gatewayv1alpha2.UDPRouteList{},
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},

@@ -85,6 +85,7 @@ func InstallNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 		"--namespace", cfg.Namespace,
 		"--wait",
 		"--set", "nginxGateway.snippetsFilters.enable=true",
+		"--set", "nginxGateway.snippetsPolicies.enable=true",
 		"--set", "nginxGateway.gwAPIExperimentalFeatures.enable=true",
 	}
 	if cfg.ChartVersion != "" {

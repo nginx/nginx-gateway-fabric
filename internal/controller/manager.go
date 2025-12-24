@@ -719,6 +719,17 @@ func registerControllers(
 		)
 	}
 
+	if cfg.SnippetsPolicies {
+		controllerRegCfgs = append(controllerRegCfgs,
+			ctlrCfg{
+				objectType: &ngfAPIv1alpha1.SnippetsPolicy{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+			},
+		)
+	}
+
 	// Filter controllers based on CRD existence
 	crdChecker := &crd.CheckerImpl{}
 	controllerRegCfgs, discoveredCRDs, err := filterControllersByCRDExistence(

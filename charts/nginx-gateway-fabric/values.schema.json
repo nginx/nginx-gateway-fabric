@@ -1069,7 +1069,6 @@
             "enable": {
               "default": false,
               "description": "Enable SnippetsPolicies feature. SnippetsPolicies allow inserting NGINX configuration into the generated NGINX\nconfig for Gateway resources.",
-              "required": [],
               "title": "enable",
               "type": "boolean"
             }
