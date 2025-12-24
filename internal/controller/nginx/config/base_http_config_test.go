@@ -495,7 +495,7 @@ func TestExecuteBaseHttp_ConnectionHeaderMaps(t *testing.T) {
 	}
 
 	g := NewWithT(t)
-	res := executeBaseHTTPConfig(dataplane.Configuration{})
+	res := executeBaseHTTPConfig(dataplane.Configuration{}, &policiesfakes.FakeGenerator{})
 	g.Expect(res).To(HaveLen(1))
 	httpConfig := string(res[0].data)
 	for subStr, count := range expSubStringsWithCount {

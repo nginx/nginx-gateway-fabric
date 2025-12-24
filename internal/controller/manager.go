@@ -602,6 +602,17 @@ func registerControllers(
 		)
 	}
 
+	if cfg.SnippetsPolicies {
+		controllerRegCfgs = append(controllerRegCfgs,
+			ctlrCfg{
+				objectType: &ngfAPIv1alpha1.SnippetsPolicy{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+			},
+		)
+	}
+
 	for _, regCfg := range controllerRegCfgs {
 		name := regCfg.objectType.GetObjectKind().GroupVersionKind().Kind
 		if regCfg.name != "" {
