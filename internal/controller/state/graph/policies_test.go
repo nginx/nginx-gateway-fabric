@@ -644,7 +644,7 @@ func TestAttachPolicyToGateway(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			attachPolicyToGateway(test.policy, test.policy.TargetRefs[0], test.gws, "nginx-gateway", logr.Discard())
+			attachPolicyToGateway(test.policy, test.policy.TargetRefs[0], test.gws, nil, "nginx-gateway", logr.Discard())
 
 			if test.expAttached {
 				for _, gw := range test.gws {
@@ -1660,6 +1660,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 
 	cspGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "ClientSettingsPolicy"}
 	opGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "ObservabilityPolicy"}
+	snipGVK := schema.GroupVersionKind{Group: "Group", Version: "Version", Kind: "SnippetsPolicy"}
 
 	gw1Ref := createTestRef(kinds.Gateway, v1.GroupName, "gw1")
 	gw1TargetRef := createTestPolicyTargetRef(
@@ -1675,6 +1676,11 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 	gw3TargetRef := createTestPolicyTargetRef(
 		kinds.Gateway,
 		types.NamespacedName{Namespace: testNs, Name: "gw3"},
+	)
+	gwSnipRef := createTestRef(kinds.Gateway, v1.GroupName, "gw-snip")
+	gwSnipTargetRef := createTestPolicyTargetRef(
+		kinds.Gateway,
+		types.NamespacedName{Namespace: testNs, Name: "gw-snip"},
 	)
 
 	hr1Ref := createTestRef(kinds.HTTPRoute, v1.GroupName, "hr1")
@@ -1751,13 +1757,23 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", gw2Ref),
 					TargetRefs: []PolicyTargetRef{gw2TargetRef},
 				},
+				createTestPolicyKey(snipGVK, "snippetsPolicy1"): {
+					Source:     createTestPolicy(snipGVK, "snippetsPolicy1", gwSnipRef),
+					TargetRefs: []PolicyTargetRef{gwSnipTargetRef},
+				},
 			},
-			gws:    createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw2"}),
+			gws: createGatewayMap(
+				types.NamespacedName{Namespace: testNs, Name: "gw2"},
+				types.NamespacedName{Namespace: testNs, Name: "gw-snip"},
+			),
 			routes: nil,
 			expectedConditions: map[types.NamespacedName][]conditions.Condition{
 				{Namespace: testNs, Name: "gw2"}: {
 					conditions.NewClientSettingsPolicyAffected(),
 					conditions.NewObservabilityPolicyAffected(),
+				},
+				{Namespace: testNs, Name: "gw-snip"}: {
+					conditions.NewSnippetsPolicyAffected(),
 				},
 			},
 		},
@@ -1848,6 +1864,9 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				},
 				{Namespace: testNs, Name: "gr2"}: {
 					conditions.NewObservabilityPolicyAffected(),
+				},
+				{Namespace: testNs, Name: "gw-snip"}: {
+					conditions.NewSnippetsPolicyAffected(),
 				},
 			},
 		},
@@ -2393,4 +2412,141 @@ func createFakePolicyWithAncestors(
 		return v1.PolicyStatus{Ancestors: ancestors}
 	}
 	return policy
+}
+
+func TestSnippetsPolicyPropagation(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	snippetsGVK := schema.GroupVersionKind{Group: v1.GroupName, Version: "v1alpha1", Kind: kinds.SnippetsPolicy}
+	otherGVK := schema.GroupVersionKind{Group: v1.GroupName, Version: "v1alpha1", Kind: "OtherPolicy"}
+
+	gwNsName := types.NamespacedName{Namespace: testNs, Name: "gateway"}
+	otherGwNsName := types.NamespacedName{Namespace: testNs, Name: "other-gateway"}
+
+	// Create SnippetsPolicy
+	snippetsPolicy := &Policy{
+		Source: createTestPolicy(snippetsGVK, "snippets-policy", v1.LocalPolicyTargetReference{
+			Group: v1.GroupName,
+			Kind:  kinds.Gateway,
+			Name:  v1.ObjectName(gwNsName.Name),
+		}),
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.Gateway,
+				Group:  v1.GroupName,
+				Nsname: gwNsName,
+			},
+		},
+		InvalidForGateways: make(map[types.NamespacedName]struct{}),
+	}
+
+	// Create OtherPolicy
+	otherPolicy := &Policy{
+		Source: createTestPolicy(otherGVK, "other-policy", v1.LocalPolicyTargetReference{
+			Group: v1.GroupName,
+			Kind:  kinds.Gateway,
+			Name:  v1.ObjectName(gwNsName.Name),
+		}),
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.Gateway,
+				Group:  v1.GroupName,
+				Nsname: gwNsName,
+			},
+		},
+		InvalidForGateways: make(map[types.NamespacedName]struct{}),
+	}
+
+	// Create Gateways
+	gateways := map[types.NamespacedName]*Gateway{
+		gwNsName: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: gwNsName.Name, Namespace: gwNsName.Namespace},
+			},
+			Valid: true,
+		},
+		otherGwNsName: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: otherGwNsName.Name, Namespace: otherGwNsName.Namespace},
+			},
+			Valid: true,
+		},
+	}
+
+	// Create Routes
+	// Route 1: Attached to target gateway
+	route1Key := RouteKey{
+		NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route1"},
+		RouteType:      RouteTypeHTTP,
+	}
+	route1 := &L7Route{
+		Source: &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route1", Namespace: testNs}},
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{NamespacedName: gwNsName},
+			},
+		},
+	}
+
+	// Route 2: Attached to other gateway
+	route2Key := RouteKey{
+		NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route2"},
+		RouteType:      RouteTypeHTTP,
+	}
+	route2 := &L7Route{
+		Source: &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route2", Namespace: testNs}},
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{NamespacedName: otherGwNsName},
+			},
+		},
+	}
+
+	// Route 3: Attached to both gateways
+	route3Key := RouteKey{
+		NamespacedName: types.NamespacedName{Namespace: testNs, Name: "route3"},
+		RouteType:      RouteTypeHTTP,
+	}
+	route3 := &L7Route{
+		Source: &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route3", Namespace: testNs}},
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{NamespacedName: gwNsName},
+			},
+			{
+				Gateway: &ParentRefGateway{NamespacedName: otherGwNsName},
+			},
+		},
+	}
+
+	routes := map[RouteKey]*L7Route{
+		route1Key: route1,
+		route2Key: route2,
+		route3Key: route3,
+	}
+
+	// Test 1: SnippetsPolicy Propagation
+	attachPolicyToGateway(snippetsPolicy, snippetsPolicy.TargetRefs[0], gateways, routes, "nginx-gateway", logr.Discard())
+
+	// Verify Gateway attachment
+	g.Expect(gateways[gwNsName].Policies).To(ContainElement(snippetsPolicy))
+
+	// Verify Route Propagation
+	g.Expect(route1.Policies).To(ContainElement(snippetsPolicy), "Route1 attached to gateway should have policy")
+	g.Expect(route2.Policies).To(
+		Not(ContainElement(snippetsPolicy)),
+		"Route2 attached to other gateway should NOT have policy",
+	)
+	g.Expect(route3.Policies).To(ContainElement(snippetsPolicy), "Route3 attached to gateway should have policy")
+
+	// Test 2: Other Policy (Non-Snippets) Propagation
+	attachPolicyToGateway(otherPolicy, otherPolicy.TargetRefs[0], gateways, routes, "nginx-gateway", logr.Discard())
+
+	// Verify Gateway attachment
+	g.Expect(gateways[gwNsName].Policies).To(ContainElement(otherPolicy))
+
+	// Verify NO Route Propagation
+	g.Expect(route1.Policies).To(Not(ContainElement(otherPolicy)), "Route1 should NOT have other policy")
+	g.Expect(route3.Policies).To(Not(ContainElement(otherPolicy)), "Route3 should NOT have other policy")
 }

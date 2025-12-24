@@ -47,6 +47,8 @@ const (
 	NginxProxy = "NginxProxy"
 	// SnippetsFilter is the SnippetsFilter kind.
 	SnippetsFilter = "SnippetsFilter"
+	// SnippetsPolicy is the SnippetsPolicy kind.
+	SnippetsPolicy = "SnippetsPolicy"
 	// UpstreamSettingsPolicy is the UpstreamSettingsPolicy kind.
 	UpstreamSettingsPolicy = "UpstreamSettingsPolicy"
 )
