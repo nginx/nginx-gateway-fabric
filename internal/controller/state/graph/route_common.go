@@ -119,14 +119,14 @@ type L4Route struct {
 }
 
 type L4RouteSpec struct {
+	// BackendRefs is a list of backend references for TCPRoute/UDPRoute multi-backend support.
+	// Each BackendRef can have a weight for load balancing.
+	BackendRefs []BackendRef
 	// Hostnames defines a set of hostnames used to select a Route used to process the request.
 	Hostnames []v1.Hostname
 	// FIXME (sarthyparty): change to slice of BackendRef, as for now we are only supporting one BackendRef.
 	// We will eventually support multiple BackendRef https://github.com/nginx/nginx-gateway-fabric/issues/2184
 	BackendRef BackendRef
-	// BackendRefs is a list of backend references for TCPRoute/UDPRoute multi-backend support.
-	// Each BackendRef can have a weight for load balancing.
-	BackendRefs []BackendRef
 }
 
 // GetBackendRefs returns all backend references for this L4Route.
