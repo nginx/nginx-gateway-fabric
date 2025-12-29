@@ -190,15 +190,6 @@ func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.Prot
 			continue
 		}
 
-		if len(l.L4Routes) > 1 {
-			logger.V(1).Info("Listener has multiple routes, which is not supported, skipping",
-				"listener", l.Name,
-				"protocol", protocolName,
-				"routeCount", len(l.L4Routes),
-			)
-			continue
-		}
-
 		for _, r := range l.L4Routes {
 			if !r.Valid {
 				continue
@@ -215,17 +206,38 @@ func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.Prot
 				continue
 			}
 
-			// Use unified upstream naming: protocol_namespace_routename
 			upstreamName := fmt.Sprintf("%s_%s_%s",
 				protocolName,
 				r.Source.GetNamespace(),
 				r.Source.GetName(),
 			)
 
+			var upstreams []Layer4Upstream
+			for i, br := range backendRefs {
+				if !br.Valid {
+					continue
+				}
+
+				// Create individual upstream name for each backend service
+				upstreamName := fmt.Sprintf("%s_%s_%s_%s_%d",
+					protocolName,
+					r.Source.GetNamespace(),
+					r.Source.GetName(),
+					br.SvcNsName.Name,
+					i,
+				)
+
+				upstreams = append(upstreams, Layer4Upstream{
+					Name:   upstreamName,
+					Weight: br.Weight,
+				})
+			}
+
 			server := Layer4VirtualServer{
 				Hostname:     "", // Layer4 doesn't use hostnames
 				UpstreamName: upstreamName,
-				Port:         int32(l.Source.Port),
+				Upstreams:    upstreams,
+				Port:         l.Source.Port,
 			}
 
 			servers = append(servers, server)
@@ -364,50 +376,129 @@ func processListenerRoutes(
 			continue
 		}
 
-		upstreamName := fmt.Sprintf("%s_%s_%s",
+		if len(backendRefs) == 1 {
+			// Single backend: use existing logic
+			processSingleBackend(
+				ctx,
+				logger,
+				route,
+				backendRefs[0],
+				protocolName,
+				gatewayNSName,
+				allowedAddressType,
+				serviceResolver,
+				uniqueUpstreams)
+		} else {
+			// Multiple backends: create individual upstreams for each service
+			processMultipleBackends(
+				ctx,
+				logger,
+				route,
+				backendRefs,
+				protocolName,
+				gatewayNSName,
+				allowedAddressType,
+				serviceResolver,
+				uniqueUpstreams)
+		}
+	}
+}
+
+func processSingleBackend(
+	ctx context.Context,
+	logger logr.Logger,
+	route *graph.L4Route,
+	br graph.BackendRef,
+	protocolName string,
+	gatewayNSName types.NamespacedName,
+	allowedAddressType []discoveryV1.AddressType,
+	serviceResolver resolver.ServiceResolver,
+	uniqueUpstreams map[string]Upstream,
+) {
+	upstreamName := fmt.Sprintf("%s_%s_%s",
+		protocolName,
+		route.Source.GetNamespace(),
+		route.Source.GetName(),
+	)
+
+	if _, exist := uniqueUpstreams[upstreamName]; exist {
+		return
+	}
+
+	if !br.Valid {
+		return
+	}
+
+	if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+		return
+	}
+
+	eps, err := serviceResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
+	var errMsg string
+	if err != nil {
+		errMsg = err.Error()
+	}
+
+	// For single backend, don't set weights on endpoints - use default load balancing
+	for i := range eps {
+		eps[i].Weight = 0
+	}
+
+	uniqueUpstreams[upstreamName] = Upstream{
+		Name:      upstreamName,
+		Endpoints: eps,
+		ErrorMsg:  errMsg,
+	}
+}
+
+func processMultipleBackends(
+	ctx context.Context,
+	logger logr.Logger,
+	route *graph.L4Route,
+	backendRefs []graph.BackendRef,
+	protocolName string,
+	gatewayNSName types.NamespacedName,
+	allowedAddressType []discoveryV1.AddressType,
+	serviceResolver resolver.ServiceResolver,
+	uniqueUpstreams map[string]Upstream,
+) {
+	// Create individual upstream for each backend service
+	for i, br := range backendRefs {
+		if !br.Valid {
+			continue
+		}
+
+		if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+			continue
+		}
+
+		// Create individual upstream name for each backend service
+		upstreamName := fmt.Sprintf("%s_%s_%s_%s_%d",
 			protocolName,
 			route.Source.GetNamespace(),
 			route.Source.GetName(),
+			br.SvcNsName.Name,
+			i,
 		)
 
 		if _, exist := uniqueUpstreams[upstreamName]; exist {
 			continue
 		}
 
-		var endpoints []resolver.Endpoint
-		var errMsgs []string
-
-		// Collect endpoints from all backends with their weights
-		for _, br := range backendRefs {
-			if !br.Valid {
-				continue
-			}
-
-			if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
-				continue
-			}
-
-			eps, err := serviceResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-				continue
-			}
-
-			// Add weight to each endpoint
-			for _, ep := range eps {
-				ep.Weight = br.Weight
-				endpoints = append(endpoints, ep)
-			}
+		eps, err := serviceResolver.Resolve(ctx, logger, br.SvcNsName, br.ServicePort, allowedAddressType)
+		var errMsg string
+		if err != nil {
+			errMsg = err.Error()
 		}
 
-		var errMsg string
-		if len(errMsgs) > 0 {
-			errMsg = fmt.Sprintf("some backends failed: %v", errMsgs)
+		// For multiple backends, don't set weights on endpoints - use least_conn within each service
+		for j := range eps {
+			eps[j].Weight = 0
 		}
 
 		uniqueUpstreams[upstreamName] = Upstream{
 			Name:      upstreamName,
-			Endpoints: endpoints,
+			Endpoints: eps,
 			ErrorMsg:  errMsg,
 		}
 	}

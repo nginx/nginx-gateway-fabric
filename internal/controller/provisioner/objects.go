@@ -164,7 +164,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		default:
 			protocol = corev1.ProtocolTCP
 		}
-		ports[int32(listener.Port)] = protocol
+		ports[listener.Port] = protocol
 	}
 
 	// Create separate copies of objectMeta for service and deployment to avoid shared map references
