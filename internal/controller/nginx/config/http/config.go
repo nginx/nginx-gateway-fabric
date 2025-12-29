@@ -1,4 +1,4 @@
-package http //nolint:revive // ignoring conflicting package name
+package http //nolint:revive,nolintlint // ignoring conflicting package name
 
 import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
