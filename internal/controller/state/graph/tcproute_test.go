@@ -352,9 +352,10 @@ func TestBuildTCPRoute(t *testing.T) {
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
-							SvcNsName: types.NamespacedName{Namespace: "test", Name: "svc-does-not-exist"},
-							Weight:    1,
-							Valid:     false,
+							SvcNsName:          types.NamespacedName{Namespace: "test", Name: "svc-does-not-exist"},
+							Weight:             1,
+							Valid:              false,
+							InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 						},
 					},
 				},
@@ -382,7 +383,8 @@ func TestBuildTCPRoute(t *testing.T) {
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
-							Valid: false,
+							Valid:              false,
+							InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 						},
 					},
 				},
@@ -410,7 +412,8 @@ func TestBuildTCPRoute(t *testing.T) {
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
-							Valid: false,
+							Valid:              false,
+							InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 						},
 					},
 				},
@@ -441,7 +444,8 @@ func TestBuildTCPRoute(t *testing.T) {
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
-							Valid: false,
+							Valid:              false,
+							InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 						},
 					},
 				},
@@ -470,7 +474,8 @@ func TestBuildTCPRoute(t *testing.T) {
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
-							Valid: false,
+							Valid:              false,
+							InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 						},
 					},
 				},
@@ -523,7 +528,7 @@ func TestBuildTCPRoute(t *testing.T) {
 							Valid:  true,
 							InvalidForGateways: map[types.NamespacedName]conditions.Condition{
 								{Namespace: "test", Name: "gateway"}: conditions.NewRouteInvalidIPFamily(
-									"service configured with IPv4 family but NginxProxy is configured with IPv6",
+									"The Service configured with IPv4 family but NginxProxy is configured with IPv6",
 								),
 							},
 						},
@@ -552,8 +557,9 @@ func TestBuildTCPRoute(t *testing.T) {
 							ServicePort: apiv1.ServicePort{
 								Port: 80,
 							},
-							Weight: 1,
-							Valid:  true,
+							Weight:             1,
+							Valid:              true,
+							InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 						},
 					},
 				},
@@ -581,16 +587,18 @@ func TestBuildTCPRoute(t *testing.T) {
 							ServicePort: apiv1.ServicePort{
 								Port: 80,
 							},
-							Weight: 80,
-							Valid:  true,
+							Weight:             80,
+							Valid:              true,
+							InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 						},
 						{
 							SvcNsName: types.NamespacedName{Namespace: "test", Name: "svc2"},
 							ServicePort: apiv1.ServicePort{
 								Port: 80,
 							},
-							Weight: 20,
-							Valid:  true,
+							Weight:             20,
+							Valid:              true,
+							InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 						},
 					},
 				},
@@ -611,6 +619,11 @@ func TestBuildTCPRoute(t *testing.T) {
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteAcceptedUnsupportedField(
+						"spec.rules[1..1]: Only the first rule is processed. 1 additional rule(s) are ignored",
+					),
+				},
 				Spec: L4RouteSpec{
 					BackendRefs: []BackendRef{
 						{
@@ -618,16 +631,9 @@ func TestBuildTCPRoute(t *testing.T) {
 							ServicePort: apiv1.ServicePort{
 								Port: 80,
 							},
-							Weight: 1,
-							Valid:  true,
-						},
-						{
-							SvcNsName: types.NamespacedName{Namespace: "test", Name: "svc2"},
-							ServicePort: apiv1.ServicePort{
-								Port: 80,
-							},
-							Weight: 1,
-							Valid:  true,
+							Weight:             1,
+							Valid:              true,
+							InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 						},
 					},
 				},

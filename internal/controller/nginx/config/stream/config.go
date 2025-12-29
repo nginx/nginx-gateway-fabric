@@ -7,19 +7,13 @@ import (
 
 // Server holds all configuration for a stream server.
 type Server struct {
-	UDPConfig       *UDPConfig
 	Listen          string
 	StatusZone      string
 	ProxyPass       string
 	Pass            string
-	Protocol        string
 	RewriteClientIP shared.RewriteClientIPSettings
 	SSLPreread      bool
 	IsSocket        bool
-}
-
-type UDPConfig struct {
-	ProxyTimeout string
 }
 
 // Upstream holds all configuration for a stream upstream.
@@ -37,10 +31,23 @@ type UpstreamServer struct {
 	Weight  int32 // Weight for load balancing, default 1
 }
 
+// SplitClient holds configuration for a stream split_clients directive.
+type SplitClient struct {
+	VariableName  string
+	Distributions []SplitClientDistribution
+}
+
+// SplitClientDistribution holds configuration for a split_clients distribution.
+type SplitClientDistribution struct {
+	Percent string
+	Value   string
+}
+
 // ServerConfig holds configuration for a stream server and IP family to be used by NGINX.
 type ServerConfig struct {
-	DNSResolver *dataplane.DNSResolverConfig
-	Servers     []Server
-	IPFamily    shared.IPFamily
-	Plus        bool
+	DNSResolver  *dataplane.DNSResolverConfig
+	Servers      []Server
+	SplitClients []SplitClient
+	IPFamily     shared.IPFamily
+	Plus         bool
 }

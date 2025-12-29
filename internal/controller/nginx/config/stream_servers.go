@@ -2,9 +2,12 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	gotemplate "text/template"
 
 	"github.com/go-logr/logr"
+
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
@@ -16,12 +19,14 @@ var streamServersTemplate = gotemplate.Must(gotemplate.New("streamServers").Pars
 
 func (g GeneratorImpl) executeStreamServers(conf dataplane.Configuration) []executeResult {
 	streamServers := createStreamServers(g.logger, conf)
+	splitClients := createStreamSplitClients(conf)
 
 	streamServerConfig := stream.ServerConfig{
-		Servers:     streamServers,
-		IPFamily:    getIPFamily(conf.BaseHTTPConfig),
-		Plus:        g.plus,
-		DNSResolver: buildDNSResolver(conf.BaseStreamConfig.DNSResolver),
+		Servers:      streamServers,
+		SplitClients: splitClients,
+		IPFamily:     getIPFamily(conf.BaseHTTPConfig),
+		Plus:         g.plus,
+		DNSResolver:  buildDNSResolver(conf.BaseStreamConfig.DNSResolver),
 	}
 
 	streamServerResult := executeResult{
@@ -88,7 +93,8 @@ func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []str
 	}
 
 	// Process Layer4 servers (TCP and UDP)
-	processLayer4Servers(logger, conf.TCPServers, conf.UDPServers, upstreams, portSet, &streamServers)
+	processLayer4Servers(logger, conf.TCPServers, upstreams, portSet, &streamServers, string(v1.TCPProtocolType))
+	processLayer4Servers(logger, conf.UDPServers, upstreams, portSet, &streamServers, string(v1.UDPProtocolType))
 
 	return streamServers
 }
@@ -96,54 +102,72 @@ func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []str
 // processLayer4Servers processes TCP and UDP servers to create stream servers.
 func processLayer4Servers(
 	logger logr.Logger,
-	tcpServers []dataplane.Layer4VirtualServer,
-	udpServers []dataplane.Layer4VirtualServer,
+	servers []dataplane.Layer4VirtualServer,
 	upstreams map[string]dataplane.Upstream,
 	portSet map[int32]struct{},
 	streamServers *[]stream.Server,
+	protocol string,
 ) {
-	// Process TCP servers
-	for i, server := range tcpServers {
+	protocolSuffix := ""
+	if protocol == string(v1.UDPProtocolType) {
+		protocolSuffix = " " + strings.ToLower(string(v1.UDPProtocolType))
+	}
+
+	for i, server := range servers {
 		if _, inPortSet := portSet[server.Port]; inPortSet {
-			continue // Skip if port already in use
+			continue
 		}
 
-		if u, ok := upstreams[server.UpstreamName]; ok && server.UpstreamName != "" && len(u.Endpoints) > 0 {
-			streamServer := stream.Server{
-				Listen:     fmt.Sprint(server.Port),
-				StatusZone: fmt.Sprintf("tcp_%d", server.Port),
-				ProxyPass:  server.UpstreamName,
-			}
-			*streamServers = append(*streamServers, streamServer)
-			portSet[server.Port] = struct{}{}
-		} else {
-			logger.V(1).Info("TCP Server skipped - upstream not found or no endpoints",
+		if server.UpstreamName == "" {
+			logger.V(1).Info(
+				fmt.Sprintf("%s Server skipped - upstream name not found", protocol),
 				"serverIndex", i,
 				"port", server.Port,
 				"upstreamName", server.UpstreamName,
 			)
-		}
-	}
-
-	// Process UDP servers
-	for _, server := range udpServers {
-		if _, inPortSet := portSet[server.Port]; inPortSet {
-			continue // Skip if port already in use
+			continue
 		}
 
-		if u, ok := upstreams[server.UpstreamName]; ok && server.UpstreamName != "" && len(u.Endpoints) > 0 {
-			streamServer := stream.Server{
-				Listen:     fmt.Sprintf("%d udp", server.Port),
-				StatusZone: fmt.Sprintf("udp_%d", server.Port),
-				ProxyPass:  server.UpstreamName,
-				Protocol:   "udp",
-				UDPConfig: &stream.UDPConfig{
-					ProxyTimeout: "1s",
-				},
+		var proxyPass string
+		if len(server.Upstreams) > 1 {
+			proxyPass = fmt.Sprintf("$backend_%d", server.Port)
+			hasValidUpstreams := false
+			for _, upstream := range server.Upstreams {
+				if u, ok := upstreams[upstream.Name]; ok && len(u.Endpoints) > 0 {
+					hasValidUpstreams = true
+					break
+				}
 			}
-			*streamServers = append(*streamServers, streamServer)
-			portSet[server.Port] = struct{}{}
+			if !hasValidUpstreams {
+				logger.V(1).Info(
+					fmt.Sprintf("%s Server skipped - no valid upstreams with endpoints", protocol),
+					"serverIndex", i,
+					"port", server.Port,
+					"upstreamName", server.UpstreamName,
+				)
+				continue
+			}
+		} else {
+			if u, ok := upstreams[server.UpstreamName]; ok && len(u.Endpoints) > 0 {
+				proxyPass = server.UpstreamName
+			} else {
+				logger.V(1).Info(
+					fmt.Sprintf("%s Server skipped - upstream not found or no endpoints", protocol),
+					"serverIndex", i,
+					"port", server.Port,
+					"upstreamName", server.UpstreamName,
+				)
+				continue
+			}
 		}
+
+		streamServer := stream.Server{
+			Listen:     fmt.Sprintf("%d%s", server.Port, protocolSuffix),
+			StatusZone: fmt.Sprintf("%s_%d", protocol, server.Port),
+			ProxyPass:  proxyPass,
+		}
+		*streamServers = append(*streamServers, streamServer)
+		portSet[server.Port] = struct{}{}
 	}
 }
 
@@ -159,4 +183,75 @@ func getRewriteClientIPSettingsForStream(
 	}
 
 	return shared.RewriteClientIPSettings{}
+}
+
+// createStreamSplitClients creates split_clients configurations for Layer4 servers with multiple backends.
+func createStreamSplitClients(conf dataplane.Configuration) []stream.SplitClient {
+	var splitClients []stream.SplitClient
+
+	// Process TCP servers
+	for _, server := range conf.TCPServers {
+		if server.NeedsWeightDistribution() {
+			splitClient := createSplitClientForL4Server(server)
+			if splitClient != nil {
+				splitClients = append(splitClients, *splitClient)
+			}
+		}
+	}
+
+	// Process UDP servers
+	for _, server := range conf.UDPServers {
+		if server.NeedsWeightDistribution() {
+			splitClient := createSplitClientForL4Server(server)
+			if splitClient != nil {
+				splitClients = append(splitClients, *splitClient)
+			}
+		}
+	}
+
+	return splitClients
+}
+
+// createSplitClientForL4Server creates a split_clients configuration for a Layer4 server with multiple backends.
+func createSplitClientForL4Server(server dataplane.Layer4VirtualServer) *stream.SplitClient {
+	if !server.NeedsWeightDistribution() {
+		return nil
+	}
+
+	// Calculate total weight
+	totalWeight := int32(0)
+	for _, upstream := range server.Upstreams {
+		totalWeight += upstream.Weight
+	}
+
+	if totalWeight == 0 {
+		return nil
+	}
+
+	distributions := make([]stream.SplitClientDistribution, 0, len(server.Upstreams))
+	availablePercentage := float64(100)
+
+	// Process all upstreams except the last one
+	for i := range len(server.Upstreams) - 1 {
+		upstream := server.Upstreams[i]
+		percentage := percentOf(upstream.Weight, totalWeight)
+		availablePercentage -= percentage
+
+		distributions = append(distributions, stream.SplitClientDistribution{
+			Percent: fmt.Sprintf("%.2f", percentage),
+			Value:   upstream.Name,
+		})
+	}
+
+	// The last upstream gets the remaining percentage
+	lastUpstream := server.Upstreams[len(server.Upstreams)-1]
+	distributions = append(distributions, stream.SplitClientDistribution{
+		Percent: fmt.Sprintf("%.2f", availablePercentage),
+		Value:   lastUpstream.Name,
+	})
+
+	return &stream.SplitClient{
+		VariableName:  fmt.Sprintf("backend_%d", server.Port),
+		Distributions: distributions,
+	}
 }

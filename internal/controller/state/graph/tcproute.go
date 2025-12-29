@@ -26,7 +26,7 @@ func buildTCPRoute(
 		namespace:        tcpRoute.Namespace,
 		parentRefs:       tcpRoute.Spec.ParentRefs,
 		rules:            rules,
-		routeType:        "TCP",
+		routeType:        string(RouteTypeTCP),
 		refGrantResolver: refGrantResolver,
 	}
 
