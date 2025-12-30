@@ -1019,6 +1019,13 @@
           "title": "podAnnotations",
           "type": "object"
         },
+        "priorityClassName": {
+          "default": "",
+          "description": "The priority class name for the NGINX Gateway Fabric control plane pod.",
+          "required": [],
+          "title": "priorityClassName",
+          "type": "string"
+        },
         "productTelemetry": {
           "properties": {
             "enable": {
