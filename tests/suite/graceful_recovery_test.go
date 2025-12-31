@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os/exec"
 	"slices"
 	"strings"
@@ -50,20 +49,20 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 	)
 
 	checkForWorkingTraffic := func(teaURL, coffeeURL string) error {
-		if err := expectRequestToSucceed(teaURL, address, "URI: /tea"); err != nil {
+		if err := ExpectRequestToSucceed(timeoutConfig.RequestTimeout, teaURL, address, "URI: /tea"); err != nil {
 			return err
 		}
-		if err := expectRequestToSucceed(coffeeURL, address, "URI: /coffee"); err != nil {
+		if err := ExpectRequestToSucceed(timeoutConfig.RequestTimeout, coffeeURL, address, "URI: /coffee"); err != nil {
 			return err
 		}
 		return nil
 	}
 
 	checkForFailingTraffic := func(teaURL, coffeeURL string) error {
-		if err := expectRequestToFail(teaURL, address); err != nil {
+		if err := ExpectRequestToFail(timeoutConfig.RequestTimeout, teaURL, address); err != nil {
 			return err
 		}
-		if err := expectRequestToFail(coffeeURL, address); err != nil {
+		if err := ExpectRequestToFail(timeoutConfig.RequestTimeout, coffeeURL, address); err != nil {
 			return err
 		}
 		return nil
@@ -553,45 +552,6 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		runRestartNodeAbruptlyTest(teaURL, coffeeURL, files, &ns)
 	})
 })
-
-func expectRequestToSucceed(appURL, address string, responseBodyMessage string) error {
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
-
-	if status != http.StatusOK {
-		return fmt.Errorf("http status was not 200, got %d: %w", status, err)
-	}
-
-	if !strings.Contains(body, responseBodyMessage) {
-		return fmt.Errorf("expected response body to contain correct body message, got: %s", body)
-	}
-
-	return err
-}
-
-// The function is expecting the request to fail (hence the name) because NGINX is not there to route the request.
-// The purpose of the graceful recovery test is to simulate various failure scenarios including NGINX
-// container restarts, NGF pod restarts, and Kubernetes node restarts to show the system can recover
-// after these real world scenarios and resume serving application traffic after recovery.
-// In this case, we verify that our requests fail and then that eventually are successful again - verifying that
-// NGINX went down and came back up again.
-// We only want an error returned from this particular function if it does not appear that NGINX has
-// stopped serving traffic.
-func expectRequestToFail(appURL, address string) error {
-	status, body, err := framework.Get(appURL, address, timeoutConfig.RequestTimeout, nil, nil)
-	if status != 0 {
-		return errors.New("expected http status to be 0")
-	}
-
-	if body != "" {
-		return fmt.Errorf("expected response body to be empty, instead received: %s", body)
-	}
-
-	if err == nil {
-		return errors.New("expected request to error")
-	}
-
-	return nil
-}
 
 func getNginxErrorLogs(nginxPodName, namespace string) string {
 	nginxLogs, err := resourceManager.GetPodLogs(
