@@ -1,0 +1,94 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: invalid-cafe-routes
+spec:
+  parentRefs:
+    - name: auth-gateway
+  rules:
+    # Tea with Basic Auth with valid basic-auth2
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /tea
+      backendRefs:
+        - name: tea
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: basic-auth2
+    # Chocolate with invalid key in reference
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /chocolate
+      backendRefs:
+        - name: chocolate
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: basic-auth-wrong-key
+    # Matcha with not existing AuthFilter
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /matcha
+      backendRefs:
+        - name: matcha
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: not-existing-auth
+---
+# AuthenticationFilters with valid and invalid configurations
+
+# Auth with valid basic-auth2
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth2
+type: nginx.org/htpasswd
+data:
+  # Base64 of "htpasswd -bn user2 password2"
+  auth: dXNlcjI6JGFwcjEkd0lKUUpjZEUkSXUuYjVhMlBGODdtQi5zT0x4aUg5MQ==
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth2
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      name: basic-auth2
+    realm: "Restricted basic-auth2"
+---
+# Auth with a wrong key
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth-wrong-key
+type: nginx.org/htpasswd
+data:
+  # Base64 of "htpasswd -bn user2 password2"
+  creds: dXNlcjI6JGFwcjEkd0lKUUpjZEUkSXUuYjVhMlBGODdtQi5zT0x4aUg5MQ==
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth-wrong-key
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      name: basic-auth-wrong-key
+    realm: "Restricted basic-auth-wrong-key"
