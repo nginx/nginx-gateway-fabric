@@ -102,7 +102,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseURL, address, "URI: /coffee")
+						return ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseURL, address, "URI: /coffee")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -329,46 +329,11 @@ func checkForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedNa
 		return err
 	}
 
-	if len(sf.Status.Controllers) != 1 {
-		tooManyStatusesErr := fmt.Errorf("snippetsFilter has %d controller statuses, expected 1", len(sf.Status.Controllers))
-		GinkgoWriter.Printf("ERROR: %v\n", tooManyStatusesErr)
-
-		return tooManyStatusesErr
-	}
-
-	status := sf.Status.Controllers[0]
-	if status.ControllerName != ngfControllerName {
-		wrongNameErr := fmt.Errorf("expected controller name to be %s, got %s", ngfControllerName, status.ControllerName)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongNameErr)
-
-		return wrongNameErr
-	}
-
-	condition := status.Conditions[0]
-	if condition.Type != string(ngfAPI.SnippetsFilterConditionTypeAccepted) {
-		wrongTypeErr := fmt.Errorf("expected condition type to be Accepted, got %s", condition.Type)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongTypeErr)
-
-		return wrongTypeErr
-	}
-
-	if status.Conditions[0].Status != metav1.ConditionTrue {
-		wrongStatusErr := fmt.Errorf("expected condition status to be %s, got %s", metav1.ConditionTrue, condition.Status)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongStatusErr)
-
-		return wrongStatusErr
-	}
-
-	if status.Conditions[0].Reason != string(ngfAPI.SnippetsFilterConditionReasonAccepted) {
-		wrongReasonErr := fmt.Errorf(
-			"expected condition reason to be %s, got %s",
-			ngfAPI.SnippetsFilterConditionReasonAccepted,
-			condition.Reason,
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongReasonErr)
-
-		return wrongReasonErr
-	}
-
-	return nil
+	return CheckFilterAccepted(
+		sf,
+		ngfControllerName,
+		snippetsFilterControllers,
+		(string)(ngfAPI.SnippetsFilterConditionTypeAccepted),
+		(string)(ngfAPI.SnippetsFilterConditionReasonAccepted),
+	)
 }

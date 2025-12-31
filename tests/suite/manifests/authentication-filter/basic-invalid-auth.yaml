@@ -1,0 +1,155 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: invalid-cafe-routes
+spec:
+  parentRefs:
+    - name: auth-gateway
+  rules:
+    # Latte without authentication
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /latte
+      backendRefs:
+        - name: latte
+          port: 80
+    # Soda with authentication reference from different namespace
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /soda
+      backendRefs:
+        - name: soda
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: basic-auth1
+    - matches:
+        # Coffee with invalid Auth type
+        - path:
+            type: PathPrefix
+            value: /coffee1
+        # Additional coffee path with same auth
+        - path:
+            type: PathPrefix
+            value: /coffee2
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: basic-auth-opaque
+    # Tea with Basic Auth with valid basic-auth2
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /tea
+      backendRefs:
+        - name: tea
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: basic-auth2
+    # Matcha with not existing AuthFilter
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /matcha
+      backendRefs:
+        - name: matcha
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: not-existing-auth
+    # Chocolate with invalid key in reference
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /chocolate
+      backendRefs:
+        - name: chocolate
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: basic-auth-wrong-key
+---
+# AuthenticationFilters with valid and invalid configurations
+
+# Auth with valid basic-auth2
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth2
+type: nginx.org/htpasswd
+data:
+  # Base64 of "htpasswd -bn user2 password2"
+  auth: dXNlcjI6JGFwcjEkd0lKUUpjZEUkSXUuYjVhMlBGODdtQi5zT0x4aUg5MQ==
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth2
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      name: basic-auth2
+    realm: "Restricted basic-auth2"
+---
+# Auth with incorrect type
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth-opaque
+type: Opaque
+data:
+  # Base64 of "printf 'user1:password1' | base64"
+  auth: dXNlcjE6cGFzc3dvcmQx
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth-opaque
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      name: basic-auth-opaque
+    realm: "Restricted basic-auth-opaque"
+---
+# Auth with a wrong key
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth-wrong-key
+type: nginx.org/htpasswd
+data:
+  # Base64 of "htpasswd -bn user2 password2"
+  creds: dXNlcjI6JGFwcjEkd0lKUUpjZEUkSXUuYjVhMlBGODdtQi5zT0x4aUg5MQ==
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth-wrong-key
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      name: basic-auth-wrong-key
+    realm: "Restricted basic-auth-wrong-key"
