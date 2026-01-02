@@ -31,6 +31,7 @@ func buildHTTPRoute(
 	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	featureFlags FeatureFlags,
 ) *L7Route {
 	r := &L7Route{
 		Source:    ghr,
@@ -63,12 +64,17 @@ func buildHTTPRoute(
 	r.Spec.Hostnames = ghr.Spec.Hostnames
 	r.Attachable = true
 
+	nsName := types.NamespacedName{
+		Name:      ghr.GetName(),
+		Namespace: ghr.GetNamespace(),
+	}
 	rules, valid, conds := processHTTPRouteRules(
 		ghr.Spec.Rules,
 		validator,
 		getSnippetsFilterResolverForNamespace(snippetsFilters, r.Source.GetNamespace()),
 		inferencePools,
-		r.Source.GetNamespace(),
+		nsName,
+		featureFlags,
 	)
 
 	r.Spec.Rules = rules
@@ -84,6 +90,7 @@ func buildHTTPMirrorRoutes(
 	route *v1.HTTPRoute,
 	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	featureFlags FeatureFlags,
 ) {
 	for idx, rule := range l7route.Spec.Rules {
 		if rule.Filters.Valid {
@@ -121,6 +128,7 @@ func buildHTTPMirrorRoutes(
 					gateways,
 					snippetsFilters,
 					nil,
+					featureFlags,
 				)
 
 				if mirrorRoute != nil {
@@ -171,15 +179,17 @@ func removeHTTPMirrorFilters(filters []v1.HTTPRouteFilter) []v1.HTTPRouteFilter 
 
 func processHTTPRouteRule(
 	specRule v1.HTTPRouteRule,
-	rulePath *field.Path,
+	ruleIdx int,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
-	routeNamespace string,
+	routeNsName types.NamespacedName,
+	featureFlags FeatureFlags,
 ) (RouteRule, routeRuleErrors) {
-	var errors routeRuleErrors
+	rulePath := field.NewPath("spec").Child("rules").Index(ruleIdx)
 
-	unsupportedFieldsErrors := checkForUnsupportedHTTPFields(specRule, rulePath)
+	var errors routeRuleErrors
+	unsupportedFieldsErrors := checkForUnsupportedHTTPFields(specRule, rulePath, featureFlags)
 	if len(unsupportedFieldsErrors) > 0 {
 		errors.warn = append(errors.warn, unsupportedFieldsErrors...)
 	}
@@ -202,59 +212,30 @@ func processHTTPRouteRule(
 		validator,
 		resolveExtRefFunc,
 	)
-
 	errors = errors.append(filterErrors)
 
-	backendRefs := make([]RouteBackendRef, 0, len(specRule.BackendRefs))
+	var sp *SessionPersistenceConfig
+	if specRule.SessionPersistence != nil {
+		spConfig, spErrors := processSessionPersistenceConfig(
+			specRule.SessionPersistence,
+			specRule.Matches,
+			rulePath.Child("sessionPersistence"),
+			validator,
+		)
+		errors = errors.append(spErrors)
 
-	// rule.BackendRefs are validated separately because of their special requirements
-	for _, b := range specRule.BackendRefs {
-		var interfaceFilters []any
-		if len(b.Filters) > 0 {
-			interfaceFilters = make([]any, 0, len(b.Filters))
-			for _, filter := range b.Filters {
-				interfaceFilters = append(interfaceFilters, filter)
+		if spConfig != nil && spConfig.Valid {
+			spKey := getSessionPersistenceKey(ruleIdx, routeNsName)
+			spConfig.Idx = spKey
+			if spConfig.Name == "" {
+				spConfig.Name = fmt.Sprintf("sp_%s", spKey)
 			}
+			sp = spConfig
 		}
-
-		rbr := RouteBackendRef{
-			BackendRef: b.BackendRef,
-		}
-
-		// If route specifies an InferencePool backend, we need to convert it to its associated
-		// headless Service backend (that we created), so nginx config can be built properly.
-		// Only do this if the InferencePool actually exists.
-		if inferencePoolBackend(b, routeNamespace, inferencePools) {
-			// We don't support traffic splitting at the Route level for
-			// InferencePool backends, so if there's more than one backendRef, and one of them
-			// is an InferencePool, we mark the rule as invalid.
-			if len(specRule.BackendRefs) > 1 {
-				err := field.Forbidden(
-					rulePath.Child("backendRefs"),
-					"cannot use InferencePool backend when multiple backendRefs are specified in a single rule",
-				)
-				errors.invalid = append(errors.invalid, err)
-				break
-			}
-
-			svcName := controller.CreateInferencePoolServiceName(string(b.Name))
-			rbr = RouteBackendRef{
-				IsInferencePool: true,
-				BackendRef: v1.BackendRef{
-					BackendObjectReference: v1.BackendObjectReference{
-						Group:     helpers.GetPointer[v1.Group](""),
-						Kind:      helpers.GetPointer[v1.Kind](kinds.Service),
-						Name:      v1.ObjectName(svcName),
-						Namespace: b.Namespace,
-					},
-					Weight: b.Weight,
-				},
-			}
-		}
-
-		rbr.Filters = interfaceFilters
-		backendRefs = append(backendRefs, rbr)
 	}
+
+	backendRefs, backendRefErrors := getBackendRefs(specRule, routeNsName.Namespace, inferencePools, rulePath, sp)
+	errors = errors.append(backendRefErrors)
 
 	if routeFilters.Valid {
 		for i, filter := range routeFilters.Filters {
@@ -280,12 +261,75 @@ func processHTTPRouteRule(
 	}, errors
 }
 
+func getBackendRefs(
+	routeRule v1.HTTPRouteRule,
+	routeNamespace string,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	rulePath *field.Path,
+	sp *SessionPersistenceConfig,
+) ([]RouteBackendRef, routeRuleErrors) {
+	var errors routeRuleErrors
+	backendRefs := make([]RouteBackendRef, 0, len(routeRule.BackendRefs))
+
+	if checkForMixedBackendTypes(routeRule, routeNamespace, inferencePools) {
+		err := field.Forbidden(
+			rulePath.Child("backendRefs"),
+			"mixing InferencePool and non-InferencePool backends in a rule is not supported",
+		)
+		errors.invalid = append(errors.invalid, err)
+
+		return backendRefs, errors
+	}
+
+	// rule.BackendRefs are validated separately because of their special requirements
+	for _, b := range routeRule.BackendRefs {
+		var interfaceFilters []any
+		if len(b.Filters) > 0 {
+			interfaceFilters = make([]any, 0, len(b.Filters))
+			for _, filter := range b.Filters {
+				interfaceFilters = append(interfaceFilters, filter)
+			}
+		}
+
+		rbr := RouteBackendRef{
+			BackendRef:         b.BackendRef,
+			SessionPersistence: sp,
+		}
+
+		// If route specifies an InferencePool backend, we need to convert it to its associated
+		// headless Service backend (that we created), so nginx config can be built properly.
+		// Only do this if the InferencePool actually exists.
+		if ok, key := inferencePoolBackend(b, routeNamespace, inferencePools); ok {
+			svcName := controller.CreateInferencePoolServiceName(string(b.Name))
+			rbr = RouteBackendRef{
+				IsInferencePool:   true,
+				InferencePoolName: key.Name,
+				BackendRef: v1.BackendRef{
+					BackendObjectReference: v1.BackendObjectReference{
+						Group:     helpers.GetPointer[v1.Group](""),
+						Kind:      helpers.GetPointer[v1.Kind](kinds.Service),
+						Name:      v1.ObjectName(svcName),
+						Namespace: b.Namespace,
+					},
+					Weight: b.Weight,
+				},
+			}
+		}
+
+		rbr.Filters = interfaceFilters
+		backendRefs = append(backendRefs, rbr)
+	}
+
+	return backendRefs, errors
+}
+
 func processHTTPRouteRules(
 	specRules []v1.HTTPRouteRule,
 	validator validation.HTTPFieldsValidator,
 	resolveExtRefFunc resolveExtRefFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
-	routeNamespace string,
+	routeNsName types.NamespacedName,
+	featureFlags FeatureFlags,
 ) (rules []RouteRule, valid bool, conds []conditions.Condition) {
 	rules = make([]RouteRule, len(specRules))
 
@@ -294,16 +338,15 @@ func processHTTPRouteRules(
 		atLeastOneValid bool
 	)
 
-	for i, rule := range specRules {
-		rulePath := field.NewPath("spec").Child("rules").Index(i)
-
+	for ruleIdx, rule := range specRules {
 		rr, errors := processHTTPRouteRule(
 			rule,
-			rulePath,
+			ruleIdx,
 			validator,
 			resolveExtRefFunc,
 			inferencePools,
-			routeNamespace,
+			routeNsName,
+			featureFlags,
 		)
 
 		if rr.ValidMatches && rr.Filters.Valid {
@@ -312,7 +355,7 @@ func processHTTPRouteRules(
 
 		allRulesErrors = allRulesErrors.append(errors)
 
-		rules[i] = rr
+		rules[ruleIdx] = rr
 	}
 
 	conds = make([]conditions.Condition, 0, 2)
@@ -346,12 +389,12 @@ func processHTTPRouteRules(
 }
 
 // inferencePoolBackend returns if a Route references an InferencePool backend
-// and that InferencePool exists.
+// and that InferencePool exists. Also returns the NamespacedName of the InferencePool.
 func inferencePoolBackend(
 	backendRef v1.HTTPBackendRef,
 	routeNamespace string,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
-) bool {
+) (bool, types.NamespacedName) {
 	if backendRef.Group != nil &&
 		*backendRef.Group == inferenceAPIGroup &&
 		*backendRef.Kind == kinds.InferencePool {
@@ -364,11 +407,11 @@ func inferencePoolBackend(
 			Namespace: namespace,
 		}
 		if _, exists := inferencePools[key]; exists {
-			return true
+			return true, key
 		}
 	}
 
-	return false
+	return false, types.NamespacedName{}
 }
 
 func validateMatch(
@@ -608,7 +651,11 @@ func validateFilterRewrite(
 	return allErrs
 }
 
-func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) field.ErrorList {
+func checkForUnsupportedHTTPFields(
+	rule v1.HTTPRouteRule,
+	rulePath *field.Path,
+	featureFlags FeatureFlags,
+) field.ErrorList {
 	var ruleErrors field.ErrorList
 
 	if rule.Name != nil {
@@ -629,10 +676,21 @@ func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) 
 			"Retry",
 		))
 	}
-	if rule.SessionPersistence != nil {
+
+	if !featureFlags.Plus && rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),
-			"SessionPersistence",
+			fmt.Sprintf(
+				"%s OSS users can use `ip_hash` load balancing method via the UpstreamSettingsPolicy for session affinity.",
+				spErrMsg,
+			),
+		))
+	}
+
+	if !featureFlags.Experimental && rule.SessionPersistence != nil {
+		ruleErrors = append(ruleErrors, field.Forbidden(
+			rulePath.Child("sessionPersistence"),
+			spErrMsg,
 		))
 	}
 
@@ -641,4 +699,29 @@ func checkForUnsupportedHTTPFields(rule v1.HTTPRouteRule, rulePath *field.Path) 
 	}
 
 	return ruleErrors
+}
+
+// checkForMixedBackendTypes returns true if the rule contains a mix of
+// InferencePool and non-InferencePool backends.
+func checkForMixedBackendTypes(
+	specRule v1.HTTPRouteRule,
+	routeNamespace string,
+	inferencePools map[types.NamespacedName]*inference.InferencePool,
+) bool {
+	var hasInferencePool, hasNonInferencePool bool
+
+	for _, backendRef := range specRule.BackendRefs {
+		if ok, _ := inferencePoolBackend(backendRef, routeNamespace, inferencePools); ok {
+			hasInferencePool = true
+		} else {
+			hasNonInferencePool = true
+		}
+
+		// Early exit if we find both types
+		if hasInferencePool && hasNonInferencePool {
+			return true
+		}
+	}
+
+	return false
 }

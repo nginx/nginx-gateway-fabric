@@ -51,6 +51,10 @@ const (
 	expectedTargetRefNameUniqueError              = "TargetRef Name must be unique"
 	expectedTargetRefKindAndNameComboMustBeUnique = "TargetRef Kind and Name combination must be unique"
 
+	// UpstreamSettingsPolicy validation errors.
+	expectedHashKeyLoadBalancingTypeError = `hashMethodKey is required when loadBalancingMethod ` +
+		`is 'hash' or 'hash consistent'`
+
 	// Header validation error.
 	expectedHeaderWithoutServerError = "header can only be specified if server is specified"
 

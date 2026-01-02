@@ -1,10 +1,14 @@
 package upstreamsettings
 
 import (
+	"fmt"
+	"strings"
+
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	httpConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
@@ -16,11 +20,15 @@ import (
 // Implements policies.Validator interface.
 type Validator struct {
 	genericValidator validation.GenericValidator
+	plusEnabled      bool
 }
 
 // NewValidator returns a new Validator.
-func NewValidator(genericValidator validation.GenericValidator) Validator {
-	return Validator{genericValidator: genericValidator}
+func NewValidator(genericValidator validation.GenericValidator, plusEnabled bool) Validator {
+	return Validator{
+		genericValidator: genericValidator,
+		plusEnabled:      plusEnabled,
+	}
 }
 
 // Validate validates the spec of an UpstreamsSettingsPolicy.
@@ -83,6 +91,22 @@ func conflicts(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
 		}
 	}
 
+	if checkConflictsForLoadBalancingFields(a, b) {
+		return true
+	}
+
+	return false
+}
+
+func checkConflictsForLoadBalancingFields(a, b ngfAPI.UpstreamSettingsPolicySpec) bool {
+	if a.LoadBalancingMethod != nil && b.LoadBalancingMethod != nil {
+		return true
+	}
+
+	if a.HashMethodKey != nil && b.HashMethodKey != nil {
+		return true
+	}
+
 	return false
 }
 
@@ -102,6 +126,8 @@ func (v Validator) validateSettings(spec ngfAPI.UpstreamSettingsPolicySpec) erro
 	if spec.KeepAlive != nil {
 		allErrs = append(allErrs, v.validateUpstreamKeepAlive(*spec.KeepAlive, fieldPath.Child("keepAlive"))...)
 	}
+
+	allErrs = append(allErrs, v.validateLoadBalancingMethod(spec)...)
 
 	return allErrs.ToAggregate()
 }
@@ -129,4 +155,52 @@ func (v Validator) validateUpstreamKeepAlive(
 	}
 
 	return allErrs
+}
+
+// ValidateLoadBalancingMethod validates the load balancing method for upstream servers.
+func (v Validator) validateLoadBalancingMethod(spec ngfAPI.UpstreamSettingsPolicySpec) field.ErrorList {
+	if spec.LoadBalancingMethod == nil {
+		return nil
+	}
+
+	var allErrs field.ErrorList
+	path := field.NewPath("spec")
+	lbPath := path.Child("loadBalancingMethod")
+
+	allowedMethods := httpConfig.OSSAllowedLBMethods
+	nginxType := "NGINX OSS"
+	if v.plusEnabled {
+		allowedMethods = httpConfig.PlusAllowedLBMethods
+		nginxType = "NGINX Plus"
+	}
+
+	if _, ok := allowedMethods[*spec.LoadBalancingMethod]; !ok {
+		allErrs = append(allErrs, field.Invalid(
+			lbPath,
+			*spec.LoadBalancingMethod,
+			fmt.Sprintf(
+				"%s supports the following load balancing methods: %s",
+				nginxType,
+				getLoadBalancingMethodList(allowedMethods),
+			),
+		))
+	}
+
+	if spec.HashMethodKey != nil {
+		hashMethodKey := *spec.HashMethodKey
+		if err := v.genericValidator.ValidateNginxVariableName(string(hashMethodKey)); err != nil {
+			path := path.Child("hashMethodKey")
+			allErrs = append(allErrs, field.Invalid(path, hashMethodKey, err.Error()))
+		}
+	}
+
+	return allErrs
+}
+
+func getLoadBalancingMethodList(lbMethods map[ngfAPI.LoadBalancingType]struct{}) string {
+	methods := make([]string, 0, len(lbMethods))
+	for method := range lbMethods {
+		methods = append(methods, string(method))
+	}
+	return strings.Join(methods, ", ")
 }

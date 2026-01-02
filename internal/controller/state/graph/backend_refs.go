@@ -12,9 +12,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/sort"
+	sort "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -35,6 +34,8 @@ type BackendRef struct {
 	// condition. Certain NginxProxy configurations may result in a backend not being valid for some Gateways,
 	// but not others.
 	InvalidForGateways map[types.NamespacedName]conditions.Condition
+	// SessionPersistence is the SessionPersistenceConfig of the backendRef.
+	SessionPersistence *SessionPersistenceConfig
 	// SvcNsName is the NamespacedName of the Service referenced by the backendRef.
 	SvcNsName types.NamespacedName
 	// ServicePort is the ServicePort of the Service which is referenced by the backendRef.
@@ -50,12 +51,24 @@ type BackendRef struct {
 	IsInferencePool bool
 }
 
-// ServicePortReference returns a string representation for the service and port that is referenced by the BackendRef.
+// BaseServicePortKey returns a base unique string key for the Service port of the BackendRef.
+func (b BackendRef) BaseServicePortKey() string {
+	return fmt.Sprintf("%s_%s_%d", b.SvcNsName.Namespace, b.SvcNsName.Name, b.ServicePort.Port)
+}
+
+// ServicePortReference returns a unique string reference for the Service port of the BackendRef including
+// session persistence index if applicable.
 func (b BackendRef) ServicePortReference() string {
 	if !b.Valid {
 		return ""
 	}
-	return fmt.Sprintf("%s_%s_%d", b.SvcNsName.Namespace, b.SvcNsName.Name, b.ServicePort.Port)
+
+	base := b.BaseServicePortKey()
+	if b.SessionPersistence == nil || b.SessionPersistence.Name == "" {
+		return base
+	}
+
+	return fmt.Sprintf("%s_%s", base, b.SessionPersistence.Idx)
 }
 
 func addBackendRefsToRouteRules(
@@ -116,7 +129,7 @@ func addBackendRefsToRules(
 				}
 
 				poolName := types.NamespacedName{
-					Name:      controller.GetInferencePoolName(string(ref.Name)),
+					Name:      ref.InferencePoolName,
 					Namespace: namespace,
 				}
 
@@ -314,6 +327,7 @@ func createBackendRef(
 		IsInferencePool:      ref.IsInferencePool,
 		InvalidForGateways:   invalidForGateways,
 		EndpointPickerConfig: ref.EndpointPickerConfig,
+		SessionPersistence:   ref.SessionPersistence,
 	}
 
 	return backendRef, conds
@@ -596,7 +610,7 @@ func validateBackendRefHTTPRoute(
 			inferencePool = true
 			inferencePoolName = types.NamespacedName{
 				Namespace: string(*ref.Namespace),
-				Name:      controller.GetInferencePoolName(string(ref.Name)),
+				Name:      ref.InferencePoolName,
 			}
 		default:
 			refNsName := types.NamespacedName{Namespace: string(*ref.Namespace), Name: string(ref.Name)}

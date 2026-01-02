@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"net"
 	gotemplate "text/template"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
@@ -34,7 +36,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
 		Includes:                includes,
 		NginxReadinessProbePort: conf.BaseHTTPConfig.NginxReadinessProbePort,
 		IPFamily:                getIPFamily(conf.BaseHTTPConfig),
-		DNSResolver:             conf.BaseHTTPConfig.DNSResolver,
+		DNSResolver:             buildDNSResolver(conf.BaseHTTPConfig.DNSResolver),
 		AccessLog:               buildAccessLog(conf.Logging.AccessLog),
 		GatewaySecretID:         conf.BaseHTTPConfig.GatewaySecretID,
 	}
@@ -47,6 +49,34 @@ func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
 	results = append(results, createIncludeExecuteResults(includes)...)
 
 	return results
+}
+
+func buildDNSResolver(dnsResolver *dataplane.DNSResolverConfig) *dataplane.DNSResolverConfig {
+	if dnsResolver == nil {
+		return nil
+	}
+
+	fixed := &dataplane.DNSResolverConfig{
+		Timeout:     dnsResolver.Timeout,
+		Valid:       dnsResolver.Valid,
+		DisableIPv6: dnsResolver.DisableIPv6,
+	}
+
+	for _, address := range dnsResolver.Addresses {
+		ip := net.ParseIP(address)
+		if ip == nil {
+			continue
+		}
+
+		if ip.To4() == nil {
+			// nginx expects IPv6 DNS resolvers to be passed with brackets
+			fixed.Addresses = append(fixed.Addresses, fmt.Sprintf("[%s]", address))
+		} else {
+			fixed.Addresses = append(fixed.Addresses, address)
+		}
+	}
+
+	return fixed
 }
 
 func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {

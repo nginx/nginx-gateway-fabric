@@ -6,14 +6,14 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/files/plus-9.repo nginx-
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:55985e8ef90954271569da91cc33692688404cbbb004c48ee386d8925dc4a4e7 AS ubi9-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:7dc127dbaa4d89f8c38573df2084af5cd8f9d311a11a5bfec2929e434d565c91 AS ubi9-packages
 
-FROM redhat/ubi9-minimal:9.7-1763362218 AS ubi-nginx-plus
+FROM redhat/ubi9-minimal:9.7-1764794109 AS ubi-nginx-plus
 
 ARG NGINX_PLUS_VERSION=R36
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.5.1
+ARG NGINX_AGENT_VERSION=v3.6.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
@@ -36,9 +36,8 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     --mount=type=bind,from=ubi9-packages,src=/,target=/ubi-bin/ \
     --mount=type=secret,id=nginx-repo.crt,dst=/etc/ssl/nginx/nginx-repo.crt,mode=0644 \
 	--mount=type=secret,id=nginx-repo.key,dst=/etc/ssl/nginx/nginx-repo.key,mode=0644 \
-    # Install shadow-utils for useradd
-    microdnf --nodocs install -y shadow-utils  \
-    && rpm --import /tmp/nginx_signing.key \
+    # Import NGINX signing key
+    rpm --import /tmp/nginx_signing.key \
     # Install c-ares from the dependencies image (contains required libs)
     && rpm -Uvh /ubi-bin/c-ares-*.rpm \
     # Create nginx user with consistent UID/GID
@@ -50,7 +49,6 @@ RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos
     # Install nginx-agent
     && microdnf --nodocs install -y nginx-agent-${NGINX_AGENT_VERSION#v}* \
     # Clean up
-    && microdnf remove -y shadow-utils \
     && microdnf clean all \
     && rm -rf /var/cache/yum
 
@@ -72,6 +70,9 @@ COPY ${NJS_DIR}/ /usr/lib64/nginx/modules/njs/
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf
+
+# Create empty /run/.containerenv file so agent can identify that it's running in a container
+RUN mkdir -p /run && touch /run/.containerenv
 
 # Switch to non-root user
 USER 101:1001

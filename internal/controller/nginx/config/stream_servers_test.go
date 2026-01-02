@@ -471,7 +471,7 @@ server {
 			},
 			expectedConfig: `
 # DNS resolver configuration for ExternalName services
-resolver 2001:4860:4860::8888 valid=30s;
+resolver [2001:4860:4860::8888] valid=30s;
 resolver_timeout 5s;
 
 server {

@@ -7,10 +7,13 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.p
 FROM nginx:1.29.3-alpine-otel
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.5.1
+ARG NGINX_AGENT_VERSION=v3.6.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
+
+# Fixes for CVEs; can be removed once base image is updated
+RUN apk update && apk add --no-cache 'libpng>=1.6.53-r0' 'ssl_client>=1.37.0-r20' 'busybox-binsh>=1.37.0-r20'
 
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     printf "%s\n" "https://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
@@ -27,6 +30,9 @@ COPY ${NJS_DIR}/ /usr/lib/nginx/modules/njs/
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf
+
+# Create empty /run/.containerenv file so agent can identify that it's running in a container
+RUN mkdir -p /run && touch /run/.containerenv
 
 RUN chown -R 101:1001 /etc/nginx /var/cache/nginx
 

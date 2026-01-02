@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -218,13 +217,13 @@ func TestDeploymentStore(t *testing.T) {
 
 	nsName := types.NamespacedName{Namespace: "default", Name: "test-deployment"}
 
-	deployment := store.GetOrStore(context.Background(), nsName, nil)
+	deployment := store.GetOrStore(t.Context(), nsName, nil)
 	g.Expect(deployment).ToNot(BeNil())
 
 	fetchedDeployment := store.Get(nsName)
 	g.Expect(fetchedDeployment).To(Equal(deployment))
 
-	deployment = store.GetOrStore(context.Background(), nsName, nil)
+	deployment = store.GetOrStore(t.Context(), nsName, nil)
 	g.Expect(fetchedDeployment).To(Equal(deployment))
 
 	store.Remove(nsName)

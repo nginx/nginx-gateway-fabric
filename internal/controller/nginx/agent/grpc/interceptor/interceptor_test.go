@@ -3,7 +3,6 @@ package interceptor
 import (
 	"context"
 	"errors"
-	"net"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -11,7 +10,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -83,13 +81,9 @@ func TestInterceptor(t *testing.T) {
 		headerUUID: "test-uuid",
 		headerAuth: "test-token",
 	})
-	validPeerData := &peer.Peer{
-		Addr: &net.TCPAddr{IP: net.ParseIP("127.0.0.1")},
-	}
 
 	tests := []struct {
 		md            metadata.MD
-		peer          *peer.Peer
 		createErr     error
 		listErr       error
 		username      string
@@ -103,7 +97,6 @@ func TestInterceptor(t *testing.T) {
 		{
 			name:          "valid request",
 			md:            validMetadata,
-			peer:          validPeerData,
 			username:      "system:serviceaccount:default:gateway-nginx",
 			appName:       "gateway-nginx",
 			podNamespace:  "default",
@@ -112,7 +105,6 @@ func TestInterceptor(t *testing.T) {
 		},
 		{
 			name:          "missing metadata",
-			peer:          validPeerData,
 			authenticated: true,
 			expErrCode:    codes.InvalidArgument,
 			expErrMsg:     "no metadata",
@@ -122,7 +114,6 @@ func TestInterceptor(t *testing.T) {
 			md: metadata.New(map[string]string{
 				headerAuth: "test-token",
 			}),
-			peer:          validPeerData,
 			authenticated: true,
 			expErrCode:    codes.Unauthenticated,
 			expErrMsg:     "no identity",
@@ -132,23 +123,14 @@ func TestInterceptor(t *testing.T) {
 			md: metadata.New(map[string]string{
 				headerUUID: "test-uuid",
 			}),
-			peer:          validPeerData,
 			authenticated: true,
 			createErr:     nil,
 			expErrCode:    codes.Unauthenticated,
 			expErrMsg:     "no authorization",
 		},
 		{
-			name:          "missing peer data",
-			md:            validMetadata,
-			authenticated: true,
-			expErrCode:    codes.InvalidArgument,
-			expErrMsg:     "no peer data",
-		},
-		{
 			name:          "tokenreview not created",
 			md:            validMetadata,
-			peer:          validPeerData,
 			authenticated: true,
 			createErr:     errors.New("not created"),
 			expErrCode:    codes.Internal,
@@ -157,7 +139,6 @@ func TestInterceptor(t *testing.T) {
 		{
 			name:          "tokenreview created and not authenticated",
 			md:            validMetadata,
-			peer:          validPeerData,
 			authenticated: false,
 			expErrCode:    codes.Unauthenticated,
 			expErrMsg:     "invalid authorization",
@@ -165,7 +146,6 @@ func TestInterceptor(t *testing.T) {
 		{
 			name:          "error listing pods",
 			md:            validMetadata,
-			peer:          validPeerData,
 			username:      "system:serviceaccount:default:gateway-nginx",
 			appName:       "gateway-nginx",
 			podNamespace:  "default",
@@ -177,7 +157,6 @@ func TestInterceptor(t *testing.T) {
 		{
 			name:          "invalid username length",
 			md:            validMetadata,
-			peer:          validPeerData,
 			username:      "serviceaccount:default:gateway-nginx",
 			appName:       "gateway-nginx",
 			podNamespace:  "default",
@@ -188,7 +167,6 @@ func TestInterceptor(t *testing.T) {
 		{
 			name:          "missing system from username",
 			md:            validMetadata,
-			peer:          validPeerData,
 			username:      "invalid:serviceaccount:default:gateway-nginx",
 			appName:       "gateway-nginx",
 			podNamespace:  "default",
@@ -199,7 +177,6 @@ func TestInterceptor(t *testing.T) {
 		{
 			name:          "missing serviceaccount from username",
 			md:            validMetadata,
-			peer:          validPeerData,
 			username:      "system:invalid:default:gateway-nginx",
 			appName:       "gateway-nginx",
 			podNamespace:  "default",
@@ -234,11 +211,7 @@ func TestInterceptor(t *testing.T) {
 
 			ctx := t.Context()
 			if test.md != nil {
-				peerCtx := context.Background()
-				if test.peer != nil {
-					peerCtx = peer.NewContext(context.Background(), test.peer)
-				}
-				ctx = metadata.NewIncomingContext(peerCtx, test.md)
+				ctx = metadata.NewIncomingContext(ctx, test.md)
 			}
 
 			stream := &mockServerStream{ctx: ctx}
@@ -280,7 +253,7 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 
 	testCases := []struct {
 		pod       *corev1.Pod
-		gi        *grpcContext.GrpcInfo
+		grpcInfo  *grpcContext.GrpcInfo
 		name      string
 		shouldErr bool
 	}{
@@ -294,13 +267,13 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 						controller.AppNameLabel: "gateway-nginx",
 					},
 				},
-				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodRunning},
+				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "1.2.3.4"},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: false,
 		},
 		{
-			name: "ip matches, namespace does not",
+			name: "namespace does not match",
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "nginx-pod",
@@ -309,13 +282,13 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 						controller.AppNameLabel: "gateway-nginx",
 					},
 				},
-				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodRunning},
+				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "1.2.3.4"},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: true,
 		},
 		{
-			name: "ip matches, label value does not match",
+			name: "label value does not match",
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "nginx-pod",
@@ -324,37 +297,22 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 						controller.AppNameLabel: "not-gateway-nginx",
 					},
 				},
-				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodRunning},
+				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "1.2.3.4"},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: true,
 		},
 		{
-			name: "ip matches, label does not exist",
+			name: "label does not exist",
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "nginx-pod",
 					Namespace: "default",
 					Labels:    map[string]string{},
 				},
-				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodRunning},
+				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "1.2.3.4"},
-			shouldErr: true,
-		},
-		{
-			name: "ip does not match",
-			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "nginx-pod",
-					Namespace: "default",
-					Labels: map[string]string{
-						controller.AppNameLabel: "gateway-nginx",
-					},
-				},
-				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodRunning},
-			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "9.9.9.9"},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: true,
 		},
 		{
@@ -367,9 +325,9 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 						controller.AppNameLabel: "gateway-nginx",
 					},
 				},
-				Status: corev1.PodStatus{PodIP: "1.2.3.4", Phase: corev1.PodPending},
+				Status: corev1.PodStatus{Phase: corev1.PodPending},
 			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token", IPAddress: "1.2.3.4"},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: true,
 		},
 	}
@@ -394,10 +352,10 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 			patchedClient := &patchClient{fakeClient}
 			csPatched := NewContextSetter(patchedClient, "ngf-audience")
 
-			resultCtx, err := csPatched.validateToken(t.Context(), tc.gi)
+			resultCtx, err := csPatched.validateToken(t.Context(), tc.grpcInfo)
 			if tc.shouldErr {
 				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring("expected a single Running pod"))
+				g.Expect(err.Error()).To(ContainSubstring("no running pods"))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resultCtx).ToNot(BeNil())

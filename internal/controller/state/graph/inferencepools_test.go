@@ -50,7 +50,8 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 					{
 						RouteBackendRefs: []RouteBackendRef{
 							{
-								IsInferencePool: true,
+								IsInferencePool:   true,
+								InferencePoolName: "pool",
 								BackendRef: gatewayv1.BackendRef{
 									BackendObjectReference: gatewayv1.BackendObjectReference{
 										Namespace: helpers.GetPointer[gatewayv1.Namespace]("test"),
@@ -111,7 +112,8 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 			{
 				RouteBackendRefs: []RouteBackendRef{
 					{
-						IsInferencePool: true,
+						IsInferencePool:   true,
+						InferencePoolName: "pool",
 						BackendRef: gatewayv1.BackendRef{
 							BackendObjectReference: gatewayv1.BackendObjectReference{
 								Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.Service),

@@ -104,7 +104,7 @@ server {
 
         {{- range $i := $l.Includes }}
         include {{ $i.Name }};
-        {{- end -}}
+        {{- end }}
 
         {{ range $r := $l.Rewrites }}
         rewrite {{ $r }};

@@ -2,7 +2,6 @@ package telemetry
 
 import (
 	"bytes"
-	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -17,7 +16,7 @@ func TestLoggingExporter(t *testing.T) {
 	logger := zap.New(zap.WriteTo(&buffer))
 	exporter := NewLoggingExporter(logger)
 
-	err := exporter.Export(context.Background(), &Data{})
+	err := exporter.Export(t.Context(), &Data{})
 
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(buffer.String()).To(ContainSubstring(`"level":"info"`))
