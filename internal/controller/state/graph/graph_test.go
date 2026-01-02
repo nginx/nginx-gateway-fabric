@@ -414,13 +414,14 @@ func TestBuildGraph(t *testing.T) {
 		},
 		spConfig,
 	)
-	addFilterToPath(
+	addElementsToPath(
 		hr1,
 		"/",
 		gatewayv1.HTTPRouteFilter{
 			Type:         gatewayv1.HTTPRouteFilterExtensionRef,
 			ExtensionRef: refAuthenticationFilterExtensionRef,
 		},
+		spConfig,
 	)
 
 	hr2 := createRoute("hr-2", "wrong-gateway", "listener-80-1")

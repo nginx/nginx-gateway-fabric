@@ -2263,7 +2263,7 @@ func TestBuildAuthenticationFilterStatuses(t *testing.T) {
 			k8sClient := createK8sClientFor(&ngfAPI.AuthenticationFilter{})
 
 			for _, af := range test.authenticationFilters {
-				err := k8sClient.Create(context.Background(), af.Source)
+				err := k8sClient.Create(t.Context(), af.Source)
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
@@ -2273,12 +2273,12 @@ func TestBuildAuthenticationFilterStatuses(t *testing.T) {
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
-			updater.Update(context.Background(), reqs...)
+			updater.Update(t.Context(), reqs...)
 
 			for nsname, expected := range test.expected {
 				var authFilter ngfAPI.AuthenticationFilter
 
-				err := k8sClient.Get(context.Background(), nsname, &authFilter)
+				err := k8sClient.Get(t.Context(), nsname, &authFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(expected, authFilter.Status)).To(BeEmpty())
 			}

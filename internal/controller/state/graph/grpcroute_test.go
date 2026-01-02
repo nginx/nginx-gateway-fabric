@@ -636,7 +636,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 
 	// route with invalid authentication filter extension ref
-	grInvalidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grInvalidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 	grInvalidAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
@@ -655,7 +655,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 
 	// route with unresolvable authentication filter extension ref
-	grUnresolvableAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grUnresolvableAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 	grUnresolvableAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
@@ -674,7 +674,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 
 	// route with two invalid authentication filter extensions refs: (1) invalid group (2) unresolvable
-	grInvalidAndUnresolvableAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grInvalidAndUnresolvableAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 	grInvalidAndUnresolvableAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
@@ -701,7 +701,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 
 	// route with one valid and one invalid authentication filter extensions ref: (1) invalid group (2) valid
-	grInvalidAndValidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grInvalidAndValidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 	grInvalidAndValidAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
@@ -728,7 +728,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 
 	// route with one valid and one unresolved authentication filter extensions ref: (1) unresolved (2) valid
-	grUnresolvedAndValidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grUnresolvedAndValidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 	grUnresolvedAndValidAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
@@ -755,7 +755,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 
 	// route with two valid authentication filter extensions refs
-	grTwoValidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grTwoValidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 	grTwoValidAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
@@ -1773,7 +1773,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 				test.gr,
 				gws,
 				snippetsFilters,
-        authenticationFilters,
+				authenticationFilters,
 				FeatureFlags{
 					Plus:         test.plus,
 					Experimental: test.experimental,
@@ -1941,7 +1941,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 		gr,
 		gateways,
 		snippetsFilters,
-    nil,
+		nil,
 		featureFlags,
 	)
 	g.Expect(l7route).NotTo(BeNil())

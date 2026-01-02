@@ -223,7 +223,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 
 	addElementsToPath(hr, "/", snippetsFilterRef, unNamedSPConfig)
 	addElementsToPath(hr, "/", requestRedirectFilter, nil)
-  addFilterToPath(hr, "/", authenticationFilterRef, nil)
+	addElementsToPath(hr, "/", authenticationFilterRef, nil)
 
 	hrWrongGateway := createHTTPRoute("hr-2", "some-gateway", "example.com", "/")
 
@@ -519,7 +519,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "af",
 		},
 	}
-	addFilterToPath(hrValidAuthenticationFilter, "/filter", validAuthenticationFilterExtRef)
+	addElementsToPath(hrValidAuthenticationFilter, "/filter", validAuthenticationFilterExtRef, nil)
 
 	// route with invalid authentication filter extension ref
 	hrInvalidAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
@@ -531,7 +531,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "af",
 		},
 	}
-	addFilterToPath(hrInvalidAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef)
+	addElementsToPath(hrInvalidAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef, nil)
 
 	// route with unresolvable authentication filter extension ref
 	hrUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
@@ -543,22 +543,22 @@ func TestBuildHTTPRoute(t *testing.T) {
 			Name:  "does-not-exist",
 		},
 	}
-	addFilterToPath(hrUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
+	addElementsToPath(hrUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef, nil)
 
 	// route with two invalid authentication filter extensions refs: (1) invalid group (2) unresolvable
 	hrInvalidAndUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
-	addFilterToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef)
-	addFilterToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
+	addElementsToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef, nil)
+	addElementsToPath(hrInvalidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef, nil)
 
 	// route with one valid and one unresolvable authentication filter extensions refs: (1) valid group (2) unresolvable
 	hrValidAndUnresolvableAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
-	addFilterToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", validAuthenticationFilterExtRef)
-	addFilterToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef)
+	addElementsToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", validAuthenticationFilterExtRef, nil)
+	addElementsToPath(hrValidAndUnresolvableAuthenticationFilter, "/filter", unresolvableAuthenticationFilterExtRef, nil)
 
 	// route with one valid and one invalid authentication filter extensions refs: (1) valid group (2) invalid group
 	hrValidAndInvalidAuthenticationFilter := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
-	addFilterToPath(hrValidAndInvalidAuthenticationFilter, "/filter", validAuthenticationFilterExtRef)
-	addFilterToPath(hrValidAndInvalidAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef)
+	addElementsToPath(hrValidAndInvalidAuthenticationFilter, "/filter", validAuthenticationFilterExtRef, nil)
+	addElementsToPath(hrValidAndInvalidAuthenticationFilter, "/filter", invalidAuthenticationFilterExtRef, nil)
 
 	validAuthenticationFilterExtRef2 := gatewayv1.HTTPRouteFilter{
 		Type: gatewayv1.HTTPRouteFilterExtensionRef,
@@ -570,8 +570,8 @@ func TestBuildHTTPRoute(t *testing.T) {
 	}
 	// route with two valid authentication filter extensions refs
 	hrTwoValidAuthenticationFilters := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/filter")
-	addFilterToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef)
-	addFilterToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef2)
+	addElementsToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef, nil)
+	addElementsToPath(hrTwoValidAuthenticationFilters, "/filter", validAuthenticationFilterExtRef2, nil)
 
 	// routes with an inference pool backend
 	hrInferencePool := createHTTPRoute("hr", gatewayNsName.Name, "example.com", "/")
@@ -1651,7 +1651,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 				test.hr,
 				gws,
 				snippetsFilters,
-        authenticationFilters,
+				authenticationFilters,
 				inferencePools,
 				FeatureFlags{
 					Plus:         test.plus,
@@ -1800,7 +1800,7 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 		gateways,
 		snippetsFilters,
 		nil,
-    nil,
+		nil,
 		featureFlags,
 	)
 	g.Expect(l7route).NotTo(BeNil())
