@@ -307,6 +307,11 @@ func TestBuildHTTPRoutes(t *testing.T) {
 											FilterType: FilterExtensionRef,
 										},
 										{
+											RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
+											RouteType:       RouteTypeHTTP,
+											FilterType:      FilterRequestRedirect,
+										},
+										{
 											ExtensionRef: authenticationFilterRef.ExtensionRef,
 											ResolvedExtensionRef: &ExtensionRefFilter{
 												AuthenticationFilter: &AuthenticationFilter{
@@ -318,11 +323,6 @@ func TestBuildHTTPRoutes(t *testing.T) {
 											},
 											RouteType:  RouteTypeHTTP,
 											FilterType: FilterExtensionRef,
-										},
-										{
-											RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
-											RouteType:       RouteTypeHTTP,
-											FilterType:      FilterRequestRedirect,
 										},
 									},
 								},
