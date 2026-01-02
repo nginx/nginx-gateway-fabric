@@ -45,7 +45,7 @@ func TestProcess(t *testing.T) {
 			expUpstreamSettings: UpstreamSettings{
 				ZoneSize: "2m",
 				KeepAlive: http.UpstreamKeepAlive{
-					Connections: 1,
+					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
 					Time:        "5s",
 					Timeout:     "10s",
@@ -124,7 +124,7 @@ func TestProcess(t *testing.T) {
 			},
 			expUpstreamSettings: UpstreamSettings{
 				KeepAlive: http.UpstreamKeepAlive{
-					Connections: 1,
+					Connections: helpers.GetPointer[int32](1),
 				},
 			},
 		},
@@ -274,7 +274,7 @@ func TestProcess(t *testing.T) {
 			expUpstreamSettings: UpstreamSettings{
 				ZoneSize: "2m",
 				KeepAlive: http.UpstreamKeepAlive{
-					Connections: 1,
+					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
 					Time:        "5s",
 					Timeout:     "10s",
@@ -376,7 +376,7 @@ func TestProcess(t *testing.T) {
 			expUpstreamSettings: UpstreamSettings{
 				ZoneSize: "2m",
 				KeepAlive: http.UpstreamKeepAlive{
-					Connections: 1,
+					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
 					Time:        "5s",
 					Timeout:     "10s",

@@ -1893,7 +1893,7 @@ func TestCreateServers(t *testing.T) {
 	keepAliveEnabledUpstream := http.Upstream{
 		Name: "test_keep_alive_80",
 		KeepAlive: http.UpstreamKeepAlive{
-			Connections: 1,
+			Connections: helpers.GetPointer[int32](1),
 		},
 	}
 	keepAliveCheck := newKeepAliveChecker([]http.Upstream{keepAliveEnabledUpstream})
@@ -4624,7 +4624,7 @@ func TestGetConnectionHeader(t *testing.T) {
 				{
 					Name: "upstream",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 1,
+						Connections: helpers.GetPointer[int32](1),
 					},
 				},
 			},
@@ -4641,20 +4641,20 @@ func TestGetConnectionHeader(t *testing.T) {
 				{
 					Name: "upstream1",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 1,
+						Connections: helpers.GetPointer[int32](1),
 					},
 				},
 				{
 					Name: "upstream2",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 2,
+						Connections: helpers.GetPointer[int32](2),
 						Requests:    1,
 					},
 				},
 				{
 					Name: "upstream3",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 3,
+						Connections: helpers.GetPointer[int32](3),
 						Time:        "5s",
 					},
 				},
@@ -4679,7 +4679,7 @@ func TestGetConnectionHeader(t *testing.T) {
 				{
 					Name: "upstream1",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 1,
+						Connections: helpers.GetPointer[int32](1),
 					},
 				},
 				{

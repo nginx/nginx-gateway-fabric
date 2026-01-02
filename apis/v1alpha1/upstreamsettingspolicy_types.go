@@ -87,10 +87,12 @@ type UpstreamKeepAlive struct {
 	// Connections sets the maximum number of idle keep-alive connections to upstream servers that are preserved
 	// in the cache of each nginx worker process. When this number is exceeded, the least recently used
 	// connections are closed.
+	// The keepAlive directive for upstreams defaults to 16. To override this value, set the connections field.
+	// To disable the keepAlive directive, set connections to 0.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive
 	//
 	// +optional
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum=0
 	Connections *int32 `json:"connections,omitempty"`
 
 	// Requests sets the maximum number of requests that can be served through one keep-alive connection.

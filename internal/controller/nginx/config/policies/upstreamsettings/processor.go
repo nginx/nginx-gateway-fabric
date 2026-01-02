@@ -33,6 +33,7 @@ func (g Processor) Process(pols []policies.Policy) UpstreamSettings {
 	return processPolicies(pols)
 }
 
+// processPolicies merges a list of policies into a single UpstreamSettings configuration.
 func processPolicies(pols []policies.Policy) UpstreamSettings {
 	upstreamSettings := UpstreamSettings{}
 
@@ -50,7 +51,7 @@ func processPolicies(pols []policies.Policy) UpstreamSettings {
 
 		if usp.Spec.KeepAlive != nil {
 			if usp.Spec.KeepAlive.Connections != nil {
-				upstreamSettings.KeepAlive.Connections = *usp.Spec.KeepAlive.Connections
+				upstreamSettings.KeepAlive.Connections = usp.Spec.KeepAlive.Connections
 			}
 
 			if usp.Spec.KeepAlive.Requests != nil {

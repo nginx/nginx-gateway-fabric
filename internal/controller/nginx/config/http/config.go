@@ -9,6 +9,8 @@ const (
 	InternalRoutePathPrefix       = "/_ngf-internal"
 	InternalMirrorRoutePathPrefix = InternalRoutePathPrefix + "-mirror"
 	HTTPSScheme                   = "https"
+	KeepAliveConnectionDefault    = int32(16)
+	IgnoreKeepAliveConnection     = -1
 )
 
 // Server holds all configuration for an HTTP server.
@@ -140,9 +142,9 @@ type UpstreamSessionPersistence struct {
 
 // UpstreamKeepAlive holds the keepalive configuration for an HTTP upstream.
 type UpstreamKeepAlive struct {
+	Connections *int32
 	Time        string
 	Timeout     string
-	Connections int32
 	Requests    int32
 }
 
