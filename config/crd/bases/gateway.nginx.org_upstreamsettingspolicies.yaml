@@ -65,9 +65,11 @@ spec:
                       Connections sets the maximum number of idle keep-alive connections to upstream servers that are preserved
                       in the cache of each nginx worker process. When this number is exceeded, the least recently used
                       connections are closed.
+                      The keepAlive directive for upstreams defaults to 16. To override this value, set the connections field.
+                      To disable the keepAlive directive, set connections to 0.
                       Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                   requests:
                     description: |-

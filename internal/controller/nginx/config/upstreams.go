@@ -186,6 +186,7 @@ func (g GeneratorImpl) createUpstream(
 		chosenLBMethod = lbMethod
 	}
 
+	keepAliveSettings := processKeepAliveSettings(upstreamPolicySettings.KeepAlive)
 	if len(up.Endpoints) == 0 {
 		return http.Upstream{
 			Name:      up.Name,
@@ -197,6 +198,7 @@ func (g GeneratorImpl) createUpstream(
 				},
 			},
 			LoadBalancingMethod: chosenLBMethod,
+			KeepAlive:           keepAliveSettings,
 		}
 	}
 
@@ -217,10 +219,36 @@ func (g GeneratorImpl) createUpstream(
 		ZoneSize:            zoneSize,
 		StateFile:           stateFile,
 		Servers:             upstreamServers,
-		KeepAlive:           upstreamPolicySettings.KeepAlive,
+		KeepAlive:           keepAliveSettings,
 		LoadBalancingMethod: chosenLBMethod,
 		SessionPersistence:  sp,
 	}
+}
+
+// processKeepAliveSettings normalizes keepalive configuration from an upstream policy.
+// If no keepalive settings are provided, it returns a default configuration with
+// Connections set to 16.
+// If Connections is set to IgnoreKeepAliveConnection(-1), the keepalive directive is
+// omitted entirely by returning a configuration without Connections set.
+// Otherwise, the keepalive settings are returned as provided.
+func processKeepAliveSettings(spec http.UpstreamKeepAlive) http.UpstreamKeepAlive {
+	keepAliveSettings := http.UpstreamKeepAlive{
+		Connections: http.KeepAliveConnectionDefault,
+	}
+
+	if spec == (http.UpstreamKeepAlive{}) {
+		return keepAliveSettings
+	}
+
+	if spec.Connections == http.IgnoreKeepAliveConnection {
+		return http.UpstreamKeepAlive{
+			Requests: spec.Requests,
+			Time:     spec.Time,
+			Timeout:  spec.Timeout,
+		}
+	}
+
+	return spec
 }
 
 func createInvalidBackendRefUpstream() http.Upstream {

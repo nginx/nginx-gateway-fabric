@@ -129,6 +129,27 @@ func TestProcess(t *testing.T) {
 			},
 		},
 		{
+			name: "keep alive connections set to 0, set to -1",
+			policies: []policies.Policy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "usp",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						KeepAlive: helpers.GetPointer(ngfAPIv1alpha1.UpstreamKeepAlive{
+							Connections: helpers.GetPointer(int32(0)),
+						}),
+					},
+				},
+			},
+			expUpstreamSettings: UpstreamSettings{
+				KeepAlive: http.UpstreamKeepAlive{
+					Connections: http.IgnoreKeepAliveConnection,
+				},
+			},
+		},
+		{
 			name: "keep alive requests set",
 			policies: []policies.Policy{
 				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
