@@ -81,7 +81,7 @@ func buildHTTPRoute(
 		Name:      ghr.GetName(),
 		Namespace: ghr.GetNamespace(),
 	}
-  
+
 	rules, valid, conds := processHTTPRouteRules(
 		ghr.Spec.Rules,
 		validator,

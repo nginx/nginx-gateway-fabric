@@ -66,12 +66,12 @@ func buildGRPCRoute(
 		authenticationFilters,
 		r.Source.GetNamespace(),
 	)
-  
+
 	grpcRouteNsName := types.NamespacedName{
 		Namespace: ghr.GetNamespace(),
 		Name:      ghr.GetName(),
 	}
-  
+
 	rules, valid, conds := processGRPCRouteRules(
 		ghr.Spec.Rules,
 		validator,

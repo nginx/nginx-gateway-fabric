@@ -212,7 +212,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		Type:            gatewayv1.HTTPRouteFilterRequestRedirect,
 		RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
 	}
-  
+
 	unNamedSPConfig := &gatewayv1.SessionPersistence{
 		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
 		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
@@ -1645,7 +1645,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			inferencePools := map[types.NamespacedName]*inference.InferencePool{
 				{Namespace: "test", Name: "ipool"}: {},
 			}
-      
+
 			route := buildHTTPRoute(
 				test.validator,
 				test.hr,

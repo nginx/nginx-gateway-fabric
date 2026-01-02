@@ -141,7 +141,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		Type:                  v1.GRPCRouteFilterRequestHeaderModifier,
 		RequestHeaderModifier: &v1.HTTPHeaderFilter{},
 	}
-  
+
 	unNamedSPConfig := v1.SessionPersistence{
 		AbsoluteTimeout: helpers.GetPointer(v1.Duration("10m")),
 		Type:            helpers.GetPointer(v1.CookieBasedSessionPersistence),

@@ -213,9 +213,9 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	createValidRuleWithBackendRefs := func(
-    matches []gatewayv1.HTTPRouteMatch,
-    sessionPersistence *SessionPersistenceConfig,
-  ) RouteRule {
+		matches []gatewayv1.HTTPRouteMatch,
+		sessionPersistence *SessionPersistenceConfig,
+	) RouteRule {
 		refs := []BackendRef{
 			{
 				SvcNsName:          types.NamespacedName{Namespace: "service", Name: "foo"},
