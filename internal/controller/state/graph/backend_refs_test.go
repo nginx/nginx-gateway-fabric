@@ -106,7 +106,8 @@ func TestValidateRouteBackendRef(t *testing.T) {
 					backend.Name = gatewayv1.ObjectName(controller.CreateInferencePoolServiceName("ipool"))
 					return backend
 				}),
-				IsInferencePool: true,
+				IsInferencePool:   true,
+				InferencePoolName: "ipool",
 			},
 			expectedValid: true,
 		},
@@ -393,7 +394,8 @@ func TestValidateBackendRefHTTPRoute(t *testing.T) {
 					backend.Namespace = helpers.GetPointer[gatewayv1.Namespace]("invalid")
 					return backend
 				}),
-				IsInferencePool: true,
+				IsInferencePool:   true,
+				InferencePoolName: "ipool",
 			},
 			refGrantResolver: alwaysFalseRefGrantResolver,
 			expectedValid:    false,
@@ -1220,6 +1222,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 				route := createRoute("hr-inference", RouteTypeHTTP, "Service", 1, svcInferenceName)
 				// Mark the backend ref as IsInferencePool and set the port to nil (simulate InferencePool logic)
 				route.Spec.Rules[0].RouteBackendRefs[0].IsInferencePool = true
+				route.Spec.Rules[0].RouteBackendRefs[0].InferencePoolName = "ipool"
 				route.Spec.Rules[0].RouteBackendRefs[0].Port = nil
 				return route
 			}(),
@@ -1410,6 +1413,14 @@ func TestCreateBackend(t *testing.T) {
 		},
 	}
 
+	expectedSPConfig := SessionPersistenceConfig{
+		Name:   "test-persistence",
+		Idx:    "test-persistence-idx",
+		Valid:  true,
+		Expiry: "10m",
+		Path:   "/test-path",
+	}
+
 	tests := []struct {
 		nginxProxySpec               *EffectiveNginxProxy
 		name                         string
@@ -1428,8 +1439,9 @@ func TestCreateBackend(t *testing.T) {
 				Weight:             5,
 				Valid:              true,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				SessionPersistence: &expectedSPConfig,
 			},
-			expectedServicePortReference: "test_service1_80",
+			expectedServicePortReference: "test_service1_80_test-persistence-idx",
 			expectedConditions:           nil,
 			name:                         "normal case",
 		},
@@ -1446,8 +1458,9 @@ func TestCreateBackend(t *testing.T) {
 				Weight:             1,
 				Valid:              true,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				SessionPersistence: &expectedSPConfig,
 			},
-			expectedServicePortReference: "test_service1_80",
+			expectedServicePortReference: "test_service1_80_test-persistence-idx",
 			expectedConditions:           nil,
 			name:                         "normal with nil weight",
 		},
@@ -1531,8 +1544,9 @@ func TestCreateBackend(t *testing.T) {
 						`The Service configured with IPv4 family but NginxProxy is configured with IPv6`,
 					),
 				},
+				SessionPersistence: &expectedSPConfig,
 			},
-			expectedServicePortReference: "test_service1_80",
+			expectedServicePortReference: "test_service1_80_test-persistence-idx",
 			nginxProxySpec:               &EffectiveNginxProxy{IPFamily: helpers.GetPointer(ngfAPIv1alpha2.IPv6)},
 			expectedConditions:           nil,
 			name:                         "service IPFamily doesn't match NginxProxy IPFamily",
@@ -1551,8 +1565,9 @@ func TestCreateBackend(t *testing.T) {
 				Valid:              true,
 				BackendTLSPolicy:   &btp,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				SessionPersistence: &expectedSPConfig,
 			},
-			expectedServicePortReference: "test_service2_80",
+			expectedServicePortReference: "test_service2_80_test-persistence-idx",
 			expectedConditions:           nil,
 			name:                         "normal case with policy",
 		},
@@ -1595,8 +1610,9 @@ func TestCreateBackend(t *testing.T) {
 						"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
 					),
 				},
+				SessionPersistence: &expectedSPConfig,
 			},
-			expectedServicePortReference: "test_external-service_80",
+			expectedServicePortReference: "test_external-service_80_test-persistence-idx",
 			expectedConditions:           nil,
 			name:                         "ExternalName service without DNS resolver",
 		},
@@ -1620,8 +1636,9 @@ func TestCreateBackend(t *testing.T) {
 				Weight:             5,
 				Valid:              true,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				SessionPersistence: &expectedSPConfig,
 			},
-			expectedServicePortReference: "test_external-service_80",
+			expectedServicePortReference: "test_external-service_80_test-persistence-idx",
 			expectedConditions:           nil,
 			name:                         "ExternalName service with DNS resolver",
 		},
@@ -1642,8 +1659,9 @@ func TestCreateBackend(t *testing.T) {
 						"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
 					),
 				},
+				SessionPersistence: &expectedSPConfig,
 			},
-			expectedServicePortReference: "test_external-service_80",
+			expectedServicePortReference: "test_external-service_80_test-persistence-idx",
 			expectedConditions:           nil,
 			name:                         "ExternalName service with multiple gateways - mixed DNS resolver config",
 		},
@@ -1728,6 +1746,13 @@ func TestCreateBackend(t *testing.T) {
 				IsInferencePool:  false,
 				BackendRef:       test.ref.BackendRef,
 				Filters:          []any{},
+				SessionPersistence: &SessionPersistenceConfig{
+					Name:   "test-persistence",
+					Idx:    "test-persistence-idx",
+					Valid:  true,
+					Expiry: "10m",
+					Path:   "/test-path",
+				},
 			}
 			route := &L7Route{
 				RouteType: RouteTypeHTTP,

@@ -104,7 +104,7 @@ server {
 
         {{- range $i := $l.Includes }}
         include {{ $i.Name }};
-        {{- end -}}
+        {{- end }}
 
         {{- if $l.AuthBasic }}
         auth_basic "{{ $l.AuthBasic.Realm }}";

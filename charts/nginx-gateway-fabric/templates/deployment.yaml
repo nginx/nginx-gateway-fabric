@@ -188,6 +188,9 @@ spec:
         {{- with .Values.nginxGateway.extraVolumeMounts -}}
         {{ toYaml . | nindent 8 }}
         {{- end }}
+      {{- if.Values.nginxGateway.priorityClassName }}
+      priorityClassName: {{ .Values.nginxGateway.priorityClassName }}
+      {{- end }}
       {{- if .Values.nginxGateway.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- toYaml .Values.nginxGateway.topologySpreadConstraints | nindent 8 }}

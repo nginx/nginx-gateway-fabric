@@ -14,7 +14,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	v1alpha "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	ngfSort "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/sort"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -24,6 +24,9 @@ const (
 	wildcardHostname  = "~^"
 	inferenceAPIGroup = "inference.networking.k8s.io"
 )
+
+var spErrMsg = "SessionPersistence is only supported with NGINX Plus " +
+	"and when experimental features are enabled. This configuration will be ignored."
 
 // ParentRef describes a reference to a parent in a Route.
 type ParentRef struct {
@@ -169,10 +172,31 @@ type RouteBackendRef struct {
 	// EndpointPickerConfig is the configuration for the EndpointPicker, if this backendRef is for an InferencePool.
 	EndpointPickerConfig EndpointPickerConfig
 
+	// InferencePoolName is the name of the InferencePool, if this backendRef is for an InferencePool.
+	InferencePoolName string
+
+	// SessionPersistence holds the session persistence configuration for the route rule.
+	SessionPersistence *SessionPersistenceConfig
+
 	Filters []any
 
 	// IsInferencePool indicates if this backend is an InferencePool disguised as a Service.
 	IsInferencePool bool
+}
+
+type SessionPersistenceConfig struct {
+	// Name is the name of the session.
+	Name string
+	// Expiry determines the expiry time of the session.
+	Expiry string
+	// SessionType is the type of session persistence.
+	SessionType v1.SessionPersistenceType
+	// Path is the path for which the session persistence is allowed.
+	Path string
+	// Idx is the unique identifier for this configuration in the route rule.
+	Idx string
+	// Valid indicates if the session persistence configuration is valid.
+	Valid bool
 }
 
 // CreateRouteKey takes a client.Object and creates a RouteKey.
@@ -257,6 +281,7 @@ func buildRoutesForGateways(
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
 	authenticationFilters map[types.NamespacedName]*AuthenticationFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
+	featureFlags FeatureFlags,
 ) map[RouteKey]*L7Route {
 	if len(gateways) == 0 {
 		return nil
@@ -265,7 +290,7 @@ func buildRoutesForGateways(
 	routes := make(map[RouteKey]*L7Route)
 
 	for _, route := range httpRoutes {
-		r := buildHTTPRoute(validator, route, gateways, snippetsFilters, authenticationFilters, inferencePools)
+		r := buildHTTPRoute(validator, route, gateways, snippetsFilters, authenticationFilters, inferencePools, featureFlags)
 		if r == nil {
 			continue
 		}
@@ -273,11 +298,11 @@ func buildRoutesForGateways(
 		routes[CreateRouteKey(route)] = r
 
 		// if this route has a RequestMirror filter, build a duplicate route for the mirror
-		buildHTTPMirrorRoutes(routes, r, route, gateways, snippetsFilters)
+		buildHTTPMirrorRoutes(routes, r, route, gateways, snippetsFilters, featureFlags)
 	}
 
 	for _, route := range grpcRoutes {
-		r := buildGRPCRoute(validator, route, gateways, snippetsFilters, authenticationFilters)
+		r := buildGRPCRoute(validator, route, gateways, snippetsFilters, authenticationFilters, featureFlags)
 		if r == nil {
 			continue
 		}
@@ -285,7 +310,7 @@ func buildRoutesForGateways(
 		routes[CreateRouteKey(route)] = r
 
 		// if this route has a RequestMirror filter, build a duplicate route for the mirror
-		buildGRPCMirrorRoutes(routes, r, route, gateways, snippetsFilters)
+		buildGRPCMirrorRoutes(routes, r, route, gateways, snippetsFilters, featureFlags)
 	}
 
 	return routes
@@ -436,7 +461,7 @@ func bindRoutesToListeners(
 
 		// Sort the slice by timestamp and name so that we process the routes in the priority order
 		sort.Slice(l4RouteSlice, func(i, j int) bool {
-			return ngfSort.LessClientObject(l4RouteSlice[i].Source, l4RouteSlice[j].Source)
+			return ngfsort.LessClientObject(l4RouteSlice[i].Source, l4RouteSlice[j].Source)
 		})
 
 		// portHostnamesMap exists to detect duplicate hostnames on the same port
@@ -1150,4 +1175,165 @@ func routeKeyForKind(kind v1.Kind, nsname types.NamespacedName) RouteKey {
 	}
 
 	return key
+}
+
+func getSessionPersistenceKey(ruleIdx int, routeNsName types.NamespacedName) string {
+	return fmt.Sprintf("%s_%s_%d", routeNsName.Name, routeNsName.Namespace, ruleIdx)
+}
+
+// processSessionPersistenceConfig processes the session persistence configuration.
+func processSessionPersistenceConfig[T any](
+	sp *v1.SessionPersistence,
+	routeMatches []T,
+	rulePath *field.Path,
+	validator validation.HTTPFieldsValidator,
+) (*SessionPersistenceConfig, routeRuleErrors) {
+	var spConfig SessionPersistenceConfig
+	expiry, errors := validateSessionPersistenceConfig(sp, rulePath, validator)
+
+	if len(errors.warn) > 0 {
+		errors.warn = append(errors.warn, field.Invalid(
+			rulePath,
+			rulePath.String(),
+			"session persistence is ignored because there are errors in the configuration",
+		))
+		spConfig.Valid = false
+		return &spConfig, errors
+	}
+
+	var sessionName string
+	if sp.SessionName != nil {
+		sessionName = *sp.SessionName
+	}
+
+	var cookieLifetimeType v1.CookieLifetimeType
+	if sp.CookieConfig != nil {
+		cookieLifetimeType = *sp.CookieConfig.LifetimeType
+	}
+
+	if sp.AbsoluteTimeout != nil && cookieLifetimeType == v1.SessionCookieLifetimeType {
+		expiry = ""
+	}
+
+	var path string
+	switch rm := any(routeMatches).(type) {
+	case []v1.HTTPRouteMatch:
+		path = deriveCookiePathForHTTPMatches(rm)
+	case []v1.GRPCRouteMatch:
+		path = ""
+	default:
+		panic("unsupported route match type")
+	}
+
+	spConfig = SessionPersistenceConfig{
+		Valid:       true,
+		Name:        sessionName,
+		SessionType: *sp.Type,
+		Path:        path,
+		Expiry:      expiry,
+	}
+
+	return &spConfig, errors
+}
+
+// validateSessionPersistenceConfig validates the session persistence configuration.
+// Returns warnings for any invalid session persistence configuration.
+// but that does not make the route associated with it invalid.
+func validateSessionPersistenceConfig(
+	sp *v1.SessionPersistence,
+	path *field.Path,
+	validator validation.HTTPFieldsValidator,
+) (string, routeRuleErrors) {
+	if sp == nil {
+		return "", routeRuleErrors{}
+	}
+
+	var errors routeRuleErrors
+
+	if sp.Type != nil && *sp.Type != v1.CookieBasedSessionPersistence {
+		errors.warn = append(errors.warn, field.NotSupported(
+			path.Child("type"),
+			sp.Type,
+			[]string{string(v1.CookieBasedSessionPersistence)},
+		))
+	}
+
+	if sp.IdleTimeout != nil {
+		errors.warn = append(errors.warn, field.Forbidden(
+			path.Child("idleTimeout"),
+			"IdleTimeout",
+		))
+	}
+
+	var timeout string
+	if sp.AbsoluteTimeout != nil {
+		if absoluteTimeout, err := validator.ValidateDuration(string(*sp.AbsoluteTimeout)); err != nil {
+			errors.warn = append(errors.warn, field.Invalid(
+				path.Child("absoluteTimeout"),
+				sp.AbsoluteTimeout,
+				err.Error(),
+			))
+		} else {
+			timeout = absoluteTimeout
+		}
+	}
+
+	return timeout, errors
+}
+
+func deriveCookiePathForHTTPMatches(matches []v1.HTTPRouteMatch) string {
+	paths := make([]string, 0, len(matches))
+	for _, match := range matches {
+		paths = append(paths, getCookiePath(match))
+	}
+
+	return longestCommonPathPrefix(paths)
+}
+
+// longestCommonPathPrefix returns the longest common path prefix of the given
+// paths.
+// Examples:
+//
+//	["/foo/bar", "/foo/baz"]    -> "/foo"
+//	["/foo/bar", "/foo/bar/b"]  -> "/foo/bar"
+//	["/foo", "/bar"]            -> ""
+//	[]                          -> ""
+func longestCommonPathPrefix(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	if len(paths) == 1 {
+		return paths[0]
+	}
+
+	commonSegs := strings.Split(paths[0], "/")
+	for _, p := range paths[1:] {
+		segs := strings.Split(p, "/")
+		i := 0
+		limit := len(commonSegs)
+		if len(segs) < limit {
+			limit = len(segs)
+		}
+		for i < limit && commonSegs[i] == segs[i] {
+			i++
+		}
+		// truncate commonSegs to the common prefix
+		commonSegs = commonSegs[:i]
+		if len(commonSegs) == 0 {
+			return ""
+		}
+	}
+
+	return strings.Join(commonSegs, "/")
+}
+
+func getCookiePath(match v1.HTTPRouteMatch) string {
+	pathType := *match.Path.Type
+
+	switch pathType {
+	case v1.PathMatchExact, v1.PathMatchPathPrefix:
+		return *match.Path.Value
+	default:
+		return ""
+	}
 }

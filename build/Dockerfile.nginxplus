@@ -8,7 +8,7 @@ FROM alpine:3.22
 
 ARG NGINX_PLUS_VERSION=R36
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.5.1
+ARG NGINX_AGENT_VERSION=v3.6.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
@@ -33,6 +33,9 @@ COPY ${NJS_DIR}/ /usr/lib/nginx/modules/njs/
 COPY ${NGINX_CONF_DIR}/nginx-plus.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf
+
+# Create empty /run/.containerenv file so agent can identify that it's running in a container
+RUN mkdir -p /run && touch /run/.containerenv
 
 RUN chown -R 101:1001 /etc/nginx /var/cache/nginx /var/lib/nginx
 

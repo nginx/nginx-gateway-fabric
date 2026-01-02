@@ -212,7 +212,10 @@ func TestBuildGraph(t *testing.T) {
 		Referenced: true,
 	}
 
-	createValidRuleWithBackendRefs := func(matches []gatewayv1.HTTPRouteMatch) RouteRule {
+	createValidRuleWithBackendRefs := func(
+    matches []gatewayv1.HTTPRouteMatch,
+    sessionPersistence *SessionPersistenceConfig,
+  ) RouteRule {
 		refs := []BackendRef{
 			{
 				SvcNsName:          types.NamespacedName{Namespace: "service", Name: "foo"},
@@ -221,11 +224,13 @@ func TestBuildGraph(t *testing.T) {
 				Weight:             1,
 				BackendTLSPolicy:   &btp,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				SessionPersistence: sessionPersistence,
 			},
 		}
 		rbrs := []RouteBackendRef{
 			{
-				BackendRef: commonGWBackendRef,
+				BackendRef:         commonGWBackendRef,
+				SessionPersistence: sessionPersistence,
 			},
 		}
 		return RouteRule{
@@ -243,8 +248,9 @@ func TestBuildGraph(t *testing.T) {
 	createValidRuleWithBackendRefsAndFilters := func(
 		matches []gatewayv1.HTTPRouteMatch,
 		routeType RouteType,
+		sessionPersistence *SessionPersistenceConfig,
 	) RouteRule {
-		rule := createValidRuleWithBackendRefs(matches)
+		rule := createValidRuleWithBackendRefs(matches, sessionPersistence)
 		rule.Filters = RouteRuleFilters{
 			Filters: []Filter{
 				{
@@ -295,7 +301,8 @@ func TestBuildGraph(t *testing.T) {
 		}
 		rbrs := []RouteBackendRef{
 			{
-				IsInferencePool: true,
+				IsInferencePool:   true,
+				InferencePoolName: "ipool",
 				BackendRef: gatewayv1.BackendRef{
 					BackendObjectReference: gatewayv1.BackendObjectReference{
 						Group:     helpers.GetPointer[gatewayv1.Group](""),
@@ -389,14 +396,23 @@ func TestBuildGraph(t *testing.T) {
 		}
 	}
 
+	spConfig := &gatewayv1.SessionPersistence{
+		SessionName:     helpers.GetPointer("session-persistence-httproute"),
+		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("30m")),
+		CookieConfig: &gatewayv1.CookieConfig{
+			LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
+		},
+	}
 	hr1 := createRoute("hr-1", "gateway-1", "listener-80-1")
-	addFilterToPath(
+	addElementsToPath(
 		hr1,
 		"/",
 		gatewayv1.HTTPRouteFilter{
 			Type:         gatewayv1.HTTPRouteFilterExtensionRef,
 			ExtensionRef: refSnippetsFilterExtensionRef,
 		},
+		spConfig,
 	)
 	addFilterToPath(
 		hr1,
@@ -447,6 +463,14 @@ func TestBuildGraph(t *testing.T) {
 						{
 							Type:         gatewayv1.GRPCRouteFilterExtensionRef,
 							ExtensionRef: refAuthenticationFilterExtensionRef,
+						},
+					},
+					SessionPersistence: &gatewayv1.SessionPersistence{
+						SessionName:     helpers.GetPointer("session-persistence-grpcroute"),
+						Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("30m")),
+						CookieConfig: &gatewayv1.CookieConfig{
+							LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 						},
 					},
 				},
@@ -930,6 +954,15 @@ func TestBuildGraph(t *testing.T) {
 		}
 	}
 
+	getExpectedSPConfig := &SessionPersistenceConfig{
+		Name:        "session-persistence-httproute",
+		SessionType: gatewayv1.CookieBasedSessionPersistence,
+		Expiry:      "30m",
+		Valid:       true,
+		Path:        "/",
+		Idx:         "hr-1_test_0",
+	}
+
 	routeHR1 := &L7Route{
 		RouteType:  RouteTypeHTTP,
 		Valid:      true,
@@ -957,7 +990,7 @@ func TestBuildGraph(t *testing.T) {
 		},
 		Spec: L7RouteSpec{
 			Hostnames: hr1.Spec.Hostnames,
-			Rules:     []RouteRule{createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeHTTP)},
+			Rules:     []RouteRule{createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeHTTP, getExpectedSPConfig)},
 		},
 		Policies: []*Policy{processedRoutePolicy},
 		Conditions: []conditions.Condition{
@@ -1121,6 +1154,13 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
+	expectedSPgr := &SessionPersistenceConfig{
+		Name:        "session-persistence-grpcroute",
+		SessionType: gatewayv1.CookieBasedSessionPersistence,
+		Expiry:      "30m",
+		Valid:       true,
+		Idx:         "gr_test_0",
+	}
 	routeGR := &L7Route{
 		RouteType:  RouteTypeGRPC,
 		Valid:      true,
@@ -1149,7 +1189,7 @@ func TestBuildGraph(t *testing.T) {
 		Spec: L7RouteSpec{
 			Hostnames: gr.Spec.Hostnames,
 			Rules: []RouteRule{
-				createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeGRPC),
+				createValidRuleWithBackendRefsAndFilters(routeMatches, RouteTypeGRPC, expectedSPgr),
 			},
 		},
 	}
@@ -1181,7 +1221,7 @@ func TestBuildGraph(t *testing.T) {
 		},
 		Spec: L7RouteSpec{
 			Hostnames: hr3.Spec.Hostnames,
-			Rules:     []RouteRule{createValidRuleWithBackendRefs(routeMatches)},
+			Rules:     []RouteRule{createValidRuleWithBackendRefs(routeMatches, nil)},
 		},
 	}
 
@@ -1524,15 +1564,16 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	tests := []struct {
-		store               ClusterState
-		expected            *Graph
-		name                string
-		experimentalEnabled bool
+		store                     ClusterState
+		expected                  *Graph
+		name                      string
+		plus, experimentalEnabled bool
 	}{
 		{
 			store:               createStateWithGatewayClass(normalGC),
 			expected:            createExpectedGraphWithGatewayClass(normalGC),
 			experimentalEnabled: true,
+			plus:                true,
 			name:                "normal case",
 		},
 		{
@@ -1551,6 +1592,12 @@ func TestBuildGraph(t *testing.T) {
 
 			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
 
+			createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
+				v := &validationfakes.FakeHTTPFieldsValidator{}
+				v.ValidateDurationReturns("30m", nil)
+				return v
+			}
+
 			result := BuildGraph(
 				test.store,
 				controllerName,
@@ -1564,12 +1611,15 @@ func TestBuildGraph(t *testing.T) {
 					},
 				},
 				validation.Validators{
-					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
+					HTTPFieldsValidator: createAllValidValidator(),
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
-				test.experimentalEnabled,
+				FeatureFlags{
+					Experimental: test.experimentalEnabled,
+					Plus:         test.plus,
+				},
 			)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())

@@ -3,10 +3,12 @@
 config:
   ul-style:
     style: dash
+  ul-indent: false
   no-hard-tabs: false
   no-multiple-blanks: false
   line-length: false
   blanks-around-headers: false
+  blanks-around-lists: false
   no-duplicate-heading:
     siblings_only: true
   no-inline-html: false

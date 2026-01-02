@@ -1,10 +1,10 @@
 {{ define "packages" }}
 ---
-title: "API reference"
+title: API reference
 weight: 100
-type: reference
-product: NGF
-docs: DOCS-000
+nd-content-type: reference
+nd-product: FABRIC
+nd-docs: DOCS-1855
 ---
 
 ## Overview

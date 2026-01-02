@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -145,6 +146,9 @@ func NewNginxProvisioner(
 		cfg.Logger.Error(err, "failed to collect agent labels")
 	}
 	cfg.AgentLabels = agentLabels
+	if cfg.AgentLabels == nil {
+		cfg.AgentLabels = make(map[string]string)
+	}
 
 	provisioner := &NginxProvisioner{
 		k8sClient:                  mgr.GetClient(),
@@ -246,33 +250,44 @@ func (p *NginxProvisioner) provisionNginx(
 		createCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 
 		var res controllerutil.OperationResult
+		var upsertErr error
 		if err := wait.PollUntilContextCancel(
 			createCtx,
 			500*time.Millisecond,
 			true, /* poll immediately */
 			func(ctx context.Context) (bool, error) {
-				var upsertErr error
 				res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, obj, objectSpecSetter(obj))
 				if upsertErr != nil {
-					if !apierrors.IsAlreadyExists(upsertErr) && !apierrors.IsConflict(upsertErr) {
-						return false, upsertErr
+					if apierrors.IsInvalid(upsertErr) { // log this error at the error level
+						p.cfg.Logger.Error(
+							upsertErr,
+							"Retrying CreateOrUpdate for nginx resource after error",
+							"namespace", gateway.GetNamespace(),
+							"name", resourceName,
+						)
+					} else {
+						p.cfg.Logger.V(1).Info(
+							"Retrying CreateOrUpdate for nginx resource after error",
+							"namespace", gateway.GetNamespace(),
+							"name", resourceName,
+							"error", upsertErr.Error(),
+						)
 					}
-					if apierrors.IsConflict(upsertErr) {
-						return false, nil
-					}
+					return false, nil
 				}
 				return true, nil
 			},
 		); err != nil {
+			fullErr := errors.Join(err, upsertErr)
 			p.cfg.EventRecorder.Eventf(
 				obj,
 				corev1.EventTypeWarning,
 				"CreateOrUpdateFailed",
 				"Failed to create or update nginx resource: %s",
-				err.Error(),
+				fullErr.Error(),
 			)
 			cancel()
-			return err
+			return fullErr
 		}
 		cancel()
 
@@ -325,6 +340,10 @@ func (p *NginxProvisioner) provisionNginx(
 			}
 			daemonSetObj.Spec.Template.Annotations[controller.RestartedAnnotation] = time.Now().Format(time.RFC3339)
 			object = daemonSetObj
+		}
+
+		if object == nil {
+			return nil
 		}
 
 		p.cfg.Logger.V(1).Info(

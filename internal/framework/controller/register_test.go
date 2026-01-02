@@ -1,7 +1,6 @@
 package controller_test
 
 import (
-	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -136,7 +135,7 @@ func TestRegister(t *testing.T) {
 
 			register := func() error {
 				return controller.Register(
-					context.Background(),
+					t.Context(),
 					test.objectType,
 					test.msg, // unique controller name for each loop iteration
 					test.fakes.mgr,

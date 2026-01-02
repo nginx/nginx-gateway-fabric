@@ -361,8 +361,9 @@ func buildAuthSecrets(secrets map[types.NamespacedName]*graph.Secret) map[AuthFi
 
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 	type key struct {
-		nsname  types.NamespacedName
-		ruleIdx int
+		nsname      types.NamespacedName
+		ruleIdx     int
+		pathRuleIdx int
 	}
 
 	// There can be duplicate backend groups if a route is attached to multiple listeners.
@@ -375,8 +376,9 @@ func buildBackendGroups(servers []VirtualServer) []BackendGroup {
 				group := mr.BackendGroup
 
 				k := key{
-					nsname:  group.Source,
-					ruleIdx: group.RuleIdx,
+					nsname:      group.Source,
+					ruleIdx:     group.RuleIdx,
+					pathRuleIdx: group.PathRuleIdx,
 				}
 
 				uniqueGroups[k] = group
@@ -711,6 +713,12 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 			return s.PathRules[i].PathType < s.PathRules[j].PathType
 		})
 
+		for pathRuleIdx := range s.PathRules {
+			for matchRuleIdx := range s.PathRules[pathRuleIdx].MatchRules {
+				s.PathRules[pathRuleIdx].MatchRules[matchRuleIdx].BackendGroup.PathRuleIdx = pathRuleIdx
+			}
+		}
+
 		servers = append(servers, s)
 	}
 
@@ -800,6 +808,7 @@ func buildUpstreams(
 						referencedServices,
 						uniqueUpstreams,
 						allowedAddressType,
+						br.SessionPersistence,
 					); upstream != nil {
 						uniqueUpstreams[upstream.Name] = *upstream
 					}
@@ -835,6 +844,7 @@ func buildUpstream(
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	uniqueUpstreams map[string]Upstream,
 	allowedAddressType []discoveryV1.AddressType,
+	sessionPersistence *graph.SessionPersistenceConfig,
 ) *Upstream {
 	if !br.Valid {
 		return nil
@@ -853,7 +863,6 @@ func buildUpstream(
 	}
 
 	var errMsg string
-
 	eps, err := resolveUpstreamEndpoints(
 		ctx,
 		logger,
@@ -874,11 +883,23 @@ func buildUpstream(
 		upstreamPolicies = buildPolicies(gateway, graphSvc.Policies)
 	}
 
+	var sp SessionPersistenceConfig
+	if sessionPersistence != nil {
+		sp = SessionPersistenceConfig{
+			Name:        sessionPersistence.Name,
+			Expiry:      sessionPersistence.Expiry,
+			Path:        sessionPersistence.Path,
+			SessionType: CookieBasedSessionPersistence,
+		}
+	}
+
 	return &Upstream{
-		Name:      upstreamName,
-		Endpoints: eps,
-		ErrorMsg:  errMsg,
-		Policies:  upstreamPolicies,
+		Name:               upstreamName,
+		Endpoints:          eps,
+		ErrorMsg:           errMsg,
+		Policies:           upstreamPolicies,
+		SessionPersistence: sp,
+		StateFileKey:       br.BaseServicePortKey(),
 	}
 }
 

@@ -122,15 +122,39 @@ type Layer4VirtualServer struct {
 
 // Upstream is a pool of endpoints to be load balanced.
 type Upstream struct {
+	// SessionPersistence holds the session persistence configuration for the upstream.
+	SessionPersistence SessionPersistenceConfig
 	// Name is the name of the Upstream. Will be unique for each service/port combination.
 	Name string
 	// ErrorMsg contains the error message if the Upstream is invalid.
 	ErrorMsg string
+	// StateFileKey is the key for naming the state file for NGINX Plus upstreams.
+	StateFileKey string
 	// Endpoints are the endpoints of the Upstream.
 	Endpoints []resolver.Endpoint
 	// Policies holds all the valid policies that apply to the Upstream.
 	Policies []policies.Policy
 }
+
+// SessionPersistenceConfig holds the session persistence configuration for an upstream.
+type SessionPersistenceConfig struct {
+	// SessionType is the type of session persistence.
+	SessionType SessionPersistenceType
+	// Name is the name of the session.
+	Name string
+	// Expiry is the expiration time of the session.
+	Expiry string
+	// Path is the path for which session is applied.
+	Path string
+}
+
+// SessionPersistenceType is the type of session persistence.
+type SessionPersistenceType string
+
+const (
+	// CookieBasedSessionPersistence indicates cookie-based session persistence.
+	CookieBasedSessionPersistence SessionPersistenceType = "cookie"
+)
 
 // SSL is the SSL configuration for a server.
 type SSL struct {
@@ -351,6 +375,9 @@ type BackendGroup struct {
 	Backends []Backend
 	// RuleIdx is the index of the corresponding rule in the HTTPRoute.
 	RuleIdx int
+	// PathRuleIdx is the index of the corresponding path rule when attached to a VirtualServer.
+	// BackendGroups attached to a MatchRule that have the same Path match will have the same PathRuleIdx.
+	PathRuleIdx int
 }
 
 // Name returns the name of the backend group.
@@ -361,7 +388,7 @@ type BackendGroup struct {
 // The RuleIdx may change for a given rule if an update is made to the HTTPRoute, but it will always match the index
 // of the rule in the stored HTTPRoute.
 func (bg *BackendGroup) Name() string {
-	return fmt.Sprintf("group_%s__%s_rule%d", bg.Source.Namespace, bg.Source.Name, bg.RuleIdx)
+	return fmt.Sprintf("group_%s__%s_rule%d_pathRule%d", bg.Source.Namespace, bg.Source.Name, bg.RuleIdx, bg.PathRuleIdx)
 }
 
 // Backend represents a Backend for a routing rule.

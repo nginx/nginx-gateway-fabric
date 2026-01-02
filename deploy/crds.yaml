@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: authenticationfilters.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -193,7 +193,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: clientsettingspolicies.gateway.nginx.org
@@ -648,7 +648,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: nginxgateways.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -781,7 +781,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: nginxproxies.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -2344,9 +2344,10 @@ spec:
                                 operator:
                                   description: |-
                                     Operator represents a key's relationship to the value.
-                                    Valid operators are Exists and Equal. Defaults to Equal.
+                                    Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                                     Exists is equivalent to wildcard for value, so that a pod can
                                     tolerate all taints of a particular category.
+                                    Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                                   type: string
                                 tolerationSeconds:
                                   description: |-
@@ -3138,7 +3139,7 @@ spec:
                                             resources:
                                               description: |-
                                                 resources represents the minimum resources the volume should have.
-                                                If RecoverVolumeExpansionFailure feature is enabled users are allowed to specify resource requirements
+                                                Users are allowed to specify resource requirements
                                                 that are lower than previous value but must still be higher than capacity recorded in the
                                                 status field of the claim.
                                                 More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources
@@ -4035,6 +4036,24 @@ spec:
                                                 description: Kubelet's generated CSRs
                                                   will be addressed to this signer.
                                                 type: string
+                                              userAnnotations:
+                                                additionalProperties:
+                                                  type: string
+                                                description: |-
+                                                  userAnnotations allow pod authors to pass additional information to
+                                                  the signer implementation.  Kubernetes does not restrict or validate this
+                                                  metadata in any way.
+
+                                                  These values are copied verbatim into the `spec.unverifiedUserAnnotations` field of
+                                                  the PodCertificateRequest objects that Kubelet creates.
+
+                                                  Entries are subject to the same validation as object metadata annotations,
+                                                  with the addition that all keys must be domain-prefixed. No restrictions
+                                                  are placed on values, except an overall size limitation on the entire field.
+
+                                                  Signers should document the keys and values they support. Signers should
+                                                  deny requests that contain keys they do not recognize.
+                                                type: object
                                             required:
                                             - keyType
                                             - signerName
@@ -4548,8 +4567,8 @@ spec:
                                       and scale-down and scale-up tolerances of 5% and 1% respectively, scaling will be
                                       triggered when the actual consumption falls below 95Mi or exceeds 101Mi.
 
-                                      This is an alpha field and requires enabling the HPAConfigurableTolerance
-                                      feature gate.
+                                      This is an beta field and requires the HPAConfigurableTolerance feature
+                                      gate to be enabled.
                                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                                     x-kubernetes-int-or-string: true
                                 type: object
@@ -4624,8 +4643,8 @@ spec:
                                       and scale-down and scale-up tolerances of 5% and 1% respectively, scaling will be
                                       triggered when the actual consumption falls below 95Mi or exceeds 101Mi.
 
-                                      This is an alpha field and requires enabling the HPAConfigurableTolerance
-                                      feature gate.
+                                      This is an beta field and requires the HPAConfigurableTolerance feature
+                                      gate to be enabled.
                                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                                     x-kubernetes-int-or-string: true
                                 type: object
@@ -6571,9 +6590,10 @@ spec:
                                 operator:
                                   description: |-
                                     Operator represents a key's relationship to the value.
-                                    Valid operators are Exists and Equal. Defaults to Equal.
+                                    Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                                     Exists is equivalent to wildcard for value, so that a pod can
                                     tolerate all taints of a particular category.
+                                    Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                                   type: string
                                 tolerationSeconds:
                                   description: |-
@@ -7365,7 +7385,7 @@ spec:
                                             resources:
                                               description: |-
                                                 resources represents the minimum resources the volume should have.
-                                                If RecoverVolumeExpansionFailure feature is enabled users are allowed to specify resource requirements
+                                                Users are allowed to specify resource requirements
                                                 that are lower than previous value but must still be higher than capacity recorded in the
                                                 status field of the claim.
                                                 More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources
@@ -8262,6 +8282,24 @@ spec:
                                                 description: Kubelet's generated CSRs
                                                   will be addressed to this signer.
                                                 type: string
+                                              userAnnotations:
+                                                additionalProperties:
+                                                  type: string
+                                                description: |-
+                                                  userAnnotations allow pod authors to pass additional information to
+                                                  the signer implementation.  Kubernetes does not restrict or validate this
+                                                  metadata in any way.
+
+                                                  These values are copied verbatim into the `spec.unverifiedUserAnnotations` field of
+                                                  the PodCertificateRequest objects that Kubelet creates.
+
+                                                  Entries are subject to the same validation as object metadata annotations,
+                                                  with the addition that all keys must be domain-prefixed. No restrictions
+                                                  are placed on values, except an overall size limitation on the entire field.
+
+                                                  Signers should document the keys and values they support. Signers should
+                                                  deny requests that contain keys they do not recognize.
+                                                type: object
                                             required:
                                             - keyType
                                             - signerName
@@ -9048,7 +9086,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   labels:
     gateway.networking.k8s.io/policy: direct
   name: observabilitypolicies.gateway.nginx.org
@@ -9532,7 +9570,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: snippetsfilters.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -9721,7 +9759,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   labels:
     gateway.networking.k8s.io/policy: direct
   name: upstreamsettingspolicies.gateway.nginx.org
@@ -9769,6 +9807,12 @@ spec:
           spec:
             description: Spec defines the desired state of the UpstreamSettingsPolicy.
             properties:
+              hashMethodKey:
+                description: |-
+                  HashMethodKey defines the key used for hash-based load balancing methods.
+                  This field is required when `LoadBalancingMethod` is set to `hash` or `hash consistent`.
+                pattern: ^\$[a-z_]+$
+                type: string
               keepAlive:
                 description: KeepAlive defines the keep-alive settings.
                 properties:
@@ -9803,6 +9847,27 @@ spec:
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
                 type: object
+              loadBalancingMethod:
+                description: |-
+                  LoadBalancingMethod specifies the load balancing algorithm to be used for the upstream.
+                  If not specified, NGINX Gateway Fabric defaults to `random two least_conn`,
+                  which differs from the standard NGINX default `round-robin`.
+                enum:
+                - round_robin
+                - least_conn
+                - ip_hash
+                - hash
+                - hash consistent
+                - random
+                - random two
+                - random two least_conn
+                - random two least_time=header
+                - random two least_time=last_byte
+                - least_time header
+                - least_time last_byte
+                - least_time header inflight
+                - least_time last_byte inflight
+                type: string
               targetRefs:
                 description: |-
                   TargetRefs identifies API object(s) to apply the policy to.
@@ -9861,6 +9926,12 @@ spec:
             required:
             - targetRefs
             type: object
+            x-kubernetes-validations:
+            - message: hashMethodKey is required when loadBalancingMethod is 'hash'
+                or 'hash consistent'
+              rule: '!(has(self.loadBalancingMethod) && (self.loadBalancingMethod
+                == ''hash'' || self.loadBalancingMethod == ''hash consistent'')) ||
+                has(self.hashMethodKey)'
           status:
             description: Status defines the state of the UpstreamSettingsPolicy.
             properties:

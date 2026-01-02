@@ -42,7 +42,7 @@ To create a new release, follow these steps:
 3. Create a release branch following the `release-X.Y` naming convention.
     - Once the release branch is created, reach out to the infra team to get it added to the runner permissions.
 4. Once the release branch pipeline completes, run tests using the `release-X.X-rc` images that are pushed to Github (for example, `release-1.3-rc`).
-   1. Kick off the [longevity tests](https://github.com/nginx/nginx-gateway-fabric/blob/main/tests/README.md#longevity-testing) for both OSS and Plus. You'll need to create two clusters and VMs for this. Before running, update your `vars.env` file with the proper image tag and prefixes. NGF and nginx images will be available from `ghcr.io`, and nginx plus will be available in GCP (`us-docker.pkg.dev/<GCP_PROJECT_ID>/nginx-gateway-fabric/nginx-plus`). These tests need to run for 4 days before releasing. The results should be committed to the main branch and then cherry-picked to the release branch.
+   1. Kick off the [longevity tests](https://github.com/nginx/nginx-gateway-fabric/blob/main/tests/README.md#longevity-testing) for both OSS and Plus. You'll need to create two clusters and VMs for this. Before running, update your `vars.env` file with the proper image tag and prefixes. NGF and nginx images will be available from `ghcr.io`, and nginx plus will be available in GCP (`us-docker.pkg.dev/<GCP_PROJECT_ID>/nginx-gateway-fabric/nginx-plus`). These tests need to run for 4 days before releasing. The results can be added to the NFR results that are collected in the next step.
    2. Kick off the [NFR workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/nfr.yml) in the browser. For `image_tag`, use `release-X.X-rc`, and for `version`, use the upcoming `X.Y.Z` NGF version. Run the workflow on the new release branch. This will run all of the NFR tests which are automated and open a PR with the results files when it is complete. Review this PR and make any necessary changes before merging. Once merged, be sure to cherry-pick the commit to the main branch as well (the original PR targets the release branch).
    3. Run the IPv6 tests using the `make ipv6-tests` target. This must be run from within the `tests` directory. An example of running this script for release 2.1.0 would look like this: `make ipv6-test TAG=release-2.1-rc`
 5. Run the [Release PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/release-pr.yml) workflow to update the repo files for the release. Then there are a few manual steps to complete:
@@ -89,6 +89,8 @@ To create a new release, follow these steps:
     - Name the file based on the requirements of the [README](https://github.com/kubernetes-sigs/gateway-api/blob/main/conformance/reports/README.md). Update the README in the ngf directory and update the site source if necessary (see following example).
     - Open a PR. [Example](https://github.com/kubernetes-sigs/gateway-api/pull/3149)
       If it's your first time submitting a PR, you will need to sign a CLA using F5, Inc. as the organization.
+13. Follow the same steps to upload the `conformance-profile-inference.yaml` to the [Inference Extension repo](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports).
+   - You also may need to update other docs for NGF in that repo to ensure that they reference the correct version that we just updated to.
 
 ### Patch Release
 

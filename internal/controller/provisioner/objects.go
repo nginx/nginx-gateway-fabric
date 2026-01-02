@@ -24,6 +24,7 @@ import (
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
@@ -90,11 +91,16 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 
 	selectorLabels := make(map[string]string)
 	maps.Copy(selectorLabels, p.baseLabelSelector.MatchLabels)
-	selectorLabels[controller.GatewayLabel] = gateway.GetName()
 	selectorLabels[controller.AppNameLabel] = resourceName
 
 	labels := make(map[string]string)
 	annotations := make(map[string]string)
+
+	if len(gateway.GetName()) > controller.MaxServiceNameLen {
+		annotations[controller.GatewayLabel] = gateway.GetName()
+	} else {
+		selectorLabels[controller.GatewayLabel] = gateway.GetName()
+	}
 
 	maps.Copy(labels, selectorLabels)
 
@@ -446,6 +452,14 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		metricsPort = *port
 	}
 
+	depType := nginxTypes.DeploymentType
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.DaemonSet != nil {
+		depType = nginxTypes.DaemonSetType
+	}
+
+	p.cfg.AgentLabels[nginxTypes.AgentOwnerNameLabel] = fmt.Sprintf("%s_%s", objectMeta.Namespace, objectMeta.Name)
+	p.cfg.AgentLabels[nginxTypes.AgentOwnerTypeLabel] = depType
+
 	agentFields := map[string]interface{}{
 		"Plus":          p.cfg.Plus,
 		"ServiceName":   p.cfg.GatewayPodConfig.ServiceName,
@@ -529,7 +543,7 @@ func buildNginxService(
 		serviceType = corev1.ServiceType(*serviceCfg.ServiceType)
 	}
 
-	var servicePolicy corev1.ServiceExternalTrafficPolicyType
+	var servicePolicy corev1.ServiceExternalTrafficPolicy
 	if serviceType != corev1.ServiceTypeClusterIP {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {
@@ -860,10 +874,8 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	tokenAudience := fmt.Sprintf("%s.%s.svc", p.cfg.GatewayPodConfig.ServiceName, p.cfg.GatewayPodConfig.Namespace)
 
 	clusterID := "unknown"
-	if p.cfg.AgentLabels != nil {
-		if val, ok := p.cfg.AgentLabels["cluster-id"]; ok {
-			clusterID = val
-		}
+	if val, ok := p.cfg.AgentLabels["cluster-id"]; ok {
+		clusterID = val
 	}
 
 	spec := corev1.PodTemplateSpec{

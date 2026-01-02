@@ -2,6 +2,7 @@ package graph
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -20,37 +21,55 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-func createGRPCMethodMatch(serviceName, methodName, methodType string) v1.GRPCRouteRule {
+func createGRPCMethodMatch(
+	serviceName,
+	methodName,
+	methodType string,
+	sp *v1.SessionPersistence,
+	backendRef []v1.GRPCBackendRef,
+) v1.GRPCRouteRule {
 	var mt *v1.GRPCMethodMatchType
 	if methodType != "nilType" {
 		mt = (*v1.GRPCMethodMatchType)(&methodType)
 	}
-	return v1.GRPCRouteRule{
-		Matches: []v1.GRPCRouteMatch{
-			{
-				Method: &v1.GRPCMethodMatch{
-					Type:    mt,
-					Service: &serviceName,
-					Method:  &methodName,
-				},
+	matches := []v1.GRPCRouteMatch{
+		{
+			Method: &v1.GRPCMethodMatch{
+				Type:    mt,
+				Service: &serviceName,
+				Method:  &methodName,
 			},
 		},
+	}
+
+	if sp != nil {
+		return v1.GRPCRouteRule{
+			Matches:            matches,
+			SessionPersistence: sp,
+			BackendRefs:        backendRef,
+		}
+	}
+
+	return v1.GRPCRouteRule{
+		Matches: matches,
 	}
 }
 
 func createGRPCHeadersMatch(headerType, headerName, headerValue string) v1.GRPCRouteRule {
-	return v1.GRPCRouteRule{
-		Matches: []v1.GRPCRouteMatch{
-			{
-				Headers: []v1.GRPCHeaderMatch{
-					{
-						Type:  (*v1.GRPCHeaderMatchType)(&headerType),
-						Name:  v1.GRPCHeaderName(headerName),
-						Value: headerValue,
-					},
+	matches := []v1.GRPCRouteMatch{
+		{
+			Headers: []v1.GRPCHeaderMatch{
+				{
+					Type:  (*v1.GRPCHeaderMatchType)(&headerType),
+					Name:  v1.GRPCHeaderName(headerName),
+					Value: headerValue,
 				},
 			},
 		},
+	}
+
+	return v1.GRPCRouteRule{
+		Matches: matches,
 	}
 }
 
@@ -122,12 +141,33 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		Type:                  v1.GRPCRouteFilterRequestHeaderModifier,
 		RequestHeaderModifier: &v1.HTTPHeaderFilter{},
 	}
-
-	grRuleWithFilters := v1.GRPCRouteRule{
-		Filters: []v1.GRPCRouteFilter{snippetsFilterRef, authenticationFilterRef, requestHeaderFilter},
+  
+	unNamedSPConfig := v1.SessionPersistence{
+		AbsoluteTimeout: helpers.GetPointer(v1.Duration("10m")),
+		Type:            helpers.GetPointer(v1.CookieBasedSessionPersistence),
+		CookieConfig: &v1.CookieConfig{
+			LifetimeType: helpers.GetPointer((v1.PermanentCookieLifetimeType)),
+		},
 	}
 
-	gr := createGRPCRoute("gr-1", gwNsName.Name, "example.com", []v1.GRPCRouteRule{grRuleWithFilters})
+	grpcBackendRef := v1.GRPCBackendRef{
+		BackendRef: v1.BackendRef{
+			BackendObjectReference: v1.BackendObjectReference{
+				Kind:      helpers.GetPointer[v1.Kind]("Service"),
+				Name:      "grpc-service",
+				Namespace: helpers.GetPointer[v1.Namespace]("test"),
+				Port:      helpers.GetPointer[v1.PortNumber](80),
+			},
+		},
+	}
+
+	grRuleWithFiltersAndSessionPersistence := v1.GRPCRouteRule{
+		Filters:            []v1.GRPCRouteFilter{snippetsFilterRef, authenticationFilterRef, requestHeaderFilter},
+		SessionPersistence: &unNamedSPConfig,
+		BackendRefs:        []v1.GRPCBackendRef{grpcBackendRef},
+	}
+
+	gr := createGRPCRoute("gr-1", gwNsName.Name, "example.com", []v1.GRPCRouteRule{grRuleWithFiltersAndSessionPersistence})
 
 	grWrongGateway := createGRPCRoute("gr-2", "some-gateway", "example.com", []v1.GRPCRouteRule{})
 
@@ -230,8 +270,21 @@ func TestBuildGRPCRoutes(t *testing.T) {
 										},
 									},
 								},
-								ValidMatches:     true,
-								RouteBackendRefs: []RouteBackendRef{},
+								ValidMatches: true,
+								RouteBackendRefs: []RouteBackendRef{
+									{
+										BackendRef: v1.BackendRef{
+											BackendObjectReference: grpcBackendRef.BackendObjectReference,
+										},
+										SessionPersistence: &SessionPersistenceConfig{
+											Valid:       true,
+											Name:        "sp_gr-1_test_0",
+											SessionType: *unNamedSPConfig.Type,
+											Expiry:      "10m",
+											Idx:         "gr-1_test_0",
+										},
+									},
+								},
 							},
 						},
 					},
@@ -246,7 +299,11 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		},
 	}
 
-	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
+		v := &validationfakes.FakeHTTPFieldsValidator{}
+		v.ValidateDurationReturns("10m", nil)
+		return v
+	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -271,13 +328,17 @@ func TestBuildGRPCRoutes(t *testing.T) {
 			}
 
 			routes := buildRoutesForGateways(
-				validator,
+				createAllValidValidator(),
 				map[types.NamespacedName]*v1.HTTPRoute{},
 				grRoutes,
 				test.gateways,
 				snippetsFilters,
 				authenticationFilters,
 				nil,
+				FeatureFlags{
+					Plus:         true,
+					Experimental: true,
+				},
 			)
 			g.Expect(helpers.Diff(test.expected, routes)).To(BeEmpty())
 		})
@@ -300,13 +361,40 @@ func TestBuildGRPCRoute(t *testing.T) {
 		},
 	}
 	gatewayNsName := client.ObjectKeyFromObject(gw.Source)
+	backendRef := v1.BackendRef{
+		BackendObjectReference: v1.BackendObjectReference{
+			Kind:      helpers.GetPointer[v1.Kind]("Service"),
+			Name:      "service1",
+			Namespace: helpers.GetPointer[v1.Namespace]("test"),
+			Port:      helpers.GetPointer[v1.PortNumber](80),
+		},
+	}
 
-	methodMatchRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grpcBackendRef := v1.GRPCBackendRef{
+		BackendRef: backendRef,
+	}
+
+	spMethod := &v1.SessionPersistence{
+		SessionName:     helpers.GetPointer("grpc-method-session"),
+		AbsoluteTimeout: helpers.GetPointer(v1.Duration("10h")),
+		Type:            helpers.GetPointer(v1.CookieBasedSessionPersistence),
+		CookieConfig: &v1.CookieConfig{
+			LifetimeType: helpers.GetPointer((v1.PermanentCookieLifetimeType)),
+		},
+	}
+
+	methodMatchRule := createGRPCMethodMatch(
+		"myService",
+		"myMethod",
+		"Exact",
+		spMethod,
+		[]v1.GRPCBackendRef{grpcBackendRef},
+	)
 	headersMatchRule := createGRPCHeadersMatch("Exact", "MyHeader", "SomeValue")
 
-	methodMatchEmptyFields := createGRPCMethodMatch("", "", "")
-	methodMatchInvalidFields := createGRPCMethodMatch("service{}", "method{}", "Exact")
-	methodMatchNilType := createGRPCMethodMatch("myService", "myMethod", "nilType")
+	methodMatchEmptyFields := createGRPCMethodMatch("", "", "", nil, nil)
+	methodMatchInvalidFields := createGRPCMethodMatch("service{}", "method{}", "Exact", nil, nil)
+	methodMatchNilType := createGRPCMethodMatch("myService", "myMethod", "nilType", nil, nil)
 	headersMatchInvalid := createGRPCHeadersMatch("", "MyHeader", "SomeValue")
 
 	headersMatchEmptyType := v1.GRPCRouteRule{
@@ -328,19 +416,6 @@ func TestBuildGRPCRoute(t *testing.T) {
 		"example.com",
 		[]v1.GRPCRouteRule{methodMatchRule, headersMatchRule},
 	)
-
-	backendRef := v1.BackendRef{
-		BackendObjectReference: v1.BackendObjectReference{
-			Kind:      helpers.GetPointer[v1.Kind]("Service"),
-			Name:      "service1",
-			Namespace: helpers.GetPointer[v1.Namespace]("test"),
-			Port:      helpers.GetPointer[v1.PortNumber](80),
-		},
-	}
-
-	grpcBackendRef := v1.GRPCBackendRef{
-		BackendRef: backendRef,
-	}
 
 	grEmptyMatch := createGRPCRoute(
 		"gr-1",
@@ -441,7 +516,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		grDuplicateSectionName.Spec.ParentRefs[0],
 	)
 
-	grInvalidFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grInvalidFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 
 	grInvalidFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
@@ -456,7 +531,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 		[]v1.GRPCRouteRule{grInvalidFilterRule},
 	)
 
-	grValidFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grValidFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 	grValidHeaderMatch := createGRPCHeadersMatch("RegularExpression", "MyHeader", "headers-[a-z]+")
 	validSnippetsFilterRef := &v1.LocalObjectReference{
 		Group: ngfAPIv1alpha1.GroupName,
@@ -496,7 +571,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 
 	// route with invalid snippets filter extension ref
-	grInvalidSnippetsFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grInvalidSnippetsFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 	grInvalidSnippetsFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
@@ -515,7 +590,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 
 	// route with unresolvable snippets filter extension ref
-	grUnresolvableSnippetsFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grUnresolvableSnippetsFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 	grUnresolvableSnippetsFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
@@ -534,7 +609,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 
 	// route with two invalid snippets filter extensions refs: (1) invalid group (2) unresolvable
-	grInvalidAndUnresolvableSnippetsFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact")
+	grInvalidAndUnresolvableSnippetsFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
 	grInvalidAndUnresolvableSnippetsFilterRule.Filters = []v1.GRPCRouteFilter{
 		{
 			Type: v1.GRPCRouteFilterExtensionRef,
@@ -712,6 +787,17 @@ func TestBuildGRPCRoute(t *testing.T) {
 		return v
 	}
 
+	createDurationValidator := func(duration *v1.Duration) *validationfakes.FakeHTTPFieldsValidator {
+		v := &validationfakes.FakeHTTPFieldsValidator{}
+
+		if duration == nil {
+			v.ValidateDurationReturns("", nil)
+		} else {
+			v.ValidateDurationReturns(string(*duration), nil)
+		}
+		return v
+	}
+
 	routeFilters := []Filter{
 		{
 			RouteType:  RouteTypeGRPC,
@@ -743,14 +829,16 @@ func TestBuildGRPCRoute(t *testing.T) {
 		},
 	}
 
+	durationSP := v1.Duration("10h")
 	tests := []struct {
-		validator *validationfakes.FakeHTTPFieldsValidator
-		gr        *v1.GRPCRoute
-		expected  *L7Route
-		name      string
+		validator          *validationfakes.FakeHTTPFieldsValidator
+		gr                 *v1.GRPCRoute
+		expected           *L7Route
+		name               string
+		plus, experimental bool
 	}{
 		{
-			validator: createAllValidValidator(),
+			validator: createDurationValidator(&durationSP),
 			gr:        grBoth,
 			expected: &L7Route{
 				RouteType: RouteTypeGRPC,
@@ -773,8 +861,19 @@ func TestBuildGRPCRoute(t *testing.T) {
 								Valid:   true,
 								Filters: []Filter{},
 							},
-							Matches:          ConvertGRPCMatches(grBoth.Spec.Rules[0].Matches),
-							RouteBackendRefs: []RouteBackendRef{},
+							Matches: ConvertGRPCMatches(grBoth.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{
+								{
+									BackendRef: grpcBackendRef.BackendRef,
+									SessionPersistence: &SessionPersistenceConfig{
+										Valid:       true,
+										Name:        "grpc-method-session",
+										SessionType: v1.CookieBasedSessionPersistence,
+										Expiry:      "10h",
+										Idx:         "gr-1_test_0",
+									},
+								},
+							},
 						},
 						{
 							ValidMatches: true,
@@ -788,7 +887,9 @@ func TestBuildGRPCRoute(t *testing.T) {
 					},
 				},
 			},
-			name: "normal case with both",
+			plus:         true,
+			experimental: true,
+			name:         "normal case with both",
 		},
 		{
 			validator: createAllValidValidator(),
@@ -956,7 +1057,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "invalid route with duplicate sectionName",
 		},
 		{
-			validator: createAllValidValidator(),
+			validator: createDurationValidator(&durationSP),
 			gr:        grOneInvalid,
 			expected: &L7Route{
 				Source:     grOneInvalid,
@@ -984,8 +1085,19 @@ func TestBuildGRPCRoute(t *testing.T) {
 								Valid:   true,
 								Filters: []Filter{},
 							},
-							Matches:          ConvertGRPCMatches(grOneInvalid.Spec.Rules[0].Matches),
-							RouteBackendRefs: []RouteBackendRef{},
+							Matches: ConvertGRPCMatches(grOneInvalid.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{
+								{
+									BackendRef: grpcBackendRef.BackendRef,
+									SessionPersistence: &SessionPersistenceConfig{
+										Valid:       true,
+										Name:        "grpc-method-session",
+										SessionType: v1.CookieBasedSessionPersistence,
+										Expiry:      "10h",
+										Idx:         "gr-1_test_0",
+									},
+								},
+							},
 						},
 						{
 							ValidMatches: false,
@@ -999,7 +1111,9 @@ func TestBuildGRPCRoute(t *testing.T) {
 					},
 				},
 			},
-			name: "invalid headers and valid method",
+			plus:         true,
+			experimental: true,
+			name:         "invalid headers and valid method",
 		},
 		{
 			validator: createAllValidValidator(),
@@ -1654,7 +1768,17 @@ func TestBuildGRPCRoute(t *testing.T) {
 			authenticationFilters := map[types.NamespacedName]*AuthenticationFilter{
 				{Namespace: "test", Name: "af"}: {Valid: true},
 			}
-			route := buildGRPCRoute(test.validator, test.gr, gws, snippetsFilters, authenticationFilters)
+			route := buildGRPCRoute(
+				test.validator,
+				test.gr,
+				gws,
+				snippetsFilters,
+        authenticationFilters,
+				FeatureFlags{
+					Plus:         test.plus,
+					Experimental: test.experimental,
+				},
+			)
 			g.Expect(helpers.Diff(test.expected, route)).To(BeEmpty())
 		})
 	}
@@ -1806,11 +1930,22 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 
 	g := NewWithT(t)
 
-	routes := map[RouteKey]*L7Route{}
-	l7route := buildGRPCRoute(validator, gr, gateways, snippetsFilters, nil)
-	g.Expect(l7route).NotTo(BeNil())
+	featureFlags := FeatureFlags{
+		Plus:         false,
+		Experimental: false,
+	}
 
-	buildGRPCMirrorRoutes(routes, l7route, gr, gateways, snippetsFilters)
+	routes := map[RouteKey]*L7Route{}
+	l7route := buildGRPCRoute(
+		validator,
+		gr,
+		gateways,
+		snippetsFilters,
+    nil,
+		featureFlags,
+	)
+	g.Expect(l7route).NotTo(BeNil())
+	buildGRPCMirrorRoutes(routes, l7route, gr, gateways, snippetsFilters, featureFlags)
 
 	obj, ok := expectedMirrorRoute.Source.(*v1.GRPCRoute)
 	g.Expect(ok).To(BeTrue())
@@ -1821,7 +1956,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 
 func TestConvertGRPCMatches(t *testing.T) {
 	t.Parallel()
-	methodMatch := createGRPCMethodMatch("myService", "myMethod", "Exact").Matches
+	methodMatch := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil).Matches
 
 	headersMatch := createGRPCHeadersMatch("Exact", "MyHeader", "SomeValue").Matches
 
@@ -1978,7 +2113,7 @@ func TestProcessGRPCRouteRule_UnsupportedFields(t *testing.T) {
 						Type: helpers.GetPointer(v1.SessionPersistenceType("unsupported-session-persistence")),
 					}),
 			},
-			expectedErrors: 2,
+			expectedErrors: 3,
 		},
 	}
 
@@ -1991,7 +2126,14 @@ func TestProcessGRPCRouteRule_UnsupportedFields(t *testing.T) {
 			var errors routeRuleErrors
 
 			// Wrap the rule in GRPCRouteRuleWrapper
-			unsupportedFieldsErrors := checkForUnsupportedGRPCFields(test.specRule, rulePath)
+			unsupportedFieldsErrors := checkForUnsupportedGRPCFields(
+				test.specRule,
+				rulePath,
+				FeatureFlags{
+					Plus:         false,
+					Experimental: false,
+				},
+			)
 			if len(unsupportedFieldsErrors) > 0 {
 				errors.warn = append(errors.warn, unsupportedFieldsErrors...)
 			}
@@ -2010,6 +2152,8 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 		expectedConds []conditions.Condition
 		expectedWarns int
 		expectedValid bool
+		plusEnabled   bool
+		experimental  bool
 	}{
 		{
 			name:          "No unsupported fields",
@@ -2037,16 +2181,57 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 				{
 					Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
 					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
-						Type: helpers.GetPointer(v1.SessionPersistenceType("unsupported-session-persistence")),
+						Type:        helpers.GetPointer(v1.CookieBasedSessionPersistence),
+						SessionName: helpers.GetPointer("session_id"),
 					}),
 				},
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteAcceptedUnsupportedField("[spec.rules[0].name: Forbidden: Name, " +
-					"spec.rules[0].sessionPersistence: Forbidden: SessionPersistence]"),
+				conditions.NewRouteAcceptedUnsupportedField(fmt.Sprintf("[spec.rules[0].name: Forbidden: Name, "+
+					"spec.rules[0].sessionPersistence: Forbidden: "+
+					"%s"+
+					" OSS users can use `ip_hash` load balancing method via the UpstreamSettingsPolicy for session affinity.]",
+					spErrMsg,
+				)),
 			},
+			experimental:  true,
+			plusEnabled:   false,
 			expectedWarns: 2,
+		},
+		{
+			name: "Session persistence unsupported with experimental disabled",
+			specRules: []v1.GRPCRouteRule{
+				{
+					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
+						Type:        helpers.GetPointer(v1.CookieBasedSessionPersistence),
+						SessionName: helpers.GetPointer("session_id"),
+					}),
+				},
+			},
+			expectedValid: true,
+			expectedConds: []conditions.Condition{
+				conditions.NewRouteAcceptedUnsupportedField(fmt.Sprintf("spec.rules[0].sessionPersistence: Forbidden: "+
+					"%s", spErrMsg)),
+			},
+			expectedWarns: 1,
+			plusEnabled:   true,
+			experimental:  false,
+		},
+		{
+			name: "Session Persistence supported with Plus enabled and experimental enabled",
+			specRules: []v1.GRPCRouteRule{
+				{
+					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
+						Type:        helpers.GetPointer(v1.CookieBasedSessionPersistence),
+						SessionName: helpers.GetPointer("session_id"),
+					}),
+				},
+			},
+			expectedValid: true,
+			plusEnabled:   true,
+			experimental:  true,
+			expectedWarns: 0,
 		},
 	}
 
@@ -2055,10 +2240,20 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
+			grpcRouteNsName := types.NamespacedName{
+				Namespace: "test",
+				Name:      "grpc-route",
+			}
+
 			_, valid, conds := processGRPCRouteRules(
 				test.specRules,
 				validation.SkipValidator{},
 				nil,
+				grpcRouteNsName,
+				FeatureFlags{
+					Plus:         test.plusEnabled,
+					Experimental: test.experimental,
+				},
 			)
 
 			g.Expect(valid).To(Equal(test.expectedValid))

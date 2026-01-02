@@ -6,3 +6,5 @@
 internal/controller/state/graph/config_maps_test.go:private-key:35
 examples/basic-authentication/basic-auth.yaml:generic-api-key:8
 examples/basic-authentication/basic-auth.yaml:generic-api-key:31
+examples/secure-traffic/gateway.yaml:kubernetes-secret-yaml:1
+examples/secure-traffic/secure-app.yaml:kubernetes-secret-yaml:110

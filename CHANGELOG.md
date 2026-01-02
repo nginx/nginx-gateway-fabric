@@ -4,6 +4,84 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.3.0
+
+_December 18, 2025_
+
+FEATURES:
+
+- Support Gateway API v1.4, moving BackendTLSPolicy from experimental to standard. [4166](https://github.com/nginx/nginx-gateway-fabric/pull/4166)
+- Add SupportedFeatures to GatewayClassStatus. [4236](https://github.com/nginx/nginx-gateway-fabric/pull/4236)
+- Add ability to configure access log format or turn logging off. [4102](https://github.com/nginx/nginx-gateway-fabric/pull/4102)
+- Added support for configuring backend TLS on Gateways to enable secure communication between the gateway and upstream. [3900](https://github.com/nginx/nginx-gateway-fabric/pull/3900)
+- Updated validation for pathType RegularExpression to support PCRE-style patterns while remaining RE2-friendly, improving compatibility with other projects. [4450](https://github.com/nginx/nginx-gateway-fabric/pull/4450)
+- Add support for multiple InferencePool backends on a Route. [4439](https://github.com/nginx/nginx-gateway-fabric/pull/4439)
+
+BUG FIXES:
+
+- Fix an issue where duplicate status entries could be written on routes. [4250](https://github.com/nginx/nginx-gateway-fabric/pull/4250)
+- Removed k8s API access from the NGINX data plane pod. [4368](https://github.com/nginx/nginx-gateway-fabric/pull/4368)
+- Fix an issue regarding configuring IPv6 DNS resolvers for ExternalName services. Thanks to [lucasl0st](https://github.com/lucasl0st). [4378](https://github.com/nginx/nginx-gateway-fabric/pull/4378)
+- Fix a bug where NGINX Service could not be created if the Gateway name was very long. [4387](https://github.com/nginx/nginx-gateway-fabric/pull/4387)
+- Fix an issue where NginxProxy config might not be honored if applied at the same time as the Gateway. [4399](https://github.com/nginx/nginx-gateway-fabric/pull/4399)
+- Fix issue where agent's Pod IP cannot be used to track the connecting data plane Pod. [4470](https://github.com/nginx/nginx-gateway-fabric/pull/4470)
+- Fix a bug to preserve external controller annotations for Deployment and DaemonSets to avoid constant updates. [4468](https://github.com/nginx/nginx-gateway-fabric/pull/4468)
+- Fix an issue where nginx pod could not connect to control plane when hostnetwork is enabled. [4481](https://github.com/nginx/nginx-gateway-fabric/pull/4481)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.3.0
+
+UPGRADE:
+
+- The Gateway API version has been updated to 1.4. This version of Gateway API must be installed before installing NGINX Gateway Fabric v2.3.0 [4166](https://github.com/nginx/nginx-gateway-fabric/pull/4166)
+- Remove deprecated v1alpha1 ObservabilityPolicy API. [4215](https://github.com/nginx/nginx-gateway-fabric/pull/4215)
+
+COMPATIBILITY:
+
+- Gateway API version: `1.4.1`
+- Gateway API Inference Extension version: `1.1.0`
+- NGINX version: `1.29.3`
+- NGINX Plus version: `R36`
+- NGINX Agent version: `v3.6.0`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.3.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.3.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.3.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.1.0`
+
+## Release 2.2.2
+
+_December 10, 2025_
+
+BUG FIXES:
+
+- Complete processing in flight requests and ensure only main NGINX process is reloaded. [1319](https://github.com/nginx/agent/pull/1391)
+- Fix permission issue with nginx-gateway container for UBI. [4404](https://github.com/nginx/nginx-gateway-fabric/pull/4404)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.2.2
+
+COMPATIBILITY:
+
+- Gateway API version: `1.3.0`
+- Gateway API Inference Extension version: `1.0.1`
+- NGINX version: `1.29.2`
+- NGINX Plus version: `R35`
+- NGINX Agent version: `v3.6.0`
+- Kubernetes version: `1.25+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.2.2`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.2.2`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.2.2`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.0.2`
+
 ## Release 2.2.1
 
 _November 13, 2025_

@@ -127,29 +127,65 @@ func TestValidatePathInRegexMatch(t *testing.T) {
 	testValidValuesForSimpleValidator(
 		t,
 		validator,
-		`/api/v[0-9]+`,
-		`/users/(?P<id>[0-9]+)`,
-		`/foo_service/\w+`,
-		`/foo/bar`,
-		`/foo/\\$bar`,
+		`/api/v[0-9]+`,                 // basic char class + quantifier
+		`/users/(?P<id>[0-9]+)`,        // re2-style named group
+		`/users/(?<id>[0-9]+)`,         // pcre-style named group
+		`/foo_service/\w+`,             // \w class
+		`/foo/bar`,                     // plain literal path
+		`/foo/\\$bar`,                  // escaped backslash + dollar
+		`/foo/(\w+)\1$`,                // numeric backreference
+		`/foo(?=bar)/baz`,              // lookahead
+		`/(service\/(?!private/).*)`,   // negative lookahead
+		`/rest/.*/V1/order/get/.*`,     // wildcard match
+		`/users/(?P<id>[0-9]+)/\k<id>`, // named backreference
+		`/foo(?<=/foo)\w+`,             // fixed-width lookbehind
+		`/foo(?<=\w+)bar`,              // variable-width lookbehind
+		`/foo(?=bar)`,                  // lookahead
+		`/users/(?=admin|staff)\w+`,    // alternation in lookahead
+		`/api/v1(?=/)`,                 // lookahead for slash
 	)
 
 	testInvalidValuesForSimpleValidator(
 		t,
 		validator,
-		``,
-		`(foo`,
-		`/path with space`,
-		`/foo;bar`,
-		`/foo{2}`,
-		`/foo$bar`,
-		`/foo(?=bar)`,
-		`/foo(?!bar)`,
-		`/foo(?<=bar)`,
-		`/foo(?<!bar)`,
-		`(\w+)\1$`,
-		`(\w+)\2$`,
-		`/foo/(?P<bad-name>[0-9]+)`,
-		`/foo/(?P<bad name>[0-9]+)`,
+		``,                          // empty: must be non-empty
+		`(foo`,                      // unbalanced parenthesis
+		`/path with space`,          // whitespace forbidden by pathFmt
+		`/foo;bar`,                  // ';' forbidden by pathFmt
+		`/foo{2}`,                   // '{' '}' forbidden by pathFmt
+		`(\w+)\2$`,                  // invalid backref: group 2 doesn't exist
+		`/foo/(?P<bad-name>[0-9]+)`, // invalid group name: hyphen not allowed
+		`/foo/(?P<bad name>[0-9]+)`, // invalid group name: space not allowed
+		`(\w+)\2$`,                  // invalid backref: group 2 doesn't exist
+		`/users/\k<nonexistent>`,    // invalid named backreference
+		`^(([a-z])+)+$`,             // nested quantifiers not allowed
+	)
+}
+
+func TestValidateDurationCanBeConvertedToNginxFormat(t *testing.T) {
+	t.Parallel()
+	validator := HTTPDurationValidator{}
+
+	testValidValuesForResultValidator[string, string](
+		t,
+		validator.validateDurationCanBeConvertedToNginxFormat,
+		resultTestCase[string, string]{input: "24h", expected: "24h"},
+		resultTestCase[string, string]{input: "1ms", expected: "1ms"},
+		resultTestCase[string, string]{input: "1.1ms", expected: "2ms"},
+		resultTestCase[string, string]{input: "100s", expected: "100s"},
+		resultTestCase[string, string]{input: "1m", expected: "1m"},
+		resultTestCase[string, string]{input: "1h", expected: "1h"},
+		resultTestCase[string, string]{input: "9999s", expected: "9999s"},
+		resultTestCase[string, string]{input: "10000s", expected: "167m"},
+	)
+
+	testInvalidValuesForResultValidator[string, string](
+		t,
+		validator.validateDurationCanBeConvertedToNginxFormat,
+		"",
+		"foo",
+		"-1s",
+		"1000000h", // too large
+		"9999h1s",  // just over max
 	)
 }

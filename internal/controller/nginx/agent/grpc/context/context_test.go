@@ -1,7 +1,6 @@
-package context_test
+package grpcinfo_test
 
 import (
-	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -13,10 +12,10 @@ func TestGrpcInfoInContext(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	grpcInfo := grpcContext.GrpcInfo{IPAddress: "192.168.1.1"}
+	grpcInfo := grpcContext.GrpcInfo{Token: "test"}
 
-	newCtx := grpcContext.NewGrpcContext(context.Background(), grpcInfo)
-	info, ok := grpcContext.GrpcInfoFromContext(newCtx)
+	newCtx := grpcContext.NewGrpcContext(t.Context(), grpcInfo)
+	info, ok := grpcContext.FromContext(newCtx)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(info).To(Equal(grpcInfo))
 }
@@ -25,7 +24,7 @@ func TestGrpcInfoNotInContext(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	info, ok := grpcContext.GrpcInfoFromContext(context.Background())
+	info, ok := grpcContext.FromContext(t.Context())
 	g.Expect(ok).To(BeFalse())
 	g.Expect(info).To(Equal(grpcContext.GrpcInfo{}))
 }
