@@ -14,6 +14,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func buildGRPCRoute(
@@ -21,6 +22,7 @@ func buildGRPCRoute(
 	ghr *v1.GRPCRoute,
 	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	authenticationFilters map[types.NamespacedName]*AuthenticationFilter,
 	featureFlags FeatureFlags,
 ) *L7Route {
 	r := &L7Route{
@@ -53,14 +55,27 @@ func buildGRPCRoute(
 	r.Spec.Hostnames = ghr.Spec.Hostnames
 	r.Attachable = true
 
+	extRefFilterResolvers := make(map[string]resolveExtRefFilter)
+
+	extRefFilterResolvers[kinds.SnippetsFilter] = getSnippetsFilterResolverForNamespace(
+		snippetsFilters,
+		r.Source.GetNamespace(),
+	)
+
+	extRefFilterResolvers[kinds.AuthenticationFilter] = getAuthenticationFilterResolverForNamespace(
+		authenticationFilters,
+		r.Source.GetNamespace(),
+	)
+
 	grpcRouteNsName := types.NamespacedName{
 		Namespace: ghr.GetNamespace(),
 		Name:      ghr.GetName(),
 	}
+
 	rules, valid, conds := processGRPCRouteRules(
 		ghr.Spec.Rules,
 		validator,
-		getSnippetsFilterResolverForNamespace(snippetsFilters, r.Source.GetNamespace()),
+		extRefFilterResolvers,
 		grpcRouteNsName,
 		featureFlags,
 	)
@@ -115,6 +130,7 @@ func buildGRPCMirrorRoutes(
 					tmpMirrorRoute,
 					gateways,
 					snippetsFilters,
+					nil,
 					featureFlags,
 				)
 
@@ -168,7 +184,7 @@ func processGRPCRouteRule(
 	specRule v1.GRPCRouteRule,
 	ruleIdx int,
 	validator validation.HTTPFieldsValidator,
-	resolveExtRefFunc resolveExtRefFilter,
+	extRefFilterResolvers map[string]resolveExtRefFilter,
 	grpcRouteNsName types.NamespacedName,
 	featureFlags FeatureFlags,
 ) (RouteRule, routeRuleErrors) {
@@ -195,7 +211,7 @@ func processGRPCRouteRule(
 		convertGRPCRouteFilters(specRule.Filters),
 		rulePath.Child("filters"),
 		validator,
-		resolveExtRefFunc,
+		extRefFilterResolvers,
 	)
 
 	errors = errors.append(filterErrors)
@@ -266,7 +282,7 @@ func processGRPCRouteRule(
 func processGRPCRouteRules(
 	specRules []v1.GRPCRouteRule,
 	validator validation.HTTPFieldsValidator,
-	resolveExtRefFunc resolveExtRefFilter,
+	extRefFilterResolvers map[string]resolveExtRefFilter,
 	grpcRouteNsName types.NamespacedName,
 	featureFlags FeatureFlags,
 ) (rules []RouteRule, valid bool, conds []conditions.Condition) {
@@ -282,7 +298,7 @@ func processGRPCRouteRules(
 			rule,
 			ruleIdx,
 			validator,
-			resolveExtRefFunc,
+			extRefFilterResolvers,
 			grpcRouteNsName,
 			featureFlags,
 		)
