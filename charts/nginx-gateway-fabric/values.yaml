@@ -750,4 +750,4 @@ gateways: []
 #     backend:
 #       clientCertificateRef:
 #         name: gateway-client-cert
-#         kind : Secret
+#         kind: Secret
