@@ -39,6 +39,10 @@ type Configuration struct {
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
+	// TCPUpstreams holds all unique TCP Upstreams
+	TCPUpstreams []Upstream
+	// UDPUpstreams holds all unique UDP Upstreams
+	UDPUpstreams []Upstream
 	// BackendGroups holds all unique BackendGroups.
 	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
@@ -47,12 +51,16 @@ type Configuration struct {
 	Upstreams []Upstream
 	// NginxPlus specifies NGINX Plus additional settings.
 	NginxPlus NginxPlus
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
 	// StreamUpstreams holds all unique stream Upstreams
 	StreamUpstreams []Upstream
 	// SSLServers holds all SSLServers.
 	SSLServers []VirtualServer
+	// HTTPServers holds all HTTPServers.
+	HTTPServers []VirtualServer
+	// TCPServers holds all TCPServers
+	TCPServers []Layer4VirtualServer
+	// UDPServers holds all UDPServers
+	UDPServers []Layer4VirtualServer
 	// TLSPassthroughServers hold all TLSPassthroughServers
 	TLSPassthroughServers []Layer4VirtualServer
 	// Telemetry holds the Otel configuration.
@@ -98,16 +106,31 @@ type VirtualServer struct {
 	IsDefault bool
 }
 
+// Layer4Upstream represents a weighted upstream for Layer 4 traffic.
+type Layer4Upstream struct {
+	// Name is the name of the upstream.
+	Name string
+	// Weight is the weight for load balancing.
+	Weight int32
+}
+
 // Layer4VirtualServer is a virtual server for Layer 4 traffic.
 type Layer4VirtualServer struct {
 	// Hostname is the hostname of the server.
 	Hostname string
-	// UpstreamName refers to the name of the upstream that is used.
+	// UpstreamName refers to the name of the upstream that is used (single backend case).
 	UpstreamName string
+	// Upstreams holds multiple upstreams with weights (multi-backend case).
+	Upstreams []Layer4Upstream
 	// Port is the port of the server.
 	Port int32
 	// IsDefault refers to whether this server is created for the default listener hostname.
 	IsDefault bool
+}
+
+// NeedsWeightDistribution returns true if this server needs weight distribution via split_clients.
+func (l4vs Layer4VirtualServer) NeedsWeightDistribution() bool {
+	return len(l4vs.Upstreams) > 1
 }
 
 // Upstream is a pool of endpoints to be load balanced.

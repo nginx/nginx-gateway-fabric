@@ -97,6 +97,8 @@ rules:
   - backendtlspolicies
 {{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - tlsroutes
+  - tcproutes
+  - udproutes
 {{- end }}
   verbs:
   - list
@@ -111,6 +113,8 @@ rules:
   - backendtlspolicies/status
 {{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
   - tlsroutes/status
+  - tcproutes/status
+  - udproutes/status
 {{- end }}
   verbs:
   - update

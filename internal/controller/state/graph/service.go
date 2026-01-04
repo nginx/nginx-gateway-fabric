@@ -94,20 +94,26 @@ func routeBelongsToGateway(refs []ParentRef, gwKey types.NamespacedName) bool {
 	return false
 }
 
-// addServiceFromL4Route adds a service from an L4 route to the referenced services map.
+// addServiceFromL4Route adds services from an L4 route to the referenced services map.
+// Supports multiple BackendRefs for TCPRoute/UDPRoute.
 func addServiceFromL4Route(
 	route *L4Route,
 	gwNsName types.NamespacedName,
 	referencedServices map[types.NamespacedName]*ReferencedService,
 	services map[types.NamespacedName]*v1.Service,
 ) {
-	svcNsName := route.Spec.BackendRef.SvcNsName
-	if svcNsName == (types.NamespacedName{}) {
-		return
-	}
+	// Use helper method to get all backend references
+	backendRefs := route.Spec.GetBackendRefs()
 
-	ensureReferencedService(svcNsName, referencedServices, services)
-	referencedServices[svcNsName].GatewayNsNames[gwNsName] = struct{}{}
+	for _, br := range backendRefs {
+		svcNsName := br.SvcNsName
+		if svcNsName == (types.NamespacedName{}) {
+			continue
+		}
+
+		ensureReferencedService(svcNsName, referencedServices, services)
+		referencedServices[svcNsName].GatewayNsNames[gwNsName] = struct{}{}
+	}
 }
 
 // addServicesFromL7RouteRules adds services from L7 route rules to the referenced services map.

@@ -1,4 +1,4 @@
-package shared //nolint:revive // ignoring meaningless package name
+package shared //nolint:revive,nolintlint // ignoring meaningless package name
 
 // Map defines an NGINX map.
 type Map struct {

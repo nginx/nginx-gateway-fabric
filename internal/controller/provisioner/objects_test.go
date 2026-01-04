@@ -178,17 +178,20 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		{
 			Port:       80,
 			Name:       "port-80",
+			Protocol:   corev1.ProtocolTCP,
 			TargetPort: intstr.FromInt(80),
 			NodePort:   30000,
 		},
 		{
 			Port:       8888,
 			Name:       "port-8888",
+			Protocol:   corev1.ProtocolTCP,
 			TargetPort: intstr.FromInt(8888),
 		},
 		{
 			Port:       9999,
 			Name:       "port-9999",
+			Protocol:   corev1.ProtocolTCP,
 			TargetPort: intstr.FromInt(9999),
 		},
 	}))
@@ -209,10 +212,12 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		{
 			ContainerPort: 80,
 			Name:          "port-80",
+			Protocol:      corev1.ProtocolTCP,
 		},
 		{
 			ContainerPort: 8888,
 			Name:          "port-8888",
+			Protocol:      corev1.ProtocolTCP,
 		},
 		{
 			ContainerPort: config.DefaultNginxMetricsPort,
@@ -221,6 +226,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		{
 			ContainerPort: 9999,
 			Name:          "port-9999",
+			Protocol:      corev1.ProtocolTCP,
 		},
 	}))
 
@@ -376,6 +382,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(container.Ports).To(ContainElement(corev1.ContainerPort{
 		ContainerPort: 8443,
 		Name:          "port-8443",
+		Protocol:      corev1.ProtocolTCP,
 		HostPort:      8443,
 	}))
 
