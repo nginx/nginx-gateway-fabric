@@ -697,8 +697,12 @@ func bindL4RouteToListeners(
 			continue
 		}
 
-		if cond, ok := route.Spec.BackendRef.InvalidForGateways[gwNsName]; ok {
-			attachment.FailedConditions = append(attachment.FailedConditions, cond)
+		backendRefs := route.Spec.GetBackendRefs()
+		for _, br := range backendRefs {
+			if cond, ok := br.InvalidForGateways[gwNsName]; ok {
+				attachment.FailedConditions = append(attachment.FailedConditions, cond)
+				break
+			}
 		}
 
 		// Try to attach Route to all matching listeners
@@ -720,16 +724,6 @@ func bindL4RouteToListeners(
 		}
 
 		attachment.Attached = true
-
-		// Check if any BackendRef is invalid for this Gateway and add conditions
-		// This is done after attachment so the route can still be attached even with invalid backends
-		backendRefs := route.Spec.GetBackendRefs()
-		for _, br := range backendRefs {
-			if cond, ok := br.InvalidForGateways[gwNsName]; ok {
-				attachment.FailedConditions = append(attachment.FailedConditions, cond)
-				break // Only need to add the condition once
-			}
-		}
 	}
 }
 
