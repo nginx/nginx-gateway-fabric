@@ -267,10 +267,11 @@ func buildSSLKeyPairs(
 			id := generateSSLKeyPairID(*l.ResolvedSecret)
 			secret := secrets[*l.ResolvedSecret]
 			// The Data map keys are guaranteed to exist by the graph package.
-			// the CertBundle field is guaranteed to be non-nil by the graph package.
-			keyPairs[id] = SSLKeyPair{
-				Cert: secret.CertBundle.Cert.TLSCert,
-				Key:  secret.CertBundle.Cert.TLSPrivateKey,
+			if secret != nil && secret.CertBundle != nil {
+				keyPairs[id] = SSLKeyPair{
+					Cert: secret.CertBundle.Cert.TLSCert,
+					Key:  secret.CertBundle.Cert.TLSPrivateKey,
+				}
 			}
 		}
 	}
@@ -278,9 +279,11 @@ func buildSSLKeyPairs(
 	if gateway.Valid && gateway.SecretRef != nil {
 		id := generateSSLKeyPairID(*gateway.SecretRef)
 		secret := secrets[*gateway.SecretRef]
-		keyPairs[id] = SSLKeyPair{
-			Cert: secret.CertBundle.Cert.TLSCert,
-			Key:  secret.CertBundle.Cert.TLSPrivateKey,
+		if secret != nil && secret.CertBundle != nil {
+			keyPairs[id] = SSLKeyPair{
+				Cert: secret.CertBundle.Cert.TLSCert,
+				Key:  secret.CertBundle.Cert.TLSPrivateKey,
+			}
 		}
 	}
 
@@ -351,7 +354,7 @@ func buildAuthSecrets(secrets map[types.NamespacedName]*graph.Secret) map[AuthFi
 	authBasics := make(map[AuthFileID]AuthFileData, len(secrets))
 
 	for nsname, secret := range secrets {
-		if secret.Source.Type == coreV1.SecretType(graph.SecretTypeHtpasswd) {
+		if secret != nil && secret.Source != nil && secret.Source.Type == coreV1.SecretType(graph.SecretTypeHtpasswd) {
 			id := AuthFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
 			authBasics[id] = secret.Source.Data[graph.AuthKeyBasic]
 		}

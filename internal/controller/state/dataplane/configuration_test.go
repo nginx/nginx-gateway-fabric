@@ -5819,3 +5819,231 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildSSLKeyPairs(t *testing.T) {
+	t.Parallel()
+
+	secretNsName := types.NamespacedName{Namespace: "test", Name: "secret"}
+	gatewaySecretNsName := types.NamespacedName{Namespace: "test", Name: "gateway-secret"}
+
+	validSecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretNsName.Name,
+				Namespace: secretNsName.Namespace,
+			},
+		},
+		CertBundle: graph.NewCertificateBundle(
+			secretNsName,
+			"Secret",
+			&graph.Certificate{
+				TLSCert:       []byte("cert-data"),
+				TLSPrivateKey: []byte("key-data"),
+			},
+		),
+	}
+
+	nilCertBundleSecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nil-cert",
+				Namespace: "test",
+			},
+		},
+		CertBundle: nil,
+	}
+
+	tests := []struct {
+		secrets  map[types.NamespacedName]*graph.Secret
+		gateway  *graph.Gateway
+		expected map[SSLKeyPairID]SSLKeyPair
+		name     string
+	}{
+		{
+			name: "valid listener with valid TLS secret",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				secretNsName: validSecret,
+			},
+			gateway: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Valid:          true,
+						ResolvedSecret: &secretNsName,
+					},
+				},
+			},
+			expected: map[SSLKeyPairID]SSLKeyPair{
+				generateSSLKeyPairID(secretNsName): {
+					Cert: []byte("cert-data"),
+					Key:  []byte("key-data"),
+				},
+			},
+		},
+		{
+			name: "listener with nil CertBundle secret",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				secretNsName: nilCertBundleSecret,
+			},
+			gateway: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Valid:          true,
+						ResolvedSecret: &secretNsName,
+					},
+				},
+			},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
+		},
+		{
+			name: "gateway backend TLS with nil CertBundle",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				gatewaySecretNsName: nilCertBundleSecret,
+			},
+			gateway: &graph.Gateway{
+				Valid:     true,
+				SecretRef: &gatewaySecretNsName,
+			},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
+		},
+		{
+			name: "invalid listener should not generate key pair",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				secretNsName: validSecret,
+			},
+			gateway: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Valid:          false,
+						ResolvedSecret: &secretNsName,
+					},
+				},
+			},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
+		},
+		{
+			name: "listener with nil resolved secret",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				secretNsName: validSecret,
+			},
+			gateway: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Valid:          true,
+						ResolvedSecret: nil,
+					},
+				},
+			},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildSSLKeyPairs(test.secrets, test.gateway)
+
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestBuildAuthSecrets(t *testing.T) {
+	t.Parallel()
+
+	htpasswdSecretNsName := types.NamespacedName{Namespace: "test", Name: "htpasswd-secret"}
+	tlsSecretNsName := types.NamespacedName{Namespace: "test", Name: "tls-secret"}
+	nilSourceSecretNsName := types.NamespacedName{Namespace: "test", Name: "nil-source"}
+
+	htpasswdSecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      htpasswdSecretNsName.Name,
+				Namespace: htpasswdSecretNsName.Namespace,
+			},
+			Type: apiv1.SecretType(graph.SecretTypeHtpasswd),
+			Data: map[string][]byte{
+				graph.AuthKeyBasic: []byte("user:password"),
+			},
+		},
+	}
+
+	tlsSecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      tlsSecretNsName.Name,
+				Namespace: tlsSecretNsName.Namespace,
+			},
+			Type: apiv1.SecretTypeTLS,
+			Data: map[string][]byte{
+				apiv1.TLSCertKey:       []byte("cert"),
+				apiv1.TLSPrivateKeyKey: []byte("key"),
+			},
+		},
+		CertBundle: graph.NewCertificateBundle(
+			tlsSecretNsName,
+			"Secret",
+			&graph.Certificate{
+				TLSCert:       []byte("cert"),
+				TLSPrivateKey: []byte("key"),
+			},
+		),
+	}
+
+	nilSourceSecret := &graph.Secret{
+		Source: nil,
+	}
+
+	tests := []struct {
+		secrets  map[types.NamespacedName]*graph.Secret
+		expected map[AuthFileID]AuthFileData
+		name     string
+	}{
+		{
+			name: "htpasswd secret",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				htpasswdSecretNsName: htpasswdSecret,
+			},
+			expected: map[AuthFileID]AuthFileData{
+				"test_htpasswd-secret": []byte("user:password"),
+			},
+		},
+		{
+			name: "TLS secret should be ignored",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				tlsSecretNsName: tlsSecret,
+			},
+			expected: map[AuthFileID]AuthFileData{},
+		},
+		{
+			name: "nil source secret should not panic",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				nilSourceSecretNsName: nilSourceSecret,
+			},
+			expected: map[AuthFileID]AuthFileData{},
+		},
+		{
+			name: "mixed secrets",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				htpasswdSecretNsName:  htpasswdSecret,
+				tlsSecretNsName:       tlsSecret,
+				nilSourceSecretNsName: nilSourceSecret,
+			},
+			expected: map[AuthFileID]AuthFileData{
+				"test_htpasswd-secret": []byte("user:password"),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildAuthSecrets(test.secrets)
+
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
