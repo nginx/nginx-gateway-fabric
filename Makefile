@@ -40,7 +40,7 @@ CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
 HELM_SCHEMA_VERSION = 0.18.1
 
-# variables that can be overridden by the user
+# variables that can be overridden by the user.
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
 NGINX_PREFIX ?= $(PREFIX)/nginx## The name of the nginx image. For example: nginx-gateway-fabric/nginx
 NGINX_PLUS_PREFIX ?= $(PREFIX)/nginx-plus## The name of the nginx plus image. For example: nginx-gateway-fabric/nginx-plus
