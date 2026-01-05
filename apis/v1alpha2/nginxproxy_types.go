@@ -397,7 +397,7 @@ const (
 	// escaped as '\n', '\r', '\t', '\b', '\f', or '\u00XX'.
 	NginxAccessLogEscapeJSON NginxAccessLogEscapeType = "json"
 
-	// NginxAccessLogEscapeNone disables escaping of characters (available since 1.13.10).
+	// NginxAccessLogEscapeNone disables escaping of characters.
 	NginxAccessLogEscapeNone NginxAccessLogEscapeType = "none"
 )
 
