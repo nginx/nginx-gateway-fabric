@@ -753,3 +753,8 @@ gateways: []
 #       allowedRoutes:
 #         namespaces:
 #           from: Same
+#   tls:
+#     backend:
+#       clientCertificateRef:
+#         name: gateway-client-cert
+#         kind: Secret
