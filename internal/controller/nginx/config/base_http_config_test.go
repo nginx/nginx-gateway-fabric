@@ -29,6 +29,33 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 				fmt.Sprintf("log_format %s '%s'", dataplane.DefaultLogFormatName, logFormat),
 				fmt.Sprintf("access_log %s %s", dataplane.DefaultAccessLogPath, dataplane.DefaultLogFormatName),
 			},
+			unexpectedOutputs: []string{
+				"escape=",
+			},
+		},
+		{
+			name:      "Log format with escape=json",
+			accessLog: &dataplane.AccessLog{Format: logFormat, Escape: "json"},
+			expectedOutputs: []string{
+				fmt.Sprintf("log_format %s escape=json '%s'", dataplane.DefaultLogFormatName, logFormat),
+				fmt.Sprintf("access_log %s %s", dataplane.DefaultAccessLogPath, dataplane.DefaultLogFormatName),
+			},
+		},
+		{
+			name:      "Log format with escape=default",
+			accessLog: &dataplane.AccessLog{Format: logFormat, Escape: "default"},
+			expectedOutputs: []string{
+				fmt.Sprintf("log_format %s escape=default '%s'", dataplane.DefaultLogFormatName, logFormat),
+				fmt.Sprintf("access_log %s %s", dataplane.DefaultAccessLogPath, dataplane.DefaultLogFormatName),
+			},
+		},
+		{
+			name:      "Log format with escape=none",
+			accessLog: &dataplane.AccessLog{Format: logFormat, Escape: "none"},
+			expectedOutputs: []string{
+				fmt.Sprintf("log_format %s escape=none '%s'", dataplane.DefaultLogFormatName, logFormat),
+				fmt.Sprintf("access_log %s %s", dataplane.DefaultAccessLogPath, dataplane.DefaultLogFormatName),
+			},
 		},
 		{
 			name:      "Empty format",
@@ -36,6 +63,14 @@ func TestLoggingSettingsTemplate(t *testing.T) {
 			unexpectedOutputs: []string{
 				fmt.Sprintf("log_format %s '%s'", dataplane.DefaultLogFormatName, logFormat),
 				fmt.Sprintf("access_log %s %s", dataplane.DefaultAccessLogPath, dataplane.DefaultLogFormatName),
+			},
+		},
+		{
+			name:      "Empty format with escape set should not output escape",
+			accessLog: &dataplane.AccessLog{Format: "", Escape: "json"},
+			unexpectedOutputs: []string{
+				"log_format",
+				"escape=",
 			},
 		},
 		{

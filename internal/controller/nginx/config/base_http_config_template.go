@@ -55,7 +55,7 @@ server {
 access_log off;
 {{- else }}
 {{- if .AccessLog.Format }}
-log_format {{ .AccessLog.FormatName }} '{{ .AccessLog.Format }}';
+log_format {{ .AccessLog.FormatName }}{{ if .AccessLog.Escape }} escape={{ .AccessLog.Escape }}{{ end }} '{{ .AccessLog.Format }}';
 access_log {{ .AccessLog.Path }} {{ .AccessLog.FormatName }};
 {{- end }}
 {{- end }}

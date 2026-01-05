@@ -481,6 +481,13 @@ nginx:
   #           disable:
   #             type: boolean
   #             description: Disable turns off access logging when set to true.
+  #           escape:
+  #             type: string
+  #             description: Escape specifies how to escape characters in variables for access log. If not specified, 'default' escaping is used.
+  #             enum:
+  #               - default
+  #               - json
+  #               - none
   #           format:
   #             type: string
   #             description: Format specifies the custom log format string. If not specified, NGINX default 'combined' format is used.

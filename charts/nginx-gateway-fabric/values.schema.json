@@ -210,6 +210,16 @@
                       "required": [],
                       "type": "boolean"
                     },
+                    "escape": {
+                      "description": "Escape specifies how to escape characters in variables for access log. If not specified, 'default' escaping is used.",
+                      "enum": [
+                        "default",
+                        "json",
+                        "none"
+                      ],
+                      "required": [],
+                      "type": "string"
+                    },
                     "format": {
                       "description": "Format specifies the custom log format string. If not specified, NGINX default 'combined' format is used.",
                       "required": [],

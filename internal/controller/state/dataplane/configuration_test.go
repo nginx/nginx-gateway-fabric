@@ -4685,6 +4685,86 @@ func TestBuildLogging(t *testing.T) {
 				},
 			},
 		},
+		{
+			msg: "AccessLog with escape=json",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Format: helpers.GetPointer(logFormat),
+							Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				AccessLog: &AccessLog{
+					Format: logFormat,
+					Escape: "json",
+				},
+			},
+		},
+		{
+			msg: "AccessLog with escape=default",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Format: helpers.GetPointer(logFormat),
+							Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeDefault),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				AccessLog: &AccessLog{
+					Format: logFormat,
+					Escape: "default",
+				},
+			},
+		},
+		{
+			msg: "AccessLog with escape=none",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Format: helpers.GetPointer(logFormat),
+							Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeNone),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				AccessLog: &AccessLog{
+					Format: logFormat,
+					Escape: "none",
+				},
+			},
+		},
+		{
+			msg: "AccessLog escape not set when format is missing",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				AccessLog:  nil,
+			},
+		},
 	}
 
 	for _, tc := range tests {
