@@ -171,6 +171,7 @@ rules:
   - clientsettingspolicies
   - observabilitypolicies
   - upstreamsettingspolicies
+  - ratelimitpolicies
   verbs:
   - list
   - watch
@@ -181,6 +182,7 @@ rules:
   - clientsettingspolicies/status
   - observabilitypolicies/status
   - upstreamsettingspolicies/status
+  - ratelimitpolicies/status
   verbs:
   - update
 - apiGroups:

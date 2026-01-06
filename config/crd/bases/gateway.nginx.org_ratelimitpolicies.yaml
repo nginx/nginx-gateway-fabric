@@ -53,6 +53,13 @@ spec:
               rateLimit:
                 description: RateLimit defines the Rate Limit settings.
                 properties:
+                  dryRun:
+                    description: |-
+                      DryRun enables the dry run mode. In this mode, the rate limit is not actually applied, but the number of excessive
+                      requests is accounted as usual in the shared memory zone.
+
+                      Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_dry_run
+                    type: boolean
                   local:
                     description: Local defines the local rate limit rules for this
                       policy.
@@ -80,35 +87,16 @@ spec:
                                 Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
                               format: int32
                               type: integer
-                            dryRun:
-                              description: |-
-                                DryRun enables the dry run mode. In this mode, the rate limit is not actually applied, but the number of excessive
-                                requests is accounted as usual in the shared memory zone.
-
-                                Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_dry_run
-                              type: boolean
                             key:
                               description: |-
                                 Key represents the key to which the rate limit is applied.
 
                                 Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
                               type: string
-                            logLevel:
-                              description: |-
-                                LogLevel sets the desired logging level for cases when the server refuses to process requests due to rate exceeding,
-                                or delays request processing. Allowed values are info, notice, warn or error.
-
-                                Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_log_level
-                              enum:
-                              - info
-                              - notice
-                              - warn
-                              - error
-                              type: string
                             noDelay:
                               description: |-
                                 NoDelay disables the delaying of excessive requests while requests are being limited.
-                                Overrides delay if both are set.
+                                NoDelay cannot be true when Delay is also set.
 
                                 Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
                               type: boolean
@@ -120,15 +108,6 @@ spec:
                                 Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
                               pattern: ^\d+r/[sm]$
                               type: string
-                            rejectCode:
-                              description: |-
-                                RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400..599.
-
-                                Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_status
-                              format: int32
-                              maximum: 599
-                              minimum: 400
-                              type: integer
                             zoneSize:
                               description: |-
                                 ZoneSize is the size of the shared memory zone.
@@ -140,8 +119,33 @@ spec:
                           - key
                           - rate
                           type: object
+                          x-kubernetes-validations:
+                          - message: NoDelay cannot be true when Delay is also set
+                            rule: '!(has(self.noDelay) && has(self.delay) && self.noDelay
+                              == true)'
                         type: array
                     type: object
+                  logLevel:
+                    description: |-
+                      LogLevel sets the desired logging level for cases when the server refuses to process requests due to rate exceeding,
+                      or delays request processing. Allowed values are info, notice, warn or error.
+
+                      Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_log_level
+                    enum:
+                    - info
+                    - notice
+                    - warn
+                    - error
+                    type: string
+                  rejectCode:
+                    description: |-
+                      RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400..599.
+
+                      Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_status
+                    format: int32
+                    maximum: 599
+                    minimum: 400
+                    type: integer
                 type: object
               targetRefs:
                 description: |-

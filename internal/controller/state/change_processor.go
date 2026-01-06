@@ -225,6 +225,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 				store:     newObjectStoreMapAdapter(clusterStore.SnippetsFilters),
 				predicate: nil, // we always want to write status to SnippetsFilters so we don't filter them out
 			},
+			{
+				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),
+				store:     commonPolicyObjectStore,
+				predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+			},
 		},
 	)
 

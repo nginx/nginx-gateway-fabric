@@ -169,6 +169,7 @@ rules:
   - clientsettingspolicies
   - observabilitypolicies
   - upstreamsettingspolicies
+  - ratelimitpolicies
   - snippetsfilters
   verbs:
   - list
@@ -180,6 +181,7 @@ rules:
   - clientsettingspolicies/status
   - observabilitypolicies/status
   - upstreamsettingspolicies/status
+  - ratelimitpolicies/status
   - snippetsfilters/status
   verbs:
   - update

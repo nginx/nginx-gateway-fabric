@@ -55,7 +55,11 @@ func BuildConfiguration(
 	// Get SnippetsFilters that are specifically referenced by routes attached to this gateway
 	gatewaySnippetsFilters := gateway.GetReferencedSnippetsFilters(g.Routes, g.SnippetsFilters)
 
-	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters)
+	// Get all RateLimitPolicies that target routes attached to this Gateway, excluding
+	// ones that are attached directly to the Gateway
+	gatewayRateLimitPolicies := gateway.GetReferencedRateLimitPolicies(g.Routes, g.NGFPolicies)
+
+	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
 	httpServers, sslServers := buildServers(gateway, g.ReferencedServices)
@@ -1080,14 +1084,27 @@ func CreateRatioVarName(ratio int32) string {
 func buildBaseHTTPConfig(
 	gateway *graph.Gateway,
 	gatewaySnippetsFilters map[types.NamespacedName]*graph.SnippetsFilter,
+	gatewayRateLimitPolicies map[graph.PolicyKey]*graph.Policy,
 ) BaseHTTPConfig {
+	// from here i need to create fake policies for each entry in gatewayRateLimitPolicies
+	// and add them to the baseConfig.Policies slice.
+
+	// However i need to modify the spec to only include zonename, key, rate, and zonesize for each rule.
+	// This will then guarantee a limit_req_zone is created in the http context for the policies
+	// which are only attached to a route.
+
 	baseConfig := BaseHTTPConfig{
 		// HTTP2 should be enabled by default
 		HTTP2:                   true,
 		IPFamily:                Dual,
+		Policies:                buildPolicies(gateway, gateway.Policies),
 		Snippets:                buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
 		NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 	}
+
+	// Create HTTP context policies for route-targeting RateLimitPolicies
+	httpContextRateLimitPolicies := buildHTTPContextRateLimitPolicies(gatewayRateLimitPolicies)
+	baseConfig.Policies = append(baseConfig.Policies, httpContextRateLimitPolicies...)
 
 	if gateway.Valid && gateway.SecretRef != nil {
 		baseConfig.GatewaySecretID = generateSSLKeyPairID(*gateway.SecretRef)
@@ -1125,6 +1142,58 @@ func buildBaseHTTPConfig(
 	baseConfig.DNSResolver = buildDNSResolverConfig(np.DNSResolver)
 
 	return baseConfig
+}
+
+// buildHTTPContextRateLimitPolicies creates HTTP context versions of RateLimitPolicies that target routes.
+// These policies are modified copies with an annotation to indicate they're for HTTP context use only.
+func buildHTTPContextRateLimitPolicies(gatewayRateLimitPolicies map[graph.PolicyKey]*graph.Policy) []policies.Policy {
+	if len(gatewayRateLimitPolicies) == 0 {
+		return nil
+	}
+
+	httpContextRateLimitPolicies := make([]policies.Policy, 0, len(gatewayRateLimitPolicies))
+
+	for _, graphPolicy := range gatewayRateLimitPolicies {
+		if graphPolicy == nil || !graphPolicy.Valid {
+			continue
+		}
+
+		// Extract the actual RateLimitPolicy from the graph.Policy wrapper
+		rateLimitPolicy, ok := graphPolicy.Source.(*ngfAPIv1alpha1.RateLimitPolicy)
+		if !ok {
+			continue
+		}
+
+		// Create a deep copy of the RateLimitPolicy
+		httpContextPolicy := rateLimitPolicy.DeepCopy()
+
+		// Add a marker annotation to identify this as a fake HTTP context policy
+		if httpContextPolicy.Annotations == nil {
+			httpContextPolicy.Annotations = make(map[string]string)
+		}
+		httpContextPolicy.Annotations["nginx.org/internal-annotation-http-context-only"] = "true"
+
+		// Convert to policies.Policy interface and add to the list
+		httpContextRateLimitPolicies = append(httpContextRateLimitPolicies, httpContextPolicy)
+	}
+
+	// Sort for deterministic ordering
+	sort.Slice(httpContextRateLimitPolicies, func(i, j int) bool {
+		policyI, okI := httpContextRateLimitPolicies[i].(*ngfAPIv1alpha1.RateLimitPolicy)
+		policyJ, okJ := httpContextRateLimitPolicies[j].(*ngfAPIv1alpha1.RateLimitPolicy)
+
+		if !okI || !okJ {
+			// If type cast fails, fall back to comparing by string representation
+			return fmt.Sprintf("%v", httpContextRateLimitPolicies[i]) < fmt.Sprintf("%v", httpContextRateLimitPolicies[j])
+		}
+
+		if policyI.Namespace != policyJ.Namespace {
+			return policyI.Namespace < policyJ.Namespace
+		}
+		return policyI.Name < policyJ.Name
+	})
+
+	return httpContextRateLimitPolicies
 }
 
 func getNginxReadinessProbePort(np *graph.EffectiveNginxProxy) int32 {

@@ -8,6 +8,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1954,6 +1955,297 @@ func TestGetReferencedSnippetsFilters(t *testing.T) {
 	// Test with routes but no snippets filters
 	emptyFilterResult := gw.GetReferencedSnippetsFilters(routes, map[types.NamespacedName]*SnippetsFilter{})
 	g.Expect(emptyFilterResult).To(BeEmpty())
+}
+
+func TestGetReferencedRateLimitPolicies(t *testing.T) {
+	t.Parallel()
+
+	gw := &Gateway{
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "gateway-ns",
+				Name:      "test-gateway",
+			},
+		},
+	}
+
+	rlp1 := &Policy{
+		Source: &ngfAPIv1alpha1.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app1",
+				Name:      "app1-rate-limit",
+			},
+		},
+		Valid: true,
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.HTTPRoute,
+				Nsname: types.NamespacedName{Namespace: "app1", Name: "attached-route"},
+			},
+		},
+	}
+
+	rlpNotAttachedRoute := &Policy{
+		Source: &ngfAPIv1alpha1.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app2",
+				Name:      "app2-rate-limit",
+			},
+		},
+		Valid: true,
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.HTTPRoute,
+				Nsname: types.NamespacedName{Namespace: "app2", Name: "not-attached-route"},
+			},
+		},
+	}
+
+	rlpAttachedInvalid := &Policy{
+		Source: &ngfAPIv1alpha1.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app3",
+				Name:      "invalid-rate-limit",
+			},
+		},
+		Valid: false,
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.HTTPRoute,
+				Nsname: types.NamespacedName{Namespace: "app1", Name: "attached-route"},
+			},
+		},
+	}
+
+	rlpGateway := &Policy{
+		Source: &ngfAPIv1alpha1.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "gateway-ns",
+				Name:      "gateway-rate-limit",
+			},
+		},
+		Valid: true,
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.Gateway,
+				Nsname: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
+			},
+		},
+	}
+
+	rlpGatewayAndRoute := &Policy{
+		Source: &ngfAPIv1alpha1.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app4",
+				Name:      "gateway-and-route-rate-limit",
+			},
+		},
+		Valid: true,
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.Gateway,
+				Nsname: types.NamespacedName{Namespace: "gateway-ns", Name: "test-gateway"},
+			},
+			{
+				Kind:   kinds.HTTPRoute,
+				Nsname: types.NamespacedName{Namespace: "app1", Name: "attached-route"},
+			},
+		},
+	}
+
+	rlpGRPC := &Policy{
+		Source: &ngfAPIv1alpha1.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app5",
+				Name:      "grpc-rate-limit",
+			},
+		},
+		Valid: true,
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.GRPCRoute,
+				Nsname: types.NamespacedName{Namespace: "app1", Name: "attached-grpc-route"},
+			},
+		},
+	}
+
+	// Policy that is marked as invalid for this gateway
+	rlpInvalidForGateway := &Policy{
+		Source: &ngfAPIv1alpha1.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app6",
+				Name:      "invalid-for-gateway",
+			},
+		},
+		Valid: true,
+		InvalidForGateways: map[types.NamespacedName]struct{}{
+			{Namespace: "gateway-ns", Name: "test-gateway"}: {},
+		},
+		TargetRefs: []PolicyTargetRef{
+			{
+				Kind:   kinds.HTTPRoute,
+				Nsname: types.NamespacedName{Namespace: "app1", Name: "attached-route"},
+			},
+		},
+	}
+
+	routeAttachedToGateway := &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app1",
+				Name:      "attached-route",
+			},
+		},
+		Valid: true,
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{
+					NamespacedName: types.NamespacedName{
+						Namespace: "gateway-ns",
+						Name:      "test-gateway",
+					},
+				},
+			},
+		},
+	}
+
+	grpcRouteAttachedToGateway := &L7Route{
+		Source: &v1.GRPCRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app1",
+				Name:      "attached-grpc-route",
+			},
+		},
+		Valid: true,
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{
+					NamespacedName: types.NamespacedName{
+						Namespace: "gateway-ns",
+						Name:      "test-gateway",
+					},
+				},
+			},
+		},
+	}
+
+	routeNotAttachedToGateway := &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "app2",
+				Name:      "not-attached-route",
+			},
+		},
+		Valid: true,
+		ParentRefs: []ParentRef{
+			{
+				Gateway: &ParentRefGateway{
+					NamespacedName: types.NamespacedName{
+						Namespace: "secondary-gateway-ns",
+						Name:      "secondary-gateway",
+					},
+				},
+			},
+		},
+	}
+
+	routes := map[RouteKey]*L7Route{
+		{
+			NamespacedName: types.NamespacedName{Namespace: "app1", Name: "attached-route"},
+			RouteType:      RouteTypeHTTP,
+		}: routeAttachedToGateway,
+		{
+			NamespacedName: types.NamespacedName{Namespace: "app1", Name: "attached-grpc-route"},
+			RouteType:      RouteTypeGRPC,
+		}: grpcRouteAttachedToGateway,
+		{
+			NamespacedName: types.NamespacedName{Namespace: "app2", Name: "not-attached-route"},
+			RouteType:      RouteTypeHTTP,
+		}: routeNotAttachedToGateway,
+	}
+
+	allPolicies := map[PolicyKey]*Policy{
+		{
+			NsName: types.NamespacedName{Namespace: "app1", Name: "app1-rate-limit"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlp1,
+		{
+			NsName: types.NamespacedName{Namespace: "app2", Name: "app2-rate-limit"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlpNotAttachedRoute,
+		{
+			NsName: types.NamespacedName{Namespace: "app3", Name: "invalid-rate-limit"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlpAttachedInvalid,
+		{
+			NsName: types.NamespacedName{Namespace: "gateway-ns", Name: "gateway-rate-limit"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlpGateway,
+		{
+			NsName: types.NamespacedName{Namespace: "app4", Name: "gateway-and-route-rate-limit"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlpGatewayAndRoute,
+		{
+			NsName: types.NamespacedName{Namespace: "app5", Name: "grpc-rate-limit"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlpGRPC,
+		{
+			NsName: types.NamespacedName{Namespace: "app6", Name: "invalid-for-gateway"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlpInvalidForGateway,
+		// Add a non-RateLimitPolicy to ensure it's filtered out
+		{
+			NsName: types.NamespacedName{Namespace: "app7", Name: "other-policy"},
+			GVK:    schema.GroupVersionKind{Kind: "SomeOtherPolicy"},
+		}: {
+			Valid: true,
+			TargetRefs: []PolicyTargetRef{
+				{
+					Kind:   kinds.HTTPRoute,
+					Nsname: types.NamespacedName{Namespace: "app1", Name: "attached-route"},
+				},
+			},
+		},
+	}
+
+	g := NewWithT(t)
+
+	result := gw.GetReferencedRateLimitPolicies(routes, allPolicies)
+
+	// Should only include rlp1 (valid RateLimitPolicy targeting attached route, not gateway)
+	// and rlp6GRPC (valid RateLimitPolicy targeting attached GRPC route)
+	expectedResult := map[PolicyKey]*Policy{
+		{
+			NsName: types.NamespacedName{Namespace: "app1", Name: "app1-rate-limit"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlp1,
+		{
+			NsName: types.NamespacedName{Namespace: "app5", Name: "grpc-rate-limit"},
+			GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+		}: rlpGRPC,
+	}
+
+	g.Expect(result).To(Equal(expectedResult))
+
+	// Test with no routes
+	emptyResult := gw.GetReferencedRateLimitPolicies(map[RouteKey]*L7Route{}, allPolicies)
+	g.Expect(emptyResult).To(BeEmpty())
+
+	// Test with no policies
+	emptyPolicyResult := gw.GetReferencedRateLimitPolicies(routes, map[PolicyKey]*Policy{})
+	g.Expect(emptyPolicyResult).To(BeEmpty())
+
+	// Test with routes but no attached routes
+	emptyRoutesGateway := &Gateway{
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "no-routes-targeting-ns",
+				Name:      "no-routes-targeting-gateway",
+			},
+		},
+	}
+	noAttachedResult := emptyRoutesGateway.GetReferencedRateLimitPolicies(routes, allPolicies)
+	g.Expect(noAttachedResult).To(BeEmpty())
 }
 
 func TestValidateUnsupportedGatewayFields(t *testing.T) {
