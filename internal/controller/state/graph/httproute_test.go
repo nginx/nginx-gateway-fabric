@@ -1057,7 +1057,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			name:         "rule with valid snippets filter extension ref filter",
 		},
 		{
-			validator: validatorInvalidFieldsInRule,
+			validator: &validationfakes.FakeHTTPFieldsValidator{},
 			hr:        hrValidAuthenticationFilter,
 			expected: &L7Route{
 				RouteType:  RouteTypeHTTP,
