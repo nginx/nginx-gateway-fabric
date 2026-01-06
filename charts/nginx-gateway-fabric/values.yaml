@@ -208,16 +208,6 @@ nginxGateway:
     # Please note that this endpoint will be secured with a self-signed certificate.
     secure: false
 
-    service:
-      # -- Creates a service to expose metrics.
-      create: false
-
-      # -- The annotations of the NGINX Gateway Fabric metrics service.
-      annotations: {}
-
-      # -- The labels of the NGINX Gateway Fabric metrics service.
-      labels: {}
-
     serviceMonitor:
       # -- Creates a serviceMonitor to expose metrics on the kubernetes pods.
       create: false
