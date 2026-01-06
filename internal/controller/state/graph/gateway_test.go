@@ -1369,11 +1369,11 @@ func TestBuildGateway(t *testing.T) {
 					},
 					Valid: true, // invalid parametersRef does not invalidate Gateway.
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayRefInvalid(
+						conditions.NewGatewayInvalidParameters(
 							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"Invalid\": " +
 								"supported values: \"NginxProxy\"",
 						),
-						conditions.NewGatewayInvalidParameters(
+						conditions.NewGatewayRefInvalid(
 							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"Invalid\": " +
 								"supported values: \"NginxProxy\"",
 						),
@@ -1412,9 +1412,11 @@ func TestBuildGateway(t *testing.T) {
 					},
 					Valid: true, // invalid parametersRef does not invalidate Gateway.
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayRefNotFound(),
 						conditions.NewGatewayInvalidParameters(
-							"spec.infrastructure.parametersRef.name: Not found: \"does-not-exist\"",
+							"Spec.infrastructure.parametersRef.name: Not found: \"does-not-exist\"",
+						),
+						conditions.NewGatewayRefInvalid(
+							"Spec.infrastructure.parametersRef.name: Not found: \"does-not-exist\"",
 						),
 					},
 				},
@@ -1458,8 +1460,8 @@ func TestBuildGateway(t *testing.T) {
 						Valid: false,
 					},
 					Conditions: []conditions.Condition{
-						conditions.NewGatewayRefInvalid("SomePath: Required value: someField"),
 						conditions.NewGatewayInvalidParameters("SomePath: Required value: someField"),
+						conditions.NewGatewayRefInvalid("SomePath: Required value: someField"),
 					},
 				},
 			},
@@ -1490,8 +1492,8 @@ func TestBuildGateway(t *testing.T) {
 					},
 					Conditions: append(
 						conditions.NewGatewayInvalid("The GatewayClass is invalid"),
-						conditions.NewGatewayRefInvalid("SomePath: Required value: someField"),
 						conditions.NewGatewayInvalidParameters("SomePath: Required value: someField"),
+						conditions.NewGatewayRefInvalid("SomePath: Required value: someField"),
 					),
 				},
 			},
@@ -1643,10 +1645,10 @@ func TestBuildGateway(t *testing.T) {
 					},
 					Conditions: []conditions.Condition{
 						conditions.NewGatewayAcceptedUnsupportedField("TLS.Frontend"),
-						conditions.NewGatewayRefInvalid(
+						conditions.NewGatewayInvalidParameters(
 							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
 						),
-						conditions.NewGatewayInvalidParameters(
+						conditions.NewGatewayRefInvalid(
 							"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": supported values: \"NginxProxy\"",
 						),
 					},
@@ -1693,20 +1695,26 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 	tests := []struct {
 		name     string
 		np       *NginxProxy
-		ref      v1.LocalParametersReference
+		gw       *v1.Gateway
 		expConds []conditions.Condition
 	}{
 		{
 			name: "unsupported parameter ref kind",
-			ref: v1.LocalParametersReference{
-				Kind: "wrong-kind",
+			gw: &v1.Gateway{
+				Spec: v1.GatewaySpec{
+					Infrastructure: &v1.GatewayInfrastructure{
+						ParametersRef: &v1.LocalParametersReference{
+							Kind: "wrong-kind",
+						},
+					},
+				},
 			},
 			expConds: []conditions.Condition{
-				conditions.NewGatewayRefInvalid(
+				conditions.NewGatewayInvalidParameters(
 					"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": " +
 						"supported values: \"NginxProxy\"",
 				),
-				conditions.NewGatewayInvalidParameters(
+				conditions.NewGatewayRefInvalid(
 					"Spec.infrastructure.parametersRef.kind: Unsupported value: \"wrong-kind\": " +
 						"supported values: \"NginxProxy\"",
 				),
@@ -1714,14 +1722,20 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 		},
 		{
 			name: "nil nginx proxy",
-			ref: v1.LocalParametersReference{
-				Group: ngfAPIv1alpha2.GroupName,
-				Kind:  kinds.NginxProxy,
-				Name:  "np",
+			gw: &v1.Gateway{
+				Spec: v1.GatewaySpec{
+					Infrastructure: &v1.GatewayInfrastructure{
+						ParametersRef: &v1.LocalParametersReference{
+							Group: ngfAPIv1alpha2.GroupName,
+							Kind:  kinds.NginxProxy,
+							Name:  "np",
+						},
+					},
+				},
 			},
 			expConds: []conditions.Condition{
-				conditions.NewGatewayRefNotFound(),
-				conditions.NewGatewayInvalidParameters("spec.infrastructure.parametersRef.name: Not found: \"np\""),
+				conditions.NewGatewayInvalidParameters("Spec.infrastructure.parametersRef.name: Not found: \"np\""),
+				conditions.NewGatewayRefInvalid("Spec.infrastructure.parametersRef.name: Not found: \"np\""),
 			},
 		},
 		{
@@ -1733,14 +1747,20 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 				},
 				Valid: false,
 			},
-			ref: v1.LocalParametersReference{
-				Group: ngfAPIv1alpha2.GroupName,
-				Kind:  kinds.NginxProxy,
-				Name:  "np",
+			gw: &v1.Gateway{
+				Spec: v1.GatewaySpec{
+					Infrastructure: &v1.GatewayInfrastructure{
+						ParametersRef: &v1.LocalParametersReference{
+							Group: ngfAPIv1alpha2.GroupName,
+							Kind:  kinds.NginxProxy,
+							Name:  "np",
+						},
+					},
+				},
 			},
 			expConds: []conditions.Condition{
-				conditions.NewGatewayRefInvalid("SomePath: Required value: someField"),
 				conditions.NewGatewayInvalidParameters("SomePath: Required value: someField"),
+				conditions.NewGatewayRefInvalid("SomePath: Required value: someField"),
 			},
 		},
 		{
@@ -1749,10 +1769,16 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 				Source: &ngfAPIv1alpha2.NginxProxy{},
 				Valid:  true,
 			},
-			ref: v1.LocalParametersReference{
-				Group: ngfAPIv1alpha2.GroupName,
-				Kind:  kinds.NginxProxy,
-				Name:  "np",
+			gw: &v1.Gateway{
+				Spec: v1.GatewaySpec{
+					Infrastructure: &v1.GatewayInfrastructure{
+						ParametersRef: &v1.LocalParametersReference{
+							Group: ngfAPIv1alpha2.GroupName,
+							Kind:  kinds.NginxProxy,
+							Name:  "np",
+						},
+					},
+				},
 			},
 			expConds: []conditions.Condition{
 				conditions.NewGatewayResolvedRefs(),
@@ -1765,7 +1791,8 @@ func TestValidateGatewayParametersRef(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			conds := validateGatewayParametersRef(test.np, test.ref)
+			var experimentalFeatures bool
+			conds, _ := validateGatewayRefs(test.gw, test.np, experimentalFeatures, nil, nil)
 			g.Expect(conds).To(BeEquivalentTo(test.expConds))
 		})
 	}
@@ -2351,7 +2378,11 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 	}
 	invalidSecretNsKey := client.ObjectKeyFromObject(invalidSecret)
 
-	createNewGatewayMap := func(secretRef types.NamespacedName) map[types.NamespacedName]*v1.Gateway {
+	createNewGatewayMap := func(
+		secretRef types.NamespacedName,
+		kind *v1.Kind,
+		group *v1.Group,
+	) map[types.NamespacedName]*v1.Gateway {
 		return map[types.NamespacedName]*v1.Gateway{
 			{Namespace: "test", Name: "test-gateway"}: {
 				ObjectMeta: metav1.ObjectMeta{
@@ -2363,6 +2394,8 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 					TLS: &v1.GatewayTLSConfig{
 						Backend: &v1.GatewayBackendTLS{
 							ClientCertificateRef: &v1.SecretObjectReference{
+								Kind:      kind,
+								Group:     group,
 								Name:      v1.ObjectName(secretRef.Name),
 								Namespace: (*v1.Namespace)(&secretRef.Namespace),
 							},
@@ -2375,8 +2408,11 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 
 	expectedGatewayMap := func(
 		secretRef types.NamespacedName,
+		kind *v1.Kind,
+		group *v1.Group,
 		cond []conditions.Condition,
 		valid bool,
+		setSecretRef bool,
 	) map[types.NamespacedName]*Gateway {
 		gwNsName := types.NamespacedName{Namespace: "test", Name: "test-gateway"}
 		gatewayMap := map[types.NamespacedName]*Gateway{
@@ -2391,6 +2427,8 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 						TLS: &v1.GatewayTLSConfig{
 							Backend: &v1.GatewayBackendTLS{
 								ClientCertificateRef: &v1.SecretObjectReference{
+									Kind:      kind,
+									Group:     group,
 									Name:      v1.ObjectName(secretRef.Name),
 									Namespace: (*v1.Namespace)(&secretRef.Namespace),
 								},
@@ -2398,19 +2436,24 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 						},
 					},
 				},
+				Listeners:      []*Listener{},
 				DeploymentName: deploymentName,
 				Conditions:     cond,
-				Valid:          valid,
-				SecretRef:      &secretRef,
+				Valid:          true,
 			},
 		}
 
-		if valid {
-			gatewayMap[gwNsName].Listeners = []*Listener{}
+		if setSecretRef {
+			gatewayMap[gwNsName].SecretRef = &secretRef
 		}
 
 		return gatewayMap
 	}
+
+	secretKind := helpers.GetPointer[v1.Kind]("Secret")
+	configMapKind := helpers.GetPointer[v1.Kind]("ConfigMap")
+	notCoreGroup := helpers.GetPointer[v1.Group]("not-core")
+	nilGroup := (*v1.Group)(nil)
 
 	tests := []struct {
 		gw           map[types.NamespacedName]*v1.Gateway
@@ -2451,26 +2494,59 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 			experimental: false,
 		},
 		{
-			name: "tls.backend is specified but secret reference is invalid",
-			gw:   createNewGatewayMap(invalidSecretNsKey),
+			name: "ClientCertificateRef has wrong kind",
+			gw:   createNewGatewayMap(secretSameNsKey, configMapKind, nilGroup),
 			expected: expectedGatewayMap(
-				invalidSecretNsKey,
+				secretSameNsKey,
+				configMapKind,
+				nilGroup,
 				[]conditions.Condition{conditions.NewGatewaySecretRefInvalid(
-					"backend.clientCertificateRef: " +
-						"Invalid value: {\"Namespace\":\"test\",\"Name\":\"invalid-secret\"}: " +
-						"Secret test/invalid-secret does not exist",
+					"Spec.tls.backend.clientCertificateRef.kind: Unsupported value: \"ConfigMap\": supported values: \"Secret\"",
 				)},
 				false,
 			),
 			experimental: true,
 		},
 		{
-			name: "tls.backend is specified but secret is not permitted by reference grant",
-			gw:   createNewGatewayMap(secretDiffNsKey),
+			name: "ClientCertificateRef has wrong group",
+			gw:   createNewGatewayMap(secretSameNsKey, secretKind, notCoreGroup),
+			expected: expectedGatewayMap(
+				secretSameNsKey,
+				secretKind,
+				notCoreGroup,
+				[]conditions.Condition{conditions.NewGatewaySecretRefInvalid(
+					"Spec.tls.backend.clientCertificateRef.group: Unsupported value: \"not-core\": supported values: \"core\", \"\"",
+				)},
+				false,
+			),
+			experimental:   true,
+			secretResolver: newSecretResolver(secrets),
+		},
+		{
+			name: "secret reference is invalid",
+			gw:   createNewGatewayMap(invalidSecretNsKey, secretKind, nilGroup),
+			expected: expectedGatewayMap(
+				invalidSecretNsKey,
+				secretKind,
+				nilGroup,
+				[]conditions.Condition{conditions.NewGatewaySecretRefInvalid(
+					"Spec.tls.backend.clientCertificateRef: " +
+						"Invalid value: {\"Namespace\":\"test\",\"Name\":\"invalid-secret\"}: secret does not exist",
+				)},
+				false,
+			),
+			experimental:   true,
+			secretResolver: newSecretResolver(secrets),
+		},
+		{
+			name: "secret is not permitted by reference grant",
+			gw:   createNewGatewayMap(secretDiffNsKey, secretKind, nilGroup),
 			expected: expectedGatewayMap(
 				secretDiffNsKey,
+				secretKind,
+				nilGroup,
 				[]conditions.Condition{
-					conditions.NewGatewaySecretRefNotPermitted(
+					conditions.NewGatewayRefNotPermitted(
 						fmt.Sprintf("secret ref %s not permitted by any ReferenceGrant", secretDiffNsKey),
 					),
 				},
@@ -2479,11 +2555,13 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 			experimental: true,
 		},
 		{
-			name: "tls.backend is specified secret in different namespace is permitted by reference grant",
-			gw:   createNewGatewayMap(secretDiffNsKey),
+			name: "secret in different namespace is permitted by reference grant",
+			gw:   createNewGatewayMap(secretDiffNsKey, secretKind, nilGroup),
 			expected: expectedGatewayMap(
 				secretDiffNsKey,
-				nil,
+				secretKind,
+				nilGroup,
+				[]conditions.Condition{conditions.NewGatewayResolvedRefs()},
 				true,
 			),
 			refGrants: map[types.NamespacedName]*v1.ReferenceGrant{
