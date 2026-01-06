@@ -1005,32 +1005,6 @@
               "title": "secure",
               "type": "boolean"
             },
-            "service": {
-              "properties": {
-                "annotations": {
-                  "description": "The annotations of the NGINX Gateway Fabric metrics service.",
-                  "required": [],
-                  "title": "annotations",
-                  "type": "object"
-                },
-                "create": {
-                  "default": false,
-                  "description": "Creates a service to expose metrics.",
-                  "required": [],
-                  "title": "create",
-                  "type": "boolean"
-                },
-                "labels": {
-                  "description": "The labels of the NGINX Gateway Fabric metrics service.",
-                  "required": [],
-                  "title": "labels",
-                  "type": "object"
-                }
-              },
-              "required": [],
-              "title": "service",
-              "type": "object"
-            },
             "serviceMonitor": {
               "properties": {
                 "create": {
