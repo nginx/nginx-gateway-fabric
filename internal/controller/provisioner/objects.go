@@ -543,7 +543,7 @@ func buildNginxService(
 		serviceType = corev1.ServiceType(*serviceCfg.ServiceType)
 	}
 
-	var servicePolicy corev1.ServiceExternalTrafficPolicyType
+	var servicePolicy corev1.ServiceExternalTrafficPolicy
 	if serviceType != corev1.ServiceTypeClusterIP {
 		servicePolicy = defaultServicePolicy
 		if serviceCfg.ExternalTrafficPolicy != nil {

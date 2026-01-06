@@ -229,6 +229,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 			AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelDebug),
 			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 				Format: helpers.GetPointer("$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent"),
+				Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeDefault),
 			},
 		},
 	})
@@ -242,13 +243,34 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 		DisableHTTP2: helpers.GetPointer(false),
 	})
 
+	// Global NginxProxy with log format but no escape
+	nginxProxyGlobalWithFormat := createNginxProxy("nginx-proxy-with-format", testNs, ngfAPIv1alpha2.NginxProxySpec{
+		DisableHTTP2: helpers.GetPointer(true),
+		Logging: &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Format: helpers.GetPointer("$remote_addr - [$time_local] \"$request\" $status"),
+			},
+		},
+	})
+
+	// Gateway NginxProxy that only sets escape (format comes from global)
+	nginxProxyGatewayEscapeOnly := createNginxProxy("nginx-proxy-escape-only", testNs, ngfAPIv1alpha2.NginxProxySpec{
+		Logging: &ngfAPIv1alpha2.NginxLogging{
+			AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+				Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),
+			},
+		},
+	})
+
 	gatewayClass := createGatewayClass(gcName, controllerName, "nginx-proxy", testNs)
+	gatewayClassWithFormat := createGatewayClass(gcName, controllerName, "nginx-proxy-with-format", testNs)
 	gateway1 := createGateway("gateway-1", testNs, "", []gatewayv1.Listener{})
 	gateway2 := createGateway("gateway-2", testNs, "", []gatewayv1.Listener{})
 	gateway3 := createGateway("gateway-3", "test2", "", []gatewayv1.Listener{})
 
 	gateway1withNP := createGateway("gateway-1", testNs, "nginx-proxy-gateway-1", []gatewayv1.Listener{})
 	gateway3withNP := createGateway("gateway-3", "test2", "nginx-proxy-gateway-3", []gatewayv1.Listener{})
+	gatewayEscape := createGateway("gateway-escape", testNs, "nginx-proxy-escape-only", []gatewayv1.Listener{})
 
 	gcConditions := []conditions.Condition{conditions.NewGatewayClassResolvedRefs()}
 
@@ -343,6 +365,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 								AgentLevel: helpers.GetPointer(ngfAPIv1alpha2.AgentLogLevelDebug),
 								AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
 									Format: helpers.GetPointer("$remote_addr - [$time_local] \"$request\" $status $body_bytes_sent"),
+									Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeDefault),
 								},
 							},
 							DisableHTTP2: helpers.GetPointer(true),
@@ -376,6 +399,56 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					client.ObjectKeyFromObject(nginxProxyGlobal):   {Source: nginxProxyGlobal, Valid: true},
 					client.ObjectKeyFromObject(nginxProxyGateway1): {Source: nginxProxyGateway1, Valid: true},
 					client.ObjectKeyFromObject(nginxProxyGateway3): {Source: nginxProxyGateway3, Valid: true},
+				},
+				Routes:      map[RouteKey]*L7Route{},
+				L4Routes:    map[L4RouteKey]*L4Route{},
+				PlusSecrets: convertedPlusSecret,
+			},
+		},
+		{
+			name: "gateway class with log format, gateway overrides only escape setting",
+			clusterState: ClusterState{
+				GatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
+					client.ObjectKeyFromObject(gatewayClassWithFormat): gatewayClassWithFormat,
+				},
+				Gateways: map[types.NamespacedName]*gatewayv1.Gateway{
+					client.ObjectKeyFromObject(gatewayEscape): gatewayEscape,
+				},
+				NginxProxies: map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy{
+					client.ObjectKeyFromObject(nginxProxyGlobalWithFormat):  nginxProxyGlobalWithFormat,
+					client.ObjectKeyFromObject(nginxProxyGatewayEscapeOnly): nginxProxyGatewayEscapeOnly,
+				},
+				Secrets: map[types.NamespacedName]*v1.Secret{
+					client.ObjectKeyFromObject(plusSecret): plusSecret,
+				},
+			},
+			expGraph: &Graph{
+				GatewayClass: convertedGatewayClass(
+					gatewayClassWithFormat,
+					*nginxProxyGlobalWithFormat,
+					gcConditions...,
+				),
+				Gateways: map[types.NamespacedName]*Gateway{
+					client.ObjectKeyFromObject(gatewayEscape): convertedGateway(
+						gatewayEscape,
+						&NginxProxy{Source: nginxProxyGatewayEscapeOnly, Valid: true},
+						&EffectiveNginxProxy{
+							DisableHTTP2: helpers.GetPointer(true),
+							Logging: &ngfAPIv1alpha2.NginxLogging{
+								AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+									// Format inherited from global, Escape overridden by gateway
+									Format: helpers.GetPointer("$remote_addr - [$time_local] \"$request\" $status"),
+									Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),
+								},
+							},
+						},
+						[]*Listener{},
+						gcConditions,
+					),
+				},
+				ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{
+					client.ObjectKeyFromObject(nginxProxyGlobalWithFormat):  {Source: nginxProxyGlobalWithFormat, Valid: true},
+					client.ObjectKeyFromObject(nginxProxyGatewayEscapeOnly): {Source: nginxProxyGatewayEscapeOnly, Valid: true},
 				},
 				Routes:      map[RouteKey]*L7Route{},
 				L4Routes:    map[L4RouteKey]*L4Route{},
