@@ -671,12 +671,12 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 			selectors[string(k)] = string(v)
 		}
 
-		// v1 of InferencePool only supports a single port right now
-		ports := []v1.ServicePort{
-			{
-				Port:       int32(pool.Source.Spec.TargetPorts[0].Number),
-				TargetPort: intstr.FromInt32(int32(pool.Source.Spec.TargetPorts[0].Number)),
-			},
+		ports := make([]v1.ServicePort, 0, len(pool.Source.Spec.TargetPorts))
+		for _, port := range pool.Source.Spec.TargetPorts {
+			ports = append(ports, v1.ServicePort{
+				Port:       int32(port.Number),
+				TargetPort: intstr.FromInt32(int32(port.Number)),
+			})
 		}
 
 		labels := map[string]string{
