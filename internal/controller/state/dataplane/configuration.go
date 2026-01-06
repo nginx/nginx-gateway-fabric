@@ -266,7 +266,6 @@ func buildSSLKeyPairs(
 		if l.Valid && l.ResolvedSecret != nil {
 			id := generateSSLKeyPairID(*l.ResolvedSecret)
 			secret := secrets[*l.ResolvedSecret]
-			// The Data map keys are guaranteed to exist by the graph package.
 			if secret != nil && secret.CertBundle != nil {
 				keyPairs[id] = SSLKeyPair{
 					Cert: secret.CertBundle.Cert.TLSCert,
