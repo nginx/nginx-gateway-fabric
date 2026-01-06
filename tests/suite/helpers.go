@@ -8,6 +8,8 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -122,6 +124,53 @@ func Expect500Response(timeout time.Duration, appURL, address string, hdrs ...Te
 	return nil
 }
 
+func ExpectGRPCRequestToSucceed(
+	timeout time.Duration,
+	address string,
+	hdrs ...TestHeader,
+) error {
+	headers := RequestWithTestHeaders(hdrs...)
+	request := framework.GRPCRequest{
+		Headers: headers,
+		Address: address,
+		Timeout: timeout,
+	}
+	err := framework.SendGRPCRequest(request)
+	if err != nil {
+		GinkgoWriter.Printf("ERROR:gRPC request returned error: %v\n", err)
+		return fmt.Errorf("expected gRPC request to succeed, but got error: %w", err)
+	}
+
+	return nil
+}
+
+func ExpectUnauthorizedGRPCRequest(
+	timeout time.Duration,
+	address string,
+	hdrs ...TestHeader,
+) error {
+	headers := RequestWithTestHeaders(hdrs...)
+	request := framework.GRPCRequest{
+		Headers: headers,
+		Address: address,
+		Timeout: timeout,
+	}
+	err := framework.SendGRPCRequest(request)
+
+	if err == nil {
+		GinkgoWriter.Printf("ERROR: gRPC request was successful when failure was expected\n")
+		return errors.New("expected Unauthenticated error, but gRPC request succeeded")
+	}
+
+	// Verify the gRPC status code is Unauthenticated (HTTP 401 equivalent).
+	if status.Code(err) != codes.Unauthenticated {
+		GinkgoWriter.Printf("ERROR: expected Unauthenticated, got %s (err: %v)\n", status.Code(err), err)
+		return fmt.Errorf("expected gRPC code %s, got %s", codes.Unauthenticated, status.Code(err))
+	}
+
+	return nil
+}
+
 // ConditionView and ControllerStatusView provide a minimal, unified view used by the generic checker.
 type ConditionView struct {
 	Type   string
@@ -158,20 +207,24 @@ func CheckFilterAccepted[T Filter](
 		return tooManyStatusesErr
 	}
 
-	status := controllers[0]
-	if status.ControllerName != (v1.GatewayController)(ngfControllerName) {
-		wrongNameErr := fmt.Errorf("expected controller name to be %s, got %s", ngfControllerName, status.ControllerName)
+	filterStatus := controllers[0]
+	if filterStatus.ControllerName != (v1.GatewayController)(ngfControllerName) {
+		wrongNameErr := fmt.Errorf(
+			"expected controller name to be %s, got %s",
+			ngfControllerName,
+			filterStatus.ControllerName,
+		)
 		GinkgoWriter.Printf("ERROR: %v\n", wrongNameErr)
 		return wrongNameErr
 	}
 
-	if len(status.Conditions) == 0 {
+	if len(filterStatus.Conditions) == 0 {
 		noCondErr := fmt.Errorf("expected at least one condition, got 0")
 		GinkgoWriter.Printf("ERROR: %v\n", noCondErr)
 		return noCondErr
 	}
 
-	condition := status.Conditions[0]
+	condition := filterStatus.Conditions[0]
 	if condition.Type != expectedCondType {
 		wrongTypeErr := fmt.Errorf("expected condition type to be %s, got %s", expectedCondType, condition.Type)
 		GinkgoWriter.Printf("ERROR: %v\n", wrongTypeErr)

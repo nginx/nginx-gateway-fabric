@@ -209,6 +209,70 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 			)
 		})
 
+		Context("verify working traffic with valid response returned for GRPCRoutes requests", func() {
+			type test struct {
+				headers map[string]string
+				desc    string
+			}
+
+			DescribeTable("Successful response",
+				func(tests []test) {
+					for _, test := range tests {
+						GinkgoWriter.Printf("Test case: %s\n", test.desc)
+						Eventually(
+							func() error {
+								return ExpectGRPCRequestToSucceed(
+									timeoutConfig.RequestTimeout,
+									fmt.Sprintf("%s:%d", address, port),
+									WithTestHeaders(test.headers),
+								)
+							}).
+							WithTimeout(timeoutConfig.RequestTimeout).
+							WithPolling(500 * time.Millisecond).
+							Should(Succeed())
+					}
+				},
+				Entry("requests with valid authentication", []test{
+					{
+						desc: "Send gRPC request with basic-auth2",
+						headers: map[string]string{
+							"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
+						},
+					},
+				}),
+			)
+
+			DescribeTable("Failed response",
+				func(tests []test) {
+					for _, test := range tests {
+						GinkgoWriter.Printf("Test case: %s\n", test.desc)
+						Eventually(
+							func() error {
+								return ExpectUnauthorizedGRPCRequest(
+									timeoutConfig.RequestTimeout,
+									fmt.Sprintf("%s:%d", address, port),
+									WithTestHeaders(test.headers),
+								)
+							}).
+							WithTimeout(timeoutConfig.RequestTimeout).
+							WithPolling(500 * time.Millisecond).
+							Should(Succeed())
+					}
+				},
+				Entry("requests with invalid authentication", []test{
+					{
+						desc: "Send gRPC request with invalid auth",
+						headers: map[string]string{
+							"Authorization": "Basic 00000",
+						},
+					},
+					{
+						desc: "Send gRPC request without authentication",
+					},
+				}),
+			)
+		})
+
 		Context("nginx directives", func() {
 			var conf *framework.Payload
 			filePrefix := fmt.Sprintf("/etc/nginx/secrets/%s", namespace)
