@@ -1014,22 +1014,14 @@
                   "type": "object"
                 },
                 "create": {
-                  "default": true,
-                  "description": "# Creates a service to expose metrics.",
+                  "default": false,
+                  "description": "Creates a service to expose metrics.",
                   "required": [],
                   "title": "create",
                   "type": "boolean"
                 },
                 "labels": {
                   "description": "The labels of the NGINX Gateway Fabric metrics service.",
-                  "properties": {
-                    "service": {
-                      "default": "nginx-gateway-fabric-metrics",
-                      "required": [],
-                      "title": "service",
-                      "type": "string"
-                    }
-                  },
                   "required": [],
                   "title": "labels",
                   "type": "object"
@@ -1042,7 +1034,7 @@
             "serviceMonitor": {
               "properties": {
                 "create": {
-                  "default": true,
+                  "default": false,
                   "description": "Creates a serviceMonitor to expose metrics on the kubernetes pods.",
                   "required": [],
                   "title": "create",
@@ -1070,12 +1062,6 @@
                   "required": [],
                   "title": "endpoints",
                   "type": "array"
-                },
-                "labels": {
-                  "description": "Kubernetes object labels to attach to the serviceMonitor object.",
-                  "required": [],
-                  "title": "labels",
-                  "type": "object"
                 }
               },
               "required": [],

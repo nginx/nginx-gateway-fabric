@@ -209,22 +209,18 @@ nginxGateway:
     secure: false
 
     service:
-      ## Creates a service to expose metrics.
-      create: true
+      # -- Creates a service to expose metrics.
+      create: false
 
       # -- The annotations of the NGINX Gateway Fabric metrics service.
       annotations: {}
 
       # -- The labels of the NGINX Gateway Fabric metrics service.
-      labels:
-        service: "nginx-gateway-fabric-metrics"
+      labels: {}
 
     serviceMonitor:
       # -- Creates a serviceMonitor to expose metrics on the kubernetes pods.
-      create: true
-
-      # -- Kubernetes object labels to attach to the serviceMonitor object.
-      labels: {}
+      create: false
 
       # A list of endpoints allowed as part of this ServiceMonitor.
       endpoints:

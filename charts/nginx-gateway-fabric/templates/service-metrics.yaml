@@ -1,10 +1,11 @@
-{{- if and .Values.nginxGateway.metrics.enabled .Values.nginxGateway.metrics.service.create }}
+{{- if and .Values.nginxGateway.metrics.enable .Values.nginxGateway.metrics.service.create }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "nginx-gateway.fullname" . }}-metrics
   namespace: {{ .Release.Namespace }}
   labels:
+    app.kubernetes.io/component: {{ include "nginx-gateway.fullname" . }}-metrics
     {{- include "nginx-gateway.labels" . | nindent 4 }}
 {{- if .Values.nginxGateway.metrics.service.labels }}
 {{ toYaml .Values.nginxGateway.metrics.service.labels | indent 4 }}
@@ -19,7 +20,7 @@ spec:
     {{- include "nginx-gateway.selectorLabels" . | nindent 4 }}
   ports:
   - name: metrics
-    port: 9113
+    port: {{ .Values.nginxGateway.metrics.port }}
     protocol: TCP
-    targetPort: 9113
+    targetPort: {{ .Values.nginxGateway.metrics.port }}
 {{- end }}
