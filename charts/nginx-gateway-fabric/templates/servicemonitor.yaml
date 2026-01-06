@@ -1,0 +1,18 @@
+{{- if and .Values.nginxGateway.metrics.enabled .Values.nginxGateway.metrics.serviceMonitor.create }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "nginx-gateway.fullname" . }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- include "nginx-gateway.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "nginx-gateway.selectorLabels" . | nindent 6 }}
+    {{- if .Values.nginxGateway.metrics.service.labels -}}
+      {{- toYaml .Values.nginxGateway.metrics.service.labels | nindent 6 }}
+    {{- end }}
+  endpoints:
+  {{- toYaml .Values.nginxGateway.metrics.serviceMonitor.endpoints | nindent 4 }}
+{{- end }}

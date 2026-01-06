@@ -1004,6 +1004,83 @@
               "required": [],
               "title": "secure",
               "type": "boolean"
+            },
+            "service": {
+              "properties": {
+                "annotations": {
+                  "description": "The annotations of the NGINX Gateway Fabric metrics service.",
+                  "required": [],
+                  "title": "annotations",
+                  "type": "object"
+                },
+                "create": {
+                  "default": true,
+                  "description": "# Creates a service to expose metrics.",
+                  "required": [],
+                  "title": "create",
+                  "type": "boolean"
+                },
+                "labels": {
+                  "description": "The labels of the NGINX Gateway Fabric metrics service.",
+                  "properties": {
+                    "service": {
+                      "default": "nginx-gateway-fabric-metrics",
+                      "required": [],
+                      "title": "service",
+                      "type": "string"
+                    }
+                  },
+                  "required": [],
+                  "title": "labels",
+                  "type": "object"
+                }
+              },
+              "required": [],
+              "title": "service",
+              "type": "object"
+            },
+            "serviceMonitor": {
+              "properties": {
+                "create": {
+                  "default": true,
+                  "description": "Creates a serviceMonitor to expose metrics on the kubernetes pods.",
+                  "required": [],
+                  "title": "create",
+                  "type": "boolean"
+                },
+                "endpoints": {
+                  "description": "A list of endpoints allowed as part of this ServiceMonitor.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "name": {
+                            "default": "metrics",
+                            "required": [],
+                            "title": "name",
+                            "type": "string"
+                          }
+                        },
+                        "required": [],
+                        "type": "object"
+                      }
+                    ],
+                    "required": []
+                  },
+                  "required": [],
+                  "title": "endpoints",
+                  "type": "array"
+                },
+                "labels": {
+                  "description": "Kubernetes object labels to attach to the serviceMonitor object.",
+                  "required": [],
+                  "title": "labels",
+                  "type": "object"
+                }
+              },
+              "required": [],
+              "title": "serviceMonitor",
+              "type": "object"
             }
           },
           "required": [],

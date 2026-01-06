@@ -208,6 +208,28 @@ nginxGateway:
     # Please note that this endpoint will be secured with a self-signed certificate.
     secure: false
 
+    service:
+      ## Creates a service to expose metrics.
+      create: true
+
+      # -- The annotations of the NGINX Gateway Fabric metrics service.
+      annotations: {}
+
+      # -- The labels of the NGINX Gateway Fabric metrics service.
+      labels:
+        service: "nginx-gateway-fabric-metrics"
+
+    serviceMonitor:
+      # -- Creates a serviceMonitor to expose metrics on the kubernetes pods.
+      create: true
+
+      # -- Kubernetes object labels to attach to the serviceMonitor object.
+      labels: {}
+
+      # A list of endpoints allowed as part of this ServiceMonitor.
+      endpoints:
+        - name: metrics
+
   gwAPIExperimentalFeatures:
     # -- Enable the experimental features of Gateway API which are supported by NGINX Gateway Fabric. Requires the Gateway
     # APIs installed from the experimental channel.
