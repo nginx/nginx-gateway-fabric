@@ -1596,7 +1596,7 @@ func createProxyPass(
 
 	backendName := backendGroupName(backendGroup)
 
-	if inferenceBackend {
+	if inferenceBackend && !strings.Contains(backendName, invalidBackendRef) {
 		backendVarName := strings.ReplaceAll(backendName, "-", "_")
 		return "http://$inference_backend_" + backendVarName + requestURI
 	}
