@@ -19,20 +19,20 @@ var (
 const rateLimitHTTPTemplate = `
 {{ range $r := .Rule }}
 limit_req_zone {{ .Key }} zone={{ .ZoneName }}:{{ .ZoneSize }} rate={{ .Rate }};
-{{- if not $.LimitZoneOnly }}
+  {{- if not $.LimitZoneOnly }}
 limit_req zone={{ .ZoneName }}{{ if .Burst }} burst={{ .Burst }}{{ end }}{{ if .NoDelay }} nodelay{{ end }}{{ if .Delay }} delay={{ .Delay }}{{ end }};
-{{- end }}
+  {{- end }}
 {{ end }}
 {{- if not .LimitZoneOnly }}
-{{- if .LogLevel }}
+  {{- if .LogLevel }}
 limit_req_log_level {{ .LogLevel }};
-{{- end }}
-{{- if .RejectCode }}
+  {{- end }}
+  {{- if .RejectCode }}
 limit_req_status {{ .RejectCode }};
-{{- end }}
-{{- if .DryRun }}
+  {{- end }}
+  {{- if .DryRun }}
 limit_req_dry_run on;
-{{- end }}
+  {{- end }}
 {{- end }}
 `
 

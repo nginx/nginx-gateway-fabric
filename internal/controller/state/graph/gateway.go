@@ -334,7 +334,7 @@ func (g *Gateway) GetReferencedRateLimitPolicies(
 			if targetRef.Kind == kinds.HTTPRoute || targetRef.Kind == kinds.GRPCRoute {
 				if _, exists := attachedRoutes[targetRef.Nsname]; exists {
 					targetsAttachedRoute = true
-					// Don't break here - we still need to check if any other targetRef targets the gateway
+					// Don't break here, we still need to check if any other targetRef targets the gateway
 				}
 			}
 		}

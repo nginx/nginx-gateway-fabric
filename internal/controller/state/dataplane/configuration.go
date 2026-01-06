@@ -1086,13 +1086,6 @@ func buildBaseHTTPConfig(
 	gatewaySnippetsFilters map[types.NamespacedName]*graph.SnippetsFilter,
 	gatewayRateLimitPolicies map[graph.PolicyKey]*graph.Policy,
 ) BaseHTTPConfig {
-	// from here i need to create fake policies for each entry in gatewayRateLimitPolicies
-	// and add them to the baseConfig.Policies slice.
-
-	// However i need to modify the spec to only include zonename, key, rate, and zonesize for each rule.
-	// This will then guarantee a limit_req_zone is created in the http context for the policies
-	// which are only attached to a route.
-
 	baseConfig := BaseHTTPConfig{
 		// HTTP2 should be enabled by default
 		HTTP2:                   true,
@@ -1103,6 +1096,10 @@ func buildBaseHTTPConfig(
 	}
 
 	// Create HTTP context policies for route-targeting RateLimitPolicies
+	// For RateLimitPolicies that target routes that aren't attached to the Gateway,
+	// these policies need to create the limit_req_zone directive at the http context.
+	// To achieve this, we create a modified copy of the RateLimitPolicy with an annotation
+	// indicating it's for HTTP context use only and attach it to the base HTTP config.
 	httpContextRateLimitPolicies := buildHTTPContextRateLimitPolicies(gatewayRateLimitPolicies)
 	baseConfig.Policies = append(baseConfig.Policies, httpContextRateLimitPolicies...)
 
