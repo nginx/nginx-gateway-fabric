@@ -132,7 +132,7 @@ const (
 	RateLimitPolicyAffected v1.PolicyConditionType = "RateLimitPolicyAffected"
 
 	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
-	// ObservabilityPolicy, ClientSettingsPolicy, or RateLimitPolicy is applied to Gateways or Routes.
+	// custom policy is applied to Gateways or Routes.
 	PolicyAffectedReason v1.PolicyConditionReason = "PolicyAffected"
 
 	// GatewayResolvedRefs condition indicates whether the controller was able to resolve the
