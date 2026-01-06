@@ -134,7 +134,11 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 	}
 
 	for id, data := range conf.AuthSecrets {
-		files = append(files, generateAuthBasicFile(id, data))
+		// Do not send files with nil data.
+		// This can happen when a secret has an invalid key.
+		if data != nil {
+			files = append(files, generateAuthBasicFile(id, data))
+		}
 	}
 	return files
 }
