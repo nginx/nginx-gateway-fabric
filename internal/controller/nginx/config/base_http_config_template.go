@@ -34,7 +34,7 @@ map $http_upgrade $connection_upgrade {
     '' close;
 }
 
-# Set $connection_header variable to upgrade when the $http_upgrade header is set, otherwise, set it to empty for when
+# Set $connection_keepalive variable to upgrade when the $http_upgrade header is set, otherwise, set it to empty for when
 # keepAlive is enabled.
 map $http_upgrade $connection_keepalive {
     default upgrade;
