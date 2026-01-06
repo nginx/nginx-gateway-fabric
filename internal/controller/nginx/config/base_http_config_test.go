@@ -481,3 +481,23 @@ func TestExecuteBaseHttp_GatewaySecretID(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteBaseHttp_ConnectionHeaderMaps(t *testing.T) {
+	t.Parallel()
+
+	expSubStringsWithCount := map[string]int{
+		"map $http_upgrade $connection_upgrade":   1,
+		"default upgrade;":                        2,
+		"'' close;":                               1,
+		"map $http_upgrade $connection_keepalive": 1,
+		"'' '';": 1,
+	}
+
+	g := NewWithT(t)
+	res := executeBaseHTTPConfig(dataplane.Configuration{})
+	g.Expect(res).To(HaveLen(1))
+	httpConfig := string(res[0].data)
+	for subStr, count := range expSubStringsWithCount {
+		g.Expect(strings.Count(httpConfig, subStr)).To(Equal(count))
+	}
+}
