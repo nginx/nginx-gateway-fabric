@@ -7,6 +7,7 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -167,7 +168,7 @@ func generate(pols []policies.Policy, tmpl *template.Template) policies.Generate
 		// Check if this is a fake HTTP context only policy
 		isHTTPContextOnly := false
 		if rlp.Annotations != nil {
-			if val, exists := rlp.Annotations["nginx.org/internal-annotation-http-context-only"]; exists && val == "true" {
+			if val, exists := rlp.Annotations[dataplane.InternalFakePolicyAnnotationKey]; exists && val == "true" {
 				isHTTPContextOnly = true
 			}
 		}

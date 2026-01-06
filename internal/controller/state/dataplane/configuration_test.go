@@ -2490,7 +2490,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Name:      "route-rate-limit",
 						Namespace: "test",
 						Annotations: map[string]string{
-							"nginx.org/internal-annotation-http-context-only": "true",
+							InternalFakePolicyAnnotationKey: "true",
 						},
 					},
 					Spec: ngfAPIv1alpha1.RateLimitPolicySpec{
