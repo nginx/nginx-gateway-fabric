@@ -16,7 +16,7 @@ func TestValidateExtensionRefFilter(t *testing.T) {
 	t.Parallel()
 	testPath := field.NewPath("test")
 
-	validTests := []struct {
+	tests := []struct {
 		ref          *v1.LocalObjectReference
 		name         string
 		errSubString []string
@@ -90,7 +90,7 @@ func TestValidateExtensionRefFilter(t *testing.T) {
 		},
 	}
 
-	for _, test := range validTests {
+	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
