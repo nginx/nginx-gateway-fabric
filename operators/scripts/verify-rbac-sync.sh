@@ -1,5 +1,31 @@
 #!/bin/bash
 # verify-rbac-sync.sh - Verify operator RBAC includes all permissions from NGF Helm chart
+#
+# WHY THIS SCRIPT IS NECESSARY:
+#
+# The operator RBAC (operators/config/rbac/role.yaml) must be a superset of the NGF Helm chart
+# RBAC (charts/nginx-gateway-fabric/templates/clusterrole.yaml) because:
+#
+# 1. The operator deploys NGF, so it needs all permissions NGF requires to function
+# 2. The operator needs additional permissions to manage Deployments, Services, CRDs, etc.
+# 3. The Helm chart has CONDITIONAL permissions based on feature flags that may or may not
+#    be enabled at runtime (experimental features, snippets, telemetry, NGINX Plus, etc.)
+#
+# WHY WE CAN'T DO A SIMPLE FILE COMPARISON:
+#
+# - The Helm chart is a TEMPLATE with conditionals ({{- if .Values.foo }}) and variables
+# - The operator needs a SUPERSET of permissions (NGF + operator-specific)
+# - The operator uses wildcard verbs (verbs: ["*"]) while Helm uses explicit verbs
+# - The Helm chart permissions change based on feature flags at deployment time
+#
+# WHAT THIS SCRIPT DOES:
+#
+# 1. Renders the Helm chart with ALL features enabled to get the maximum set of permissions
+# 2. Extracts all possible permissions NGF might need (across all feature combinations)
+# 3. Verifies the operator RBAC includes all these permissions (either explicitly or via wildcards)
+# 4. Reports any missing permissions that would cause the operator to fail
+#
+# This ensures the operator will work correctly regardless of which NGF features are enabled.
 
 set -e
 

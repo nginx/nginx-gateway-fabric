@@ -80,8 +80,8 @@ jobs:
         working-directory: certified-operators/operators/nginx-gateway-fabric-operator
         run: |
           mkdir v${{ inputs.operator-version }}
-          cp -R ../../../operators/bundle/manifests v${{ inputs.operator-version }}/
-          cp -R ../../../operators/bundle/metadata v${{ inputs.operator-version }}/
+          cp -R ${{ github.workspace }}/operators/bundle/manifests v${{ inputs.operator-version }}/
+          cp -R ${{ github.workspace }}/operators/bundle/metadata v${{ inputs.operator-version }}/
 
       - name: Commit and push to certified-operators
         if: ${{ inputs.submit-to-redhat }}
