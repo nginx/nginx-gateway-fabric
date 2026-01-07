@@ -27,7 +27,6 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
@@ -83,13 +82,25 @@ jobs:
             - Added OpenShift compatibility annotations
 
       - name: Checkout certified-operators repo
+        if: ${{ inputs.submit-to-redhat }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           token: ${{ secrets.NGINX_PAT }}
           repository: nginx-bot/certified-operators
           path: certified-operators
 
+      - name: Sync fork with upstream
+        if: ${{ inputs.submit-to-redhat }}
+        working-directory: certified-operators
+        run: |
+          git remote add upstream https://github.com/redhat-openshift-ecosystem/certified-operators.git
+          git fetch upstream
+          git checkout main
+          git merge upstream/main --ff-only
+          git push origin main
+
       - name: Update certified-operators repo
+        if: ${{ inputs.submit-to-redhat }}
         working-directory: certified-operators/operators/nginx-gateway-fabric-operator
         run: |
           mkdir v${{ inputs.operator-version }}
@@ -97,6 +108,7 @@ jobs:
           cp -R ${{ github.workspace }}/operators/bundle/metadata v${{ inputs.operator-version }}/
 
       - name: Commit and push to certified-operators
+        if: ${{ inputs.submit-to-redhat }}
         uses: stefanzweifel/git-auto-commit-action@28e16e81777b558cc906c8750092100bbb34c5e3 # v7.0.0
         with:
           commit_message: operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})
@@ -108,7 +120,7 @@ jobs:
           repository: certified-operators
 
       - name: Create PR to RedHat certified-operators
-        if: ${{ inputs.submit-to-redhat == 'true' }}
+        if: ${{ inputs.submit-to-redhat }}
         working-directory: certified-operators
         run: |
           gh pr create --title "operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})" --body "Update nginx-gateway-fabric-operator to v${{ inputs.operator-version }}" --head nginx-bot:update-nginx-gateway-fabric-operator-to-v${{ inputs.operator-version }} --base main --repo redhat-openshift-ecosystem/certified-operators
