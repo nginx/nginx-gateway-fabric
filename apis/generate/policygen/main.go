@@ -2,7 +2,7 @@
 
 // Package main is a code generator for NGF Policy methods.
 // It generates the GetTargetRefs, GetPolicyStatus, and SetPolicyStatus methods
-// for types marked with the +ngf:policy comment.
+// for policy types specified via command-line flags.
 //
 // Usage: go run main.go -types=TypeA,TypeB -package=v1alpha1 -targetref-single=TypeA -output=zz_generated.policymethods.go
 package main
