@@ -192,7 +192,7 @@ func TestCollect_Errors(t *testing.T) {
 					},
 				},
 			})),
-			wantErrContain: "failed to get NGF deploymentID",
+			wantErrContain: "failed to get NGF deployment info",
 		},
 	}
 
