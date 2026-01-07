@@ -328,7 +328,7 @@ func createHtpasswdSecret(ns, name string, withAuth bool) *corev1.Secret {
 		Data: map[string][]byte{},
 	}
 	if withAuth {
-		sec.Data[AuthKeyBasic] = []byte("user:pass")
+		sec.Data[AuthKey] = []byte("user:pass")
 	}
 	return sec
 }

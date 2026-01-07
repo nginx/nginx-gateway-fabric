@@ -671,7 +671,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 					Source: &apiv1.Secret{
 						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "auth-basic"},
 						Data: map[string][]byte{
-							graph.AuthKeyBasic: []byte("user:$apr1$cred"),
+							graph.AuthKey: []byte("user:$apr1$cred"),
 						},
 					},
 				},

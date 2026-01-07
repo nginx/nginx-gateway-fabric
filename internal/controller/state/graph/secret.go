@@ -32,7 +32,7 @@ const (
 
 const (
 	// Key in the Secret data for Basic Auth credentials.
-	AuthKeyBasic = "auth"
+	AuthKey = "auth"
 )
 
 // secretResolver wraps the cluster Secrets so that they can be resolved (includes validation). All resolved
@@ -83,8 +83,8 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 		certBundle = NewCertificateBundle(nsname, "Secret", cert)
 	case secret.Type == apiv1.SecretType(SecretTypeHtpasswd):
 		// Validate Htpasswd secret
-		if _, exists := secret.Data[AuthKeyBasic]; !exists {
-			validationErr = fmt.Errorf("missing required key %q in secret type %q", AuthKeyBasic, secret.Type)
+		if _, exists := secret.Data[AuthKey]; !exists {
+			validationErr = fmt.Errorf("missing required key %q in secret type %q", AuthKey, secret.Type)
 		}
 	default:
 		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)

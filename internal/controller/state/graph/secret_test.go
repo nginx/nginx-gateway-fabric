@@ -112,7 +112,7 @@ func TestSecretResolver(t *testing.T) {
 				Name:      "secret-4",
 			},
 			Data: map[string][]byte{
-				AuthKeyBasic: []byte("dXNlcjpwYXNzd29yZA=="), // base64 for user:password
+				AuthKey: []byte("dXNlcjpwYXNzd29yZA=="), // base64 for user:password
 			},
 			Type: apiv1.SecretType(SecretTypeHtpasswd),
 		}

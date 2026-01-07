@@ -5964,7 +5964,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 			},
 			Type: apiv1.SecretType(graph.SecretTypeHtpasswd),
 			Data: map[string][]byte{
-				graph.AuthKeyBasic: []byte("user:password"),
+				graph.AuthKey: []byte("user:password"),
 			},
 		},
 	}

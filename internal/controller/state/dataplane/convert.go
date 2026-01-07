@@ -212,7 +212,7 @@ func convertAuthenticationFilter(
 		result.Basic = &AuthBasic{
 			SecretName:      specBasic.SecretRef.Name,
 			SecretNamespace: referencedSecret.Source.Namespace,
-			Data:            referencedSecret.Source.Data[graph.AuthKeyBasic],
+			Data:            referencedSecret.Source.Data[graph.AuthKey],
 			Realm:           specBasic.Realm,
 		}
 	}
