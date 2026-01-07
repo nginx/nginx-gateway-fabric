@@ -557,9 +557,6 @@ func buildServers(
 			continue
 		}
 		if l.Valid {
-			continue
-		}
-		if l.Valid {
 			rules := rulesForProtocol[l.Source.Protocol][l.Source.Port]
 			if rules == nil {
 				rules = newHostPathRules()
