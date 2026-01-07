@@ -90,8 +90,7 @@ func TestGenerate(t *testing.T) {
 			"test-certbundle": []byte("test-cert"),
 		},
 		AuthSecrets: map[dataplane.AuthFileID]dataplane.AuthFileData{
-			"default_auth-basic-user":     []byte("user:$apr1$cred"),
-			"default_auth-basic-user-nil": nil, // Nil entry should be skipped.
+			"default_auth-basic-user": []byte("user:$apr1$cred"),
 		},
 		Telemetry: dataplane.Telemetry{
 			Endpoint:    "1.2.3.4:123",
