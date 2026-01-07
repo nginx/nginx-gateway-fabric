@@ -6039,7 +6039,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 		{
 			name: "invalid key in htpasswd secret",
 			secrets: map[types.NamespacedName]*graph.Secret{
-				types.NamespacedName{Namespace: "test", Name: "invalid-key-secret"}: invalidKeySecret,
+				{Namespace: "test", Name: "invalid-key-secret"}: invalidKeySecret,
 			},
 			expected: map[AuthFileID]AuthFileData{},
 		},
