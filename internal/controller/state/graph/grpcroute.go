@@ -14,7 +14,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 func buildGRPCRoute(
@@ -55,16 +54,10 @@ func buildGRPCRoute(
 	r.Spec.Hostnames = ghr.Spec.Hostnames
 	r.Attachable = true
 
-	extRefFilterResolvers := make(map[string]resolveExtRefFilter)
-
-	extRefFilterResolvers[kinds.SnippetsFilter] = getSnippetsFilterResolverForNamespace(
+	extRefFilterResolvers := buildExtRefFilterResolvers(
+		r.Source.GetNamespace(),
 		snippetsFilters,
-		r.Source.GetNamespace(),
-	)
-
-	extRefFilterResolvers[kinds.AuthenticationFilter] = getAuthenticationFilterResolverForNamespace(
 		authenticationFilters,
-		r.Source.GetNamespace(),
 	)
 
 	grpcRouteNsName := types.NamespacedName{

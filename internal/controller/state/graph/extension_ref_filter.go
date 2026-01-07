@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -55,4 +56,25 @@ func validateExtensionRefFilter(ref *v1.LocalObjectReference, path *field.Path) 
 	}
 
 	return allErrs
+}
+
+// buildExtRefFilterResolvers builds a map of resolvers for all supported extension filter kinds.
+func buildExtRefFilterResolvers(
+	namespace string,
+	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	authenticationFilters map[types.NamespacedName]*AuthenticationFilter,
+) map[string]resolveExtRefFilter {
+	resolvers := make(map[string]resolveExtRefFilter, 2)
+
+	resolvers[kinds.SnippetsFilter] = getSnippetsFilterResolverForNamespace(
+		snippetsFilters,
+		namespace,
+	)
+
+	resolvers[kinds.AuthenticationFilter] = getAuthenticationFilterResolverForNamespace(
+		authenticationFilters,
+		namespace,
+	)
+
+	return resolvers
 }

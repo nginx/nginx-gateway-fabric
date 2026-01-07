@@ -65,16 +65,10 @@ func buildHTTPRoute(
 	r.Spec.Hostnames = ghr.Spec.Hostnames
 	r.Attachable = true
 
-	extRefFilterResolvers := make(map[string]resolveExtRefFilter)
-
-	extRefFilterResolvers[kinds.SnippetsFilter] = getSnippetsFilterResolverForNamespace(
+	extRefFilterResolvers := buildExtRefFilterResolvers(
+		r.Source.GetNamespace(),
 		snippetsFilters,
-		r.Source.GetNamespace(),
-	)
-
-	extRefFilterResolvers[kinds.AuthenticationFilter] = getAuthenticationFilterResolverForNamespace(
 		authenticationFilters,
-		r.Source.GetNamespace(),
 	)
 
 	nsName := types.NamespacedName{
