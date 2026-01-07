@@ -146,3 +146,110 @@ func makeRequest(method string, request Request, opts ...Option) (*http.Response
 
 	return resp, nil
 }
+
+type RequestHeader func(*RequestHeaders)
+
+type RequestHeaders = map[string]string
+
+func WithTestHeaders(headers map[string]string) RequestHeader {
+	return func(hdrs *RequestHeaders) {
+		*hdrs = headers
+	}
+}
+
+func RequestWithTestHeaders(hdrs ...RequestHeader) RequestHeaders {
+	var headers RequestHeaders
+	for _, hdr := range hdrs {
+		hdr(&headers)
+	}
+
+	return headers
+}
+
+func ExpectRequestToSucceed(
+	timeout time.Duration,
+	appURL, address string,
+	responseBodyMessage string,
+	hdrs ...RequestHeader,
+) error {
+	headers := RequestWithTestHeaders(hdrs...)
+	request := Request{
+		Headers: headers,
+		URL:     appURL,
+		Address: address,
+		Timeout: timeout,
+	}
+	resp, err := Get(request)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("http status was not 200, got %d: %w", resp.StatusCode, err)
+	}
+
+	if !strings.Contains(resp.Body, responseBodyMessage) {
+		return fmt.Errorf("expected response body to contain correct body message, got: %s", resp.Body)
+	}
+
+	return err
+}
+
+// The function is expecting the request to fail (hence the name) because NGINX is not there to route the request.
+// The purpose of the graceful recovery test is to simulate various failure scenarios including NGINX
+// container restarts, NGF pod restarts, and Kubernetes node restarts to show the system can recover
+// after these real world scenarios and resume serving application traffic after recovery.
+// In this case, we verify that our requests fail and then that eventually are successful again - verifying that
+// NGINX went down and came back up again.
+// We only want an error returned from this particular function if it does not appear that NGINX has
+// stopped serving traffic.
+func ExpectRequestToFail(timeout time.Duration, appURL, address string) error {
+	request := Request{
+		URL:     appURL,
+		Address: address,
+		Timeout: timeout,
+	}
+	resp, err := Get(request)
+	if resp.StatusCode != 0 {
+		return errors.New("expected http status to be 0")
+	}
+
+	if resp.Body != "" {
+		return fmt.Errorf("expected response body to be empty, instead received: %s", resp.Body)
+	}
+
+	if err == nil {
+		return errors.New("expected request to error")
+	}
+
+	return nil
+}
+
+func ExpectUnauthorizedRequest(timeout time.Duration, appURL, address string, hdrs ...RequestHeader) error {
+	headers := RequestWithTestHeaders(hdrs...)
+	request := Request{
+		Headers: headers,
+		URL:     appURL,
+		Address: address,
+		Timeout: timeout,
+	}
+	resp, _ := Get(request)
+	if resp.StatusCode != http.StatusUnauthorized {
+		return errors.New("expected http status to be 401")
+	}
+
+	return nil
+}
+
+func Expect500Response(timeout time.Duration, appURL, address string, hdrs ...RequestHeader) error {
+	headers := RequestWithTestHeaders(hdrs...)
+	request := Request{
+		Headers: headers,
+		URL:     appURL,
+		Address: address,
+		Timeout: timeout,
+	}
+	resp, _ := Get(request)
+	if resp.StatusCode != http.StatusInternalServerError {
+		return errors.New("expected http status to be 500")
+	}
+
+	return nil
+}

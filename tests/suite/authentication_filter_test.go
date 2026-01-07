@@ -111,12 +111,12 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						GinkgoWriter.Printf("Test case: %s\n", test.desc)
 						Eventually(
 							func() error {
-								return ExpectRequestToSucceed(
+								return framework.ExpectRequestToSucceed(
 									timeoutConfig.RequestTimeout,
 									fmt.Sprintf("%s%d%s", test.url, port, test.path),
 									address,
 									test.expected,
-									WithTestHeaders(test.headers))
+									framework.WithTestHeaders(test.headers))
 							}).
 							WithTimeout(timeoutConfig.RequestTimeout).
 							WithPolling(500 * time.Millisecond).
@@ -167,11 +167,11 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						GinkgoWriter.Printf("Test case: %s\n", test.desc)
 						Eventually(
 							func() error {
-								return ExpectUnauthorizedRequest(
+								return framework.ExpectUnauthorizedRequest(
 									timeoutConfig.RequestTimeout,
 									fmt.Sprintf("%s%d%s", test.url, port, test.path),
 									address,
-									WithTestHeaders(test.headers))
+									framework.WithTestHeaders(test.headers))
 							}).
 							WithTimeout(timeoutConfig.RequestTimeout).
 							WithPolling(500 * time.Millisecond).
@@ -221,10 +221,10 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						GinkgoWriter.Printf("Test case: %s\n", test.desc)
 						Eventually(
 							func() error {
-								return ExpectGRPCRequestToSucceed(
+								return framework.ExpectGRPCRequestToSucceed(
 									timeoutConfig.RequestTimeout,
 									fmt.Sprintf("%s:%d", address, port),
-									WithTestHeaders(test.headers),
+									framework.WithTestHeaders(test.headers),
 								)
 							}).
 							WithTimeout(timeoutConfig.RequestTimeout).
@@ -248,10 +248,10 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						GinkgoWriter.Printf("Test case: %s\n", test.desc)
 						Eventually(
 							func() error {
-								return ExpectUnauthorizedGRPCRequest(
+								return framework.ExpectUnauthorizedGRPCRequest(
 									timeoutConfig.RequestTimeout,
 									fmt.Sprintf("%s:%d", address, port),
-									WithTestHeaders(test.headers),
+									framework.WithTestHeaders(test.headers),
 								)
 							}).
 							WithTimeout(timeoutConfig.RequestTimeout).
@@ -439,12 +439,12 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						GinkgoWriter.Printf("Test case: %s\n", test.desc)
 						Eventually(
 							func() error {
-								return ExpectRequestToSucceed(
+								return framework.ExpectRequestToSucceed(
 									timeoutConfig.RequestTimeout,
 									fmt.Sprintf("%s%d%s", test.url, port, test.path),
 									address,
 									test.expected,
-									WithTestHeaders(test.headers))
+									framework.WithTestHeaders(test.headers))
 							}).
 							WithTimeout(timeoutConfig.RequestTimeout).
 							WithPolling(500 * time.Millisecond).
@@ -477,11 +477,11 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						GinkgoWriter.Printf("Test case: %s\n", test.desc)
 						Eventually(
 							func() error {
-								return Expect500Response(
+								return framework.Expect500Response(
 									timeoutConfig.RequestTimeout,
 									fmt.Sprintf("%s%d%s", test.url, port, test.path),
 									address,
-									WithTestHeaders(test.headers))
+									framework.WithTestHeaders(test.headers))
 							}).
 							WithTimeout(timeoutConfig.RequestTimeout).
 							WithPolling(500 * time.Millisecond).
@@ -532,6 +532,40 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 				}),
 			)
 		})
+
+		Context("verify working traffic for GRPCRoutes requests", func() {
+			type test struct {
+				headers map[string]string
+				desc    string
+			}
+
+			DescribeTable("Failed response",
+				func(tests []test) {
+					for _, test := range tests {
+						GinkgoWriter.Printf("Test case: %s\n", test.desc)
+						Eventually(
+							func() error {
+								return framework.Expect500GRPCResponse(
+									timeoutConfig.RequestTimeout,
+									fmt.Sprintf("%s:%d", address, port),
+									framework.WithTestHeaders(test.headers),
+								)
+							}).
+							WithTimeout(timeoutConfig.RequestTimeout).
+							WithPolling(500 * time.Millisecond).
+							Should(Succeed())
+					}
+				},
+				Entry("requests with invalid authentication", []test{
+					{
+						desc: "Send gRPC request with invalid key AuthFilter",
+						headers: map[string]string{
+							"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
+						},
+					},
+				}),
+			)
+		})
 	})
 })
 
@@ -551,10 +585,10 @@ func checkForAuthenticationFilterToBeAccepted(authenticationFilterNsNames types.
 		return err
 	}
 
-	return CheckFilterAccepted(
+	return framework.CheckFilterAccepted(
 		af,
 		ngfControllerName,
-		authenticationFilterControllers,
+		framework.AuthenticationFilterControllers,
 		(string)(ngfAPI.AuthenticationFilterConditionTypeAccepted),
 		(string)(ngfAPI.AuthenticationFilterConditionReasonAccepted),
 	)

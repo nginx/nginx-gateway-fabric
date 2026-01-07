@@ -102,7 +102,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 
 				Eventually(
 					func() error {
-						return ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseURL, address, "URI: /coffee")
+						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseURL, address, "URI: /coffee")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -329,10 +329,10 @@ func checkForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedNa
 		return err
 	}
 
-	return CheckFilterAccepted(
+	return framework.CheckFilterAccepted(
 		sf,
 		ngfControllerName,
-		snippetsFilterControllers,
+		framework.SnippetsFilterControllers,
 		(string)(ngfAPI.SnippetsFilterConditionTypeAccepted),
 		(string)(ngfAPI.SnippetsFilterConditionReasonAccepted),
 	)

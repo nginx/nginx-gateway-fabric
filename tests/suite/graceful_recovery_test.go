@@ -49,20 +49,25 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 	)
 
 	checkForWorkingTraffic := func(teaURL, coffeeURL string) error {
-		if err := ExpectRequestToSucceed(timeoutConfig.RequestTimeout, teaURL, address, "URI: /tea"); err != nil {
+		if err := framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, teaURL, address, "URI: /tea"); err != nil {
 			return err
 		}
-		if err := ExpectRequestToSucceed(timeoutConfig.RequestTimeout, coffeeURL, address, "URI: /coffee"); err != nil {
+		if err := framework.ExpectRequestToSucceed(
+			timeoutConfig.RequestTimeout,
+			coffeeURL,
+			address,
+			"URI: /coffee",
+		); err != nil {
 			return err
 		}
 		return nil
 	}
 
 	checkForFailingTraffic := func(teaURL, coffeeURL string) error {
-		if err := ExpectRequestToFail(timeoutConfig.RequestTimeout, teaURL, address); err != nil {
+		if err := framework.ExpectRequestToFail(timeoutConfig.RequestTimeout, teaURL, address); err != nil {
 			return err
 		}
-		if err := ExpectRequestToFail(timeoutConfig.RequestTimeout, coffeeURL, address); err != nil {
+		if err := framework.ExpectRequestToFail(timeoutConfig.RequestTimeout, coffeeURL, address); err != nil {
 			return err
 		}
 		return nil

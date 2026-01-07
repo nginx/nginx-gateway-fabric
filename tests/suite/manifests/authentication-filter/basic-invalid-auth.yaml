@@ -89,6 +89,29 @@ spec:
             kind: AuthenticationFilter
             name: basic-auth-wrong-key
 ---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: grpc-route
+spec:
+  parentRefs:
+    - name: auth-gateway
+      sectionName: http
+  rules:
+    - matches:
+        - method:
+            service: helloworld.Greeter
+            method: SayHello
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: basic-auth-wrong-key
+      backendRefs:
+        - name: grpc-backend
+          port: 8080
+---
 # AuthenticationFilters with valid and invalid configurations
 
 # Auth with valid basic-auth2

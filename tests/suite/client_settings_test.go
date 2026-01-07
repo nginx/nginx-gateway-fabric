@@ -114,7 +114,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 
 				Eventually(
 					func() error {
-						return ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseCoffeeURL, address, "URI: /coffee")
+						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseCoffeeURL, address, "URI: /coffee")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -122,7 +122,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 
 				Eventually(
 					func() error {
-						return ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseTeaURL, address, "URI: /tea")
+						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseTeaURL, address, "URI: /tea")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
