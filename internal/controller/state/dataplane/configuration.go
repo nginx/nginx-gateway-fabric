@@ -354,8 +354,10 @@ func buildAuthSecrets(secrets map[types.NamespacedName]*graph.Secret) map[AuthFi
 
 	for nsname, secret := range secrets {
 		if secret != nil && secret.Source != nil && secret.Source.Type == coreV1.SecretType(graph.SecretTypeHtpasswd) {
-			id := AuthFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
-			authBasics[id] = secret.Source.Data[graph.AuthKeyBasic]
+			if data, exists := secret.Source.Data[graph.AuthKeyBasic]; exists {
+				id := AuthFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
+				authBasics[id] = data
+			}
 		}
 	}
 	return authBasics

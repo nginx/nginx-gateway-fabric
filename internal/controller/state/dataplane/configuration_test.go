@@ -5995,6 +5995,19 @@ func TestBuildAuthSecrets(t *testing.T) {
 		Source: nil,
 	}
 
+	invalidKeySecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "invalid-key-secret",
+				Namespace: "test",
+			},
+			Type: apiv1.SecretType(graph.SecretTypeHtpasswd),
+			Data: map[string][]byte{
+				"wrong-key": []byte("data"),
+			},
+		},
+	}
+
 	tests := []struct {
 		secrets  map[types.NamespacedName]*graph.Secret
 		expected map[AuthFileID]AuthFileData
@@ -6020,6 +6033,13 @@ func TestBuildAuthSecrets(t *testing.T) {
 			name: "nil source secret should not panic",
 			secrets: map[types.NamespacedName]*graph.Secret{
 				nilSourceSecretNsName: nilSourceSecret,
+			},
+			expected: map[AuthFileID]AuthFileData{},
+		},
+		{
+			name: "invalid key in htpasswd secret",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				types.NamespacedName{Namespace: "test", Name: "invalid-key-secret"}: invalidKeySecret,
 			},
 			expected: map[AuthFileID]AuthFileData{},
 		},
