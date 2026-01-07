@@ -470,22 +470,22 @@ jobs:
   redhat-certification:
     name: Submit images for RedHat certification
     needs: [build-oss, build-operator]
-    if: ${{ inputs.is_production_release }}
+    # TEMPORARY: Test on feature branch - remove before merging
     strategy:
       fail-fast: false
       matrix:
         include:
           - image: ngf
-            tag: ${{ inputs.release_version }}
+            tag: ${{ inputs.release_version || 'edge' }}
           - image: nginx
-            tag: ${{ inputs.release_version }}
+            tag: ${{ inputs.release_version || 'edge' }}
           - image: operator
-            tag: ${{ inputs.operator_version }}
+            tag: ${{ inputs.operator_version || 'edge' }}
     uses: ./.github/workflows/redhat-certification.yml
     with:
       image: ${{ matrix.image }}
       tag: ${{ matrix.tag }}
-      dry_run: ${{ inputs.dry_run }}
+      dry_run: ${{ inputs.dry_run || true }}
     secrets: inherit
 
   functional-tests:

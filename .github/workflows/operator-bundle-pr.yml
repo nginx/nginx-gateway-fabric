@@ -1,6 +1,10 @@
 name: Operator Bundle PR
 
 on:
+  # TEMPORARY: Test on feature branch push - remove before merging
+  push:
+    branches:
+      - chore/add-operator-release
   workflow_dispatch:
     inputs:
       operator-version:
@@ -27,6 +31,18 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      - name: Set default values for testing
+        id: defaults
+        run: |
+          # TEMPORARY: Set defaults when triggered by push (not workflow_dispatch)
+          if [ "${{ github.event_name }}" == "push" ]; then
+          echo "operator-version=0.0.0-test" >> $GITHUB_OUTPUT
+          echo "submit-to-redhat=false" >> $GITHUB_OUTPUT
+          else
+          echo "operator-version=${{ inputs.operator-version }}" >> $GITHUB_OUTPUT
+          echo "submit-to-redhat=${{ inputs.submit-to-redhat }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
@@ -51,15 +67,15 @@ jobs:
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: Generate operator bundle for v${{ inputs.operator-version }}
-          title: Operator Bundle v${{ inputs.operator-version }}
+          commit-message: Generate operator bundle for v${{ steps.defaults.outputs.operator-version }}
+          title: Operator Bundle v${{ steps.defaults.outputs.operator-version }}
           draft: true
           delete-branch: true
-          branch: operator/bundle-${{ inputs.operator-version }}
+          branch: operator/bundle-${{ steps.defaults.outputs.operator-version }}
           author: nginx-bot <integrations@nginx.com>
           committer: nginx-bot <integrations@nginx.com>
           body: |
-            This automated PR generates the operator bundle for v${{ inputs.operator-version }}.
+            This automated PR generates the operator bundle for v${{ steps.defaults.outputs.operator-version }}.
 
             ## What's Changed
             - Updated NGF image versions in sample manifests using image digests
@@ -68,7 +84,6 @@ jobs:
             - Added OpenShift compatibility annotations
 
       - name: Checkout certified-operators repo
-        if: ${{ inputs.submit-to-redhat }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           token: ${{ secrets.NGINX_PAT }}
@@ -76,7 +91,6 @@ jobs:
           path: certified-operators
 
       - name: Update certified-operators repo
-        if: ${{ inputs.submit-to-redhat }}
         working-directory: certified-operators/operators/nginx-gateway-fabric-operator
         run: |
           mkdir v${{ inputs.operator-version }}
@@ -84,7 +98,6 @@ jobs:
           cp -R ${{ github.workspace }}/operators/bundle/metadata v${{ inputs.operator-version }}/
 
       - name: Commit and push to certified-operators
-        if: ${{ inputs.submit-to-redhat }}
         uses: stefanzweifel/git-auto-commit-action@28e16e81777b558cc906c8750092100bbb34c5e3 # v7.0.0
         with:
           commit_message: operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})
@@ -96,7 +109,7 @@ jobs:
           repository: certified-operators
 
       - name: Create PR to RedHat certified-operators
-        if: ${{ inputs.submit-to-redhat }}
+        if: ${{ steps.defaults.outputs.submit-to-redhat == 'true' }}
         working-directory: certified-operators
         run: |
           gh pr create --title "operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})" --body "Update nginx-gateway-fabric-operator to v${{ inputs.operator-version }}" --head nginx-bot:update-nginx-gateway-fabric-operator-to-v${{ inputs.operator-version }} --base main --repo redhat-openshift-ecosystem/certified-operators
