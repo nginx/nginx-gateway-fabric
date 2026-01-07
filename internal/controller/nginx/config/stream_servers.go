@@ -225,7 +225,7 @@ func createSplitClientForL4Server(server dataplane.Layer4VirtualServer) *stream.
 	availablePercentage := float64(100)
 
 	// Process all upstreams except the last one
-	for i := 0; i < len(server.Upstreams)-1; i++ {
+	for i := range len(server.Upstreams) - 1 {
 		upstream := server.Upstreams[i]
 		percentage := percentOf(upstream.Weight, totalWeight)
 		availablePercentage -= percentage
