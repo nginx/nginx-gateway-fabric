@@ -36,7 +36,7 @@ jobs:
         run: |
           # TEMPORARY: Set defaults when triggered by push (not workflow_dispatch)
           if [ "${{ github.event_name }}" == "push" ]; then
-          echo "operator-version=0.0.0-test" >> $GITHUB_OUTPUT
+          echo "operator-version=1.1.0" >> $GITHUB_OUTPUT
           echo "submit-to-redhat=false" >> $GITHUB_OUTPUT
           else
           echo "operator-version=${{ inputs.operator-version }}" >> $GITHUB_OUTPUT
