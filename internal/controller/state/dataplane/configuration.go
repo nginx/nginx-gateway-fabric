@@ -551,10 +551,12 @@ func buildServers(
 	}
 
 	for _, l := range gateway.Listeners {
-		if l.Source.Protocol == v1.TLSProtocolType {
+		if l.Source.Protocol == v1.TLSProtocolType ||
+			l.Source.Protocol == v1.TCPProtocolType ||
+			l.Source.Protocol == v1.UDPProtocolType {
 			continue
 		}
-		if l.Source.Protocol == v1.TCPProtocolType || l.Source.Protocol == v1.UDPProtocolType {
+		if l.Valid {
 			continue
 		}
 		if l.Valid {

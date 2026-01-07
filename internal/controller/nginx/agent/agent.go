@@ -121,8 +121,7 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 
 	var errs []error
 	var applied bool
-	actions := make([]*pb.NGINXPlusAction, 0,
-		len(conf.Upstreams)+len(conf.StreamUpstreams))
+	actions := make([]*pb.NGINXPlusAction, 0, len(conf.Upstreams)+len(conf.StreamUpstreams))
 
 	// HTTP/GRPC Upstreams
 	for _, upstream := range conf.Upstreams {

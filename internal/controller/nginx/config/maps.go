@@ -68,6 +68,8 @@ func createStreamMaps(conf dataplane.Configuration) []shared.Map {
 
 		socket := emptyStringSocket
 
+		// TLSPassthroughServers currently only support a single backend,
+		// so we use the first (and only) upstream
 		if len(server.Upstreams) > 0 {
 			upstreamName := server.Upstreams[0].Name
 			if u, ok := upstreams[upstreamName]; ok && len(u.Endpoints) > 0 {
