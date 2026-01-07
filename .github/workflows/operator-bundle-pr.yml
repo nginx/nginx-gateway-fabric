@@ -27,6 +27,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
@@ -37,15 +38,29 @@ jobs:
 
       - name: Install operator-sdk
         run: |
-          OPERATOR_SDK_VERSION=v1.42.0 # renovate: datasource=github-tags depName=operator-framework/operator-sdk
-          curl -sSLo /tmp/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk_linux-amd64
+          # renovate: datasource=github-tags depName=operator-framework/operator-sdk
+          OPERATOR_SDK_VERSION="v1.42.0"
+
+          # Remove any existing installation
+          sudo rm -f /usr/local/bin/operator-sdk
+
+          # Download with redirect following and fail on error
+          curl -sSL --fail -o /tmp/operator-sdk "https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk_linux_amd64"
+
+          # Verify it's a binary, not HTML/text
+          file /tmp/operator-sdk
+
+          # Make executable and move to PATH
           chmod +x /tmp/operator-sdk
           sudo mv /tmp/operator-sdk /usr/local/bin/operator-sdk
+
+          # Verify installation
+          operator-sdk version
 
       - name: Generate Bundle
         working-directory: operators
         run: |
-          make bundle-release
+          make bundle-release VERSION=${{ inputs.operator-version }}
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
@@ -68,7 +83,6 @@ jobs:
             - Added OpenShift compatibility annotations
 
       - name: Checkout certified-operators repo
-        if: ${{ inputs.submit-to-redhat }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           token: ${{ secrets.NGINX_PAT }}
@@ -76,7 +90,6 @@ jobs:
           path: certified-operators
 
       - name: Update certified-operators repo
-        if: ${{ inputs.submit-to-redhat }}
         working-directory: certified-operators/operators/nginx-gateway-fabric-operator
         run: |
           mkdir v${{ inputs.operator-version }}
@@ -84,7 +97,6 @@ jobs:
           cp -R ${{ github.workspace }}/operators/bundle/metadata v${{ inputs.operator-version }}/
 
       - name: Commit and push to certified-operators
-        if: ${{ inputs.submit-to-redhat }}
         uses: stefanzweifel/git-auto-commit-action@28e16e81777b558cc906c8750092100bbb34c5e3 # v7.0.0
         with:
           commit_message: operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})
@@ -96,7 +108,7 @@ jobs:
           repository: certified-operators
 
       - name: Create PR to RedHat certified-operators
-        if: ${{ inputs.submit-to-redhat }}
+        if: ${{ inputs.submit-to-redhat == 'true' }}
         working-directory: certified-operators
         run: |
           gh pr create --title "operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})" --body "Update nginx-gateway-fabric-operator to v${{ inputs.operator-version }}" --head nginx-bot:update-nginx-gateway-fabric-operator-to-v${{ inputs.operator-version }} --base main --repo redhat-openshift-ecosystem/certified-operators

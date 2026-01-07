@@ -48,31 +48,34 @@ jobs:
               ;;
           esac
 
-      - name: Set component ID environment variable
-        run: |
-          case "${{ inputs.image }}" in
-            ngf)
-              echo "COMPONENT_ID=${{ secrets.CERTIFICATION_COMPONENT_ID_NGF }}" >> $GITHUB_ENV
-              ;;
-            nginx)
-              echo "COMPONENT_ID=${{ secrets.CERTIFICATION_COMPONENT_ID_NGINX }}" >> $GITHUB_ENV
-              ;;
-            operator)
-              echo "COMPONENT_ID=${{ secrets.CERTIFICATION_COMPONENT_ID_OPERATOR }}" >> $GITHUB_ENV
-              ;;
-          esac
-
       - name: Install preflight
         run: |
-          PREFLIGHT_VERSION=1.14.1 # renovate: datasource=github-tags depName=redhat-openshift-ecosystem/openshift-preflight
+          PREFLIGHT_VERSION=1.15.2 # renovate: datasource=github-tags depName=redhat-openshift-ecosystem/openshift-preflight
           curl -sSLo /tmp/preflight https://github.com/redhat-openshift-ecosystem/openshift-preflight/releases/download/${PREFLIGHT_VERSION}/preflight-linux-amd64
           chmod +x /tmp/preflight
           sudo mv /tmp/preflight /usr/local/bin/preflight
           preflight version
 
-      - name: Run preflight check${{ !inputs.dry_run && ' and submit' || '' }}
+      - name: Run preflight check for ngf${{ !inputs.dry_run && ' and submit' || '' }}
+        if: inputs.image == 'ngf'
         run: |
           preflight check container ${{ steps.image.outputs.ref }} \
             --pyxis-api-token="${{ secrets.PYXIS_API_TOKEN }}" \
-            --certification-component-id="${COMPONENT_ID}" \
+            --certification-component-id="${{ secrets.CERTIFICATION_COMPONENT_ID_NGF }}" \
+            ${{ !inputs.dry_run && '--submit' || '' }}
+
+      - name: Run preflight check for nginx${{ !inputs.dry_run && ' and submit' || '' }}
+        if: inputs.image == 'nginx'
+        run: |
+          preflight check container ${{ steps.image.outputs.ref }} \
+            --pyxis-api-token="${{ secrets.PYXIS_API_TOKEN }}" \
+            --certification-component-id="${{ secrets.CERTIFICATION_COMPONENT_ID_NGINX }}" \
+            ${{ !inputs.dry_run && '--submit' || '' }}
+
+      - name: Run preflight check for operator${{ !inputs.dry_run && ' and submit' || '' }}
+        if: inputs.image == 'operator'
+        run: |
+          preflight check container ${{ steps.image.outputs.ref }} \
+            --pyxis-api-token="${{ secrets.PYXIS_API_TOKEN }}" \
+            --certification-component-id="${{ secrets.CERTIFICATION_COMPONENT_ID_OPERATOR }}" \
             ${{ !inputs.dry_run && '--submit' || '' }}
