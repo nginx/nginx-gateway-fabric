@@ -6,7 +6,6 @@ import (
 	gotemplate "text/template"
 
 	"github.com/go-logr/logr"
-
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
@@ -52,20 +51,15 @@ func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []str
 	for _, u := range conf.StreamUpstreams {
 		upstreams[u.Name] = u
 	}
-	for _, u := range conf.TCPUpstreams {
-		upstreams[u.Name] = u
-	}
-	for _, u := range conf.UDPUpstreams {
-		upstreams[u.Name] = u
-	}
 
 	for _, server := range conf.TLSPassthroughServers {
-		if u, ok := upstreams[server.UpstreamName]; ok && server.UpstreamName != "" {
-			if server.Hostname != "" && len(u.Endpoints) > 0 {
+		if len(server.Upstreams) > 0 {
+			upstreamName := server.Upstreams[0].Name
+			if u, ok := upstreams[upstreamName]; ok && server.Hostname != "" && len(u.Endpoints) > 0 {
 				streamServer := stream.Server{
 					Listen:     getSocketNameTLS(server.Port, server.Hostname),
 					StatusZone: server.Hostname,
-					ProxyPass:  server.UpstreamName,
+					ProxyPass:  upstreamName,
 					IsSocket:   true,
 				}
 				// set rewriteClientIP settings as this is a socket stream server
@@ -118,12 +112,11 @@ func processLayer4Servers(
 			continue
 		}
 
-		if server.UpstreamName == "" {
+		if len(server.Upstreams) == 0 {
 			logger.V(1).Info(
-				fmt.Sprintf("%s Server skipped - upstream name not found", protocol),
+				fmt.Sprintf("%s Server skipped - no upstreams", protocol),
 				"serverIndex", i,
 				"port", server.Port,
-				"upstreamName", server.UpstreamName,
 			)
 			continue
 		}
@@ -143,19 +136,19 @@ func processLayer4Servers(
 					fmt.Sprintf("%s Server skipped - no valid upstreams with endpoints", protocol),
 					"serverIndex", i,
 					"port", server.Port,
-					"upstreamName", server.UpstreamName,
 				)
 				continue
 			}
 		} else {
-			if u, ok := upstreams[server.UpstreamName]; ok && len(u.Endpoints) > 0 {
-				proxyPass = server.UpstreamName
+			upstreamName := server.Upstreams[0].Name
+			if u, ok := upstreams[upstreamName]; ok && len(u.Endpoints) > 0 {
+				proxyPass = upstreamName
 			} else {
 				logger.V(1).Info(
 					fmt.Sprintf("%s Server skipped - upstream not found or no endpoints", protocol),
 					"serverIndex", i,
 					"port", server.Port,
-					"upstreamName", server.UpstreamName,
+					"upstreamName", upstreamName,
 				)
 				continue
 			}
@@ -232,7 +225,7 @@ func createSplitClientForL4Server(server dataplane.Layer4VirtualServer) *stream.
 	availablePercentage := float64(100)
 
 	// Process all upstreams except the last one
-	for i := range len(server.Upstreams) - 1 {
+	for i := 0; i < len(server.Upstreams)-1; i++ {
 		upstream := server.Upstreams[i]
 		percentage := percentOf(upstream.Weight, totalWeight)
 		availablePercentage -= percentage

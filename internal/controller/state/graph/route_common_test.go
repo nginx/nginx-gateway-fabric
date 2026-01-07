@@ -4480,9 +4480,11 @@ func TestL4RouteSpec_GetBackendRefs(t *testing.T) {
 			},
 		},
 		{
-			name:     "empty route with no backends",
-			spec:     L4RouteSpec{},
-			expected: []BackendRef{},
+			name: "empty route with no backends returns zero-value BackendRef",
+			spec: L4RouteSpec{},
+			expected: []BackendRef{
+				{}, // Expect a single zero-value BackendRef
+			},
 		},
 		{
 			name: "BackendRefs takes precedence over BackendRef",
@@ -4527,70 +4529,6 @@ func TestL4RouteSpec_GetBackendRefs(t *testing.T) {
 			g := NewWithT(t)
 
 			result := test.spec.GetBackendRefs()
-			g.Expect(result).To(Equal(test.expected))
-		})
-	}
-}
-
-func TestL4RouteSpec_GetPrimaryBackendRef(t *testing.T) {
-	t.Parallel()
-
-	svc1 := types.NamespacedName{Namespace: "test", Name: "svc1"}
-	svc2 := types.NamespacedName{Namespace: "test", Name: "svc2"}
-
-	tests := []struct {
-		name     string
-		spec     L4RouteSpec
-		expected BackendRef
-	}{
-		{
-			name: "multi-backend route returns first BackendRef",
-			spec: L4RouteSpec{
-				BackendRefs: []BackendRef{
-					{SvcNsName: svc1, Valid: true, Weight: 80},
-					{SvcNsName: svc2, Valid: true, Weight: 20},
-				},
-			},
-			expected: BackendRef{SvcNsName: svc1, Valid: true, Weight: 80},
-		},
-		{
-			name: "single backend route returns BackendRef",
-			spec: L4RouteSpec{
-				BackendRef: BackendRef{
-					SvcNsName: svc1,
-					Valid:     true,
-					Weight:    1,
-				},
-			},
-			expected: BackendRef{SvcNsName: svc1, Valid: true, Weight: 1},
-		},
-		{
-			name:     "empty route returns zero value",
-			spec:     L4RouteSpec{},
-			expected: BackendRef{},
-		},
-		{
-			name: "BackendRefs takes precedence",
-			spec: L4RouteSpec{
-				BackendRefs: []BackendRef{
-					{SvcNsName: svc1, Valid: true, Weight: 100},
-				},
-				BackendRef: BackendRef{
-					SvcNsName: svc2,
-					Valid:     true,
-					Weight:    1,
-				},
-			},
-			expected: BackendRef{SvcNsName: svc1, Valid: true, Weight: 100},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			result := test.spec.GetPrimaryBackendRef()
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}

@@ -77,7 +77,7 @@ func PrepareRouteRequests(
 			reqs = append(reqs, req)
 
 		default:
-			continue
+			panic(fmt.Sprintf("Unknown L4 route source type: %T", r.Source))
 		}
 	}
 

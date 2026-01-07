@@ -131,28 +131,13 @@ type L4RouteSpec struct {
 
 // GetBackendRefs returns all backend references for this L4Route.
 // For TCPRoute/UDPRoute with multiple backends, it returns BackendRefs.
-// For TLSRoute or single backend routes, it returns a slice containing BackendRef.
-// Note: Returns BackendRef even if not Valid, as we need to check InvalidForGateways.
+// For TLSRoute or single-backend routes, it returns a slice containing BackendRef.
 func (spec *L4RouteSpec) GetBackendRefs() []BackendRef {
 	if len(spec.BackendRefs) > 0 {
 		return spec.BackendRefs
 	}
-	// Check if BackendRef has been set (even if invalid)
-	// An unset BackendRef will have empty SvcNsName and InvalidForGateways
-	if spec.BackendRef.SvcNsName.Name != "" || len(spec.BackendRef.InvalidForGateways) > 0 {
-		return []BackendRef{spec.BackendRef}
-	}
-	return []BackendRef{}
-}
-
-// GetPrimaryBackendRef returns the primary backend reference.
-// For multi-backend routes, it returns the first BackendRef.
-// For single backend routes, it returns BackendRef.
-func (spec *L4RouteSpec) GetPrimaryBackendRef() BackendRef {
-	if len(spec.BackendRefs) > 0 {
-		return spec.BackendRefs[0]
-	}
-	return spec.BackendRef
+	// For single-backend routes, always return the BackendRef.
+	return []BackendRef{spec.BackendRef}
 }
 
 // L7Route is the generic type for the layer 7 routes, HTTPRoute and GRPCRoute.
@@ -1446,7 +1431,7 @@ type l4RouteConfig struct {
 	source           client.Object
 	refGrantResolver func(resource toResource) bool
 	namespace        string
-	routeType        string // "TCP" or "UDP"
+	routeType        RouteType
 	parentRefs       []v1.ParentReference
 	rules            []l4RouteRule
 }

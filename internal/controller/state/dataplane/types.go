@@ -39,10 +39,6 @@ type Configuration struct {
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
-	// TCPUpstreams holds all unique TCP Upstreams
-	TCPUpstreams []Upstream
-	// UDPUpstreams holds all unique UDP Upstreams
-	UDPUpstreams []Upstream
 	// BackendGroups holds all unique BackendGroups.
 	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
@@ -51,7 +47,7 @@ type Configuration struct {
 	Upstreams []Upstream
 	// NginxPlus specifies NGINX Plus additional settings.
 	NginxPlus NginxPlus
-	// StreamUpstreams holds all unique stream Upstreams
+	// StreamUpstreams holds all unique stream Upstreams (TLS, TCP, UDP)
 	StreamUpstreams []Upstream
 	// SSLServers holds all SSLServers.
 	SSLServers []VirtualServer
@@ -118,9 +114,7 @@ type Layer4Upstream struct {
 type Layer4VirtualServer struct {
 	// Hostname is the hostname of the server.
 	Hostname string
-	// UpstreamName refers to the name of the upstream that is used (single backend case).
-	UpstreamName string
-	// Upstreams holds multiple upstreams with weights (multi-backend case).
+	// Upstreams holds upstreams with weights. For single backend cases, the list contains one entry.
 	Upstreams []Layer4Upstream
 	// Port is the port of the server.
 	Port int32

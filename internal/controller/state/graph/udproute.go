@@ -26,7 +26,7 @@ func buildUDPRoute(
 		namespace:        udpRoute.Namespace,
 		parentRefs:       udpRoute.Spec.ParentRefs,
 		rules:            rules,
-		routeType:        string(RouteTypeUDP),
+		routeType:        RouteTypeUDP,
 		refGrantResolver: refGrantResolver,
 	}
 

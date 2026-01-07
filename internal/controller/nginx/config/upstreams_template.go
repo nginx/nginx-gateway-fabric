@@ -58,7 +58,7 @@ upstream {{ $u.Name }} {
     {{- else }}
         {{ range $server := $u.Servers }}
     server {{ $server.Address }}
-            {{- if ne $server.Weight 0 }}{{ if ne $server.Weight 1 }} weight={{ $server.Weight }}{{ end }}{{ end }}
+            {{- if and (ne $server.Weight 0) (ne $server.Weight 1) }} weight={{ $server.Weight }}{{ end }}
             {{- if $server.Resolve }} resolve{{ end }};
         {{- end }}
     {{- end }}

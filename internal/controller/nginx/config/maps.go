@@ -68,8 +68,11 @@ func createStreamMaps(conf dataplane.Configuration) []shared.Map {
 
 		socket := emptyStringSocket
 
-		if u, ok := upstreams[server.UpstreamName]; ok && server.UpstreamName != "" && len(u.Endpoints) > 0 {
-			socket = getSocketNameTLS(server.Port, server.Hostname)
+		if len(server.Upstreams) > 0 {
+			upstreamName := server.Upstreams[0].Name
+			if u, ok := upstreams[upstreamName]; ok && len(u.Endpoints) > 0 {
+				socket = getSocketNameTLS(server.Port, server.Hostname)
+			}
 		}
 
 		if server.IsDefault {

@@ -206,19 +206,25 @@ func TestExecuteStreamMaps(t *testing.T) {
 	conf := dataplane.Configuration{
 		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
 			{
-				Hostname:     "example.com",
-				Port:         8081,
-				UpstreamName: "backend1",
+				Hostname: "example.com",
+				Port:     8081,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "example.com",
-				Port:         8080,
-				UpstreamName: "backend1",
+				Hostname: "example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "cafe.example.com",
-				Port:         8080,
-				UpstreamName: "backend2",
+				Hostname: "cafe.example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend2", Weight: 0},
+				},
 			},
 		},
 		SSLServers: []dataplane.VirtualServer{
@@ -274,38 +280,50 @@ func TestCreateStreamMaps(t *testing.T) {
 	conf := dataplane.Configuration{
 		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
 			{
-				Hostname:     "example.com",
-				Port:         8081,
-				UpstreamName: "backend1",
+				Hostname: "example.com",
+				Port:     8081,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "example.com",
-				Port:         8080,
-				UpstreamName: "backend1",
+				Hostname: "example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "cafe.example.com",
-				Port:         8080,
-				UpstreamName: "backend2",
+				Hostname: "cafe.example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend2", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "dne.example.com",
-				Port:         8080,
-				UpstreamName: "backend-dne",
+				Hostname: "dne.example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend-dne", Weight: 0},
+				},
 			},
 			{
-				Port:     8082,
-				Hostname: "",
+				Port:      8082,
+				Hostname:  "",
+				Upstreams: []dataplane.Layer4Upstream{},
 			},
 			{
 				Hostname:  "*.example.com",
 				Port:      8080,
 				IsDefault: true,
+				Upstreams: []dataplane.Layer4Upstream{},
 			},
 			{
-				Hostname:     "no-endpoints.example.com",
-				Port:         8080,
-				UpstreamName: "backend3",
+				Hostname: "no-endpoints.example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend3", Weight: 0},
+				},
 			},
 		},
 		SSLServers: []dataplane.VirtualServer{
