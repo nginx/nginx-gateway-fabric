@@ -191,6 +191,35 @@ func convertSnippetsFilter(filter *graph.SnippetsFilter) SnippetsFilter {
 	return result
 }
 
+func convertAuthenticationFilter(
+	filter *graph.AuthenticationFilter,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
+) *AuthenticationFilter {
+	result := &AuthenticationFilter{}
+
+	// Do not convert invalid filters; graph validation will have emitted a condition.
+	if filter == nil || !filter.Valid {
+		return result
+	}
+
+	if specBasic := filter.Source.Spec.Basic; specBasic != nil {
+		// It is safe to assume the referenced secret exists and is valid due to prior validation.
+		referencedSecret := referencedSecrets[types.NamespacedName{
+			Namespace: filter.Source.Namespace,
+			Name:      specBasic.SecretRef.Name,
+		}]
+
+		result.Basic = &AuthBasic{
+			SecretName:      specBasic.SecretRef.Name,
+			SecretNamespace: referencedSecret.Source.Namespace,
+			Data:            referencedSecret.Source.Data[graph.AuthKey],
+			Realm:           specBasic.Realm,
+		}
+	}
+
+	return result
+}
+
 func convertDNSResolverAddresses(addresses []ngfAPIv1alpha2.DNSResolverAddress) []string {
 	if len(addresses) == 0 {
 		return nil

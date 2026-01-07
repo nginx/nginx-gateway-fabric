@@ -86,22 +86,23 @@ type ChangeProcessorImpl struct {
 // NewChangeProcessorImpl creates a new ChangeProcessorImpl for the Gateway resource with the configured namespace name.
 func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 	clusterStore := graph.ClusterState{
-		GatewayClasses:     make(map[types.NamespacedName]*v1.GatewayClass),
-		Gateways:           make(map[types.NamespacedName]*v1.Gateway),
-		HTTPRoutes:         make(map[types.NamespacedName]*v1.HTTPRoute),
-		Services:           make(map[types.NamespacedName]*apiv1.Service),
-		Namespaces:         make(map[types.NamespacedName]*apiv1.Namespace),
-		ReferenceGrants:    make(map[types.NamespacedName]*v1beta1.ReferenceGrant),
-		Secrets:            make(map[types.NamespacedName]*apiv1.Secret),
-		CRDMetadata:        make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
-		BackendTLSPolicies: make(map[types.NamespacedName]*v1.BackendTLSPolicy),
-		ConfigMaps:         make(map[types.NamespacedName]*apiv1.ConfigMap),
-		NginxProxies:       make(map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy),
-		GRPCRoutes:         make(map[types.NamespacedName]*v1.GRPCRoute),
-		TLSRoutes:          make(map[types.NamespacedName]*v1alpha2.TLSRoute),
-		NGFPolicies:        make(map[graph.PolicyKey]policies.Policy),
-		SnippetsFilters:    make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
-		InferencePools:     make(map[types.NamespacedName]*inference.InferencePool),
+		GatewayClasses:        make(map[types.NamespacedName]*v1.GatewayClass),
+		Gateways:              make(map[types.NamespacedName]*v1.Gateway),
+		HTTPRoutes:            make(map[types.NamespacedName]*v1.HTTPRoute),
+		Services:              make(map[types.NamespacedName]*apiv1.Service),
+		Namespaces:            make(map[types.NamespacedName]*apiv1.Namespace),
+		ReferenceGrants:       make(map[types.NamespacedName]*v1beta1.ReferenceGrant),
+		Secrets:               make(map[types.NamespacedName]*apiv1.Secret),
+		CRDMetadata:           make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
+		BackendTLSPolicies:    make(map[types.NamespacedName]*v1.BackendTLSPolicy),
+		ConfigMaps:            make(map[types.NamespacedName]*apiv1.ConfigMap),
+		NginxProxies:          make(map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy),
+		GRPCRoutes:            make(map[types.NamespacedName]*v1.GRPCRoute),
+		TLSRoutes:             make(map[types.NamespacedName]*v1alpha2.TLSRoute),
+		NGFPolicies:           make(map[graph.PolicyKey]policies.Policy),
+		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
+		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter),
+		InferencePools:        make(map[types.NamespacedName]*inference.InferencePool),
 	}
 
 	processor := &ChangeProcessorImpl{
@@ -224,6 +225,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.SnippetsFilter{}),
 				store:     newObjectStoreMapAdapter(clusterStore.SnippetsFilters),
 				predicate: nil, // we always want to write status to SnippetsFilters so we don't filter them out
+			},
+			{
+				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.AuthenticationFilter{}),
+				store:     newObjectStoreMapAdapter(clusterStore.AuthenticationFilters),
+				predicate: nil, // we always want to write status to AuthenticationFilters so we don't filter them out
 			},
 		},
 	)

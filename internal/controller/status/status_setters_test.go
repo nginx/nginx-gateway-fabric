@@ -1613,6 +1613,7 @@ func TestPolicyStatusEqual(t *testing.T) {
 }
 
 func TestNewSnippetsFilterStatusSetter(t *testing.T) {
+	t.Parallel()
 	const (
 		controllerName      = "controller"
 		otherControllerName = "other-controller"
@@ -1738,6 +1739,7 @@ func TestNewSnippetsFilterStatusSetter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			setter := newSnippetsFilterStatusSetter(test.newStatus, controllerName)
@@ -1747,6 +1749,147 @@ func TestNewSnippetsFilterStatusSetter(t *testing.T) {
 
 			g.Expect(statusSet).To(Equal(test.expStatusSet))
 			g.Expect(sf.Status).To(Equal(test.expStatus))
+		})
+	}
+}
+
+func TestNewAuthenticationFilterStatusSetter(t *testing.T) {
+	t.Parallel()
+	const (
+		controllerName      = "controller"
+		otherControllerName = "other-controller"
+	)
+	tests := []struct {
+		name                         string
+		status, expStatus, newStatus ngfAPI.AuthenticationFilterStatus
+		expStatusSet                 bool
+	}{
+		{
+			name: "AuthenticationFilter has no status",
+			newStatus: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			expStatusSet: true,
+			expStatus: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+		},
+		{
+			name: "AuthenticationFilter has old status",
+			status: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "old condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			newStatus: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			expStatusSet: true,
+			expStatus: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+		},
+		{
+			name: "AuthenticationFilter has old status and other controller status",
+			newStatus: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			status: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						ControllerName: otherControllerName,
+						Conditions:     []metav1.Condition{{Message: "some condition"}},
+					},
+					{
+						ControllerName: controllerName,
+						Conditions:     []metav1.Condition{{Message: "old condition"}},
+					},
+				},
+			},
+			expStatus: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						ControllerName: otherControllerName,
+						Conditions:     []metav1.Condition{{Message: "some condition"}},
+					},
+					{
+						ControllerName: controllerName,
+						Conditions:     []metav1.Condition{{Message: "new condition"}},
+					},
+				},
+			},
+			expStatusSet: true,
+		},
+		{
+			name: "AuthenticationFilter has same status",
+			status: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "same condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			newStatus: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "same condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+			expStatusSet: false,
+			expStatus: ngfAPI.AuthenticationFilterStatus{
+				Controllers: []ngfAPI.ControllerStatus{
+					{
+						Conditions:     []metav1.Condition{{Message: "same condition"}},
+						ControllerName: controllerName,
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			setter := newAuthenticationFilterStatusSetter(test.newStatus, controllerName)
+			af := &ngfAPI.AuthenticationFilter{Status: test.status}
+
+			statusSet := setter(af)
+
+			g.Expect(statusSet).To(Equal(test.expStatusSet))
+			g.Expect(af.Status).To(Equal(test.expStatus))
 		})
 	}
 }
