@@ -233,12 +233,18 @@ func PrepareGatewayClassRequests(
 
 		apiConds := conditions.ConvertConditions(conds, gc.Source.Generation, transitionTime)
 
+		var suppFeatures []v1.SupportedFeature
+		// Skip reporting supported features if we are in BestEffort mode
+		if !gc.BestEffort {
+			suppFeatures = supportedFeatures(gc.ExperimentalSupported)
+		}
+
 		req := UpdateRequest{
 			NsName:       client.ObjectKeyFromObject(gc.Source),
 			ResourceType: &v1.GatewayClass{},
 			Setter: newGatewayClassStatusSetter(v1.GatewayClassStatus{
 				Conditions:        apiConds,
-				SupportedFeatures: supportedFeatures(gc.ExperimentalSupported),
+				SupportedFeatures: suppFeatures,
 			}),
 		}
 
@@ -246,6 +252,13 @@ func PrepareGatewayClassRequests(
 	}
 
 	for nsname, gwClass := range ignoredGwClasses {
+		var ignoredSuppFeatures []v1.SupportedFeature
+		// Skip reporting supported features if we are in BestEffort mode
+		// If gc is nil, we can safely populate supported features
+		if gc == nil || !gc.BestEffort {
+			ignoredSuppFeatures = supportedFeatures(false)
+		}
+
 		req := UpdateRequest{
 			NsName:       nsname,
 			ResourceType: &v1.GatewayClass{},
@@ -255,7 +268,7 @@ func PrepareGatewayClassRequests(
 					gwClass.Generation,
 					transitionTime,
 				),
-				SupportedFeatures: supportedFeatures(false),
+				SupportedFeatures: ignoredSuppFeatures,
 			}),
 		}
 
