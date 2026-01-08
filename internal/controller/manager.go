@@ -673,12 +673,10 @@ func registerControllers(
 				options: []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
-				requireCRDCheck: true,
-				crdGVK: &schema.GroupVersionKind{
-					Group:   "x-k8s.io",
-					Version: "v1",
-					Kind:    "InferencePool",
-				},
+				// Skip CRD check for InferenceExtension as it uses a non-standard API group (x-k8s.io)
+				// that may not be properly discoverable via the standard API discovery mechanism.
+				// The InferenceExtension flag itself controls whether this controller is enabled.
+				requireCRDCheck: false,
 			},
 		}
 		controllerRegCfgs = append(controllerRegCfgs, inferenceExt...)
@@ -942,7 +940,7 @@ func prepareFirstEventBatchPreparerArgs(
 		}
 	}
 
-	if cfg.InferenceExtension && discoveredCRDs["InferencePool"] {
+	if cfg.InferenceExtension {
 		objectLists = append(objectLists, &inference.InferencePoolList{})
 	}
 
