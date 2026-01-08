@@ -53,6 +53,10 @@ const (
 	// as another route.
 	RouteReasonHostnameConflict v1.RouteConditionReason = "HostnameConflict"
 
+	// RouteReasonMultipleRoutesOnListener is used with the "Accepted" condition when multiple
+	// L4 Routes are attached to the same listener, which is not supported.
+	RouteReasonMultipleRoutesOnListener v1.RouteConditionReason = "MultipleRoutesOnListener"
+
 	// RouteReasonUnsupportedConfiguration is used when the associated Gateway does not support the Route.
 	// Used with Accepted (false).
 	RouteReasonUnsupportedConfiguration v1.RouteConditionReason = "UnsupportedConfiguration"
@@ -427,6 +431,17 @@ func NewRouteHostnameConflict() Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonHostnameConflict),
 		Message: "Hostname(s) conflict with another Route of the same kind on the same port",
+	}
+}
+
+// NewRouteMultipleRoutesOnListener returns a Condition that indicates that the Route is not
+// accepted because of multiple.L4 Routes attached to the same listener, which is not supported.
+func NewRouteMultipleRoutesOnListener() Condition {
+	return Condition{
+		Type:    string(v1.RouteConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(RouteReasonMultipleRoutesOnListener),
+		Message: "Multiple L4 Routes are attached to the same listener, which is not supported",
 	}
 }
 

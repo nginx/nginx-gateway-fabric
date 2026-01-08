@@ -28,12 +28,26 @@ type Upstream struct {
 type UpstreamServer struct {
 	Address string
 	Resolve bool
+	Weight  int32 // Weight for load balancing, default 1
+}
+
+// SplitClient holds configuration for a stream split_clients directive.
+type SplitClient struct {
+	VariableName  string
+	Distributions []SplitClientDistribution
+}
+
+// SplitClientDistribution holds configuration for a split_clients distribution.
+type SplitClientDistribution struct {
+	Percent string
+	Value   string
 }
 
 // ServerConfig holds configuration for a stream server and IP family to be used by NGINX.
 type ServerConfig struct {
-	DNSResolver *dataplane.DNSResolverConfig
-	Servers     []Server
-	IPFamily    shared.IPFamily
-	Plus        bool
+	DNSResolver  *dataplane.DNSResolverConfig
+	Servers      []Server
+	SplitClients []SplitClient
+	IPFamily     shared.IPFamily
+	Plus         bool
 }

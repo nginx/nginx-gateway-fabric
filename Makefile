@@ -24,7 +24,7 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION = v2.7.2
+GOLANGCI_LINT_VERSION = v2.8.0
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.35.0
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
@@ -38,7 +38,7 @@ NODE_VERSION = 24
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
 CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
-HELM_SCHEMA_VERSION = 0.18.1
+HELM_SCHEMA_VERSION = 0.20.0
 
 # variables that can be overridden by the user
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric

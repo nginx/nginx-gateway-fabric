@@ -98,6 +98,22 @@ func fromTLSRoute(namespace string) fromResource {
 	}
 }
 
+func fromTCPRoute(namespace string) fromResource {
+	return fromResource{
+		group:     v1.GroupName,
+		kind:      kinds.TCPRoute,
+		namespace: namespace,
+	}
+}
+
+func fromUDPRoute(namespace string) fromResource {
+	return fromResource{
+		group:     v1.GroupName,
+		kind:      kinds.UDPRoute,
+		namespace: namespace,
+	}
+}
+
 // newReferenceGrantResolver creates a new referenceGrantResolver.
 func newReferenceGrantResolver(refGrants map[types.NamespacedName]*v1beta1.ReferenceGrant) *referenceGrantResolver {
 	allowed := make(map[allowedReference]struct{})

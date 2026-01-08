@@ -78,6 +78,8 @@ func BuildConfiguration(
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
 		TLSPassthroughServers: buildPassthroughServers(gateway),
+		TCPServers:            buildL4Servers(logger, gateway, v1.TCPProtocolType),
+		UDPServers:            buildL4Servers(logger, gateway, v1.UDPProtocolType),
 		Upstreams:             upstreams,
 		StreamUpstreams: buildStreamUpstreams(
 			ctx,
@@ -144,9 +146,14 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 					foundRouteMatchingListenerHostname = true
 				}
 				passthroughServersMap[key] = append(passthroughServersMap[key], Layer4VirtualServer{
-					Hostname:     h,
-					UpstreamName: r.Spec.BackendRef.ServicePortReference(),
-					Port:         l.Source.Port,
+					Hostname: h,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   r.Spec.BackendRef.ServicePortReference(),
+							Weight: 0, // TLSRoute doesn't support weights
+						},
+					},
+					Port: l.Source.Port,
 				})
 			}
 		}
@@ -156,11 +163,13 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 					Hostname:  string(*l.Source.Hostname),
 					IsDefault: true,
 					Port:      l.Source.Port,
+					Upstreams: []Layer4Upstream{},
 				})
 			} else {
 				listenerPassthroughServers = append(listenerPassthroughServers, Layer4VirtualServer{
-					Hostname: "",
-					Port:     l.Source.Port,
+					Hostname:  "",
+					Port:      l.Source.Port,
+					Upstreams: []Layer4Upstream{},
 				})
 			}
 		}
@@ -176,6 +185,66 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 	return passthroughServers
 }
 
+// buildL4Servers builds Layer4 servers (TCP or UDP) from routes attached to listeners.
+func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.ProtocolType) []Layer4VirtualServer {
+	var servers []Layer4VirtualServer
+	protocolName := string(protocol)
+
+	for _, l := range gateway.Listeners {
+		if !l.Valid || l.Source.Protocol != protocol {
+			continue
+		}
+
+		for _, r := range l.L4Routes {
+			if !r.Valid {
+				continue
+			}
+
+			backendRefs := r.Spec.GetBackendRefs()
+
+			if len(backendRefs) == 0 {
+				logger.V(1).Info("Route has no valid backend references, skipping",
+					"route", r.Source.GetName(),
+					"protocol", protocolName,
+				)
+				continue
+			}
+
+			var upstreams []Layer4Upstream
+			for _, br := range backendRefs {
+				if !br.Valid {
+					continue
+				}
+
+				upstreamName := br.ServicePortReference()
+
+				upstreams = append(upstreams, Layer4Upstream{
+					Name:   upstreamName,
+					Weight: br.Weight,
+				})
+			}
+
+			if len(upstreams) == 0 {
+				logger.V(1).Info("No valid upstreams for route, skipping",
+					"route", r.Source.GetName(),
+					"protocol", protocolName,
+				)
+				continue
+			}
+
+			server := Layer4VirtualServer{
+				Hostname:  "", // Layer4 doesn't use hostnames
+				Upstreams: upstreams,
+				Port:      l.Source.Port,
+			}
+
+			servers = append(servers, server)
+		}
+	}
+
+	return servers
+}
+
 // buildStreamUpstreams builds all stream upstreams.
 func buildStreamUpstreams(
 	ctx context.Context,
@@ -189,8 +258,18 @@ func buildStreamUpstreams(
 	// We use a map to deduplicate them.
 	uniqueUpstreams := make(map[string]Upstream)
 
+	gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
+	allowedAddressType := getAllowedAddressType(ipFamily)
+
+	// Supported protocols for stream upstreams
+	supportedProtocols := map[v1.ProtocolType]bool{
+		v1.TLSProtocolType: true,
+		v1.TCPProtocolType: true,
+		v1.UDPProtocolType: true,
+	}
+
 	for _, l := range gateway.Listeners {
-		if !l.Valid || l.Source.Protocol != v1.TLSProtocolType {
+		if !l.Valid || !supportedProtocols[l.Source.Protocol] {
 			continue
 		}
 
@@ -199,43 +278,47 @@ func buildStreamUpstreams(
 				continue
 			}
 
-			br := route.Spec.BackendRef
-
-			if !br.Valid {
+			backendRefs := route.Spec.GetBackendRefs()
+			if len(backendRefs) == 0 {
 				continue
 			}
 
-			gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
-			if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
-				continue
-			}
+			// Process each backend reference
+			for _, br := range backendRefs {
+				if !br.Valid {
+					continue
+				}
 
-			upstreamName := br.ServicePortReference()
+				if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+					continue
+				}
 
-			if _, exist := uniqueUpstreams[upstreamName]; exist {
-				continue
-			}
+				upstreamName := br.ServicePortReference()
 
-			var errMsg string
+				if _, exist := uniqueUpstreams[upstreamName]; exist {
+					continue
+				}
 
-			allowedAddressType := getAllowedAddressType(ipFamily)
+				var errMsg string
 
-			eps, err := resolveUpstreamEndpoints(
-				ctx,
-				logger,
-				br,
-				serviceResolver,
-				referencedServices,
-				allowedAddressType,
-			)
-			if err != nil {
-				errMsg = err.Error()
-			}
+				// Use resolveUpstreamEndpoints to handle both regular and ExternalName services
+				eps, err := resolveUpstreamEndpoints(
+					ctx,
+					logger,
+					br,
+					serviceResolver,
+					referencedServices,
+					allowedAddressType,
+				)
+				if err != nil {
+					errMsg = err.Error()
+				}
 
-			uniqueUpstreams[upstreamName] = Upstream{
-				Name:      upstreamName,
-				Endpoints: eps,
-				ErrorMsg:  errMsg,
+				uniqueUpstreams[upstreamName] = Upstream{
+					Name:      upstreamName,
+					Endpoints: eps,
+					ErrorMsg:  errMsg,
+				}
 			}
 		}
 	}
@@ -468,7 +551,9 @@ func buildServers(
 	}
 
 	for _, l := range gateway.Listeners {
-		if l.Source.Protocol == v1.TLSProtocolType {
+		if l.Source.Protocol == v1.TLSProtocolType ||
+			l.Source.Protocol == v1.TCPProtocolType ||
+			l.Source.Protocol == v1.UDPProtocolType {
 			continue
 		}
 		if l.Valid {

@@ -2320,6 +2320,126 @@ func TestBindL4RouteToListeners(t *testing.T) {
 			},
 			name: "route still allowed if backendRef failure conditions exist",
 		},
+		{
+			route: func() *L4Route {
+				tcpRoute := &v1alpha2.TCPRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "tcp-route-2",
+					},
+					Spec: v1alpha2.TCPRouteSpec{
+						CommonRouteSpec: gatewayv1.CommonRouteSpec{
+							ParentRefs: []gatewayv1.ParentReference{
+								{
+									Name:        gatewayv1.ObjectName(gw.Name),
+									SectionName: helpers.GetPointer[gatewayv1.SectionName]("tcp-listener"),
+								},
+							},
+						},
+					},
+				}
+				return &L4Route{
+					Source:     tcpRoute,
+					Valid:      true,
+					Attachable: true,
+					Spec: L4RouteSpec{
+						Hostnames: []gatewayv1.Hostname{}, // Empty hostnames for TCP route
+					},
+					ParentRefs: []ParentRef{
+						{
+							Idx:         0,
+							Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
+							SectionName: helpers.GetPointer[gatewayv1.SectionName]("tcp-listener"),
+						},
+					},
+				}
+			}(),
+			gateway: &Gateway{
+				Source: gw,
+				Valid:  true,
+				DeploymentName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "gateway",
+				},
+				Listeners: []*Listener{
+					{
+						Name: "tcp-listener",
+						GatewayName: types.NamespacedName{
+							Namespace: "test",
+							Name:      "gateway",
+						},
+						Source: gatewayv1.Listener{
+							Name:     gatewayv1.SectionName("tcp-listener"),
+							Protocol: gatewayv1.TCPProtocolType,
+							Port:     9000,
+						},
+						SupportedKinds: []gatewayv1.RouteGroupKind{
+							{Kind: gatewayv1.Kind("TCPRoute")},
+						},
+						Valid:      true,
+						Attachable: true,
+						Routes:     map[RouteKey]*L7Route{},
+						L4Routes: map[L4RouteKey]*L4Route{
+							// Pre-populate with an existing TCP route
+							{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tcp-route-1"}}: {
+								Source: &v1alpha2.TCPRoute{
+									ObjectMeta: metav1.ObjectMeta{
+										Namespace: "test",
+										Name:      "tcp-route-1",
+									},
+								},
+								Valid: true,
+							},
+						},
+					},
+				},
+			},
+			expectedSectionNameRefs: []ParentRef{
+				{
+					Idx:         0,
+					Gateway:     &ParentRefGateway{NamespacedName: client.ObjectKeyFromObject(gw)},
+					SectionName: helpers.GetPointer[gatewayv1.SectionName]("tcp-listener"),
+					Attachment: &ParentRefAttachmentStatus{
+						Attached:          false,
+						AcceptedHostnames: map[string][]string{},
+						FailedConditions:  []conditions.Condition{conditions.NewRouteMultipleRoutesOnListener()},
+					},
+				},
+			},
+			expectedGatewayListeners: []*Listener{
+				{
+					Name: "tcp-listener",
+					GatewayName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+					Source: gatewayv1.Listener{
+						Name:     gatewayv1.SectionName("tcp-listener"),
+						Protocol: gatewayv1.TCPProtocolType,
+						Port:     9000,
+					},
+					SupportedKinds: []gatewayv1.RouteGroupKind{
+						{Kind: gatewayv1.Kind("TCPRoute")},
+					},
+					Valid:      true,
+					Attachable: true,
+					Routes:     map[RouteKey]*L7Route{},
+					L4Routes: map[L4RouteKey]*L4Route{
+						// Should still have only the original route
+						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tcp-route-1"}}: {
+							Source: &v1alpha2.TCPRoute{
+								ObjectMeta: metav1.ObjectMeta{
+									Namespace: "test",
+									Name:      "tcp-route-1",
+								},
+							},
+							Valid: true,
+						},
+					},
+				},
+			},
+			name: "listener already has a route (TCP)",
+		},
 	}
 
 	namespaces := map[types.NamespacedName]*v1.Namespace{
@@ -2375,8 +2495,10 @@ func TestBuildL4RoutesForGateways_NoGateways(t *testing.T) {
 
 	g.Expect(buildL4RoutesForGateways(
 		tlsRoutes,
+		nil, // tcpRoutes
+		nil, // udpRoutes
 		services,
-		nil,
+		nil, // gateways
 		refGrantResolver,
 	)).To(BeNil())
 }
@@ -4299,6 +4421,115 @@ func TestGetCookiePath(t *testing.T) {
 
 			result := deriveCookiePathForHTTPMatches(test.matches)
 			g.Expect(result).To(Equal(test.expectedPath))
+		})
+	}
+}
+
+func TestL4RouteSpec_GetBackendRefs(t *testing.T) {
+	t.Parallel()
+
+	svc1 := types.NamespacedName{Namespace: "test", Name: "svc1"}
+	svc2 := types.NamespacedName{Namespace: "test", Name: "svc2"}
+
+	tests := []struct {
+		name     string
+		expected []BackendRef
+		spec     L4RouteSpec
+	}{
+		{
+			name: "multi-backend route returns BackendRefs",
+			spec: L4RouteSpec{
+				BackendRefs: []BackendRef{
+					{SvcNsName: svc1, Valid: true, Weight: 80},
+					{SvcNsName: svc2, Valid: true, Weight: 20},
+				},
+			},
+			expected: []BackendRef{
+				{SvcNsName: svc1, Valid: true, Weight: 80},
+				{SvcNsName: svc2, Valid: true, Weight: 20},
+			},
+		},
+		{
+			name: "single backend route with BackendRef set",
+			spec: L4RouteSpec{
+				BackendRef: BackendRef{
+					SvcNsName: svc1,
+					Valid:     true,
+					Weight:    1,
+				},
+			},
+			expected: []BackendRef{
+				{SvcNsName: svc1, Valid: true, Weight: 1},
+			},
+		},
+		{
+			name: "single backend route with invalid BackendRef",
+			spec: L4RouteSpec{
+				BackendRef: BackendRef{
+					SvcNsName:          svc1,
+					Valid:              false,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+			expected: []BackendRef{
+				{
+					SvcNsName:          svc1,
+					Valid:              false,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+		},
+		{
+			name: "empty route with no backends returns zero-value BackendRef",
+			spec: L4RouteSpec{},
+			expected: []BackendRef{
+				{}, // Expect a single zero-value BackendRef
+			},
+		},
+		{
+			name: "BackendRefs takes precedence over BackendRef",
+			spec: L4RouteSpec{
+				BackendRefs: []BackendRef{
+					{SvcNsName: svc1, Valid: true, Weight: 100},
+				},
+				BackendRef: BackendRef{
+					SvcNsName: svc2,
+					Valid:     true,
+					Weight:    1,
+				},
+			},
+			expected: []BackendRef{
+				{SvcNsName: svc1, Valid: true, Weight: 100},
+			},
+		},
+		{
+			name: "route with InvalidForGateways should be returned",
+			spec: L4RouteSpec{
+				BackendRef: BackendRef{
+					Valid: true,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+						{Namespace: "test", Name: "gw"}: conditions.NewRouteInvalidIPFamily("mismatch"),
+					},
+				},
+			},
+			expected: []BackendRef{
+				{
+					Valid: true,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+						{Namespace: "test", Name: "gw"}: conditions.NewRouteInvalidIPFamily("mismatch"),
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := test.spec.GetBackendRefs()
+			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }

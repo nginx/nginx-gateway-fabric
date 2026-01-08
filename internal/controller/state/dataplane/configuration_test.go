@@ -1764,27 +1764,31 @@ func TestBuildConfiguration(t *testing.T) {
 				}
 				conf.TLSPassthroughServers = []Layer4VirtualServer{
 					{
-						Hostname:     "app.example.com",
-						UpstreamName: "default_secure-app_8443",
-						Port:         443,
+						Hostname: "app.example.com",
+						Upstreams: []Layer4Upstream{
+							{Name: "default_secure-app_8443", Weight: 0},
+						},
+						Port: 443,
 					},
 					{
-						Hostname:     "*.example.com",
-						UpstreamName: "",
-						Port:         443,
-						IsDefault:    true,
+						Hostname:  "*.example.com",
+						Upstreams: []Layer4Upstream{},
+						Port:      443,
+						IsDefault: true,
 					},
 					{
-						Hostname:     "app.example.com",
-						UpstreamName: "default_secure-app_8443",
-						Port:         444,
-						IsDefault:    false,
+						Hostname: "app.example.com",
+						Upstreams: []Layer4Upstream{
+							{Name: "default_secure-app_8443", Weight: 0},
+						},
+						Port:      444,
+						IsDefault: false,
 					},
 					{
-						Hostname:     "",
-						UpstreamName: "",
-						Port:         443,
-						IsDefault:    false,
+						Hostname:  "",
+						Upstreams: []Layer4Upstream{},
+						Port:      443,
+						IsDefault: false,
 					},
 				}
 				return conf
@@ -4110,28 +4114,32 @@ func TestCreatePassthroughServers(t *testing.T) {
 
 	expectedPassthroughServers := []Layer4VirtualServer{
 		{
-			Hostname:     "app.example.com",
-			UpstreamName: "default_secure-app_8443",
-			Port:         443,
-			IsDefault:    false,
+			Hostname: "app.example.com",
+			Upstreams: []Layer4Upstream{
+				{Name: "default_secure-app_8443", Weight: 0},
+			},
+			Port:      443,
+			IsDefault: false,
 		},
 		{
-			Hostname:     "cafe.example.com",
-			UpstreamName: "default_secure-app_8443",
-			Port:         443,
-			IsDefault:    false,
+			Hostname: "cafe.example.com",
+			Upstreams: []Layer4Upstream{
+				{Name: "default_secure-app_8443", Weight: 0},
+			},
+			Port:      443,
+			IsDefault: false,
 		},
 		{
-			Hostname:     "*.example.com",
-			UpstreamName: "",
-			Port:         443,
-			IsDefault:    true,
+			Hostname:  "*.example.com",
+			Upstreams: []Layer4Upstream{},
+			Port:      443,
+			IsDefault: true,
 		},
 		{
-			Hostname:     "cafe.example.com",
-			UpstreamName: "",
-			Port:         443,
-			IsDefault:    true,
+			Hostname:  "cafe.example.com",
+			Upstreams: []Layer4Upstream{},
+			Port:      443,
+			IsDefault: true,
 		},
 	}
 

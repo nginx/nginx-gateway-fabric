@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
@@ -17,19 +18,25 @@ func TestExecuteStreamServers(t *testing.T) {
 	conf := dataplane.Configuration{
 		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
 			{
-				Hostname:     "example.com",
-				Port:         8081,
-				UpstreamName: "backend1",
+				Hostname: "example.com",
+				Port:     8081,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "example.com",
-				Port:         8080,
-				UpstreamName: "backend1",
+				Hostname: "example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "cafe.example.com",
-				Port:         8080,
-				UpstreamName: "backend2",
+				Hostname: "cafe.example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend2", Weight: 0},
+				},
 			},
 		},
 		StreamUpstreams: []dataplane.Upstream{
@@ -79,19 +86,25 @@ func TestExecuteStreamServers_Plus(t *testing.T) {
 	config := dataplane.Configuration{
 		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
 			{
-				Hostname:     "example.com",
-				Port:         8081,
-				UpstreamName: "backend1",
+				Hostname: "example.com",
+				Port:     8081,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "example.com",
-				Port:         8080,
-				UpstreamName: "backend1",
+				Hostname: "example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "cafe.example.com",
-				Port:         8082,
-				UpstreamName: "backend2",
+				Hostname: "cafe.example.com",
+				Port:     8082,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend2", Weight: 0},
+				},
 			},
 		},
 	}
@@ -118,34 +131,44 @@ func TestCreateStreamServers(t *testing.T) {
 	conf := dataplane.Configuration{
 		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
 			{
-				Hostname:     "example.com",
-				Port:         8081,
-				UpstreamName: "backend1",
+				Hostname: "example.com",
+				Port:     8081,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "example.com",
-				Port:         8080,
-				UpstreamName: "backend1",
+				Hostname: "example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "cafe.example.com",
-				Port:         8080,
-				UpstreamName: "backend2",
+				Hostname: "cafe.example.com",
+				Port:     8080,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend2", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "blank-upstream.example.com",
-				Port:         8081,
-				UpstreamName: "",
+				Hostname:  "blank-upstream.example.com",
+				Port:      8081,
+				Upstreams: []dataplane.Layer4Upstream{},
 			},
 			{
-				Hostname:     "dne-upstream.example.com",
-				Port:         8081,
-				UpstreamName: "dne",
+				Hostname: "dne-upstream.example.com",
+				Port:     8081,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "dne", Weight: 0},
+				},
 			},
 			{
-				Hostname:     "no-endpoints.example.com",
-				Port:         8081,
-				UpstreamName: "no-endpoints",
+				Hostname: "no-endpoints.example.com",
+				Port:     8081,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "no-endpoints", Weight: 0},
+				},
 			},
 		},
 		StreamUpstreams: []dataplane.Upstream{
@@ -174,28 +197,29 @@ func TestCreateStreamServers(t *testing.T) {
 		},
 	}
 
-	streamServers := createStreamServers(conf)
+	logger := logr.Discard()
+	streamServers := createStreamServers(logger, conf)
 
 	g := NewWithT(t)
 
 	expectedStreamServers := []stream.Server{
 		{
 			Listen:     getSocketNameTLS(conf.TLSPassthroughServers[0].Port, conf.TLSPassthroughServers[0].Hostname),
-			ProxyPass:  conf.TLSPassthroughServers[0].UpstreamName,
+			ProxyPass:  conf.TLSPassthroughServers[0].Upstreams[0].Name,
 			StatusZone: conf.TLSPassthroughServers[0].Hostname,
 			SSLPreread: false,
 			IsSocket:   true,
 		},
 		{
 			Listen:     getSocketNameTLS(conf.TLSPassthroughServers[1].Port, conf.TLSPassthroughServers[1].Hostname),
-			ProxyPass:  conf.TLSPassthroughServers[1].UpstreamName,
+			ProxyPass:  conf.TLSPassthroughServers[1].Upstreams[0].Name,
 			StatusZone: conf.TLSPassthroughServers[1].Hostname,
 			SSLPreread: false,
 			IsSocket:   true,
 		},
 		{
 			Listen:     getSocketNameTLS(conf.TLSPassthroughServers[2].Port, conf.TLSPassthroughServers[2].Hostname),
-			ProxyPass:  conf.TLSPassthroughServers[2].UpstreamName,
+			ProxyPass:  conf.TLSPassthroughServers[2].Upstreams[0].Name,
 			StatusZone: conf.TLSPassthroughServers[2].Hostname,
 			SSLPreread: false,
 			IsSocket:   true,
@@ -220,9 +244,11 @@ func TestExecuteStreamServersForIPFamily(t *testing.T) {
 	t.Parallel()
 	passThroughServers := []dataplane.Layer4VirtualServer{
 		{
-			UpstreamName: "backend1",
-			Hostname:     "cafe.example.com",
-			Port:         8443,
+			Hostname: "cafe.example.com",
+			Port:     8443,
+			Upstreams: []dataplane.Layer4Upstream{
+				{Name: "backend1", Weight: 0},
+			},
 		},
 	}
 	streamUpstreams := []dataplane.Upstream{
@@ -306,9 +332,11 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 	t.Parallel()
 	passThroughServers := []dataplane.Layer4VirtualServer{
 		{
-			UpstreamName: "backend1",
-			Hostname:     "cafe.example.com",
-			Port:         8443,
+			Hostname: "cafe.example.com",
+			Port:     8443,
+			Upstreams: []dataplane.Layer4Upstream{
+				{Name: "backend1", Weight: 0},
+			},
 		},
 	}
 	streamUpstreams := []dataplane.Upstream{
@@ -405,7 +433,8 @@ func TestCreateStreamServersWithNone(t *testing.T) {
 		TLSPassthroughServers: nil,
 	}
 
-	streamServers := createStreamServers(conf)
+	logger := logr.Discard()
+	streamServers := createStreamServers(logger, conf)
 
 	g := NewWithT(t)
 

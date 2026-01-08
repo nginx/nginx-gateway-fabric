@@ -153,9 +153,18 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		openshiftObjs = p.buildOpenshiftObjects(objectMeta)
 	}
 
-	ports := make(map[int32]struct{})
+	ports := make(map[int32]corev1.Protocol)
 	for _, listener := range gateway.Spec.Listeners {
-		ports[listener.Port] = struct{}{}
+		var protocol corev1.Protocol
+		switch listener.Protocol {
+		case gatewayv1.TCPProtocolType:
+			protocol = corev1.ProtocolTCP
+		case gatewayv1.UDPProtocolType:
+			protocol = corev1.ProtocolUDP
+		default:
+			protocol = corev1.ProtocolTCP
+		}
+		ports[listener.Port] = protocol
 	}
 
 	// Create separate copies of objectMeta for service and deployment to avoid shared map references
@@ -529,7 +538,7 @@ func (p *NginxProvisioner) buildOpenshiftObjects(objectMeta metav1.ObjectMeta) [
 func buildNginxService(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
-	ports map[int32]struct{},
+	ports map[int32]corev1.Protocol,
 	selectorLabels map[string]string,
 	addresses []gatewayv1.GatewaySpecAddress,
 ) (*corev1.Service, error) {
@@ -552,11 +561,12 @@ func buildNginxService(
 	}
 
 	servicePorts := make([]corev1.ServicePort, 0, len(ports))
-	for port := range ports {
+	for port, protocol := range ports {
 		servicePort := corev1.ServicePort{
 			Name:       fmt.Sprintf("port-%d", port),
 			Port:       port,
 			TargetPort: intstr.FromInt32(port),
+			Protocol:   protocol,
 		}
 
 		if serviceType != corev1.ServiceTypeClusterIP {
@@ -639,7 +649,7 @@ func (p *NginxProvisioner) buildNginxDeployment(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ngxIncludesConfigMapName string,
 	ngxAgentConfigMapName string,
-	ports map[int32]struct{},
+	ports map[int32]corev1.Protocol,
 	selectorLabels map[string]string,
 	agentTLSSecretName string,
 	dockerSecretNames map[string]string,
@@ -829,7 +839,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ngxIncludesConfigMapName string,
 	ngxAgentConfigMapName string,
-	ports map[int32]struct{},
+	ports map[int32]corev1.Protocol,
 	agentTLSSecretName string,
 	dockerSecretNames map[string]string,
 	jwtSecretName string,
@@ -838,10 +848,11 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	dataplaneKeySecretName string,
 ) corev1.PodTemplateSpec {
 	containerPorts := make([]corev1.ContainerPort, 0, len(ports))
-	for port := range ports {
+	for port, protocol := range ports {
 		containerPort := corev1.ContainerPort{
 			Name:          fmt.Sprintf("port-%d", port),
 			ContainerPort: port,
+			Protocol:      protocol,
 		}
 		containerPorts = append(containerPorts, containerPort)
 	}

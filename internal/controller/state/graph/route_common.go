@@ -83,6 +83,10 @@ const (
 	RouteTypeGRPC RouteType = "grpc"
 	// RouteTypeTLS indicates that the RouteType of the L4Route is TLS.
 	RouteTypeTLS RouteType = "tls"
+	// RouteTypeTCP indicates that the RouteType of the L4Route is TCP.
+	RouteTypeTCP RouteType = "tcp"
+	// RouteTypeUDP indicates that the RouteType of the L4Route is UDP.
+	RouteTypeUDP RouteType = "udp"
 )
 
 // L4RouteKey is the unique identifier for a L4Route.
@@ -115,11 +119,25 @@ type L4Route struct {
 }
 
 type L4RouteSpec struct {
+	// BackendRefs is a list of backend references for TCPRoute/UDPRoute multi-backend support.
+	// Each BackendRef can have a weight for load balancing.
+	BackendRefs []BackendRef
 	// Hostnames defines a set of hostnames used to select a Route used to process the request.
 	Hostnames []v1.Hostname
 	// FIXME (sarthyparty): change to slice of BackendRef, as for now we are only supporting one BackendRef.
 	// We will eventually support multiple BackendRef https://github.com/nginx/nginx-gateway-fabric/issues/2184
 	BackendRef BackendRef
+}
+
+// GetBackendRefs returns all backend references for this L4Route.
+// For TCPRoute/UDPRoute with multiple backends, it returns BackendRefs.
+// For TLSRoute or single-backend routes, it returns a slice containing BackendRef.
+func (spec *L4RouteSpec) GetBackendRefs() []BackendRef {
+	if len(spec.BackendRefs) > 0 {
+		return spec.BackendRefs
+	}
+	// For single-backend routes, always return the BackendRef.
+	return []BackendRef{spec.BackendRef}
 }
 
 // L7Route is the generic type for the layer 7 routes, HTTPRoute and GRPCRoute.
@@ -248,6 +266,8 @@ func (e routeRuleErrors) append(newErrors routeRuleErrors) routeRuleErrors {
 
 func buildL4RoutesForGateways(
 	tlsRoutes map[types.NamespacedName]*v1alpha.TLSRoute,
+	tcpRoutes map[types.NamespacedName]*v1alpha.TCPRoute,
+	udpRoutes map[types.NamespacedName]*v1alpha.UDPRoute,
 	services map[types.NamespacedName]*apiv1.Service,
 	gws map[types.NamespacedName]*Gateway,
 	resolver *referenceGrantResolver,
@@ -263,6 +283,32 @@ func buildL4RoutesForGateways(
 			gws,
 			services,
 			resolver.refAllowedFrom(fromTLSRoute(route.Namespace)),
+		)
+		if r != nil {
+			routes[CreateRouteKeyL4(route)] = r
+		}
+	}
+
+	// Process TCP routes
+	for _, route := range tcpRoutes {
+		r := buildTCPRoute(
+			route,
+			gws,
+			services,
+			resolver.refAllowedFrom(fromTCPRoute(route.Namespace)),
+		)
+		if r != nil {
+			routes[CreateRouteKeyL4(route)] = r
+		}
+	}
+
+	// Process UDP routes
+	for _, route := range udpRoutes {
+		r := buildUDPRoute(
+			route,
+			gws,
+			services,
+			resolver.refAllowedFrom(fromUDPRoute(route.Namespace)),
 		)
 		if r != nil {
 			routes[CreateRouteKeyL4(route)] = r
@@ -636,8 +682,12 @@ func bindL4RouteToListeners(
 			continue
 		}
 
-		if cond, ok := route.Spec.BackendRef.InvalidForGateways[gwNsName]; ok {
-			attachment.FailedConditions = append(attachment.FailedConditions, cond)
+		backendRefs := route.Spec.GetBackendRefs()
+		for _, br := range backendRefs {
+			if cond, ok := br.InvalidForGateways[gwNsName]; ok {
+				attachment.FailedConditions = append(attachment.FailedConditions, cond)
+				break
+			}
 		}
 
 		// Try to attach Route to all matching listeners
@@ -682,23 +732,13 @@ func tryToAttachL4RouteToListeners(
 	var (
 		attachedToAtLeastOneValidListener  bool
 		allowed, attached, hostnamesUnique bool
+		multipleRoutesOnListener           bool
 	)
 
-	// Sorting the listeners from most specific hostname to the least specific hostname
-	sort.Slice(attachableListeners, func(i, j int) bool {
-		h1 := ""
-		h2 := ""
-		if attachableListeners[i].Source.Hostname != nil {
-			h1 = string(*attachableListeners[i].Source.Hostname)
-		}
-		if attachableListeners[j].Source.Hostname != nil {
-			h2 = string(*attachableListeners[j].Source.Hostname)
-		}
-		return h1 == GetMoreSpecificHostname(h1, h2)
-	})
+	sortListenersByHostname(attachableListeners)
 
 	for _, l := range attachableListeners {
-		routeAllowed, routeAttached, routeHostnamesUnique := bindToListenerL4(
+		routeAllowed, routeAttached, routeHostnamesUnique, routeMultiple := bindToListenerL4(
 			l,
 			route,
 			gw,
@@ -710,11 +750,15 @@ func tryToAttachL4RouteToListeners(
 		attached = attached || routeAttached
 		hostnamesUnique = hostnamesUnique || routeHostnamesUnique
 		attachedToAtLeastOneValidListener = attachedToAtLeastOneValidListener || (routeAttached && l.Valid)
+		multipleRoutesOnListener = multipleRoutesOnListener || routeMultiple
 	}
 
 	if !attached {
 		if !allowed {
 			return conditions.NewRouteNotAllowedByListeners(), false
+		}
+		if multipleRoutesOnListener {
+			return conditions.NewRouteMultipleRoutesOnListener(), false
 		}
 		if !hostnamesUnique {
 			return conditions.NewRouteHostnameConflict(), false
@@ -729,6 +773,34 @@ func tryToAttachL4RouteToListeners(
 	return conditions.Condition{}, true
 }
 
+func sortListenersByHostname(attachableListeners []*Listener) {
+	// Sorting the listeners from most specific hostname to the least specific hostname
+	sort.Slice(attachableListeners, func(i, j int) bool {
+		h1 := ""
+		h2 := ""
+		if attachableListeners[i].Source.Hostname != nil {
+			h1 = string(*attachableListeners[i].Source.Hostname)
+		}
+		if attachableListeners[j].Source.Hostname != nil {
+			h2 = string(*attachableListeners[j].Source.Hostname)
+		}
+		return h1 == GetMoreSpecificHostname(h1, h2)
+	})
+}
+
+func getL4RouteKind(route *L4Route) v1.Kind {
+	switch route.Source.(type) {
+	case *v1alpha.TLSRoute:
+		return v1.Kind(kinds.TLSRoute)
+	case *v1alpha.TCPRoute:
+		return v1.Kind(kinds.TCPRoute)
+	case *v1alpha.UDPRoute:
+		return v1.Kind(kinds.UDPRoute)
+	default:
+		return v1.Kind(kinds.TLSRoute)
+	}
+}
+
 func bindToListenerL4(
 	l *Listener,
 	route *L4Route,
@@ -736,13 +808,30 @@ func bindToListenerL4(
 	namespaces map[types.NamespacedName]*apiv1.Namespace,
 	portHostnamesMap map[string]struct{},
 	refStatus *ParentRefAttachmentStatus,
-) (allowed, attached, notConflicting bool) {
+) (allowed, attached, notConflicting, multipleRoutesOnListener bool) {
 	if !isRouteNamespaceAllowedByListener(l, route.Source.GetNamespace(), gw.Source.Namespace, namespaces) {
-		return false, false, false
+		return false, false, false, false
 	}
 
-	if !isRouteTypeAllowedByListener(l, kinds.TLSRoute) {
-		return false, false, false
+	routeKind := getL4RouteKind(route)
+	if !isRouteTypeAllowedByListener(l, routeKind) {
+		return false, false, false, false
+	}
+
+	// TCP/UDP protocols have no routing discriminator (no hostname/path/SNI)
+	// so we can only support one route per listener port
+	if (routeKind == v1.Kind(kinds.TCPRoute) || routeKind == v1.Kind(kinds.UDPRoute)) && len(l.L4Routes) > 0 {
+		existingRoute := false
+		for existingKey := range l.L4Routes {
+			if existingKey == CreateRouteKeyL4(route.Source) {
+				existingRoute = true
+				break
+			}
+		}
+		if !existingRoute {
+			// Listener already has a route; TCP/UDP cannot route multiple backends on same port
+			return true, false, true, true
+		}
 	}
 
 	acceptedListenerHostnames := findAcceptedHostnames(l.Source.Hostname, route.Spec.Hostnames)
@@ -762,16 +851,16 @@ func bindToListenerL4(
 	// if any hostnames were removed because of conflicts first, and add that condition first. Otherwise, we know that
 	// the hostnames were all removed because they didn't match the listener hostname, so we add that condition.
 	if len(hostnames) == 0 && len(acceptedListenerHostnames) > 0 {
-		return true, false, false
+		return true, false, false, false
 	}
 	if len(hostnames) == 0 {
-		return true, false, true
+		return true, false, true, false
 	}
 
 	refStatus.AcceptedHostnames[CreateGatewayListenerKey(l.GatewayName, l.Name)] = hostnames
 	l.L4Routes[CreateRouteKeyL4(route.Source)] = route
 
-	return true, true, true
+	return true, true, true, false
 }
 
 func bindL7RouteToListeners(
@@ -1335,4 +1424,177 @@ func getCookiePath(match v1.HTTPRouteMatch) string {
 	default:
 		return ""
 	}
+}
+
+// l4RouteConfig holds the configuration needed to build an L4Route generically.
+type l4RouteConfig struct {
+	source           client.Object
+	refGrantResolver func(resource toResource) bool
+	namespace        string
+	routeType        RouteType
+	parentRefs       []v1.ParentReference
+	rules            []l4RouteRule
+}
+
+// l4RouteRule represents a rule in TCPRoute or UDPRoute.
+type l4RouteRule struct {
+	backendRefs []v1alpha.BackendRef
+}
+
+// buildGenericL4Route is a generic function to build L4Route for both TCP and UDP routes.
+// This eliminates code duplication between buildTCPRoute and buildUDPRoute.
+func buildGenericL4Route(
+	config l4RouteConfig,
+	gws map[types.NamespacedName]*Gateway,
+	services map[types.NamespacedName]*apiv1.Service,
+) *L4Route {
+	r := &L4Route{
+		Source: config.source,
+	}
+
+	sectionNameRefs, err := buildSectionNameRefs(config.parentRefs, config.namespace, gws)
+	if err != nil {
+		r.Valid = false
+		return r
+	}
+
+	// route doesn't belong to any of the Gateways
+	if len(sectionNameRefs) == 0 {
+		return nil
+	}
+	r.ParentRefs = sectionNameRefs
+
+	// TCPRoute/UDPRoute don't have hostnames like TLSRoute, so we skip hostname validation
+
+	// Validate that we have at least one rule
+	if len(config.rules) == 0 {
+		r.Valid = false
+		cond := conditions.NewRouteBackendRefUnsupportedValue(
+			"Must have at least one Rule",
+		)
+		r.Conditions = append(r.Conditions, cond)
+		return r
+	}
+
+	var allBackendRefs []BackendRef
+	var allConditions []conditions.Condition
+
+	// Check for multiple rules and add warning if present
+	if len(config.rules) > 1 {
+		ignoredRulesCount := len(config.rules) - 1
+		warningMsg := fmt.Sprintf(
+			"spec.rules[1..%d]: Only the first rule is processed. %d additional rule(s) are ignored",
+			len(config.rules)-1,
+			ignoredRulesCount,
+		)
+		allConditions = append(allConditions, conditions.NewRouteAcceptedUnsupportedField(warningMsg))
+	}
+
+	// Process only the first rule's BackendRefs
+	if len(config.rules) > 0 {
+		rule := config.rules[0]
+		ruleIdx := 0
+
+		if len(rule.backendRefs) > 0 {
+			for refIdx, ref := range rule.backendRefs {
+				br, conds := validateBackendRefL4RouteMulti(
+					config.namespace, ref, services, r.ParentRefs,
+					config.refGrantResolver, ruleIdx, refIdx,
+				)
+				allBackendRefs = append(allBackendRefs, br)
+				allConditions = append(allConditions, conds...)
+			}
+		}
+	}
+
+	// Set BackendRefs for multi-backend support
+	r.Spec.BackendRefs = allBackendRefs
+	r.Valid = true
+	r.Attachable = true
+
+	if len(allConditions) > 0 {
+		r.Conditions = append(r.Conditions, allConditions...)
+	}
+
+	return r
+}
+
+// validate BackendRef for both TCP and UDP routes.
+func validateBackendRefL4RouteMulti(
+	namespace string,
+	ref v1alpha.BackendRef,
+	services map[types.NamespacedName]*apiv1.Service,
+	parentRefs []ParentRef,
+	refGrantResolver func(resource toResource) bool,
+	ruleIdx int,
+	refIdx int,
+) (BackendRef, []conditions.Condition) {
+	refPath := field.NewPath("spec").Child("rules").Index(ruleIdx).Child("backendRefs").Index(refIdx)
+
+	if valid, cond := validateBackendRef(
+		ref,
+		namespace,
+		refGrantResolver,
+		refPath,
+	); !valid {
+		backendRef := BackendRef{
+			Valid:              false,
+			InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
+		}
+
+		return backendRef, []conditions.Condition{cond}
+	}
+
+	ns := namespace
+	if ref.Namespace != nil {
+		ns = string(*ref.Namespace)
+	}
+
+	svcNsName := types.NamespacedName{
+		Namespace: ns,
+		Name:      string(ref.Name),
+	}
+
+	svcIPFamily, svcPort, err := getIPFamilyAndPortFromRef(
+		ref,
+		svcNsName,
+		services,
+		refPath,
+	)
+
+	// Handle weight - default to 1 if not specified
+	weight := int32(1)
+	if ref.Weight != nil {
+		if validateWeight(*ref.Weight) != nil {
+			weight = 0 // Invalid weight set to 0 (no traffic)
+		} else {
+			weight = *ref.Weight
+		}
+	}
+
+	backendRef := BackendRef{
+		SvcNsName:          svcNsName,
+		ServicePort:        svcPort,
+		Weight:             weight,
+		Valid:              true,
+		InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
+	}
+
+	if err != nil {
+		backendRef.Valid = false
+
+		return backendRef, []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(err.Error())}
+	}
+
+	// For TCP/UDPRoute, we don't need to validate app protocol compatibility
+	// as TCP/UDP are protocol-agnostic at the application layer
+
+	var conds []conditions.Condition
+	for _, parentRef := range parentRefs {
+		if err := verifyIPFamily(parentRef.Gateway.EffectiveNginxProxy, svcIPFamily); err != nil {
+			backendRef.InvalidForGateways[parentRef.Gateway.NamespacedName] = conditions.NewRouteInvalidIPFamily(err.Error())
+		}
+	}
+
+	return backendRef, conds
 }

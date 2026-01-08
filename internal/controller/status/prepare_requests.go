@@ -41,17 +41,44 @@ func PrepareRouteRequests(
 			r.Source.GetGeneration(),
 		)
 
-		status := v1alpha2.TLSRouteStatus{
-			RouteStatus: routeStatus,
-		}
+		switch r.Source.(type) {
+		case *v1alpha2.TLSRoute:
+			status := v1alpha2.TLSRouteStatus{
+				RouteStatus: routeStatus,
+			}
 
-		req := UpdateRequest{
-			NsName:       routeKey.NamespacedName,
-			ResourceType: &v1alpha2.TLSRoute{},
-			Setter:       newTLSRouteStatusSetter(status, gatewayCtlrName),
-		}
+			req := UpdateRequest{
+				NsName:       routeKey.NamespacedName,
+				ResourceType: &v1alpha2.TLSRoute{},
+				Setter:       newTLSRouteStatusSetter(status, gatewayCtlrName),
+			}
+			reqs = append(reqs, req)
 
-		reqs = append(reqs, req)
+		case *v1alpha2.TCPRoute:
+			status := v1alpha2.TCPRouteStatus{
+				RouteStatus: routeStatus,
+			}
+			req := UpdateRequest{
+				NsName:       routeKey.NamespacedName,
+				ResourceType: &v1alpha2.TCPRoute{},
+				Setter:       newTCPRouteStatusSetter(status, gatewayCtlrName),
+			}
+			reqs = append(reqs, req)
+
+		case *v1alpha2.UDPRoute:
+			status := v1alpha2.UDPRouteStatus{
+				RouteStatus: routeStatus,
+			}
+			req := UpdateRequest{
+				NsName:       routeKey.NamespacedName,
+				ResourceType: &v1alpha2.UDPRoute{},
+				Setter:       newUDPRouteStatusSetter(status, gatewayCtlrName),
+			}
+			reqs = append(reqs, req)
+
+		default:
+			panic(fmt.Sprintf("Unknown L4 route source type: %T", r.Source))
+		}
 	}
 
 	for routeKey, r := range routes {
