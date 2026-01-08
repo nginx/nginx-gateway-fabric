@@ -1089,6 +1089,173 @@ func TestExecuteStreamUpstreams(t *testing.T) {
 	}
 }
 
+func TestExecuteStreamUpstreamsWithWeights(t *testing.T) {
+	t.Parallel()
+	gen := GeneratorImpl{}
+
+	tests := []struct {
+		name              string
+		stateUpstreams    []dataplane.Upstream
+		expectedSubstring []string
+		notExpected       []string
+	}{
+		{
+			name: "single endpoint no weight",
+			stateUpstreams: []dataplane.Upstream{
+				{
+					Name: "single",
+					Endpoints: []resolver.Endpoint{
+						{
+							Address: "10.0.0.1",
+							Port:    8080,
+							Weight:  0,
+						},
+					},
+				},
+			},
+			expectedSubstring: []string{
+				"upstream single",
+				"server 10.0.0.1:8080;",
+			},
+			notExpected: []string{
+				"weight=",
+			},
+		},
+		{
+			name: "multiple endpoints with weight 1",
+			stateUpstreams: []dataplane.Upstream{
+				{
+					Name: "weight-one",
+					Endpoints: []resolver.Endpoint{
+						{
+							Address: "10.0.0.1",
+							Port:    8080,
+							Weight:  1,
+						},
+						{
+							Address: "10.0.0.2",
+							Port:    8080,
+							Weight:  1,
+						},
+					},
+				},
+			},
+			expectedSubstring: []string{
+				"upstream weight-one",
+				"server 10.0.0.1:8080;",
+				"server 10.0.0.2:8080;",
+			},
+			notExpected: []string{
+				"weight=",
+			},
+		},
+		{
+			name: "multiple endpoints with weights",
+			stateUpstreams: []dataplane.Upstream{
+				{
+					Name: "weighted",
+					Endpoints: []resolver.Endpoint{
+						{
+							Address: "10.0.0.1",
+							Port:    8080,
+							Weight:  80,
+						},
+						{
+							Address: "10.0.0.2",
+							Port:    8080,
+							Weight:  20,
+						},
+					},
+				},
+			},
+			expectedSubstring: []string{
+				"upstream weighted",
+				"server 10.0.0.1:8080",
+				"weight=80",
+				"server 10.0.0.2:8080",
+				"weight=20",
+			},
+		},
+		{
+			name: "mixed weights with ExternalName service",
+			stateUpstreams: []dataplane.Upstream{
+				{
+					Name: "mixed-weighted",
+					Endpoints: []resolver.Endpoint{
+						{
+							Address: "backend.example.com",
+							Port:    443,
+							Resolve: true,
+							Weight:  70,
+						},
+						{
+							Address: "10.0.0.1",
+							Port:    8080,
+							Weight:  30,
+						},
+					},
+				},
+			},
+			expectedSubstring: []string{
+				"upstream mixed-weighted",
+				"server backend.example.com:443",
+				"weight=70",
+				"resolve",
+				"server 10.0.0.1:8080",
+				"weight=30",
+			},
+		},
+		{
+			name: "endpoints with weight 2",
+			stateUpstreams: []dataplane.Upstream{
+				{
+					Name: "weight-two",
+					Endpoints: []resolver.Endpoint{
+						{
+							Address: "10.0.0.1",
+							Port:    8080,
+							Weight:  2,
+						},
+						{
+							Address: "10.0.0.2",
+							Port:    8080,
+							Weight:  2,
+						},
+					},
+				},
+			},
+			expectedSubstring: []string{
+				"upstream weight-two",
+				"server 10.0.0.1:8080",
+				"weight=2",
+				"server 10.0.0.2:8080",
+				"weight=2",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			upstreamResults := gen.executeStreamUpstreams(dataplane.Configuration{StreamUpstreams: test.stateUpstreams})
+			g.Expect(upstreamResults).To(HaveLen(1))
+			upstreams := string(upstreamResults[0].data)
+
+			for _, expSubString := range test.expectedSubstring {
+				g.Expect(upstreams).To(ContainSubstring(expSubString),
+					"Expected to find substring: %s", expSubString)
+			}
+
+			for _, notExpSubString := range test.notExpected {
+				g.Expect(upstreams).ToNot(ContainSubstring(notExpSubString),
+					"Expected NOT to find substring: %s", notExpSubString)
+			}
+		})
+	}
+}
+
 func TestCreateStreamUpstreams(t *testing.T) {
 	t.Parallel()
 	gen := GeneratorImpl{}
