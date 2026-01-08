@@ -821,17 +821,13 @@ func bindToListenerL4(
 
 	// TCP/UDP protocols have no routing discriminator (no hostname/path/SNI)
 	// so we can only support one route per listener port
-	if (routeKind == v1.Kind(kinds.TCPRoute) || routeKind == v1.Kind(kinds.UDPRoute)) && len(l.L4Routes) > 0 {
-		existingRoute := false
-		for existingKey := range l.L4Routes {
-			if existingKey == CreateRouteKeyL4(route.Source) {
-				existingRoute = true
-				break
+	if routeKind == v1.Kind(kinds.TCPRoute) || routeKind == v1.Kind(kinds.UDPRoute) {
+		currentRouteKey := CreateRouteKeyL4(route.Source)
+		for existingRouteKey := range l.L4Routes {
+			if existingRouteKey != currentRouteKey {
+				// A different TCP/UDP route is already attached to this listener
+				return true, false, true, true
 			}
-		}
-		if !existingRoute {
-			// Listener already has a route; TCP/UDP cannot route multiple backends on same port
-			return true, false, true, true
 		}
 	}
 
