@@ -85,44 +85,26 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("they are accepted by the target resource", func() {
-			policyNames := []string{
-				"gateway-proxy-settings",
-				"coffee-http-proxy-settings",
+		Specify("policies have correct status", func() {
+			policyExpectations := []policyStatusExpectation{
+				{
+					nsname:          types.NamespacedName{Name: "gateway-proxy-settings", Namespace: namespace},
+					conditionStatus: metav1.ConditionTrue,
+					conditionReason: gatewayv1.PolicyReasonAccepted,
+				},
+				{
+					nsname:          types.NamespacedName{Name: "coffee-http-proxy-settings", Namespace: namespace},
+					conditionStatus: metav1.ConditionTrue,
+					conditionReason: gatewayv1.PolicyReasonAccepted,
+				},
 			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
+			waitForPoliciesVerification(policyExpectations)
 		})
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				baseCoffeeURL := baseURL + "/coffee"
-				baseTeaURL := baseURL + "/tea"
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "Coffee chunk", framework.WithContextDisabled())
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRequestSucceeds(baseURL+"/coffee", address, "Coffee chunk", framework.WithContextDisabled())
+				verifyRequestSucceeds(baseURL+"/tea", address, "URI: /tea")
 			})
 		})
 
@@ -205,22 +187,20 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("they are accepted by the target resource", func() {
-			policyNames := []string{
-				"gateway-proxy-settings",
-				"coffee-grpc-proxy-settings",
+		Specify("policies have correct status", func() {
+			policyExpectations := []policyStatusExpectation{
+				{
+					nsname:          types.NamespacedName{Name: "gateway-proxy-settings", Namespace: namespace},
+					conditionStatus: metav1.ConditionTrue,
+					conditionReason: gatewayv1.PolicyReasonAccepted,
+				},
+				{
+					nsname:          types.NamespacedName{Name: "coffee-grpc-proxy-settings", Namespace: namespace},
+					conditionStatus: metav1.ConditionTrue,
+					conditionReason: gatewayv1.PolicyReasonAccepted,
+				},
 			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
+			waitForPoliciesVerification(policyExpectations)
 		})
 
 		Context("nginx config", func() {
@@ -324,43 +304,20 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("they are accepted by the target resource", func() {
-			policyNames := []string{
-				"coffee-http-proxy-settings",
-			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
+		Specify("policy has correct status", func() {
+			waitForPoliciesVerification([]policyStatusExpectation{
+				{
+					nsname:          types.NamespacedName{Name: "coffee-http-proxy-settings", Namespace: namespace},
+					conditionStatus: metav1.ConditionTrue,
+					conditionReason: gatewayv1.PolicyReasonAccepted,
+				},
+			})
 		})
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				baseCoffeeURL := baseURL + "/coffee"
-				baseTeaURL := baseURL + "/tea"
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "Coffee chunk", framework.WithContextDisabled())
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRequestSucceeds(baseURL+"/coffee", address, "Coffee chunk", framework.WithContextDisabled())
+				verifyRequestSucceeds(baseURL+"/tea", address, "URI: /tea")
 			})
 		})
 
@@ -432,43 +389,20 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("they are accepted by the target resource", func() {
-			policyNames := []string{
-				"gateway-proxy-settings",
-			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
+		Specify("policy has correct status", func() {
+			waitForPoliciesVerification([]policyStatusExpectation{
+				{
+					nsname:          types.NamespacedName{Name: "gateway-proxy-settings", Namespace: namespace},
+					conditionStatus: metav1.ConditionTrue,
+					conditionReason: gatewayv1.PolicyReasonAccepted,
+				},
+			})
 		})
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response only for HTTPRoute tea, and fail for coffee", func() {
-				baseCoffeeURL := baseURL + "/coffee"
-				baseTeaURL := baseURL + "/tea"
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "Coffee chunk", framework.WithContextDisabled())
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					ShouldNot(Succeed())
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRequestFails(baseURL+"/coffee", address, "Coffee chunk", framework.WithContextDisabled())
+				verifyRequestSucceeds(baseURL+"/tea", address, "URI: /tea")
 			})
 		})
 
@@ -527,21 +461,14 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("they are accepted by the target resource", func() {
-			policyNames := []string{
-				"coffee-http-proxy-settings",
-			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
+		Specify("policy has correct status", func() {
+			waitForPoliciesVerification([]policyStatusExpectation{
+				{
+					nsname:          types.NamespacedName{Name: "coffee-http-proxy-settings", Namespace: namespace},
+					conditionStatus: metav1.ConditionTrue,
+					conditionReason: gatewayv1.PolicyReasonAccepted,
+				},
+			})
 		})
 	})
 
@@ -559,49 +486,26 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		})
 
 		Context("verify that conflicting HTTPRoute ProxySettingsPolicies are not accepted", func() {
-			type test struct {
-				desc            string
-				nsname          types.NamespacedName
-				conditionStatus metav1.ConditionStatus
-				conditionReason gatewayv1.PolicyConditionReason
-			}
-
-			DescribeTable("Accepted and Conflicted conditions are set properly",
-				func(tests []test) {
-					for _, test := range tests {
-						GinkgoWriter.Printf("Test case: %s\n", test.desc)
-						Eventually(waitForPSPolicyStatus).
-							WithArguments(
-								test.nsname,
-								test.conditionStatus,
-								test.conditionReason,
-							).
-							WithTimeout(timeoutConfig.RequestTimeout).
-							WithPolling(500 * time.Millisecond).
-							Should(Succeed())
-					}
-				},
-				Entry("conditions expectations", []test{
+			Specify("policies have correct status", func() {
+				policyExpectations := []policyStatusExpectation{
 					{
-						desc:            "http-proxy-settings-1 Accepted",
 						nsname:          types.NamespacedName{Name: "http-proxy-settings-1", Namespace: namespace},
 						conditionStatus: metav1.ConditionTrue,
 						conditionReason: gatewayv1.PolicyReasonAccepted,
 					},
 					{
-						desc:            "http-proxy-settings-2 Conflicted",
 						nsname:          types.NamespacedName{Name: "http-proxy-settings-2", Namespace: namespace},
 						conditionStatus: metav1.ConditionFalse,
 						conditionReason: gatewayv1.PolicyReasonConflicted,
 					},
 					{
-						desc:            "http-proxy-settings-3 Conflicted",
 						nsname:          types.NamespacedName{Name: "http-proxy-settings-3", Namespace: namespace},
 						conditionStatus: metav1.ConditionFalse,
 						conditionReason: gatewayv1.PolicyReasonConflicted,
 					},
-				}),
-			)
+				}
+				waitForPoliciesVerification(policyExpectations)
+			})
 		})
 	})
 
@@ -618,22 +522,20 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("they are not accepted by the target resource", func() {
-			policyNames := []string{
-				"coffee-http-proxy-settings",
-				"gateway-proxy-settings",
+		Specify("policy has correct status", func() {
+			policyExpectations := []policyStatusExpectation{
+				{
+					nsname:          types.NamespacedName{Name: "coffee-http-proxy-settings", Namespace: namespace},
+					conditionStatus: metav1.ConditionFalse,
+					conditionReason: gatewayv1.PolicyReasonInvalid,
+				},
+				{
+					nsname:          types.NamespacedName{Name: "gateway-proxy-settings", Namespace: namespace},
+					conditionStatus: metav1.ConditionFalse,
+					conditionReason: gatewayv1.PolicyReasonInvalid,
+				},
 			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionFalse,
-					gatewayv1.PolicyReasonInvalid,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
+			waitForPoliciesVerification(policyExpectations)
 		})
 	})
 })
@@ -681,4 +583,43 @@ func waitForPSPolicyStatus(
 			return true, nil
 		},
 	)
+}
+
+type policyStatusExpectation struct {
+	nsname          types.NamespacedName
+	conditionStatus metav1.ConditionStatus
+	conditionReason gatewayv1.PolicyConditionReason
+}
+
+// waitForPoliciesVerification waits for multiple ProxySettingsPolicies to be accepted/conflicted/ignored.
+func waitForPoliciesVerification(policyExpectations []policyStatusExpectation) {
+	for _, expectation := range policyExpectations {
+		Eventually(waitForPSPolicyStatus).
+			WithArguments(
+				expectation.nsname,
+				expectation.conditionStatus,
+				expectation.conditionReason,
+			).
+			WithTimeout(timeoutConfig.RequestTimeout).
+			WithPolling(500 * time.Millisecond).
+			Should(Succeed())
+	}
+}
+
+func verifyRequestSucceeds(url, address, expectedContent string, opts ...framework.Option) {
+	Eventually(func() error {
+		return expectRequestToSucceed(url, address, expectedContent, opts...)
+	}).
+		WithTimeout(timeoutConfig.RequestTimeout).
+		WithPolling(500 * time.Millisecond).
+		Should(Succeed())
+}
+
+func verifyRequestFails(url, address, expectedContent string, opts ...framework.Option) {
+	Eventually(func() error {
+		return expectRequestToSucceed(url, address, expectedContent, opts...)
+	}).
+		WithTimeout(timeoutConfig.RequestTimeout).
+		WithPolling(500 * time.Millisecond).
+		ShouldNot(Succeed())
 }
