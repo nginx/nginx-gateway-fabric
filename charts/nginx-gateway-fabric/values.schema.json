@@ -13,7 +13,6 @@
         "agentTLSSecretName": {
           "default": "agent-tls",
           "description": "The name of the base Secret containing TLS CA, certificate, and key for the NGINX Agent to securely\ncommunicate with the NGINX Gateway Fabric control plane. Must exist in the same namespace that the\nNGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).",
-          "required": [],
           "title": "agentTLSSecretName",
           "type": "string"
         },
@@ -26,7 +25,6 @@
         "enable": {
           "default": true,
           "description": "Enable the cert-generator Job. If this is disabled, then cert-manager or some other method must be used to create the required Secrets.",
-          "required": [],
           "title": "enable",
           "type": "boolean"
         },
@@ -39,14 +37,12 @@
         "overwrite": {
           "default": false,
           "description": "Overwrite existing TLS Secrets on startup.",
-          "required": [],
           "title": "overwrite",
           "type": "boolean"
         },
         "serverTLSSecretName": {
           "default": "server-tls",
           "description": "The name of the Secret containing TLS CA, certificate, and key for the NGINX Gateway Fabric control plane\nto securely communicate with the NGINX Agent. Must exist in the same namespace that the NGINX Gateway Fabric\ncontrol plane is running in (default namespace: nginx-gateway).",
-          "required": [],
           "title": "serverTLSSecretName",
           "type": "string"
         },
@@ -55,7 +51,6 @@
           "items": {
             "required": []
           },
-          "required": [],
           "title": "tolerations",
           "type": "array"
         },
@@ -64,14 +59,12 @@
           "items": {
             "required": []
           },
-          "required": [],
           "title": "topologySpreadConstraints",
           "type": "array"
         },
         "ttlSecondsAfterFinished": {
           "default": 30,
           "description": "How long to wait after the cert generator job has finished before it is removed by the job controller.",
-          "required": [],
           "title": "ttlSecondsAfterFinished",
           "type": "integer"
         }
@@ -83,7 +76,6 @@
     "clusterDomain": {
       "default": "cluster.local",
       "description": "The DNS cluster domain of your Kubernetes cluster.",
-      "required": [],
       "title": "clusterDomain",
       "type": "string"
     },
@@ -92,7 +84,6 @@
       "items": {
         "required": []
       },
-      "required": [],
       "title": "gateways",
       "type": "array"
     },
@@ -111,7 +102,6 @@
             "enable": {
               "default": false,
               "description": "Enable or disable Horizontal Pod Autoscaler for the NGINX data plane.",
-              "required": [],
               "title": "enable",
               "type": "boolean"
             }
@@ -125,12 +115,10 @@
           "properties": {
             "disableHTTP2": {
               "description": "DisableHTTP2 defines if http2 should be disabled for all servers.",
-              "required": [],
               "type": "boolean"
             },
             "disableSNIHostValidation": {
               "description": "DisableSNIHostValidation disables the validation that ensures the SNI hostname matches the Host header in HTTPS requests. This resolves HTTP/2 connection coalescing issues with wildcard certificates but introduces security risks as described in Gateway API GEP-3567.",
-              "required": [],
               "type": "boolean"
             },
             "dnsResolver": {
@@ -146,15 +134,13 @@
                           "IPAddress",
                           "Hostname"
                         ],
-                        "required": [],
-                        "type": "string"
+                        "required": []
                       },
                       "value": {
                         "description": "Value specifies the address value.",
                         "maxItems": 253,
                         "minItems": 1,
-                        "required": [],
-                        "type": "string"
+                        "type": "array"
                       }
                     },
                     "required": [
@@ -165,24 +151,20 @@
                   },
                   "maxItems": 16,
                   "minItems": 1,
-                  "required": [],
                   "type": "array"
                 },
                 "cacheTTL": {
                   "description": "CacheTTL specifies how long to cache DNS responses.",
                   "pattern": "^\\d+[smhd]?$",
-                  "required": [],
                   "type": "string"
                 },
                 "disableIPv6": {
                   "description": "DisableIPv6 disables DisableIPv6 lookups. If not specified, or set to false, IPv6 lookups will be enabled.",
-                  "required": [],
                   "type": "boolean"
                 },
                 "timeout": {
                   "description": "Timeout specifies the timeout for name resolution.",
                   "pattern": "^\\d+[smhd]?$",
-                  "required": [],
                   "type": "string"
                 }
               },
@@ -196,8 +178,7 @@
                 "ipv6",
                 "dual"
               ],
-              "required": [],
-              "type": "string"
+              "required": []
             },
             "logging": {
               "description": "Logging defines logging related settings for NGINX.",
@@ -207,7 +188,6 @@
                   "properties": {
                     "disable": {
                       "description": "Disable turns off access logging when set to true.",
-                      "required": [],
                       "type": "boolean"
                     },
                     "escape": {
@@ -217,12 +197,10 @@
                         "json",
                         "none"
                       ],
-                      "required": [],
-                      "type": "string"
+                      "required": []
                     },
                     "format": {
                       "description": "Format specifies the custom log format string. If not specified, NGINX default 'combined' format is used.",
-                      "required": [],
                       "type": "string"
                     }
                   },
@@ -237,8 +215,7 @@
                     "panic",
                     "fatal"
                   ],
-                  "required": [],
-                  "type": "string"
+                  "required": []
                 },
                 "errorLevel": {
                   "enum": [
@@ -251,8 +228,7 @@
                     "alert",
                     "emerg"
                   ],
-                  "required": [],
-                  "type": "string"
+                  "required": []
                 }
               },
               "required": [],
@@ -262,13 +238,11 @@
               "description": "Metrics defines the configuration for Prometheus scraping metrics.",
               "properties": {
                 "disable": {
-                  "required": [],
                   "type": "boolean"
                 },
                 "port": {
                   "maximum": 65535,
                   "minimum": 1,
-                  "required": [],
                   "type": "integer"
                 }
               },
@@ -286,17 +260,14 @@
                           "CIDR",
                           "IPAddress"
                         ],
-                        "required": [],
-                        "type": "string"
+                        "required": []
                       },
                       "value": {
-                        "required": [],
                         "type": "string"
                       }
                     },
                     "required": []
                   },
-                  "required": [],
                   "type": "array"
                 }
               },
@@ -311,11 +282,9 @@
                     "ProxyProtocol",
                     "XForwardedFor"
                   ],
-                  "required": [],
-                  "type": "string"
+                  "required": []
                 },
                 "setIPRecursively": {
-                  "required": [],
                   "type": "boolean"
                 },
                 "trustedAddresses": {
@@ -327,17 +296,14 @@
                           "IPAddress",
                           "Hostname"
                         ],
-                        "required": [],
-                        "type": "string"
+                        "required": []
                       },
                       "value": {
-                        "required": [],
                         "type": "string"
                       }
                     },
                     "required": []
                   },
-                  "required": [],
                   "type": "array"
                 }
               },
@@ -352,32 +318,26 @@
                     "enum": [
                       "DisableTracing"
                     ],
-                    "required": [],
-                    "type": "string"
+                    "required": []
                   },
-                  "required": [],
                   "type": "array"
                 },
                 "exporter": {
                   "properties": {
                     "batchCount": {
                       "minimum": 0,
-                      "required": [],
                       "type": "integer"
                     },
                     "batchSize": {
                       "minimum": 0,
-                      "required": [],
                       "type": "integer"
                     },
                     "endpoint": {
                       "pattern": "^(?:http?:\\/\\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\\d{1,5})?$",
-                      "required": [],
                       "type": "string"
                     },
                     "interval": {
                       "pattern": "^\\d{1,4}(ms|s)?$",
-                      "required": [],
                       "type": "string"
                     }
                   },
@@ -386,7 +346,6 @@
                 },
                 "serviceName": {
                   "pattern": "^[a-zA-Z0-9_-]+$",
-                  "required": [],
                   "type": "string"
                 },
                 "spanAttributes": {
@@ -396,20 +355,17 @@
                         "maxLength": 255,
                         "minLength": 1,
                         "pattern": "^([^\"$\\\\]|\\\\[^$])*$",
-                        "required": [],
                         "type": "string"
                       },
                       "value": {
                         "maxLength": 255,
                         "minLength": 1,
                         "pattern": "^([^\"$\\\\]|\\\\[^$])*$",
-                        "required": [],
                         "type": "string"
                       }
                     },
                     "required": []
                   },
-                  "required": [],
                   "type": "array"
                 }
               },
@@ -420,7 +376,6 @@
               "description": "The number of worker connections for NGINX. Default is 1024.",
               "maximum": 65535,
               "minimum": 1,
-              "required": [],
               "type": "integer"
             }
           },
@@ -438,20 +393,17 @@
                   "containerPort": {
                     "maximum": 65535,
                     "minimum": 1,
-                    "required": [],
                     "type": "integer"
                   },
                   "port": {
                     "maximum": 65535,
                     "minimum": 1,
-                    "required": [],
                     "type": "integer"
                   }
                 },
                 "required": [],
                 "type": "object"
               },
-              "required": [],
               "title": "hostPorts",
               "type": "array"
             },
@@ -478,7 +430,6 @@
               "items": {
                 "required": []
               },
-              "required": [],
               "title": "volumeMounts",
               "type": "array"
             }
@@ -490,7 +441,6 @@
         "debug": {
           "default": false,
           "description": "Enable debugging for NGINX. Uses the nginx-debug binary. The NGINX error log level should be set to debug in the NginxProxy resource.",
-          "required": [],
           "title": "debug",
           "type": "boolean"
         },
@@ -509,13 +459,11 @@
             "repository": {
               "default": "ghcr.io/nginx/nginx-gateway-fabric/nginx",
               "description": "The NGINX image to use.",
-              "required": [],
               "title": "repository",
               "type": "string"
             },
             "tag": {
               "default": "edge",
-              "required": [],
               "title": "tag",
               "type": "string"
             }
@@ -527,7 +475,6 @@
         "imagePullSecret": {
           "default": "",
           "description": "The name of the secret containing docker registry credentials.\nSecret must exist in the same namespace as the helm release. The control\nplane will copy this secret into any namespace where NGINX is deployed.",
-          "required": [],
           "title": "imagePullSecret",
           "type": "string"
         },
@@ -536,7 +483,6 @@
           "items": {
             "required": []
           },
-          "required": [],
           "title": "imagePullSecrets",
           "type": "array"
         },
@@ -556,14 +502,12 @@
             "dataplaneKeySecretName": {
               "default": "",
               "description": "Name of the secret which holds the dataplane key that is required to authenticate with the NGINX One Console.\nSecret must exist in the same namespace that the NGINX Gateway Fabric control plane is running in\n(default namespace: nginx-gateway).",
-              "required": [],
               "title": "dataplaneKeySecretName",
               "type": "string"
             },
             "endpointHost": {
               "default": "agent.connect.nginx.com",
               "description": "The Endpoint host that the NGINX One Console telemetry metrics will be sent to.",
-              "required": [],
               "title": "endpointHost",
               "type": "string"
             },
@@ -572,14 +516,12 @@
               "description": "The endpoint port that the NGINX One Console telemetry metrics will be sent to.",
               "maximum": 65535,
               "minimum": 1,
-              "required": [],
               "title": "endpointPort",
               "type": "integer"
             },
             "skipVerify": {
               "default": false,
               "description": "Skip TLS verification for NGINX One Console connections.",
-              "required": [],
               "title": "skipVerify",
               "type": "boolean"
             }
@@ -593,14 +535,12 @@
           "items": {
             "required": []
           },
-          "required": [],
           "title": "patches",
           "type": "array"
         },
         "plus": {
           "default": false,
           "description": "Is NGINX Plus image being used.",
-          "required": [],
           "title": "plus",
           "type": "boolean"
         },
@@ -613,7 +553,6 @@
         "replicas": {
           "default": 1,
           "description": "The number of replicas of the NGINX Deployment. This value is ignored if autoscaling.enable is true.",
-          "required": [],
           "title": "replicas",
           "type": "integer"
         },
@@ -633,14 +572,12 @@
             "loadBalancerClass": {
               "default": "",
               "description": "LoadBalancerClass is the class of the load balancer implementation this Service belongs to.\nRequires nginx.service.type set to LoadBalancer.",
-              "required": [],
               "title": "loadBalancerClass",
               "type": "string"
             },
             "loadBalancerIP": {
               "default": "",
               "description": "The static IP address for the load balancer. Requires nginx.service.type set to LoadBalancer.",
-              "required": [],
               "title": "loadBalancerIP",
               "type": "string"
             },
@@ -649,7 +586,6 @@
               "items": {
                 "required": []
               },
-              "required": [],
               "title": "loadBalancerSourceRanges",
               "type": "array"
             },
@@ -660,20 +596,17 @@
                   "listenerPort": {
                     "maximum": 65535,
                     "minimum": 1,
-                    "required": [],
                     "type": "integer"
                   },
                   "port": {
                     "maximum": 65535,
                     "minimum": 1,
-                    "required": [],
                     "type": "integer"
                   }
                 },
                 "required": [],
                 "type": "object"
               },
-              "required": [],
               "title": "nodePorts",
               "type": "array"
             },
@@ -682,7 +615,6 @@
               "items": {
                 "required": []
               },
-              "required": [],
               "title": "patches",
               "type": "array"
             },
@@ -708,49 +640,42 @@
             "caSecretName": {
               "default": "",
               "description": "The name of the Secret containing the NGINX Instance Manager CA certificate.\nMust exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).",
-              "required": [],
               "title": "caSecretName",
               "type": "string"
             },
             "clientSSLSecretName": {
               "default": "",
               "description": "The name of the Secret containing the client certificate and key for authenticating with NGINX Instance Manager.\nMust exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).",
-              "required": [],
               "title": "clientSSLSecretName",
               "type": "string"
             },
             "endpoint": {
               "default": "",
               "description": "The endpoint of the NGINX Plus usage reporting server. Default: product.connect.nginx.com",
-              "required": [],
               "title": "endpoint",
               "type": "string"
             },
             "enforceInitialReport": {
               "default": true,
               "description": "Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.",
-              "required": [],
               "title": "enforceInitialReport",
               "type": "boolean"
             },
             "resolver": {
               "default": "",
               "description": "The nameserver used to resolve the NGINX Plus usage reporting endpoint. Used with NGINX Instance Manager.",
-              "required": [],
               "title": "resolver",
               "type": "string"
             },
             "secretName": {
               "default": "nplus-license",
               "description": "The name of the Secret containing the JWT for NGINX Plus usage reporting. Must exist in the same namespace\nthat the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).",
-              "required": [],
               "title": "secretName",
               "type": "string"
             },
             "skipVerify": {
               "default": false,
               "description": "Disable client verification of the NGINX Plus usage reporting server certificate.",
-              "required": [],
               "title": "skipVerify",
               "type": "boolean"
             }
@@ -779,7 +704,6 @@
             "enable": {
               "default": false,
               "description": "Enable or disable Horizontal Pod Autoscaler for the control plane.",
-              "required": [],
               "title": "enable",
               "type": "boolean"
             }
@@ -825,7 +749,6 @@
           "items": {
             "required": []
           },
-          "required": [],
           "title": "extraVolumeMounts",
           "type": "array"
         },
@@ -834,7 +757,6 @@
           "items": {
             "required": []
           },
-          "required": [],
           "title": "extraVolumes",
           "type": "array"
         },
@@ -847,7 +769,6 @@
         "gatewayClassName": {
           "default": "nginx",
           "description": "The name of the GatewayClass that will be created as part of this release. Every NGINX Gateway\nFabric must have a unique corresponding GatewayClass resource. NGINX Gateway Fabric only processes resources that\nbelong to its class - i.e. have the \"gatewayClassName\" field resource equal to the class.",
-          "required": [],
           "title": "gatewayClassName",
           "type": "string"
         },
@@ -863,7 +784,6 @@
             "enable": {
               "default": false,
               "description": "Enable the experimental features of Gateway API which are supported by NGINX Gateway Fabric. Requires the Gateway\nAPIs installed from the experimental channel.",
-              "required": [],
               "title": "enable",
               "type": "boolean"
             }
@@ -877,7 +797,6 @@
             "enable": {
               "default": false,
               "description": "Enable Gateway API Inference Extension support. Allows for configuring InferencePools to route traffic to AI workloads.",
-              "required": [],
               "title": "enable",
               "type": "boolean"
             },
@@ -887,14 +806,12 @@
                 "disableTLS": {
                   "default": false,
                   "description": "Disable TLS for EndpointPicker communication. By default, TLS is enabled.\nSet to true only for development/testing or when using a service mesh for encryption.",
-                  "required": [],
                   "title": "disableTLS",
                   "type": "boolean"
                 },
                 "skipVerify": {
                   "default": true,
                   "description": "Disables TLS certificate verification when connecting to the EndpointPicker.\nBy default, certificate verification is disabled.\nREQUIRED: Must be true until Gateway API Inference Extension EndpointPicker supports mounting certificates.\nSee: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1556",
-                  "required": [],
                   "title": "skipVerify",
                   "type": "boolean"
                 }
@@ -924,13 +841,11 @@
             "repository": {
               "default": "ghcr.io/nginx/nginx-gateway-fabric",
               "description": "The NGINX Gateway Fabric image to use",
-              "required": [],
               "title": "repository",
               "type": "string"
             },
             "tag": {
               "default": "edge",
-              "required": [],
               "title": "tag",
               "type": "string"
             }
@@ -958,14 +873,12 @@
             "enable": {
               "default": true,
               "description": "Enable leader election. Leader election is used to avoid multiple replicas of the NGINX Gateway Fabric\nreporting the status of the Gateway API resources. If not enabled, all replicas of NGINX Gateway Fabric\nwill update the statuses of the Gateway API resources.",
-              "required": [],
               "title": "enable",
               "type": "boolean"
             },
             "lockName": {
               "default": "",
               "description": "The name of the leader election lock. A Lease object with this name will be created in the same Namespace as\nthe controller.",
-              "required": [],
               "title": "lockName",
               "type": "string"
             }
@@ -985,7 +898,6 @@
             "enable": {
               "default": true,
               "description": "Enable exposing metrics in the Prometheus format.",
-              "required": [],
               "title": "enable",
               "type": "boolean"
             },
@@ -994,14 +906,12 @@
               "description": "Set the port where the Prometheus metrics are exposed.",
               "maximum": 65535,
               "minimum": 1,
-              "required": [],
               "title": "port",
               "type": "integer"
             },
             "secure": {
               "default": false,
               "description": "Enable serving metrics via https. By default metrics are served via http.\nPlease note that this endpoint will be secured with a self-signed certificate.",
-              "required": [],
               "title": "secure",
               "type": "boolean"
             }
@@ -1013,7 +923,6 @@
         "name": {
           "default": "",
           "description": "The name of the NGINX Gateway Fabric deployment - if not present, then by default uses release name given during installation.",
-          "required": [],
           "title": "name",
           "type": "string"
         },
@@ -1032,7 +941,6 @@
         "priorityClassName": {
           "default": "",
           "description": "The priority class name for the NGINX Gateway Fabric control plane pod.",
-          "required": [],
           "title": "priorityClassName",
           "type": "string"
         },
@@ -1041,7 +949,6 @@
             "enable": {
               "default": true,
               "description": "Enable the collection of product telemetry.",
-              "required": [],
               "title": "enable",
               "type": "boolean"
             }
@@ -1056,14 +963,12 @@
             "enable": {
               "default": true,
               "description": "Enable the /readyz endpoint on the control plane.",
-              "required": [],
               "title": "enable",
               "type": "boolean"
             },
             "initialDelaySeconds": {
               "default": 3,
               "description": "The number of seconds after the Pod has started before the readiness probes are initiated.",
-              "required": [],
               "title": "initialDelaySeconds",
               "type": "integer"
             },
@@ -1072,7 +977,6 @@
               "description": "Port in which the readiness endpoint is exposed.",
               "maximum": 65535,
               "minimum": 1,
-              "required": [],
               "title": "port",
               "type": "integer"
             }
@@ -1084,7 +988,6 @@
         "replicas": {
           "default": 1,
           "description": "The number of replicas of the NGINX Gateway Fabric Deployment. This value is ignored if autoscaling.enable is true.",
-          "required": [],
           "title": "replicas",
           "type": "integer"
         },
@@ -1126,7 +1029,6 @@
             "imagePullSecret": {
               "default": "",
               "description": "The name of the secret containing docker registry credentials for the control plane.\nSecret must exist in the same namespace as the helm release.",
-              "required": [],
               "title": "imagePullSecret",
               "type": "string"
             },
@@ -1135,14 +1037,12 @@
               "items": {
                 "required": []
               },
-              "required": [],
               "title": "imagePullSecrets",
               "type": "array"
             },
             "name": {
               "default": "",
               "description": "The name of the service account of the NGINX Gateway Fabric control plane pods. Used for RBAC.",
-              "required": [],
               "title": "name",
               "type": "string"
             }
@@ -1156,7 +1056,6 @@
             "enable": {
               "default": false,
               "description": "Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the generated NGINX\nconfig for HTTPRoute and GRPCRoute resources.",
-              "required": [],
               "title": "enable",
               "type": "boolean"
             }
@@ -1168,7 +1067,6 @@
         "terminationGracePeriodSeconds": {
           "default": 30,
           "description": "The termination grace period of the NGINX Gateway Fabric control plane pod.",
-          "required": [],
           "title": "terminationGracePeriodSeconds",
           "type": "integer"
         },
@@ -1177,7 +1075,6 @@
           "items": {
             "required": []
           },
-          "required": [],
           "title": "tolerations",
           "type": "array"
         },
@@ -1186,7 +1083,6 @@
           "items": {
             "required": []
           },
-          "required": [],
           "title": "topologySpreadConstraints",
           "type": "array"
         }

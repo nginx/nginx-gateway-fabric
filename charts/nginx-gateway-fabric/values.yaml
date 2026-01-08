@@ -371,7 +371,6 @@ nginx:
   #     type: boolean
   #   ipFamily:
   #     description: IPFamily specifies the IP family to be used by the NGINX.
-  #     type: string
   #     enum:
   #       - ipv4
   #       - ipv6
@@ -381,7 +380,6 @@ nginx:
   #     description: RewriteClientIP defines configuration for rewriting the client IP to the original client's IP.
   #     properties:
   #       mode:
-  #         type: string
   #         enum:
   #           - ProxyProtocol
   #           - XForwardedFor
@@ -392,7 +390,6 @@ nginx:
   #         items:
   #           properties:
   #             type:
-  #               type: string
   #               enum:
   #                 - CIDR
   #                 - IPAddress
@@ -438,7 +435,6 @@ nginx:
   #       disabledFeatures:
   #         type: array
   #         items:
-  #           type: string
   #           enum:
   #             - DisableTracing
   #   metrics:
@@ -456,7 +452,6 @@ nginx:
   #     description: Logging defines logging related settings for NGINX.
   #     properties:
   #       errorLevel:
-  #         type: string
   #         enum:
   #           - debug
   #           - info
@@ -467,7 +462,6 @@ nginx:
   #           - alert
   #           - emerg
   #       agentLevel:
-  #         type: string
   #         enum:
   #           - debug
   #           - info
@@ -482,7 +476,6 @@ nginx:
   #             type: boolean
   #             description: Disable turns off access logging when set to true.
   #           escape:
-  #             type: string
   #             description: Escape specifies how to escape characters in variables for access log. If not specified, 'default' escaping is used.
   #             enum:
   #               - default
@@ -500,7 +493,6 @@ nginx:
   #         items:
   #           properties:
   #             type:
-  #               type: string
   #               enum:
   #                 - CIDR
   #                 - IPAddress
@@ -522,13 +514,12 @@ nginx:
   #           type: object
   #           properties:
   #             type:
-  #               type: string
   #               enum:
   #                 - IPAddress
   #                 - Hostname
   #               description: Type specifies the type of address.
   #             value:
-  #               type: string
+  #               type: array
   #               minItems: 1
   #               maxItems: 253
   #               description: Value specifies the address value.
