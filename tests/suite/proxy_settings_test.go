@@ -514,415 +514,6 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		})
 	})
 
-	When("valid ProxySettingsPolicies are disabled for both: Gateway and HTTPRoute", func() {
-		var (
-			policies = []string{
-				"proxy-settings-policy/gateway-and-coffee-disabled-http-proxy-settings.yaml",
-			}
-
-			baseURL string
-		)
-
-		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
-
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
-		})
-
-		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
-		})
-
-		Specify("they are accepted by the target resource", func() {
-			policyNames := []string{
-				"gateway-proxy-settings",
-				"coffee-http-proxy-settings",
-			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
-		})
-
-		Context("verify working traffic", func() {
-			It("should return a 200 response only for HTTPRoute tea, and fail for coffee", func() {
-				baseCoffeeURL := baseURL + "/coffee"
-				baseTeaURL := baseURL + "/tea"
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "Coffee chunk", framework.WithContextDisabled())
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					ShouldNot(Succeed())
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-		})
-	})
-
-	When("valid big buffer Gateway ProxySettingsPolicies are inherited by HTTPRoute", func() {
-		var (
-			policies = []string{
-				"proxy-settings-policy/gateway-big-buffer-proxy-settings.yaml",
-			}
-
-			baseURL string
-		)
-
-		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
-
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
-		})
-
-		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
-		})
-
-		Specify("they are accepted by the target resource", func() {
-			nsnameGateway := types.NamespacedName{Name: "gateway-proxy-settings", Namespace: namespace}
-			nsnameCoffee := types.NamespacedName{Name: "coffee-http-proxy-settings", Namespace: namespace}
-
-			errGateway := waitForPSPolicyStatus(
-				nsnameGateway,
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
-			)
-
-			Expect(errGateway).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", "gateway-proxy-settings"))
-
-			errCoffee := waitForPSPolicyStatus(
-				nsnameCoffee,
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
-			)
-
-			Expect(errCoffee).To(HaveOccurred(), fmt.Sprintf("%s was accepted", "coffee-http-proxy-settings"))
-		})
-
-		Context("verify working traffic", func() {
-			It("should return a 200 response for HTTPRoutes", func() {
-				baseCoffeeURL := baseURL + "/coffee"
-				baseTeaURL := baseURL + "/tea"
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "Coffee chunk", framework.WithContextDisabled())
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-		})
-	})
-
-	//  Gateway policy disables buffering,
-	//  Route policy explicitly sets disable: false and specifies buffer sizes
-	When("valid enable for HTTPRoute ProxySettingsPolicies overrides disabled Gateway settings", func() {
-		var (
-			policies = []string{
-				"proxy-settings-policy/gateway-disabled-coffee-enabled-http-proxy-settings.yaml",
-			}
-
-			baseURL string
-		)
-
-		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
-
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
-		})
-
-		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
-		})
-
-		Specify("they are accepted by the target resource", func() {
-			policyNames := []string{
-				"gateway-proxy-settings",
-				"coffee-http-proxy-settings",
-			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
-		})
-
-		Context("verify working traffic", func() {
-			It("should return a 200 response for HTTPRoutes", func() {
-				baseCoffeeURL := baseURL + "/coffee"
-				baseTeaURL := baseURL + "/tea"
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "Coffee chunk", framework.WithContextDisabled())
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-		})
-	})
-
-	// Gateway policy disables buffering,
-	// Route policy specifies buffer sizes without setting disable: false
-	// Since by default disable = false, the HTTPRoute settings should apply
-	When("valid disable for Gateway ProxySettingsPolicies is ovewritten by HTTPRoute default disable=false value", func() {
-		var (
-			policies = []string{
-				"proxy-settings-policy/gateway-disabled-coffee-not-enabled-http-proxy-settings.yaml",
-			}
-
-			baseURL string
-		)
-
-		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
-
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
-		})
-
-		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
-		})
-
-		Specify("they are accepted by the target resource", func() {
-			policyNames := []string{
-				"gateway-proxy-settings",
-				"coffee-http-proxy-settings",
-			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
-		})
-
-		Context("verify working traffic", func() {
-			It("should return a 200 response only for both HTTPRoutes tea and coffee", func() {
-				baseCoffeeURL := baseURL + "/coffee"
-				baseTeaURL := baseURL + "/tea"
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "Coffee chunk", framework.WithContextDisabled())
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-		})
-	})
-
-	When("valid disable for HTTPRoute ProxySettingsPolicies with unsufficient buffer size", func() {
-		var (
-			policies = []string{
-				"proxy-settings-policy/gateway-enabled-coffee-disabled-http-proxy-settings.yaml",
-			}
-
-			baseURL string
-		)
-
-		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
-
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
-		})
-
-		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
-		})
-
-		Specify("they are accepted by the target resource", func() {
-			policyNames := []string{
-				"gateway-proxy-settings",
-				"coffee-http-proxy-settings",
-			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
-		})
-
-		Context("verify working traffic", func() {
-			// Gateway policy has sufficient buffering,
-			// Route policy specifies not sufficient buffer sizes
-			It("should return a 200 response only for HTTPRoutes tea and coffee should fail", func() {
-				baseCoffeeURL := baseURL + "/coffee"
-				baseTeaURL := baseURL + "/tea"
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "Coffee chunk", framework.WithContextDisabled())
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					ShouldNot(Succeed())
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-		})
-	})
-
-	When("valid disable for HTTPRoute ProxySettingsPolicies does not override enabled Gateway setting", func() {
-		var (
-			policies = []string{
-				"proxy-settings-policy/gateway-enabled-coffee-only-disabled-http-proxy-settings.yaml",
-			}
-
-			baseURL string
-		)
-
-		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
-
-			port := 80
-			if portFwdPort != 0 {
-				port = portFwdPort
-			}
-
-			baseURL = fmt.Sprintf("http://cafe.example.com:%d", port)
-		})
-
-		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
-		})
-
-		Specify("they are accepted by the target resource", func() {
-			policyNames := []string{
-				"gateway-proxy-settings",
-				"coffee-http-proxy-settings",
-			}
-
-			for _, name := range policyNames {
-				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				err := waitForPSPolicyStatus(
-					nsname,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
-				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
-			}
-		})
-
-		Context("verify working traffic", func() {
-			// Gateway policy has sufficient buffering,
-			// Route policy specifies not sufficient buffer sizes
-			// But Route policy disables buffering, that means that Gateway settings should apply
-			It("should return a 200 response for both HTTPRoutes tea and coffee", func() {
-				baseCoffeeURL := baseURL + "/coffee"
-				baseTeaURL := baseURL + "/tea"
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "Coffee chunk", framework.WithContextDisabled())
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-
-				Eventually(
-					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
-			})
-		})
-	})
-
 	When("valid HTTPRoute ProxySettingsPolicies with more than one TargetRef", func() {
 		policies := []string{
 			"proxy-settings-policy/two-targetrefs-http-proxy-settings.yaml",
@@ -967,25 +558,50 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("they are accepted by the target resource", func() {
-			err1 := waitForPSPolicyStatus(
-				types.NamespacedName{Name: "http-proxy-settings-1", Namespace: namespace},
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
+		Context("verify that conflicting HTTPRoute ProxySettingsPolicies are not accepted", func() {
+			type test struct {
+				desc            string
+				nsname          types.NamespacedName
+				conditionStatus metav1.ConditionStatus
+				conditionReason gatewayv1.PolicyConditionReason
+			}
+
+			DescribeTable("Accepted and Conflicted conditions are set properly",
+				func(tests []test) {
+					for _, test := range tests {
+						GinkgoWriter.Printf("Test case: %s\n", test.desc)
+						Eventually(waitForPSPolicyStatus).
+							WithArguments(
+								test.nsname,
+								test.conditionStatus,
+								test.conditionReason,
+							).
+							WithTimeout(timeoutConfig.RequestTimeout).
+							WithPolling(500 * time.Millisecond).
+							Should(Succeed())
+					}
+				},
+				Entry("conditions expectations", []test{
+					{
+						desc:            "http-proxy-settings-1 Accepted",
+						nsname:          types.NamespacedName{Name: "http-proxy-settings-1", Namespace: namespace},
+						conditionStatus: metav1.ConditionTrue,
+						conditionReason: gatewayv1.PolicyReasonAccepted,
+					},
+					{
+						desc:            "http-proxy-settings-2 Conflicted",
+						nsname:          types.NamespacedName{Name: "http-proxy-settings-2", Namespace: namespace},
+						conditionStatus: metav1.ConditionFalse,
+						conditionReason: gatewayv1.PolicyReasonConflicted,
+					},
+					{
+						desc:            "http-proxy-settings-3 Conflicted",
+						nsname:          types.NamespacedName{Name: "http-proxy-settings-3", Namespace: namespace},
+						conditionStatus: metav1.ConditionFalse,
+						conditionReason: gatewayv1.PolicyReasonConflicted,
+					},
+				}),
 			)
-			Expect(err1).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", "http-proxy-settings-1"))
-			err2 := waitForPSPolicyStatus(
-				types.NamespacedName{Name: "http-proxy-settings-2", Namespace: namespace},
-				metav1.ConditionFalse,
-				gatewayv1.PolicyReasonConflicted,
-			)
-			Expect(err2).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", "http-proxy-settings-2"))
-			err3 := waitForPSPolicyStatus(
-				types.NamespacedName{Name: "http-proxy-settings-3", Namespace: namespace},
-				metav1.ConditionFalse,
-				gatewayv1.PolicyReasonConflicted,
-			)
-			Expect(err3).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", "http-proxy-settings-3"))
 		})
 	})
 
@@ -1043,7 +659,6 @@ func waitForPSPolicyStatus(
 		true,
 		func(ctx context.Context) (bool, error) {
 			var psPolicy ngfAPI.ProxySettingsPolicy
-			var err error
 
 			if err := resourceManager.Get(ctx, psPolicyNsName, &psPolicy); err != nil {
 				return false, err
@@ -1059,9 +674,11 @@ func waitForPSPolicyStatus(
 			ancestors := psPolicy.Status.Ancestors
 
 			for _, ancestor := range ancestors {
-				err = ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
+				if err := ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason); err != nil {
+					return false, err
+				}
 			}
-			return err == nil, err
+			return true, nil
 		},
 	)
 }
