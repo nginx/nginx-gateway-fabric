@@ -2600,3 +2600,155 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildTCPRouteStatuses(t *testing.T) {
+	t.Parallel()
+	tcpValid := &v1alpha2.TCPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "tcp-valid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.TCPRouteSpec{
+			CommonRouteSpec: commonRouteSpecValid,
+		},
+	}
+	tcpInvalid := &v1alpha2.TCPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "tcp-invalid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.TCPRouteSpec{
+			CommonRouteSpec: commonRouteSpecInvalid,
+		},
+	}
+	routes := map[graph.L4RouteKey]*graph.L4Route{
+		graph.CreateRouteKeyL4(tcpValid): {
+			Valid:      true,
+			Source:     tcpValid,
+			ParentRefs: parentRefsValid,
+		},
+		graph.CreateRouteKeyL4(tcpInvalid): {
+			Valid:      false,
+			Conditions: []conditions.Condition{invalidRouteCondition},
+			Source:     tcpInvalid,
+			ParentRefs: parentRefsInvalid,
+		},
+	}
+
+	expectedStatuses := map[types.NamespacedName]v1alpha2.TCPRouteStatus{
+		{Namespace: "test", Name: "tcp-valid"}: {
+			RouteStatus: routeStatusValid,
+		},
+		{Namespace: "test", Name: "tcp-invalid"}: {
+			RouteStatus: routeStatusInvalid,
+		},
+	}
+
+	g := NewWithT(t)
+
+	k8sClient := createK8sClientFor(&v1alpha2.TCPRoute{})
+
+	for _, r := range routes {
+		err := k8sClient.Create(t.Context(), r.Source)
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	updater := NewUpdater(k8sClient, logr.Discard())
+
+	reqs := PrepareRouteRequests(
+		routes,
+		map[graph.RouteKey]*graph.L7Route{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	updater.Update(t.Context(), reqs...)
+
+	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
+
+	for nsname, expected := range expectedStatuses {
+		var tcpRoute v1alpha2.TCPRoute
+
+		err := k8sClient.Get(t.Context(), nsname, &tcpRoute)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(tcpRoute.Status.Parents))
+	}
+}
+
+func TestBuildUDPRouteStatuses(t *testing.T) {
+	t.Parallel()
+	udpValid := &v1alpha2.UDPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "udp-valid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.UDPRouteSpec{
+			CommonRouteSpec: commonRouteSpecValid,
+		},
+	}
+	udpInvalid := &v1alpha2.UDPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "udp-invalid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.UDPRouteSpec{
+			CommonRouteSpec: commonRouteSpecInvalid,
+		},
+	}
+	routes := map[graph.L4RouteKey]*graph.L4Route{
+		graph.CreateRouteKeyL4(udpValid): {
+			Valid:      true,
+			Source:     udpValid,
+			ParentRefs: parentRefsValid,
+		},
+		graph.CreateRouteKeyL4(udpInvalid): {
+			Valid:      false,
+			Conditions: []conditions.Condition{invalidRouteCondition},
+			Source:     udpInvalid,
+			ParentRefs: parentRefsInvalid,
+		},
+	}
+
+	expectedStatuses := map[types.NamespacedName]v1alpha2.UDPRouteStatus{
+		{Namespace: "test", Name: "udp-valid"}: {
+			RouteStatus: routeStatusValid,
+		},
+		{Namespace: "test", Name: "udp-invalid"}: {
+			RouteStatus: routeStatusInvalid,
+		},
+	}
+
+	g := NewWithT(t)
+
+	k8sClient := createK8sClientFor(&v1alpha2.UDPRoute{})
+
+	for _, r := range routes {
+		err := k8sClient.Create(t.Context(), r.Source)
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	updater := NewUpdater(k8sClient, logr.Discard())
+
+	reqs := PrepareRouteRequests(
+		routes,
+		map[graph.RouteKey]*graph.L7Route{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	updater.Update(t.Context(), reqs...)
+
+	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
+
+	for nsname, expected := range expectedStatuses {
+		var udpRoute v1alpha2.UDPRoute
+
+		err := k8sClient.Get(t.Context(), nsname, &udpRoute)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(udpRoute.Status.Parents))
+	}
+}
