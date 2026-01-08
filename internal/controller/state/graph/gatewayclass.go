@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"slices"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -216,11 +217,8 @@ func validateCRDVersions(
 	}
 
 	// Check if any CRD is using experimental channel
-	for _, ch := range channels {
-		if ch == features.FeatureChannelExperimental {
-			experimental = true
-			break
-		}
+	if slices.Contains(channels, features.FeatureChannelExperimental) {
+		experimental = true
 	}
 
 	if unsupported {
