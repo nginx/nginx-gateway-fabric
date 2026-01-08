@@ -96,34 +96,50 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 			}
 		})
 
-		Context("verify working traffic with valid response returned for HTTPRoutes requests", func() {
+		Context("verify traffic with valid AuthenticationFilter configurations for HTTPRoutes", func() {
 			type test struct {
-				desc     string
-				url      string // since port is not available at this point, we build full URL in the test
-				path     string
-				headers  map[string]string
-				expected string
+				desc         string
+				url          string // since port is not available at this point, we build full URL in the test
+				path         string
+				headers      map[string]string
+				expected     string
+				responseCode int
 			}
 
-			DescribeTable("200 response",
+			DescribeTable("Authenticated/unauthenticated requests",
 				func(tests []test) {
 					for _, test := range tests {
-						GinkgoWriter.Printf("Test case: %s\n", test.desc)
-						Eventually(
-							func() error {
-								return framework.ExpectRequestToSucceed(
-									timeoutConfig.RequestTimeout,
-									fmt.Sprintf("%s%d%s", test.url, port, test.path),
-									address,
-									test.expected,
-									framework.WithTestHeaders(test.headers))
-							}).
-							WithTimeout(timeoutConfig.RequestTimeout).
-							WithPolling(500 * time.Millisecond).
-							Should(Succeed())
+						GinkgoWriter.Printf("Test case: %s, expected response code: %d\n", test.desc, test.responseCode)
+						if test.responseCode == 200 {
+							Eventually(
+								func() error {
+									return framework.ExpectRequestToSucceed(
+										timeoutConfig.RequestTimeout,
+										fmt.Sprintf("%s%d%s", test.url, port, test.path),
+										address,
+										test.expected,
+										framework.WithTestHeaders(test.headers))
+								}).
+								WithTimeout(timeoutConfig.RequestTimeout).
+								WithPolling(500 * time.Millisecond).
+								Should(Succeed())
+						} else {
+							Eventually(
+								func() error {
+									return framework.ExpectUnauthenticatedRequest(
+										timeoutConfig.RequestTimeout,
+										fmt.Sprintf("%s%d%s", test.url, port, test.path),
+										address,
+										framework.WithTestHeaders(test.headers))
+								}).
+								WithTimeout(timeoutConfig.RequestTimeout).
+								WithPolling(500 * time.Millisecond).
+								Should(Succeed())
+						}
 					}
 				},
-				Entry("requests with valid authentication", []test{
+				Entry("requests configurations", []test{
+					// Requests expected to return 200
 					{
 						desc: "Send https /coffee1 traffic with basic-auth1",
 						url:  "http://cafe.example.com:",
@@ -131,7 +147,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						headers: map[string]string{
 							"Authorization": "Basic dXNlcjE6cGFzc3dvcmQx",
 						},
-						expected: "URI: /coffee1",
+						expected:     "URI: /coffee1",
+						responseCode: 200,
 					},
 					{
 						desc: "Send https /coffee2 traffic with basic-auth1",
@@ -140,7 +157,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						headers: map[string]string{
 							"Authorization": "Basic dXNlcjE6cGFzc3dvcmQx",
 						},
-						expected: "URI: /coffee2",
+						expected:     "URI: /coffee2",
+						responseCode: 200,
 					},
 					{
 						desc: "Send https /tea traffic with basic-auth2",
@@ -149,36 +167,18 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						headers: map[string]string{
 							"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
 						},
-						expected: "URI: /tea",
+						expected:     "URI: /tea",
+						responseCode: 200,
 					},
 					{
-						desc:     "Send https /latte traffic without authentication",
-						url:      "http://cafe.example.com:",
-						path:     "/latte",
-						headers:  nil,
-						expected: "URI: /latte",
+						desc:         "Send https /latte traffic without authentication",
+						url:          "http://cafe.example.com:",
+						path:         "/latte",
+						headers:      nil,
+						expected:     "URI: /latte",
+						responseCode: 200,
 					},
-				}),
-			)
-
-			DescribeTable("401 response",
-				func(tests []test) {
-					for _, test := range tests {
-						GinkgoWriter.Printf("Test case: %s\n", test.desc)
-						Eventually(
-							func() error {
-								return framework.ExpectUnauthorizedRequest(
-									timeoutConfig.RequestTimeout,
-									fmt.Sprintf("%s%d%s", test.url, port, test.path),
-									address,
-									framework.WithTestHeaders(test.headers))
-							}).
-							WithTimeout(timeoutConfig.RequestTimeout).
-							WithPolling(500 * time.Millisecond).
-							Should(Succeed())
-					}
-				},
-				Entry("requests with invalid authentication", []test{
+					// Requests expected to return 401
 					{
 						desc: "Send https /coffee1 traffic with wrong authentication",
 						url:  "http://cafe.example.com:",
@@ -186,11 +186,13 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						headers: map[string]string{
 							"Authorization": "Basic 0000",
 						},
+						responseCode: 401,
 					},
 					{
-						desc: "Send https /coffee1 traffic without authentication",
-						url:  "http://cafe.example.com:",
-						path: "/coffee1",
+						desc:         "Send https /coffee1 traffic without authentication",
+						url:          "http://cafe.example.com:",
+						path:         "/coffee1",
+						responseCode: 401,
 					},
 					{
 						desc: "Send https /tea traffic with wrong authentication",
@@ -199,75 +201,76 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						headers: map[string]string{
 							"Authorization": "Basic 0000",
 						},
+						responseCode: 401,
 					},
 					{
-						desc: "Send https /tea traffic without authentication",
-						url:  "http://cafe.example.com:",
-						path: "/tea",
+						desc:         "Send https /tea traffic without authentication",
+						url:          "http://cafe.example.com:",
+						path:         "/tea",
+						responseCode: 401,
 					},
 				}),
 			)
 		})
 
-		Context("verify working traffic with valid response returned for GRPCRoutes requests", func() {
+		Context("verify traffic with valid AuthenticationFilter configurations for GRPCRoutes", func() {
 			type test struct {
-				headers map[string]string
-				desc    string
+				headers      map[string]string
+				desc         string
+				responseCode int
 			}
 
-			DescribeTable("Successful response",
+			DescribeTable("Authenticated/unauthenticated requests",
 				func(tests []test) {
 					for _, test := range tests {
-						GinkgoWriter.Printf("Test case: %s\n", test.desc)
-						Eventually(
-							func() error {
-								return framework.ExpectGRPCRequestToSucceed(
-									timeoutConfig.RequestTimeout,
-									fmt.Sprintf("%s:%d", address, port),
-									framework.WithTestHeaders(test.headers),
-								)
-							}).
-							WithTimeout(timeoutConfig.RequestTimeout).
-							WithPolling(500 * time.Millisecond).
-							Should(Succeed())
+						GinkgoWriter.Printf("Test case: %s, expected response code: %d\n", test.desc, test.responseCode)
+						if test.responseCode == 200 {
+							Eventually(
+								func() error {
+									return framework.ExpectGRPCRequestToSucceed(
+										timeoutConfig.RequestTimeout,
+										fmt.Sprintf("%s:%d", address, port),
+										framework.WithTestHeaders(test.headers),
+									)
+								}).
+								WithTimeout(timeoutConfig.RequestTimeout).
+								WithPolling(500 * time.Millisecond).
+								Should(Succeed())
+						} else {
+							Eventually(
+								func() error {
+									return framework.ExpectUnauthenticatedGRPCRequest(
+										timeoutConfig.RequestTimeout,
+										fmt.Sprintf("%s:%d", address, port),
+										framework.WithTestHeaders(test.headers),
+									)
+								}).
+								WithTimeout(timeoutConfig.RequestTimeout).
+								WithPolling(500 * time.Millisecond).
+								Should(Succeed())
+						}
 					}
 				},
 				Entry("requests with valid authentication", []test{
+					// Requests expected to return 200
 					{
 						desc: "Send gRPC request with basic-auth2",
 						headers: map[string]string{
 							"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
 						},
+						responseCode: 200,
 					},
-				}),
-			)
-
-			DescribeTable("Failed response",
-				func(tests []test) {
-					for _, test := range tests {
-						GinkgoWriter.Printf("Test case: %s\n", test.desc)
-						Eventually(
-							func() error {
-								return framework.ExpectUnauthorizedGRPCRequest(
-									timeoutConfig.RequestTimeout,
-									fmt.Sprintf("%s:%d", address, port),
-									framework.WithTestHeaders(test.headers),
-								)
-							}).
-							WithTimeout(timeoutConfig.RequestTimeout).
-							WithPolling(500 * time.Millisecond).
-							Should(Succeed())
-					}
-				},
-				Entry("requests with invalid authentication", []test{
+					// Requests expected to return Unauthenticated
 					{
-						desc: "Send gRPC request with invalid auth",
+						desc: "Send gRPC request with invalid authentication",
 						headers: map[string]string{
 							"Authorization": "Basic 00000",
 						},
+						responseCode: 204,
 					},
 					{
-						desc: "Send gRPC request without authentication",
+						desc:         "Send gRPC request without authentication",
+						responseCode: 204,
 					},
 				}),
 			)
@@ -361,8 +364,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 			invalidAuthenticationFilters = []string{
 				"authentication-filter/basic-invalid-auth.yaml",
 			}
-			validAuthenticationFilter = []string{
-				"authentication-filter/basic-auth1.yaml",
+			wrongWorkspaceAuthenticationFilter = []string{
+				"authentication-filter/basic-valid-auth3.yaml",
 			}
 			wrongNamespace = "wrong-namespace"
 		)
@@ -374,7 +377,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 				},
 			}
 			Expect(resourceManager.Apply([]client.Object{wns})).To(Succeed())
-			Expect(resourceManager.ApplyFromFiles(validAuthenticationFilter, wrongNamespace)).To(Succeed())
+			Expect(resourceManager.ApplyFromFiles(wrongWorkspaceAuthenticationFilter, wrongNamespace)).To(Succeed())
 			Expect(resourceManager.ApplyFromFiles(invalidAuthenticationFilters, namespace)).To(Succeed())
 			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 		})
@@ -382,7 +385,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 		AfterAll(func() {
 			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 			Expect(resourceManager.DeleteFromFiles(invalidAuthenticationFilters, namespace)).To(Succeed())
-			Expect(resourceManager.DeleteFromFiles(validAuthenticationFilter, wrongNamespace)).To(Succeed())
+			Expect(resourceManager.DeleteFromFiles(wrongWorkspaceAuthenticationFilter, wrongNamespace)).To(Succeed())
 			Expect(resourceManager.DeleteNamespace(wrongNamespace)).To(Succeed())
 		})
 
@@ -391,18 +394,21 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 				"basic-auth-wrong-key",
 				"basic-auth-opaque",
 			}
-			validAuthenticationFilter := "basic-auth2"
-			invalidNamespaceAuthenticationFilterNames := "basic-auth1"
+			validAuthenticationFilters := []string{
+				"basic-auth1",
+				"basic-auth2",
+			}
+			invalidNamespaceAuthenticationFilterNames := "basic-auth3"
 
-			// Check that valid AuthenticationFilter is accepted
-			Eventually(checkForAuthenticationFilterToBeAccepted).
-				WithArguments(
-					types.NamespacedName{Name: validAuthenticationFilter, Namespace: namespace},
-				).
-				WithTimeout(timeoutConfig.GetStatusTimeout).
-				WithPolling(500*time.Millisecond).
-				Should(Succeed(), fmt.Sprintf("%s was not accepted", validAuthenticationFilter))
-
+			// Check that valid AuthenticationFilters are accepted regardless of invalid ones
+			for _, name := range validAuthenticationFilters {
+				nsname := types.NamespacedName{Name: name, Namespace: namespace}
+				Eventually(checkForAuthenticationFilterToBeAccepted).
+					WithArguments(nsname).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500*time.Millisecond).
+					Should(Succeed(), fmt.Sprintf("%s was not accepted", wrongWorkspaceAuthenticationFilter))
+			}
 			// Check that invalid AuthenticationFilters are not accepted
 			for _, name := range invalidAuthenticationFilterNames {
 				nsname := types.NamespacedName{Name: name, Namespace: namespace}
@@ -414,7 +420,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 					ShouldNot(Succeed(), fmt.Sprintf("%s was accepted", name))
 			}
 
-			// Check that valid AuthenticationFilter in wrong namespace is not accepted
+			// Check that valid AuthenticationFilter in wrong namespace is accepted
 			Eventually(checkForAuthenticationFilterToBeAccepted).
 				WithArguments(
 					types.NamespacedName{Name: invalidNamespaceAuthenticationFilterNames, Namespace: wrongNamespace},
@@ -424,34 +430,50 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 				Should(Succeed(), fmt.Sprintf("%s was not accepted", invalidNamespaceAuthenticationFilterNames))
 		})
 
-		Context("verify working traffic with valid response returned for HTTPRoutes requests", func() {
+		Context("verify traffic for HTTPRoutes configured with valid and invalid AuthenticationFilters", func() {
 			type test struct {
-				desc     string
-				url      string // since port is not available at this point, we build full URL in the test
-				path     string
-				headers  map[string]string
-				expected string
+				desc         string
+				url          string // since port is not available at this point, we build full URL in the test
+				path         string
+				headers      map[string]string
+				expected     string
+				responseCode int
 			}
 
-			DescribeTable("200 response",
+			DescribeTable("Verification for setup with valid and invalid filters configuration",
 				func(tests []test) {
 					for _, test := range tests {
-						GinkgoWriter.Printf("Test case: %s\n", test.desc)
-						Eventually(
-							func() error {
-								return framework.ExpectRequestToSucceed(
-									timeoutConfig.RequestTimeout,
-									fmt.Sprintf("%s%d%s", test.url, port, test.path),
-									address,
-									test.expected,
-									framework.WithTestHeaders(test.headers))
-							}).
-							WithTimeout(timeoutConfig.RequestTimeout).
-							WithPolling(500 * time.Millisecond).
-							Should(Succeed())
+						GinkgoWriter.Printf("Test case: %s, expected response: %d\n", test.desc, test.responseCode)
+						if test.responseCode == 200 {
+							Eventually(
+								func() error {
+									return framework.ExpectRequestToSucceed(
+										timeoutConfig.RequestTimeout,
+										fmt.Sprintf("%s%d%s", test.url, port, test.path),
+										address,
+										test.expected,
+										framework.WithTestHeaders(test.headers))
+								}).
+								WithTimeout(timeoutConfig.RequestTimeout).
+								WithPolling(500 * time.Millisecond).
+								Should(Succeed())
+						} else {
+							Eventually(
+								func() error {
+									return framework.Expect500Response(
+										timeoutConfig.RequestTimeout,
+										fmt.Sprintf("%s%d%s", test.url, port, test.path),
+										address,
+										framework.WithTestHeaders(test.headers))
+								}).
+								WithTimeout(timeoutConfig.RequestTimeout).
+								WithPolling(500 * time.Millisecond).
+								Should(Succeed())
+						}
 					}
 				},
-				Entry("requests with valid authentication", []test{
+				Entry("requests configurations", []test{
+					// Requests expected to return 200
 					{
 						desc: "Send https /tea traffic with valid basic-auth2",
 						url:  "http://cafe.example.com:",
@@ -459,36 +481,18 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						headers: map[string]string{
 							"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
 						},
-						expected: "URI: /tea",
+						expected:     "URI: /tea",
+						responseCode: 200,
 					},
 					{
-						desc:     "Send https /latte traffic without authentication",
-						url:      "http://cafe.example.com:",
-						path:     "/latte",
-						headers:  nil,
-						expected: "URI: /latte",
+						desc:         "Send https /latte traffic without authentication",
+						url:          "http://cafe.example.com:",
+						path:         "/latte",
+						headers:      nil,
+						expected:     "URI: /latte",
+						responseCode: 200,
 					},
-				}),
-			)
-
-			DescribeTable("500 response",
-				func(tests []test) {
-					for _, test := range tests {
-						GinkgoWriter.Printf("Test case: %s\n", test.desc)
-						Eventually(
-							func() error {
-								return framework.Expect500Response(
-									timeoutConfig.RequestTimeout,
-									fmt.Sprintf("%s%d%s", test.url, port, test.path),
-									address,
-									framework.WithTestHeaders(test.headers))
-							}).
-							WithTimeout(timeoutConfig.RequestTimeout).
-							WithPolling(500 * time.Millisecond).
-							Should(Succeed())
-					}
-				},
-				Entry("requests with invalid authentication configuration", []test{
+					// Requests expected to return 500
 					{
 						desc: "Send https /coffee1 traffic with invalid Auth type",
 						url:  "http://cafe.example.com:",
@@ -496,6 +500,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						headers: map[string]string{
 							"Authorization": "Basic dXNlcjE6cGFzc3dvcmQx",
 						},
+						responseCode: 500,
 					},
 					{
 						desc: "Send https /coffee2 traffic with invalid Auth type",
@@ -504,14 +509,16 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						headers: map[string]string{
 							"Authorization": "Basic dXNlcjE6cGFzc3dvcmQx",
 						},
+						responseCode: 500,
 					},
 					{
-						desc: "Send https /soda traffic with basic-auth1 in different namespace",
+						desc: "Send https /soda traffic with basic-auth3 in different namespace",
 						url:  "http://cafe.example.com:",
 						path: "/soda",
 						headers: map[string]string{
-							"Authorization": "Basic dXNlcjE6cGFzc3dvcmQx",
+							"Authorization": "Basic dXNlcjM6cGFzc3dvcmQz",
 						},
+						responseCode: 500,
 					},
 					{
 						desc: "Send https /matcha traffic with not existing AuthenticationFilter",
@@ -520,51 +527,54 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						headers: map[string]string{
 							"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
 						},
+						responseCode: 500,
 					},
 					{
 						desc: "Send https /chocolate traffic with invalid key",
 						url:  "http://cafe.example.com:",
 						path: "/chocolate",
 						headers: map[string]string{
-							"Authorization": "Basic 0000",
+							"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
 						},
+						responseCode: 500,
+					},
+					{
+						desc: "Send https /frappe traffic with twice configured AuthenticationFilters: auth1",
+						url:  "http://cafe.example.com:",
+						path: "/frappe",
+						headers: map[string]string{
+							"Authorization": "Basic dXNlcjE6cGFzc3dvcmQx",
+						},
+						responseCode: 500,
+					},
+					{
+						desc: "Send https /frappe traffic with twice configured AuthenticationFilters: auth2",
+						url:  "http://cafe.example.com:",
+						path: "/frappe",
+						headers: map[string]string{
+							"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
+						},
+						responseCode: 500,
 					},
 				}),
 			)
 		})
 
-		Context("verify working traffic for GRPCRoutes requests", func() {
-			type test struct {
-				headers map[string]string
-				desc    string
-			}
-
-			DescribeTable("Failed response",
-				func(tests []test) {
-					for _, test := range tests {
-						GinkgoWriter.Printf("Test case: %s\n", test.desc)
-						Eventually(
-							func() error {
-								return framework.Expect500GRPCResponse(
-									timeoutConfig.RequestTimeout,
-									fmt.Sprintf("%s:%d", address, port),
-									framework.WithTestHeaders(test.headers),
-								)
-							}).
-							WithTimeout(timeoutConfig.RequestTimeout).
-							WithPolling(500 * time.Millisecond).
-							Should(Succeed())
-					}
-				},
-				Entry("requests with invalid authentication", []test{
-					{
-						desc: "Send gRPC request with invalid key AuthFilter",
-						headers: map[string]string{
+		Context("verify 500 response for invalid filter configured on GRPCRoutes", func() {
+			Specify("authenticationFilters are accepted", func() {
+				GinkgoWriter.Printf("Test case: Send gRPC request with invalid key AuthFilter\n")
+				Eventually(framework.Expect500GRPCResponse).
+					WithArguments(
+						timeoutConfig.RequestTimeout,
+						fmt.Sprintf("%s:%d", address, port),
+						framework.WithTestHeaders(map[string]string{
 							"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
-						},
-					},
-				}),
-			)
+						}),
+					).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+			})
 		})
 	})
 })
@@ -587,7 +597,6 @@ func checkForAuthenticationFilterToBeAccepted(authenticationFilterNsNames types.
 
 	return framework.CheckFilterAccepted(
 		af,
-		ngfControllerName,
 		framework.AuthenticationFilterControllers,
 		(string)(ngfAPI.AuthenticationFilterConditionTypeAccepted),
 		(string)(ngfAPI.AuthenticationFilterConditionReasonAccepted),

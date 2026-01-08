@@ -331,7 +331,6 @@ func checkForSnippetsFilterToBeAccepted(snippetsFilterNsNames types.NamespacedNa
 
 	return framework.CheckFilterAccepted(
 		sf,
-		ngfControllerName,
 		framework.SnippetsFilterControllers,
 		(string)(ngfAPI.SnippetsFilterConditionTypeAccepted),
 		(string)(ngfAPI.SnippetsFilterConditionReasonAccepted),

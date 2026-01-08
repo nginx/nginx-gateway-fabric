@@ -504,10 +504,10 @@ func ancestorMustEqualGatewayRef(
 	gatewayName string,
 	namespace string,
 ) error {
-	if ancestor.ControllerName != ngfControllerName {
+	if ancestor.ControllerName != framework.NgfControllerName {
 		return fmt.Errorf(
 			"expected ancestor controller name to be %s, got %s",
-			ngfControllerName,
+			framework.NgfControllerName,
 			ancestor.ControllerName,
 		)
 	}

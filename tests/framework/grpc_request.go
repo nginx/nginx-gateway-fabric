@@ -17,14 +17,14 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type GRPCRequest struct {
+type gRPCRequest struct {
 	Headers map[string]string // optional metadata headers (e.g., Authorization: Basic ...)
 	Address string            // host:port to dial (e.g., 127.0.0.1:80)
 	Timeout time.Duration
 }
 
 // SendGRPCRequest performs a unary gRPC call to helloworld.Greeter/SayHello using generic Invoke.
-func SendGRPCRequest(request GRPCRequest) error {
+func sendGRPCRequest(request gRPCRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), request.Timeout)
 	defer cancel()
 
@@ -87,32 +87,31 @@ func ExpectGRPCRequestToSucceed(
 	hdrs ...RequestHeader,
 ) error {
 	headers := RequestWithTestHeaders(hdrs...)
-	request := GRPCRequest{
+	request := gRPCRequest{
 		Headers: headers,
 		Address: address,
 		Timeout: timeout,
 	}
-	err := SendGRPCRequest(request)
-	if status.Code(err) != codes.OK {
+	err := sendGRPCRequest(request)
+	if err != nil {
 		return fmt.Errorf("expected gRPC request to succeed, but got error: %w", err)
 	}
 
 	return nil
 }
 
-func ExpectUnauthorizedGRPCRequest(
+func ExpectUnauthenticatedGRPCRequest(
 	timeout time.Duration,
 	address string,
 	hdrs ...RequestHeader,
 ) error {
 	headers := RequestWithTestHeaders(hdrs...)
-	request := GRPCRequest{
+	request := gRPCRequest{
 		Headers: headers,
 		Address: address,
 		Timeout: timeout,
 	}
-	err := SendGRPCRequest(request)
-
+	err := sendGRPCRequest(request)
 	if err == nil {
 		return errors.New("expected Unauthenticated error, but gRPC request succeeded")
 	}
@@ -131,12 +130,12 @@ func Expect500GRPCResponse(
 	hdrs ...RequestHeader,
 ) error {
 	headers := RequestWithTestHeaders(hdrs...)
-	request := GRPCRequest{
+	request := gRPCRequest{
 		Headers: headers,
 		Address: address,
 		Timeout: timeout,
 	}
-	err := SendGRPCRequest(request)
+	err := sendGRPCRequest(request)
 
 	if err == nil {
 		return errors.New("expected 500 error, but gRPC request succeeded")

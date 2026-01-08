@@ -34,7 +34,6 @@ type Filter interface {
 // - expectedCondType/expectedCondReason: the condition type and reason to assert (passed in for flexibility).
 func CheckFilterAccepted[T Filter](
 	filter T,
-	ngfControllerName string,
 	getControllers func(T) []ControllerStatusView,
 	expectedCondType string,
 	expectedCondReason string,
@@ -47,10 +46,10 @@ func CheckFilterAccepted[T Filter](
 	}
 
 	filterStatus := controllers[0]
-	if filterStatus.ControllerName != (v1.GatewayController)(ngfControllerName) {
+	if filterStatus.ControllerName != (v1.GatewayController)(NgfControllerName) {
 		wrongNameErr := fmt.Errorf(
 			"expected controller name to be %s, got %s",
-			ngfControllerName,
+			NgfControllerName,
 			filterStatus.ControllerName,
 		)
 		GinkgoWriter.Printf("ERROR: %v\n", wrongNameErr)
@@ -85,7 +84,7 @@ func CheckFilterAccepted[T Filter](
 	return nil
 }
 
-// Adapters: extract ControllerStatusView slices from concrete NGF filter types.
+// SnippetsFilterControllers is an adapter that extracts controller statuses from a SnippetsFilter.
 func SnippetsFilterControllers(sf ngfAPI.SnippetsFilter) []ControllerStatusView {
 	out := make([]ControllerStatusView, 0, len(sf.Status.Controllers))
 	for _, st := range sf.Status.Controllers {
@@ -98,6 +97,7 @@ func SnippetsFilterControllers(sf ngfAPI.SnippetsFilter) []ControllerStatusView 
 	return out
 }
 
+// AuthenticationFilterControllers is an adapter that extracts controller statuses from an AuthenticationFilter.
 func AuthenticationFilterControllers(af ngfAPI.AuthenticationFilter) []ControllerStatusView {
 	out := make([]ControllerStatusView, 0, len(af.Status.Controllers))
 	for _, st := range af.Status.Controllers {

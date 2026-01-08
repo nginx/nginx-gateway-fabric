@@ -168,7 +168,8 @@ func RequestWithTestHeaders(hdrs ...RequestHeader) RequestHeaders {
 
 func ExpectRequestToSucceed(
 	timeout time.Duration,
-	appURL, address string,
+	appURL,
+	address,
 	responseBodyMessage string,
 	hdrs ...RequestHeader,
 ) error {
@@ -222,7 +223,7 @@ func ExpectRequestToFail(timeout time.Duration, appURL, address string) error {
 	return nil
 }
 
-func ExpectUnauthorizedRequest(timeout time.Duration, appURL, address string, hdrs ...RequestHeader) error {
+func ExpectUnauthenticatedRequest(timeout time.Duration, appURL, address string, hdrs ...RequestHeader) error {
 	headers := RequestWithTestHeaders(hdrs...)
 	request := Request{
 		Headers: headers,

@@ -195,3 +195,36 @@ spec:
     name: http
   selector:
     app: matcha
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frappe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frappe
+  template:
+    metadata:
+      labels:
+        app: frappe
+    spec:
+      containers:
+      - name: frappe
+        image: nginxdemos/nginx-hello:plain-text
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frappe
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: frappe

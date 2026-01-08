@@ -474,10 +474,10 @@ func ancestorMustEqualTargetRef(
 	targetRef v1.LocalPolicyTargetReference,
 	namespace string,
 ) error {
-	if ancestor.ControllerName != ngfControllerName {
+	if ancestor.ControllerName != framework.NgfControllerName {
 		controllerNameErr := fmt.Errorf(
 			"expected ancestor controller name to be %s, got %s",
-			ngfControllerName,
+			framework.NgfControllerName,
 			ancestor.ControllerName,
 		)
 		GinkgoWriter.Printf("ERROR: %v\n", controllerNameErr)
