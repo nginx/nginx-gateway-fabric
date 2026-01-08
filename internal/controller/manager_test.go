@@ -39,15 +39,19 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 	)
 
 	tests := []struct {
+		discoveredCRDs      map[string]bool
+		name                string
 		expectedObjects     []client.Object
 		expectedObjectLists []client.ObjectList
-		name                string
 		cfg                 config.Config
 	}{
 		{
-			name: "base case",
+			name: "base case with BackendTLSPolicy v1",
 			cfg: config.Config{
 				GatewayClassName: gcName,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -72,10 +76,44 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "experimental enabled",
+			name: "base case without BackendTLSPolicy v1",
+			cfg: config.Config{
+				GatewayClassName: gcName,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": false,
+			},
+			expectedObjects: []client.Object{
+				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
+			},
+			expectedObjectLists: []client.ObjectList{
+				&apiv1.ServiceList{},
+				&apiv1.SecretList{},
+				&apiv1.NamespaceList{},
+				&discoveryV1.EndpointSliceList{},
+				&gatewayv1.HTTPRouteList{},
+				&apiv1.ConfigMapList{},
+				&gatewayv1.GatewayList{},
+				&gatewayv1beta1.ReferenceGrantList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
+				&gatewayv1.GRPCRouteList{},
+				partialObjectMetadataList,
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+			},
+		},
+		{
+			name: "experimental enabled with BackendTLSPolicy v1",
 			cfg: config.Config{
 				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"TLSRoute":         true,
+				"TCPRoute":         true,
+				"UDPRoute":         true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -103,10 +141,14 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "inference extension enabled",
+			name: "inference extension enabled with BackendTLSPolicy v1",
 			cfg: config.Config{
 				GatewayClassName:   gcName,
 				InferenceExtension: true,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"InferencePool":    true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -132,10 +174,13 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "snippets filters enabled",
+			name: "snippets filters enabled with BackendTLSPolicy v1",
 			cfg: config.Config{
 				GatewayClassName: gcName,
 				SnippetsFilters:  true,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -161,12 +206,19 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "experimental, inference, and snippets filters enabled",
+			name: "experimental, inference, and snippets filters enabled with BackendTLSPolicy v1",
 			cfg: config.Config{
 				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
 				InferenceExtension:   true,
 				SnippetsFilters:      true,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"TLSRoute":         true,
+				"TCPRoute":         true,
+				"UDPRoute":         true,
+				"InferencePool":    true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -202,7 +254,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			objects, objectLists := prepareFirstEventBatchPreparerArgs(test.cfg)
+			objects, objectLists := prepareFirstEventBatchPreparerArgs(test.cfg, test.discoveredCRDs)
 
 			g.Expect(objects).To(ConsistOf(test.expectedObjects))
 			g.Expect(objectLists).To(ConsistOf(test.expectedObjectLists))
