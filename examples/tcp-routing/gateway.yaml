@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: coffee
+    protocol: TCP
+    port: 81
+    allowedRoutes:
+      kinds:
+      - kind: TCPRoute
+  - name: tea
+    protocol: TCP
+    port: 82
+    allowedRoutes:
+      kinds:
+      - kind: TCPRoute
