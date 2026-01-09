@@ -74,18 +74,30 @@ func (v *Validator) validateSettings(spec ngfAPI.RateLimitPolicySpec) error {
 
 	if spec.RateLimit != nil && spec.RateLimit.Local != nil {
 		for _, rule := range spec.RateLimit.Local.Rules {
-			if err := v.genericValidator.ValidateNginxSize(string(*rule.ZoneSize)); err != nil {
-				allErrs = append(allErrs,
-					field.Invalid(
-						fieldPath.
-							Child("rateLimit").
-							Child("local").
-							Child("rules").
-							Child("zoneSize"),
-						*rule.ZoneSize,
-						err.Error(),
-					),
-				)
+			path := fieldPath.Child("rateLimit").Child("local").Child("rules")
+
+			if rule.ZoneSize != nil {
+				if err := v.genericValidator.ValidateNginxSize(string(*rule.ZoneSize)); err != nil {
+					allErrs = append(allErrs,
+						field.Invalid(
+							path.Child("zoneSize"),
+							*rule.ZoneSize,
+							err.Error(),
+						),
+					)
+				}
+			}
+
+			if rule.Rate != "" {
+				if err := v.genericValidator.ValidateNginxRate(string(rule.Rate)); err != nil {
+					allErrs = append(allErrs,
+						field.Invalid(
+							path.Child("rate"),
+							rule.Rate,
+							err.Error(),
+						),
+					)
+				}
 			}
 		}
 	}

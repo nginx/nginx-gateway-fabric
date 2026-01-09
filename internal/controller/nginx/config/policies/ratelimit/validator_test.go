@@ -76,8 +76,48 @@ func TestValidator_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid rate",
+			policy: createModifiedPolicy(func(p *ngfAPI.RateLimitPolicy) *ngfAPI.RateLimitPolicy {
+				p.Spec.RateLimit.Local.Rules[0].Rate = "100rs"
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.rateLimit.local.rules.rate: Invalid value: \"100rs\": ^\\d+r/[sm]$ " +
+					"(e.g. '10r/s',  or '500r/m', regex used for validation is 'must contain a number followed by 'r/s' or 'r/m'')"),
+			},
+		},
+		{
 			name:          "valid",
 			policy:        createValidPolicy(),
+			expConditions: nil,
+		},
+		{
+			name: "minimal valid with rate limit rule",
+			policy: &ngfAPI.RateLimitPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+				},
+				Spec: ngfAPI.RateLimitPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gateway",
+						},
+					},
+					RateLimit: &ngfAPI.RateLimit{
+						Local: &ngfAPI.LocalRateLimit{
+							Rules: []ngfAPI.RateLimitRule{
+								{
+									Rate: ngfAPI.Rate("10r/s"),
+									Key:  "$binary_remote_addr",
+								},
+							},
+						},
+					},
+				},
+				Status: v1.PolicyStatus{},
+			},
 			expConditions: nil,
 		},
 	}

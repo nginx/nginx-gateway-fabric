@@ -78,7 +78,7 @@ type RateLimit struct {
 	// +optional
 	LogLevel *RateLimitLogLevel `json:"logLevel,omitempty"`
 
-	// RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400..599.
+	// RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400-599.
 	//
 	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_status
 	//

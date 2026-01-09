@@ -54,9 +54,12 @@ limit_req_dry_run on;
 `
 
 const (
+	// defaultZoneSize is the default size of the shared memory zone in the limit_req_zone NGINX directive.
 	defaultZoneSize = "10m"
-	defaultRate     = "100r/s"
-	defaultKey      = "$binary_remote_addr"
+	// defaultRate is the default request rate in the limit_req_zone NGINX directive.
+	defaultRate = "100r/s"
+	// defaultKey is the default key in the limit_req_zone NGINX directive.
+	defaultKey = "$binary_remote_addr"
 )
 
 type rateLimitSettings struct {
@@ -168,7 +171,7 @@ func generate(pols []policies.Policy, tmpl *template.Template) policies.Generate
 		// Check if this is a fake HTTP context only policy
 		isHTTPContextOnly := false
 		if rlp.Annotations != nil {
-			if val, exists := rlp.Annotations[dataplane.InternalFakePolicyAnnotationKey]; exists && val == "true" {
+			if val, exists := rlp.Annotations[dataplane.InternalRLShadowPolicyAnnotationKey]; exists && val == "true" {
 				isHTTPContextOnly = true
 			}
 		}
@@ -176,7 +179,15 @@ func generate(pols []policies.Policy, tmpl *template.Template) policies.Generate
 		// Set the flag in settings
 		settings.LimitZoneOnly = isHTTPContextOnly
 
-		name := fmt.Sprintf("RateLimitPolicy_%s_%s.conf", rlp.Namespace, rlp.Name)
+		var targetRefType string
+		switch tmpl {
+		case tmplHTTP:
+			targetRefType = "gateway"
+		case tmplLocation:
+			targetRefType = "route"
+		}
+
+		name := fmt.Sprintf("RateLimitPolicy_%s_%s_%s.conf", rlp.Namespace, rlp.Name, targetRefType)
 
 		if isHTTPContextOnly {
 			name = fmt.Sprintf("RateLimitPolicy_%s_%s_internal_http.conf", rlp.Namespace, rlp.Name)

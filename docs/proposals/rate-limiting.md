@@ -137,7 +137,7 @@ type RateLimit struct {
     // +optional
     LogLevel *RateLimitLogLevel `json:"logLevel,omitempty"`
 
-    // RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400..599.
+    // RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400-599.
     //
     // Default: 503
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_status
@@ -272,6 +272,8 @@ The following Conditions must be populated on the `RateLimitPolicy` CRD:
 Note: The `Programmed` condition is part of the updated GEP-713 specification and should be implemented for this policy. Existing policies (ClientSettingsPolicy, UpstreamSettingsPolicy, ObservabilityPolicy) may not have implemented this condition yet and should be updated in future work.
 
 If multiple `RateLimitPolicies` affect the same resource, conflicts can occur if multiple policies attempt to set the same field. The affected fields are: `DryRun`, `LogLevel`, and `RejectCode`. If multiple policies attempt to set one of these fields, only the Policy created first will stay valid and `Accepted`, while the others will be invalid and will have the `Conflicted` Reason given to the `Accepted` Condition being false.
+
+When multiple RateLimitPolicies select the same target and specify any of dryRun, logLevel, or rejectCode, only one policy will be applied. The controller selects the policy with the highest priority (based on time created, if created at the same time, ties are calculated on alphabetical order sorting of the policy name) and rejected policies will have the `Accepted` Condition set to false with the reason `Conflicted`.
 
 #### Setting Status on Objects Affected by a Policy
 
