@@ -278,6 +278,8 @@ func TestRefAllowedFrom(t *testing.T) {
 	hrNs := "hr-ns"
 	grNs := "gr-ns"
 	trNs := "tr-ns"
+	tcrNs := "tcr-ns"
+	urNs := "ur-ns"
 
 	allowedHTTPRouteNs := "hr-allowed-ns"
 	allowedHTTPRouteNsName := types.NamespacedName{Namespace: allowedHTTPRouteNs, Name: "all-allowed-in-ns"}
@@ -287,6 +289,12 @@ func TestRefAllowedFrom(t *testing.T) {
 
 	allowedTLSRouteNs := "tr-allowed-ns"
 	allowedTLSRouteNsName := types.NamespacedName{Namespace: allowedTLSRouteNs, Name: "all-allowed-in-ns"}
+
+	allowedTCPRouteNs := "tcr-allowed-ns"
+	allowedTCPRouteNsName := types.NamespacedName{Namespace: allowedTCPRouteNs, Name: "all-allowed-in-ns"}
+
+	allowedUDPRouteNs := "ur-allowed-ns"
+	allowedUDPRouteNsName := types.NamespacedName{Namespace: allowedUDPRouteNs, Name: "all-allowed-in-ns"}
 
 	allowedGatewayNs := "gw-allowed-ns"
 	allowedGatewayNsName := types.NamespacedName{Namespace: allowedGatewayNs, Name: "all-allowed-in-ns"}
@@ -375,6 +383,38 @@ func TestRefAllowedFrom(t *testing.T) {
 				},
 			},
 		},
+		{Namespace: allowedTCPRouteNs, Name: "tcr-2-svc"}: {
+			Spec: v1beta1.ReferenceGrantSpec{
+				From: []v1beta1.ReferenceGrantFrom{
+					{
+						Group:     v1beta1.GroupName,
+						Kind:      kinds.TCPRoute,
+						Namespace: v1beta1.Namespace(tcrNs),
+					},
+				},
+				To: []v1beta1.ReferenceGrantTo{
+					{
+						Kind: kinds.Service,
+					},
+				},
+			},
+		},
+		{Namespace: allowedUDPRouteNs, Name: "ur-2-svc"}: {
+			Spec: v1beta1.ReferenceGrantSpec{
+				From: []v1beta1.ReferenceGrantFrom{
+					{
+						Group:     v1beta1.GroupName,
+						Kind:      kinds.UDPRoute,
+						Namespace: v1beta1.Namespace(urNs),
+					},
+				},
+				To: []v1beta1.ReferenceGrantTo{
+					{
+						Kind: kinds.Service,
+					},
+				},
+			},
+		},
 	}
 
 	tests := []struct {
@@ -440,6 +480,30 @@ func TestRefAllowedFrom(t *testing.T) {
 		{
 			name:           "ref not allowed from tlsroute to service",
 			refAllowedFrom: fromTLSRoute(trNs),
+			toResource:     toService(notAllowedNsName),
+			expAllowed:     false,
+		},
+		{
+			name:           "ref allowed from tcproute to service",
+			refAllowedFrom: fromTCPRoute(tcrNs),
+			toResource:     toService(allowedTCPRouteNsName),
+			expAllowed:     true,
+		},
+		{
+			name:           "ref not allowed from tcproute to service",
+			refAllowedFrom: fromTCPRoute(tcrNs),
+			toResource:     toService(notAllowedNsName),
+			expAllowed:     false,
+		},
+		{
+			name:           "ref allowed from udproute to service",
+			refAllowedFrom: fromUDPRoute(urNs),
+			toResource:     toService(allowedUDPRouteNsName),
+			expAllowed:     true,
+		},
+		{
+			name:           "ref not allowed from udproute to service",
+			refAllowedFrom: fromUDPRoute(urNs),
 			toResource:     toService(notAllowedNsName),
 			expAllowed:     false,
 		},
