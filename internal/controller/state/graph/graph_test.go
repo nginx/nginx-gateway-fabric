@@ -431,6 +431,61 @@ func TestBuildGraph(t *testing.T) {
 	tr := createRouteTLS("tr", "gateway-1")
 	tr2 := createRouteTLS("tr2", "gateway-1")
 
+	createRouteTCP := func(name string, gatewayName string) *v1alpha2.TCPRoute {
+		return &v1alpha2.TCPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: testNs,
+				Name:      name,
+			},
+			Spec: v1alpha2.TCPRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{
+					ParentRefs: []gatewayv1.ParentReference{
+						{
+							Namespace: (*gatewayv1.Namespace)(helpers.GetPointer(testNs)),
+							Name:      gatewayv1.ObjectName(gatewayName),
+						},
+					},
+				},
+				Rules: []v1alpha2.TCPRouteRule{
+					{
+						BackendRefs: []gatewayv1.BackendRef{
+							commonTLSBackendRef,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	createRouteUDP := func(name string, gatewayName string) *v1alpha2.UDPRoute {
+		return &v1alpha2.UDPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: testNs,
+				Name:      name,
+			},
+			Spec: v1alpha2.UDPRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{
+					ParentRefs: []gatewayv1.ParentReference{
+						{
+							Namespace: (*gatewayv1.Namespace)(helpers.GetPointer(testNs)),
+							Name:      gatewayv1.ObjectName(gatewayName),
+						},
+					},
+				},
+				Rules: []v1alpha2.UDPRouteRule{
+					{
+						BackendRefs: []gatewayv1.BackendRef{
+							commonTLSBackendRef,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	tcpr := createRouteTCP("tcpr", "gateway-1")
+	udpr := createRouteUDP("udpr", "gateway-1")
+
 	gr := &gatewayv1.GRPCRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: testNs,
@@ -905,6 +960,12 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(tr):  tr,
 				client.ObjectKeyFromObject(tr2): tr2,
 			},
+			TCPRoutes: map[types.NamespacedName]*v1alpha2.TCPRoute{
+				client.ObjectKeyFromObject(tcpr): tcpr,
+			},
+			UDPRoutes: map[types.NamespacedName]*v1alpha2.UDPRoute{
+				client.ObjectKeyFromObject(udpr): udpr,
+			},
 			GRPCRoutes: map[types.NamespacedName]*gatewayv1.GRPCRoute{
 				client.ObjectKeyFromObject(gr): gr,
 			},
@@ -1151,6 +1212,158 @@ func TestBuildGraph(t *testing.T) {
 				},
 				Valid:              true,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+			},
+		},
+	}
+
+	routeTCP := &L4Route{
+		Valid:      true,
+		Attachable: true,
+		Source:     tcpr,
+		ParentRefs: []ParentRef{
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[0].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[1].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[2].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[3].Name,
+			},
+		},
+		Spec: L4RouteSpec{
+			BackendRefs: []BackendRef{
+				{
+					SvcNsName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "foo2",
+					},
+					ServicePort: v1.ServicePort{
+						Port: 80,
+					},
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+		},
+	}
+
+	routeUDP := &L4Route{
+		Valid:      true,
+		Attachable: true,
+		Source:     udpr,
+		ParentRefs: []ParentRef{
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[0].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[1].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[2].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[3].Name,
+			},
+		},
+		Spec: L4RouteSpec{
+			BackendRefs: []BackendRef{
+				{
+					SvcNsName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "foo2",
+					},
+					ServicePort: v1.ServicePort{
+						Port: 80,
+					},
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
 			},
 		},
 	}
@@ -1446,8 +1659,10 @@ func TestBuildGraph(t *testing.T) {
 				CreateRouteKey(ir):  inferenceRoute,
 			},
 			L4Routes: map[L4RouteKey]*L4Route{
-				CreateRouteKeyL4(tr):  routeTR,
-				CreateRouteKeyL4(tr2): routeTR2,
+				CreateRouteKeyL4(tr):   routeTR,
+				CreateRouteKeyL4(tr2):  routeTR2,
+				CreateRouteKeyL4(tcpr): routeTCP,
+				CreateRouteKeyL4(udpr): routeUDP,
 			},
 			ReferencedSecrets: map[types.NamespacedName]*Secret{
 				client.ObjectKeyFromObject(secret): {
@@ -1626,6 +1841,246 @@ func TestBuildGraph(t *testing.T) {
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}
+}
+
+func TestBuildGraphTCPAndUDPRoutes(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const (
+		gcName         = "test-gc"
+		controllerName = "test-controller"
+	)
+
+	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
+		v := &validationfakes.FakeHTTPFieldsValidator{}
+		return v
+	}
+
+	// Create a service for TCP/UDP backends
+	svc := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "backend-svc",
+		},
+		Spec: v1.ServiceSpec{
+			Ports: []v1.ServicePort{
+				{
+					Name: "tcp-port",
+					Port: 8080,
+				},
+				{
+					Name: "udp-port",
+					Port: 5353,
+				},
+			},
+		},
+	}
+
+	// Create a valid GatewayClass
+	gc := &gatewayv1.GatewayClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: gcName,
+		},
+		Spec: gatewayv1.GatewayClassSpec{
+			ControllerName: controllerName,
+		},
+	}
+
+	// Create a Gateway with TCP and UDP listeners
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "gateway",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			GatewayClassName: gcName,
+			Listeners: []gatewayv1.Listener{
+				{
+					Name:     "tcp-listener",
+					Port:     8080,
+					Protocol: gatewayv1.TCPProtocolType,
+					AllowedRoutes: &gatewayv1.AllowedRoutes{
+						Kinds: []gatewayv1.RouteGroupKind{
+							{Kind: kinds.TCPRoute, Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+					},
+				},
+				{
+					Name:     "udp-listener",
+					Port:     5353,
+					Protocol: gatewayv1.UDPProtocolType,
+					AllowedRoutes: &gatewayv1.AllowedRoutes{
+						Kinds: []gatewayv1.RouteGroupKind{
+							{Kind: kinds.UDPRoute, Group: helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName)},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create TCPRoute
+	tcpRoute := &v1alpha2.TCPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "tcp-route",
+		},
+		Spec: v1alpha2.TCPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: []gatewayv1.ParentReference{
+					{
+						Name:        gatewayv1.ObjectName("gateway"),
+						SectionName: helpers.GetPointer[gatewayv1.SectionName]("tcp-listener"),
+					},
+				},
+			},
+			Rules: []v1alpha2.TCPRouteRule{
+				{
+					BackendRefs: []gatewayv1.BackendRef{
+						{
+							BackendObjectReference: gatewayv1.BackendObjectReference{
+								Kind: helpers.GetPointer[gatewayv1.Kind]("Service"),
+								Name: "backend-svc",
+								Port: helpers.GetPointer[gatewayv1.PortNumber](8080),
+							},
+							Weight: helpers.GetPointer[int32](1),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create UDPRoute
+	udpRoute := &v1alpha2.UDPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNs,
+			Name:      "udp-route",
+		},
+		Spec: v1alpha2.UDPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: []gatewayv1.ParentReference{
+					{
+						Name:        gatewayv1.ObjectName("gateway"),
+						SectionName: helpers.GetPointer[gatewayv1.SectionName]("udp-listener"),
+					},
+				},
+			},
+			Rules: []v1alpha2.UDPRouteRule{
+				{
+					BackendRefs: []gatewayv1.BackendRef{
+						{
+							BackendObjectReference: gatewayv1.BackendObjectReference{
+								Kind: helpers.GetPointer[gatewayv1.Kind]("Service"),
+								Name: "backend-svc",
+								Port: helpers.GetPointer[gatewayv1.PortNumber](5353),
+							},
+							Weight: helpers.GetPointer[int32](1),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create namespace
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: testNs,
+		},
+	}
+
+	// Build the ClusterState
+	state := ClusterState{
+		GatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
+			client.ObjectKeyFromObject(gc): gc,
+		},
+		Gateways: map[types.NamespacedName]*gatewayv1.Gateway{
+			client.ObjectKeyFromObject(gw): gw,
+		},
+		TCPRoutes: map[types.NamespacedName]*v1alpha2.TCPRoute{
+			client.ObjectKeyFromObject(tcpRoute): tcpRoute,
+		},
+		UDPRoutes: map[types.NamespacedName]*v1alpha2.UDPRoute{
+			client.ObjectKeyFromObject(udpRoute): udpRoute,
+		},
+		Services: map[types.NamespacedName]*v1.Service{
+			client.ObjectKeyFromObject(svc): svc,
+		},
+		Namespaces: map[types.NamespacedName]*v1.Namespace{
+			{Name: testNs}: ns,
+		},
+	}
+
+	// Build the graph
+	result := BuildGraph(
+		state,
+		controllerName,
+		gcName,
+		nil, // plusSecrets
+		validation.Validators{
+			HTTPFieldsValidator: createAllValidValidator(),
+			GenericValidator:    &validationfakes.FakeGenericValidator{},
+		},
+		logr.Discard(),
+		FeatureFlags{},
+	)
+
+	// Verify the graph contains the expected gateway with TCP and UDP routes
+	gatewayKey := client.ObjectKeyFromObject(gw)
+	g.Expect(result.Gateways).To(HaveKey(gatewayKey))
+	graphGW := result.Gateways[gatewayKey]
+	g.Expect(graphGW).ToNot(BeNil())
+	g.Expect(graphGW.Listeners).To(HaveLen(2))
+
+	// Find TCP listener
+	var tcpListener *Listener
+	var udpListener *Listener
+	for _, l := range graphGW.Listeners {
+		if l.Name == "tcp-listener" {
+			tcpListener = l
+		}
+		if l.Name == "udp-listener" {
+			udpListener = l
+		}
+	}
+
+	g.Expect(tcpListener).ToNot(BeNil(), "TCP listener should exist")
+	g.Expect(udpListener).ToNot(BeNil(), "UDP listener should exist")
+
+	// Verify TCP listener has the TCP route attached
+	g.Expect(tcpListener.L4Routes).To(HaveLen(1))
+	tcpRouteKey := CreateRouteKeyL4(tcpRoute)
+	g.Expect(tcpListener.L4Routes).To(HaveKey(tcpRouteKey))
+
+	tcpL4Route := tcpListener.L4Routes[tcpRouteKey]
+	g.Expect(tcpL4Route.Valid).To(BeTrue())
+	g.Expect(tcpL4Route.Source).To(Equal(tcpRoute))
+	g.Expect(tcpL4Route.Spec.BackendRefs).To(HaveLen(1))
+	g.Expect(tcpL4Route.Spec.BackendRefs[0].Valid).To(BeTrue())
+	g.Expect(tcpL4Route.Spec.BackendRefs[0].Weight).To(Equal(int32(1)))
+	g.Expect(tcpL4Route.ParentRefs).To(HaveLen(1))
+	g.Expect(tcpL4Route.ParentRefs[0].Attachment.Attached).To(BeTrue())
+
+	// Verify UDP listener has the UDP route attached
+	g.Expect(udpListener.L4Routes).To(HaveLen(1))
+	udpRouteKey := CreateRouteKeyL4(udpRoute)
+	g.Expect(udpListener.L4Routes).To(HaveKey(udpRouteKey))
+
+	udpL4Route := udpListener.L4Routes[udpRouteKey]
+	g.Expect(udpL4Route.Valid).To(BeTrue())
+	g.Expect(udpL4Route.Source).To(Equal(udpRoute))
+	g.Expect(udpL4Route.Spec.BackendRefs).To(HaveLen(1))
+	g.Expect(udpL4Route.Spec.BackendRefs[0].Valid).To(BeTrue())
+	g.Expect(udpL4Route.Spec.BackendRefs[0].Weight).To(Equal(int32(1)))
+	g.Expect(udpL4Route.ParentRefs).To(HaveLen(1))
+	g.Expect(udpL4Route.ParentRefs[0].Attachment.Attached).To(BeTrue())
+
+	// Verify routes are in the L4Routes map
+	g.Expect(result.L4Routes).To(HaveLen(2))
+	g.Expect(result.L4Routes).To(HaveKey(tcpRouteKey))
+	g.Expect(result.L4Routes).To(HaveKey(udpRouteKey))
 }
 
 func TestIsReferenced(t *testing.T) {

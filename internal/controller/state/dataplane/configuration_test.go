@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -4415,6 +4416,486 @@ func TestBuildStreamUpstreams(t *testing.T) {
 	g := NewWithT(t)
 
 	g.Expect(streamUpstreams).To(ConsistOf(expectedStreamUpstreams))
+}
+
+func TestBuildL4Servers(t *testing.T) {
+	t.Parallel()
+
+	createL4Route := func(name string, valid bool, backendRefs []graph.BackendRef) *graph.L4Route {
+		return &graph.L4Route{
+			Valid: valid,
+			Source: &v1alpha2.TCPRoute{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      name,
+				},
+			},
+			Spec: graph.L4RouteSpec{
+				BackendRefs: backendRefs,
+			},
+		}
+	}
+
+	tests := []struct {
+		name            string
+		gateway         *graph.Gateway
+		protocol        v1.ProtocolType
+		expectedServers []Layer4VirtualServer
+	}{
+		{
+			name: "TCP route with single backend",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route-1"}}: createL4Route(
+								"tcp-route-1",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{
+					Hostname: "",
+					Port:     8080,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   "default_svc1_8080",
+							Weight: 1,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "TCP route with multiple weighted backends",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route-weighted"}}: createL4Route(
+								"tcp-route-weighted",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 80,
+									},
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc2"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 20,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{
+					Hostname: "",
+					Port:     8080,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   "default_svc1_8080",
+							Weight: 80,
+						},
+						{
+							Name:   "default_svc2_8080",
+							Weight: 20,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "UDP route with backends",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "udp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.UDPProtocolType,
+							Port:     5353,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "udp-route-1"}}: createL4Route(
+								"udp-route-1",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "dns-svc"},
+										ServicePort: apiv1.ServicePort{
+											Name: "dns",
+											Port: 53,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.UDPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{
+					Hostname: "",
+					Port:     5353,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   "default_dns-svc_53",
+							Weight: 1,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "skips invalid routes",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "invalid-route"}}: createL4Route(
+								"invalid-route",
+								false, // invalid route
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol:        v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+		{
+			name: "skips routes with no valid backends",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "no-backends"}}: createL4Route(
+								"no-backends",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     false, // invalid backend
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol:        v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+		{
+			name: "skips routes with empty backend refs",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "empty-backends"}}: createL4Route(
+								"empty-backends",
+								true,
+								[]graph.BackendRef{}, // empty
+							),
+						},
+					},
+				},
+			},
+			protocol:        v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+		{
+			name: "skips invalid listeners",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: false, // invalid listener
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route"}}: createL4Route(
+								"tcp-route",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol:        v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+		{
+			name: "filters by protocol - TCP listener ignored for UDP protocol",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route"}}: createL4Route(
+								"tcp-route",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol:        v1.UDPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+		{
+			name: "multiple listeners and routes",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener-1",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route-1"}}: createL4Route(
+								"tcp-route-1",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+					{
+						Name:  "tcp-listener-2",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     9090,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route-2"}}: createL4Route(
+								"tcp-route-2",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc2"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 9090,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{
+					Hostname: "",
+					Port:     8080,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   "default_svc1_8080",
+							Weight: 1,
+						},
+					},
+				},
+				{
+					Hostname: "",
+					Port:     9090,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   "default_svc2_9090",
+							Weight: 1,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			servers := buildL4Servers(logr.Discard(), tt.gateway, tt.protocol)
+
+			g.Expect(servers).To(ConsistOf(tt.expectedServers))
+		})
+	}
 }
 
 func TestBuildRewriteIPSettings(t *testing.T) {
