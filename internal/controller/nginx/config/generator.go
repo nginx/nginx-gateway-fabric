@@ -194,12 +194,6 @@ func (g GeneratorImpl) executeConfigTemplates(
 	}
 	files = append(files, mgmtFiles...)
 
-	fmt.Println("Generated NGINX configuration files:")
-	for _, f := range files {
-		fmt.Println("File name: ", f.Meta.Name)
-		fmt.Println(string(f.Contents))
-	}
-
 	return files
 }
 
