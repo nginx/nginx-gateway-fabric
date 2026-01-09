@@ -127,3 +127,24 @@ func (GenericValidator) ValidateNginxVariableName(name string) error {
 
 	return nil
 }
+
+const (
+	rateStringFmt    = `^\d+r/[sm]$`
+	rateStringErrMsg = `must contain a number followed by 'r/s' or 'r/m'`
+)
+
+var rateStringRegexp = regexp.MustCompile("^" + rateStringFmt + "$")
+
+// ValidateNginxRate validates a rate string that nginx can understand.
+func (GenericValidator) ValidateNginxRate(rate string) error {
+	if !rateStringRegexp.MatchString(rate) {
+		examples := []string{
+			"10r/s",
+			"500r/m",
+		}
+
+		return errors.New(k8svalidation.RegexError(rateStringFmt, rateStringErrMsg, examples...))
+	}
+
+	return nil
+}

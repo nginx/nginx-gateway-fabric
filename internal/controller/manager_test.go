@@ -68,6 +68,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.RateLimitPolicyList{},
 			},
 		},
 		{
@@ -96,6 +97,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.RateLimitPolicyList{},
 			},
 		},
 		{
@@ -121,6 +123,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				partialObjectMetadataList,
 				&inference.InferencePoolList{},
 				&gatewayv1.GatewayList{},
@@ -152,6 +155,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.SnippetsFilterList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.RateLimitPolicyList{},
 			},
 		},
 		{
@@ -184,6 +188,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.SnippetsFilterList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.RateLimitPolicyList{},
 			},
 		},
 	}

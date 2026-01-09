@@ -15,6 +15,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/ratelimit"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
@@ -125,6 +126,7 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 	policyGenerator := policies.NewCompositeGenerator(
 		clientsettings.NewGenerator(),
 		observability.NewGenerator(conf.Telemetry),
+		ratelimit.NewGenerator(),
 	)
 
 	files = append(files, g.executeConfigTemplates(conf, policyGenerator)...)
@@ -203,7 +205,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 	return []executeFunc{
 		executeMainConfig,
 		executeEventsConfig,
-		executeBaseHTTPConfig,
+		newExecuteBaseHTTPConfigFunc(generator),
 		g.newExecuteServersFunc(generator, keepAliveCheck),
 		newExecuteUpstreamsFunc(upstreams),
 		executeSplitClients,
