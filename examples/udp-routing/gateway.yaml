@@ -1,0 +1,13 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: coredns
+    protocol: UDP
+    port: 53
+    allowedRoutes:
+      kinds:
+      - kind: UDPRoute
