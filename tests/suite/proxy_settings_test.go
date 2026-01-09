@@ -85,18 +85,20 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("policies have correct status", func() {
+		Specify("policies are Accepted", func() {
 			policyExpectations := []policyStatusExpectation{
-				{
-					nsname:          types.NamespacedName{Name: "gateway-proxy-settings", Namespace: namespace},
-					conditionStatus: metav1.ConditionTrue,
-					conditionReason: gatewayv1.PolicyReasonAccepted,
-				},
-				{
-					nsname:          types.NamespacedName{Name: "coffee-http-proxy-settings", Namespace: namespace},
-					conditionStatus: metav1.ConditionTrue,
-					conditionReason: gatewayv1.PolicyReasonAccepted,
-				},
+				createPolicyExpectation(
+					"gateway-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
+				createPolicyExpectation(
+					"coffee-http-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
 			}
 			waitForPoliciesVerification(policyExpectations)
 		})
@@ -187,18 +189,20 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("policies have correct status", func() {
+		Specify("policies are Accepted", func() {
 			policyExpectations := []policyStatusExpectation{
-				{
-					nsname:          types.NamespacedName{Name: "gateway-proxy-settings", Namespace: namespace},
-					conditionStatus: metav1.ConditionTrue,
-					conditionReason: gatewayv1.PolicyReasonAccepted,
-				},
-				{
-					nsname:          types.NamespacedName{Name: "coffee-grpc-proxy-settings", Namespace: namespace},
-					conditionStatus: metav1.ConditionTrue,
-					conditionReason: gatewayv1.PolicyReasonAccepted,
-				},
+				createPolicyExpectation(
+					"gateway-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
+				createPolicyExpectation(
+					"coffee-grpc-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
 			}
 			waitForPoliciesVerification(policyExpectations)
 		})
@@ -304,13 +308,14 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("policy has correct status", func() {
+		Specify("policy is Accepted", func() {
 			waitForPoliciesVerification([]policyStatusExpectation{
-				{
-					nsname:          types.NamespacedName{Name: "coffee-http-proxy-settings", Namespace: namespace},
-					conditionStatus: metav1.ConditionTrue,
-					conditionReason: gatewayv1.PolicyReasonAccepted,
-				},
+				createPolicyExpectation(
+					"coffee-http-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
 			})
 		})
 
@@ -389,13 +394,14 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("policy has correct status", func() {
+		Specify("policy is Accepted", func() {
 			waitForPoliciesVerification([]policyStatusExpectation{
-				{
-					nsname:          types.NamespacedName{Name: "gateway-proxy-settings", Namespace: namespace},
-					conditionStatus: metav1.ConditionTrue,
-					conditionReason: gatewayv1.PolicyReasonAccepted,
-				},
+				createPolicyExpectation(
+					"gateway-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
 			})
 		})
 
@@ -461,13 +467,14 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("policy has correct status", func() {
+		Specify("policy is Accepted", func() {
 			waitForPoliciesVerification([]policyStatusExpectation{
-				{
-					nsname:          types.NamespacedName{Name: "coffee-http-proxy-settings", Namespace: namespace},
-					conditionStatus: metav1.ConditionTrue,
-					conditionReason: gatewayv1.PolicyReasonAccepted,
-				},
+				createPolicyExpectation(
+					"coffee-http-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
 			})
 		})
 	})
@@ -488,21 +495,24 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		Context("verify that conflicting HTTPRoute ProxySettingsPolicies are not accepted", func() {
 			Specify("policies have correct status", func() {
 				policyExpectations := []policyStatusExpectation{
-					{
-						nsname:          types.NamespacedName{Name: "http-proxy-settings-1", Namespace: namespace},
-						conditionStatus: metav1.ConditionTrue,
-						conditionReason: gatewayv1.PolicyReasonAccepted,
-					},
-					{
-						nsname:          types.NamespacedName{Name: "http-proxy-settings-2", Namespace: namespace},
-						conditionStatus: metav1.ConditionFalse,
-						conditionReason: gatewayv1.PolicyReasonConflicted,
-					},
-					{
-						nsname:          types.NamespacedName{Name: "http-proxy-settings-3", Namespace: namespace},
-						conditionStatus: metav1.ConditionFalse,
-						conditionReason: gatewayv1.PolicyReasonConflicted,
-					},
+					createPolicyExpectation(
+						"http-proxy-settings-1",
+						namespace,
+						metav1.ConditionTrue,
+						gatewayv1.PolicyReasonAccepted,
+					),
+					createPolicyExpectation(
+						"http-proxy-settings-2",
+						namespace,
+						metav1.ConditionFalse,
+						gatewayv1.PolicyReasonConflicted,
+					),
+					createPolicyExpectation(
+						"http-proxy-settings-3",
+						namespace,
+						metav1.ConditionFalse,
+						gatewayv1.PolicyReasonConflicted,
+					),
 				}
 				waitForPoliciesVerification(policyExpectations)
 			})
@@ -522,18 +532,20 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
 		})
 
-		Specify("policy has correct status", func() {
+		Specify("policies are Invalid", func() {
 			policyExpectations := []policyStatusExpectation{
-				{
-					nsname:          types.NamespacedName{Name: "coffee-http-proxy-settings", Namespace: namespace},
-					conditionStatus: metav1.ConditionFalse,
-					conditionReason: gatewayv1.PolicyReasonInvalid,
-				},
-				{
-					nsname:          types.NamespacedName{Name: "gateway-proxy-settings", Namespace: namespace},
-					conditionStatus: metav1.ConditionFalse,
-					conditionReason: gatewayv1.PolicyReasonInvalid,
-				},
+				createPolicyExpectation(
+					"coffee-http-proxy-settings",
+					namespace,
+					metav1.ConditionFalse,
+					gatewayv1.PolicyReasonInvalid,
+				),
+				createPolicyExpectation(
+					"gateway-proxy-settings",
+					namespace,
+					metav1.ConditionFalse,
+					gatewayv1.PolicyReasonInvalid,
+				),
 			}
 			waitForPoliciesVerification(policyExpectations)
 		})
@@ -589,6 +601,19 @@ type policyStatusExpectation struct {
 	nsname          types.NamespacedName
 	conditionStatus metav1.ConditionStatus
 	conditionReason gatewayv1.PolicyConditionReason
+}
+
+// createPolicyExpectation creates a single policy status expectation.
+func createPolicyExpectation(
+	name, ns string,
+	status metav1.ConditionStatus,
+	reason gatewayv1.PolicyConditionReason,
+) policyStatusExpectation {
+	return policyStatusExpectation{
+		nsname:          types.NamespacedName{Name: name, Namespace: ns},
+		conditionStatus: status,
+		conditionReason: reason,
+	}
 }
 
 // waitForPoliciesVerification waits for multiple ProxySettingsPolicies to be accepted/conflicted/ignored.
