@@ -208,6 +208,14 @@ nginxGateway:
     # Please note that this endpoint will be secured with a self-signed certificate.
     secure: false
 
+    serviceMonitor:
+      # -- Creates a serviceMonitor to expose metrics on the kubernetes pods.
+      create: false
+
+      # A list of endpoints allowed as part of this ServiceMonitor.
+      endpoints:
+        - name: metrics
+
   gwAPIExperimentalFeatures:
     # -- Enable the experimental features of Gateway API which are supported by NGINX Gateway Fabric. Requires the Gateway
     # APIs installed from the experimental channel.

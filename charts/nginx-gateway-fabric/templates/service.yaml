@@ -23,3 +23,9 @@ spec:
     port: 443
     protocol: TCP
     targetPort: 8443
+{{- if .Values.nginxGateway.metrics.enable }}
+  - name: metrics
+    port: {{ .Values.nginxGateway.metrics.port }}
+    protocol: TCP
+    targetPort: {{ .Values.nginxGateway.metrics.port }}
+{{- end }}

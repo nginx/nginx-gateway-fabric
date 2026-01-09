@@ -914,6 +914,43 @@
               "description": "Enable serving metrics via https. By default metrics are served via http.\nPlease note that this endpoint will be secured with a self-signed certificate.",
               "title": "secure",
               "type": "boolean"
+            },
+            "serviceMonitor": {
+              "properties": {
+                "create": {
+                  "default": false,
+                  "description": "Creates a serviceMonitor to expose metrics on the kubernetes pods.",
+                  "required": [],
+                  "title": "create",
+                  "type": "boolean"
+                },
+                "endpoints": {
+                  "description": "A list of endpoints allowed as part of this ServiceMonitor.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "name": {
+                            "default": "metrics",
+                            "required": [],
+                            "title": "name",
+                            "type": "string"
+                          }
+                        },
+                        "required": [],
+                        "type": "object"
+                      }
+                    ],
+                    "required": []
+                  },
+                  "required": [],
+                  "title": "endpoints",
+                  "type": "array"
+                }
+              },
+              "required": [],
+              "title": "serviceMonitor",
+              "type": "object"
             }
           },
           "required": [],
