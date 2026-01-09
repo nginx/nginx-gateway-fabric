@@ -19,6 +19,13 @@
       "groupName": "NGINX Agent"
     },
     {
+      "matchPackageNames": [
+        "kubernetes-sigs/gateway-api-inference-extension",
+        "sigs.k8s.io/gateway-api-inference-extension"
+      ],
+      "groupName": "Gateway API Inference Extension"
+    },
+    {
       "groupName": "Docker digests",
       "matchDatasources": [
         "docker"
