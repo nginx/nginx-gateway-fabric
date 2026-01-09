@@ -106,6 +106,28 @@ func TestSecretResolver(t *testing.T) {
 			Type: apiv1.SecretTypeTLS,
 		}
 
+		validSecret4 = &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "secret-4",
+			},
+			Data: map[string][]byte{
+				AuthKey: []byte("dXNlcjpwYXNzd29yZA=="), // base64 for user:password
+			},
+			Type: apiv1.SecretType(SecretTypeHtpasswd),
+		}
+
+		invalidAuthKeySecret = &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "invalid-auth-key",
+			},
+			Data: map[string][]byte{
+				"invalid-key": []byte("dXNlcjpwYXNzd29yZA=="), // base64 for user:password
+			},
+			Type: apiv1.SecretType(SecretTypeHtpasswd),
+		}
+
 		invalidSecretType = &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "test",
@@ -163,13 +185,15 @@ func TestSecretResolver(t *testing.T) {
 
 	resolver := newSecretResolver(
 		map[types.NamespacedName]*apiv1.Secret{
-			client.ObjectKeyFromObject(validSecret1):        validSecret1,
-			client.ObjectKeyFromObject(validSecret2):        validSecret2, // we're not going to resolve it
-			client.ObjectKeyFromObject(validSecret3):        validSecret3,
-			client.ObjectKeyFromObject(invalidSecretType):   invalidSecretType,
-			client.ObjectKeyFromObject(invalidSecretCert):   invalidSecretCert,
-			client.ObjectKeyFromObject(invalidSecretKey):    invalidSecretKey,
-			client.ObjectKeyFromObject(invalidSecretCaCert): invalidSecretCaCert,
+			client.ObjectKeyFromObject(validSecret1):         validSecret1,
+			client.ObjectKeyFromObject(validSecret2):         validSecret2, // we're not going to resolve it
+			client.ObjectKeyFromObject(validSecret3):         validSecret3,
+			client.ObjectKeyFromObject(validSecret4):         validSecret4,
+			client.ObjectKeyFromObject(invalidAuthKeySecret): invalidAuthKeySecret,
+			client.ObjectKeyFromObject(invalidSecretType):    invalidSecretType,
+			client.ObjectKeyFromObject(invalidSecretCert):    invalidSecretCert,
+			client.ObjectKeyFromObject(invalidSecretKey):     invalidSecretKey,
+			client.ObjectKeyFromObject(invalidSecretCaCert):  invalidSecretCaCert,
 		})
 
 	tests := []struct {
@@ -190,6 +214,15 @@ func TestSecretResolver(t *testing.T) {
 			nsname: client.ObjectKeyFromObject(validSecret3),
 		},
 		{
+			name:   "valid htpasswd secret",
+			nsname: client.ObjectKeyFromObject(validSecret4),
+		},
+		{
+			name:           "invalid htpasswd secret",
+			nsname:         client.ObjectKeyFromObject(invalidAuthKeySecret),
+			expectedErrMsg: "missing required key \"auth\" in secret type \"nginx.org/htpasswd\"",
+		},
+		{
 			name:           "doesn't exist",
 			nsname:         secretNotExistNsName,
 			expectedErrMsg: "secret does not exist",
@@ -197,12 +230,12 @@ func TestSecretResolver(t *testing.T) {
 		{
 			name:           "invalid secret type",
 			nsname:         client.ObjectKeyFromObject(invalidSecretType),
-			expectedErrMsg: `secret type must be "kubernetes.io/tls" not "kubernetes.io/dockercfg"`,
+			expectedErrMsg: `unsupported secret type "kubernetes.io/dockercfg"`,
 		},
 		{
 			name:           "invalid secret type, again",
 			nsname:         client.ObjectKeyFromObject(invalidSecretType),
-			expectedErrMsg: `secret type must be "kubernetes.io/tls" not "kubernetes.io/dockercfg"`,
+			expectedErrMsg: `unsupported secret type "kubernetes.io/dockercfg"`,
 		},
 		{
 			name:           "invalid secret cert",
@@ -250,6 +283,12 @@ func TestSecretResolver(t *testing.T) {
 				TLSPrivateKey: key,
 				CACert:        []byte(caBlock),
 			}),
+		},
+		client.ObjectKeyFromObject(validSecret4): {
+			Source: validSecret4,
+		},
+		client.ObjectKeyFromObject(invalidAuthKeySecret): {
+			Source: invalidAuthKeySecret,
 		},
 		client.ObjectKeyFromObject(invalidSecretType): {
 			Source: invalidSecretType,

@@ -128,6 +128,15 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		},
 	}
 
+	authenticationFilterRef := v1.GRPCRouteFilter{
+		Type: v1.GRPCRouteFilterExtensionRef,
+		ExtensionRef: &v1.LocalObjectReference{
+			Name:  "af",
+			Kind:  kinds.AuthenticationFilter,
+			Group: ngfAPIv1alpha1.GroupName,
+		},
+	}
+
 	requestHeaderFilter := v1.GRPCRouteFilter{
 		Type:                  v1.GRPCRouteFilterRequestHeaderModifier,
 		RequestHeaderModifier: &v1.HTTPHeaderFilter{},
@@ -153,7 +162,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 	}
 
 	grRuleWithFiltersAndSessionPersistence := v1.GRPCRouteRule{
-		Filters:            []v1.GRPCRouteFilter{snippetsFilterRef, requestHeaderFilter},
+		Filters:            []v1.GRPCRouteFilter{snippetsFilterRef, authenticationFilterRef, requestHeaderFilter},
 		SessionPersistence: &unNamedSPConfig,
 		BackendRefs:        []v1.GRPCBackendRef{grpcBackendRef},
 	}
@@ -178,6 +187,21 @@ func TestBuildGRPCRoutes(t *testing.T) {
 					Context: ngfAPIv1alpha1.NginxContextHTTP,
 					Value:   "http snippet",
 				},
+			},
+		},
+	}
+
+	af := &ngfAPIv1alpha1.AuthenticationFilter{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test",
+			Name:      "af",
+		},
+		Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+			Basic: &ngfAPIv1alpha1.BasicAuth{
+				SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+					Name: "test-secret",
+				},
+				Realm: "test-realm",
 			},
 		},
 	}
@@ -218,6 +242,19 @@ func TestBuildGRPCRoutes(t *testing.T) {
 													Snippets: map[ngfAPIv1alpha1.NginxContext]string{
 														ngfAPIv1alpha1.NginxContextHTTP: "http snippet",
 													},
+													Valid:      true,
+													Referenced: true,
+												},
+												Valid: true,
+											},
+											RouteType:  RouteTypeGRPC,
+											FilterType: FilterExtensionRef,
+										},
+										{
+											ExtensionRef: authenticationFilterRef.ExtensionRef,
+											ResolvedExtensionRef: &ExtensionRefFilter{
+												AuthenticationFilter: &AuthenticationFilter{
+													Source:     af,
 													Valid:      true,
 													Referenced: true,
 												},
@@ -282,12 +319,21 @@ func TestBuildGRPCRoutes(t *testing.T) {
 					},
 				},
 			}
+
+			authenticationFilters := map[types.NamespacedName]*AuthenticationFilter{
+				client.ObjectKeyFromObject(af): {
+					Source: af,
+					Valid:  true,
+				},
+			}
+
 			routes := buildRoutesForGateways(
 				createAllValidValidator(),
 				map[types.NamespacedName]*v1.HTTPRoute{},
 				grRoutes,
 				test.gateways,
 				snippetsFilters,
+				authenticationFilters,
 				nil,
 				FeatureFlags{
 					Plus:         true,
@@ -587,6 +633,152 @@ func TestBuildGRPCRoute(t *testing.T) {
 		gatewayNsName.Name,
 		"example.com",
 		[]v1.GRPCRouteRule{grInvalidAndUnresolvableSnippetsFilterRule},
+	)
+
+	// route with invalid authentication filter extension ref
+	grInvalidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
+	grInvalidAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
+		{
+			Type: v1.GRPCRouteFilterExtensionRef,
+			ExtensionRef: &v1.LocalObjectReference{
+				Group: "wrong",
+				Kind:  kinds.AuthenticationFilter,
+				Name:  "af",
+			},
+		},
+	}
+	grInvalidAuthenticationFilter := createGRPCRoute(
+		"gr",
+		gatewayNsName.Name,
+		"example.com",
+		[]v1.GRPCRouteRule{grInvalidAuthenticationFilterRule},
+	)
+
+	// route with unresolvable authentication filter extension ref
+	grUnresolvableAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
+	grUnresolvableAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
+		{
+			Type: v1.GRPCRouteFilterExtensionRef,
+			ExtensionRef: &v1.LocalObjectReference{
+				Group: ngfAPIv1alpha1.GroupName,
+				Kind:  kinds.AuthenticationFilter,
+				Name:  "does-not-exist",
+			},
+		},
+	}
+	grUnresolvableAuthenticationFilter := createGRPCRoute(
+		"gr",
+		gatewayNsName.Name,
+		"example.com",
+		[]v1.GRPCRouteRule{grUnresolvableAuthenticationFilterRule},
+	)
+
+	// route with two invalid authentication filter extensions refs: (1) invalid group (2) unresolvable
+	grInvalidAndUnresolvableAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
+	grInvalidAndUnresolvableAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
+		{
+			Type: v1.GRPCRouteFilterExtensionRef,
+			ExtensionRef: &v1.LocalObjectReference{
+				Group: "wrong",
+				Kind:  kinds.AuthenticationFilter,
+				Name:  "af",
+			},
+		},
+		{
+			Type: v1.GRPCRouteFilterExtensionRef,
+			ExtensionRef: &v1.LocalObjectReference{
+				Group: ngfAPIv1alpha1.GroupName,
+				Kind:  kinds.AuthenticationFilter,
+				Name:  "does-not-exist",
+			},
+		},
+	}
+	grInvalidAndUnresolvableAuthenticationFilter := createGRPCRoute(
+		"gr",
+		gatewayNsName.Name,
+		"example.com",
+		[]v1.GRPCRouteRule{grInvalidAndUnresolvableAuthenticationFilterRule},
+	)
+
+	// route with one valid and one invalid authentication filter extensions ref: (1) invalid group (2) valid
+	grInvalidAndValidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
+	grInvalidAndValidAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
+		{
+			Type: v1.GRPCRouteFilterExtensionRef,
+			ExtensionRef: &v1.LocalObjectReference{
+				Group: "wrong",
+				Kind:  kinds.AuthenticationFilter,
+				Name:  "af-wrong-group",
+			},
+		},
+		{
+			Type: v1.GRPCRouteFilterExtensionRef,
+			ExtensionRef: &v1.LocalObjectReference{
+				Group: ngfAPIv1alpha1.GroupName,
+				Kind:  kinds.AuthenticationFilter,
+				Name:  "af",
+			},
+		},
+	}
+	grInvalidAndValidAuthenticationFilter := createGRPCRoute(
+		"gr",
+		gatewayNsName.Name,
+		"example.com",
+		[]v1.GRPCRouteRule{grInvalidAndValidAuthenticationFilterRule},
+	)
+
+	// route with one valid and one unresolved authentication filter extensions ref: (1) unresolved (2) valid
+	grUnresolvedAndValidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
+	grUnresolvedAndValidAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
+		{
+			Type: v1.GRPCRouteFilterExtensionRef,
+			ExtensionRef: &v1.LocalObjectReference{
+				Group: ngfAPIv1alpha1.GroupName,
+				Kind:  kinds.AuthenticationFilter,
+				Name:  "does-not-exist",
+			},
+		},
+		{
+			Type: v1.GRPCRouteFilterExtensionRef,
+			ExtensionRef: &v1.LocalObjectReference{
+				Group: ngfAPIv1alpha1.GroupName,
+				Kind:  kinds.AuthenticationFilter,
+				Name:  "af",
+			},
+		},
+	}
+	grUnresolvedAndValidAuthenticationFilter := createGRPCRoute(
+		"gr",
+		gatewayNsName.Name,
+		"example.com",
+		[]v1.GRPCRouteRule{grUnresolvedAndValidAuthenticationFilterRule},
+	)
+
+	// route with two valid authentication filter extensions refs
+	grTwoValidAuthenticationFilterRule := createGRPCMethodMatch("myService", "myMethod", "Exact", nil, nil)
+	grTwoValidAuthenticationFilterRule.Filters = []v1.GRPCRouteFilter{
+		{
+			Type: v1.GRPCRouteFilterExtensionRef,
+			ExtensionRef: &v1.LocalObjectReference{
+				Group: ngfAPIv1alpha1.GroupName,
+				Kind:  kinds.AuthenticationFilter,
+				Name:  "af",
+			},
+		},
+		{
+			Type: v1.GRPCRouteFilterExtensionRef,
+			ExtensionRef: &v1.LocalObjectReference{
+				Group: ngfAPIv1alpha1.GroupName,
+				Kind:  kinds.AuthenticationFilter,
+				Name:  "af2",
+			},
+		},
+	}
+	grTwoValidAuthenticationFilter := createGRPCRoute(
+		"gr",
+		gatewayNsName.Name,
+		"example.com",
+		[]v1.GRPCRouteRule{grTwoValidAuthenticationFilterRule},
 	)
 
 	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
@@ -1226,6 +1418,267 @@ func TestBuildGRPCRoute(t *testing.T) {
 		},
 		{
 			validator: createAllValidValidator(),
+			gr:        grInvalidAuthenticationFilter,
+			expected: &L7Route{
+				Source:     grInvalidAuthenticationFilter,
+				RouteType:  RouteTypeGRPC,
+				Valid:      false,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: grInvalidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedValue(
+						"All rules are invalid: spec.rules[0].filters[0].extensionRef: " +
+							"Unsupported value: \"wrong\": supported values: \"gateway.nginx.org\"",
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: grInvalidAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   false,
+								Filters: convertGRPCRouteFilters(grInvalidAuthenticationFilter.Spec.Rules[0].Filters),
+							},
+							Matches:          ConvertGRPCMatches(grInvalidAuthenticationFilter.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{},
+						},
+					},
+				},
+			},
+			name: "invalid authentication filter extension ref",
+		},
+		{
+			validator: createAllValidValidator(),
+			gr:        grUnresolvableAuthenticationFilter,
+			expected: &L7Route{
+				Source:     grUnresolvableAuthenticationFilter,
+				RouteType:  RouteTypeGRPC,
+				Valid:      true,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: grUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteResolvedRefsInvalidFilter(
+						"spec.rules[0].filters[0].extensionRef: Not found: " +
+							`{"group":"gateway.nginx.org","kind":"AuthenticationFilter",` +
+							`"name":"does-not-exist"}`,
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: grUnresolvableAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   false,
+								Filters: convertGRPCRouteFilters(grUnresolvableAuthenticationFilter.Spec.Rules[0].Filters),
+							},
+							Matches:          ConvertGRPCMatches(grUnresolvableAuthenticationFilter.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{},
+						},
+					},
+				},
+			},
+			name: "unresolvable authentication filter extension ref",
+		},
+		{
+			validator: createAllValidValidator(),
+			gr:        grInvalidAndUnresolvableAuthenticationFilter,
+			expected: &L7Route{
+				Source:     grInvalidAndUnresolvableAuthenticationFilter,
+				RouteType:  RouteTypeGRPC,
+				Valid:      false,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: grInvalidAndUnresolvableAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedValue(
+						`All rules are invalid: [` +
+							`spec.rules[0].filters[0].extensionRef: Unsupported value: "wrong": supported values: "gateway.nginx.org", ` +
+							`spec.rules[0].filters[1].extensionRef: Invalid value: ` +
+							`{"group":"gateway.nginx.org","kind":"AuthenticationFilter","name":"does-not-exist"}: ` +
+							`only one AuthenticationFilter is allowed per Route rule` +
+							`]`,
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: grInvalidAndUnresolvableAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   false,
+								Filters: convertGRPCRouteFilters(grInvalidAndUnresolvableAuthenticationFilter.Spec.Rules[0].Filters),
+							},
+							Matches:          ConvertGRPCMatches(grInvalidAndUnresolvableAuthenticationFilter.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{},
+						},
+					},
+				},
+			},
+			name: "one invalid and one unresolvable authentication filter extension ref",
+		},
+		{
+			validator: createAllValidValidator(),
+			gr:        grInvalidAndValidAuthenticationFilter,
+			expected: &L7Route{
+				Source:     grInvalidAndValidAuthenticationFilter,
+				RouteType:  RouteTypeGRPC,
+				Valid:      false,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: grInvalidAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedValue(
+						`All rules are invalid: [` +
+							`spec.rules[0].filters[0].extensionRef: Unsupported value: "wrong": supported values: "gateway.nginx.org", ` +
+							`spec.rules[0].filters[1].extensionRef: Invalid value: ` +
+							`{"group":"gateway.nginx.org","kind":"AuthenticationFilter","name":"af"}: ` +
+							`only one AuthenticationFilter is allowed per Route rule` +
+							`]`,
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: grInvalidAndValidAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   false,
+								Filters: convertGRPCRouteFilters(grInvalidAndValidAuthenticationFilter.Spec.Rules[0].Filters),
+							},
+							Matches:          ConvertGRPCMatches(grInvalidAndValidAuthenticationFilter.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{},
+						},
+					},
+				},
+			},
+			name: "one invalid and one valid authentication filter extension ref",
+		},
+		{
+			validator: createAllValidValidator(),
+			gr:        grUnresolvedAndValidAuthenticationFilter,
+			expected: &L7Route{
+				Source:     grUnresolvedAndValidAuthenticationFilter,
+				RouteType:  RouteTypeGRPC,
+				Valid:      false,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: grUnresolvedAndValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedValue(
+						`All rules are invalid: ` +
+							`spec.rules[0].filters[1].extensionRef: Invalid value: ` +
+							`{"group":"gateway.nginx.org","kind":"AuthenticationFilter","name":"af"}: ` +
+							`only one AuthenticationFilter is allowed per Route rule`,
+					),
+					conditions.NewRouteResolvedRefsInvalidFilter(
+						`spec.rules[0].filters[0].extensionRef: Not found: ` +
+							`{"group":"gateway.nginx.org","kind":"AuthenticationFilter","name":"does-not-exist"}`,
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: grUnresolvedAndValidAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid:   false,
+								Filters: convertGRPCRouteFilters(grUnresolvedAndValidAuthenticationFilter.Spec.Rules[0].Filters),
+							},
+							Matches:          ConvertGRPCMatches(grUnresolvedAndValidAuthenticationFilter.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{},
+						},
+					},
+				},
+			},
+			name: "one unresolved and one valid authentication filter extension ref",
+		},
+		{
+			validator: createAllValidValidator(),
+			gr:        grTwoValidAuthenticationFilter,
+			expected: &L7Route{
+				Source:     grTwoValidAuthenticationFilter,
+				RouteType:  RouteTypeGRPC,
+				Valid:      false,
+				Attachable: true,
+				ParentRefs: []ParentRef{
+					{
+						Idx:         0,
+						Gateway:     CreateParentRefGateway(gw),
+						SectionName: grTwoValidAuthenticationFilter.Spec.ParentRefs[0].SectionName,
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteUnsupportedValue(
+						`All rules are invalid: ` +
+							`spec.rules[0].filters[1].extensionRef: Invalid value: ` +
+							`{"group":"gateway.nginx.org","kind":"AuthenticationFilter","name":"af2"}: ` +
+							`only one AuthenticationFilter is allowed per Route rule`,
+					),
+				},
+				Spec: L7RouteSpec{
+					Hostnames: grTwoValidAuthenticationFilter.Spec.Hostnames,
+					Rules: []RouteRule{
+						{
+							ValidMatches: true,
+							Filters: RouteRuleFilters{
+								Valid: false,
+								Filters: []Filter{
+									{
+										RouteType:    RouteTypeGRPC,
+										FilterType:   FilterExtensionRef,
+										ExtensionRef: grTwoValidAuthenticationFilter.Spec.Rules[0].Filters[0].ExtensionRef,
+										ResolvedExtensionRef: &ExtensionRefFilter{
+											Valid:                true,
+											AuthenticationFilter: &AuthenticationFilter{Valid: true, Referenced: true},
+										},
+									},
+									{
+										RouteType:            RouteTypeGRPC,
+										FilterType:           FilterExtensionRef,
+										ExtensionRef:         grTwoValidAuthenticationFilter.Spec.Rules[0].Filters[1].ExtensionRef,
+										ResolvedExtensionRef: nil,
+									},
+								},
+							},
+							Matches:          ConvertGRPCMatches(grTwoValidAuthenticationFilter.Spec.Rules[0].Matches),
+							RouteBackendRefs: []RouteBackendRef{},
+						},
+					},
+				},
+			},
+			name: "two valid authentication filter extension refs",
+		},
+		{
+			validator: createAllValidValidator(),
 			gr:        grValidWithUnsupportedField,
 			expected: &L7Route{
 				RouteType: RouteTypeGRPC,
@@ -1312,11 +1765,15 @@ func TestBuildGRPCRoute(t *testing.T) {
 			snippetsFilters := map[types.NamespacedName]*SnippetsFilter{
 				{Namespace: "test", Name: "sf"}: {Valid: true},
 			}
+			authenticationFilters := map[types.NamespacedName]*AuthenticationFilter{
+				{Namespace: "test", Name: "af"}: {Valid: true},
+			}
 			route := buildGRPCRoute(
 				test.validator,
 				test.gr,
 				gws,
 				snippetsFilters,
+				authenticationFilters,
 				FeatureFlags{
 					Plus:         test.plus,
 					Experimental: test.experimental,
@@ -1484,6 +1941,7 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 		gr,
 		gateways,
 		snippetsFilters,
+		nil,
 		featureFlags,
 	)
 	g.Expect(l7route).NotTo(BeNil())

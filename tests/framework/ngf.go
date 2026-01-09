@@ -19,6 +19,7 @@ import (
 const (
 	gwInstallBasePath = "https://github.com/kubernetes-sigs/gateway-api/releases/download"
 	PlusSecretName    = "nplus-license"
+	NgfControllerName = "gateway.nginx.org/nginx-gateway-controller"
 )
 
 // InstallationConfig contains the configuration for the NGF installation.

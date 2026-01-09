@@ -69,7 +69,20 @@ func TestValidateFilter(t *testing.T) {
 				},
 			},
 			expectErrCount: 0,
-			name:           "valid HTTP extension ref filter",
+			name:           "valid SnippetsFilter HTTP extension ref filter",
+		},
+		{
+			filter: Filter{
+				RouteType:  RouteTypeHTTP,
+				FilterType: FilterExtensionRef,
+				ExtensionRef: &gatewayv1.LocalObjectReference{
+					Group: ngfAPI.GroupName,
+					Kind:  kinds.AuthenticationFilter,
+					Name:  "af",
+				},
+			},
+			expectErrCount: 0,
+			name:           "valid AuthenticationFilter HTTP extension ref filter",
 		},
 		{
 			filter: Filter{

@@ -91,6 +91,9 @@ func TestGenerate(t *testing.T) {
 		CertBundles: map[dataplane.CertBundleID]dataplane.CertBundle{
 			"test-certbundle": []byte("test-cert"),
 		},
+		AuthSecrets: map[dataplane.AuthFileID]dataplane.AuthFileData{
+			"default_auth-basic-user": []byte("user:$apr1$cred"),
+		},
 		Telemetry: dataplane.Telemetry{
 			Endpoint:    "1.2.3.4:123",
 			ServiceName: "ngf:gw-ns:gw-name:my-name",
@@ -149,7 +152,7 @@ func TestGenerate(t *testing.T) {
 
 	files := generator.Generate(conf)
 
-	g.Expect(files).To(HaveLen(18))
+	g.Expect(files).To(HaveLen(19))
 	arrange := func(i, j int) bool {
 		return files[i].Meta.Name < files[j].Meta.Name
 	}
@@ -168,6 +171,7 @@ func TestGenerate(t *testing.T) {
 		/etc/nginx/main-includes/deployment_ctx.json
 		/etc/nginx/main-includes/main.conf
 		/etc/nginx/main-includes/mgmt.conf
+		/etc/nginx/secrets/default_auth-basic-user
 		/etc/nginx/secrets/license.jwt
 		/etc/nginx/secrets/mgmt-ca.crt
 		/etc/nginx/secrets/mgmt-tls.crt
@@ -179,7 +183,7 @@ func TestGenerate(t *testing.T) {
 
 	g.Expect(files[0].Meta.Permissions).To(Equal(file.RegularFileMode))
 	g.Expect(files[0].Meta.Name).To(Equal("/etc/nginx/conf.d/http.conf"))
-	httpCfg := string(files[0].Contents) // converting to string so that on failure gomega prints strings not byte arrays
+	httpCfg := string(files[0].Contents) // Converting to string so that on failure gomega prints strings not byte arrays
 	// Note: this only verifies that Generate() returns a byte array with upstream, server, and split_client blocks.
 	// It does not test the correctness of those blocks. That functionality is covered by other tests in this package.
 	g.Expect(httpCfg).To(ContainSubstring("listen 80"))
@@ -247,23 +251,26 @@ func TestGenerate(t *testing.T) {
 	g.Expect(mgmtConf).To(ContainSubstring("ssl_certificate /etc/nginx/secrets/mgmt-tls.crt"))
 	g.Expect(mgmtConf).To(ContainSubstring("ssl_certificate_key /etc/nginx/secrets/mgmt-tls.key"))
 
-	g.Expect(files[11].Meta.Name).To(Equal("/etc/nginx/secrets/license.jwt"))
-	g.Expect(string(files[11].Contents)).To(Equal("license"))
+	g.Expect(files[11].Meta.Name).To(Equal("/etc/nginx/secrets/default_auth-basic-user"))
+	AuthSecrets := string(files[11].Contents)
+	g.Expect(AuthSecrets).To(Equal("user:$apr1$cred"))
 
-	g.Expect(files[12].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-ca.crt"))
-	g.Expect(string(files[12].Contents)).To(Equal("ca"))
+	g.Expect(files[12].Meta.Name).To(Equal("/etc/nginx/secrets/license.jwt"))
+	g.Expect(string(files[12].Contents)).To(Equal("license"))
 
-	g.Expect(files[13].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-tls.crt"))
-	g.Expect(string(files[13].Contents)).To(Equal("cert"))
+	g.Expect(files[13].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-ca.crt"))
+	g.Expect(string(files[13].Contents)).To(Equal("ca"))
 
-	g.Expect(files[14].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-tls.key"))
-	g.Expect(string(files[14].Contents)).To(Equal("key"))
+	g.Expect(files[14].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-tls.crt"))
+	g.Expect(string(files[14].Contents)).To(Equal("cert"))
 
-	g.Expect(files[15].Meta.Name).To(Equal("/etc/nginx/secrets/test-certbundle.crt"))
-	certBundle := string(files[15].Contents)
+	g.Expect(files[15].Meta.Name).To(Equal("/etc/nginx/secrets/mgmt-tls.key"))
+	g.Expect(string(files[15].Contents)).To(Equal("key"))
+	g.Expect(files[16].Meta.Name).To(Equal("/etc/nginx/secrets/test-certbundle.crt"))
+	certBundle := string(files[16].Contents)
 	g.Expect(certBundle).To(Equal("test-cert"))
 
-	g.Expect(files[16]).To(Equal(agent.File{
+	g.Expect(files[17]).To(Equal(agent.File{
 		Meta: &pb.FileMeta{
 			Name:        "/etc/nginx/secrets/test-keypair.pem",
 			Hash:        filesHelper.GenerateHash([]byte("test-cert\ntest-key")),
@@ -273,9 +280,9 @@ func TestGenerate(t *testing.T) {
 		Contents: []byte("test-cert\ntest-key"),
 	}))
 
-	g.Expect(files[17].Meta.Name).To(Equal("/etc/nginx/stream-conf.d/stream.conf"))
-	g.Expect(files[17].Meta.Permissions).To(Equal(file.RegularFileMode))
-	streamCfg := string(files[17].Contents)
+	g.Expect(files[18].Meta.Name).To(Equal("/etc/nginx/stream-conf.d/stream.conf"))
+	g.Expect(files[18].Meta.Permissions).To(Equal(file.RegularFileMode))
+	streamCfg := string(files[18].Contents)
 	g.Expect(streamCfg).To(ContainSubstring("listen unix:/var/run/nginx/app.example.com-443.sock"))
 	g.Expect(streamCfg).To(ContainSubstring("listen 443"))
 	g.Expect(streamCfg).To(ContainSubstring("app.example.com unix:/var/run/nginx/app.example.com-443.sock"))

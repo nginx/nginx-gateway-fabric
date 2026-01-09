@@ -148,6 +148,7 @@ rules:
   - observabilitypolicies
   - upstreamsettingspolicies
   - snippetsfilters
+  - authenticationfilters
   verbs:
   - create
   - delete
@@ -163,6 +164,7 @@ rules:
   - observabilitypolicies/status
   - upstreamsettingspolicies/status
   - snippetsfilters/status
+  - authenticationfilters/status
   verbs:
   - update
 - apiGroups:

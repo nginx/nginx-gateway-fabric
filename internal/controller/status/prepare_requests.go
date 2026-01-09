@@ -513,6 +513,39 @@ func PrepareSnippetsFilterRequests(
 	return reqs
 }
 
+func PrepareAuthenticationFilterRequests(
+	authenticationFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+	transitionTime metav1.Time,
+	gatewayCtlrName string,
+) []UpdateRequest {
+	reqs := make([]UpdateRequest, 0, len(authenticationFilters))
+
+	for nsname, authenticationFilter := range authenticationFilters {
+		allConds := make([]conditions.Condition, 0, len(authenticationFilter.Conditions)+1)
+		allConds = append(allConds, conditions.NewAuthenticationFilterAccepted())
+		allConds = append(allConds, authenticationFilter.Conditions...)
+
+		conds := conditions.DeduplicateConditions(allConds)
+		apiConds := conditions.ConvertConditions(conds, authenticationFilter.Source.GetGeneration(), transitionTime)
+		status := ngfAPI.AuthenticationFilterStatus{
+			Controllers: []ngfAPI.ControllerStatus{
+				{
+					Conditions:     apiConds,
+					ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
+				},
+			},
+		}
+
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: authenticationFilter.Source,
+			Setter:       newAuthenticationFilterStatusSetter(status, gatewayCtlrName),
+		})
+	}
+
+	return reqs
+}
+
 // ControlPlaneUpdateResult describes the result of a control plane update.
 type ControlPlaneUpdateResult struct {
 	// Error is the error that occurred during the update.

@@ -44,7 +44,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 		},
 		{
 			name:       "Validate Invalid TargetRef Kind is not allowed",
-			wantErrors: []string{expectedTargetRefMustBeHTTPRouteOrGrpcRouteError},
+			wantErrors: []string{expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -56,7 +56,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 		},
 		{
 			name:       "Validate TCPRoute TargetRef Kind is not allowed",
-			wantErrors: []string{expectedTargetRefMustBeHTTPRouteOrGrpcRouteError},
+			wantErrors: []string{expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -68,7 +68,7 @@ func TestObservabilityPoliciesTargetRefKind(t *testing.T) {
 		},
 		{
 			name:       "Validate TargetRef of kind Gateway is not allowed",
-			wantErrors: []string{expectedTargetRefMustBeHTTPRouteOrGrpcRouteError},
+			wantErrors: []string{expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha2.ObservabilityPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{

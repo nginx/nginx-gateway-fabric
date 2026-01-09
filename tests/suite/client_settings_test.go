@@ -114,7 +114,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "URI: /coffee")
+						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseCoffeeURL, address, "URI: /coffee")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -122,7 +122,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
+						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseTeaURL, address, "URI: /tea")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -474,10 +474,10 @@ func ancestorMustEqualTargetRef(
 	targetRef v1.LocalPolicyTargetReference,
 	namespace string,
 ) error {
-	if ancestor.ControllerName != ngfControllerName {
+	if ancestor.ControllerName != framework.NgfControllerName {
 		controllerNameErr := fmt.Errorf(
 			"expected ancestor controller name to be %s, got %s",
-			ngfControllerName,
+			framework.NgfControllerName,
 			ancestor.ControllerName,
 		)
 		GinkgoWriter.Printf("ERROR: %v\n", controllerNameErr)

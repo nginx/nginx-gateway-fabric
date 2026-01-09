@@ -48,7 +48,7 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 		},
 		{
 			name:       "Validate Invalid TargetRef Kind is not allowed",
-			wantErrors: []string{expectedTargetRefKindError},
+			wantErrors: []string{expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  invalidKind,
@@ -58,7 +58,7 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 		},
 		{
 			name:       "Validate TCPRoute TargetRef Kind is not allowed",
-			wantErrors: []string{expectedTargetRefKindError},
+			wantErrors: []string{expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
 				TargetRef: gatewayv1.LocalPolicyTargetReference{
 					Kind:  tcpRouteKind,

@@ -30,6 +30,7 @@ func buildHTTPRoute(
 	ghr *v1.HTTPRoute,
 	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	authenticationFilters map[types.NamespacedName]*AuthenticationFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 	featureFlags FeatureFlags,
 ) *L7Route {
@@ -64,14 +65,21 @@ func buildHTTPRoute(
 	r.Spec.Hostnames = ghr.Spec.Hostnames
 	r.Attachable = true
 
+	extRefFilterResolvers := buildExtRefFilterResolvers(
+		r.Source.GetNamespace(),
+		snippetsFilters,
+		authenticationFilters,
+	)
+
 	nsName := types.NamespacedName{
 		Name:      ghr.GetName(),
 		Namespace: ghr.GetNamespace(),
 	}
+
 	rules, valid, conds := processHTTPRouteRules(
 		ghr.Spec.Rules,
 		validator,
-		getSnippetsFilterResolverForNamespace(snippetsFilters, r.Source.GetNamespace()),
+		extRefFilterResolvers,
 		inferencePools,
 		nsName,
 		featureFlags,
@@ -127,6 +135,7 @@ func buildHTTPMirrorRoutes(
 					tmpMirrorRoute,
 					gateways,
 					snippetsFilters,
+					nil, // Mirror routes can't use NGINX auth directives.
 					nil,
 					featureFlags,
 				)
@@ -181,7 +190,7 @@ func processHTTPRouteRule(
 	specRule v1.HTTPRouteRule,
 	ruleIdx int,
 	validator validation.HTTPFieldsValidator,
-	resolveExtRefFunc resolveExtRefFilter,
+	extRefFilterResolvers map[string]resolveExtRefFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 	routeNsName types.NamespacedName,
 	featureFlags FeatureFlags,
@@ -210,7 +219,7 @@ func processHTTPRouteRule(
 		convertHTTPRouteFilters(specRule.Filters),
 		rulePath.Child("filters"),
 		validator,
-		resolveExtRefFunc,
+		extRefFilterResolvers,
 	)
 	errors = errors.append(filterErrors)
 
@@ -326,7 +335,7 @@ func getBackendRefs(
 func processHTTPRouteRules(
 	specRules []v1.HTTPRouteRule,
 	validator validation.HTTPFieldsValidator,
-	resolveExtRefFunc resolveExtRefFilter,
+	extRefFilterResolvers map[string]resolveExtRefFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 	routeNsName types.NamespacedName,
 	featureFlags FeatureFlags,
@@ -343,7 +352,7 @@ func processHTTPRouteRules(
 			rule,
 			ruleIdx,
 			validator,
-			resolveExtRefFunc,
+			extRefFilterResolvers,
 			inferencePools,
 			routeNsName,
 			featureFlags,

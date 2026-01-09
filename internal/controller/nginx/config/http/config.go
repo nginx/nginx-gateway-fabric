@@ -66,6 +66,8 @@ type Location struct {
 	Type LocationType
 	// Path is the NGINX location path.
 	Path string
+	// AuthBasic contains the configuration for basic authentication.
+	AuthBasic *AuthBasic
 	// ResponseHeaders are custom response headers to be sent.
 	ResponseHeaders ResponseHeaders
 	// ProxySetHeaders are headers to set when proxying requests upstream.
@@ -169,6 +171,13 @@ type SplitClientDistribution struct {
 type ProxySSLVerify struct {
 	TrustedCertificate string
 	Name               string
+}
+
+// AuthBasic holds the values for the auth_basic and auth_basic_user_file directives.
+// See https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html
+type AuthBasic struct {
+	Realm string
+	File  string
 }
 
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.

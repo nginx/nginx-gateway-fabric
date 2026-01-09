@@ -112,7 +112,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "URI: /coffee")
+						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseCoffeeURL, address, "URI: /coffee")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -120,7 +120,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
+						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseTeaURL, address, "URI: /tea")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -292,7 +292,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "URI: /coffee")
+						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseCoffeeURL, address, "URI: /coffee")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(1000 * time.Millisecond).
@@ -300,7 +300,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseTeaURL, address, "URI: /tea")
+						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseTeaURL, address, "URI: /tea")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(1000 * time.Millisecond).
@@ -504,10 +504,10 @@ func ancestorMustEqualGatewayRef(
 	gatewayName string,
 	namespace string,
 ) error {
-	if ancestor.ControllerName != ngfControllerName {
+	if ancestor.ControllerName != framework.NgfControllerName {
 		return fmt.Errorf(
 			"expected ancestor controller name to be %s, got %s",
-			ngfControllerName,
+			framework.NgfControllerName,
 			ancestor.ControllerName,
 		)
 	}

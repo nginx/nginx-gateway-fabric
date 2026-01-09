@@ -106,6 +106,11 @@ server {
         include {{ $i.Name }};
         {{- end }}
 
+        {{- if $l.AuthBasic }}
+        auth_basic "{{ $l.AuthBasic.Realm }}";
+        auth_basic_user_file {{ $l.AuthBasic.File }};
+        {{- end }}
+
         {{ range $r := $l.Rewrites }}
         rewrite {{ $r }};
         {{- end }}
