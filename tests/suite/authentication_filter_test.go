@@ -106,7 +106,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 				responseCode int
 			}
 
-			DescribeTable("Authenticated/unauthenticated requests",
+			DescribeTable("Authenticated and unauthenticated requests",
 				func(tests []test) {
 					for _, test := range tests {
 						GinkgoWriter.Printf("Test case: %s, expected response code: %d\n", test.desc, test.responseCode)
@@ -138,8 +138,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						}
 					}
 				},
-				Entry("requests configurations", []test{
-					// Requests expected to return 200
+				Entry("Requests configurations", []test{
+					// Expect 200 response code
 					{
 						desc: "Send https /coffee1 traffic with basic-auth1",
 						url:  "http://cafe.example.com:",
@@ -178,7 +178,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						expected:     "URI: /latte",
 						responseCode: 200,
 					},
-					// Requests expected to return 401
+					// Expect 401 response code
 					{
 						desc: "Send https /coffee1 traffic with wrong authentication",
 						url:  "http://cafe.example.com:",
@@ -220,7 +220,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 				responseCode int
 			}
 
-			DescribeTable("Authenticated/unauthenticated requests",
+			DescribeTable("Authenticated and unauthenticated requests",
 				func(tests []test) {
 					for _, test := range tests {
 						GinkgoWriter.Printf("Test case: %s, expected response code: %d\n", test.desc, test.responseCode)
@@ -251,8 +251,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						}
 					}
 				},
-				Entry("requests with valid authentication", []test{
-					// Requests expected to return 200
+				Entry("Requests with valid authentication", []test{
+					// Expect 200 response code
 					{
 						desc: "Send gRPC request with basic-auth2",
 						headers: map[string]string{
@@ -260,7 +260,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						},
 						responseCode: 200,
 					},
-					// Requests expected to return Unauthenticated
+					// Expect Unauthenticated response code
 					{
 						desc: "Send gRPC request with invalid authentication",
 						headers: map[string]string{
@@ -472,8 +472,8 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						}
 					}
 				},
-				Entry("requests configurations", []test{
-					// Requests expected to return 200
+				Entry("Requests configurations", []test{
+					// Expect 200 response code
 					{
 						desc: "Send https /tea traffic with valid basic-auth2",
 						url:  "http://cafe.example.com:",
@@ -492,7 +492,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 						expected:     "URI: /latte",
 						responseCode: 200,
 					},
-					// Requests expected to return 500
+					// Expect 500 response code
 					{
 						desc: "Send https /coffee1 traffic with invalid Auth type",
 						url:  "http://cafe.example.com:",
