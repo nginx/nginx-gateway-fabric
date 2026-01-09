@@ -57,7 +57,9 @@ upstream {{ $u.Name }} {
     state {{ $u.StateFile }};
     {{- else }}
         {{ range $server := $u.Servers }}
-    server {{ $server.Address }}{{ if $server.Resolve }} resolve{{ end }};
+    server {{ $server.Address }}
+            {{- if and (ne $server.Weight 0) (ne $server.Weight 1) }} weight={{ $server.Weight }}{{ end }}
+            {{- if $server.Resolve }} resolve{{ end }};
         {{- end }}
     {{- end }}
 }

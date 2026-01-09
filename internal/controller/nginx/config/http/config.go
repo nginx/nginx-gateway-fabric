@@ -1,4 +1,4 @@
-package http //nolint:revive // ignoring conflicting package name
+package http //nolint:revive,nolintlint // ignoring conflicting package name
 
 import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -9,6 +9,7 @@ const (
 	InternalRoutePathPrefix       = "/_ngf-internal"
 	InternalMirrorRoutePathPrefix = InternalRoutePathPrefix + "-mirror"
 	HTTPSScheme                   = "https"
+	KeepAliveConnectionDefault    = int32(16)
 )
 
 // Server holds all configuration for an HTTP server.
@@ -142,9 +143,9 @@ type UpstreamSessionPersistence struct {
 
 // UpstreamKeepAlive holds the keepalive configuration for an HTTP upstream.
 type UpstreamKeepAlive struct {
+	Connections *int32
 	Time        string
 	Timeout     string
-	Connections int32
 	Requests    int32
 }
 

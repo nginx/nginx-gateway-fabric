@@ -157,6 +157,48 @@ func newGRPCRouteStatusSetter(status gatewayv1.GRPCRouteStatus, gatewayCtlrName 
 	}
 }
 
+func newTCPRouteStatusSetter(status v1alpha2.TCPRouteStatus, gatewayCtlrName string) Setter {
+	return func(object client.Object) (wasSet bool) {
+		tr := helpers.MustCastObject[*v1alpha2.TCPRoute](object)
+
+		// keep all the parent statuses that belong to other controllers
+		for _, os := range tr.Status.Parents {
+			if string(os.ControllerName) != gatewayCtlrName {
+				status.Parents = append(status.Parents, os)
+			}
+		}
+
+		if routeStatusEqual(gatewayCtlrName, tr.Status.Parents, status.Parents) {
+			return false
+		}
+
+		tr.Status = status
+
+		return true
+	}
+}
+
+func newUDPRouteStatusSetter(status v1alpha2.UDPRouteStatus, gatewayCtlrName string) Setter {
+	return func(object client.Object) (wasSet bool) {
+		ur := helpers.MustCastObject[*v1alpha2.UDPRoute](object)
+
+		// keep all the parent statuses that belong to other controllers
+		for _, os := range ur.Status.Parents {
+			if string(os.ControllerName) != gatewayCtlrName {
+				status.Parents = append(status.Parents, os)
+			}
+		}
+
+		if routeStatusEqual(gatewayCtlrName, ur.Status.Parents, status.Parents) {
+			return false
+		}
+
+		ur.Status = status
+
+		return true
+	}
+}
+
 func routeStatusEqual(gatewayCtlrName string, prevParents, curParents []gatewayv1.RouteParentStatus) bool {
 	// Since other controllers may update HTTPRoute status we can't assume anything about the order of the statuses,
 	// and we have to ignore statuses written by other controllers when checking for equality.

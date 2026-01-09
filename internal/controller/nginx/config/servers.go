@@ -42,9 +42,9 @@ var httpConnectionHeader = http.Header{
 	Value: "$connection_upgrade",
 }
 
-var unsetHTTPConnectionHeader = http.Header{
+var keepAliveConnectionHeader = http.Header{
 	Name:  "Connection",
-	Value: "",
+	Value: "$connection_keepalive",
 }
 
 var httpUpgradeHeader = http.Header{
@@ -1703,9 +1703,12 @@ func createBaseProxySetHeaders(externalHostname string, extraHeaders ...http.Hea
 func getConnectionHeader(keepAliveCheck keepAliveChecker, backends []dataplane.Backend) http.Header {
 	for _, backend := range backends {
 		if keepAliveCheck(backend.UpstreamName) {
-			// if keep-alive settings are enabled on any upstream, the connection header value
-			// must be empty for the location
-			return unsetHTTPConnectionHeader
+			// we set a custom value for connection header when keepAlive is enabled.
+			// we map this header to `$connection_keepalive` variable which is determined by the value of
+			// $http_upgrade header.
+			// If there is an upgrade request, $connection_keepalive will be set to "upgrade", else
+			// connection is set to empty for HTTP requests.
+			return keepAliveConnectionHeader
 		}
 	}
 

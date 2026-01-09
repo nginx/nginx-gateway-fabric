@@ -46,15 +46,15 @@ func (l *LabelCollector) Collect(ctx context.Context) (map[string]string, error)
 		return nil, fmt.Errorf("failed to get replica set for pod %v: %w", l.cfg.PodNSName, err)
 	}
 
-	deploymentID, err := getDeploymentID(replicaSet)
+	deploymentName, deploymentID, err := getDeploymentNameAndID(replicaSet)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get NGF deploymentID: %w", err)
+		return nil, fmt.Errorf("failed to get NGF deployment info: %w", err)
 	}
 
 	agentLabels["product-type"] = "ngf"
 	agentLabels["product-version"] = l.cfg.Version
 	agentLabels["cluster-id"] = clusterID
-	agentLabels["control-name"] = l.cfg.PodNSName.Name
+	agentLabels["control-name"] = deploymentName
 	agentLabels["control-namespace"] = l.cfg.PodNSName.Namespace
 	agentLabels["control-id"] = deploymentID
 

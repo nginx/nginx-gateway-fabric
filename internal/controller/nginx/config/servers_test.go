@@ -1298,9 +1298,11 @@ func TestCreateServers(t *testing.T) {
 		},
 		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
 			{
-				Hostname:     "app.example.com",
-				Port:         8443,
-				UpstreamName: "sup",
+				Hostname: "app.example.com",
+				Port:     8443,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "sup", Weight: 0},
+				},
 			},
 		},
 	}
@@ -1824,7 +1826,7 @@ func TestCreateServers(t *testing.T) {
 			{
 				Path:            "= /keep-alive-enabled",
 				ProxyPass:       "http://test_keep_alive_80$request_uri",
-				ProxySetHeaders: createBaseProxySetHeaders("", httpUpgradeHeader, unsetHTTPConnectionHeader),
+				ProxySetHeaders: createBaseProxySetHeaders("", httpUpgradeHeader, keepAliveConnectionHeader),
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
 			},
@@ -1903,7 +1905,7 @@ func TestCreateServers(t *testing.T) {
 	keepAliveEnabledUpstream := http.Upstream{
 		Name: "test_keep_alive_80",
 		KeepAlive: http.UpstreamKeepAlive{
-			Connections: 1,
+			Connections: helpers.GetPointer[int32](1),
 		},
 	}
 	keepAliveCheck := newKeepAliveChecker([]http.Upstream{keepAliveEnabledUpstream})
@@ -4575,10 +4577,10 @@ func TestCreateBaseProxySetHeaders(t *testing.T) {
 		{
 			msg: "unset connection header and upgrade header",
 			additionalHeaders: []http.Header{
-				unsetHTTPConnectionHeader,
+				keepAliveConnectionHeader,
 				httpUpgradeHeader,
 			},
-			expBaseHeaders: append(expBaseHeaders, unsetHTTPConnectionHeader, httpUpgradeHeader),
+			expBaseHeaders: append(expBaseHeaders, keepAliveConnectionHeader, httpUpgradeHeader),
 		},
 	}
 
@@ -4634,7 +4636,7 @@ func TestGetConnectionHeader(t *testing.T) {
 				{
 					Name: "upstream",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 1,
+						Connections: helpers.GetPointer[int32](1),
 					},
 				},
 			},
@@ -4643,7 +4645,7 @@ func TestGetConnectionHeader(t *testing.T) {
 					UpstreamName: "upstream",
 				},
 			},
-			expConnectionHeader: unsetHTTPConnectionHeader,
+			expConnectionHeader: keepAliveConnectionHeader,
 		},
 		{
 			msg: "multiple upstreams with keepAlive enabled",
@@ -4651,20 +4653,20 @@ func TestGetConnectionHeader(t *testing.T) {
 				{
 					Name: "upstream1",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 1,
+						Connections: helpers.GetPointer[int32](1),
 					},
 				},
 				{
 					Name: "upstream2",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 2,
+						Connections: helpers.GetPointer[int32](2),
 						Requests:    1,
 					},
 				},
 				{
 					Name: "upstream3",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 3,
+						Connections: helpers.GetPointer[int32](3),
 						Time:        "5s",
 					},
 				},
@@ -4680,16 +4682,16 @@ func TestGetConnectionHeader(t *testing.T) {
 					UpstreamName: "upstream3",
 				},
 			},
-			expConnectionHeader: unsetHTTPConnectionHeader,
+			expConnectionHeader: keepAliveConnectionHeader,
 		},
 		{
 			msg:                 "mix of upstreams with keepAlive enabled and disabled",
-			expConnectionHeader: unsetHTTPConnectionHeader,
+			expConnectionHeader: keepAliveConnectionHeader,
 			upstreams: []http.Upstream{
 				{
 					Name: "upstream1",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 1,
+						Connections: helpers.GetPointer[int32](1),
 					},
 				},
 				{

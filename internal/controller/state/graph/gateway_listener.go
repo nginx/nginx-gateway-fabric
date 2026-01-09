@@ -66,7 +66,7 @@ func buildListeners(
 }
 
 type listenerConfiguratorFactory struct {
-	http, https, tls, unsupportedProtocol *listenerConfigurator
+	http, https, tls, tcp, udp, unsupportedProtocol *listenerConfigurator
 }
 
 func (f *listenerConfiguratorFactory) getConfiguratorForListener(l v1.Listener) *listenerConfigurator {
@@ -77,6 +77,10 @@ func (f *listenerConfiguratorFactory) getConfiguratorForListener(l v1.Listener) 
 		return f.https
 	case v1.TLSProtocolType:
 		return f.tls
+	case v1.TCPProtocolType:
+		return f.tcp
+	case v1.UDPProtocolType:
+		return f.udp
 	default:
 		return f.unsupportedProtocol
 	}
@@ -98,7 +102,10 @@ func newListenerConfiguratorFactory(
 					valErr := field.NotSupported(
 						field.NewPath("protocol"),
 						listener.Protocol,
-						[]string{string(v1.HTTPProtocolType), string(v1.HTTPSProtocolType), string(v1.TLSProtocolType)},
+						[]string{
+							string(v1.HTTPProtocolType), string(v1.HTTPSProtocolType), string(v1.TLSProtocolType),
+							string(v1.TCPProtocolType), string(v1.UDPProtocolType),
+						},
 					)
 					return conditions.NewListenerUnsupportedProtocol(valErr.Error()), false /* not attachable */
 				},
@@ -142,6 +149,26 @@ func newListenerConfiguratorFactory(
 				sharedOverlappingTLSConfigResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{},
+		},
+		tcp: &listenerConfigurator{
+			validators: []listenerValidator{
+				validateListenerAllowedRouteKind,
+				validateListenerLabelSelector,
+				createL4ListenerValidator(v1.TCPProtocolType, protectedPorts),
+			},
+			conflictResolvers: []listenerConflictResolver{
+				sharedPortConflictResolver,
+			},
+		},
+		udp: &listenerConfigurator{
+			validators: []listenerValidator{
+				validateListenerAllowedRouteKind,
+				validateListenerLabelSelector,
+				createL4ListenerValidator(v1.UDPProtocolType, protectedPorts),
+			},
+			conflictResolvers: []listenerConflictResolver{
+				sharedPortConflictResolver,
+			},
 		},
 	}
 }
@@ -259,19 +286,7 @@ func getAndValidateListenerSupportedKinds(listener v1.Listener) (
 	var conds []conditions.Condition
 	var supportedKinds []v1.RouteGroupKind
 
-	var validKinds []v1.RouteGroupKind
-
-	switch listener.Protocol {
-	case v1.HTTPProtocolType, v1.HTTPSProtocolType:
-		validKinds = []v1.RouteGroupKind{
-			{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
-			{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
-		}
-	case v1.TLSProtocolType:
-		validKinds = []v1.RouteGroupKind{
-			{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
-		}
-	}
+	validKinds := getValidKindsForProtocol(listener.Protocol)
 
 	validProtocolRouteKind := func(kind v1.RouteGroupKind) bool {
 		if kind.Group != nil && *kind.Group != v1.GroupName {
@@ -313,6 +328,31 @@ func getAndValidateListenerSupportedKinds(listener v1.Listener) (
 	}
 
 	return conds, validKinds
+}
+
+// getValidKindsForProtocol returns the valid route kinds for a given protocol.
+func getValidKindsForProtocol(protocol v1.ProtocolType) []v1.RouteGroupKind {
+	switch protocol {
+	case v1.HTTPProtocolType, v1.HTTPSProtocolType:
+		return []v1.RouteGroupKind{
+			{Kind: v1.Kind(kinds.HTTPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+			{Kind: v1.Kind(kinds.GRPCRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		}
+	case v1.TLSProtocolType:
+		return []v1.RouteGroupKind{
+			{Kind: v1.Kind(kinds.TLSRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		}
+	case v1.TCPProtocolType:
+		return []v1.RouteGroupKind{
+			{Kind: v1.Kind(kinds.TCPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		}
+	case v1.UDPProtocolType:
+		return []v1.RouteGroupKind{
+			{Kind: v1.Kind(kinds.UDPRoute), Group: helpers.GetPointer[v1.Group](v1.GroupName)},
+		}
+	default:
+		return nil
+	}
 }
 
 func validateListenerAllowedRouteKind(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
@@ -446,15 +486,23 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 	}
 }
 
+// isL4Protocol checks if the protocol is a Layer 4 protocol (TCP or UDP).
+func isL4Protocol(protocol v1.ProtocolType) bool {
+	return protocol == v1.TCPProtocolType || protocol == v1.UDPProtocolType
+}
+
 func createPortConflictResolver() listenerConflictResolver {
 	const (
 		secureProtocolGroup   int = 0
 		insecureProtocolGroup int = 1
+		l4ProtocolGroup       int = 2
 	)
 	protocolGroups := map[v1.ProtocolType]int{
 		v1.TLSProtocolType:   secureProtocolGroup,
 		v1.HTTPProtocolType:  insecureProtocolGroup,
 		v1.HTTPSProtocolType: secureProtocolGroup,
+		v1.TCPProtocolType:   l4ProtocolGroup,
+		v1.UDPProtocolType:   l4ProtocolGroup,
 	}
 	conflictedPorts := make(map[v1.PortNumber]bool)
 	portProtocolOwner := make(map[v1.PortNumber]int)
@@ -465,6 +513,8 @@ func createPortConflictResolver() listenerConflictResolver {
 
 	formatHostname := "HTTPS and TLS listeners for the same port %d specify overlapping hostnames; " +
 		"ensure no overlapping hostnames for HTTPS and TLS listeners for the same port"
+
+	formatL4SameProtocol := "Multiple %s listeners cannot share the same port %d"
 
 	return func(l *Listener) {
 		port := l.Source.Port
@@ -503,7 +553,16 @@ func createPortConflictResolver() listenerConflictResolver {
 		} else {
 			foundConflict := false
 			for _, listener := range listenersByPort[port] {
+				if isL4Protocol(l.Source.Protocol) &&
+					listener.Source.Protocol == l.Source.Protocol {
+					listener.Valid = false
+					conflictedConds := conditions.NewListenerProtocolConflict(
+						fmt.Sprintf(formatL4SameProtocol, l.Source.Protocol, port))
+					listener.Conditions = append(listener.Conditions, conflictedConds...)
+					foundConflict = true
+				}
 				if listener.Source.Protocol != l.Source.Protocol &&
+					!isL4Protocol(listener.Source.Protocol) && !isL4Protocol(l.Source.Protocol) &&
 					haveOverlap(l.Source.Hostname, listener.Source.Hostname) {
 					listener.Valid = false
 					conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
@@ -514,8 +573,14 @@ func createPortConflictResolver() listenerConflictResolver {
 
 			if foundConflict {
 				l.Valid = false
-				conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
-				l.Conditions = append(l.Conditions, conflictedConds...)
+				if isL4Protocol(l.Source.Protocol) {
+					conflictedConds := conditions.NewListenerProtocolConflict(
+						fmt.Sprintf(formatL4SameProtocol, l.Source.Protocol, port))
+					l.Conditions = append(l.Conditions, conflictedConds...)
+				} else {
+					conflictedConds := conditions.NewListenerHostnameConflict(fmt.Sprintf(formatHostname, port))
+					l.Conditions = append(l.Conditions, conflictedConds...)
+				}
 			}
 		}
 
@@ -602,6 +667,30 @@ func haveOverlap(hostname1, hostname2 *v1.Hostname) bool {
 		return true
 	}
 	return matchesWildcard(h1, h2)
+}
+
+func createL4ListenerValidator(protocol v1.ProtocolType, protectedPorts ProtectedPorts) listenerValidator {
+	return func(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+		if err := validateListenerPort(listener.Port, protectedPorts); err != nil {
+			path := field.NewPath("port")
+			valErr := field.Invalid(path, listener.Port, err.Error())
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		if listener.TLS != nil {
+			path := field.NewPath("tls")
+			valErr := field.Forbidden(path, fmt.Sprintf("tls is not supported for %s listener", protocol))
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		if listener.Hostname != nil {
+			path := field.NewPath("hostname")
+			valErr := field.Forbidden(path, fmt.Sprintf("hostname is not supported for %s listener", protocol))
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		return conds, true
+	}
 }
 
 func createOverlappingTLSConfigResolver() listenerConflictResolver {
