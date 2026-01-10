@@ -73,6 +73,11 @@ func (g *Generator) GenerateForLocation(pols []policies.Policy, _ http.Location)
 	return g.generate(pols, v1alpha1.NginxContextHTTPServerLocation)
 }
 
+// GenerateForInternalLocation generates policy configuration for an internal location block.
+func (g *Generator) GenerateForInternalLocation(pols []policies.Policy) policies.GenerateResultFiles {
+	return g.generate(pols, v1alpha1.NginxContextHTTPServerLocation)
+}
+
 func (g *Generator) generate(
 	pols []policies.Policy,
 	context v1alpha1.NginxContext,
