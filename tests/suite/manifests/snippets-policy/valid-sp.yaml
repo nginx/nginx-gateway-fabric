@@ -9,10 +9,10 @@ spec:
     name: gateway
   snippets:
   - context: main
-    value: "worker_priority 0;"
+    value: "timer_resolution 100ms;"
   - context: http
-    value: "aio off;"
+    value: "gzip off;"
   - context: http.server
-    value: "auth_delay 0s;"
+    value: "server_name_in_redirect off;"
   - context: http.server.location
-    value: "allow 127.0.0.1;"
+    value: "add_header X-Snippets-Policy valid;"

@@ -51,6 +51,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/snippetspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	ngxvalidation "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner"
@@ -151,6 +152,7 @@ func StartManager(cfg config.Config) error {
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
 		},
+		SnippetsPolicies: cfg.SnippetsPolicies,
 	})
 
 	var handlerCollector handlerMetricsCollector = collectors.NewControllerNoopCollector()
@@ -345,6 +347,13 @@ func createPolicyManager(
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
 			Validator: upstreamsettings.NewValidator(validator, cfg.Plus),
 		},
+	}
+
+	if cfg.SnippetsPolicies {
+		cfgs = append(cfgs, policies.ManagerConfig{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.SnippetsPolicy{}),
+			Validator: snippetspolicy.NewValidator(),
+		})
 	}
 
 	return policies.NewManager(mustExtractGVK, cfgs...)

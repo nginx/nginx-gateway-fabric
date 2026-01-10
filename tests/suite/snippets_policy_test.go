@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -118,6 +119,37 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
 			})
+
+			It("should return a 200 response for HTTPRoute with header match (internal location)", func() {
+				port := 80
+				if portFwdPort != 0 {
+					port = portFwdPort
+				}
+				baseURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/tea")
+
+				request := framework.Request{
+					URL:     baseURL,
+					Address: address,
+					Headers: map[string]string{"version": "v1"},
+					Timeout: timeoutConfig.RequestTimeout,
+				}
+
+				Eventually(
+					func() error {
+						resp, err := framework.Get(request)
+						if err != nil {
+							return err
+						}
+						if resp.StatusCode != 200 {
+							return fmt.Errorf("expected 200, got %d", resp.StatusCode)
+						}
+						return nil
+					},
+				).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+			})
 		})
 
 		Context("nginx directives", func() {
@@ -137,23 +169,23 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 				},
 				Entry("SnippetsPolicy", []framework.ExpectedNginxField{
 					{
-						Directive: "worker_priority",
-						Value:     "0",
+						Directive: "timer_resolution",
+						Value:     "100ms",
 						File:      "SnippetsPolicy_main_snippets-policy-valid-sp.conf",
 					},
 					{
-						Directive: "aio",
+						Directive: "gzip",
 						Value:     "off",
 						File:      "SnippetsPolicy_http_snippets-policy-valid-sp.conf",
 					},
 					{
-						Directive: "auth_delay",
-						Value:     "0s",
+						Directive: "server_name_in_redirect",
+						Value:     "off",
 						File:      "SnippetsPolicy_server_snippets-policy-valid-sp.conf",
 					},
 					{
-						Directive: "allow",
-						Value:     "127.0.0.1",
+						Directive: "add_header",
+						Value:     "X-Snippets-Policy valid",
 						File:      "SnippetsPolicy_location_snippets-policy-valid-sp.conf",
 					},
 					{
@@ -177,12 +209,152 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 						Value:     "/etc/nginx/includes/SnippetsPolicy_location_snippets-policy-valid-sp.conf",
 						File:      "http.conf",
 						Location:  "/coffee",
+						Server:    "cafe.example.com",
+					},
+					{
+						Directive: "include",
+						Value:     "/etc/nginx/includes/SnippetsPolicy_location_snippets-policy-valid-sp.conf",
+						File:      "http.conf",
+						Location:  "/_ngf-internal-rule1-route0",
+						Server:    "cafe.example.com",
 					},
 				}),
 			)
 		})
 	})
+
+	When("Multiple SnippetsPolicies are applied", func() {
+		policies := []string{
+			"snippets-policy/valid-sp.yaml",
+			"snippets-policy/second-sp.yaml",
+		}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
+			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
+		})
+
+		It("should both be accepted and applied in order", func() {
+			for _, name := range []string{"valid-sp", "second-sp"} {
+				nsname := types.NamespacedName{Name: name, Namespace: namespace}
+				Eventually(checkForSnippetsPolicyToBeAccepted).
+					WithArguments(nsname).
+					WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+			}
+
+			Eventually(func() error {
+				conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				if err != nil {
+					return err
+				}
+
+				if err := framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "add_header",
+					Value:     "X-Second-Policy true",
+					File:      "SnippetsPolicy_location_snippets-policy-second-sp.conf",
+				}); err != nil {
+					return err
+				}
+
+				return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "add_header",
+					Value:     "X-Snippets-Policy valid",
+					File:      "SnippetsPolicy_location_snippets-policy-valid-sp.conf",
+				})
+			}).WithTimeout(timeoutConfig.GetStatusTimeout).WithPolling(500 * time.Millisecond).Should(Succeed())
+		})
+	})
+
+	When("SnippetsPolicy is deleted", func() {
+		policy := []string{"snippets-policy/valid-sp.yaml"}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(policy, namespace)).To(Succeed())
+			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+		})
+
+		It("should remove configuration and maintain traffic", func() {
+			Expect(resourceManager.DeleteFromFiles(policy, namespace)).To(Succeed())
+
+			Eventually(func() error {
+				conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				if err != nil {
+					return err
+				}
+
+				for _, config := range conf.Config {
+					if strings.Contains(config.File, "SnippetsPolicy_location_snippets-policy-valid-sp.conf") {
+						return fmt.Errorf("expected SnippetsPolicy config file to be removed, but it still exists")
+					}
+				}
+
+				return nil
+			}).WithTimeout(timeoutConfig.GetStatusTimeout).WithPolling(500 * time.Millisecond).Should(Succeed())
+
+			// Traffic should still work
+			port := 80
+			if portFwdPort != 0 {
+				port = portFwdPort
+			}
+			baseURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
+			Expect(expectRequestToSucceed(baseURL, address, "URI: /coffee")).To(Succeed())
+		})
+	})
+
+	When("SnippetsPolicy is invalid", func() {
+		Specify("if syntax is invalid", func() {
+			files := []string{"snippets-policy/invalid-syntax-sp.yaml"}
+			gatewayNsName := types.NamespacedName{Name: "gateway", Namespace: namespace}
+
+			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
+
+			Eventually(checkGatewayToHaveProgrammedCond).
+				WithArguments(gatewayNsName, metav1.ConditionFalse, string(v1.GatewayReasonInvalid)).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
+
+			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
+		})
+	})
 })
+
+func checkGatewayToHaveProgrammedCond(
+	gatewayNsName types.NamespacedName,
+	status metav1.ConditionStatus,
+	reason string,
+) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
+	defer cancel()
+
+	var gw v1.Gateway
+	if err := resourceManager.Get(ctx, gatewayNsName, &gw); err != nil {
+		return err
+	}
+
+	for _, cond := range gw.Status.Conditions {
+		if cond.Type == string(v1.GatewayConditionProgrammed) {
+			if cond.Status == status && cond.Reason == reason {
+				return nil
+			}
+			return fmt.Errorf(
+				"expected Programmed condition to be %s/%s, got %s/%s",
+				status,
+				reason,
+				cond.Status,
+				cond.Reason,
+			)
+		}
+	}
+
+	return fmt.Errorf("Programmed condition not found")
+}
 
 func checkForSnippetsPolicyToBeAccepted(snippetsPolicyNsNames types.NamespacedName) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
