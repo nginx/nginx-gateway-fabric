@@ -9,6 +9,17 @@ import (
 )
 
 type FakeGenerator struct {
+	GenerateForHTTPStub        func([]policies.Policy) policies.GenerateResultFiles
+	generateForHTTPMutex       sync.RWMutex
+	generateForHTTPArgsForCall []struct {
+		arg1 []policies.Policy
+	}
+	generateForHTTPReturns struct {
+		result1 policies.GenerateResultFiles
+	}
+	generateForHTTPReturnsOnCall map[int]struct {
+		result1 policies.GenerateResultFiles
+	}
 	GenerateForInternalLocationStub        func([]policies.Policy) policies.GenerateResultFiles
 	generateForInternalLocationMutex       sync.RWMutex
 	generateForInternalLocationArgsForCall []struct {
@@ -32,6 +43,17 @@ type FakeGenerator struct {
 	generateForLocationReturnsOnCall map[int]struct {
 		result1 policies.GenerateResultFiles
 	}
+	GenerateForMainStub        func([]policies.Policy) policies.GenerateResultFiles
+	generateForMainMutex       sync.RWMutex
+	generateForMainArgsForCall []struct {
+		arg1 []policies.Policy
+	}
+	generateForMainReturns struct {
+		result1 policies.GenerateResultFiles
+	}
+	generateForMainReturnsOnCall map[int]struct {
+		result1 policies.GenerateResultFiles
+	}
 	GenerateForServerStub        func([]policies.Policy, http.Server) policies.GenerateResultFiles
 	generateForServerMutex       sync.RWMutex
 	generateForServerArgsForCall []struct {
@@ -46,6 +68,72 @@ type FakeGenerator struct {
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+func (fake *FakeGenerator) GenerateForHTTP(arg1 []policies.Policy) policies.GenerateResultFiles {
+	var arg1Copy []policies.Policy
+	if arg1 != nil {
+		arg1Copy = make([]policies.Policy, len(arg1))
+		copy(arg1Copy, arg1)
+	}
+	fake.generateForHTTPMutex.Lock()
+	ret, specificReturn := fake.generateForHTTPReturnsOnCall[len(fake.generateForHTTPArgsForCall)]
+	fake.generateForHTTPArgsForCall = append(fake.generateForHTTPArgsForCall, struct {
+		arg1 []policies.Policy
+	}{arg1Copy})
+	stub := fake.GenerateForHTTPStub
+	fakeReturns := fake.generateForHTTPReturns
+	fake.recordInvocation("GenerateForHTTP", []interface{}{arg1Copy})
+	fake.generateForHTTPMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenerator) GenerateForHTTPCallCount() int {
+	fake.generateForHTTPMutex.RLock()
+	defer fake.generateForHTTPMutex.RUnlock()
+	return len(fake.generateForHTTPArgsForCall)
+}
+
+func (fake *FakeGenerator) GenerateForHTTPCalls(stub func([]policies.Policy) policies.GenerateResultFiles) {
+	fake.generateForHTTPMutex.Lock()
+	defer fake.generateForHTTPMutex.Unlock()
+	fake.GenerateForHTTPStub = stub
+}
+
+func (fake *FakeGenerator) GenerateForHTTPArgsForCall(i int) []policies.Policy {
+	fake.generateForHTTPMutex.RLock()
+	defer fake.generateForHTTPMutex.RUnlock()
+	argsForCall := fake.generateForHTTPArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenerator) GenerateForHTTPReturns(result1 policies.GenerateResultFiles) {
+	fake.generateForHTTPMutex.Lock()
+	defer fake.generateForHTTPMutex.Unlock()
+	fake.GenerateForHTTPStub = nil
+	fake.generateForHTTPReturns = struct {
+		result1 policies.GenerateResultFiles
+	}{result1}
+}
+
+func (fake *FakeGenerator) GenerateForHTTPReturnsOnCall(i int, result1 policies.GenerateResultFiles) {
+	fake.generateForHTTPMutex.Lock()
+	defer fake.generateForHTTPMutex.Unlock()
+	fake.GenerateForHTTPStub = nil
+	if fake.generateForHTTPReturnsOnCall == nil {
+		fake.generateForHTTPReturnsOnCall = make(map[int]struct {
+			result1 policies.GenerateResultFiles
+		})
+	}
+	fake.generateForHTTPReturnsOnCall[i] = struct {
+		result1 policies.GenerateResultFiles
+	}{result1}
 }
 
 func (fake *FakeGenerator) GenerateForInternalLocation(arg1 []policies.Policy) policies.GenerateResultFiles {
@@ -177,6 +265,72 @@ func (fake *FakeGenerator) GenerateForLocationReturnsOnCall(i int, result1 polic
 		})
 	}
 	fake.generateForLocationReturnsOnCall[i] = struct {
+		result1 policies.GenerateResultFiles
+	}{result1}
+}
+
+func (fake *FakeGenerator) GenerateForMain(arg1 []policies.Policy) policies.GenerateResultFiles {
+	var arg1Copy []policies.Policy
+	if arg1 != nil {
+		arg1Copy = make([]policies.Policy, len(arg1))
+		copy(arg1Copy, arg1)
+	}
+	fake.generateForMainMutex.Lock()
+	ret, specificReturn := fake.generateForMainReturnsOnCall[len(fake.generateForMainArgsForCall)]
+	fake.generateForMainArgsForCall = append(fake.generateForMainArgsForCall, struct {
+		arg1 []policies.Policy
+	}{arg1Copy})
+	stub := fake.GenerateForMainStub
+	fakeReturns := fake.generateForMainReturns
+	fake.recordInvocation("GenerateForMain", []interface{}{arg1Copy})
+	fake.generateForMainMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenerator) GenerateForMainCallCount() int {
+	fake.generateForMainMutex.RLock()
+	defer fake.generateForMainMutex.RUnlock()
+	return len(fake.generateForMainArgsForCall)
+}
+
+func (fake *FakeGenerator) GenerateForMainCalls(stub func([]policies.Policy) policies.GenerateResultFiles) {
+	fake.generateForMainMutex.Lock()
+	defer fake.generateForMainMutex.Unlock()
+	fake.GenerateForMainStub = stub
+}
+
+func (fake *FakeGenerator) GenerateForMainArgsForCall(i int) []policies.Policy {
+	fake.generateForMainMutex.RLock()
+	defer fake.generateForMainMutex.RUnlock()
+	argsForCall := fake.generateForMainArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenerator) GenerateForMainReturns(result1 policies.GenerateResultFiles) {
+	fake.generateForMainMutex.Lock()
+	defer fake.generateForMainMutex.Unlock()
+	fake.GenerateForMainStub = nil
+	fake.generateForMainReturns = struct {
+		result1 policies.GenerateResultFiles
+	}{result1}
+}
+
+func (fake *FakeGenerator) GenerateForMainReturnsOnCall(i int, result1 policies.GenerateResultFiles) {
+	fake.generateForMainMutex.Lock()
+	defer fake.generateForMainMutex.Unlock()
+	fake.GenerateForMainStub = nil
+	if fake.generateForMainReturnsOnCall == nil {
+		fake.generateForMainReturnsOnCall = make(map[int]struct {
+			result1 policies.GenerateResultFiles
+		})
+	}
+	fake.generateForMainReturnsOnCall[i] = struct {
 		result1 policies.GenerateResultFiles
 	}{result1}
 }

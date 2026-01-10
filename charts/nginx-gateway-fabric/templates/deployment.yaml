@@ -110,6 +110,9 @@ spec:
         {{- if .Values.nginxGateway.snippetsFilters.enable }}
         - --snippets-filters
         {{- end }}
+        {{- if .Values.nginxGateway.snippetsPolicies.enable }}
+        - --snippets-policies
+        {{- end }}
         {{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
         - --nginx-scc={{ include "nginx-gateway.scc-name" . }}-nginx
         {{- end}}

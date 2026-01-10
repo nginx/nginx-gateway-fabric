@@ -1,0 +1,18 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsPolicy
+metadata:
+  name: valid-sp
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  snippets:
+  - context: main
+    value: "timer_resolution 100ms;"
+  - context: http
+    value: "gzip off;"
+  - context: http.server
+    value: "server_name_in_redirect off;"
+  - context: http.server.location
+    value: "add_header X-Snippets-Policy valid;"
