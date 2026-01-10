@@ -41,6 +41,7 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/crd"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/licensing"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/metrics/collectors"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
@@ -117,7 +118,9 @@ func StartManager(cfg config.Config) error {
 		Namespace: cfg.GatewayPodConfig.Namespace,
 		Name:      cfg.ConfigName,
 	}
-	if err := registerControllers(ctx, cfg, mgr, recorder, logLevelSetter, eventCh, controlConfigNSName); err != nil {
+
+	discoveredCRDs, err := registerControllers(ctx, cfg, mgr, recorder, logLevelSetter, eventCh, controlConfigNSName)
+	if err != nil {
 		return err
 	}
 
@@ -267,7 +270,7 @@ func StartManager(cfg config.Config) error {
 		inferenceExtension:      cfg.InferenceExtension,
 	})
 
-	objects, objectLists := prepareFirstEventBatchPreparerArgs(cfg)
+	objects, objectLists := prepareFirstEventBatchPreparerArgs(cfg, discoveredCRDs)
 
 	firstBatchPreparer := events.NewFirstEventBatchPreparerImpl(mgr.GetCache(), objects, objectLists)
 	eventLoop := events.NewEventLoop(
@@ -402,6 +405,84 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 	return mgr, nil
 }
 
+// ctlrCfg contains the configuration for a controller.
+type ctlrCfg struct {
+	objectType      ngftypes.ObjectType
+	crdGVK          *schema.GroupVersionKind
+	name            string
+	options         []controller.Option
+	requireCRDCheck bool
+}
+
+// filterControllersByCRDExistence filters the controller list to only include controllers
+// whose CRDs exist in the cluster (for controllers that require CRD checking).
+// Returns the filtered controller list and a map of discovered CRDs.
+func filterControllersByCRDExistence(
+	mgr manager.Manager,
+	controllers []ctlrCfg,
+	checker crd.Checker,
+) ([]ctlrCfg, map[string]bool, error) {
+	// Collect GVKs that need checking
+	var gvksToCheck []schema.GroupVersionKind
+	gvkToController := make(map[schema.GroupVersionKind]*ctlrCfg)
+
+	for i := range controllers {
+		if controllers[i].requireCRDCheck {
+			var gvk schema.GroupVersionKind
+			if controllers[i].crdGVK != nil {
+				gvk = *controllers[i].crdGVK
+			} else {
+				// Fall back to object's GVK if no override specified
+				gvk = controllers[i].objectType.GetObjectKind().GroupVersionKind()
+			}
+			gvksToCheck = append(gvksToCheck, gvk)
+			gvkToController[gvk] = &controllers[i]
+		}
+	}
+
+	// If no CRD checks needed, return original list
+	if len(gvksToCheck) == 0 {
+		return controllers, map[string]bool{}, nil
+	}
+
+	// Batch check CRD existence
+	crdResults, err := checker.CheckCRDsExist(mgr.GetConfig(), gvksToCheck)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to check CRD existence: %w", err)
+	}
+
+	// Build discovered CRDs map for logging
+	discoveredCRDs := make(map[string]bool)
+	for gvk, exists := range crdResults {
+		discoveredCRDs[gvk.Kind] = exists
+	}
+
+	// Filter controllers - only include if CRD exists (or doesn't require check)
+	var filtered []ctlrCfg
+	for _, ctrl := range controllers {
+		if !ctrl.requireCRDCheck {
+			// Always include controllers that don't require CRD checking
+			filtered = append(filtered, ctrl)
+			continue
+		}
+
+		var gvk schema.GroupVersionKind
+		if ctrl.crdGVK != nil {
+			gvk = *ctrl.crdGVK
+		} else {
+			gvk = ctrl.objectType.GetObjectKind().GroupVersionKind()
+		}
+
+		if exists, found := crdResults[gvk]; found && exists {
+			// CRD exists, include this controller
+			filtered = append(filtered, ctrl)
+		}
+		// If CRD doesn't exist, skip this controller (don't add to filtered list)
+	}
+
+	return filtered, discoveredCRDs, nil
+}
+
 func registerControllers(
 	ctx context.Context,
 	cfg config.Config,
@@ -410,13 +491,7 @@ func registerControllers(
 	logLevelSetter logLevelSetter,
 	eventCh chan interface{},
 	controlConfigNSName types.NamespacedName,
-) error {
-	type ctlrCfg struct {
-		name       string
-		objectType ngftypes.ObjectType
-		options    []controller.Option
-	}
-
+) (map[string]bool, error) {
 	crdWithGVK := apiext.CustomResourceDefinition{}
 	crdWithGVK.SetGroupVersionKind(
 		schema.GroupVersionKind{Group: apiext.GroupName, Version: "v1", Kind: "CustomResourceDefinition"},
@@ -447,12 +522,6 @@ func registerControllers(
 		},
 		{
 			objectType: &gatewayv1.HTTPRoute{},
-			options: []controller.Option{
-				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-			},
-		},
-		{
-			objectType: &gatewayv1.BackendTLSPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -535,6 +604,20 @@ func registerControllers(
 		},
 	}
 
+	// BackendTLSPolicy v1 - conditionally register if CRD exists
+	controllerRegCfgs = append(controllerRegCfgs, ctlrCfg{
+		objectType: &gatewayv1.BackendTLSPolicy{},
+		options: []controller.Option{
+			controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+		},
+		requireCRDCheck: true,
+		crdGVK: &schema.GroupVersionKind{
+			Group:   "gateway.networking.k8s.io",
+			Version: "v1",
+			Kind:    "BackendTLSPolicy",
+		},
+	})
+
 	if cfg.ExperimentalFeatures {
 		gwExpFeatures := []ctlrCfg{
 			{
@@ -542,17 +625,35 @@ func registerControllers(
 				options: []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
+				requireCRDCheck: true,
+				crdGVK: &schema.GroupVersionKind{
+					Group:   "gateway.networking.k8s.io",
+					Version: "v1alpha2",
+					Kind:    "TLSRoute",
+				},
 			},
 			{
 				objectType: &gatewayv1alpha2.TCPRoute{},
 				options: []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
+				requireCRDCheck: true,
+				crdGVK: &schema.GroupVersionKind{
+					Group:   "gateway.networking.k8s.io",
+					Version: "v1alpha2",
+					Kind:    "TCPRoute",
+				},
 			},
 			{
 				objectType: &gatewayv1alpha2.UDPRoute{},
 				options: []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK: &schema.GroupVersionKind{
+					Group:   "gateway.networking.k8s.io",
+					Version: "v1alpha2",
+					Kind:    "UDPRoute",
 				},
 			},
 		}
@@ -566,6 +667,10 @@ func registerControllers(
 				options: []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
+				// Skip CRD check for InferenceExtension as it uses a non-standard API group (x-k8s.io)
+				// that may not be properly discoverable via the standard API discovery mechanism.
+				// The InferenceExtension flag itself controls whether this controller is enabled.
+				requireCRDCheck: false,
 			},
 		}
 		controllerRegCfgs = append(controllerRegCfgs, inferenceExt...)
@@ -587,7 +692,7 @@ func registerControllers(
 			logLevelSetter,
 			controlConfigNSName,
 		); err != nil {
-			return fmt.Errorf("error setting initial control plane configuration: %w", err)
+			return nil, fmt.Errorf("error setting initial control plane configuration: %w", err)
 		}
 	}
 
@@ -600,6 +705,26 @@ func registerControllers(
 				},
 			},
 		)
+	}
+
+	// Filter controllers based on CRD existence
+	crdChecker := &crd.CheckerImpl{}
+	controllerRegCfgs, discoveredCRDs, err := filterControllersByCRDExistence(
+		mgr,
+		controllerRegCfgs,
+		crdChecker,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error filtering controllers by CRD existence: %w", err)
+	}
+
+	// Log discovered CRDs
+	for kind, exists := range discoveredCRDs {
+		if exists {
+			cfg.Logger.Info("CRD detected, enabling controller", "kind", kind)
+		} else {
+			cfg.Logger.Info("CRD not found, controller disabled", "kind", kind)
+		}
 	}
 
 	for _, regCfg := range controllerRegCfgs {
@@ -616,10 +741,10 @@ func registerControllers(
 			eventCh,
 			regCfg.options...,
 		); err != nil {
-			return fmt.Errorf("cannot register controller for %T: %w", regCfg.objectType, err)
+			return nil, fmt.Errorf("cannot register controller for %T: %w", regCfg.objectType, err)
 		}
 	}
-	return nil
+	return discoveredCRDs, nil
 }
 
 func createPlusSecretMetadata(
@@ -758,7 +883,10 @@ func createTelemetryJob(
 	}, nil
 }
 
-func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []client.ObjectList) {
+func prepareFirstEventBatchPreparerArgs(
+	cfg config.Config,
+	discoveredCRDs map[string]bool,
+) ([]client.Object, []client.ObjectList) {
 	objects := []client.Object{
 		&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: cfg.GatewayClassName}},
 	}
@@ -778,7 +906,6 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 		&apiv1.NamespaceList{},
 		&discoveryV1.EndpointSliceList{},
 		&gatewayv1.HTTPRouteList{},
-		&gatewayv1.BackendTLSPolicyList{},
 		&apiv1.ConfigMapList{},
 		&gatewayv1beta1.ReferenceGrantList{},
 		&ngfAPIv1alpha2.NginxProxyList{},
@@ -789,13 +916,21 @@ func prepareFirstEventBatchPreparerArgs(cfg config.Config) ([]client.Object, []c
 		partialObjectMetadataList,
 	}
 
+	// Add object lists for CRDs that were discovered
+	if discoveredCRDs["BackendTLSPolicy"] {
+		objectLists = append(objectLists, &gatewayv1.BackendTLSPolicyList{})
+	}
+
 	if cfg.ExperimentalFeatures {
-		objectLists = append(
-			objectLists,
-			&gatewayv1alpha2.TLSRouteList{},
-			&gatewayv1alpha2.TCPRouteList{},
-			&gatewayv1alpha2.UDPRouteList{},
-		)
+		if discoveredCRDs["TLSRoute"] {
+			objectLists = append(objectLists, &gatewayv1alpha2.TLSRouteList{})
+		}
+		if discoveredCRDs["TCPRoute"] {
+			objectLists = append(objectLists, &gatewayv1alpha2.TCPRouteList{})
+		}
+		if discoveredCRDs["UDPRoute"] {
+			objectLists = append(objectLists, &gatewayv1alpha2.UDPRouteList{})
+		}
 	}
 
 	if cfg.InferenceExtension {

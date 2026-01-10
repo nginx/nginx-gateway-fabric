@@ -492,7 +492,7 @@ func TestValidateCRDVersions(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			conds, valid, _ := validateCRDVersions(test.crds)
+			conds, valid, _, _ := validateCRDVersions(test.crds)
 			g.Expect(valid).To(Equal(test.valid))
 			g.Expect(conds).To(Equal(test.expConds))
 		})

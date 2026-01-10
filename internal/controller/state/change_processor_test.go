@@ -1559,6 +1559,7 @@ var _ = Describe("ChangeProcessor", func() {
 					expGraph.GatewayClass.Conditions = conditions.NewGatewayClassSupportedVersionBestEffort(
 						consts.BundleVersion,
 					)
+					expGraph.GatewayClass.BestEffort = true
 
 					processAndValidateGraph(expGraph)
 				})
@@ -1577,6 +1578,7 @@ var _ = Describe("ChangeProcessor", func() {
 					expGraph.GatewayClass.Conditions = conditions.NewGatewayClassSupportedVersionBestEffort(
 						consts.BundleVersion,
 					)
+					expGraph.GatewayClass.BestEffort = true
 
 					graphCfg := processor.Process()
 					Expect(graphCfg).To(BeNil())
@@ -1592,6 +1594,10 @@ var _ = Describe("ChangeProcessor", func() {
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
+
+					// Reset conditions and BestEffort flag back to normal (supported version)
+					expGraph.GatewayClass.Conditions = nil
+					expGraph.GatewayClass.BestEffort = false
 
 					processAndValidateGraph(expGraph)
 				})
