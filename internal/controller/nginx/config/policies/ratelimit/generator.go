@@ -67,7 +67,7 @@ type rateLimitSettings struct {
 	// LogLevel is the log level for cases when the server refuses to process requests due to
 	// rate exceeding, or delays request processing.
 	LogLevel string
-	// Rule if the list of rate limit rules.
+	// Rule is the list of rate limit rules.
 	Rule []rateLimitRule
 	// RejectCode is the status code to return in response to rejected requests.
 	RejectCode int
@@ -75,7 +75,7 @@ type rateLimitSettings struct {
 	// of excessive requests is accounted as usual in the shared memory zone.
 	DryRun bool
 	// LimitZoneOnly indicates whether this policy should only generate the limit_req_zone directive.
-	// This is used for internally-created policies that only target the HTTP context because the original
+	// This is used for internally-created policies that only target the http context because the original
 	// policy targeted a Route and needs to generate limit_req_zone directives at the http context.
 	LimitZoneOnly bool
 }

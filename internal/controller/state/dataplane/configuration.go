@@ -33,8 +33,8 @@ const (
 	// DefaultAccessLogPath is the default path for the access log.
 	DefaultAccessLogPath = "/dev/stdout"
 	// InternalRLShadowPolicyAnnotationKey is the annotation key used to mark internally generated
-	// RateLimitPolicies. These policies are created with a RateLimitPolicy targets a route, and not
-	// the Gateway itself, in this situation we need an additional policy to generate the http context
+	// RateLimitPolicies. These policies are created when a RateLimitPolicy targets a route and not
+	// the Gateway itself; in this situation we need an additional policy to generate the http context
 	// configuration.
 	InternalRLShadowPolicyAnnotationKey = "nginx.org/internal-annotation-http-context-only"
 )
@@ -61,7 +61,7 @@ func BuildConfiguration(
 	gatewaySnippetsFilters := gateway.GetReferencedSnippetsFilters(g.Routes, g.SnippetsFilters)
 
 	// Get all RateLimitPolicies that target routes attached to this Gateway, excluding
-	// ones that are attached directly to the Gateway
+	// policies that are attached directly to the Gateway
 	gatewayRateLimitPolicies := gateway.GetReferencedRateLimitPolicies(g.Routes, g.NGFPolicies)
 
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies)

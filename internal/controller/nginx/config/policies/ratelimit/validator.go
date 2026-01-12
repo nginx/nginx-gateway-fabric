@@ -121,7 +121,7 @@ func (v *Validator) validateSettings(spec ngfAPI.RateLimitPolicySpec) error {
 	return allErrs.ToAggregate()
 }
 
-// ValidateNginxRate validates a rate string that nginx can understand.
+// validateNginxRate validates a rate string that nginx can understand.
 func validateNginxRate(rate string) error {
 	const (
 		rateStringFmt    = `^\d+r/[sm]$`
@@ -142,7 +142,7 @@ func validateNginxRate(rate string) error {
 	return nil
 }
 
-// ValidateLimitReqKey validates a limit_req key string that nginx can understand.
+// validateLimitReqKey validates a limit_req key string that nginx can understand.
 func validateLimitReqKey(key string) error {
 	const (
 		// ?: is a non-capturing group

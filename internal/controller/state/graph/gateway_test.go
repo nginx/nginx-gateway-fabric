@@ -2213,7 +2213,7 @@ func TestGetReferencedRateLimitPolicies(t *testing.T) {
 	result := gw.GetReferencedRateLimitPolicies(routes, allPolicies)
 
 	// Should only include rlp1 (valid RateLimitPolicy targeting attached route, not gateway)
-	// and rlp6GRPC (valid RateLimitPolicy targeting attached GRPC route)
+	// and rlpGRPC (valid RateLimitPolicy targeting attached GRPC route)
 	expectedResult := map[PolicyKey]*Policy{
 		{
 			NsName: types.NamespacedName{Namespace: "app1", Name: "app1-rate-limit"},
