@@ -51,6 +51,7 @@ type RateLimitPolicySpec struct {
 	// +kubebuilder:validation:XValidation:message="TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute",rule="self.all(t, t.kind == 'Gateway' || t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute')"
 	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.all(t, t.group=='gateway.networking.k8s.io')"
 	// +kubebuilder:validation:XValidation:message="TargetRef Kind and Name combination must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name) && (p1.kind == p2.kind)))"
+	// +kubebuilder:validation:XValidation:message="Cannot mix Gateway kind with HTTPRoute or GRPCRoute kinds in targetRefs",rule="!(self.exists(t, t.kind == 'Gateway') && self.exists(t, t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute'))"
 	//nolint:lll
 	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 }
@@ -61,49 +62,6 @@ type RateLimit struct {
 	//
 	// +optional
 	Local *LocalRateLimit `json:"local,omitempty"`
-}
-
-// LocalRateLimit contains the local rate limit rules.
-type LocalRateLimit struct {
-	// Rules contains the list of rate limit rules.
-	//
-	// +optional
-	Rules []RateLimitRule `json:"rules,omitempty"`
-}
-
-// RateLimitRule contains settings for a RateLimit Rule.
-type RateLimitRule struct {
-	// ZoneSize is the size of the shared memory zone.
-	//
-	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-	//
-	// +optional
-	ZoneSize *Size `json:"zoneSize,omitempty"`
-
-	// Delay specifies a limit at which excessive requests become delayed.
-	// Default value is zero, which means all excessive requests are delayed.
-	//
-	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
-	//
-	// +optional
-	Delay *int32 `json:"delay,omitempty"`
-
-	// NoDelay disables the delaying of excessive requests while requests are being limited.
-	// Overrides delay if both are set.
-	//
-	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
-	//
-	// +optional
-	NoDelay *bool `json:"noDelay,omitempty"`
-
-	// Burst sets the maximum burst size of requests. If the requests rate exceeds the rate configured for a zone,
-	// their processing is delayed such that requests are processed at a defined rate. Excessive requests are delayed
-	// until their number exceeds the maximum burst size in which case the request is terminated with an error.
-	//
-	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
-	//
-	// +optional
-	Burst *int32 `json:"burst,omitempty"`
 
 	// DryRun enables the dry run mode. In this mode, the rate limit is not actually applied, but the number of excessive
 	// requests is accounted as usual in the shared memory zone.
@@ -121,7 +79,7 @@ type RateLimitRule struct {
 	// +optional
 	LogLevel *RateLimitLogLevel `json:"logLevel,omitempty"`
 
-	// RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400..599.
+	// RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400-599.
 	//
 	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_status
 	//
@@ -129,6 +87,53 @@ type RateLimitRule struct {
 	// +kubebuilder:validation:Minimum=400
 	// +kubebuilder:validation:Maximum=599
 	RejectCode *int32 `json:"rejectCode,omitempty"`
+}
+
+// LocalRateLimit contains the local rate limit rules.
+type LocalRateLimit struct {
+	// Rules contains the list of rate limit rules.
+	//
+	// +optional
+	Rules []RateLimitRule `json:"rules,omitempty"`
+}
+
+// RateLimitRule contains settings for a RateLimit Rule.
+//
+// +kubebuilder:validation:XValidation:message="NoDelay cannot be true when Delay is also set",rule="!(has(self.noDelay) && has(self.delay) && self.noDelay == true)"
+//
+//nolint:lll
+type RateLimitRule struct {
+	// ZoneSize is the size of the shared memory zone.
+	//
+	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
+	//
+	// +optional
+	ZoneSize *Size `json:"zoneSize,omitempty"`
+
+	// Delay specifies a limit at which excessive requests become delayed.
+	// Default value is zero, which means all excessive requests are delayed.
+	//
+	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
+	//
+	// +optional
+	Delay *int32 `json:"delay,omitempty"`
+
+	// NoDelay disables the delaying of excessive requests while requests are being limited.
+	// NoDelay cannot be true when Delay is also set.
+	//
+	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
+	//
+	// +optional
+	NoDelay *bool `json:"noDelay,omitempty"`
+
+	// Burst sets the maximum burst size of requests. If the requests rate exceeds the rate configured for a zone,
+	// their processing is delayed such that requests are processed at a defined rate. Excessive requests are delayed
+	// until their number exceeds the maximum burst size in which case the request is terminated with an error.
+	//
+	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
+	//
+	// +optional
+	Burst *int32 `json:"burst,omitempty"`
 
 	// Rate represents the rate of requests permitted. The rate is specified in requests per second (r/s)
 	// or requests per minute (r/m).
@@ -136,9 +141,12 @@ type RateLimitRule struct {
 	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
 	Rate Rate `json:"rate"`
 
-	// Key represents the key to which the rate limit is applied.
+	// Key represents the key to which the rate limit is applied. The key can contain text, variables,
+	// and their combination.
 	//
 	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
+	//
+	// +kubebuilder:validation:Pattern=`^(?:[^ \t\r\n;{}#$]+|\$\w+)+$`
 	Key string `json:"key"`
 }
 

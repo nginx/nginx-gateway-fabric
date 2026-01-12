@@ -54,6 +54,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/ratelimit"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/snippetspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	ngxvalidation "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
@@ -354,6 +355,10 @@ func createPolicyManager(
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
 			Validator: upstreamsettings.NewValidator(validator, cfg.Plus),
 		},
+		{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),
+			Validator: ratelimit.NewValidator(validator),
+		},
 	}
 
 	if cfg.SnippetsPolicies {
@@ -643,6 +648,12 @@ func registerControllers(
 		},
 		{
 			objectType: &ngfAPIv1alpha1.AuthenticationFilter{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
+		{
+			objectType: &ngfAPIv1alpha1.RateLimitPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -971,6 +982,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
+		&ngfAPIv1alpha1.RateLimitPolicyList{},
 		partialObjectMetadataList,
 	}
 

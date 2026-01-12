@@ -141,6 +141,12 @@ const (
 
 	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
 	// ObservabilityPolicy, ClientSettingsPolicy, or ProxySettingsPolicy is applied to Gateways or Routes.
+	// RateLimitPolicyAffected is used with the "PolicyAffected" condition when a
+	// RateLimitPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	RateLimitPolicyAffected v1.PolicyConditionType = "RateLimitPolicyAffected"
+
+	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
+	// custom policy is applied to Gateways or Routes.
 	PolicyAffectedReason v1.PolicyConditionReason = "PolicyAffected"
 
 	// GatewayResolvedRefs condition indicates whether the controller was able to resolve the
@@ -1209,6 +1215,17 @@ func NewProxySettingsPolicyAffected() Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
 		Message: "The ProxySettingsPolicy is applied to the resource",
+	}
+}
+
+// NewRateLimitPolicyAffected returns a Condition that indicates that a RateLimitPolicy
+// is applied to the resource.
+func NewRateLimitPolicyAffected() Condition {
+	return Condition{
+		Type:    string(RateLimitPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "The RateLimitPolicy is applied to the resource",
 	}
 }
 

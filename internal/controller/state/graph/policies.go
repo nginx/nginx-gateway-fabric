@@ -683,5 +683,10 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 			return
 		}
 		*conditionsList = append(*conditionsList, conditions.NewProxySettingsPolicyAffected())
+	case kinds.RateLimitPolicy:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewRateLimitPolicyAffected()) {
+			return
+		}
+		*conditionsList = append(*conditionsList, conditions.NewRateLimitPolicyAffected())
 	}
 }

@@ -2341,6 +2341,293 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				gw := g.Gateways[gatewayNsName]
+
+				// Create a RateLimitPolicy that targets the Gateway directly
+				gatewayRateLimitPolicy := &graph.Policy{
+					Source: &ngfAPIv1alpha1.RateLimitPolicy{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "gateway-rate-limit",
+							Namespace: "test",
+						},
+						Spec: ngfAPIv1alpha1.RateLimitPolicySpec{
+							RateLimit: &ngfAPIv1alpha1.RateLimit{
+								Local: &ngfAPIv1alpha1.LocalRateLimit{
+									Rules: []ngfAPIv1alpha1.RateLimitRule{
+										{
+											Key:      "$binary_remote_addr",
+											Rate:     "20r/m",
+											ZoneSize: helpers.GetPointer(ngfAPIv1alpha1.Size("5m")),
+											Burst:    helpers.GetPointer(int32(10)),
+										},
+									},
+								},
+							},
+							TargetRefs: []v1.LocalPolicyTargetReference{
+								{
+									Group: "gateway.networking.k8s.io",
+									Kind:  "Gateway",
+									Name:  "gateway",
+								},
+							},
+						},
+					},
+					Valid: true,
+					TargetRefs: []graph.PolicyTargetRef{
+						{
+							Group: "gateway.networking.k8s.io",
+							Kind:  "Gateway",
+							Nsname: types.NamespacedName{
+								Namespace: "test",
+								Name:      "gateway",
+							},
+						},
+					},
+				}
+
+				// Create a RateLimitPolicy that targets a route attached to this Gateway
+				routeRateLimitPolicy := &graph.Policy{
+					Source: &ngfAPIv1alpha1.RateLimitPolicy{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "route-rate-limit",
+							Namespace: "test",
+						},
+						Spec: ngfAPIv1alpha1.RateLimitPolicySpec{
+							RateLimit: &ngfAPIv1alpha1.RateLimit{
+								Local: &ngfAPIv1alpha1.LocalRateLimit{
+									Rules: []ngfAPIv1alpha1.RateLimitRule{
+										{
+											Key:      "$binary_remote_addr",
+											Rate:     "10r/m",
+											ZoneSize: helpers.GetPointer(ngfAPIv1alpha1.Size("10m")),
+											Burst:    helpers.GetPointer(int32(5)),
+										},
+									},
+								},
+							},
+							TargetRefs: []v1.LocalPolicyTargetReference{
+								{
+									Group: "gateway.networking.k8s.io",
+									Kind:  "HTTPRoute",
+									Name:  "hr-1",
+								},
+							},
+						},
+					},
+					Valid: true,
+					TargetRefs: []graph.PolicyTargetRef{
+						{
+							Group: "gateway.networking.k8s.io",
+							Kind:  "HTTPRoute",
+							Nsname: types.NamespacedName{
+								Namespace: "test",
+								Name:      "hr-1",
+							},
+						},
+					},
+				}
+
+				// Create a RateLimitPolicy that targets a route NOT attached to this Gateway
+				unrelatedRouteRateLimitPolicy := &graph.Policy{
+					Source: &ngfAPIv1alpha1.RateLimitPolicy{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "unrelated-route-rate-limit",
+							Namespace: "test",
+						},
+						Spec: ngfAPIv1alpha1.RateLimitPolicySpec{
+							RateLimit: &ngfAPIv1alpha1.RateLimit{
+								Local: &ngfAPIv1alpha1.LocalRateLimit{
+									Rules: []ngfAPIv1alpha1.RateLimitRule{
+										{
+											Key:      "$binary_remote_addr",
+											Rate:     "30r/m",
+											ZoneSize: helpers.GetPointer(ngfAPIv1alpha1.Size("15m")),
+											Burst:    helpers.GetPointer(int32(15)),
+										},
+									},
+								},
+							},
+							TargetRefs: []v1.LocalPolicyTargetReference{
+								{
+									Group: "gateway.networking.k8s.io",
+									Kind:  "HTTPRoute",
+									Name:  "unrelated-hr",
+								},
+							},
+						},
+					},
+					Valid: true,
+					TargetRefs: []graph.PolicyTargetRef{
+						{
+							Group: "gateway.networking.k8s.io",
+							Kind:  "HTTPRoute",
+							Nsname: types.NamespacedName{
+								Namespace: "test",
+								Name:      "unrelated-hr", // This route is not attached to this gateway
+							},
+						},
+					},
+				}
+
+				// Add all policies to NGFPolicies
+				g.NGFPolicies = map[graph.PolicyKey]*graph.Policy{
+					{
+						NsName: types.NamespacedName{
+							Namespace: "test",
+							Name:      "gateway-rate-limit",
+						},
+						GVK: schema.GroupVersionKind{
+							Kind:    "RateLimitPolicy",
+							Group:   "nginx.org",
+							Version: "v1alpha1",
+						},
+					}: gatewayRateLimitPolicy,
+					{
+						NsName: types.NamespacedName{
+							Namespace: "test",
+							Name:      "route-rate-limit",
+						},
+						GVK: schema.GroupVersionKind{
+							Kind:    "RateLimitPolicy",
+							Group:   "nginx.org",
+							Version: "v1alpha1",
+						},
+					}: routeRateLimitPolicy,
+					{
+						NsName: types.NamespacedName{
+							Namespace: "test",
+							Name:      "unrelated-route-rate-limit",
+						},
+						GVK: schema.GroupVersionKind{
+							Kind:    "RateLimitPolicy",
+							Group:   "nginx.org",
+							Version: "v1alpha1",
+						},
+					}: unrelatedRouteRateLimitPolicy,
+				}
+
+				// Add the Gateway policy to the Gateway itself
+				gw.Policies = []*graph.Policy{gatewayRateLimitPolicy}
+
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
+					Name:        "listener-80-1",
+					GatewayName: gatewayNsName,
+					Source:      listener80,
+					Valid:       true,
+					Routes: map[graph.RouteKey]*graph.L7Route{
+						graph.CreateRouteKey(hr1): routeHR1,
+					},
+				})
+				g.Routes = map[graph.RouteKey]*graph.L7Route{
+					graph.CreateRouteKey(hr1): routeHR1,
+				}
+
+				return g
+			}),
+			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				// The Gateway RateLimitPolicy should be included as-is (no HTTP context version)
+				gatewayRateLimitPolicyOriginal := &ngfAPIv1alpha1.RateLimitPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gateway-rate-limit",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.RateLimitPolicySpec{
+						RateLimit: &ngfAPIv1alpha1.RateLimit{
+							Local: &ngfAPIv1alpha1.LocalRateLimit{
+								Rules: []ngfAPIv1alpha1.RateLimitRule{
+									{
+										Key:      "$binary_remote_addr",
+										Rate:     "20r/m",
+										ZoneSize: helpers.GetPointer(ngfAPIv1alpha1.Size("5m")),
+										Burst:    helpers.GetPointer(int32(10)),
+									},
+								},
+							},
+						},
+						TargetRefs: []v1.LocalPolicyTargetReference{
+							{
+								Group: "gateway.networking.k8s.io",
+								Kind:  "Gateway",
+								Name:  "gateway",
+							},
+						},
+					},
+				}
+
+				// HTTP context RateLimit policy for the route-targeting policy
+				expectedHTTPContextPolicy := &ngfAPIv1alpha1.RateLimitPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "route-rate-limit",
+						Namespace: "test",
+						Annotations: map[string]string{
+							InternalRateLimitShadowPolicyAnnotationKey: "true",
+						},
+					},
+					Spec: ngfAPIv1alpha1.RateLimitPolicySpec{
+						RateLimit: &ngfAPIv1alpha1.RateLimit{
+							Local: &ngfAPIv1alpha1.LocalRateLimit{
+								Rules: []ngfAPIv1alpha1.RateLimitRule{
+									{
+										Key:      "$binary_remote_addr",
+										Rate:     "10r/m",
+										ZoneSize: helpers.GetPointer(ngfAPIv1alpha1.Size("10m")),
+										Burst:    helpers.GetPointer(int32(5)),
+									},
+								},
+							},
+						},
+						TargetRefs: []v1.LocalPolicyTargetReference{
+							{
+								Group: "gateway.networking.k8s.io",
+								Kind:  "HTTPRoute",
+								Name:  "hr-1",
+							},
+						},
+					},
+				}
+
+				// BaseHTTPConfig should include both the original Gateway policy and the HTTP context route policy
+				conf.BaseHTTPConfig.Policies = []policies.Policy{
+					gatewayRateLimitPolicyOriginal,
+					expectedHTTPContextPolicy,
+				}
+
+				conf.HTTPServers = []VirtualServer{
+					{
+						IsDefault: true,
+						Port:      80,
+						Policies:  []policies.Policy{gatewayRateLimitPolicyOriginal}, // Gateway policies are also applied to servers
+					},
+					{
+						Hostname: "foo.example.com",
+						PathRules: []PathRule{
+							{
+								Path:     "/",
+								PathType: PathTypePrefix,
+								MatchRules: []MatchRule{
+									{
+										BackendGroup: expHR1Groups[0],
+										Source:       &hr1.ObjectMeta,
+									},
+								},
+							},
+						},
+						Port:     80,
+						Policies: []policies.Policy{gatewayRateLimitPolicyOriginal}, // Gateway policies are also applied to servers
+					},
+				}
+
+				conf.SSLServers = []VirtualServer{}
+				conf.Upstreams = []Upstream{fooUpstream}
+				conf.BackendGroups = []BackendGroup{expHR1Groups[0]}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
+
+				return conf
+			}),
+			msg: "Internal RateLimitPolices are generated in BaseHTTPConfig correctly",
+		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
 				g.SnippetsFilters = map[types.NamespacedName]*graph.SnippetsFilter{
 					client.ObjectKeyFromObject(sf1.Source):             sf1,
 					client.ObjectKeyFromObject(sfNotReferenced.Source): sfNotReferenced,
@@ -5064,6 +5351,7 @@ func TestBuildRewriteIPSettings(t *testing.T) {
 			baseConfig := buildBaseHTTPConfig(
 				tc.g.Gateways[types.NamespacedName{}],
 				make(map[types.NamespacedName]*graph.SnippetsFilter),
+				make(map[graph.PolicyKey]*graph.Policy),
 			)
 			g.Expect(baseConfig.RewriteClientIPSettings).To(Equal(tc.expRewriteIPSettings))
 		})
@@ -5806,7 +6094,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			g.Expect(buildBaseHTTPConfig(tc.gateway, nil)).To(Equal(tc.expected))
+			g.Expect(buildBaseHTTPConfig(tc.gateway, nil, nil)).To(Equal(tc.expected))
 		})
 	}
 }

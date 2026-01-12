@@ -2948,15 +2948,16 @@ var _ = Describe("ChangeProcessor", func() {
 
 		Describe("NGF Policy resource changes", Ordered, func() {
 			var (
-				gw                                      *v1.Gateway
-				route                                   *v1.HTTPRoute
-				svc                                     *apiv1.Service
-				csp, cspUpdated                         *ngfAPIv1alpha1.ClientSettingsPolicy
-				obs, obsUpdated                         *ngfAPIv1alpha2.ObservabilityPolicy
-				usp, uspUpdated                         *ngfAPIv1alpha1.UpstreamSettingsPolicy
-				snip, snipUpdated                       *ngfAPIv1alpha1.SnippetsPolicy
-				psp, pspUpdated                         *ngfAPIv1alpha1.ProxySettingsPolicy
-				cspKey, obsKey, uspKey, snipKey, pspKey graph.PolicyKey
+				gw                                              *v1.Gateway
+				route                                           *v1.HTTPRoute
+				svc                                             *apiv1.Service
+				csp, cspUpdated                                 *ngfAPIv1alpha1.ClientSettingsPolicy
+				obs, obsUpdated                                 *ngfAPIv1alpha2.ObservabilityPolicy
+				usp, uspUpdated                                 *ngfAPIv1alpha1.UpstreamSettingsPolicy
+				snip, snipUpdated                               *ngfAPIv1alpha1.SnippetsPolicy
+				psp, pspUpdated                                 *ngfAPIv1alpha1.ProxySettingsPolicy
+				rlp, rlpUpdated                                 *ngfAPIv1alpha1.RateLimitPolicy
+				cspKey, obsKey, uspKey, snipKey, pspKey, rlpKey graph.PolicyKey
 			)
 
 			BeforeAll(func() {
@@ -3101,6 +3102,32 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 				}
 
+				rlp = &ngfAPIv1alpha1.RateLimitPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "rlp",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.RateLimitPolicySpec{
+						TargetRefs: []v1.LocalPolicyTargetReference{
+							{
+								Group: v1.GroupName,
+								Kind:  kinds.Gateway,
+								Name:  "gw",
+							},
+						},
+						RateLimit: &ngfAPIv1alpha1.RateLimit{
+							Local: &ngfAPIv1alpha1.LocalRateLimit{
+								Rules: []ngfAPIv1alpha1.RateLimitRule{
+									{
+										Rate: ngfAPIv1alpha1.Rate("10r/s"),
+										Key:  "$binary_remote_addr",
+									},
+								},
+							},
+						},
+					},
+				}
+
 				psp = &ngfAPIv1alpha1.ProxySettingsPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "psp",
@@ -3137,12 +3164,21 @@ var _ = Describe("ChangeProcessor", func() {
 
 				pspUpdated = psp.DeepCopy()
 				pspUpdated.Spec.Buffering.BufferSize = helpers.GetPointer[ngfAPIv1alpha1.Size]("16k")
-
 				pspKey = graph.PolicyKey{
 					NsName: types.NamespacedName{Name: "psp", Namespace: "test"},
 					GVK: schema.GroupVersionKind{
+						Group: ngfAPIv1alpha1.GroupName,
+						Kind:  kinds.ProxySettingsPolicy,
+					},
+				}
+
+				rlpUpdated = rlp.DeepCopy()
+				rlpUpdated.Spec.RateLimit.Local.Rules[0].Rate = ngfAPIv1alpha1.Rate("20r/s")
+				rlpKey = graph.PolicyKey{
+					NsName: types.NamespacedName{Name: "rlp", Namespace: "test"},
+					GVK: schema.GroupVersionKind{
 						Group:   ngfAPIv1alpha1.GroupName,
-						Kind:    kinds.ProxySettingsPolicy,
+						Kind:    kinds.RateLimitPolicy,
 						Version: "v1alpha1",
 					},
 				}
@@ -3161,6 +3197,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(usp)
 					processor.CaptureUpsertChange(snip)
 					processor.CaptureUpsertChange(psp)
+					processor.CaptureUpsertChange(rlp)
 
 					Expect(processor.Process()).To(BeNil())
 				})
@@ -3175,6 +3212,8 @@ var _ = Describe("ChangeProcessor", func() {
 					Expect(graph.NGFPolicies[cspKey].Source).To(Equal(csp))
 					Expect(graph.NGFPolicies).To(HaveKey(pspKey))
 					Expect(graph.NGFPolicies[pspKey].Source).To(Equal(psp))
+					Expect(graph.NGFPolicies).To(HaveKey(rlpKey))
+					Expect(graph.NGFPolicies[rlpKey].Source).To(Equal(rlp))
 					Expect(graph.NGFPolicies).ToNot(HaveKey(obsKey))
 
 					processor.CaptureUpsertChange(route)
@@ -3209,6 +3248,7 @@ var _ = Describe("ChangeProcessor", func() {
 						Value:   "keepalive_timeout 65s;",
 					})
 					processor.CaptureUpsertChange(snipUpdated)
+					processor.CaptureUpsertChange(rlpUpdated)
 
 					graph := processor.Process()
 					Expect(graph).ToNot(BeNil())
@@ -3222,6 +3262,8 @@ var _ = Describe("ChangeProcessor", func() {
 					Expect(graph.NGFPolicies[snipKey].Source).To(Equal(snipUpdated))
 					Expect(graph.NGFPolicies).To(HaveKey(pspKey))
 					Expect(graph.NGFPolicies[pspKey].Source).To(Equal(pspUpdated))
+					Expect(graph.NGFPolicies).To(HaveKey(rlpKey))
+					Expect(graph.NGFPolicies[rlpKey].Source).To(Equal(rlpUpdated))
 				})
 			})
 			When("the policy is deleted", func() {
@@ -3231,6 +3273,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}, client.ObjectKeyFromObject(usp))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.SnippetsPolicy{}, client.ObjectKeyFromObject(snip))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.ProxySettingsPolicy{}, client.ObjectKeyFromObject(psp))
+					processor.CaptureDeleteChange(&ngfAPIv1alpha1.RateLimitPolicy{}, client.ObjectKeyFromObject(rlp))
 
 					graph := processor.Process()
 					Expect(graph).ToNot(BeNil())
