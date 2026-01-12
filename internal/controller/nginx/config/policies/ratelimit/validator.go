@@ -14,6 +14,24 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
+const (
+	rateStringFmt    = `^\d+r/[sm]$`
+	rateStringErrMsg = `must contain a number followed by 'r/s' or 'r/m'`
+
+	// ?: is a non-capturing group
+	// [^ \t\r\n;{}#$]+ matches any run of characters except the separators that
+	//   would make nginx stop parsing the argument.
+	// $\w+ matches an nginx variable.
+	limitReqKeyFmt = `^(?:[^ \t\r\n;{}#$]+|\$\w+)+$`
+	limitReqErrMsg = "must be a valid limit_req key consisting of nginx variables " +
+		"and/or strings without spaces or special characters"
+)
+
+var (
+	rateStringRegexp  = regexp.MustCompile(rateStringFmt)
+	limitReqKeyRegexp = regexp.MustCompile(limitReqKeyFmt)
+)
+
 // Validator validates a RateLimitPolicy.
 // Implements policies.Validator interface.
 type Validator struct {
@@ -123,13 +141,6 @@ func (v *Validator) validateSettings(spec ngfAPI.RateLimitPolicySpec) error {
 
 // validateNginxRate validates a rate string that nginx can understand.
 func validateNginxRate(rate string) error {
-	const (
-		rateStringFmt    = `^\d+r/[sm]$`
-		rateStringErrMsg = `must contain a number followed by 'r/s' or 'r/m'`
-	)
-
-	rateStringRegexp := regexp.MustCompile("^" + rateStringFmt + "$")
-
 	if !rateStringRegexp.MatchString(rate) {
 		examples := []string{
 			"10r/s",
@@ -144,18 +155,6 @@ func validateNginxRate(rate string) error {
 
 // validateLimitReqKey validates a limit_req key string that nginx can understand.
 func validateLimitReqKey(key string) error {
-	const (
-		// ?: is a non-capturing group
-		// [^ \t\r\n;{}#$]+ matches any run of characters except the separators that
-		//   would make nginx stop parsing the argument.
-		// $\w+ matches an nginx variable.
-		limitReqKeyFmt = `^(?:[^ \t\r\n;{}#$]+|\$\w+)+$`
-		limitReqErrMsg = "must be a valid limit_req key consisting of nginx variables " +
-			"and/or strings without spaces or special characters"
-	)
-
-	limitReqKeyRegexp := regexp.MustCompile("^" + limitReqKeyFmt + "$")
-
 	if !limitReqKeyRegexp.MatchString(key) {
 		examples := []string{
 			"$binary_remote_addr",
