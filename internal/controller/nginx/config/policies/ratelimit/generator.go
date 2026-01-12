@@ -189,7 +189,7 @@ func generate(pols []policies.Policy, tmpl *template.Template) policies.Generate
 		// Check if this is a shadow HTTP context only policy
 		isHTTPContextOnly := false
 		if rlp.Annotations != nil {
-			if val, exists := rlp.Annotations[dataplane.InternalRLShadowPolicyAnnotationKey]; exists && val == "true" {
+			if val, exists := rlp.Annotations[dataplane.InternalRateLimitShadowPolicyAnnotationKey]; exists && val == "true" {
 				isHTTPContextOnly = true
 			}
 		}

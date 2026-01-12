@@ -2490,7 +2490,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Name:      "route-rate-limit",
 						Namespace: "test",
 						Annotations: map[string]string{
-							InternalRLShadowPolicyAnnotationKey: "true",
+							InternalRateLimitShadowPolicyAnnotationKey: "true",
 						},
 					},
 					Spec: ngfAPIv1alpha1.RateLimitPolicySpec{
