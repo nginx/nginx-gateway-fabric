@@ -4884,6 +4884,53 @@ func TestBuildL4Servers(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "filters by protocol - UDP listener ignored for TCP protocol",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "udp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.UDPProtocolType,
+							Port:     53,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "udp-route"}}: {
+								Valid: true,
+								Source: &v1alpha2.UDPRoute{
+									ObjectMeta: metav1.ObjectMeta{
+										Namespace: "default",
+										Name:      "udp-route",
+									},
+								},
+								Spec: graph.L4RouteSpec{
+									BackendRefs: []graph.BackendRef{
+										{
+											Valid:     true,
+											SvcNsName: types.NamespacedName{Namespace: "default", Name: "dns-svc"},
+											ServicePort: apiv1.ServicePort{
+												Name: "dns",
+												Port: 53,
+											},
+											Weight: 1,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			protocol:        v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
 	}
 
 	for _, tt := range tests {
