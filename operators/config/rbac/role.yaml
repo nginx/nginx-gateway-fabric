@@ -146,6 +146,7 @@ rules:
   - nginxproxies/finalizers
   - clientsettingspolicies
   - observabilitypolicies
+  - proxysettingspolicies
   - upstreamsettingspolicies
   - snippetsfilters
   verbs:
@@ -161,6 +162,7 @@ rules:
   resources:
   - clientsettingspolicies/status
   - observabilitypolicies/status
+  - proxysettingspolicies/status
   - upstreamsettingspolicies/status
   - snippetsfilters/status
   verbs:

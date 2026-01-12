@@ -9530,6 +9530,10 @@ spec:
                 - message: TargetRef Kind and Name combination must be unique
                   rule: self.all(t1, self.exists_one(t2, t1.group == t2.group && t1.kind
                     == t2.kind && t1.name == t2.name))
+                - message: Cannot mix Gateway kind with HTTPRoute or GRPCRoute kinds
+                    in targetRefs
+                  rule: '!(self.exists(t, t.kind == ''Gateway'') && self.exists(t,
+                    t.kind == ''HTTPRoute'' || t.kind == ''GRPCRoute''))'
             required:
             - targetRefs
             type: object

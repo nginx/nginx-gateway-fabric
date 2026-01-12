@@ -109,11 +109,16 @@ type ProxySettingsPolicySpec struct {
 	// Objects must be in the same namespace as the policy.
 	// Support: Gateway, HTTPRoute, GRPCRoute
 	//
+	// Note: A single policy cannot target both Gateway and Route kinds simultaneously.
+	// Use separate policies: one targeting Gateway (for inherited settings) and others
+	// targeting specific Routes (for overrides).
+	//
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=16
-	// +kubebuilder:validation:XValidation:message="TargetRefs entries must have kind Gateway, HTTPRoute, or GRPCRoute",rule="self.all(t, t.kind == 'Gateway' || t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute')"
-	// +kubebuilder:validation:XValidation:message="TargetRefs entries must have group gateway.networking.k8s.io",rule="self.all(t, t.group == 'gateway.networking.k8s.io')"
-	// +kubebuilder:validation:XValidation:message="TargetRefs must be unique",rule="self.all(t1, self.exists_one(t2, t1.group == t2.group && t1.kind == t2.kind && t1.name == t2.name))"
+	// +kubebuilder:validation:XValidation:message="TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute",rule="self.all(t, t.kind == 'Gateway' || t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute')"
+	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.all(t, t.group == 'gateway.networking.k8s.io')"
+	// +kubebuilder:validation:XValidation:message="TargetRef Kind and Name combination must be unique",rule="self.all(t1, self.exists_one(t2, t1.group == t2.group && t1.kind == t2.kind && t1.name == t2.name))"
+	// +kubebuilder:validation:XValidation:message="Cannot mix Gateway kind with HTTPRoute or GRPCRoute kinds in targetRefs",rule="!(self.exists(t, t.kind == 'Gateway') && self.exists(t, t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute'))"
 	//nolint:lll
 	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 }
@@ -296,6 +301,8 @@ spec:
 
 The `ProxySettingsPolicy` may be attached to Gateways, HTTPRoutes, and GRPCRoutes.
 
+**Important Constraint**: A single ProxySettingsPolicy instance cannot target both Gateway and Route kinds simultaneously. This prevents configuration conflicts and ensures clear policy boundaries. To configure both Gateway-level defaults and Route-level overrides, use separate policy instances.
+
 There are three possible attachment scenarios:
 
 **1. Gateway Attachment**
@@ -306,9 +313,9 @@ When a `ProxySettingsPolicy` is attached to a Gateway only, all the HTTPRoutes a
 
 When a `ProxySettingsPolicy` is attached to an HTTPRoute or GRPCRoute only, the settings in that policy apply to that Route only. Other Routes attached to the same Gateway will use the default NGINX values for proxy settings.
 
-**3: Gateway and Route Attachment**
+**3: Gateway and Route Attachment (Separate Policies)**
 
-When a `ProxySettingsPolicy` is attached to a Gateway and one or more of the Routes that are attached to that Gateway, the effective policy is calculated by accepting the "lowest" default configured.
+When separate `ProxySettingsPolicy` instances are used - one attached to a Gateway and others attached to Routes that are attached to that Gateway - the effective policy is calculated by accepting the "lowest" default configured.
 
 For example:
 
@@ -367,6 +374,7 @@ Key validation rules:
 - `Number` of buffers must be between 2 and 256
 - `BusyBuffersSize` should be validated to be greater than or equal to `BufferSize` when both are specified
 - TargetRef must reference Gateway, HTTPRoute, or GRPCRoute only
+- TargetRefs cannot mix Gateway kind with HTTPRoute or GRPCRoute kinds in the same policy (a policy must target either Gateway OR Routes, not both)
 
 ### Resource Limits
 
