@@ -5,6 +5,9 @@ metadata:
 spec:
   parentRefs:
   - name: cafe-gateway
+    sectionName: http
+  hostnames:
+  - "cafe.example.com"
   rules:
   - matches:
       - path:
