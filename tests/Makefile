@@ -56,7 +56,7 @@ run-conformance-tests: ## Run conformance tests
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -timeout=60m -v -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
@@ -68,6 +68,9 @@ run-conformance-tests: ## Run conformance tests
 	if [ "$$grpc_core_result" != "failure" ] && [ "$$http_core_result" != "failure" ] && [ "$$http_extended_result" != "failure" ] ; then \
 		exit 0; \
 	else \
+		kubectl -n nginx-gateway logs deployment/nginx-gateway; \
+		echo "---------BREAK---------"; \
+		kubectl -n gateway-conformance-infra get pods --no-headers | awk '/-nginx/ {print $1, $2}' | while read pod; do kubectl -n gateway-conformance-infra logs "$pod"; done; \
 		exit 2; \
 	fi
 
