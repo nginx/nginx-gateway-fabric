@@ -118,7 +118,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 										fmt.Sprintf("%s%d%s", test.url, port, test.path),
 										address,
 										test.expected,
-										framework.WithTestHeaders(test.headers))
+										framework.WithRequestHeaders(test.headers))
 								}).
 								WithTimeout(timeoutConfig.RequestTimeout).
 								WithPolling(500 * time.Millisecond).
@@ -130,7 +130,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 										timeoutConfig.RequestTimeout,
 										fmt.Sprintf("%s%d%s", test.url, port, test.path),
 										address,
-										framework.WithTestHeaders(test.headers))
+										framework.WithRequestHeaders(test.headers))
 								}).
 								WithTimeout(timeoutConfig.RequestTimeout).
 								WithPolling(500 * time.Millisecond).
@@ -230,7 +230,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 									return framework.ExpectGRPCRequestToSucceed(
 										timeoutConfig.RequestTimeout,
 										fmt.Sprintf("%s:%d", address, port),
-										framework.WithTestHeaders(test.headers),
+										framework.WithRequestHeaders(test.headers),
 									)
 								}).
 								WithTimeout(timeoutConfig.RequestTimeout).
@@ -242,7 +242,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 									return framework.ExpectUnauthenticatedGRPCRequest(
 										timeoutConfig.RequestTimeout,
 										fmt.Sprintf("%s:%d", address, port),
-										framework.WithTestHeaders(test.headers),
+										framework.WithRequestHeaders(test.headers),
 									)
 								}).
 								WithTimeout(timeoutConfig.RequestTimeout).
@@ -452,7 +452,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 										fmt.Sprintf("%s%d%s", test.url, port, test.path),
 										address,
 										test.expected,
-										framework.WithTestHeaders(test.headers))
+										framework.WithRequestHeaders(test.headers))
 								}).
 								WithTimeout(timeoutConfig.RequestTimeout).
 								WithPolling(500 * time.Millisecond).
@@ -464,7 +464,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 										timeoutConfig.RequestTimeout,
 										fmt.Sprintf("%s%d%s", test.url, port, test.path),
 										address,
-										framework.WithTestHeaders(test.headers))
+										framework.WithRequestHeaders(test.headers))
 								}).
 								WithTimeout(timeoutConfig.RequestTimeout).
 								WithPolling(500 * time.Millisecond).
@@ -567,7 +567,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "authentic
 					WithArguments(
 						timeoutConfig.RequestTimeout,
 						fmt.Sprintf("%s:%d", address, port),
-						framework.WithTestHeaders(map[string]string{
+						framework.WithRequestHeaders(map[string]string{
 							"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
 						}),
 					).

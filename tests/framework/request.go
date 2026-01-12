@@ -147,35 +147,16 @@ func makeRequest(method string, request Request, opts ...Option) (*http.Response
 	return resp, nil
 }
 
-type RequestHeader func(*RequestHeaders)
-
-type RequestHeaders = map[string]string
-
-func WithTestHeaders(headers map[string]string) RequestHeader {
-	return func(hdrs *RequestHeaders) {
-		*hdrs = headers
-	}
-}
-
-func RequestWithTestHeaders(hdrs ...RequestHeader) RequestHeaders {
-	var headers RequestHeaders
-	for _, hdr := range hdrs {
-		hdr(&headers)
-	}
-
-	return headers
-}
-
 func ExpectRequestToSucceed(
 	timeout time.Duration,
 	appURL,
 	address,
 	responseBodyMessage string,
-	hdrs ...RequestHeader,
+	opts ...Option,
 ) error {
-	headers := RequestWithTestHeaders(hdrs...)
+	options := LogOptions(opts...)
 	request := Request{
-		Headers: headers,
+		Headers: options.requestHeaders,
 		URL:     appURL,
 		Address: address,
 		Timeout: timeout,
@@ -223,10 +204,10 @@ func ExpectRequestToFail(timeout time.Duration, appURL, address string) error {
 	return nil
 }
 
-func ExpectUnauthenticatedRequest(timeout time.Duration, appURL, address string, hdrs ...RequestHeader) error {
-	headers := RequestWithTestHeaders(hdrs...)
+func ExpectUnauthenticatedRequest(timeout time.Duration, appURL, address string, opts ...Option) error {
+	options := LogOptions(opts...)
 	request := Request{
-		Headers: headers,
+		Headers: options.requestHeaders,
 		URL:     appURL,
 		Address: address,
 		Timeout: timeout,
@@ -239,10 +220,10 @@ func ExpectUnauthenticatedRequest(timeout time.Duration, appURL, address string,
 	return nil
 }
 
-func Expect500Response(timeout time.Duration, appURL, address string, hdrs ...RequestHeader) error {
-	headers := RequestWithTestHeaders(hdrs...)
+func Expect500Response(timeout time.Duration, appURL, address string, opts ...Option) error {
+	options := LogOptions(opts...)
 	request := Request{
-		Headers: headers,
+		Headers: options.requestHeaders,
 		URL:     appURL,
 		Address: address,
 		Timeout: timeout,

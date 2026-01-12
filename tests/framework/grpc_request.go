@@ -84,11 +84,11 @@ func sendGRPCRequest(request gRPCRequest) error {
 func ExpectGRPCRequestToSucceed(
 	timeout time.Duration,
 	address string,
-	hdrs ...RequestHeader,
+	opts ...Option,
 ) error {
-	headers := RequestWithTestHeaders(hdrs...)
+	options := LogOptions(opts...)
 	request := gRPCRequest{
-		Headers: headers,
+		Headers: options.requestHeaders,
 		Address: address,
 		Timeout: timeout,
 	}
@@ -103,11 +103,11 @@ func ExpectGRPCRequestToSucceed(
 func ExpectUnauthenticatedGRPCRequest(
 	timeout time.Duration,
 	address string,
-	hdrs ...RequestHeader,
+	opts ...Option,
 ) error {
-	headers := RequestWithTestHeaders(hdrs...)
+	options := LogOptions(opts...)
 	request := gRPCRequest{
-		Headers: headers,
+		Headers: options.requestHeaders,
 		Address: address,
 		Timeout: timeout,
 	}
@@ -127,11 +127,11 @@ func ExpectUnauthenticatedGRPCRequest(
 func Expect500GRPCResponse(
 	timeout time.Duration,
 	address string,
-	hdrs ...RequestHeader,
+	opts ...Option,
 ) error {
-	headers := RequestWithTestHeaders(hdrs...)
+	options := LogOptions(opts...)
 	request := gRPCRequest{
-		Headers: headers,
+		Headers: options.requestHeaders,
 		Address: address,
 		Timeout: timeout,
 	}
