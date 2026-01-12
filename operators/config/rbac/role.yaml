@@ -146,6 +146,7 @@ rules:
   - nginxproxies/finalizers
   - clientsettingspolicies
   - observabilitypolicies
+  - proxysettingspolicies
   - upstreamsettingspolicies
   - snippetsfilters
   - authenticationfilters
@@ -162,6 +163,7 @@ rules:
   resources:
   - clientsettingspolicies/status
   - observabilitypolicies/status
+  - proxysettingspolicies/status
   - upstreamsettingspolicies/status
   - snippetsfilters/status
   - authenticationfilters/status

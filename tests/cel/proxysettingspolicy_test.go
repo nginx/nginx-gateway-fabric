@@ -67,7 +67,8 @@ func TestProxySettingsPolicyTargetRefsKind(t *testing.T) {
 			},
 		},
 		{
-			name: "Validate TargetRefs of kind Gateway and HTTPRoute are allowed",
+			name:       "Validate TargetRefs of kind Gateway and HTTPRoute are not allowed",
+			wantErrors: []string{"Cannot mix Gateway kind with HTTPRoute or GRPCRoute kinds in targetRefs"},
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
@@ -76,6 +77,42 @@ func TestProxySettingsPolicyTargetRefsKind(t *testing.T) {
 					},
 					{
 						Kind:  httpRouteKind,
+						Group: gatewayGroup,
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate TargetRefs of kind Gateway and GRPCRoute are not allowed",
+			wantErrors: []string{"Cannot mix Gateway kind with HTTPRoute or GRPCRoute kinds in targetRefs"},
+			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
+						Group: gatewayGroup,
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate TargetRefs with Gateway, HTTPRoute, and GRPCRoute are not allowed",
+			wantErrors: []string{"Cannot mix Gateway kind with HTTPRoute or GRPCRoute kinds in targetRefs"},
+			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
+					{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  httpRouteKind,
+						Group: gatewayGroup,
+					},
+					{
+						Kind:  grpcRouteKind,
 						Group: gatewayGroup,
 					},
 				},
@@ -267,10 +304,6 @@ func TestProxySettingsPolicyTargetRefsNameUniqueness(t *testing.T) {
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
-						Kind:  gatewayKind,
-						Group: gatewayGroup,
-					},
-					{
 						Kind:  httpRouteKind,
 						Group: gatewayGroup,
 					},
@@ -286,14 +319,9 @@ func TestProxySettingsPolicyTargetRefsNameUniqueness(t *testing.T) {
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
-						Kind:  gatewayKind,
-						Group: gatewayGroup,
-						Name:  "duplicate-service-name",
-					},
-					{
 						Kind:  httpRouteKind,
 						Group: gatewayGroup,
-						Name:  "duplicate-service-name", // Same name as above
+						Name:  "duplicate-service-name",
 					},
 					{
 						Kind:  grpcRouteKind,
@@ -327,7 +355,7 @@ func TestProxySettingsPolicyTargetRefsNameUniqueness(t *testing.T) {
 			spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 				TargetRefs: []gatewayv1.LocalPolicyTargetReference{
 					{
-						Kind:  gatewayKind,
+						Kind:  grpcRouteKind,
 						Group: gatewayGroup,
 						Name:  "unique-service-1",
 					},
