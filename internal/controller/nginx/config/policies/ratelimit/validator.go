@@ -1,6 +1,10 @@
 package ratelimit
 
 import (
+	"errors"
+	"regexp"
+
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -89,7 +93,7 @@ func (v *Validator) validateSettings(spec ngfAPI.RateLimitPolicySpec) error {
 			}
 
 			if rule.Rate != "" {
-				if err := v.genericValidator.ValidateNginxRate(string(rule.Rate)); err != nil {
+				if err := validateNginxRate(string(rule.Rate)); err != nil {
 					allErrs = append(allErrs,
 						field.Invalid(
 							path.Child("rate"),
@@ -101,7 +105,7 @@ func (v *Validator) validateSettings(spec ngfAPI.RateLimitPolicySpec) error {
 			}
 
 			if rule.Key != "" {
-				if err := v.genericValidator.ValidateLimitReqKey(rule.Key); err != nil {
+				if err := validateLimitReqKey(rule.Key); err != nil {
 					allErrs = append(allErrs,
 						field.Invalid(
 							path.Child("key"),
@@ -115,4 +119,52 @@ func (v *Validator) validateSettings(spec ngfAPI.RateLimitPolicySpec) error {
 	}
 
 	return allErrs.ToAggregate()
+}
+
+// ValidateNginxRate validates a rate string that nginx can understand.
+func validateNginxRate(rate string) error {
+	const (
+		rateStringFmt    = `^\d+r/[sm]$`
+		rateStringErrMsg = `must contain a number followed by 'r/s' or 'r/m'`
+	)
+
+	rateStringRegexp := regexp.MustCompile("^" + rateStringFmt + "$")
+
+	if !rateStringRegexp.MatchString(rate) {
+		examples := []string{
+			"10r/s",
+			"500r/m",
+		}
+
+		return errors.New(k8svalidation.RegexError(rateStringFmt, rateStringErrMsg, examples...))
+	}
+
+	return nil
+}
+
+// ValidateLimitReqKey validates a limit_req key string that nginx can understand.
+func validateLimitReqKey(key string) error {
+	const (
+		// ?: is a non-capturing group
+		// [^ \t\r\n;{}#$]+ matches any run of characters except the separators that
+		//   would make nginx stop parsing the argument.
+		// $\w+ matches an nginx variable.
+		limitReqKeyFmt = `^(?:[^ \t\r\n;{}#$]+|\$\w+)+$`
+		limitReqErrMsg = "must be a valid limit_req key consisting of nginx variables " +
+			"and/or strings without spaces or special characters"
+	)
+
+	limitReqKeyRegexp := regexp.MustCompile("^" + limitReqKeyFmt + "$")
+
+	if !limitReqKeyRegexp.MatchString(key) {
+		examples := []string{
+			"$binary_remote_addr",
+			"$binary_remote_addr:$request_uri",
+			"my_fixed_key",
+		}
+
+		return errors.New(k8svalidation.RegexError(limitReqKeyFmt, limitReqErrMsg, examples...))
+	}
+
+	return nil
 }
