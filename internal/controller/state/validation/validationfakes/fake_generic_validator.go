@@ -30,6 +30,17 @@ type FakeGenericValidator struct {
 	validateEscapedStringNoVarExpansionReturnsOnCall map[int]struct {
 		result1 error
 	}
+	ValidateLimitReqKeyStub        func(string) error
+	validateLimitReqKeyMutex       sync.RWMutex
+	validateLimitReqKeyArgsForCall []struct {
+		arg1 string
+	}
+	validateLimitReqKeyReturns struct {
+		result1 error
+	}
+	validateLimitReqKeyReturnsOnCall map[int]struct {
+		result1 error
+	}
 	ValidateNginxDurationStub        func(string) error
 	validateNginxDurationMutex       sync.RWMutex
 	validateNginxDurationArgsForCall []struct {
@@ -207,6 +218,67 @@ func (fake *FakeGenericValidator) ValidateEscapedStringNoVarExpansionReturnsOnCa
 		})
 	}
 	fake.validateEscapedStringNoVarExpansionReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateLimitReqKey(arg1 string) error {
+	fake.validateLimitReqKeyMutex.Lock()
+	ret, specificReturn := fake.validateLimitReqKeyReturnsOnCall[len(fake.validateLimitReqKeyArgsForCall)]
+	fake.validateLimitReqKeyArgsForCall = append(fake.validateLimitReqKeyArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateLimitReqKeyStub
+	fakeReturns := fake.validateLimitReqKeyReturns
+	fake.recordInvocation("ValidateLimitReqKey", []interface{}{arg1})
+	fake.validateLimitReqKeyMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenericValidator) ValidateLimitReqKeyCallCount() int {
+	fake.validateLimitReqKeyMutex.RLock()
+	defer fake.validateLimitReqKeyMutex.RUnlock()
+	return len(fake.validateLimitReqKeyArgsForCall)
+}
+
+func (fake *FakeGenericValidator) ValidateLimitReqKeyCalls(stub func(string) error) {
+	fake.validateLimitReqKeyMutex.Lock()
+	defer fake.validateLimitReqKeyMutex.Unlock()
+	fake.ValidateLimitReqKeyStub = stub
+}
+
+func (fake *FakeGenericValidator) ValidateLimitReqKeyArgsForCall(i int) string {
+	fake.validateLimitReqKeyMutex.RLock()
+	defer fake.validateLimitReqKeyMutex.RUnlock()
+	argsForCall := fake.validateLimitReqKeyArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenericValidator) ValidateLimitReqKeyReturns(result1 error) {
+	fake.validateLimitReqKeyMutex.Lock()
+	defer fake.validateLimitReqKeyMutex.Unlock()
+	fake.ValidateLimitReqKeyStub = nil
+	fake.validateLimitReqKeyReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateLimitReqKeyReturnsOnCall(i int, result1 error) {
+	fake.validateLimitReqKeyMutex.Lock()
+	defer fake.validateLimitReqKeyMutex.Unlock()
+	fake.ValidateLimitReqKeyStub = nil
+	if fake.validateLimitReqKeyReturnsOnCall == nil {
+		fake.validateLimitReqKeyReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateLimitReqKeyReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
 }

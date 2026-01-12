@@ -141,9 +141,12 @@ type RateLimitRule struct {
 	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
 	Rate Rate `json:"rate"`
 
-	// Key represents the key to which the rate limit is applied.
+	// Key represents the key to which the rate limit is applied. The key can contain text, variables,
+	// and their combination.
 	//
 	// Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
+	//
+	// +kubebuilder:validation:Pattern=`^(?:[^ \t\r\n;{}#$]+|\$\w+)+$`
 	Key string `json:"key"`
 }
 

@@ -13,7 +13,7 @@ spec:
       - zoneSize: 20m
         noDelay: true
         burst: 5
-        key: "$binary_remote_addr"
+        key: "$binary_remote_addr:$request_uri"
         rate: 20r/s
     dryRun: true
     logLevel: "warn"

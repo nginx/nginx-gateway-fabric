@@ -87,6 +87,19 @@ func TestValidator_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid key",
+			policy: createModifiedPolicy(func(p *ngfAPI.RateLimitPolicy) *ngfAPI.RateLimitPolicy {
+				p.Spec.RateLimit.Local.Rules[0].Key = "$invalid_key{}"
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.rateLimit.local.rules.key: Invalid value: " +
+					"\"$invalid_key{}\": ^(?:[^ \\t\\r\\n;{}#$]+|\\$\\w+)+$ (e.g. '$binary_remote_addr',  or " +
+					"'$binary_remote_addr:$request_uri',  or 'my_fixed_key', regex used for validation is 'must be " +
+					"a valid limit_req key consisting of nginx variables and/or strings without spaces or special characters')"),
+			},
+		},
+		{
 			name:          "valid",
 			policy:        createValidPolicy(),
 			expConditions: nil,

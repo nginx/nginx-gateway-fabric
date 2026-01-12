@@ -148,3 +148,30 @@ func (GenericValidator) ValidateNginxRate(rate string) error {
 
 	return nil
 }
+
+const (
+	// ?: is a non-capturing group
+	// [^ \t\r\n;{}#$]+ matches any run of characters except the separators that
+	//   would make nginx stop parsing the argument.
+	// $\w+ matches an nginx variable.
+	limitReqKeyFmt = `^(?:[^ \t\r\n;{}#$]+|\$\w+)+$`
+	limitReqErrMsg = "must be a valid limit_req key consisting of nginx variables " +
+		"and/or strings without spaces or special characters"
+)
+
+var limitReqKeyRegexp = regexp.MustCompile("^" + limitReqKeyFmt + "$")
+
+// ValidateLimitReqKey validates a limit_req key string that nginx can understand.
+func (GenericValidator) ValidateLimitReqKey(key string) error {
+	if !limitReqKeyRegexp.MatchString(key) {
+		examples := []string{
+			"$binary_remote_addr",
+			"$binary_remote_addr:$request_uri",
+			"my_fixed_key",
+		}
+
+		return errors.New(k8svalidation.RegexError(limitReqKeyFmt, limitReqErrMsg, examples...))
+	}
+
+	return nil
+}

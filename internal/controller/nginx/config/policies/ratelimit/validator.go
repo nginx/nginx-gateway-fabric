@@ -99,6 +99,18 @@ func (v *Validator) validateSettings(spec ngfAPI.RateLimitPolicySpec) error {
 					)
 				}
 			}
+
+			if rule.Key != "" {
+				if err := v.genericValidator.ValidateLimitReqKey(rule.Key); err != nil {
+					allErrs = append(allErrs,
+						field.Invalid(
+							path.Child("key"),
+							rule.Key,
+							err.Error(),
+						),
+					)
+				}
+			}
 		}
 	}
 
