@@ -4,45 +4,25 @@ metadata:
   name: cafe-routes
 spec:
   parentRefs:
-    - name: cafe-gateway
+  - name: cafe-gateway
   rules:
-    - matches:
-        # Coffee with Basic Auth via basic-auth1
-        - path:
-            type: PathPrefix
-            value: /coffee1
-        # Additional coffee path with same auth
-        - path:
-            type: PathPrefix
-            value: /coffee2
-      backendRefs:
-        - name: coffee
-          port: 80
-      filters:
-        - type: ExtensionRef
-          extensionRef:
-            group: gateway.nginx.org
-            kind: AuthenticationFilter
-            name: basic-auth1
-    # Tea with Basic Auth via basic-auth2
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /tea
-      backendRefs:
-        - name: tea
-          port: 80
-      filters:
-        - type: ExtensionRef
-          extensionRef:
-            group: gateway.nginx.org
-            kind: AuthenticationFilter
-            name: basic-auth2
-    # Latte without authentication
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /latte
-      backendRefs:
-        - name: latte
-          port: 80
+  - matches:
+      - path:
+          type: PathPrefix
+          value: /coffee
+    backendRefs:
+      - name: coffee
+        port: 80
+    filters:
+      - type: ExtensionRef
+        extensionRef:
+          group: gateway.nginx.org
+          kind: AuthenticationFilter
+          name: basic-auth
+  - matches:
+      - path:
+          type: PathPrefix
+          value: /tea
+    backendRefs:
+      - name: tea
+        port: 80

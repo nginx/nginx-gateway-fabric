@@ -5,9 +5,7 @@ metadata:
 spec:
   gatewayClassName: nginx
   listeners:
-    - name: http
-      port: 80
-      protocol: HTTP
-      allowedRoutes:
-        namespaces:
-          from: Same
+  - name: http
+    port: 80
+    protocol: HTTP
+    hostname: "*.example.com"
