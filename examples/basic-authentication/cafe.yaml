@@ -63,4 +63,3 @@ spec:
     name: http
   selector:
     app: tea
-    
