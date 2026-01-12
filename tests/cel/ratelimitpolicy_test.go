@@ -10,7 +10,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-func TestProxySettingsPolicyTargetRefsKind(t *testing.T) {
+func TestRateLimitPolicyTargetRefsKind(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
 
