@@ -62,22 +62,40 @@ const (
 	defaultKey = "$binary_remote_addr"
 )
 
+// rateLimitSettings represents the settings for a rate limit policy.
 type rateLimitSettings struct {
-	LogLevel      string
-	Rule          []rateLimitRule
-	RejectCode    int
-	DryRun        bool
+	// LogLevel is the log level for cases when the server refuses to process requests due to
+	// rate exceeding, or delays request processing.
+	LogLevel string
+	// Rule if the list of rate limit rules.
+	Rule []rateLimitRule
+	// RejectCode is the status code to return in response to rejected requests.
+	RejectCode int
+	// DryRun enables the dry run mode, where the rate limit is not actually applied, but the number
+	// of excessive requests is accounted as usual in the shared memory zone.
+	DryRun bool
+	// LimitZoneOnly indicates whether this policy should only generate the limit_req_zone directive.
+	// This is used for internally-created policies that only target the HTTP context because the original
+	// policy targeted a Route and needs to generate limit_req_zone directives at the http context.
 	LimitZoneOnly bool
 }
 
+// rateLimitRule represents a single rate limit rule.
 type rateLimitRule struct {
+	// ZoneName is the name of the shared memory zone.
 	ZoneName string
+	// ZoneSize is the size of the shared memory zone.
 	ZoneSize string
-	Rate     string
-	Key      string
-	Delay    int
-	Burst    int
-	NoDelay  bool
+	// Rate is the request rate.
+	Rate string
+	// Key is the key to use for rate limiting.
+	Key string
+	// Delay is the delay for excessive requests.
+	Delay int
+	// Burst is the maximum number of excessive requests that can be delayed.
+	Burst int
+	// NoDelay indicates whether excessive requests are processed without delay.
+	NoDelay bool
 }
 
 func getRateLimitSettings(rlp ngfAPI.RateLimitPolicy) rateLimitSettings {
@@ -168,7 +186,7 @@ func generate(pols []policies.Policy, tmpl *template.Template) policies.Generate
 
 		settings := getRateLimitSettings(*rlp)
 
-		// Check if this is a fake HTTP context only policy
+		// Check if this is a shadow HTTP context only policy
 		isHTTPContextOnly := false
 		if rlp.Annotations != nil {
 			if val, exists := rlp.Annotations[dataplane.InternalRLShadowPolicyAnnotationKey]; exists && val == "true" {
