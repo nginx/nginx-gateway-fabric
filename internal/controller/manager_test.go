@@ -216,6 +216,9 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				GatewayClassName: gcName,
 				SnippetsPolicies: true,
 			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
 			},
@@ -236,6 +239,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.SnippetsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
 			},
 		},
 		{
@@ -289,6 +293,13 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				SnippetsFilters:      true,
 				SnippetsPolicies:     true,
 			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"TLSRoute":         true,
+				"TCPRoute":         true,
+				"UDPRoute":         true,
+				"InferencePool":    true,
+			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
 			},
@@ -314,6 +325,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.SnippetsFilterList{},
 				&ngfAPIv1alpha1.SnippetsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
 			},
 		},
 	}

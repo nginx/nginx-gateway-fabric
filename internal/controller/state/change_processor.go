@@ -133,117 +133,117 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 	commonPolicyObjectStore := newNGFPolicyObjectStore(clusterStore.NGFPolicies, cfg.MustExtractGVK)
 
 	trackingUpdaterCfg := []changeTrackingUpdaterObjectTypeCfg{
-			{
-				gvk:       cfg.MustExtractGVK(&v1.GatewayClass{}),
-				store:     newObjectStoreMapAdapter(clusterStore.GatewayClasses),
-				predicate: nil,
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&v1.Gateway{}),
-				store:     newObjectStoreMapAdapter(clusterStore.Gateways),
-				predicate: nil,
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&v1.HTTPRoute{}),
-				store:     newObjectStoreMapAdapter(clusterStore.HTTPRoutes),
-				predicate: nil,
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&v1beta1.ReferenceGrant{}),
-				store:     newObjectStoreMapAdapter(clusterStore.ReferenceGrants),
-				predicate: nil,
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&v1.BackendTLSPolicy{}),
-				store:     newObjectStoreMapAdapter(clusterStore.BackendTLSPolicies),
-				predicate: nil,
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&v1.GRPCRoute{}),
-				store:     newObjectStoreMapAdapter(clusterStore.GRPCRoutes),
-				predicate: nil,
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&apiv1.Namespace{}),
-				store:     newObjectStoreMapAdapter(clusterStore.Namespaces),
-				predicate: funcPredicate{stateChanged: isReferenced},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&apiv1.Service{}),
-				store:     newObjectStoreMapAdapter(clusterStore.Services),
-				predicate: funcPredicate{stateChanged: isReferenced},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&inference.InferencePool{}),
-				store:     newObjectStoreMapAdapter(clusterStore.InferencePools),
-				predicate: funcPredicate{stateChanged: isReferenced},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&discoveryV1.EndpointSlice{}),
-				store:     nil,
-				predicate: funcPredicate{stateChanged: isReferenced},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&apiv1.Secret{}),
-				store:     newObjectStoreMapAdapter(clusterStore.Secrets),
-				predicate: funcPredicate{stateChanged: isReferenced},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&apiv1.ConfigMap{}),
-				store:     newObjectStoreMapAdapter(clusterStore.ConfigMaps),
-				predicate: funcPredicate{stateChanged: isReferenced},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&apiext.CustomResourceDefinition{}),
-				store:     newObjectStoreMapAdapter(clusterStore.CRDMetadata),
-				predicate: annotationChangedPredicate{annotation: consts.BundleVersionAnnotation},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha2.NginxProxy{}),
-				store:     newObjectStoreMapAdapter(clusterStore.NginxProxies),
-				predicate: funcPredicate{stateChanged: isReferenced},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.ClientSettingsPolicy{}),
-				store:     commonPolicyObjectStore,
-				predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha2.ObservabilityPolicy{}),
-				store:     commonPolicyObjectStore,
-				predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
-				store:     commonPolicyObjectStore,
-				predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&v1alpha2.TLSRoute{}),
-				store:     newObjectStoreMapAdapter(clusterStore.TLSRoutes),
-				predicate: nil,
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&v1alpha2.TCPRoute{}),
-				store:     newObjectStoreMapAdapter(clusterStore.TCPRoutes),
-				predicate: nil,
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&v1alpha2.UDPRoute{}),
-				store:     newObjectStoreMapAdapter(clusterStore.UDPRoutes),
-				predicate: nil,
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.SnippetsFilter{}),
-				store:     newObjectStoreMapAdapter(clusterStore.SnippetsFilters),
-				predicate: nil, // we always want to write status to SnippetsFilters so we don't filter them out
-			},
-			{
-				gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.AuthenticationFilter{}),
-				store:     newObjectStoreMapAdapter(clusterStore.AuthenticationFilters),
-				predicate: nil, // we always want to write status to AuthenticationFilters so we don't filter them out
-			},
-		}
+		{
+			gvk:       cfg.MustExtractGVK(&v1.GatewayClass{}),
+			store:     newObjectStoreMapAdapter(clusterStore.GatewayClasses),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&v1.Gateway{}),
+			store:     newObjectStoreMapAdapter(clusterStore.Gateways),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&v1.HTTPRoute{}),
+			store:     newObjectStoreMapAdapter(clusterStore.HTTPRoutes),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&v1beta1.ReferenceGrant{}),
+			store:     newObjectStoreMapAdapter(clusterStore.ReferenceGrants),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&v1.BackendTLSPolicy{}),
+			store:     newObjectStoreMapAdapter(clusterStore.BackendTLSPolicies),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&v1.GRPCRoute{}),
+			store:     newObjectStoreMapAdapter(clusterStore.GRPCRoutes),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&apiv1.Namespace{}),
+			store:     newObjectStoreMapAdapter(clusterStore.Namespaces),
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&apiv1.Service{}),
+			store:     newObjectStoreMapAdapter(clusterStore.Services),
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&inference.InferencePool{}),
+			store:     newObjectStoreMapAdapter(clusterStore.InferencePools),
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&discoveryV1.EndpointSlice{}),
+			store:     nil,
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&apiv1.Secret{}),
+			store:     newObjectStoreMapAdapter(clusterStore.Secrets),
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&apiv1.ConfigMap{}),
+			store:     newObjectStoreMapAdapter(clusterStore.ConfigMaps),
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&apiext.CustomResourceDefinition{}),
+			store:     newObjectStoreMapAdapter(clusterStore.CRDMetadata),
+			predicate: annotationChangedPredicate{annotation: consts.BundleVersionAnnotation},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha2.NginxProxy{}),
+			store:     newObjectStoreMapAdapter(clusterStore.NginxProxies),
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.ClientSettingsPolicy{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha2.ObservabilityPolicy{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&v1alpha2.TLSRoute{}),
+			store:     newObjectStoreMapAdapter(clusterStore.TLSRoutes),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&v1alpha2.TCPRoute{}),
+			store:     newObjectStoreMapAdapter(clusterStore.TCPRoutes),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&v1alpha2.UDPRoute{}),
+			store:     newObjectStoreMapAdapter(clusterStore.UDPRoutes),
+			predicate: nil,
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.SnippetsFilter{}),
+			store:     newObjectStoreMapAdapter(clusterStore.SnippetsFilters),
+			predicate: nil, // we always want to write status to SnippetsFilters so we don't filter them out
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.AuthenticationFilter{}),
+			store:     newObjectStoreMapAdapter(clusterStore.AuthenticationFilters),
+			predicate: nil, // we always want to write status to AuthenticationFilters so we don't filter them out
+		},
+	}
 
 	if cfg.SnippetsPolicies {
 		trackingUpdaterCfg = append(trackingUpdaterCfg, changeTrackingUpdaterObjectTypeCfg{

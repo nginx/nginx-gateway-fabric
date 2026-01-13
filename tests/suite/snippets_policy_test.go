@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -113,7 +114,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseURL, address, "URI: /coffee")
+						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseURL, address, "URI: /coffee")
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -140,7 +141,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 						if err != nil {
 							return err
 						}
-						if resp.StatusCode != 200 {
+						if resp.StatusCode != http.StatusOK {
 							return fmt.Errorf("expected 200, got %d", resp.StatusCode)
 						}
 						return nil
@@ -303,7 +304,9 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 				port = portFwdPort
 			}
 			baseURL := fmt.Sprintf("http://cafe.example.com:%d%s", port, "/coffee")
-			Expect(expectRequestToSucceed(baseURL, address, "URI: /coffee")).To(Succeed())
+			Expect(
+				framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseURL, address, "URI: /coffee"),
+			).To(Succeed())
 		})
 	})
 
