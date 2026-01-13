@@ -532,28 +532,7 @@ spec:
 For JWT Auth, we will process a custom secret type of `nginx.org/jwt`.
 This will allow us to be more confident that the user is providing us with the appropriate kind of secret for this use case.
 
-To create this kind of secret for JWT Auth first run this command:
-
-```bash
-htpasswd -c auth user
-```
-
-This will create a file called `auth` with the username and an MD5-hashed password:
-
-```bash
-cat auth
-user:$apr1$prQ3Bh4t$A6bmTv7VgmemGe5eqR61j0
-```
-
-Use these options in the `htpasswd` command for stronger hashing algorithms:
-
-```bash
- -2  Force SHA-256 hashing of the password (secure).
- -5  Force SHA-512 hashing of the password (secure).
- -B  Force bcrypt hashing of the password (very secure).
-```
-
-You can then run this command to generate the secret from the `auth` file:
+You can then run this command to generate the secret from the `auth` file which contains your JSON Web Key Set (JWKS):
 
 ```bash
 kubectl create secret generic jwt-keys-secure --type='nginx.org/jwt' --from-file=auth
