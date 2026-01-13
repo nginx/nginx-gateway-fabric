@@ -772,7 +772,7 @@ This example shows a single HTTPRoute, with a single `filter` defined in a `rule
 
 Only a single `AuthenticationFilter` may be referenced in a single rule.
 
-In a scenario where a route rule references multiple `AuthenticationFilter` resources, that route ruel will set to `Invalid`.
+In a scenario where a route rule references multiple `AuthenticationFilter` resources, that route rule will set to `Invalid`.
 
 The HTTPRoute/GRPCRoute resource will display an `UnresolvedRef` message to inform the user that the rule has been `Rejected`.
 
@@ -832,7 +832,7 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 ### Invalid AuthenticationFilter Scenarios
 
 This section covers configuration deployment scenarios for an `AuthenticationFilter` resource that would be considered invalid.
-These typically occur when the secret referenced by the `AuthenticationFilter` is miss-configured.
+These typically occur when the secret referenced by the `AuthenticationFilter` is misconfigured.
 These invalid scenarios can occur for both `type: Basic` and `type: JWT`. For JWT, mode should be `File` in these scenarios.
 
 When an `AuthenticationFilter` is described as invalid, it could be for these reasons:
