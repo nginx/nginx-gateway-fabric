@@ -472,6 +472,67 @@ func snippetsStatusEqual(status1, status2 ngfAPI.ControllerStatus) bool {
 	return ConditionsEqual(status1.Conditions, status2.Conditions)
 }
 
+func newAuthenticationFilterStatusSetter(afStatus ngfAPI.AuthenticationFilterStatus, gatewayCtlrName string) Setter {
+	return func(obj client.Object) (wasSet bool) {
+		af := helpers.MustCastObject[*ngfAPI.AuthenticationFilter](obj)
+
+		maxControllerStatus := 1 + len(af.Status.Controllers)
+		controllerStatuses := make([]ngfAPI.ControllerStatus, 0, maxControllerStatus)
+
+		for _, status := range af.Status.Controllers {
+			if string(status.ControllerName) != gatewayCtlrName {
+				controllerStatuses = append(controllerStatuses, status)
+			}
+		}
+
+		controllerStatuses = append(controllerStatuses, afStatus.Controllers...)
+		afStatus.Controllers = controllerStatuses
+
+		if authenticationFilterStatusEqual(gatewayCtlrName, afStatus.Controllers, af.Status.Controllers) {
+			return false
+		}
+
+		af.Status = afStatus
+		return true
+	}
+}
+
+func authenticationFilterStatusEqual(gatewayCtlrName string, currStatus, prevStatus []ngfAPI.ControllerStatus) bool {
+	for _, prev := range prevStatus {
+		if prev.ControllerName != gatewayv1.GatewayController(gatewayCtlrName) {
+			continue
+		}
+
+		exists := slices.ContainsFunc(currStatus, func(currStatus ngfAPI.ControllerStatus) bool {
+			return authenticationStatusEqual(currStatus, prev)
+		})
+
+		if !exists {
+			return false
+		}
+	}
+
+	for _, curr := range currStatus {
+		exists := slices.ContainsFunc(prevStatus, func(prevStatus ngfAPI.ControllerStatus) bool {
+			return authenticationStatusEqual(curr, prevStatus)
+		})
+
+		if !exists {
+			return false
+		}
+	}
+
+	return true
+}
+
+func authenticationStatusEqual(status1, status2 ngfAPI.ControllerStatus) bool {
+	if status1.ControllerName != status2.ControllerName {
+		return false
+	}
+
+	return ConditionsEqual(status1.Conditions, status2.Conditions)
+}
+
 func newInferencePoolStatusSetter(status inference.InferencePoolStatus) Setter {
 	return func(obj client.Object) (wasSet bool) {
 		ip := helpers.MustCastObject[*inference.InferencePool](obj)

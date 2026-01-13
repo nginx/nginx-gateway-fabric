@@ -172,7 +172,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		return Data{}, fmt.Errorf("failed to collect NGF replica count: %w", err)
 	}
 
-	deploymentID, err := getDeploymentID(replicaSet)
+	_, deploymentID, err := getDeploymentNameAndID(replicaSet)
 	if err != nil {
 		return Data{}, fmt.Errorf("failed to get NGF deploymentID: %w", err)
 	}
@@ -356,22 +356,22 @@ func getReplicas(replicaSet *appsv1.ReplicaSet) (int, error) {
 	return int(*replicaSet.Spec.Replicas), nil
 }
 
-// getDeploymentID gets the deployment ID of the provided ReplicaSet.
-func getDeploymentID(replicaSet *appsv1.ReplicaSet) (string, error) {
+// getDeploymentNameAndID gets the deployment name and ID of the provided ReplicaSet.
+func getDeploymentNameAndID(replicaSet *appsv1.ReplicaSet) (string, string, error) {
 	replicaOwnerRefs := replicaSet.GetOwnerReferences()
 	if len(replicaOwnerRefs) != 1 {
-		return "", fmt.Errorf("expected one owner reference of the NGF ReplicaSet, got %d", len(replicaOwnerRefs))
+		return "", "", fmt.Errorf("expected one owner reference of the NGF ReplicaSet, got %d", len(replicaOwnerRefs))
 	}
 
 	if replicaOwnerRefs[0].Kind != "Deployment" {
-		return "", fmt.Errorf("expected replicaSet owner reference to be Deployment, got %s", replicaOwnerRefs[0].Kind)
+		return "", "", fmt.Errorf("expected replicaSet owner reference to be Deployment, got %s", replicaOwnerRefs[0].Kind)
 	}
 
 	if replicaOwnerRefs[0].UID == "" {
-		return "", fmt.Errorf("expected replicaSet owner reference to have a UID")
+		return "", "", fmt.Errorf("expected replicaSet owner reference to have a UID")
 	}
 
-	return string(replicaOwnerRefs[0].UID), nil
+	return replicaOwnerRefs[0].Name, string(replicaOwnerRefs[0].UID), nil
 }
 
 // collectClusterID gets the UID of the kube-system namespace.

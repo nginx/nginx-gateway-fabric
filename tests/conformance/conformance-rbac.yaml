@@ -45,6 +45,7 @@ rules:
   - gatewayclasses
   - tlsroutes
   - backendtlspolicies
+  - udproutes
   verbs:
   - create
   - delete

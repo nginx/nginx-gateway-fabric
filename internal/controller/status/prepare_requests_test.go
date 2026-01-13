@@ -2032,6 +2032,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 }
 
 func TestBuildSnippetsFilterStatuses(t *testing.T) {
+	t.Parallel()
 	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
 	const gatewayCtlrName = "controller"
 
@@ -2133,6 +2134,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			k8sClient := createK8sClientFor(&ngfAPI.SnippetsFilter{})
@@ -2156,6 +2158,129 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 				err := k8sClient.Get(t.Context(), nsname, &snippetsFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(helpers.Diff(expected, snippetsFilter.Status)).To(BeEmpty())
+			}
+		})
+	}
+}
+
+func TestBuildAuthenticationFilterStatuses(t *testing.T) {
+	t.Parallel()
+	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
+
+	validAuthenticationFilter := &graph.AuthenticationFilter{
+		Source: &ngfAPI.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "valid-auth",
+				Namespace:  "test",
+				Generation: 1,
+			},
+		},
+		Valid: true,
+	}
+
+	invalidAuthenticationFilter := &graph.AuthenticationFilter{
+		Source: &ngfAPI.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "invalid-auth",
+				Namespace:  "test",
+				Generation: 1,
+			},
+		},
+		Conditions: []conditions.Condition{conditions.NewAuthenticationFilterInvalid("Invalid AuthenticationFilter")},
+		Valid:      false,
+	}
+
+	tests := []struct {
+		authenticationFilters map[types.NamespacedName]*graph.AuthenticationFilter
+		expected              map[types.NamespacedName]ngfAPI.AuthenticationFilterStatus
+		name                  string
+		expectedReqs          int
+	}{
+		{
+			name:         "nil authenticationFilters",
+			expectedReqs: 0,
+			expected:     map[types.NamespacedName]ngfAPI.AuthenticationFilterStatus{},
+		},
+		{
+			name: "valid authenticationFilter",
+			authenticationFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "valid-auth"}: validAuthenticationFilter,
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]ngfAPI.AuthenticationFilterStatus{
+				{Namespace: "test", Name: "valid-auth"}: {
+					Controllers: []ngfAPI.ControllerStatus{
+						{
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+									Status:             metav1.ConditionTrue,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(ngfAPI.AuthenticationFilterConditionReasonAccepted),
+									Message:            "The AuthenticationFilter is accepted",
+								},
+							},
+							ControllerName: gatewayCtlrName,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "invalid authenticationFilter",
+			authenticationFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				{Namespace: "test", Name: "invalid-auth"}: invalidAuthenticationFilter,
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]ngfAPI.AuthenticationFilterStatus{
+				{Namespace: "test", Name: "invalid-auth"}: {
+					Controllers: []ngfAPI.ControllerStatus{
+						{
+							Conditions: []metav1.Condition{
+								{
+									Type:               string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+									Status:             metav1.ConditionFalse,
+									ObservedGeneration: 1,
+									LastTransitionTime: transitionTime,
+									Reason:             string(ngfAPI.AuthenticationFilterConditionReasonInvalid),
+									Message:            "Invalid AuthenticationFilter",
+								},
+							},
+							ControllerName: gatewayCtlrName,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			k8sClient := createK8sClientFor(&ngfAPI.AuthenticationFilter{})
+
+			for _, af := range test.authenticationFilters {
+				err := k8sClient.Create(t.Context(), af.Source)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			updater := NewUpdater(k8sClient, logr.Discard())
+
+			reqs := PrepareAuthenticationFilterRequests(test.authenticationFilters, transitionTime, gatewayCtlrName)
+
+			g.Expect(reqs).To(HaveLen(test.expectedReqs))
+
+			updater.Update(t.Context(), reqs...)
+
+			for nsname, expected := range test.expected {
+				var authFilter ngfAPI.AuthenticationFilter
+
+				err := k8sClient.Get(t.Context(), nsname, &authFilter)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(helpers.Diff(expected, authFilter.Status)).To(BeEmpty())
 			}
 		})
 	}
@@ -2473,5 +2598,157 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 				g.Expect(helpers.Diff(expected, inferencePool.Status)).To(BeEmpty())
 			}
 		})
+	}
+}
+
+func TestBuildTCPRouteStatuses(t *testing.T) {
+	t.Parallel()
+	tcpValid := &v1alpha2.TCPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "tcp-valid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.TCPRouteSpec{
+			CommonRouteSpec: commonRouteSpecValid,
+		},
+	}
+	tcpInvalid := &v1alpha2.TCPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "tcp-invalid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.TCPRouteSpec{
+			CommonRouteSpec: commonRouteSpecInvalid,
+		},
+	}
+	routes := map[graph.L4RouteKey]*graph.L4Route{
+		graph.CreateRouteKeyL4(tcpValid): {
+			Valid:      true,
+			Source:     tcpValid,
+			ParentRefs: parentRefsValid,
+		},
+		graph.CreateRouteKeyL4(tcpInvalid): {
+			Valid:      false,
+			Conditions: []conditions.Condition{invalidRouteCondition},
+			Source:     tcpInvalid,
+			ParentRefs: parentRefsInvalid,
+		},
+	}
+
+	expectedStatuses := map[types.NamespacedName]v1alpha2.TCPRouteStatus{
+		{Namespace: "test", Name: "tcp-valid"}: {
+			RouteStatus: routeStatusValid,
+		},
+		{Namespace: "test", Name: "tcp-invalid"}: {
+			RouteStatus: routeStatusInvalid,
+		},
+	}
+
+	g := NewWithT(t)
+
+	k8sClient := createK8sClientFor(&v1alpha2.TCPRoute{})
+
+	for _, r := range routes {
+		err := k8sClient.Create(t.Context(), r.Source)
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	updater := NewUpdater(k8sClient, logr.Discard())
+
+	reqs := PrepareRouteRequests(
+		routes,
+		map[graph.RouteKey]*graph.L7Route{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	updater.Update(t.Context(), reqs...)
+
+	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
+
+	for nsname, expected := range expectedStatuses {
+		var tcpRoute v1alpha2.TCPRoute
+
+		err := k8sClient.Get(t.Context(), nsname, &tcpRoute)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(tcpRoute.Status.Parents))
+	}
+}
+
+func TestBuildUDPRouteStatuses(t *testing.T) {
+	t.Parallel()
+	udpValid := &v1alpha2.UDPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "udp-valid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.UDPRouteSpec{
+			CommonRouteSpec: commonRouteSpecValid,
+		},
+	}
+	udpInvalid := &v1alpha2.UDPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "udp-invalid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.UDPRouteSpec{
+			CommonRouteSpec: commonRouteSpecInvalid,
+		},
+	}
+	routes := map[graph.L4RouteKey]*graph.L4Route{
+		graph.CreateRouteKeyL4(udpValid): {
+			Valid:      true,
+			Source:     udpValid,
+			ParentRefs: parentRefsValid,
+		},
+		graph.CreateRouteKeyL4(udpInvalid): {
+			Valid:      false,
+			Conditions: []conditions.Condition{invalidRouteCondition},
+			Source:     udpInvalid,
+			ParentRefs: parentRefsInvalid,
+		},
+	}
+
+	expectedStatuses := map[types.NamespacedName]v1alpha2.UDPRouteStatus{
+		{Namespace: "test", Name: "udp-valid"}: {
+			RouteStatus: routeStatusValid,
+		},
+		{Namespace: "test", Name: "udp-invalid"}: {
+			RouteStatus: routeStatusInvalid,
+		},
+	}
+
+	g := NewWithT(t)
+
+	k8sClient := createK8sClientFor(&v1alpha2.UDPRoute{})
+
+	for _, r := range routes {
+		err := k8sClient.Create(t.Context(), r.Source)
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	updater := NewUpdater(k8sClient, logr.Discard())
+
+	reqs := PrepareRouteRequests(
+		routes,
+		map[graph.RouteKey]*graph.L7Route{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	updater.Update(t.Context(), reqs...)
+
+	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
+
+	for nsname, expected := range expectedStatuses {
+		var udpRoute v1alpha2.UDPRoute
+
+		err := k8sClient.Get(t.Context(), nsname, &udpRoute)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(udpRoute.Status.Parents))
 	}
 }

@@ -318,13 +318,14 @@ func buildL4RoutesForGateways(
 	return routes
 }
 
-// buildGRPCRoutesForGateways builds routes from HTTP/GRPCRoutes that reference any of the specified Gateways.
+// buildRoutesForGateways builds routes from HTTP/GRPCRoutes that reference any of the specified Gateways.
 func buildRoutesForGateways(
 	validator validation.HTTPFieldsValidator,
 	httpRoutes map[types.NamespacedName]*v1.HTTPRoute,
 	grpcRoutes map[types.NamespacedName]*v1.GRPCRoute,
 	gateways map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	authenticationFilters map[types.NamespacedName]*AuthenticationFilter,
 	inferencePools map[types.NamespacedName]*inference.InferencePool,
 	featureFlags FeatureFlags,
 ) map[RouteKey]*L7Route {
@@ -335,7 +336,7 @@ func buildRoutesForGateways(
 	routes := make(map[RouteKey]*L7Route)
 
 	for _, route := range httpRoutes {
-		r := buildHTTPRoute(validator, route, gateways, snippetsFilters, inferencePools, featureFlags)
+		r := buildHTTPRoute(validator, route, gateways, snippetsFilters, authenticationFilters, inferencePools, featureFlags)
 		if r == nil {
 			continue
 		}
@@ -347,7 +348,7 @@ func buildRoutesForGateways(
 	}
 
 	for _, route := range grpcRoutes {
-		r := buildGRPCRoute(validator, route, gateways, snippetsFilters, featureFlags)
+		r := buildGRPCRoute(validator, route, gateways, snippetsFilters, authenticationFilters, featureFlags)
 		if r == nil {
 			continue
 		}
@@ -820,17 +821,13 @@ func bindToListenerL4(
 
 	// TCP/UDP protocols have no routing discriminator (no hostname/path/SNI)
 	// so we can only support one route per listener port
-	if (routeKind == v1.Kind(kinds.TCPRoute) || routeKind == v1.Kind(kinds.UDPRoute)) && len(l.L4Routes) > 0 {
-		existingRoute := false
-		for existingKey := range l.L4Routes {
-			if existingKey == CreateRouteKeyL4(route.Source) {
-				existingRoute = true
-				break
+	if routeKind == v1.Kind(kinds.TCPRoute) || routeKind == v1.Kind(kinds.UDPRoute) {
+		currentRouteKey := CreateRouteKeyL4(route.Source)
+		for existingRouteKey := range l.L4Routes {
+			if existingRouteKey != currentRouteKey {
+				// A different TCP/UDP route is already attached to this listener
+				return true, false, true, true
 			}
-		}
-		if !existingRoute {
-			// Listener already has a route; TCP/UDP cannot route multiple backends on same port
-			return true, false, true, true
 		}
 	}
 

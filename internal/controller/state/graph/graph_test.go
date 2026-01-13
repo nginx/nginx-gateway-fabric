@@ -165,6 +165,53 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
+	// AuthenticationFilter to be used in tests
+	refAuthenticationFilterExtensionRef := &gatewayv1.LocalObjectReference{
+		Group: ngfAPIv1alpha1.GroupName,
+		Kind:  kinds.AuthenticationFilter,
+		Name:  "ref-authentication-filter",
+	}
+
+	unreferencedAuthenticationFilter := &ngfAPIv1alpha1.AuthenticationFilter{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "unref-authentication-filter",
+			Namespace: testNs,
+		},
+		Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+			Basic: &ngfAPIv1alpha1.BasicAuth{
+				SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+					Name: "basic-auth-secret",
+				},
+			},
+		},
+	}
+
+	referencedAuthenticationFilter := &ngfAPIv1alpha1.AuthenticationFilter{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ref-authentication-filter",
+			Namespace: testNs,
+		},
+		Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+			Basic: &ngfAPIv1alpha1.BasicAuth{
+				SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+					Name: "basic-auth-secret",
+				},
+			},
+		},
+	}
+
+	processedUnrefAuthenticationFilter := &AuthenticationFilter{
+		Source:     unreferencedAuthenticationFilter,
+		Valid:      true,
+		Referenced: false,
+	}
+
+	processedRefAuthenticationFilter := &AuthenticationFilter{
+		Source:     referencedAuthenticationFilter,
+		Valid:      true,
+		Referenced: true,
+	}
+
 	createValidRuleWithBackendRefs := func(
 		matches []gatewayv1.HTTPRouteMatch,
 		sessionPersistence *SessionPersistenceConfig,
@@ -213,6 +260,15 @@ func TestBuildGraph(t *testing.T) {
 					ResolvedExtensionRef: &ExtensionRefFilter{
 						SnippetsFilter: processedRefSnippetsFilter,
 						Valid:          true,
+					},
+				},
+				{
+					RouteType:    routeType,
+					FilterType:   FilterExtensionRef,
+					ExtensionRef: refAuthenticationFilterExtensionRef,
+					ResolvedExtensionRef: &ExtensionRefFilter{
+						AuthenticationFilter: processedRefAuthenticationFilter,
+						Valid:                true,
 					},
 				},
 			},
@@ -358,6 +414,15 @@ func TestBuildGraph(t *testing.T) {
 		},
 		spConfig,
 	)
+	addElementsToPath(
+		hr1,
+		"/",
+		gatewayv1.HTTPRouteFilter{
+			Type:         gatewayv1.HTTPRouteFilterExtensionRef,
+			ExtensionRef: refAuthenticationFilterExtensionRef,
+		},
+		spConfig,
+	)
 
 	hr2 := createRoute("hr-2", "wrong-gateway", "listener-80-1")
 	hr3 := createRoute("hr-3", "gateway-1", "listener-443-1") // https listener; should not conflict with hr1
@@ -365,6 +430,61 @@ func TestBuildGraph(t *testing.T) {
 	// These TLS Routes do not specify section names so that they attempt to attach to all listeners.
 	tr := createRouteTLS("tr", "gateway-1")
 	tr2 := createRouteTLS("tr2", "gateway-1")
+
+	createRouteTCP := func(name string, gatewayName string) *v1alpha2.TCPRoute {
+		return &v1alpha2.TCPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: testNs,
+				Name:      name,
+			},
+			Spec: v1alpha2.TCPRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{
+					ParentRefs: []gatewayv1.ParentReference{
+						{
+							Namespace: (*gatewayv1.Namespace)(helpers.GetPointer(testNs)),
+							Name:      gatewayv1.ObjectName(gatewayName),
+						},
+					},
+				},
+				Rules: []v1alpha2.TCPRouteRule{
+					{
+						BackendRefs: []gatewayv1.BackendRef{
+							commonTLSBackendRef,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	createRouteUDP := func(name string, gatewayName string) *v1alpha2.UDPRoute {
+		return &v1alpha2.UDPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: testNs,
+				Name:      name,
+			},
+			Spec: v1alpha2.UDPRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{
+					ParentRefs: []gatewayv1.ParentReference{
+						{
+							Namespace: (*gatewayv1.Namespace)(helpers.GetPointer(testNs)),
+							Name:      gatewayv1.ObjectName(gatewayName),
+						},
+					},
+				},
+				Rules: []v1alpha2.UDPRouteRule{
+					{
+						BackendRefs: []gatewayv1.BackendRef{
+							commonTLSBackendRef,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	tcpr := createRouteTCP("tcpr", "gateway-1")
+	udpr := createRouteUDP("udpr", "gateway-1")
 
 	gr := &gatewayv1.GRPCRoute{
 		ObjectMeta: metav1.ObjectMeta{
@@ -395,6 +515,10 @@ func TestBuildGraph(t *testing.T) {
 						{
 							Type:         gatewayv1.GRPCRouteFilterExtensionRef,
 							ExtensionRef: refSnippetsFilterExtensionRef,
+						},
+						{
+							Type:         gatewayv1.GRPCRouteFilterExtensionRef,
+							ExtensionRef: refAuthenticationFilterExtensionRef,
 						},
 					},
 					SessionPersistence: &gatewayv1.SessionPersistence{
@@ -836,6 +960,12 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(tr):  tr,
 				client.ObjectKeyFromObject(tr2): tr2,
 			},
+			TCPRoutes: map[types.NamespacedName]*v1alpha2.TCPRoute{
+				client.ObjectKeyFromObject(tcpr): tcpr,
+			},
+			UDPRoutes: map[types.NamespacedName]*v1alpha2.UDPRoute{
+				client.ObjectKeyFromObject(udpr): udpr,
+			},
 			GRPCRoutes: map[types.NamespacedName]*gatewayv1.GRPCRoute{
 				client.ObjectKeyFromObject(gr): gr,
 			},
@@ -878,6 +1008,10 @@ func TestBuildGraph(t *testing.T) {
 			SnippetsFilters: map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter{
 				client.ObjectKeyFromObject(unreferencedSnippetsFilter): unreferencedSnippetsFilter,
 				client.ObjectKeyFromObject(referencedSnippetsFilter):   referencedSnippetsFilter,
+			},
+			AuthenticationFilters: map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter{
+				client.ObjectKeyFromObject(unreferencedAuthenticationFilter): unreferencedAuthenticationFilter,
+				client.ObjectKeyFromObject(referencedAuthenticationFilter):   referencedAuthenticationFilter,
 			},
 		}
 	}
@@ -1078,6 +1212,158 @@ func TestBuildGraph(t *testing.T) {
 				},
 				Valid:              true,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+			},
+		},
+	}
+
+	routeTCP := &L4Route{
+		Valid:      true,
+		Attachable: true,
+		Source:     tcpr,
+		ParentRefs: []ParentRef{
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[0].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[1].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[2].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[3].Name,
+			},
+		},
+		Spec: L4RouteSpec{
+			BackendRefs: []BackendRef{
+				{
+					SvcNsName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "foo2",
+					},
+					ServicePort: v1.ServicePort{
+						Port: 80,
+					},
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
+			},
+		},
+	}
+
+	routeUDP := &L4Route{
+		Valid:      true,
+		Attachable: true,
+		Source:     udpr,
+		ParentRefs: []ParentRef{
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[0].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[1].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[2].Name,
+			},
+			{
+				Idx: 0,
+				Gateway: &ParentRefGateway{
+					NamespacedName:      client.ObjectKeyFromObject(gw1.Source),
+					EffectiveNginxProxy: np1Effective,
+				},
+				Attachment: &ParentRefAttachmentStatus{
+					AcceptedHostnames: map[string][]string{},
+					Attached:          false,
+					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+				},
+				SectionName: &gw1.Source.Spec.Listeners[3].Name,
+			},
+		},
+		Spec: L4RouteSpec{
+			BackendRefs: []BackendRef{
+				{
+					SvcNsName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "foo2",
+					},
+					ServicePort: v1.ServicePort{
+						Port: 80,
+					},
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				},
 			},
 		},
 	}
@@ -1373,8 +1659,10 @@ func TestBuildGraph(t *testing.T) {
 				CreateRouteKey(ir):  inferenceRoute,
 			},
 			L4Routes: map[L4RouteKey]*L4Route{
-				CreateRouteKeyL4(tr):  routeTR,
-				CreateRouteKeyL4(tr2): routeTR2,
+				CreateRouteKeyL4(tr):   routeTR,
+				CreateRouteKeyL4(tr2):  routeTR2,
+				CreateRouteKeyL4(tcpr): routeTCP,
+				CreateRouteKeyL4(udpr): routeUDP,
 			},
 			ReferencedSecrets: map[types.NamespacedName]*Secret{
 				client.ObjectKeyFromObject(secret): {
@@ -1451,6 +1739,10 @@ func TestBuildGraph(t *testing.T) {
 			SnippetsFilters: map[types.NamespacedName]*SnippetsFilter{
 				client.ObjectKeyFromObject(unreferencedSnippetsFilter): processedUnrefSnippetsFilter,
 				client.ObjectKeyFromObject(referencedSnippetsFilter):   processedRefSnippetsFilter,
+			},
+			AuthenticationFilters: map[types.NamespacedName]*AuthenticationFilter{
+				client.ObjectKeyFromObject(unreferencedAuthenticationFilter): processedUnrefAuthenticationFilter,
+				client.ObjectKeyFromObject(referencedAuthenticationFilter):   processedRefAuthenticationFilter,
 			},
 			PlusSecrets: map[types.NamespacedName][]PlusSecretFile{
 				client.ObjectKeyFromObject(plusSecret): {

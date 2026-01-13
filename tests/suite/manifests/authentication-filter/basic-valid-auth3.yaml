@@ -1,0 +1,20 @@
+# Basic Auth Secret and AuthenticationFilter
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth3
+type: nginx.org/htpasswd
+data:
+  # Base64 of "htpasswd -bn user3 password3"
+  auth: dXNlcjM6JGFwcjEka0FBc2d0V1AkekdRNG9CaGEyR0hRdGtEZUFEQ0pnMQ==
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth3
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      name: basic-auth3
+    realm: "Restricted basic-auth3"
