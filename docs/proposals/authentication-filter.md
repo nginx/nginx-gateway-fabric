@@ -392,7 +392,7 @@ You can then run this command to generate the secret from the `auth` file:
 kubectl create secret generic auth-basic-test --type='nginx.org/htpasswd' --from-file=auth
 ```
 
-Note: `auth` will be the default key for secrets referenced by `AuthenticationFilters` of `Type: Basic`.
+Note: `auth` will be the default key for secrets referenced by `AuthenticationFilters` of `Type: Basic` and `Type: JWT`.
 
 Example secret:
 
@@ -532,7 +532,28 @@ spec:
 For JWT Auth, we will process a custom secret type of `nginx.org/jwt`.
 This will allow us to be more confident that the user is providing us with the appropriate kind of secret for this use case.
 
-To create the example secret, run the following command:
+To create this kind of secret for JWT Auth first run this command:
+
+```bash
+htpasswd -c auth user
+```
+
+This will create a file called `auth` with the username and an MD5-hashed password:
+
+```bash
+cat auth
+user:$apr1$prQ3Bh4t$A6bmTv7VgmemGe5eqR61j0
+```
+
+Use these options in the `htpasswd` command for stronger hashing algorithms:
+
+```bash
+ -2  Force SHA-256 hashing of the password (secure).
+ -5  Force SHA-512 hashing of the password (secure).
+ -B  Force bcrypt hashing of the password (very secure).
+```
+
+You can then run this command to generate the secret from the `auth` file:
 
 ```bash
 kubectl create secret generic jwt-keys-secure --type='nginx.org/jwt' --from-file=auth
@@ -870,6 +891,12 @@ Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute re
   All route rules are marked as valid.
   Requests to any path in the valid route rule return a 200 response when correctly authenticated.
   Requests to any path in the valid route rule return a 401 response when incorrectly authenticated.
+
+A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter` set to `type: JWT` and `mode: Remote` where the value of `remote.url` is a resolvable URL.
+- Expected outcomes:
+  The route rule referencing the `AuthenticationFilter` is marked as valid.
+  Requests to any path in the invalid route rule will return a 200 response with the JSON web key set (JWKS) to validate the original JWT signature from the authentication request.
+  This behavior is documented in the [auth_jwt_key_request](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_request) directive documentation.
 
 ### Invalid scenarios
 
