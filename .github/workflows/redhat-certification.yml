@@ -50,7 +50,7 @@ jobs:
 
       - name: Install preflight
         run: |
-          PREFLIGHT_VERSION=1.15.2 # renovate: datasource=github-tags depName=redhat-openshift-ecosystem/openshift-preflight
+          PREFLIGHT_VERSION=1.16.0 # renovate: datasource=github-tags depName=redhat-openshift-ecosystem/openshift-preflight
           curl -sSLo /tmp/preflight https://github.com/redhat-openshift-ecosystem/openshift-preflight/releases/download/${PREFLIGHT_VERSION}/preflight-linux-amd64
           chmod +x /tmp/preflight
           sudo mv /tmp/preflight /usr/local/bin/preflight
