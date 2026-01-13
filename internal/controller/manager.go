@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctlr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -414,11 +415,16 @@ type ctlrCfg struct {
 	requireCRDCheck bool
 }
 
+// configProvider provides access to the Kubernetes REST config.
+type configProvider interface {
+	GetConfig() *rest.Config
+}
+
 // filterControllersByCRDExistence filters the controller list to only include controllers
 // whose CRDs exist in the cluster (for controllers that require CRD checking).
 // Returns the filtered controller list and a map of discovered CRDs.
 func filterControllersByCRDExistence(
-	mgr manager.Manager,
+	cfgProvider configProvider,
 	controllers []ctlrCfg,
 	checker crd.Checker,
 ) ([]ctlrCfg, map[string]bool, error) {
@@ -446,7 +452,7 @@ func filterControllersByCRDExistence(
 	}
 
 	// Batch check CRD existence
-	crdResults, err := checker.CheckCRDsExist(mgr.GetConfig(), gvksToCheck)
+	crdResults, err := checker.CheckCRDsExist(cfgProvider.GetConfig(), gvksToCheck)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to check CRD existence: %w", err)
 	}
@@ -727,7 +733,7 @@ func registerControllers(
 	// Log discovered CRDs
 	for kind, exists := range discoveredCRDs {
 		if exists {
-			cfg.Logger.Info("CRD detected, enabling controller", "kind", kind)
+			cfg.Logger.V(1).Info("CRD detected, enabling controller", "kind", kind)
 		} else {
 			cfg.Logger.Info("CRD not found, controller disabled", "kind", kind)
 		}

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -11,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -22,7 +24,9 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/crd/crdfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
 
 func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
@@ -602,4 +606,275 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			g.Expect(plusSecrets).To(Equal(test.expSecrets))
 		})
 	}
+}
+
+func TestFilterControllersByCRDExistence(t *testing.T) {
+	t.Parallel()
+
+	backendTLSPolicyGVK := schema.GroupVersionKind{
+		Group:   "gateway.networking.k8s.io",
+		Version: "v1",
+		Kind:    "BackendTLSPolicy",
+	}
+
+	tlsRouteGVK := schema.GroupVersionKind{
+		Group:   "gateway.networking.k8s.io",
+		Version: "v1alpha2",
+		Kind:    "TLSRoute",
+	}
+
+	tcpRouteGVK := schema.GroupVersionKind{
+		Group:   "gateway.networking.k8s.io",
+		Version: "v1alpha2",
+		Kind:    "TCPRoute",
+	}
+
+	tests := []struct {
+		crdCheckError          error
+		crdCheckResults        map[schema.GroupVersionKind]bool
+		expectedDiscoveredCRDs map[string]bool
+		name                   string
+		controllers            []ctlrCfg
+		expectedControllerCnt  int
+		expectError            bool
+	}{
+		{
+			name: "no controllers require CRD check",
+			controllers: []ctlrCfg{
+				{
+					name:            "HTTPRoute",
+					objectType:      &gatewayv1.HTTPRoute{},
+					requireCRDCheck: false,
+				},
+				{
+					name:            "Gateway",
+					objectType:      &gatewayv1.Gateway{},
+					requireCRDCheck: false,
+				},
+			},
+			crdCheckResults:        nil,
+			expectedControllerCnt:  2,
+			expectedDiscoveredCRDs: map[string]bool{},
+			expectError:            false,
+		},
+		{
+			name: "all CRDs exist",
+			controllers: []ctlrCfg{
+				{
+					name:            "HTTPRoute",
+					objectType:      &gatewayv1.HTTPRoute{},
+					requireCRDCheck: false,
+				},
+				{
+					name:            "BackendTLSPolicy",
+					objectType:      &gatewayv1.BackendTLSPolicy{},
+					requireCRDCheck: true,
+					crdGVK:          &backendTLSPolicyGVK,
+				},
+				{
+					name:            "TLSRoute",
+					objectType:      &gatewayv1alpha2.TLSRoute{},
+					requireCRDCheck: true,
+					crdGVK:          &tlsRouteGVK,
+				},
+			},
+			crdCheckResults: map[schema.GroupVersionKind]bool{
+				backendTLSPolicyGVK: true,
+				tlsRouteGVK:         true,
+			},
+			expectedControllerCnt: 3,
+			expectedDiscoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"TLSRoute":         true,
+			},
+			expectError: false,
+		},
+		{
+			name: "some CRDs missing",
+			controllers: []ctlrCfg{
+				{
+					name:            "HTTPRoute",
+					objectType:      &gatewayv1.HTTPRoute{},
+					requireCRDCheck: false,
+				},
+				{
+					name:            "BackendTLSPolicy",
+					objectType:      &gatewayv1.BackendTLSPolicy{},
+					requireCRDCheck: true,
+					crdGVK:          &backendTLSPolicyGVK,
+				},
+				{
+					name:            "TLSRoute",
+					objectType:      &gatewayv1alpha2.TLSRoute{},
+					requireCRDCheck: true,
+					crdGVK:          &tlsRouteGVK,
+				},
+			},
+			crdCheckResults: map[schema.GroupVersionKind]bool{
+				backendTLSPolicyGVK: true,
+				tlsRouteGVK:         false,
+			},
+			expectedControllerCnt: 2, // HTTPRoute and BackendTLSPolicy only
+			expectedDiscoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"TLSRoute":         false,
+			},
+			expectError: false,
+		},
+		{
+			name: "all CRDs missing",
+			controllers: []ctlrCfg{
+				{
+					name:            "HTTPRoute",
+					objectType:      &gatewayv1.HTTPRoute{},
+					requireCRDCheck: false,
+				},
+				{
+					name:            "BackendTLSPolicy",
+					objectType:      &gatewayv1.BackendTLSPolicy{},
+					requireCRDCheck: true,
+					crdGVK:          &backendTLSPolicyGVK,
+				},
+				{
+					name:            "TLSRoute",
+					objectType:      &gatewayv1alpha2.TLSRoute{},
+					requireCRDCheck: true,
+					crdGVK:          &tlsRouteGVK,
+				},
+			},
+			crdCheckResults: map[schema.GroupVersionKind]bool{
+				backendTLSPolicyGVK: false,
+				tlsRouteGVK:         false,
+			},
+			expectedControllerCnt: 1, // Only HTTPRoute
+			expectedDiscoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": false,
+				"TLSRoute":         false,
+			},
+			expectError: false,
+		},
+		{
+			name: "CRD check error",
+			controllers: []ctlrCfg{
+				{
+					name:            "BackendTLSPolicy",
+					objectType:      &gatewayv1.BackendTLSPolicy{},
+					requireCRDCheck: true,
+					crdGVK:          &backendTLSPolicyGVK,
+				},
+			},
+			crdCheckResults:        nil,
+			crdCheckError:          errors.New("failed to connect to API server"),
+			expectedControllerCnt:  0,
+			expectedDiscoveredCRDs: nil,
+			expectError:            true,
+		},
+		{
+			name: "multiple controllers with same GVK",
+			controllers: []ctlrCfg{
+				{
+					name:            "TLSRoute-1",
+					objectType:      &gatewayv1alpha2.TLSRoute{},
+					requireCRDCheck: true,
+					crdGVK:          &tlsRouteGVK,
+				},
+				{
+					name:            "TLSRoute-2",
+					objectType:      &gatewayv1alpha2.TLSRoute{},
+					requireCRDCheck: true,
+					crdGVK:          &tlsRouteGVK,
+				},
+			},
+			crdCheckResults: map[schema.GroupVersionKind]bool{
+				tlsRouteGVK: true,
+			},
+			expectedControllerCnt: 2,
+			expectedDiscoveredCRDs: map[string]bool{
+				"TLSRoute": true,
+			},
+			expectError: false,
+		},
+		{
+			name: "controller without crdGVK override uses object type GVK",
+			controllers: []ctlrCfg{
+				{
+					name:            "TCPRoute",
+					objectType:      createTypedObject(&tcpRouteGVK),
+					requireCRDCheck: true,
+					crdGVK:          nil, // No override, should use object's GVK
+				},
+			},
+			crdCheckResults: map[schema.GroupVersionKind]bool{
+				tcpRouteGVK: true,
+			},
+			expectedControllerCnt: 1,
+			expectedDiscoveredCRDs: map[string]bool{
+				"TCPRoute": true,
+			},
+			expectError: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			// Create a fake config provider
+			fakeMgr := &fakeManagerForCRDTest{
+				config: &rest.Config{},
+			}
+
+			// Create fake checker
+			fakeChecker := &crdfakes.FakeChecker{}
+			fakeChecker.CheckCRDsExistReturns(test.crdCheckResults, test.crdCheckError)
+
+			// Call the function
+			filtered, discoveredCRDs, err := filterControllersByCRDExistence(
+				fakeMgr,
+				test.controllers,
+				fakeChecker,
+			)
+
+			// Verify results
+			if test.expectError {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(filtered).To(HaveLen(test.expectedControllerCnt))
+				g.Expect(discoveredCRDs).To(Equal(test.expectedDiscoveredCRDs))
+
+				// Verify that CheckCRDsExist was called with the right config and GVKs
+				if len(test.crdCheckResults) > 0 || test.crdCheckError != nil {
+					g.Expect(fakeChecker.CheckCRDsExistCallCount()).To(Equal(1))
+					config, gvks := fakeChecker.CheckCRDsExistArgsForCall(0)
+					g.Expect(config).To(Equal(fakeMgr.config))
+					// Verify all expected GVKs were passed
+					expectedGVKs := make(map[schema.GroupVersionKind]bool)
+					for gvk := range test.crdCheckResults {
+						expectedGVKs[gvk] = true
+					}
+					for _, gvk := range gvks {
+						g.Expect(expectedGVKs).To(HaveKey(gvk))
+					}
+				}
+			}
+		})
+	}
+}
+
+// fakeManagerForCRDTest implements only GetConfig() method needed for filterControllersByCRDExistence.
+type fakeManagerForCRDTest struct {
+	config *rest.Config
+}
+
+func (f *fakeManagerForCRDTest) GetConfig() *rest.Config {
+	return f.config
+}
+
+// createTypedObject creates a typed object with GVK set for testing.
+func createTypedObject(gvk *schema.GroupVersionKind) ngftypes.ObjectType {
+	obj := &gatewayv1alpha2.TCPRoute{}
+	obj.SetGroupVersionKind(*gvk)
+	return obj
 }
