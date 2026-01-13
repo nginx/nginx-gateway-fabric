@@ -180,7 +180,7 @@ func ExpectRequestToSucceed(
 	responseBodyMessage string,
 	opts ...Option,
 ) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	request := Request{
 		Headers: options.requestHeaders,
 		URL:     appURL,
@@ -231,7 +231,7 @@ func ExpectRequestToFail(timeout time.Duration, appURL, address string) error {
 }
 
 func ExpectUnauthenticatedRequest(timeout time.Duration, appURL, address string, opts ...Option) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	request := Request{
 		Headers: options.requestHeaders,
 		URL:     appURL,
@@ -247,7 +247,7 @@ func ExpectUnauthenticatedRequest(timeout time.Duration, appURL, address string,
 }
 
 func Expect500Response(timeout time.Duration, appURL, address string, opts ...Option) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	request := Request{
 		Headers: options.requestHeaders,
 		URL:     appURL,

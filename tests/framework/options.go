@@ -20,18 +20,6 @@ func WithRequestHeaders(headers map[string]string) Option {
 	}
 }
 
-func LogOptions(opts ...Option) *Options {
-	options := &Options{
-		logEnabled:     true,
-		requestHeaders: make(map[string]string),
-	}
-	for _, opt := range opts {
-		opt(options)
-	}
-
-	return options
-}
-
 func WithContextDisabled() Option {
 	return func(opts *Options) {
 		opts.withContext = false
@@ -39,7 +27,11 @@ func WithContextDisabled() Option {
 }
 
 func TestOptions(opts ...Option) *Options {
-	options := &Options{logEnabled: true, withContext: true}
+	options := &Options{
+		logEnabled:     true,
+		withContext:    true,
+		requestHeaders: make(map[string]string),
+	}
 	for _, opt := range opts {
 		opt(options)
 	}
