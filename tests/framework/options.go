@@ -25,6 +25,10 @@ func LogOptions(opts ...Option) *Options {
 		logEnabled:     true,
 		requestHeaders: make(map[string]string),
 	}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	return options
 }
 

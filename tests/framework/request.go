@@ -187,7 +187,7 @@ func ExpectRequestToSucceed(
 		Address: address,
 		Timeout: timeout,
 	}
-	resp, err := Get(request)
+	resp, err := Get(request, opts...)
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("http status was not 200, got %d: %w", resp.StatusCode, err)
@@ -238,7 +238,7 @@ func ExpectUnauthenticatedRequest(timeout time.Duration, appURL, address string,
 		Address: address,
 		Timeout: timeout,
 	}
-	resp, _ := Get(request)
+	resp, _ := Get(request, opts...)
 	if resp.StatusCode != http.StatusUnauthorized {
 		return errors.New("expected http status to be 401")
 	}
@@ -254,7 +254,7 @@ func Expect500Response(timeout time.Duration, appURL, address string, opts ...Op
 		Address: address,
 		Timeout: timeout,
 	}
-	resp, _ := Get(request)
+	resp, _ := Get(request, opts...)
 	if resp.StatusCode != http.StatusInternalServerError {
 		return errors.New("expected http status to be 500")
 	}

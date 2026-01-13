@@ -633,7 +633,7 @@ func waitForPoliciesVerification(policyExpectations []policyStatusExpectation) {
 
 func verifyRequestSucceeds(url, address, expectedContent string, opts ...framework.Option) {
 	Eventually(func() error {
-		return expectRequestToSucceed(url, address, expectedContent, opts...)
+		return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, url, address, expectedContent, opts...)
 	}).
 		WithTimeout(timeoutConfig.RequestTimeout).
 		WithPolling(500 * time.Millisecond).
@@ -642,7 +642,7 @@ func verifyRequestSucceeds(url, address, expectedContent string, opts ...framewo
 
 func verifyRequestFails(url, address, expectedContent string, opts ...framework.Option) {
 	Eventually(func() error {
-		return expectRequestToSucceed(url, address, expectedContent, opts...)
+		return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, url, address, expectedContent, opts...)
 	}).
 		WithTimeout(timeoutConfig.RequestTimeout).
 		WithPolling(500 * time.Millisecond).
