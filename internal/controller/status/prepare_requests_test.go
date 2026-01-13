@@ -694,6 +694,135 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "gatewayclass with BestEffort=true should not report SupportedFeatures",
+			gc: &graph.GatewayClass{
+				Source: &v1.GatewayClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "best-effort-gc",
+						Generation: 1,
+					},
+				},
+				BestEffort: true,
+				Conditions: conditions.NewGatewayClassSupportedVersionBestEffort("v1.4.0"),
+			},
+			expected: map[types.NamespacedName]v1.GatewayClassStatus{
+				{Name: "best-effort-gc"}: {
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayClassConditionStatusAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonAccepted),
+							Message:            "The GatewayClass is accepted",
+						},
+						{
+							Type:               string(v1.GatewayClassConditionStatusSupportedVersion),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonUnsupportedVersion),
+							Message:            "The Gateway API CRD versions are not recommended. Recommended version is v1.4.0",
+						},
+					},
+					SupportedFeatures: nil, // Empty when BestEffort=true
+				},
+			},
+		},
+		{
+			name: "gatewayclass with BestEffort=false and conditions should report SupportedFeatures",
+			gc: &graph.GatewayClass{
+				Source: &v1.GatewayClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "normal-gc-with-conditions",
+						Generation: 1,
+					},
+				},
+				BestEffort: false,
+				Conditions: conditions.NewGatewayClassSupportedVersionBestEffort("v1.4.0"),
+			},
+			expected: map[types.NamespacedName]v1.GatewayClassStatus{
+				{Name: "normal-gc-with-conditions"}: {
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayClassConditionStatusAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonAccepted),
+							Message:            "The GatewayClass is accepted",
+						},
+						{
+							Type:               string(v1.GatewayClassConditionStatusSupportedVersion),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonUnsupportedVersion),
+							Message:            "The Gateway API CRD versions are not recommended. Recommended version is v1.4.0",
+						},
+					},
+					SupportedFeatures: supportedFeatures(false),
+				},
+			},
+		},
+		{
+			name: "ignored gatewayclass when active GC has BestEffort=true should not report SupportedFeatures",
+			gc: &graph.GatewayClass{
+				Source: &v1.GatewayClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "best-effort-gc",
+						Generation: 1,
+					},
+				},
+				BestEffort: true,
+				Conditions: conditions.NewGatewayClassSupportedVersionBestEffort("v1.4.0"),
+			},
+			ignoredClasses: map[types.NamespacedName]*v1.GatewayClass{
+				{Name: "ignored-best-effort"}: {
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "ignored-best-effort",
+						Generation: 1,
+					},
+				},
+			},
+			expected: map[types.NamespacedName]v1.GatewayClassStatus{
+				{Name: "best-effort-gc"}: {
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayClassConditionStatusAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonAccepted),
+							Message:            "The GatewayClass is accepted",
+						},
+						{
+							Type:               string(v1.GatewayClassConditionStatusSupportedVersion),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonUnsupportedVersion),
+							Message:            "The Gateway API CRD versions are not recommended. Recommended version is v1.4.0",
+						},
+					},
+					SupportedFeatures: nil, // Empty when BestEffort=true
+				},
+				{Name: "ignored-best-effort"}: {
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayClassConditionStatusAccepted),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(conditions.GatewayClassReasonGatewayClassConflict),
+							Message:            conditions.GatewayClassMessageGatewayClassConflict,
+						},
+					},
+					SupportedFeatures: nil, // Empty when active GC has BestEffort=true
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -2598,5 +2727,157 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 				g.Expect(helpers.Diff(expected, inferencePool.Status)).To(BeEmpty())
 			}
 		})
+	}
+}
+
+func TestBuildTCPRouteStatuses(t *testing.T) {
+	t.Parallel()
+	tcpValid := &v1alpha2.TCPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "tcp-valid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.TCPRouteSpec{
+			CommonRouteSpec: commonRouteSpecValid,
+		},
+	}
+	tcpInvalid := &v1alpha2.TCPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "tcp-invalid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.TCPRouteSpec{
+			CommonRouteSpec: commonRouteSpecInvalid,
+		},
+	}
+	routes := map[graph.L4RouteKey]*graph.L4Route{
+		graph.CreateRouteKeyL4(tcpValid): {
+			Valid:      true,
+			Source:     tcpValid,
+			ParentRefs: parentRefsValid,
+		},
+		graph.CreateRouteKeyL4(tcpInvalid): {
+			Valid:      false,
+			Conditions: []conditions.Condition{invalidRouteCondition},
+			Source:     tcpInvalid,
+			ParentRefs: parentRefsInvalid,
+		},
+	}
+
+	expectedStatuses := map[types.NamespacedName]v1alpha2.TCPRouteStatus{
+		{Namespace: "test", Name: "tcp-valid"}: {
+			RouteStatus: routeStatusValid,
+		},
+		{Namespace: "test", Name: "tcp-invalid"}: {
+			RouteStatus: routeStatusInvalid,
+		},
+	}
+
+	g := NewWithT(t)
+
+	k8sClient := createK8sClientFor(&v1alpha2.TCPRoute{})
+
+	for _, r := range routes {
+		err := k8sClient.Create(t.Context(), r.Source)
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	updater := NewUpdater(k8sClient, logr.Discard())
+
+	reqs := PrepareRouteRequests(
+		routes,
+		map[graph.RouteKey]*graph.L7Route{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	updater.Update(t.Context(), reqs...)
+
+	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
+
+	for nsname, expected := range expectedStatuses {
+		var tcpRoute v1alpha2.TCPRoute
+
+		err := k8sClient.Get(t.Context(), nsname, &tcpRoute)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(tcpRoute.Status.Parents))
+	}
+}
+
+func TestBuildUDPRouteStatuses(t *testing.T) {
+	t.Parallel()
+	udpValid := &v1alpha2.UDPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "udp-valid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.UDPRouteSpec{
+			CommonRouteSpec: commonRouteSpecValid,
+		},
+	}
+	udpInvalid := &v1alpha2.UDPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "udp-invalid",
+			Generation: 3,
+		},
+		Spec: v1alpha2.UDPRouteSpec{
+			CommonRouteSpec: commonRouteSpecInvalid,
+		},
+	}
+	routes := map[graph.L4RouteKey]*graph.L4Route{
+		graph.CreateRouteKeyL4(udpValid): {
+			Valid:      true,
+			Source:     udpValid,
+			ParentRefs: parentRefsValid,
+		},
+		graph.CreateRouteKeyL4(udpInvalid): {
+			Valid:      false,
+			Conditions: []conditions.Condition{invalidRouteCondition},
+			Source:     udpInvalid,
+			ParentRefs: parentRefsInvalid,
+		},
+	}
+
+	expectedStatuses := map[types.NamespacedName]v1alpha2.UDPRouteStatus{
+		{Namespace: "test", Name: "udp-valid"}: {
+			RouteStatus: routeStatusValid,
+		},
+		{Namespace: "test", Name: "udp-invalid"}: {
+			RouteStatus: routeStatusInvalid,
+		},
+	}
+
+	g := NewWithT(t)
+
+	k8sClient := createK8sClientFor(&v1alpha2.UDPRoute{})
+
+	for _, r := range routes {
+		err := k8sClient.Create(t.Context(), r.Source)
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	updater := NewUpdater(k8sClient, logr.Discard())
+
+	reqs := PrepareRouteRequests(
+		routes,
+		map[graph.RouteKey]*graph.L7Route{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	updater.Update(t.Context(), reqs...)
+
+	g.Expect(reqs).To(HaveLen(len(expectedStatuses)))
+
+	for nsname, expected := range expectedStatuses {
+		var udpRoute v1alpha2.UDPRoute
+
+		err := k8sClient.Get(t.Context(), nsname, &udpRoute)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(udpRoute.Status.Parents))
 	}
 }
