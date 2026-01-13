@@ -123,7 +123,7 @@ jobs:
           GOPROXY_VALUE="proxy.golang.org,direct"
           elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && ("${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" =~ ^refs/heads/release-) ]]; then
           echo "Production mode - using production Artifactory"
-          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           else
           echo "Development mode - using dev Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
@@ -257,7 +257,7 @@ jobs:
           GOPROXY_VALUE="proxy.golang.org,direct"
           elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && ("${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" =~ ^refs/heads/release-) ]]; then
           echo "Production mode - using production Artifactory"
-          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           else
           echo "Development mode - using dev Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
@@ -357,7 +357,7 @@ jobs:
         id: goproxy
         run: |
           echo "Production mode - using production Artifactory"
-          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
