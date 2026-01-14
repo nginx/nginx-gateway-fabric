@@ -21,6 +21,10 @@ spec:
   infrastructure:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with .spec.addresses }}
+  addresses:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   listeners:
     {{- range $listener := .spec.listeners }}
     - name: {{ $listener.name }}
