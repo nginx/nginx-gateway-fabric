@@ -77,7 +77,7 @@ type ClusterInfo struct {
 
 // Apply creates or updates Kubernetes resources defined as Go objects.
 func (rm *ResourceManager) Apply(resources []client.Object, opts ...Option) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if options.logEnabled {
 		GinkgoWriter.Printf("Applying resources defined as Go objects\n")
 	}
@@ -141,7 +141,7 @@ func (rm *ResourceManager) Apply(resources []client.Object, opts ...Option) erro
 
 // ApplyFromFiles creates or updates Kubernetes resources defined within the provided YAML files.
 func (rm *ResourceManager) ApplyFromFiles(files []string, namespace string, opts ...Option) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	for _, file := range files {
 		if options.logEnabled {
 			GinkgoWriter.Printf("\nApplying resources from file: %q to namespace %q\n", file, namespace)
@@ -166,7 +166,7 @@ func (rm *ResourceManager) ApplyFromBuffer(buffer *bytes.Buffer, namespace strin
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.CreateTimeout)
 	defer cancel()
 
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if options.logEnabled {
 		GinkgoWriter.Printf("Applying resources from buffer to namespace %q\n", namespace)
 	}
@@ -470,7 +470,7 @@ func (rm *ResourceManager) WaitForPodsToBeReady(
 	namespace string,
 	opts ...Option,
 ) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	waitingErr := wait.PollUntilContextCancel(
 		ctx,
 		500*time.Millisecond,
@@ -941,7 +941,7 @@ func (rm *ResourceManager) GetReadyNGFPodNames(
 	timeout time.Duration,
 	opts ...Option,
 ) ([]string, error) {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if options.logEnabled {
 		GinkgoWriter.Printf("Getting ready NGF Pod names in namespace %q with release name %q\n", namespace, releaseName)
 	}
@@ -1002,7 +1002,7 @@ func (rm *ResourceManager) GetReadyNginxPodNames(
 	timeout time.Duration,
 	opts ...Option,
 ) ([]string, error) {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if options.logEnabled {
 		GinkgoWriter.Printf("Getting ready NGINX Pod names in namespace %q\n", namespace)
 	}
@@ -1061,7 +1061,7 @@ func getReadyPodNames(podList core.PodList, opts ...Option) []string {
 			}
 		}
 	}
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if options.logEnabled {
 		GinkgoWriter.Printf("Found %d ready pod name(s): %v\n", len(names), names)
 	}
@@ -1092,7 +1092,7 @@ func (rm *ResourceManager) WaitForPodsToBeReadyWithCount(
 	count int,
 	opts ...Option,
 ) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	GinkgoWriter.Printf("Waiting for %d pods to be ready in namespace %q\n", count, namespace)
 
 	return wait.PollUntilContextCancel(
@@ -1169,7 +1169,7 @@ func (rm *ResourceManager) GetNginxConfig(
 	opts ...Option,
 ) (*Payload, error) {
 	GinkgoWriter.Printf("Getting NGINX config from pod %q in namespace %q\n", nginxPodName, namespace)
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 
 	if err := injectCrossplaneContainer(
 		rm.ClientGoClient,
@@ -1249,7 +1249,7 @@ func (rm *ResourceManager) Get(
 	obj client.Object,
 	opts ...Option,
 ) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if err := rm.K8sClient.Get(ctx, key, obj); err != nil {
 		// Don't log NotFound errors - they're often expected (e.g., when checking if resource was deleted)
 		if options.logEnabled && !apierrors.IsNotFound(err) {
@@ -1283,7 +1283,7 @@ func (rm *ResourceManager) Delete(
 	deleteOpts []client.DeleteOption,
 	opts ...Option,
 ) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if err := rm.K8sClient.Delete(ctx, obj, deleteOpts...); err != nil {
 		if options.logEnabled {
 			GinkgoWriter.Printf("Could not delete k8s resource %q: %w\n", obj.GetName(), err)
@@ -1301,7 +1301,7 @@ func (rm *ResourceManager) Update(
 	updateOpts []client.UpdateOption,
 	opts ...Option,
 ) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if err := rm.K8sClient.Update(ctx, obj, updateOpts...); err != nil {
 		updateResourceErr := fmt.Errorf("error updating k8s resource: %w", err)
 		if options.logEnabled {

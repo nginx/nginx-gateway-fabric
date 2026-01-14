@@ -474,7 +474,7 @@ func CreateMetricExistChecker(
 ) func() error {
 	return func() error {
 		queryWithTimestamp := fmt.Sprintf("%s @ %d", query, getTime().Unix())
-		options := LogOptions(opts...)
+		options := TestOptions(opts...)
 
 		result, err := promInstance.Query(queryWithTimestamp)
 		if err != nil {
@@ -537,7 +537,7 @@ func CreateEndTimeFinder(
 
 // CreateResponseChecker returns a function that checks if there is a successful response from a url.
 func CreateResponseChecker(url, address string, requestTimeout time.Duration, opts ...Option) func() error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	if options.logEnabled {
 		GinkgoWriter.Printf("Starting checking response for url %q and address %q\n", url, address)
 	}
