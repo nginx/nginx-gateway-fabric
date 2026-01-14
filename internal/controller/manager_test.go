@@ -103,6 +103,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				partialObjectMetadataList,
