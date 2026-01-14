@@ -608,13 +608,6 @@ func validateFilterRedirect(
 		}
 	}
 
-	if redirect.StatusCode != nil {
-		if valid, supportedValues := validator.ValidateRedirectStatusCode(*redirect.StatusCode); !valid {
-			valErr := field.NotSupported(redirectPath.Child("statusCode"), *redirect.StatusCode, supportedValues)
-			allErrs = append(allErrs, valErr)
-		}
-	}
-
 	return allErrs
 }
 
