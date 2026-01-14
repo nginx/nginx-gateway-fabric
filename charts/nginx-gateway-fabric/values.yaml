@@ -733,6 +733,9 @@ gateways: []
 #   annotationKey: annotationValue
 # spec:
 #   gatewayClassName: nginx
+#    addresses:
+#    - type: IPAddress
+#      value: 1.2.3.4
 #   infrastructure:
 #     annotations:
 #       networking.gke.io/load-balancer-type: Internal
