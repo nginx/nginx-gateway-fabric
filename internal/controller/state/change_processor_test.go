@@ -2948,14 +2948,14 @@ var _ = Describe("ChangeProcessor", func() {
 
 		Describe("NGF Policy resource changes", Ordered, func() {
 			var (
-				gw                              *v1.Gateway
-				route                           *v1.HTTPRoute
-				svc                             *apiv1.Service
-				csp, cspUpdated                 *ngfAPIv1alpha1.ClientSettingsPolicy
-				obs, obsUpdated                 *ngfAPIv1alpha2.ObservabilityPolicy
-				usp, uspUpdated                 *ngfAPIv1alpha1.UpstreamSettingsPolicy
-				snip, snipUpdated               *ngfAPIv1alpha1.SnippetsPolicy
-				psp, pspUpdated                *ngfAPIv1alpha1.ProxySettingsPolicy
+				gw                                      *v1.Gateway
+				route                                   *v1.HTTPRoute
+				svc                                     *apiv1.Service
+				csp, cspUpdated                         *ngfAPIv1alpha1.ClientSettingsPolicy
+				obs, obsUpdated                         *ngfAPIv1alpha2.ObservabilityPolicy
+				usp, uspUpdated                         *ngfAPIv1alpha1.UpstreamSettingsPolicy
+				snip, snipUpdated                       *ngfAPIv1alpha1.SnippetsPolicy
+				psp, pspUpdated                         *ngfAPIv1alpha1.ProxySettingsPolicy
 				cspKey, obsKey, uspKey, snipKey, pspKey graph.PolicyKey
 			)
 
