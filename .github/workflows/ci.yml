@@ -126,7 +126,7 @@ jobs:
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
           else
           echo "Development mode - using dev Artifactory"
-          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
+          GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
           fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
