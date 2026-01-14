@@ -55,9 +55,9 @@ type SnippetsPolicySpec struct {
 	// TargetRefs identifies API object(s) to apply the policy to.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=16
-	// +kubebuilder:validation:XValidation:message="TargetRefs Kind must be Gateway",rule="self.all(t, t.kind == 'Gateway')"
-	// +kubebuilder:validation:XValidation:message="TargetRefs Name must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name)))"
-	// +kubebuilder:validation:XValidation:message="TargetRefs Group must be gateway.networking.k8s.io",rule="self.all(t, t.group == 'gateway.networking.k8s.io')"
+	// +kubebuilder:validation:XValidation:message="TargetRef Kind must be Gateway",rule="self.all(t, t.kind == 'Gateway')"
+	// +kubebuilder:validation:XValidation:message="TargetRef Name must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name)))"
+	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.all(t, t.group == 'gateway.networking.k8s.io')"
 	//nolint:lll
 	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 

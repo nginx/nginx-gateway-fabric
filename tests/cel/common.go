@@ -41,6 +41,7 @@ const (
 		"Gateway, HTTPRoute, or GRPCRoute"
 	expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError = "TargetRef Kind must be: HTTPRoute or GRPCRoute"
 	expectedTargetRefKindServiceError                    = "TargetRefs Kind must be: Service"
+	expectedTargetRefKindGatewayError                    = "TargetRef Kind must be Gateway"
 
 	// Group validation errors.
 	expectedTargetRefGroupError     = "TargetRef Group must be gateway.networking.k8s.io"
@@ -64,8 +65,8 @@ const (
 	// Strategy validation error.
 	expectedStrategyMustBeOfTypeRatio = "ratio can only be specified if strategy is of type ratio"
 
-	// SnippetsFilter validation errors.
-	expectedSnippetsFilterContextError = "Only one snippet allowed per context"
+	// Snippets validation errors.
+	expectedSnippetsContextError = "Only one snippet allowed per context"
 
 	// HashMethodKey validation error.
 	expectedHashKeyLoadBalancingTypeError = `hashMethodKey is required when loadBalancingMethod ` +
