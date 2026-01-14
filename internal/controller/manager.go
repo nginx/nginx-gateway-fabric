@@ -51,6 +51,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/snippetspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	ngxvalidation "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
@@ -344,6 +345,10 @@ func createPolicyManager(
 			Validator: observability.NewValidator(validator),
 		},
 		{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.ProxySettingsPolicy{}),
+			Validator: proxysettings.NewValidator(validator),
+		},
+		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
 			Validator: upstreamsettings.NewValidator(validator, cfg.Plus),
 		},
@@ -607,6 +612,12 @@ func registerControllers(
 		},
 		{
 			objectType: &ngfAPIv1alpha2.ObservabilityPolicy{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
+		{
+			objectType: &ngfAPIv1alpha1.ProxySettingsPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
@@ -944,6 +955,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&gatewayv1.GRPCRouteList{},
 		&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 		&ngfAPIv1alpha2.ObservabilityPolicyList{},
+		&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
 		partialObjectMetadataList,

@@ -45,7 +45,7 @@ func TestSnippetsFilterValidation(t *testing.T) {
 		},
 		{
 			name:       "Validate duplicate contexts are not allowed",
-			wantErrors: []string{expectedSnippetsFilterContextError},
+			wantErrors: []string{expectedSnippetsContextError},
 			spec: ngfAPIv1alpha1.SnippetsFilterSpec{
 				Snippets: []ngfAPIv1alpha1.Snippet{
 					{

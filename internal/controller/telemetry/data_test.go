@@ -42,12 +42,14 @@ func TestDataAttributes(t *testing.T) {
 			UpstreamSettingsPolicyCount:              14,
 			GatewayAttachedNpCount:                   15,
 		},
-		SnippetsFiltersDirectives:      []string{"main-three-count", "http-two-count", "server-one-count"},
-		SnippetsFiltersDirectivesCount: []int64{3, 2, 1},
-		NginxPodCount:                  3,
-		ControlPlanePodCount:           3,
-		NginxOneConnectionEnabled:      true,
-		InferencePoolCount:             16,
+		SnippetsFiltersDirectives:               []string{"main-three-count", "http-two-count", "server-one-count"},
+		SnippetsFiltersDirectivesCount:          []int64{3, 2, 1},
+		NginxPodCount:                           3,
+		ControlPlanePodCount:                    3,
+		NginxOneConnectionEnabled:               true,
+		InferencePoolCount:                      16,
+		GatewayAttachedProxySettingsPolicyCount: 17,
+		RouteAttachedProxySettingsPolicyCount:   18,
 	}
 
 	expected := []attribute.KeyValue{
@@ -89,6 +91,8 @@ func TestDataAttributes(t *testing.T) {
 		attribute.Bool("NginxOneConnectionEnabled", true),
 		attribute.Int64("InferencePoolCount", 16),
 		attribute.String("BuildOS", ""),
+		attribute.Int64("GatewayAttachedProxySettingsPolicyCount", 17),
+		attribute.Int64("RouteAttachedProxySettingsPolicyCount", 18),
 	}
 
 	result := data.Attributes()
@@ -137,6 +141,8 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.Bool("NginxOneConnectionEnabled", false),
 		attribute.Int64("InferencePoolCount", 0),
 		attribute.String("BuildOS", ""),
+		attribute.Int64("GatewayAttachedProxySettingsPolicyCount", 0),
+		attribute.Int64("RouteAttachedProxySettingsPolicyCount", 0),
 	}
 
 	result := data.Attributes()

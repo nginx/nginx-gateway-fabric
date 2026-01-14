@@ -1,19 +1,3 @@
-/*
-Copyright 2025 The NGINX Gateway Fabric Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package v1alpha1
 
 import (
@@ -55,9 +39,9 @@ type SnippetsPolicySpec struct {
 	// TargetRefs identifies API object(s) to apply the policy to.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=16
-	// +kubebuilder:validation:XValidation:message="TargetRefs Kind must be Gateway",rule="self.all(t, t.kind == 'Gateway')"
-	// +kubebuilder:validation:XValidation:message="TargetRefs Name must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name)))"
-	// +kubebuilder:validation:XValidation:message="TargetRefs Group must be gateway.networking.k8s.io",rule="self.all(t, t.group == 'gateway.networking.k8s.io')"
+	// +kubebuilder:validation:XValidation:message="TargetRef Kind must be: Gateway",rule="self.all(t, t.kind == 'Gateway')"
+	// +kubebuilder:validation:XValidation:message="TargetRef Name must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name)))"
+	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.all(t, t.group == 'gateway.networking.k8s.io')"
 	//nolint:lll
 	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 

@@ -86,7 +86,7 @@ func ExpectGRPCRequestToSucceed(
 	address string,
 	opts ...Option,
 ) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	request := gRPCRequest{
 		Headers: options.requestHeaders,
 		Address: address,
@@ -105,7 +105,7 @@ func ExpectUnauthenticatedGRPCRequest(
 	address string,
 	opts ...Option,
 ) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	request := gRPCRequest{
 		Headers: options.requestHeaders,
 		Address: address,
@@ -129,7 +129,7 @@ func Expect500GRPCResponse(
 	address string,
 	opts ...Option,
 ) error {
-	options := LogOptions(opts...)
+	options := TestOptions(opts...)
 	request := gRPCRequest{
 		Headers: options.requestHeaders,
 		Address: address,

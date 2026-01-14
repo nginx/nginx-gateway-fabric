@@ -39,7 +39,7 @@ func newExecuteBaseHTTPConfigFunc(generator policies.Generator) executeFunc {
 func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Generator) []executeResult {
 	includes := createIncludesFromSnippets(conf.BaseHTTPConfig.Snippets)
 
-	policyIncludes := createIncludesFromPolicyGenerateResult(generator.GenerateForHTTP(conf.Policies))
+	policyIncludes := createIncludesFromPolicyGenerateResult(generator.GenerateForHTTP(conf.BaseHTTPConfig.Policies))
 	includes = append(includes, policyIncludes...)
 
 	hc := httpConfig{
