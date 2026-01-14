@@ -1,0 +1,37 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: grpcroute-rate-limit
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpc-route
+  rateLimit:
+    local:
+      rules:
+      - zoneSize: 20m
+        burst: 2
+        key: "$binary_remote_addr"
+        rate: 5r/s
+    logLevel: "warn"
+    rejectCode: 466
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: httproute-rate-limit
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  rateLimit:
+    local:
+      rules:
+      - zoneSize: 20m
+        burst: 5
+        key: "$binary_remote_addr"
+        rate: 1r/m
+    logLevel: "warn"
+    rejectCode: 466

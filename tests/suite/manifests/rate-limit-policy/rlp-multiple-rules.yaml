@@ -1,0 +1,25 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: rlp-multiple-rules
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  rateLimit:
+    local:
+      rules:
+      - zoneSize: 20m
+        noDelay: true
+        burst: 5
+        key: "$binary_remote_addr:$request_uri"
+        rate: 20r/s
+      - zoneSize: 10m
+        delay: 3
+        burst: 3
+        key: "$binary_remote_addr"
+        rate: 50r/s
+    dryRun: true
+    logLevel: "warn"
+    rejectCode: 466
