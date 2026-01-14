@@ -10338,7 +10338,7 @@ spec:
                 minItems: 1
                 type: array
                 x-kubernetes-validations:
-                - message: TargetRef Kind must be Gateway
+                - message: 'TargetRef Kind must be: Gateway'
                   rule: self.all(t, t.kind == 'Gateway')
                 - message: TargetRef Name must be unique
                   rule: self.all(p1, self.exists_one(p2, (p1.name == p2.name)))

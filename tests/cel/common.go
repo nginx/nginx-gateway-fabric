@@ -41,7 +41,7 @@ const (
 		"Gateway, HTTPRoute, or GRPCRoute"
 	expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError = "TargetRef Kind must be: HTTPRoute or GRPCRoute"
 	expectedTargetRefKindServiceError                    = "TargetRefs Kind must be: Service"
-	expectedTargetRefKindGatewayError                    = "TargetRef Kind must be Gateway"
+	expectedTargetRefKindGatewayError                    = "TargetRef Kind must be: Gateway"
 
 	// Group validation errors.
 	expectedTargetRefGroupError     = "TargetRef Group must be gateway.networking.k8s.io"
