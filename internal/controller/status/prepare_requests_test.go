@@ -694,6 +694,135 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "gatewayclass with BestEffort=true should not report SupportedFeatures",
+			gc: &graph.GatewayClass{
+				Source: &v1.GatewayClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "best-effort-gc",
+						Generation: 1,
+					},
+				},
+				BestEffort: true,
+				Conditions: conditions.NewGatewayClassSupportedVersionBestEffort("v1.4.0"),
+			},
+			expected: map[types.NamespacedName]v1.GatewayClassStatus{
+				{Name: "best-effort-gc"}: {
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayClassConditionStatusAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonAccepted),
+							Message:            "The GatewayClass is accepted",
+						},
+						{
+							Type:               string(v1.GatewayClassConditionStatusSupportedVersion),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonUnsupportedVersion),
+							Message:            "The Gateway API CRD versions are not recommended. Recommended version is v1.4.0",
+						},
+					},
+					SupportedFeatures: nil, // Empty when BestEffort=true
+				},
+			},
+		},
+		{
+			name: "gatewayclass with BestEffort=false and conditions should report SupportedFeatures",
+			gc: &graph.GatewayClass{
+				Source: &v1.GatewayClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "normal-gc-with-conditions",
+						Generation: 1,
+					},
+				},
+				BestEffort: false,
+				Conditions: conditions.NewGatewayClassSupportedVersionBestEffort("v1.4.0"),
+			},
+			expected: map[types.NamespacedName]v1.GatewayClassStatus{
+				{Name: "normal-gc-with-conditions"}: {
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayClassConditionStatusAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonAccepted),
+							Message:            "The GatewayClass is accepted",
+						},
+						{
+							Type:               string(v1.GatewayClassConditionStatusSupportedVersion),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonUnsupportedVersion),
+							Message:            "The Gateway API CRD versions are not recommended. Recommended version is v1.4.0",
+						},
+					},
+					SupportedFeatures: supportedFeatures(false),
+				},
+			},
+		},
+		{
+			name: "ignored gatewayclass when active GC has BestEffort=true should not report SupportedFeatures",
+			gc: &graph.GatewayClass{
+				Source: &v1.GatewayClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "best-effort-gc",
+						Generation: 1,
+					},
+				},
+				BestEffort: true,
+				Conditions: conditions.NewGatewayClassSupportedVersionBestEffort("v1.4.0"),
+			},
+			ignoredClasses: map[types.NamespacedName]*v1.GatewayClass{
+				{Name: "ignored-best-effort"}: {
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "ignored-best-effort",
+						Generation: 1,
+					},
+				},
+			},
+			expected: map[types.NamespacedName]v1.GatewayClassStatus{
+				{Name: "best-effort-gc"}: {
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayClassConditionStatusAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonAccepted),
+							Message:            "The GatewayClass is accepted",
+						},
+						{
+							Type:               string(v1.GatewayClassConditionStatusSupportedVersion),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonUnsupportedVersion),
+							Message:            "The Gateway API CRD versions are not recommended. Recommended version is v1.4.0",
+						},
+					},
+					SupportedFeatures: nil, // Empty when BestEffort=true
+				},
+				{Name: "ignored-best-effort"}: {
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayClassConditionStatusAccepted),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(conditions.GatewayClassReasonGatewayClassConflict),
+							Message:            conditions.GatewayClassMessageGatewayClassConflict,
+						},
+					},
+					SupportedFeatures: nil, // Empty when active GC has BestEffort=true
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
