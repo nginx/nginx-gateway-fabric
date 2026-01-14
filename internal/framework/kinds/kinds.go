@@ -49,6 +49,8 @@ const (
 	ObservabilityPolicy = "ObservabilityPolicy"
 	// NginxProxy is the NginxProxy kind.
 	NginxProxy = "NginxProxy"
+	// ProxySettingsPolicy is the ProxySettingsPolicy kind.
+	ProxySettingsPolicy = "ProxySettingsPolicy"
 	// SnippetsFilter is the SnippetsFilter kind.
 	SnippetsFilter = "SnippetsFilter"
 	// SnippetsPolicy is the SnippetsPolicy kind.

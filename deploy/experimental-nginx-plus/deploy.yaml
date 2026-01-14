@@ -176,6 +176,7 @@ rules:
   - observabilitypolicies
   - upstreamsettingspolicies
   - authenticationfilters
+  - proxysettingspolicies
   verbs:
   - list
   - watch
@@ -187,6 +188,7 @@ rules:
   - observabilitypolicies/status
   - upstreamsettingspolicies/status
   - authenticationfilters/status
+  - proxysettingspolicies/status
   verbs:
   - update
 - apiGroups:

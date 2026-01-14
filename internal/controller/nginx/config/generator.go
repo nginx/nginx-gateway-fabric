@@ -15,6 +15,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/snippetspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -127,6 +128,7 @@ func (g GeneratorImpl) Generate(conf dataplane.Configuration) []agent.File {
 		clientsettings.NewGenerator(),
 		observability.NewGenerator(conf.Telemetry),
 		snippetspolicy.NewGenerator(),
+		proxysettings.NewGenerator(),
 	)
 
 	files = append(files, g.executeConfigTemplates(conf, policyGenerator)...)

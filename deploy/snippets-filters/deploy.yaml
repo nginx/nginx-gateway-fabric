@@ -170,6 +170,7 @@ rules:
   - observabilitypolicies
   - upstreamsettingspolicies
   - authenticationfilters
+  - proxysettingspolicies
   - snippetsfilters
   verbs:
   - list
@@ -182,6 +183,7 @@ rules:
   - observabilitypolicies/status
   - upstreamsettingspolicies/status
   - authenticationfilters/status
+  - proxysettingspolicies/status
   - snippetsfilters/status
   verbs:
   - update

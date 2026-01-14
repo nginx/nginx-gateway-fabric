@@ -5,6 +5,7 @@ type Option func(*Options)
 type Options struct {
 	requestHeaders map[string]string
 	logEnabled     bool
+	withContext    bool
 }
 
 func WithLoggingDisabled() Option {
@@ -19,9 +20,16 @@ func WithRequestHeaders(headers map[string]string) Option {
 	}
 }
 
-func LogOptions(opts ...Option) *Options {
+func WithContextDisabled() Option {
+	return func(opts *Options) {
+		opts.withContext = false
+	}
+}
+
+func TestOptions(opts ...Option) *Options {
 	options := &Options{
 		logEnabled:     true,
+		withContext:    true,
 		requestHeaders: make(map[string]string),
 	}
 	for _, opt := range opts {

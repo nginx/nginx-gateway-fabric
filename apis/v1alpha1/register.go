@@ -38,6 +38,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&AuthenticationFilterList{},
 		&ClientSettingsPolicy{},
 		&ClientSettingsPolicyList{},
+		&ProxySettingsPolicy{},
+		&ProxySettingsPolicyList{},
 		&SnippetsFilter{},
 		&SnippetsFilterList{},
 		&UpstreamSettingsPolicy{},
