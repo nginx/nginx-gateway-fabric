@@ -97,6 +97,7 @@ func createControllerCommand() *cobra.Command {
 		snippetsFiltersFlag                 = "snippets-filters"
 		snippetsPoliciesFlag                = "snippets-policies"
 		nginxSCCFlag                        = "nginx-scc"
+		watchNamespacesFlag                 = "watch-namespaces"
 	)
 
 	// flag values
@@ -167,6 +168,10 @@ func createControllerCommand() *cobra.Command {
 
 		endpointPickerDisableTLS    bool
 		endpointPickerTLSSkipVerify = true
+
+		watchNamespaces = stringSliceValidatingValue{
+			validator: validateResourceName,
+		}
 	)
 
 	usageReportParams := usageReportParams{
@@ -296,6 +301,7 @@ func createControllerCommand() *cobra.Command {
 				},
 				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
+				WatchNamespaces:             watchNamespaces.values,
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -528,6 +534,13 @@ func createControllerCommand() *cobra.Command {
 		nginxSCCFlag,
 		`The name of the SecurityContextConstraints to be used with the NGINX data plane Pods.`+
 			` Only applicable in OpenShift.`,
+	)
+
+	cmd.Flags().Var(
+		&watchNamespaces,
+		watchNamespacesFlag,
+		`List of namespaces to watch for resources. If not set, all namespaces are watched. `+
+			`The controller's own namespace is always watched.`,
 	)
 
 	return cmd

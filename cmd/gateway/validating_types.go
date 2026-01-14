@@ -53,8 +53,11 @@ func (v *stringSliceValidatingValue) String() string {
 }
 
 func (v *stringSliceValidatingValue) Set(param string) error {
-	if err := v.validator(param); err != nil {
-		return err
+	params := strings.SplitSeq(param, ",")
+	for val := range params {
+		if err := v.validator(val); err != nil {
+			return err
+		}
 	}
 
 	stringReader := strings.NewReader(param)

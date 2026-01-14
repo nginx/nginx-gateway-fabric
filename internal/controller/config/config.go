@@ -36,6 +36,8 @@ type Config struct {
 	LeaderElection LeaderElectionConfig
 	// NginxDockerSecretNames are the names of any Docker registry Secrets for the NGINX container.
 	NginxDockerSecretNames []string
+	// WatchNamespaces is the list of namespaces to watch for resources. If empty, all namespaces are watched.
+	WatchNamespaces []string
 	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
 	NginxOneConsoleTelemetryConfig NginxOneConsoleTelemetryConfig
 	// ProductTelemetryConfig contains the configuration for collecting product telemetry.

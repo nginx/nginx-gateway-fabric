@@ -44,6 +44,9 @@ spec:
         - --config={{ include "nginx-gateway.config-name" . }}
         - --service={{ include "nginx-gateway.fullname" . }}
         - --agent-tls-secret={{ .Values.certGenerator.agentTLSSecretName }}
+        {{- if .Values.nginxGateway.watchNamespaces }}
+        - --watch-namespaces={{ join "," .Values.nginxGateway.watchNamespaces }}
+        {{- end }}
         {{- if .Values.nginx.imagePullSecret }}
         - --nginx-docker-secret={{ .Values.nginx.imagePullSecret }}
         {{- end }}
