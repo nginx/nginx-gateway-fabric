@@ -16,6 +16,6 @@ spec:
       - zoneSize: 10m
         burst: 3
         key: "$binary_remote_addr"
-        rate: 15r/m
+        rate: 2r/m
     logLevel: "info"
     rejectCode: 429

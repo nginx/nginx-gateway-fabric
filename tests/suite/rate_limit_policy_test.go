@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -104,7 +106,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			It("should return 200 response for HTTPRoute `coffee`", func() {
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "URI: /coffee")
+						return expectHTTPCodeWithParallelRequests(baseCoffeeURL, address, 466)
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -263,7 +265,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			It("should return 200 response for HTTPRoute `coffee`", func() {
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "URI: /coffee")
+						return expectHTTPCodeWithParallelRequests(baseCoffeeURL, address, 429)
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -294,7 +296,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					},
 					{
 						Directive: "limit_req_zone",
-						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_rlp-multiple-targets_rule0:10m rate=15r/m",
+						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_rlp-multiple-targets_rule0:10m rate=2r/m",
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-targets_internal_http.conf"),
 					},
 					{
@@ -368,7 +370,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			It("should return 200 response for HTTPRoute `coffee`", func() {
 				Eventually(
 					func() error {
-						return expectRequestToSucceed(baseCoffeeURL, address, "URI: /coffee")
+						return expectHTTPCodeWithParallelRequests(baseCoffeeURL, address, 466)
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -407,22 +409,22 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
 						Directive: "limit_req_zone",
-						Value:     "$binary_remote_addr:$request_uri zone=rate-limit-policy_rl_rlp-multiple-rules_rule0:20m rate=20r/s",
+						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_rlp-multiple-rules_rule0:20m rate=1r/m",
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_internal_http.conf"),
 						Directive: "limit_req_zone",
-						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_rlp-multiple-rules_rule1:10m rate=50r/s",
+						Value:     "$binary_remote_addr zone=rate-limit-policy_rl_rlp-multiple-rules_rule1:10m rate=1r/m",
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
 						Directive: "limit_req",
-						Value:     "zone=rate-limit-policy_rl_rlp-multiple-rules_rule0 burst=5 nodelay",
+						Value:     "zone=rate-limit-policy_rl_rlp-multiple-rules_rule0 burst=2 nodelay",
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
 						Directive: "limit_req",
-						Value:     "zone=rate-limit-policy_rl_rlp-multiple-rules_rule1 burst=3 delay=3",
+						Value:     "zone=rate-limit-policy_rl_rlp-multiple-rules_rule1 burst=1 nodelay",
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
@@ -433,11 +435,6 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
 						Directive: "limit_req_status",
 						Value:     "466",
-					},
-					{
-						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
-						Directive: "limit_req_dry_run",
-						Value:     "on",
 					},
 				}),
 			)
@@ -528,4 +525,92 @@ func findTargetRefForAncestor(
 		}
 	}
 	return gatewayv1.LocalPolicyTargetReference{}, false
+}
+
+// expectHTTPCodeWithParallelRequests sends parallel requests to the given URL
+// and expects to receive the expected HTTP status code in at least one of them.
+func expectHTTPCodeWithParallelRequests(appURL, address string, expectedCode int) error {
+	const (
+		parallelWorkers   = 5
+		requestsPerWorker = 35
+	)
+
+	req := framework.Request{
+		URL:     appURL,
+		Address: address,
+		Timeout: timeoutConfig.RequestTimeout,
+	}
+
+	foundCh := make(chan struct{}, 1)
+
+	var (
+		wg sync.WaitGroup
+		// stop is a one-time latch.
+		stop           atomic.Bool
+		lastStatusCode atomic.Int64
+
+		mu      sync.Mutex
+		lastErr error
+	)
+
+	worker := func() {
+		defer wg.Done()
+
+		for range requestsPerWorker {
+			if stop.Load() {
+				return
+			}
+
+			resp, err := framework.Get(req)
+			if err != nil {
+				mu.Lock()
+				lastErr = err
+				mu.Unlock()
+				continue
+			}
+
+			lastStatusCode.Store(int64(resp.StatusCode))
+			if resp.StatusCode == expectedCode {
+				// CompareAndSwap(false, true) ensures only the first goroutine that
+				// sees the expected status signals success and tells all others to stop.
+				if stop.CompareAndSwap(false, true) {
+					select {
+					case foundCh <- struct{}{}:
+					default:
+					}
+				}
+				return
+			}
+		}
+	}
+
+	wg.Add(parallelWorkers)
+	for range parallelWorkers {
+		go worker()
+	}
+
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+
+	select {
+	case <-foundCh:
+		<-doneCh
+		return nil
+
+	case <-doneCh:
+		mu.Lock()
+		err := lastErr
+		mu.Unlock()
+
+		ls := lastStatusCode.Load()
+		if err != nil {
+			return fmt.Errorf("did not observe HTTP StatusCode %d from %s (last status: %d)w last error: %w",
+				expectedCode, appURL, ls, err)
+		}
+		return fmt.Errorf("did not observe HTTP StatusCode %d from %s (last status: %d)",
+			expectedCode, appURL, ls)
+	}
 }
