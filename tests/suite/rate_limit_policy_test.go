@@ -551,11 +551,7 @@ func expectHTTPCodeWithParallelRequests(appURL, address string, expectedCode int
 
 		mu      sync.Mutex
 		lastErr error
-
-		timeout = timeoutConfig.GetTimeout
 	)
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
 
 	worker := func() {
 		defer wg.Done()
@@ -616,9 +612,10 @@ func expectHTTPCodeWithParallelRequests(appURL, address string, expectedCode int
 		}
 		return fmt.Errorf("did not observe HTTP StatusCode %d from %s (last status: %d)",
 			expectedCode, appURL, ls)
-	case <-timer.C:
+
+	case <-time.After(timeoutConfig.GetTimeout):
 		stop.Store(true)
-		return fmt.Errorf("timed out after %s waiting for HTTP StatusCode %d from %s",
-			timeout.String(), expectedCode, appURL)
+		return fmt.Errorf("timed out after waiting for HTTP StatusCode %d from %s",
+			expectedCode, appURL)
 	}
 }
