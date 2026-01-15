@@ -613,7 +613,7 @@ func expectHTTPCodeWithParallelRequests(appURL, address string, expectedCode int
 		return fmt.Errorf("did not observe HTTP StatusCode %d from %s (last status: %d)",
 			expectedCode, appURL, ls)
 
-	case <-time.After(timeoutConfig.GetTimeout):
+	case <-time.After(timeoutConfig.RequestTimeout):
 		stop.Store(true)
 		return fmt.Errorf("timed out after waiting for HTTP StatusCode %d from %s",
 			expectedCode, appURL)
