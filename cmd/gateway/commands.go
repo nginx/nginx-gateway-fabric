@@ -539,7 +539,7 @@ func createControllerCommand() *cobra.Command {
 	cmd.Flags().Var(
 		&watchNamespaces,
 		watchNamespacesFlag,
-		`List of namespaces to watch for resources. If not set, all namespaces are watched. `+
+		`Comma-separated list of namespaces to watch for resources. If not set, all namespaces are watched. `+
 			`The controller's own namespace is always watched.`,
 	)
 
