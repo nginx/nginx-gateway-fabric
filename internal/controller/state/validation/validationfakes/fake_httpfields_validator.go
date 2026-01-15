@@ -178,19 +178,6 @@ type FakeHTTPFieldsValidator struct {
 		result1 bool
 		result2 []string
 	}
-	ValidateRedirectStatusCodeStub        func(int) (bool, []string)
-	validateRedirectStatusCodeMutex       sync.RWMutex
-	validateRedirectStatusCodeArgsForCall []struct {
-		arg1 int
-	}
-	validateRedirectStatusCodeReturns struct {
-		result1 bool
-		result2 []string
-	}
-	validateRedirectStatusCodeReturnsOnCall map[int]struct {
-		result1 bool
-		result2 []string
-	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -1106,70 +1093,6 @@ func (fake *FakeHTTPFieldsValidator) ValidateRedirectSchemeReturnsOnCall(i int, 
 		})
 	}
 	fake.validateRedirectSchemeReturnsOnCall[i] = struct {
-		result1 bool
-		result2 []string
-	}{result1, result2}
-}
-
-func (fake *FakeHTTPFieldsValidator) ValidateRedirectStatusCode(arg1 int) (bool, []string) {
-	fake.validateRedirectStatusCodeMutex.Lock()
-	ret, specificReturn := fake.validateRedirectStatusCodeReturnsOnCall[len(fake.validateRedirectStatusCodeArgsForCall)]
-	fake.validateRedirectStatusCodeArgsForCall = append(fake.validateRedirectStatusCodeArgsForCall, struct {
-		arg1 int
-	}{arg1})
-	stub := fake.ValidateRedirectStatusCodeStub
-	fakeReturns := fake.validateRedirectStatusCodeReturns
-	fake.recordInvocation("ValidateRedirectStatusCode", []interface{}{arg1})
-	fake.validateRedirectStatusCodeMutex.Unlock()
-	if stub != nil {
-		return stub(arg1)
-	}
-	if specificReturn {
-		return ret.result1, ret.result2
-	}
-	return fakeReturns.result1, fakeReturns.result2
-}
-
-func (fake *FakeHTTPFieldsValidator) ValidateRedirectStatusCodeCallCount() int {
-	fake.validateRedirectStatusCodeMutex.RLock()
-	defer fake.validateRedirectStatusCodeMutex.RUnlock()
-	return len(fake.validateRedirectStatusCodeArgsForCall)
-}
-
-func (fake *FakeHTTPFieldsValidator) ValidateRedirectStatusCodeCalls(stub func(int) (bool, []string)) {
-	fake.validateRedirectStatusCodeMutex.Lock()
-	defer fake.validateRedirectStatusCodeMutex.Unlock()
-	fake.ValidateRedirectStatusCodeStub = stub
-}
-
-func (fake *FakeHTTPFieldsValidator) ValidateRedirectStatusCodeArgsForCall(i int) int {
-	fake.validateRedirectStatusCodeMutex.RLock()
-	defer fake.validateRedirectStatusCodeMutex.RUnlock()
-	argsForCall := fake.validateRedirectStatusCodeArgsForCall[i]
-	return argsForCall.arg1
-}
-
-func (fake *FakeHTTPFieldsValidator) ValidateRedirectStatusCodeReturns(result1 bool, result2 []string) {
-	fake.validateRedirectStatusCodeMutex.Lock()
-	defer fake.validateRedirectStatusCodeMutex.Unlock()
-	fake.ValidateRedirectStatusCodeStub = nil
-	fake.validateRedirectStatusCodeReturns = struct {
-		result1 bool
-		result2 []string
-	}{result1, result2}
-}
-
-func (fake *FakeHTTPFieldsValidator) ValidateRedirectStatusCodeReturnsOnCall(i int, result1 bool, result2 []string) {
-	fake.validateRedirectStatusCodeMutex.Lock()
-	defer fake.validateRedirectStatusCodeMutex.Unlock()
-	fake.ValidateRedirectStatusCodeStub = nil
-	if fake.validateRedirectStatusCodeReturnsOnCall == nil {
-		fake.validateRedirectStatusCodeReturnsOnCall = make(map[int]struct {
-			result1 bool
-			result2 []string
-		})
-	}
-	fake.validateRedirectStatusCodeReturnsOnCall[i] = struct {
 		result1 bool
 		result2 []string
 	}{result1, result2}

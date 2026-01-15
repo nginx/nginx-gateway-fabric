@@ -2253,7 +2253,6 @@ func TestValidateFilterRedirect(t *testing.T) {
 		v := &validationfakes.FakeHTTPFieldsValidator{}
 
 		v.ValidateRedirectSchemeReturns(true, nil)
-		v.ValidateRedirectStatusCodeReturns(true, nil)
 
 		return v
 	}
@@ -2328,18 +2327,6 @@ func TestValidateFilterRedirect(t *testing.T) {
 			},
 			expectErrCount: 1,
 			name:           "redirect filter with invalid port",
-		},
-		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
-				validator := createAllValidValidator()
-				validator.ValidateRedirectStatusCodeReturns(false, []string{"200"})
-				return validator
-			}(),
-			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
-				StatusCode: helpers.GetPointer(301), // any value is invalid by the validator
-			},
-			expectErrCount: 1,
-			name:           "redirect filter with invalid status code",
 		},
 		{
 			validator: func() *validationfakes.FakeHTTPFieldsValidator {
