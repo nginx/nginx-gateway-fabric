@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -520,13 +521,46 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	}
 
+	authBasicSecretNsName := types.NamespacedName{Namespace: "test", Name: "auth-basic-secret"}
+	authBasicSecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      authBasicSecretNsName.Name,
+				Namespace: authBasicSecretNsName.Namespace,
+			},
+			Type: apiv1.SecretType("nginx.org/htpasswd"),
+			Data: map[string][]byte{
+				"auth": []byte("user:$apr1$cred"),
+			},
+		},
+	}
+
+	af1 := &graph.AuthenticationFilter{
+		Source: &ngfAPIv1alpha1.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "af",
+				Namespace: "test",
+			},
+			Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Basic: &ngfAPIv1alpha1.BasicAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: authBasicSecretNsName.Name,
+					},
+					Realm: "",
+				},
+			},
+		},
+		Valid:      true,
+		Referenced: true,
+	}
+
 	redirect := graph.Filter{
 		FilterType: graph.FilterRequestRedirect,
 		RequestRedirect: &v1.HTTPRequestRedirectFilter{
 			Hostname: (*v1.PreciseHostname)(helpers.GetPointer("foo.example.com")),
 		},
 	}
-	extRefFilter := graph.Filter{
+	extRefFilterSnippetsFilter := graph.Filter{
 		FilterType: graph.FilterExtensionRef,
 		ExtensionRef: &v1.LocalObjectReference{
 			Group: ngfAPIv1alpha1.GroupName,
@@ -538,24 +572,52 @@ func TestBuildConfiguration(t *testing.T) {
 			SnippetsFilter: sf1,
 		},
 	}
-	addFilters(routeHR5, []graph.Filter{redirect, extRefFilter})
+
+	extRefFilterAuthenticationFilter := graph.Filter{
+		FilterType: graph.FilterExtensionRef,
+		ExtensionRef: &v1.LocalObjectReference{
+			Group: ngfAPIv1alpha1.GroupName,
+			Kind:  kinds.AuthenticationFilter,
+			Name:  "af",
+		},
+		ResolvedExtensionRef: &graph.ExtensionRefFilter{
+			Valid:                true,
+			AuthenticationFilter: af1,
+		},
+	}
+
+	addFilters(routeHR5, []graph.Filter{
+		redirect,
+		extRefFilterSnippetsFilter,
+		extRefFilterAuthenticationFilter,
+	})
 	expRedirect := HTTPRequestRedirectFilter{
 		Hostname: helpers.GetPointer("foo.example.com"),
 	}
-	expExtRefFilter := SnippetsFilter{
+
+	expExtRefFiltersSf := SnippetsFilter{
 		LocationSnippet: &Snippet{
 			Name: createSnippetName(
 				ngfAPIv1alpha1.NginxContextHTTPServerLocation,
-				client.ObjectKeyFromObject(extRefFilter.ResolvedExtensionRef.SnippetsFilter.Source),
+				client.ObjectKeyFromObject(extRefFilterSnippetsFilter.ResolvedExtensionRef.SnippetsFilter.Source),
 			),
 			Contents: "location snippet",
 		},
 		ServerSnippet: &Snippet{
 			Name: createSnippetName(
 				ngfAPIv1alpha1.NginxContextHTTPServer,
-				client.ObjectKeyFromObject(extRefFilter.ResolvedExtensionRef.SnippetsFilter.Source),
+				client.ObjectKeyFromObject(extRefFilterSnippetsFilter.ResolvedExtensionRef.SnippetsFilter.Source),
 			),
 			Contents: "server snippet",
+		},
+	}
+
+	expExtRefFiltersAf := &AuthenticationFilter{
+		Basic: &AuthBasic{
+			SecretName:      authBasicSecretNsName.Name,
+			SecretNamespace: authBasicSecretNsName.Namespace,
+			Realm:           "",
+			Data:            authBasicSecret.Source.Data["auth"],
 		},
 	}
 
@@ -1595,6 +1657,9 @@ func TestBuildConfiguration(t *testing.T) {
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(hr5): routeHR5,
 				}
+				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+					authBasicSecretNsName: authBasicSecret,
+				}
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
@@ -1610,8 +1675,9 @@ func TestBuildConfiguration(t *testing.T) {
 										Source:       &hr5.ObjectMeta,
 										BackendGroup: expHR5Groups[0],
 										Filters: HTTPFilters{
-											RequestRedirect: &expRedirect,
-											SnippetsFilters: []SnippetsFilter{expExtRefFilter},
+											RequestRedirect:      &expRedirect,
+											SnippetsFilters:      []SnippetsFilter{expExtRefFiltersSf},
+											AuthenticationFilter: expExtRefFiltersAf,
 										},
 									},
 								},
@@ -1764,27 +1830,31 @@ func TestBuildConfiguration(t *testing.T) {
 				}
 				conf.TLSPassthroughServers = []Layer4VirtualServer{
 					{
-						Hostname:     "app.example.com",
-						UpstreamName: "default_secure-app_8443",
-						Port:         443,
+						Hostname: "app.example.com",
+						Upstreams: []Layer4Upstream{
+							{Name: "default_secure-app_8443", Weight: 0},
+						},
+						Port: 443,
 					},
 					{
-						Hostname:     "*.example.com",
-						UpstreamName: "",
-						Port:         443,
-						IsDefault:    true,
+						Hostname:  "*.example.com",
+						Upstreams: []Layer4Upstream{},
+						Port:      443,
+						IsDefault: true,
 					},
 					{
-						Hostname:     "app.example.com",
-						UpstreamName: "default_secure-app_8443",
-						Port:         444,
-						IsDefault:    false,
+						Hostname: "app.example.com",
+						Upstreams: []Layer4Upstream{
+							{Name: "default_secure-app_8443", Weight: 0},
+						},
+						Port:      444,
+						IsDefault: false,
 					},
 					{
-						Hostname:     "",
-						UpstreamName: "",
-						Port:         443,
-						IsDefault:    false,
+						Hostname:  "",
+						Upstreams: []Layer4Upstream{},
+						Port:      443,
+						IsDefault: false,
 					},
 				}
 				return conf
@@ -2136,6 +2206,7 @@ func TestBuildConfiguration(t *testing.T) {
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.BaseHTTPConfig.Policies = []policies.Policy{gwPolicy1.Source, gwPolicy2.Source}
 				conf.SSLServers = []VirtualServer{
 					{
 						IsDefault: true,
@@ -2221,6 +2292,7 @@ func TestBuildConfiguration(t *testing.T) {
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				conf.BaseHTTPConfig.Policies = []policies.Policy{gwPolicy1.Source, gwPolicy2.Source}
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
 				conf.HTTPServers = []VirtualServer{
@@ -2498,7 +2570,7 @@ func TestUpsertRoute_PathRuleHasInferenceBackend(t *testing.T) {
 	}
 
 	hpr := newHostPathRules()
-	hpr.upsertRoute(route, listener, gateway, nil)
+	hpr.upsertRoute(route, listener, gateway, nil, nil)
 
 	// Find the PathRule for "/infer"
 	found := false
@@ -2842,7 +2914,7 @@ func TestCreateFilters(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 			routeNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
-			result := createHTTPFilters(test.filters, 0, routeNsName)
+			result := createHTTPFilters(test.filters, 0, routeNsName, nil)
 
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
@@ -4110,28 +4182,32 @@ func TestCreatePassthroughServers(t *testing.T) {
 
 	expectedPassthroughServers := []Layer4VirtualServer{
 		{
-			Hostname:     "app.example.com",
-			UpstreamName: "default_secure-app_8443",
-			Port:         443,
-			IsDefault:    false,
+			Hostname: "app.example.com",
+			Upstreams: []Layer4Upstream{
+				{Name: "default_secure-app_8443", Weight: 0},
+			},
+			Port:      443,
+			IsDefault: false,
 		},
 		{
-			Hostname:     "cafe.example.com",
-			UpstreamName: "default_secure-app_8443",
-			Port:         443,
-			IsDefault:    false,
+			Hostname: "cafe.example.com",
+			Upstreams: []Layer4Upstream{
+				{Name: "default_secure-app_8443", Weight: 0},
+			},
+			Port:      443,
+			IsDefault: false,
 		},
 		{
-			Hostname:     "*.example.com",
-			UpstreamName: "",
-			Port:         443,
-			IsDefault:    true,
+			Hostname:  "*.example.com",
+			Upstreams: []Layer4Upstream{},
+			Port:      443,
+			IsDefault: true,
 		},
 		{
-			Hostname:     "cafe.example.com",
-			UpstreamName: "",
-			Port:         443,
-			IsDefault:    true,
+			Hostname:  "cafe.example.com",
+			Upstreams: []Layer4Upstream{},
+			Port:      443,
+			IsDefault: true,
 		},
 	}
 
@@ -4342,6 +4418,533 @@ func TestBuildStreamUpstreams(t *testing.T) {
 	g := NewWithT(t)
 
 	g.Expect(streamUpstreams).To(ConsistOf(expectedStreamUpstreams))
+}
+
+func TestBuildL4Servers(t *testing.T) {
+	t.Parallel()
+
+	createL4Route := func(name string, valid bool, backendRefs []graph.BackendRef) *graph.L4Route {
+		return &graph.L4Route{
+			Valid: valid,
+			Source: &v1alpha2.TCPRoute{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      name,
+				},
+			},
+			Spec: graph.L4RouteSpec{
+				BackendRefs: backendRefs,
+			},
+		}
+	}
+
+	tests := []struct {
+		name            string
+		gateway         *graph.Gateway
+		protocol        v1.ProtocolType
+		expectedServers []Layer4VirtualServer
+	}{
+		{
+			name: "TCP route with single backend",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route-1"}}: createL4Route(
+								"tcp-route-1",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{
+					Hostname: "",
+					Port:     8080,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   "default_svc1_8080",
+							Weight: 1,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "TCP route with multiple weighted backends",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route-weighted"}}: createL4Route(
+								"tcp-route-weighted",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 80,
+									},
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc2"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 20,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{
+					Hostname: "",
+					Port:     8080,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   "default_svc1_8080",
+							Weight: 80,
+						},
+						{
+							Name:   "default_svc2_8080",
+							Weight: 20,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "UDP route with backends",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "udp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.UDPProtocolType,
+							Port:     5353,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "udp-route-1"}}: createL4Route(
+								"udp-route-1",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "dns-svc"},
+										ServicePort: apiv1.ServicePort{
+											Name: "dns",
+											Port: 53,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.UDPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{
+					Hostname: "",
+					Port:     5353,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   "default_dns-svc_53",
+							Weight: 1,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "skips invalid routes",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "invalid-route"}}: createL4Route(
+								"invalid-route",
+								false, // invalid route
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol:        v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+		{
+			name: "skips routes with no valid backends",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "no-backends"}}: createL4Route(
+								"no-backends",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     false, // invalid backend
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol:        v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+		{
+			name: "skips routes with empty backend refs",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "empty-backends"}}: createL4Route(
+								"empty-backends",
+								true,
+								[]graph.BackendRef{}, // empty
+							),
+						},
+					},
+				},
+			},
+			protocol:        v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+		{
+			name: "skips invalid listeners",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: false, // invalid listener
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route"}}: createL4Route(
+								"tcp-route",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol:        v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+		{
+			name: "filters by protocol - TCP listener ignored for UDP protocol",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route"}}: createL4Route(
+								"tcp-route",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol:        v1.UDPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+		{
+			name: "multiple listeners and routes",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "tcp-listener-1",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     8080,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route-1"}}: createL4Route(
+								"tcp-route-1",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc1"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 8080,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+					{
+						Name:  "tcp-listener-2",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.TCPProtocolType,
+							Port:     9090,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "tcp-route-2"}}: createL4Route(
+								"tcp-route-2",
+								true,
+								[]graph.BackendRef{
+									{
+										Valid:     true,
+										SvcNsName: types.NamespacedName{Namespace: "default", Name: "svc2"},
+										ServicePort: apiv1.ServicePort{
+											Name: "http",
+											Port: 9090,
+										},
+										Weight: 1,
+									},
+								},
+							),
+						},
+					},
+				},
+			},
+			protocol: v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{
+				{
+					Hostname: "",
+					Port:     8080,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   "default_svc1_8080",
+							Weight: 1,
+						},
+					},
+				},
+				{
+					Hostname: "",
+					Port:     9090,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   "default_svc2_9090",
+							Weight: 1,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filters by protocol - UDP listener ignored for TCP protocol",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "gateway",
+					},
+				},
+				Listeners: []*graph.Listener{
+					{
+						Name:  "udp-listener",
+						Valid: true,
+						Source: v1.Listener{
+							Protocol: v1.UDPProtocolType,
+							Port:     53,
+						},
+						L4Routes: map[graph.L4RouteKey]*graph.L4Route{
+							{NamespacedName: types.NamespacedName{Namespace: "default", Name: "udp-route"}}: {
+								Valid: true,
+								Source: &v1alpha2.UDPRoute{
+									ObjectMeta: metav1.ObjectMeta{
+										Namespace: "default",
+										Name:      "udp-route",
+									},
+								},
+								Spec: graph.L4RouteSpec{
+									BackendRefs: []graph.BackendRef{
+										{
+											Valid:     true,
+											SvcNsName: types.NamespacedName{Namespace: "default", Name: "dns-svc"},
+											ServicePort: apiv1.ServicePort{
+												Name: "dns",
+												Port: 53,
+											},
+											Weight: 1,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			protocol:        v1.TCPProtocolType,
+			expectedServers: []Layer4VirtualServer{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			servers := buildL4Servers(logr.Discard(), tt.gateway, tt.protocol)
+
+			g.Expect(servers).To(ConsistOf(tt.expectedServers))
+		})
+	}
 }
 
 func TestBuildRewriteIPSettings(t *testing.T) {
@@ -4683,6 +5286,86 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Disable: true,
 				},
+			},
+		},
+		{
+			msg: "AccessLog with escape=json",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Format: helpers.GetPointer(logFormat),
+							Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				AccessLog: &AccessLog{
+					Format: logFormat,
+					Escape: "json",
+				},
+			},
+		},
+		{
+			msg: "AccessLog with escape=default",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Format: helpers.GetPointer(logFormat),
+							Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeDefault),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				AccessLog: &AccessLog{
+					Format: logFormat,
+					Escape: "default",
+				},
+			},
+		},
+		{
+			msg: "AccessLog with escape=none",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Format: helpers.GetPointer(logFormat),
+							Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeNone),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				AccessLog: &AccessLog{
+					Format: logFormat,
+					Escape: "none",
+				},
+			},
+		},
+		{
+			msg: "AccessLog escape not set when format is missing",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Logging: &ngfAPIv1alpha2.NginxLogging{
+						ErrorLevel: helpers.GetPointer(ngfAPIv1alpha2.NginxLogLevelInfo),
+						AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+							Escape: helpers.GetPointer(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),
+						},
+					},
+				},
+			},
+			expLoggingSettings: Logging{
+				ErrorLevel: "info",
+				AccessLog:  nil,
 			},
 		},
 	}
@@ -5751,6 +6434,254 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 			)
 
 			assertBuildConfiguration(g, result, test.expConf)
+		})
+	}
+}
+
+func TestBuildSSLKeyPairs(t *testing.T) {
+	t.Parallel()
+
+	secretNsName := types.NamespacedName{Namespace: "test", Name: "secret"}
+	gatewaySecretNsName := types.NamespacedName{Namespace: "test", Name: "gateway-secret"}
+
+	validSecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretNsName.Name,
+				Namespace: secretNsName.Namespace,
+			},
+		},
+		CertBundle: graph.NewCertificateBundle(
+			secretNsName,
+			"Secret",
+			&graph.Certificate{
+				TLSCert:       []byte("cert-data"),
+				TLSPrivateKey: []byte("key-data"),
+			},
+		),
+	}
+
+	nilCertBundleSecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nil-cert",
+				Namespace: "test",
+			},
+		},
+		CertBundle: nil,
+	}
+
+	tests := []struct {
+		secrets  map[types.NamespacedName]*graph.Secret
+		gateway  *graph.Gateway
+		expected map[SSLKeyPairID]SSLKeyPair
+		name     string
+	}{
+		{
+			name: "valid listener with valid TLS secret",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				secretNsName: validSecret,
+			},
+			gateway: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Valid:          true,
+						ResolvedSecret: &secretNsName,
+					},
+				},
+			},
+			expected: map[SSLKeyPairID]SSLKeyPair{
+				generateSSLKeyPairID(secretNsName): {
+					Cert: []byte("cert-data"),
+					Key:  []byte("key-data"),
+				},
+			},
+		},
+		{
+			name: "listener with nil CertBundle secret",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				secretNsName: nilCertBundleSecret,
+			},
+			gateway: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Valid:          true,
+						ResolvedSecret: &secretNsName,
+					},
+				},
+			},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
+		},
+		{
+			name: "gateway backend TLS with nil CertBundle",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				gatewaySecretNsName: nilCertBundleSecret,
+			},
+			gateway: &graph.Gateway{
+				Valid:     true,
+				SecretRef: &gatewaySecretNsName,
+			},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
+		},
+		{
+			name: "invalid listener should not generate key pair",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				secretNsName: validSecret,
+			},
+			gateway: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Valid:          false,
+						ResolvedSecret: &secretNsName,
+					},
+				},
+			},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
+		},
+		{
+			name: "listener with nil resolved secret",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				secretNsName: validSecret,
+			},
+			gateway: &graph.Gateway{
+				Listeners: []*graph.Listener{
+					{
+						Valid:          true,
+						ResolvedSecret: nil,
+					},
+				},
+			},
+			expected: map[SSLKeyPairID]SSLKeyPair{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildSSLKeyPairs(test.secrets, test.gateway)
+
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestBuildAuthSecrets(t *testing.T) {
+	t.Parallel()
+
+	htpasswdSecretNsName := types.NamespacedName{Namespace: "test", Name: "htpasswd-secret"}
+	tlsSecretNsName := types.NamespacedName{Namespace: "test", Name: "tls-secret"}
+	nilSourceSecretNsName := types.NamespacedName{Namespace: "test", Name: "nil-source"}
+
+	htpasswdSecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      htpasswdSecretNsName.Name,
+				Namespace: htpasswdSecretNsName.Namespace,
+			},
+			Type: apiv1.SecretType(graph.SecretTypeHtpasswd),
+			Data: map[string][]byte{
+				graph.AuthKey: []byte("user:password"),
+			},
+		},
+	}
+
+	tlsSecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      tlsSecretNsName.Name,
+				Namespace: tlsSecretNsName.Namespace,
+			},
+			Type: apiv1.SecretTypeTLS,
+			Data: map[string][]byte{
+				apiv1.TLSCertKey:       []byte("cert"),
+				apiv1.TLSPrivateKeyKey: []byte("key"),
+			},
+		},
+		CertBundle: graph.NewCertificateBundle(
+			tlsSecretNsName,
+			"Secret",
+			&graph.Certificate{
+				TLSCert:       []byte("cert"),
+				TLSPrivateKey: []byte("key"),
+			},
+		),
+	}
+
+	nilSourceSecret := &graph.Secret{
+		Source: nil,
+	}
+
+	invalidKeySecret := &graph.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "invalid-key-secret",
+				Namespace: "test",
+			},
+			Type: apiv1.SecretType(graph.SecretTypeHtpasswd),
+			Data: map[string][]byte{
+				"wrong-key": []byte("data"),
+			},
+		},
+	}
+
+	tests := []struct {
+		secrets  map[types.NamespacedName]*graph.Secret
+		expected map[AuthFileID]AuthFileData
+		name     string
+	}{
+		{
+			name: "htpasswd secret",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				htpasswdSecretNsName: htpasswdSecret,
+			},
+			expected: map[AuthFileID]AuthFileData{
+				"test_htpasswd-secret": []byte("user:password"),
+			},
+		},
+		{
+			name: "TLS secret should be ignored",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				tlsSecretNsName: tlsSecret,
+			},
+			expected: map[AuthFileID]AuthFileData{},
+		},
+		{
+			name: "nil source secret should not panic",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				nilSourceSecretNsName: nilSourceSecret,
+			},
+			expected: map[AuthFileID]AuthFileData{},
+		},
+		{
+			name: "invalid key in htpasswd secret",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				{Namespace: "test", Name: "invalid-key-secret"}: invalidKeySecret,
+			},
+			expected: map[AuthFileID]AuthFileData{},
+		},
+		{
+			name: "mixed secrets",
+			secrets: map[types.NamespacedName]*graph.Secret{
+				htpasswdSecretNsName:  htpasswdSecret,
+				tlsSecretNsName:       tlsSecret,
+				nilSourceSecretNsName: nilSourceSecret,
+			},
+			expected: map[AuthFileID]AuthFileData{
+				"test_htpasswd-secret": []byte("user:password"),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildAuthSecrets(test.secrets)
+
+			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }

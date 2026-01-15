@@ -35,6 +35,7 @@ permissions:
 
 jobs:
   build:
+    if: ${{ ! (github.event.pull_request.head.repo.fork && inputs.image == 'plus' && inputs.build-os == 'ubi') }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -59,7 +60,7 @@ jobs:
           path: ${{ github.workspace }}/dist
 
       - name: Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
         with:
           driver-opts: network=host
 
@@ -185,7 +186,7 @@ jobs:
       - name: Scan SBOM
         id: scan
         if: ${{ !inputs.dry_run }}
-        uses: anchore/scan-action@3c9a191a0fbab285ca6b8530b5de5a642cba332f # v7.2.2
+        uses: anchore/scan-action@62b74fb7bb810d2c45b1865f47a77655621862a5 # v7.2.3
         with:
           sbom: "sbom-${{ inputs.image }}.json"
           only-fixed: true
@@ -193,7 +194,7 @@ jobs:
           fail-build: false
 
       - name: Upload scan result to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@1b168cd39490f61582a9beae412bb7057a6b2c4e # v4.31.8
+        uses: github/codeql-action/upload-sarif@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4.31.9
         if: ${{ !inputs.dry_run }}
         continue-on-error: true
         with:

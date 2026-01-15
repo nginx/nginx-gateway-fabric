@@ -146,6 +146,9 @@ func NewNginxProvisioner(
 		cfg.Logger.Error(err, "failed to collect agent labels")
 	}
 	cfg.AgentLabels = agentLabels
+	if cfg.AgentLabels == nil {
+		cfg.AgentLabels = make(map[string]string)
+	}
 
 	provisioner := &NginxProvisioner{
 		k8sClient:                  mgr.GetClient(),

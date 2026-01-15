@@ -94,7 +94,6 @@ const (
 	gatewayClassName      = "nginx"
 	ngfHTTPForwardedPort  = 10080
 	ngfHTTPSForwardedPort = 10443
-	ngfControllerName     = "gateway.nginx.org/nginx-gateway-controller"
 )
 
 type setupConfig struct {

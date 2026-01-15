@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -11,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -22,7 +24,9 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/crd/crdfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
 
 func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
@@ -39,15 +43,19 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 	)
 
 	tests := []struct {
+		discoveredCRDs      map[string]bool
+		name                string
 		expectedObjects     []client.Object
 		expectedObjectLists []client.ObjectList
-		name                string
 		cfg                 config.Config
 	}{
 		{
-			name: "base case",
+			name: "base case with BackendTLSPolicy v1",
 			cfg: config.Config{
 				GatewayClassName: gcName,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -67,14 +75,52 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				partialObjectMetadataList,
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
 			},
 		},
 		{
-			name: "experimental enabled",
+			name: "base case without BackendTLSPolicy v1",
+			cfg: config.Config{
+				GatewayClassName: gcName,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": false,
+			},
+			expectedObjects: []client.Object{
+				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
+			},
+			expectedObjectLists: []client.ObjectList{
+				&apiv1.ServiceList{},
+				&apiv1.SecretList{},
+				&apiv1.NamespaceList{},
+				&discoveryV1.EndpointSliceList{},
+				&gatewayv1.HTTPRouteList{},
+				&apiv1.ConfigMapList{},
+				&gatewayv1beta1.ReferenceGrantList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
+				&gatewayv1.GRPCRouteList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				partialObjectMetadataList,
+				&gatewayv1.GatewayList{},
+			},
+		},
+		{
+			name: "experimental enabled with BackendTLSPolicy v1",
 			cfg: config.Config{
 				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"TLSRoute":         true,
+				"TCPRoute":         true,
+				"UDPRoute":         true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -92,17 +138,25 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				partialObjectMetadataList,
 				&gatewayv1.BackendTLSPolicyList{},
 				&gatewayv1alpha2.TLSRouteList{},
+				&gatewayv1alpha2.TCPRouteList{},
+				&gatewayv1alpha2.UDPRouteList{},
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
 			},
 		},
 		{
-			name: "inference extension enabled",
+			name: "inference extension enabled with BackendTLSPolicy v1",
 			cfg: config.Config{
 				GatewayClassName:   gcName,
 				InferenceExtension: true,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"InferencePool":    true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -120,17 +174,22 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				partialObjectMetadataList,
 				&inference.InferencePoolList{},
 				&gatewayv1.GatewayList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
 			},
 		},
 		{
-			name: "snippets filters enabled",
+			name: "snippets filters enabled with BackendTLSPolicy v1",
 			cfg: config.Config{
 				GatewayClassName: gcName,
 				SnippetsFilters:  true,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -151,17 +210,59 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.SnippetsFilterList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
 			},
 		},
 		{
-			name: "experimental, inference, and snippets filters enabled",
+			name: "snippets policies enabled",
+			cfg: config.Config{
+				GatewayClassName: gcName,
+				SnippetsPolicies: true,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+			},
+			expectedObjects: []client.Object{
+				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
+			},
+			expectedObjectLists: []client.ObjectList{
+				&apiv1.ServiceList{},
+				&apiv1.SecretList{},
+				&apiv1.NamespaceList{},
+				&discoveryV1.EndpointSliceList{},
+				&gatewayv1.HTTPRouteList{},
+				&gatewayv1.BackendTLSPolicyList{},
+				&apiv1.ConfigMapList{},
+				&gatewayv1.GatewayList{},
+				&gatewayv1beta1.ReferenceGrantList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
+				partialObjectMetadataList,
+				&gatewayv1.GRPCRouteList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.SnippetsPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
+			},
+		},
+		{
+			name: "experimental, inference, and snippets filters enabled with BackendTLSPolicy v1",
 			cfg: config.Config{
 				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
 				InferenceExtension:   true,
 				SnippetsFilters:      true,
 			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"TLSRoute":         true,
+				"TCPRoute":         true,
+				"UDPRoute":         true,
+				"InferencePool":    true,
+			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
 			},
@@ -179,11 +280,60 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&inference.InferencePoolList{},
 				&gatewayv1.BackendTLSPolicyList{},
 				&gatewayv1alpha2.TLSRouteList{},
+				&gatewayv1alpha2.TCPRouteList{},
+				&gatewayv1alpha2.UDPRouteList{},
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.SnippetsFilterList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
+			},
+		},
+		{
+			name: "all features enabled",
+			cfg: config.Config{
+				GatewayClassName:     gcName,
+				ExperimentalFeatures: true,
+				InferenceExtension:   true,
+				SnippetsFilters:      true,
+				SnippetsPolicies:     true,
+			},
+			discoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"TLSRoute":         true,
+				"TCPRoute":         true,
+				"UDPRoute":         true,
+				"InferencePool":    true,
+			},
+			expectedObjects: []client.Object{
+				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
+			},
+			expectedObjectLists: []client.ObjectList{
+				&apiv1.ServiceList{},
+				&apiv1.SecretList{},
+				&apiv1.NamespaceList{},
+				&apiv1.ConfigMapList{},
+				&discoveryV1.EndpointSliceList{},
+				&gatewayv1.HTTPRouteList{},
+				&gatewayv1.GatewayList{},
+				&gatewayv1beta1.ReferenceGrantList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
+				partialObjectMetadataList,
+				&inference.InferencePoolList{},
+				&gatewayv1.BackendTLSPolicyList{},
+				&gatewayv1alpha2.TLSRouteList{},
+				&gatewayv1alpha2.TCPRouteList{},
+				&gatewayv1alpha2.UDPRouteList{},
+				&gatewayv1.GRPCRouteList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.SnippetsFilterList{},
+				&ngfAPIv1alpha1.SnippetsPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
 			},
 		},
 	}
@@ -193,7 +343,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			objects, objectLists := prepareFirstEventBatchPreparerArgs(test.cfg)
+			objects, objectLists := prepareFirstEventBatchPreparerArgs(test.cfg, test.discoveredCRDs)
 
 			g.Expect(objects).To(ConsistOf(test.expectedObjects))
 			g.Expect(objectLists).To(ConsistOf(test.expectedObjectLists))
@@ -540,4 +690,275 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			g.Expect(plusSecrets).To(Equal(test.expSecrets))
 		})
 	}
+}
+
+func TestFilterControllersByCRDExistence(t *testing.T) {
+	t.Parallel()
+
+	backendTLSPolicyGVK := schema.GroupVersionKind{
+		Group:   "gateway.networking.k8s.io",
+		Version: "v1",
+		Kind:    "BackendTLSPolicy",
+	}
+
+	tlsRouteGVK := schema.GroupVersionKind{
+		Group:   "gateway.networking.k8s.io",
+		Version: "v1alpha2",
+		Kind:    "TLSRoute",
+	}
+
+	tcpRouteGVK := schema.GroupVersionKind{
+		Group:   "gateway.networking.k8s.io",
+		Version: "v1alpha2",
+		Kind:    "TCPRoute",
+	}
+
+	tests := []struct {
+		crdCheckError          error
+		crdCheckResults        map[schema.GroupVersionKind]bool
+		expectedDiscoveredCRDs map[string]bool
+		name                   string
+		controllers            []ctlrCfg
+		expectedControllerCnt  int
+		expectError            bool
+	}{
+		{
+			name: "no controllers require CRD check",
+			controllers: []ctlrCfg{
+				{
+					name:            "HTTPRoute",
+					objectType:      &gatewayv1.HTTPRoute{},
+					requireCRDCheck: false,
+				},
+				{
+					name:            "Gateway",
+					objectType:      &gatewayv1.Gateway{},
+					requireCRDCheck: false,
+				},
+			},
+			crdCheckResults:        nil,
+			expectedControllerCnt:  2,
+			expectedDiscoveredCRDs: map[string]bool{},
+			expectError:            false,
+		},
+		{
+			name: "all CRDs exist",
+			controllers: []ctlrCfg{
+				{
+					name:            "HTTPRoute",
+					objectType:      &gatewayv1.HTTPRoute{},
+					requireCRDCheck: false,
+				},
+				{
+					name:            "BackendTLSPolicy",
+					objectType:      &gatewayv1.BackendTLSPolicy{},
+					requireCRDCheck: true,
+					crdGVK:          &backendTLSPolicyGVK,
+				},
+				{
+					name:            "TLSRoute",
+					objectType:      &gatewayv1alpha2.TLSRoute{},
+					requireCRDCheck: true,
+					crdGVK:          &tlsRouteGVK,
+				},
+			},
+			crdCheckResults: map[schema.GroupVersionKind]bool{
+				backendTLSPolicyGVK: true,
+				tlsRouteGVK:         true,
+			},
+			expectedControllerCnt: 3,
+			expectedDiscoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"TLSRoute":         true,
+			},
+			expectError: false,
+		},
+		{
+			name: "some CRDs missing",
+			controllers: []ctlrCfg{
+				{
+					name:            "HTTPRoute",
+					objectType:      &gatewayv1.HTTPRoute{},
+					requireCRDCheck: false,
+				},
+				{
+					name:            "BackendTLSPolicy",
+					objectType:      &gatewayv1.BackendTLSPolicy{},
+					requireCRDCheck: true,
+					crdGVK:          &backendTLSPolicyGVK,
+				},
+				{
+					name:            "TLSRoute",
+					objectType:      &gatewayv1alpha2.TLSRoute{},
+					requireCRDCheck: true,
+					crdGVK:          &tlsRouteGVK,
+				},
+			},
+			crdCheckResults: map[schema.GroupVersionKind]bool{
+				backendTLSPolicyGVK: true,
+				tlsRouteGVK:         false,
+			},
+			expectedControllerCnt: 2, // HTTPRoute and BackendTLSPolicy only
+			expectedDiscoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": true,
+				"TLSRoute":         false,
+			},
+			expectError: false,
+		},
+		{
+			name: "all CRDs missing",
+			controllers: []ctlrCfg{
+				{
+					name:            "HTTPRoute",
+					objectType:      &gatewayv1.HTTPRoute{},
+					requireCRDCheck: false,
+				},
+				{
+					name:            "BackendTLSPolicy",
+					objectType:      &gatewayv1.BackendTLSPolicy{},
+					requireCRDCheck: true,
+					crdGVK:          &backendTLSPolicyGVK,
+				},
+				{
+					name:            "TLSRoute",
+					objectType:      &gatewayv1alpha2.TLSRoute{},
+					requireCRDCheck: true,
+					crdGVK:          &tlsRouteGVK,
+				},
+			},
+			crdCheckResults: map[schema.GroupVersionKind]bool{
+				backendTLSPolicyGVK: false,
+				tlsRouteGVK:         false,
+			},
+			expectedControllerCnt: 1, // Only HTTPRoute
+			expectedDiscoveredCRDs: map[string]bool{
+				"BackendTLSPolicy": false,
+				"TLSRoute":         false,
+			},
+			expectError: false,
+		},
+		{
+			name: "CRD check error",
+			controllers: []ctlrCfg{
+				{
+					name:            "BackendTLSPolicy",
+					objectType:      &gatewayv1.BackendTLSPolicy{},
+					requireCRDCheck: true,
+					crdGVK:          &backendTLSPolicyGVK,
+				},
+			},
+			crdCheckResults:        nil,
+			crdCheckError:          errors.New("failed to connect to API server"),
+			expectedControllerCnt:  0,
+			expectedDiscoveredCRDs: nil,
+			expectError:            true,
+		},
+		{
+			name: "multiple controllers with same GVK",
+			controllers: []ctlrCfg{
+				{
+					name:            "TLSRoute-1",
+					objectType:      &gatewayv1alpha2.TLSRoute{},
+					requireCRDCheck: true,
+					crdGVK:          &tlsRouteGVK,
+				},
+				{
+					name:            "TLSRoute-2",
+					objectType:      &gatewayv1alpha2.TLSRoute{},
+					requireCRDCheck: true,
+					crdGVK:          &tlsRouteGVK,
+				},
+			},
+			crdCheckResults: map[schema.GroupVersionKind]bool{
+				tlsRouteGVK: true,
+			},
+			expectedControllerCnt: 2,
+			expectedDiscoveredCRDs: map[string]bool{
+				"TLSRoute": true,
+			},
+			expectError: false,
+		},
+		{
+			name: "controller without crdGVK override uses object type GVK",
+			controllers: []ctlrCfg{
+				{
+					name:            "TCPRoute",
+					objectType:      createTypedObject(&tcpRouteGVK),
+					requireCRDCheck: true,
+					crdGVK:          nil, // No override, should use object's GVK
+				},
+			},
+			crdCheckResults: map[schema.GroupVersionKind]bool{
+				tcpRouteGVK: true,
+			},
+			expectedControllerCnt: 1,
+			expectedDiscoveredCRDs: map[string]bool{
+				"TCPRoute": true,
+			},
+			expectError: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			// Create a fake config provider
+			fakeMgr := &fakeManagerForCRDTest{
+				config: &rest.Config{},
+			}
+
+			// Create fake checker
+			fakeChecker := &crdfakes.FakeChecker{}
+			fakeChecker.CheckCRDsExistReturns(test.crdCheckResults, test.crdCheckError)
+
+			// Call the function
+			filtered, discoveredCRDs, err := filterControllersByCRDExistence(
+				fakeMgr,
+				test.controllers,
+				fakeChecker,
+			)
+
+			// Verify results
+			if test.expectError {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(filtered).To(HaveLen(test.expectedControllerCnt))
+				g.Expect(discoveredCRDs).To(Equal(test.expectedDiscoveredCRDs))
+
+				// Verify that CheckCRDsExist was called with the right config and GVKs
+				if len(test.crdCheckResults) > 0 || test.crdCheckError != nil {
+					g.Expect(fakeChecker.CheckCRDsExistCallCount()).To(Equal(1))
+					config, gvks := fakeChecker.CheckCRDsExistArgsForCall(0)
+					g.Expect(config).To(Equal(fakeMgr.config))
+					// Verify all expected GVKs were passed
+					expectedGVKs := make(map[schema.GroupVersionKind]bool)
+					for gvk := range test.crdCheckResults {
+						expectedGVKs[gvk] = true
+					}
+					for _, gvk := range gvks {
+						g.Expect(expectedGVKs).To(HaveKey(gvk))
+					}
+				}
+			}
+		})
+	}
+}
+
+// fakeManagerForCRDTest implements only GetConfig() method needed for filterControllersByCRDExistence.
+type fakeManagerForCRDTest struct {
+	config *rest.Config
+}
+
+func (f *fakeManagerForCRDTest) GetConfig() *rest.Config {
+	return f.config
+}
+
+// createTypedObject creates a typed object with GVK set for testing.
+func createTypedObject(gvk *schema.GroupVersionKind) ngftypes.ObjectType {
+	obj := &gatewayv1alpha2.TCPRoute{}
+	obj.SetGroupVersionKind(*gvk)
+	return obj
 }

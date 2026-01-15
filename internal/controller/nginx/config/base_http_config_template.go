@@ -21,11 +21,23 @@ map $http_host $gw_api_compliant_host {
     default $http_host;
 }
 
+# Understanding the Connection header behavior:
+# For normal HTTP proxying with keepAlive disabled, we set Connection header to close. This tells the upstream to close the connection after the response.
+# When upgrading the connection to WebSocket, we set Connection header to upgrade to inform the upstream to switch protocols.
+# For normal HTTP proxying with keepAlive enabled, we leave the Connection header empty. This allows NGINX to manage persistent connections with the upstream.
+
 # Set $connection_header variable to upgrade when the $http_upgrade header is set, otherwise, set it to close. This
 # allows support for websocket connections. See https://nginx.org/en/docs/http/websocket.html.
 map $http_upgrade $connection_upgrade {
     default upgrade;
     '' close;
+}
+
+# Set $connection_keepalive variable to upgrade when the $http_upgrade header is set, otherwise, set it to empty for when
+# keepAlive is enabled.
+map $http_upgrade $connection_keepalive {
+    default upgrade;
+    '' '';
 }
 
 ## Returns just the path from the original request URI.
@@ -55,7 +67,7 @@ server {
 access_log off;
 {{- else }}
 {{- if .AccessLog.Format }}
-log_format {{ .AccessLog.FormatName }} '{{ .AccessLog.Format }}';
+log_format {{ .AccessLog.FormatName }}{{ if .AccessLog.Escape }} escape={{ .AccessLog.Escape }}{{ end }} '{{ .AccessLog.Format }}';
 access_log {{ .AccessLog.Path }} {{ .AccessLog.FormatName }};
 {{- end }}
 {{- end }}

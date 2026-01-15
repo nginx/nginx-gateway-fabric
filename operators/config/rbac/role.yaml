@@ -95,6 +95,8 @@ rules:
   - grpcroutes
   - backendtlspolicies
   - tlsroutes
+  - tcproutes
+  - udproutes
   verbs:
   - create
   - delete
@@ -112,6 +114,8 @@ rules:
   - grpcroutes/status
   - backendtlspolicies/status
   - tlsroutes/status
+  - tcproutes/status
+  - udproutes/status
   verbs:
   - update
 - apiGroups:
@@ -142,8 +146,10 @@ rules:
   - nginxproxies/finalizers
   - clientsettingspolicies
   - observabilitypolicies
+  - proxysettingspolicies
   - upstreamsettingspolicies
   - snippetsfilters
+  - authenticationfilters
   verbs:
   - create
   - delete
@@ -157,8 +163,10 @@ rules:
   resources:
   - clientsettingspolicies/status
   - observabilitypolicies/status
+  - proxysettingspolicies/status
   - upstreamsettingspolicies/status
   - snippetsfilters/status
+  - authenticationfilters/status
   verbs:
   - update
 - apiGroups:

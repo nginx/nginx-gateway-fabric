@@ -120,7 +120,7 @@ jobs:
         run: |
           if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
           echo "No Artifactory secrets available - using direct GOPROXY"
-          GOPROXY_VALUE="direct"
+          GOPROXY_VALUE="proxy.golang.org,direct"
           elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && ("${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" =~ ^refs/heads/release-) ]]; then
           echo "Production mode - using production Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
@@ -131,7 +131,7 @@ jobs:
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: stable
           cache-dependency-path: |
@@ -145,11 +145,14 @@ jobs:
           filters: |
             charts:
             - charts/nginx-gateway-fabric/**/*
+            rbac:
+            - operators/config/rbac/role.yaml
+            - charts/nginx-gateway-fabric/templates/clusterrole.yaml
 
       - name: Output Variables
         id: vars
         run: |
-          K8S_KIND_VERSION=v1.34.2 # renovate: datasource=docker depName=kindest/node
+          K8S_KIND_VERSION=v1.35.0 # renovate: datasource=docker depName=kindest/node
           echo "go_path=$(go env GOPATH)" >> $GITHUB_OUTPUT
           echo "min_k8s_version=v1.25.16" >> $GITHUB_OUTPUT
           echo "k8s_latest=${K8S_KIND_VERSION}" >> $GITHUB_OUTPUT
@@ -164,6 +167,10 @@ jobs:
       - name: Check if all the generated files are up to date
         run: make generate-all && git diff --exit-code
 
+      - name: Verify Operator RBAC Synchronization
+        if: steps.filter.outputs.rbac == 'true'
+        run: ./operators/scripts/verify-rbac-sync.sh
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-24.04
@@ -176,14 +183,14 @@ jobs:
         id: goproxy
         run: |
           if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
-          GOPROXY_VALUE="direct"
+          GOPROXY_VALUE="proxy.golang.org,direct"
           else
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: stable
           cache-dependency-path: |
@@ -214,7 +221,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Setup Node.js Environment
-        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
           node-version-file: .nvmrc
 
@@ -247,7 +254,7 @@ jobs:
         run: |
           if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
           echo "No Artifactory secrets available - using direct GOPROXY"
-          GOPROXY_VALUE="direct"
+          GOPROXY_VALUE="proxy.golang.org,direct"
           elif [[ "${{ inputs.is_production_release }}" == "true" ]] || [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && ("${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" =~ ^refs/heads/release-) ]]; then
           echo "Production mode - using production Artifactory"
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_ENDPOINT }}"
@@ -258,7 +265,7 @@ jobs:
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: stable
           cache-dependency-path: |
@@ -281,11 +288,11 @@ jobs:
           notes-header: |
             *Below is the auto-generated changelog, which includes all PRs that went into the release.
             For a shorter version that highlights only important changes, see [CHANGELOG.md](https://github.com/nginx/nginx-gateway-fabric/blob/{{version}}/CHANGELOG.md).*
-        if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
+        if: ${{ (github.event_name == 'push' && github.ref != 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.release_version != '') }}
 
       - name: Download Syft
         if: ${{ inputs.is_production_release }}
-        uses: anchore/sbom-action/download-syft@43a17d6e7add2b5535efe4dcae9952337c479a93 # v0.20.11
+        uses: anchore/sbom-action/download-syft@0b82b0b1a22399a1c542d4d656f70cd903571b5c # v0.21.1
 
       - name: Install Cosign
         if: ${{ inputs.is_production_release }}
@@ -294,7 +301,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
-          version: v2.13.1 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.13.3 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || 'build --snapshot' }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -354,7 +361,7 @@ jobs:
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: stable
 
@@ -458,6 +465,27 @@ jobs:
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
       packages: write # for docker/build-push-action to push to GHCR
       id-token: write # for docker/login to login to NGINX registry
+    secrets: inherit
+
+  redhat-certification:
+    name: Submit images for RedHat certification
+    needs: [build-oss, build-operator]
+    if: ${{ inputs.is_production_release }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ngf
+            tag: ${{ inputs.release_version }}
+          - image: nginx
+            tag: ${{ inputs.release_version }}
+          - image: operator
+            tag: ${{ inputs.operator_version }}
+    uses: ./.github/workflows/redhat-certification.yml
+    with:
+      image: ${{ matrix.image }}
+      tag: ${{ matrix.tag }}
+      dry_run: ${{ inputs.dry_run }}
     secrets: inherit
 
   functional-tests:
@@ -574,14 +602,14 @@ jobs:
         id: goproxy
         run: |
           if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
-          GOPROXY_VALUE="direct"
+          GOPROXY_VALUE="proxy.golang.org,direct"
           else
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: stable
           cache-dependency-path: |

@@ -25,22 +25,25 @@ import (
 
 // ClusterState includes cluster resources necessary to build the Graph.
 type ClusterState struct {
-	GatewayClasses     map[types.NamespacedName]*gatewayv1.GatewayClass
-	Gateways           map[types.NamespacedName]*gatewayv1.Gateway
-	HTTPRoutes         map[types.NamespacedName]*gatewayv1.HTTPRoute
-	TLSRoutes          map[types.NamespacedName]*v1alpha2.TLSRoute
-	Services           map[types.NamespacedName]*v1.Service
-	Namespaces         map[types.NamespacedName]*v1.Namespace
-	ReferenceGrants    map[types.NamespacedName]*v1beta1.ReferenceGrant
-	Secrets            map[types.NamespacedName]*v1.Secret
-	CRDMetadata        map[types.NamespacedName]*metav1.PartialObjectMetadata
-	BackendTLSPolicies map[types.NamespacedName]*gatewayv1.BackendTLSPolicy
-	ConfigMaps         map[types.NamespacedName]*v1.ConfigMap
-	NginxProxies       map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy
-	GRPCRoutes         map[types.NamespacedName]*gatewayv1.GRPCRoute
-	NGFPolicies        map[PolicyKey]policies.Policy
-	SnippetsFilters    map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
-	InferencePools     map[types.NamespacedName]*inference.InferencePool
+	GatewayClasses        map[types.NamespacedName]*gatewayv1.GatewayClass
+	Gateways              map[types.NamespacedName]*gatewayv1.Gateway
+	HTTPRoutes            map[types.NamespacedName]*gatewayv1.HTTPRoute
+	TLSRoutes             map[types.NamespacedName]*v1alpha2.TLSRoute
+	TCPRoutes             map[types.NamespacedName]*v1alpha2.TCPRoute
+	UDPRoutes             map[types.NamespacedName]*v1alpha2.UDPRoute
+	Services              map[types.NamespacedName]*v1.Service
+	Namespaces            map[types.NamespacedName]*v1.Namespace
+	ReferenceGrants       map[types.NamespacedName]*v1beta1.ReferenceGrant
+	Secrets               map[types.NamespacedName]*v1.Secret
+	CRDMetadata           map[types.NamespacedName]*metav1.PartialObjectMetadata
+	BackendTLSPolicies    map[types.NamespacedName]*gatewayv1.BackendTLSPolicy
+	ConfigMaps            map[types.NamespacedName]*v1.ConfigMap
+	NginxProxies          map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy
+	GRPCRoutes            map[types.NamespacedName]*gatewayv1.GRPCRoute
+	NGFPolicies           map[PolicyKey]policies.Policy
+	SnippetsFilters       map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
+	AuthenticationFilters map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter
+	InferencePools        map[types.NamespacedName]*inference.InferencePool
 }
 
 // Graph is a Graph-like representation of Gateway API resources.
@@ -79,6 +82,8 @@ type Graph struct {
 	NGFPolicies map[PolicyKey]*Policy
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
+	// AuthenticationFilters holds all the AuthenticationFilters.
+	AuthenticationFilters map[types.NamespacedName]*AuthenticationFilter
 	// PlusSecrets holds the secrets related to NGINX Plus licensing.
 	PlusSecrets map[types.NamespacedName][]PlusSecretFile
 }
@@ -262,12 +267,15 @@ func BuildGraph(
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 
+	processedAuthenticationFilters := processAuthenticationFilters(state.AuthenticationFilters, secretResolver)
+
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
 		state.HTTPRoutes,
 		state.GRPCRoutes,
 		gws,
 		processedSnippetsFilters,
+		processedAuthenticationFilters,
 		state.InferencePools,
 		featureFlags,
 	)
@@ -276,6 +284,8 @@ func BuildGraph(
 
 	l4routes := buildL4RoutesForGateways(
 		state.TLSRoutes,
+		state.TCPRoutes,
+		state.UDPRoutes,
 		state.Services,
 		gws,
 		refGrantResolver,
@@ -325,6 +335,7 @@ func BuildGraph(
 		BackendTLSPolicies:         processedBackendTLSPolicies,
 		NGFPolicies:                processedPolicies,
 		SnippetsFilters:            processedSnippetsFilters,
+		AuthenticationFilters:      processedAuthenticationFilters,
 		PlusSecrets:                plusSecrets,
 	}
 

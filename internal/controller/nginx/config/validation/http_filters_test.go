@@ -36,24 +36,6 @@ func TestValidateRedirectPort(t *testing.T) {
 	)
 }
 
-func TestValidateRedirectStatusCode(t *testing.T) {
-	t.Parallel()
-	validator := HTTPRedirectValidator{}
-
-	testValidValuesForSupportedValuesValidator(
-		t,
-		validator.ValidateRedirectStatusCode,
-		301,
-		302)
-
-	testInvalidValuesForSupportedValuesValidator(
-		t,
-		validator.ValidateRedirectStatusCode,
-		supportedRedirectStatusCodes,
-		404,
-	)
-}
-
 func TestValidateHostname(t *testing.T) {
 	t.Parallel()
 	validator := HTTPRedirectValidator{}

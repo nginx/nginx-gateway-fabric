@@ -49,7 +49,7 @@ func newKeepAliveChecker(upstreams []http.Upstream) keepAliveChecker {
 
 	return func(upstreamName string) bool {
 		if upstream, exists := upstreamMap[upstreamName]; exists {
-			return upstream.KeepAlive.Connections != 0
+			return upstream.KeepAlive.Connections != nil && *upstream.KeepAlive.Connections > 0
 		}
 
 		return false
@@ -112,9 +112,13 @@ func (g GeneratorImpl) createStreamUpstream(up dataplane.Upstream) stream.Upstre
 		if ep.IPv6 {
 			format = "[%s]:%d"
 		}
+		// Keep the original weight from endpoint
+		// For single backend: Weight is 0 (template won't output weight directive)
+		// For multi-backend: Weight is set from BackendRef.Weight (template outputs weight=X if > 1)
 		upstreamServers[idx] = stream.UpstreamServer{
 			Address: fmt.Sprintf(format, ep.Address, ep.Port),
 			Resolve: ep.Resolve,
+			Weight:  ep.Weight,
 		}
 	}
 
@@ -186,6 +190,7 @@ func (g GeneratorImpl) createUpstream(
 		chosenLBMethod = lbMethod
 	}
 
+	keepAliveSettings := processKeepAliveSettings(upstreamPolicySettings.KeepAlive)
 	if len(up.Endpoints) == 0 {
 		return http.Upstream{
 			Name:      up.Name,
@@ -197,6 +202,7 @@ func (g GeneratorImpl) createUpstream(
 				},
 			},
 			LoadBalancingMethod: chosenLBMethod,
+			KeepAlive:           keepAliveSettings,
 		}
 	}
 
@@ -217,10 +223,29 @@ func (g GeneratorImpl) createUpstream(
 		ZoneSize:            zoneSize,
 		StateFile:           stateFile,
 		Servers:             upstreamServers,
-		KeepAlive:           upstreamPolicySettings.KeepAlive,
+		KeepAlive:           keepAliveSettings,
 		LoadBalancingMethod: chosenLBMethod,
 		SessionPersistence:  sp,
 	}
+}
+
+// processKeepAliveSettings normalizes keepalive configuration from an upstream policy.
+// If Connections is nil, it's set to the default value of 16.
+// If Connections is set to 0, it indicates that keepAlive is disabled.
+func processKeepAliveSettings(spec http.UpstreamKeepAlive) http.UpstreamKeepAlive {
+	if spec.Connections == nil {
+		spec.Connections = helpers.GetPointer[int32](http.KeepAliveConnectionDefault)
+	}
+
+	if spec.Connections != nil && *spec.Connections == 0 {
+		return http.UpstreamKeepAlive{
+			Requests: spec.Requests,
+			Time:     spec.Time,
+			Timeout:  spec.Timeout,
+		}
+	}
+
+	return spec
 }
 
 func createInvalidBackendRefUpstream() http.Upstream {

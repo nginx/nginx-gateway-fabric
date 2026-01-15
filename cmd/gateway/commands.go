@@ -95,6 +95,7 @@ func createControllerCommand() *cobra.Command {
 		usageReportCASecretFlag             = "usage-report-ca-secret"         //nolint:gosec // not credentials
 		usageReportEnforceInitialReportFlag = "usage-report-enforce-initial-report"
 		snippetsFiltersFlag                 = "snippets-filters"
+		snippetsPoliciesFlag                = "snippets-policies"
 		nginxSCCFlag                        = "nginx-scc"
 	)
 
@@ -156,7 +157,8 @@ func createControllerCommand() *cobra.Command {
 
 		disableProductTelemetry bool
 
-		snippetsFilters bool
+		snippetsFilters  bool
+		snippetsPolicies bool
 
 		plus               bool
 		nginxDockerSecrets = stringSliceValidatingValue{
@@ -282,6 +284,7 @@ func createControllerCommand() *cobra.Command {
 					Values: flagValues,
 				},
 				SnippetsFilters:        snippetsFilters,
+				SnippetsPolicies:       snippetsPolicies,
 				NginxDockerSecretNames: nginxDockerSecrets.values,
 				AgentTLSSecretName:     agentTLSSecretName.value,
 				NGINXSCCName:           nginxSCCName.value,
@@ -510,6 +513,14 @@ func createControllerCommand() *cobra.Command {
 		false,
 		"Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the "+
 			"generated NGINX config for HTTPRoute and GRPCRoute resources.",
+	)
+
+	cmd.Flags().BoolVar(
+		&snippetsPolicies,
+		snippetsPoliciesFlag,
+		false,
+		"Enable SnippetsPolicies feature. SnippetsPolicies allow inserting NGINX configuration into the "+
+			"generated NGINX config for Gateway resources.",
 	)
 
 	cmd.Flags().Var(

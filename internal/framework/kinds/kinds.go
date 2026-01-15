@@ -21,6 +21,10 @@ const (
 	GRPCRoute = "GRPCRoute"
 	// TLSRoute is the TLSRoute kind.
 	TLSRoute = "TLSRoute"
+	// TCPRoute is the TCPRoute kind.
+	TCPRoute = "TCPRoute"
+	// UDPRoute is the UDPRoute kind.
+	UDPRoute = "UDPRoute"
 	// BackendTLSPolicy is the BackendTLSPolicy kind.
 	BackendTLSPolicy = "BackendTLSPolicy"
 )
@@ -45,8 +49,14 @@ const (
 	ObservabilityPolicy = "ObservabilityPolicy"
 	// NginxProxy is the NginxProxy kind.
 	NginxProxy = "NginxProxy"
+	// ProxySettingsPolicy is the ProxySettingsPolicy kind.
+	ProxySettingsPolicy = "ProxySettingsPolicy"
 	// SnippetsFilter is the SnippetsFilter kind.
 	SnippetsFilter = "SnippetsFilter"
+	// SnippetsPolicy is the SnippetsPolicy kind.
+	SnippetsPolicy = "SnippetsPolicy"
+	// AuthenticationFilter is the AuthenticationFilter kind.
+	AuthenticationFilter = "AuthenticationFilter"
 	// UpstreamSettingsPolicy is the UpstreamSettingsPolicy kind.
 	UpstreamSettingsPolicy = "UpstreamSettingsPolicy"
 )

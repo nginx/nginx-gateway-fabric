@@ -31,19 +31,6 @@ func (HTTPRedirectValidator) ValidateRedirectPort(_ int32) error {
 	return nil
 }
 
-var supportedRedirectStatusCodes = map[int]struct{}{
-	301: {},
-	302: {},
-}
-
-// ValidateRedirectStatusCode validates a status code to be used in the return directive for a redirect.
-// NGINX allows 0..999. However, let's be conservative and only allow 301 and 302 (the values allowed by the Gateway API
-// spec). Note that in the future, we might reserve some codes for internal redirects, so better not to allow all
-// possible code values. We can always relax the validation later in case there is a need.
-func (HTTPRedirectValidator) ValidateRedirectStatusCode(statusCode int) (valid bool, supportedValues []string) {
-	return validateInSupportedValues(statusCode, supportedRedirectStatusCodes)
-}
-
 var hostnameExamples = []string{"host", "example.com"}
 
 func (HTTPRedirectValidator) ValidateHostname(hostname string) error {

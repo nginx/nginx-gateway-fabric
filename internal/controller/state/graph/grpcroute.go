@@ -21,6 +21,7 @@ func buildGRPCRoute(
 	ghr *v1.GRPCRoute,
 	gws map[types.NamespacedName]*Gateway,
 	snippetsFilters map[types.NamespacedName]*SnippetsFilter,
+	authenticationFilters map[types.NamespacedName]*AuthenticationFilter,
 	featureFlags FeatureFlags,
 ) *L7Route {
 	r := &L7Route{
@@ -53,14 +54,21 @@ func buildGRPCRoute(
 	r.Spec.Hostnames = ghr.Spec.Hostnames
 	r.Attachable = true
 
+	extRefFilterResolvers := buildExtRefFilterResolvers(
+		r.Source.GetNamespace(),
+		snippetsFilters,
+		authenticationFilters,
+	)
+
 	grpcRouteNsName := types.NamespacedName{
 		Namespace: ghr.GetNamespace(),
 		Name:      ghr.GetName(),
 	}
+
 	rules, valid, conds := processGRPCRouteRules(
 		ghr.Spec.Rules,
 		validator,
-		getSnippetsFilterResolverForNamespace(snippetsFilters, r.Source.GetNamespace()),
+		extRefFilterResolvers,
 		grpcRouteNsName,
 		featureFlags,
 	)
@@ -115,6 +123,7 @@ func buildGRPCMirrorRoutes(
 					tmpMirrorRoute,
 					gateways,
 					snippetsFilters,
+					nil,
 					featureFlags,
 				)
 
@@ -168,7 +177,7 @@ func processGRPCRouteRule(
 	specRule v1.GRPCRouteRule,
 	ruleIdx int,
 	validator validation.HTTPFieldsValidator,
-	resolveExtRefFunc resolveExtRefFilter,
+	extRefFilterResolvers map[string]resolveExtRefFilter,
 	grpcRouteNsName types.NamespacedName,
 	featureFlags FeatureFlags,
 ) (RouteRule, routeRuleErrors) {
@@ -195,7 +204,7 @@ func processGRPCRouteRule(
 		convertGRPCRouteFilters(specRule.Filters),
 		rulePath.Child("filters"),
 		validator,
-		resolveExtRefFunc,
+		extRefFilterResolvers,
 	)
 
 	errors = errors.append(filterErrors)
@@ -266,7 +275,7 @@ func processGRPCRouteRule(
 func processGRPCRouteRules(
 	specRules []v1.GRPCRouteRule,
 	validator validation.HTTPFieldsValidator,
-	resolveExtRefFunc resolveExtRefFilter,
+	extRefFilterResolvers map[string]resolveExtRefFilter,
 	grpcRouteNsName types.NamespacedName,
 	featureFlags FeatureFlags,
 ) (rules []RouteRule, valid bool, conds []conditions.Condition) {
@@ -282,7 +291,7 @@ func processGRPCRouteRules(
 			rule,
 			ruleIdx,
 			validator,
-			resolveExtRefFunc,
+			extRefFilterResolvers,
 			grpcRouteNsName,
 			featureFlags,
 		)

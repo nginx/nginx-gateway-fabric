@@ -71,6 +71,14 @@ func TestExecuteServers(t *testing.T) {
 											Percent:   helpers.GetPointer(float64(50)),
 										},
 									},
+									AuthenticationFilter: &dataplane.AuthenticationFilter{
+										Basic: &dataplane.AuthBasic{
+											SecretName:      "auth-basic-filter",
+											SecretNamespace: "test-ns",
+											Realm:           "Restricted",
+											Data:            []byte("user:$apr1$cred"),
+										},
+									},
 								},
 								Match: dataplane.Match{},
 								BackendGroup: dataplane.BackendGroup{
@@ -162,20 +170,22 @@ func TestExecuteServers(t *testing.T) {
 	}
 
 	expSubStrings := map[string]int{
-		"listen 8080 default_server;":                                       1,
-		"listen 8080;":                                                      2,
-		"listen 8443 ssl;":                                                  2,
-		"listen 8443 ssl default_server;":                                   1,
-		"server_name example.com;":                                          2,
-		"server_name cafe.example.com;":                                     2,
-		"ssl_certificate /etc/nginx/secrets/test-keypair.pem;":              2,
-		"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;":          2,
-		"proxy_ssl_server_name on;":                                         1,
-		"status_zone":                                                       0,
-		"include /etc/nginx/includes/location-snippet.conf":                 1,
-		"include /etc/nginx/includes/server-snippet.conf":                   1,
-		"mirror /_ngf-internal-mirror-my-backend-test/route1-0;":            1,
-		"if ($__ngf_internal_mirror_my_backend_test_route1_0_50_00 = \"\")": 1,
+		"listen 8080 default_server;":                                        1,
+		"listen 8080;":                                                       2,
+		"listen 8443 ssl;":                                                   2,
+		"listen 8443 ssl default_server;":                                    1,
+		"server_name example.com;":                                           2,
+		"server_name cafe.example.com;":                                      2,
+		"ssl_certificate /etc/nginx/secrets/test-keypair.pem;":               2,
+		"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;":           2,
+		"proxy_ssl_server_name on;":                                          1,
+		"status_zone":                                                        0,
+		"include /etc/nginx/includes/location-snippet.conf":                  1,
+		"include /etc/nginx/includes/server-snippet.conf":                    1,
+		"auth_basic \"Restricted\";":                                         1,
+		"auth_basic_user_file /etc/nginx/secrets/test-ns_auth-basic-filter;": 1,
+		"mirror /_ngf-internal-mirror-my-backend-test/route1-0;":             1,
+		"if ($__ngf_internal_mirror_my_backend_test_route1_0_50_00 = \"\")":  1,
 		"return 204": 1,
 	}
 
@@ -1288,9 +1298,11 @@ func TestCreateServers(t *testing.T) {
 		},
 		TLSPassthroughServers: []dataplane.Layer4VirtualServer{
 			{
-				Hostname:     "app.example.com",
-				Port:         8443,
-				UpstreamName: "sup",
+				Hostname: "app.example.com",
+				Port:     8443,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "sup", Weight: 0},
+				},
 			},
 		},
 	}
@@ -1814,7 +1826,7 @@ func TestCreateServers(t *testing.T) {
 			{
 				Path:            "= /keep-alive-enabled",
 				ProxyPass:       "http://test_keep_alive_80$request_uri",
-				ProxySetHeaders: createBaseProxySetHeaders("", httpUpgradeHeader, unsetHTTPConnectionHeader),
+				ProxySetHeaders: createBaseProxySetHeaders("", httpUpgradeHeader, keepAliveConnectionHeader),
 				Type:            http.ExternalLocationType,
 				Includes:        externalIncludes,
 			},
@@ -1893,7 +1905,7 @@ func TestCreateServers(t *testing.T) {
 	keepAliveEnabledUpstream := http.Upstream{
 		Name: "test_keep_alive_80",
 		KeepAlive: http.UpstreamKeepAlive{
-			Connections: 1,
+			Connections: helpers.GetPointer[int32](1),
 		},
 	}
 	keepAliveCheck := newKeepAliveChecker([]http.Upstream{keepAliveEnabledUpstream})
@@ -4565,10 +4577,10 @@ func TestCreateBaseProxySetHeaders(t *testing.T) {
 		{
 			msg: "unset connection header and upgrade header",
 			additionalHeaders: []http.Header{
-				unsetHTTPConnectionHeader,
+				keepAliveConnectionHeader,
 				httpUpgradeHeader,
 			},
-			expBaseHeaders: append(expBaseHeaders, unsetHTTPConnectionHeader, httpUpgradeHeader),
+			expBaseHeaders: append(expBaseHeaders, keepAliveConnectionHeader, httpUpgradeHeader),
 		},
 	}
 
@@ -4624,7 +4636,7 @@ func TestGetConnectionHeader(t *testing.T) {
 				{
 					Name: "upstream",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 1,
+						Connections: helpers.GetPointer[int32](1),
 					},
 				},
 			},
@@ -4633,7 +4645,7 @@ func TestGetConnectionHeader(t *testing.T) {
 					UpstreamName: "upstream",
 				},
 			},
-			expConnectionHeader: unsetHTTPConnectionHeader,
+			expConnectionHeader: keepAliveConnectionHeader,
 		},
 		{
 			msg: "multiple upstreams with keepAlive enabled",
@@ -4641,20 +4653,20 @@ func TestGetConnectionHeader(t *testing.T) {
 				{
 					Name: "upstream1",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 1,
+						Connections: helpers.GetPointer[int32](1),
 					},
 				},
 				{
 					Name: "upstream2",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 2,
+						Connections: helpers.GetPointer[int32](2),
 						Requests:    1,
 					},
 				},
 				{
 					Name: "upstream3",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 3,
+						Connections: helpers.GetPointer[int32](3),
 						Time:        "5s",
 					},
 				},
@@ -4670,16 +4682,16 @@ func TestGetConnectionHeader(t *testing.T) {
 					UpstreamName: "upstream3",
 				},
 			},
-			expConnectionHeader: unsetHTTPConnectionHeader,
+			expConnectionHeader: keepAliveConnectionHeader,
 		},
 		{
 			msg:                 "mix of upstreams with keepAlive enabled and disabled",
-			expConnectionHeader: unsetHTTPConnectionHeader,
+			expConnectionHeader: keepAliveConnectionHeader,
 			upstreams: []http.Upstream{
 				{
 					Name: "upstream1",
 					KeepAlive: http.UpstreamKeepAlive{
-						Connections: 1,
+						Connections: helpers.GetPointer[int32](1),
 					},
 				},
 				{

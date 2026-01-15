@@ -1,7 +1,6 @@
 package status_test
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -90,7 +89,7 @@ func TestNewRetryUpdateFunc(t *testing.T) {
 				func(client.Object) bool { return test.statusSetterReturns },
 			)
 
-			conditionPassed, err := f(context.Background())
+			conditionPassed, err := f(t.Context())
 
 			// The function should always return nil.
 			g.Expect(err).ToNot(HaveOccurred())

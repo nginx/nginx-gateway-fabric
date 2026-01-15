@@ -253,7 +253,7 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 
 	testCases := []struct {
 		pod       *corev1.Pod
-		gi        *grpcContext.GrpcInfo
+		grpcInfo  *grpcContext.GrpcInfo
 		name      string
 		shouldErr bool
 	}{
@@ -269,7 +269,7 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 				},
 				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token"},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: false,
 		},
 		{
@@ -284,7 +284,7 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 				},
 				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token"},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: true,
 		},
 		{
@@ -299,7 +299,7 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 				},
 				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token"},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: true,
 		},
 		{
@@ -312,7 +312,7 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 				},
 				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token"},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: true,
 		},
 		{
@@ -327,7 +327,7 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 				},
 				Status: corev1.PodStatus{Phase: corev1.PodPending},
 			},
-			gi:        &grpcContext.GrpcInfo{Token: "dummy-token"},
+			grpcInfo:  &grpcContext.GrpcInfo{Token: "dummy-token"},
 			shouldErr: true,
 		},
 	}
@@ -352,7 +352,7 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 			patchedClient := &patchClient{fakeClient}
 			csPatched := NewContextSetter(patchedClient, "ngf-audience")
 
-			resultCtx, err := csPatched.validateToken(t.Context(), tc.gi)
+			resultCtx, err := csPatched.validateToken(t.Context(), tc.grpcInfo)
 			if tc.shouldErr {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring("no running pods"))

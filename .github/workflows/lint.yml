@@ -35,14 +35,14 @@ jobs:
         id: goproxy
         run: |
           if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
-          GOPROXY_VALUE="direct"
+          GOPROXY_VALUE="proxy.golang.org,direct"
           else
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: stable
 
@@ -50,7 +50,7 @@ jobs:
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
         with:
           working-directory: ${{ matrix.directory }}
-          version: v2.7.2 # renovate: datasource=github-tags depName=golangci/golangci-lint
+          version: v2.8.0 # renovate: datasource=github-tags depName=golangci/golangci-lint
 
   njs-lint:
     name: NJS Lint
@@ -60,7 +60,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Setup Node.js Environment
-        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
           node-version-file: .nvmrc
 

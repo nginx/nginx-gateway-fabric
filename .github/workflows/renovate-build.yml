@@ -54,14 +54,14 @@ jobs:
         id: goproxy
         run: |
           if [[ "${{ secrets.ARTIFACTORY_USER }}" == "" ]]; then
-          GOPROXY_VALUE="direct"
+          GOPROXY_VALUE="proxy.golang.org,direct"
           else
           GOPROXY_VALUE="https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@${{ secrets.ARTIFACTORY_DEV_ENDPOINT }}"
           fi
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: stable
           cache-dependency-path: |
@@ -76,7 +76,7 @@ jobs:
 
       - name: Commit changes
         id: commit
-        uses: stefanzweifel/git-auto-commit-action@28e16e81777b558cc906c8750092100bbb34c5e3 # v7.0.0
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
         with:
           commit_message: "Update files for renovate"
           commit_author: "renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>"

@@ -42,9 +42,9 @@ var httpConnectionHeader = http.Header{
 	Value: "$connection_upgrade",
 }
 
-var unsetHTTPConnectionHeader = http.Header{
+var keepAliveConnectionHeader = http.Header{
 	Name:  "Connection",
-	Value: "",
+	Value: "$connection_keepalive",
 }
 
 var httpUpgradeHeader = http.Header{
@@ -1049,6 +1049,7 @@ func updateLocation(
 
 	location = updateLocationMirrorRoute(location, pathRule.Path, grpc)
 	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
+	location = updateLocationAuthenticationFilter(location, filters.AuthenticationFilter)
 
 	if filters.RequestRedirect != nil {
 		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
@@ -1058,6 +1059,25 @@ func updateLocation(
 	location = updateLocationMirrorFilters(location, filters.RequestMirrors, pathRule.Path, mirrorPercentage)
 	location = updateLocationProxySettings(location, matchRule, grpc, inferenceBackend, keepAliveCheck)
 
+	return location
+}
+
+func updateLocationAuthenticationFilter(
+	location http.Location,
+	authenticationFilter *dataplane.AuthenticationFilter,
+) http.Location {
+	if authenticationFilter != nil {
+		if authenticationFilter.Basic != nil {
+			id := dataplane.GenerateAuthFileID(
+				authenticationFilter.Basic.SecretNamespace,
+				authenticationFilter.Basic.SecretName,
+			)
+			location.AuthBasic = &http.AuthBasic{
+				Realm: authenticationFilter.Basic.Realm,
+				File:  generateAuthBasicFileName(id),
+			}
+		}
+	}
 	return location
 }
 
@@ -1683,9 +1703,12 @@ func createBaseProxySetHeaders(externalHostname string, extraHeaders ...http.Hea
 func getConnectionHeader(keepAliveCheck keepAliveChecker, backends []dataplane.Backend) http.Header {
 	for _, backend := range backends {
 		if keepAliveCheck(backend.UpstreamName) {
-			// if keep-alive settings are enabled on any upstream, the connection header value
-			// must be empty for the location
-			return unsetHTTPConnectionHeader
+			// we set a custom value for connection header when keepAlive is enabled.
+			// we map this header to `$connection_keepalive` variable which is determined by the value of
+			// $http_upgrade header.
+			// If there is an upgrade request, $connection_keepalive will be set to "upgrade", else
+			// connection is set to empty for HTTP requests.
+			return keepAliveConnectionHeader
 		}
 	}
 

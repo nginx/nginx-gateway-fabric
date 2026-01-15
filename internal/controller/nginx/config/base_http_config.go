@@ -5,6 +5,7 @@ import (
 	"net"
 	gotemplate "text/template"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -14,6 +15,7 @@ var baseHTTPTemplate = gotemplate.Must(gotemplate.New("baseHttp").Parse(baseHTTP
 
 type AccessLog struct {
 	Format     string // User's format string
+	Escape     string // Escape setting for variables (default, json, none)
 	Path       string // Where to write logs (/dev/stdout)
 	FormatName string // Internal format name (ngf_user_defined_log_format)
 	Disable    bool   // User's disable flag
@@ -28,8 +30,17 @@ type httpConfig struct {
 	HTTP2                   bool
 }
 
-func executeBaseHTTPConfig(conf dataplane.Configuration) []executeResult {
+func newExecuteBaseHTTPConfigFunc(generator policies.Generator) executeFunc {
+	return func(conf dataplane.Configuration) []executeResult {
+		return executeBaseHTTPConfig(conf, generator)
+	}
+}
+
+func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Generator) []executeResult {
 	includes := createIncludesFromSnippets(conf.BaseHTTPConfig.Snippets)
+
+	policyIncludes := createIncludesFromPolicyGenerateResult(generator.GenerateForHTTP(conf.BaseHTTPConfig.Policies))
+	includes = append(includes, policyIncludes...)
 
 	hc := httpConfig{
 		HTTP2:                   conf.BaseHTTPConfig.HTTP2,
@@ -87,6 +98,9 @@ func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {
 		}
 		if accessLogConfig.Format != "" {
 			accessLog.Format = accessLogConfig.Format
+		}
+		if accessLogConfig.Escape != "" {
+			accessLog.Escape = accessLogConfig.Escape
 		}
 		accessLog.Disable = accessLogConfig.Disable
 

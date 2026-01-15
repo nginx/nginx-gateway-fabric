@@ -19,6 +19,7 @@ import (
 const (
 	gwInstallBasePath = "https://github.com/kubernetes-sigs/gateway-api/releases/download"
 	PlusSecretName    = "nplus-license"
+	NgfControllerName = "gateway.nginx.org/nginx-gateway-controller"
 )
 
 // InstallationConfig contains the configuration for the NGF installation.
@@ -84,6 +85,7 @@ func InstallNGF(cfg InstallationConfig, extraArgs ...string) ([]byte, error) {
 		"--namespace", cfg.Namespace,
 		"--wait",
 		"--set", "nginxGateway.snippetsFilters.enable=true",
+		"--set", "nginxGateway.snippetsPolicies.enable=true",
 		"--set", "nginxGateway.gwAPIExperimentalFeatures.enable=true",
 	}
 	if cfg.ChartVersion != "" {

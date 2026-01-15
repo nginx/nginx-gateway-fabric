@@ -56,7 +56,7 @@ func (fs *fileService) GetFile(
 	ctx context.Context,
 	req *pb.GetFileRequest,
 ) (*pb.GetFileResponse, error) {
-	gi, ok := grpcContext.FromContext(ctx)
+	grpcInfo, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return nil, agentgrpc.ErrStatusInvalidConnection
 	}
@@ -65,7 +65,7 @@ func (fs *fileService) GetFile(
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	contents, err := fs.getFileContents(req, gi.UUID)
+	contents, err := fs.getFileContents(req, grpcInfo.UUID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (fs *fileService) GetFileStream(
 	req *pb.GetFileRequest,
 	server grpc.ServerStreamingServer[pb.FileDataChunk],
 ) error {
-	gi, ok := grpcContext.FromContext(server.Context())
+	grpcInfo, ok := grpcContext.FromContext(server.Context())
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
@@ -93,7 +93,7 @@ func (fs *fileService) GetFileStream(
 		return status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	contents, err := fs.getFileContents(req, gi.UUID)
+	contents, err := fs.getFileContents(req, grpcInfo.UUID)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,11 @@ func (fs *fileService) GetFileStream(
 	sizeUint32 = uint32(size) //nolint:gosec // validation check performed on previous line
 	hash := req.GetFileMeta().GetHash()
 
-	fs.logger.V(1).Info("Sending chunked file to agent", "file", req.GetFileMeta().GetName())
+	fs.logger.V(1).Info(
+		"Sending chunked file to agent",
+		"file", req.GetFileMeta().GetName(),
+		"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+	)
 
 	if err := files.SendChunkedFile(
 		req.GetMessageMeta(),
@@ -133,11 +137,11 @@ func (fs *fileService) GetFileStream(
 
 func (fs *fileService) getFileContents(req *pb.GetFileRequest, connKey string) ([]byte, error) {
 	conn := fs.connTracker.GetConnection(connKey)
-	if conn.PodName == "" {
+	if conn.InstanceID == "" {
 		return nil, status.Errorf(codes.NotFound, "connection not found")
 	}
 
-	deployment := fs.nginxDeployments.Get(conn.Parent)
+	deployment := fs.nginxDeployments.Get(conn.ParentName)
 	if deployment == nil {
 		return nil, status.Errorf(codes.NotFound, "deployment not found in store")
 	}
@@ -145,20 +149,28 @@ func (fs *fileService) getFileContents(req *pb.GetFileRequest, connKey string) (
 	filename := req.GetFileMeta().GetName()
 	contents, fileFoundHash := deployment.GetFile(filename, req.GetFileMeta().GetHash())
 	if len(contents) == 0 {
-		fs.logger.V(1).Info("Error getting file for agent", "file", filename)
+		fs.logger.V(1).Info(
+			"Error getting file for agent",
+			"file", filename,
+			"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+		)
 		if fileFoundHash != "" {
 			fs.logger.V(1).Info(
 				"File found had wrong hash",
-				"hashWanted",
-				req.GetFileMeta().GetHash(),
-				"hashFound",
-				fileFoundHash,
+				"hash_wanted", req.GetFileMeta().GetHash(),
+				"hash_found", fileFoundHash,
+				"correlation_id", req.GetMessageMeta().GetCorrelationId(),
 			)
 		}
 		return nil, status.Errorf(codes.NotFound, "file not found")
 	}
 
-	fs.logger.V(1).Info("Getting file for agent", "file", filename, "fileHash", fileFoundHash)
+	fs.logger.V(1).Info(
+		"Getting file for agent",
+		"file", filename,
+		"file_hash", fileFoundHash,
+		"correlation_id", req.GetMessageMeta().GetCorrelationId(),
+	)
 
 	return contents, nil
 }
@@ -187,17 +199,17 @@ func (fs *fileService) UpdateOverview(
 	ctx context.Context,
 	req *pb.UpdateOverviewRequest,
 ) (*pb.UpdateOverviewResponse, error) {
-	gi, ok := grpcContext.FromContext(ctx)
+	grpcInfo, ok := grpcContext.FromContext(ctx)
 	if !ok {
 		return &pb.UpdateOverviewResponse{}, agentgrpc.ErrStatusInvalidConnection
 	}
 
-	conn := fs.connTracker.GetConnection(gi.UUID)
-	if conn.PodName == "" {
+	conn := fs.connTracker.GetConnection(grpcInfo.UUID)
+	if conn.InstanceID == "" {
 		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "connection not found")
 	}
 
-	deployment := fs.nginxDeployments.Get(conn.Parent)
+	deployment := fs.nginxDeployments.Get(conn.ParentName)
 	if deployment == nil {
 		return &pb.UpdateOverviewResponse{}, status.Errorf(codes.NotFound, "deployment not found in store")
 	}

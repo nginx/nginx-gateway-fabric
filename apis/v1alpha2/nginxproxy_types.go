@@ -372,7 +372,34 @@ type NginxAccessLog struct {
 	//
 	// +optional
 	Format *string `json:"format,omitempty"`
+
+	// Escape specifies how to escape characters in variables for access log.
+	// Possible values are: default, json, none.
+	// If not specified, 'default' escaping is used.
+	// See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
+	//
+	// +optional
+	Escape *NginxAccessLogEscapeType `json:"escape,omitempty"`
 }
+
+// NginxAccessLogEscapeType defines the escape setting for variables in access log format.
+//
+// +kubebuilder:validation:Enum=default;json;none
+type NginxAccessLogEscapeType string
+
+const (
+	// NginxAccessLogEscapeDefault specifies that characters '\"', '\', and other characters with values less
+	// than 32 or above 126 are escaped as '\xXX'.
+	NginxAccessLogEscapeDefault NginxAccessLogEscapeType = "default"
+
+	// NginxAccessLogEscapeJSON specifies that all characters not allowed in JSON strings are escaped.
+	// Characters '\"' and '\' are escaped as '\"' and '\\', characters with values less than 32 are
+	// escaped as '\n', '\r', '\t', '\b', '\f', or '\u00XX'.
+	NginxAccessLogEscapeJSON NginxAccessLogEscapeType = "json"
+
+	// NginxAccessLogEscapeNone disables escaping of characters.
+	NginxAccessLogEscapeNone NginxAccessLogEscapeType = "none"
+)
 
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.
 type NginxPlus struct {

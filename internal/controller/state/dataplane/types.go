@@ -32,6 +32,8 @@ type Configuration struct {
 	BaseStreamConfig BaseStreamConfig
 	// SSLKeyPairs holds all unique SSLKeyPairs.
 	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
+	// AuthSecrets holds all unique secrets for authentication.
+	AuthSecrets map[AuthFileID]AuthFileData
 	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
 	// Gateway API resources.
 	AuxiliarySecrets map[graph.SecretFileType][]byte
@@ -43,16 +45,22 @@ type Configuration struct {
 	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
 	MainSnippets []Snippet
+	// Policies holds the policies attached to the Gateway.
+	Policies []policies.Policy
 	// Upstreams holds all unique http Upstreams.
 	Upstreams []Upstream
 	// NginxPlus specifies NGINX Plus additional settings.
 	NginxPlus NginxPlus
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
-	// StreamUpstreams holds all unique stream Upstreams
+	// StreamUpstreams holds all unique stream Upstreams (TLS, TCP, UDP)
 	StreamUpstreams []Upstream
 	// SSLServers holds all SSLServers.
 	SSLServers []VirtualServer
+	// HTTPServers holds all HTTPServers.
+	HTTPServers []VirtualServer
+	// TCPServers holds all TCPServers
+	TCPServers []Layer4VirtualServer
+	// UDPServers holds all UDPServers
+	UDPServers []Layer4VirtualServer
 	// TLSPassthroughServers hold all TLSPassthroughServers
 	TLSPassthroughServers []Layer4VirtualServer
 	// Telemetry holds the Otel configuration.
@@ -71,8 +79,16 @@ type SSLKeyPairID string
 // The ID is safe to use as a file name.
 type CertBundleID string
 
+// AuthFileID is a unique identifier for an auth user file.
+// This can be both for basic auth and jwt auth user files.
+// The ID is safe to use as a file name.
+type AuthFileID string
+
 // CertBundle is a Certificate bundle.
 type CertBundle []byte
+
+// AuthFileData is the data for a basic auth user file.
+type AuthFileData []byte
 
 // SSLKeyPair is an SSL private/public key pair.
 type SSLKeyPair struct {
@@ -98,16 +114,29 @@ type VirtualServer struct {
 	IsDefault bool
 }
 
+// Layer4Upstream represents a weighted upstream for Layer 4 traffic.
+type Layer4Upstream struct {
+	// Name is the name of the upstream.
+	Name string
+	// Weight is the weight for load balancing.
+	Weight int32
+}
+
 // Layer4VirtualServer is a virtual server for Layer 4 traffic.
 type Layer4VirtualServer struct {
 	// Hostname is the hostname of the server.
 	Hostname string
-	// UpstreamName refers to the name of the upstream that is used.
-	UpstreamName string
+	// Upstreams holds upstreams with weights. For single backend cases, the list contains one entry.
+	Upstreams []Layer4Upstream
 	// Port is the port of the server.
 	Port int32
 	// IsDefault refers to whether this server is created for the default listener hostname.
 	IsDefault bool
+}
+
+// NeedsWeightDistribution returns true if this server needs weight distribution via split_clients.
+func (l4vs Layer4VirtualServer) NeedsWeightDistribution() bool {
+	return len(l4vs.Upstreams) > 1
 }
 
 // Upstream is a pool of endpoints to be load balanced.
@@ -180,12 +209,14 @@ type HTTPFilters struct {
 	RequestRedirect *HTTPRequestRedirectFilter
 	// RequestURLRewrite holds the HTTPURLRewriteFilter.
 	RequestURLRewrite *HTTPURLRewriteFilter
-	// RequestMirrors holds the HTTPRequestMirrorFilters. There could be more than one specified.
-	RequestMirrors []*HTTPRequestMirrorFilter
 	// RequestHeaderModifiers holds the HTTPHeaderFilter.
 	RequestHeaderModifiers *HTTPHeaderFilter
 	// ResponseHeaderModifiers holds the HTTPHeaderFilter.
 	ResponseHeaderModifiers *HTTPHeaderFilter
+	// AuthenticationFilter holds the AuthenticationFilter for the MatchRule.
+	AuthenticationFilter *AuthenticationFilter
+	// RequestMirrors holds the HTTPRequestMirrorFilters. There could be more than one specified.
+	RequestMirrors []*HTTPRequestMirrorFilter
 	// SnippetsFilters holds all the SnippetsFilters for the MatchRule.
 	// Unlike the core and extended filters, there can be more than one SnippetsFilters defined on a routing rule.
 	SnippetsFilters []SnippetsFilter
@@ -198,6 +229,34 @@ type SnippetsFilter struct {
 	LocationSnippet *Snippet
 	// ServerSnippet holds the snippet for the server context.
 	ServerSnippet *Snippet
+}
+
+// Snippet is a snippet of configuration.
+type Snippet struct {
+	// Name is the name of the snippet.
+	Name string
+	// Contents is the content of the snippet.
+	Contents string
+}
+
+// AuthenticationFilter holds the top level spec for each kind of authentication (e.g. Basic, JWT, etc...).
+type AuthenticationFilter struct {
+	// Basic contains fields related to basic authentication.
+	Basic *AuthBasic
+}
+
+// AuthBasic contains fields related to basic authentication.
+// such as the secret data for authentication, and the name/namespace of the secret.
+type AuthBasic struct {
+	// SecretName is the name of the secret containing the basic authentication data.
+	SecretName string
+	// SecretNamespace is the namespace of the secret containing the basic authentication data.
+	SecretNamespace string
+	// Realm is the authentication realm. This is an arbitrary string
+	// displayed to users when prompting for credentials.
+	Realm string
+	// Data contains the user data required for authentication.
+	Data []byte
 }
 
 // HTTPHeader represents an HTTP header.
@@ -422,6 +481,8 @@ type BaseHTTPConfig struct {
 	IPFamily IPFamilyType
 	// GatewaySecretID is the ID of the secret that contains the gateway backend TLS certificate.
 	GatewaySecretID SSLKeyPairID
+	// Policies holds the policies attached to the Gateway for the http context.
+	Policies []policies.Policy
 	// Snippets contain the snippets that apply to the http context.
 	Snippets []Snippet
 	// RewriteIPSettings defines configuration for rewriting the client IP to the original client's IP.
@@ -438,14 +499,6 @@ type BaseHTTPConfig struct {
 type BaseStreamConfig struct {
 	// DNSResolver specifies the DNS resolver configuration for ExternalName services.
 	DNSResolver *DNSResolverConfig
-}
-
-// Snippet is a snippet of configuration.
-type Snippet struct {
-	// Name is the name of the snippet.
-	Name string
-	// Contents is the content of the snippet.
-	Contents string
 }
 
 // RewriteClientIPSettings defines configuration for rewriting the client IP to the original client's IP.
@@ -532,6 +585,8 @@ type DeploymentContext struct {
 type AccessLog struct {
 	// Format is the access log format template.
 	Format string
+	// Escape specifies how to escape characters in variables (default, json, none).
+	Escape string
 	// Disable specifies whether the access log is disabled.
 	Disable bool
 }

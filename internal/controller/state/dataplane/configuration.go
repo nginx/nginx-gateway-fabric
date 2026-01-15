@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
+	coreV1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -58,7 +59,7 @@ func BuildConfiguration(
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
-	httpServers, sslServers := buildServers(gateway, g.ReferencedServices)
+	httpServers, sslServers := buildServers(gateway, g.ReferencedServices, g.ReferencedSecrets)
 	backendGroups := buildBackendGroups(append(httpServers, sslServers...))
 	upstreams := buildUpstreams(
 		ctx,
@@ -78,6 +79,8 @@ func BuildConfiguration(
 		HTTPServers:           httpServers,
 		SSLServers:            sslServers,
 		TLSPassthroughServers: buildPassthroughServers(gateway),
+		TCPServers:            buildL4Servers(logger, gateway, v1.TCPProtocolType),
+		UDPServers:            buildL4Servers(logger, gateway, v1.UDPProtocolType),
 		Upstreams:             upstreams,
 		StreamUpstreams: buildStreamUpstreams(
 			ctx,
@@ -93,12 +96,14 @@ func BuildConfiguration(
 			buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps),
 			backendGroups,
 		),
+		AuthSecrets:       buildAuthSecrets(g.ReferencedSecrets),
 		Telemetry:         buildTelemetry(g, gateway),
 		BaseHTTPConfig:    baseHTTPConfig,
 		BaseStreamConfig:  baseStreamConfig,
 		Logging:           buildLogging(gateway),
 		NginxPlus:         nginxPlus,
 		MainSnippets:      buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
+		Policies:          buildPolicies(gateway, gateway.Policies),
 		AuxiliarySecrets:  buildAuxiliarySecrets(g.PlusSecrets),
 		WorkerConnections: buildWorkerConnections(gateway),
 	}
@@ -144,9 +149,14 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 					foundRouteMatchingListenerHostname = true
 				}
 				passthroughServersMap[key] = append(passthroughServersMap[key], Layer4VirtualServer{
-					Hostname:     h,
-					UpstreamName: r.Spec.BackendRef.ServicePortReference(),
-					Port:         l.Source.Port,
+					Hostname: h,
+					Upstreams: []Layer4Upstream{
+						{
+							Name:   r.Spec.BackendRef.ServicePortReference(),
+							Weight: 0, // TLSRoute doesn't support weights
+						},
+					},
+					Port: l.Source.Port,
 				})
 			}
 		}
@@ -156,11 +166,13 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 					Hostname:  string(*l.Source.Hostname),
 					IsDefault: true,
 					Port:      l.Source.Port,
+					Upstreams: []Layer4Upstream{},
 				})
 			} else {
 				listenerPassthroughServers = append(listenerPassthroughServers, Layer4VirtualServer{
-					Hostname: "",
-					Port:     l.Source.Port,
+					Hostname:  "",
+					Port:      l.Source.Port,
+					Upstreams: []Layer4Upstream{},
 				})
 			}
 		}
@@ -176,6 +188,66 @@ func buildPassthroughServers(gateway *graph.Gateway) []Layer4VirtualServer {
 	return passthroughServers
 }
 
+// buildL4Servers builds Layer4 servers (TCP or UDP) from routes attached to listeners.
+func buildL4Servers(logger logr.Logger, gateway *graph.Gateway, protocol v1.ProtocolType) []Layer4VirtualServer {
+	var servers []Layer4VirtualServer
+	protocolName := string(protocol)
+
+	for _, l := range gateway.Listeners {
+		if !l.Valid || l.Source.Protocol != protocol {
+			continue
+		}
+
+		for _, r := range l.L4Routes {
+			if !r.Valid {
+				continue
+			}
+
+			backendRefs := r.Spec.GetBackendRefs()
+
+			if len(backendRefs) == 0 {
+				logger.V(1).Info("Route has no valid backend references, skipping",
+					"route", r.Source.GetName(),
+					"protocol", protocolName,
+				)
+				continue
+			}
+
+			var upstreams []Layer4Upstream
+			for _, br := range backendRefs {
+				if !br.Valid {
+					continue
+				}
+
+				upstreamName := br.ServicePortReference()
+
+				upstreams = append(upstreams, Layer4Upstream{
+					Name:   upstreamName,
+					Weight: br.Weight,
+				})
+			}
+
+			if len(upstreams) == 0 {
+				logger.V(1).Info("No valid upstreams for route, skipping",
+					"route", r.Source.GetName(),
+					"protocol", protocolName,
+				)
+				continue
+			}
+
+			server := Layer4VirtualServer{
+				Hostname:  "", // Layer4 doesn't use hostnames
+				Upstreams: upstreams,
+				Port:      l.Source.Port,
+			}
+
+			servers = append(servers, server)
+		}
+	}
+
+	return servers
+}
+
 // buildStreamUpstreams builds all stream upstreams.
 func buildStreamUpstreams(
 	ctx context.Context,
@@ -189,8 +261,18 @@ func buildStreamUpstreams(
 	// We use a map to deduplicate them.
 	uniqueUpstreams := make(map[string]Upstream)
 
+	gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
+	allowedAddressType := getAllowedAddressType(ipFamily)
+
+	// Supported protocols for stream upstreams
+	supportedProtocols := map[v1.ProtocolType]bool{
+		v1.TLSProtocolType: true,
+		v1.TCPProtocolType: true,
+		v1.UDPProtocolType: true,
+	}
+
 	for _, l := range gateway.Listeners {
-		if !l.Valid || l.Source.Protocol != v1.TLSProtocolType {
+		if !l.Valid || !supportedProtocols[l.Source.Protocol] {
 			continue
 		}
 
@@ -199,43 +281,47 @@ func buildStreamUpstreams(
 				continue
 			}
 
-			br := route.Spec.BackendRef
-
-			if !br.Valid {
+			backendRefs := route.Spec.GetBackendRefs()
+			if len(backendRefs) == 0 {
 				continue
 			}
 
-			gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
-			if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
-				continue
-			}
+			// Process each backend reference
+			for _, br := range backendRefs {
+				if !br.Valid {
+					continue
+				}
 
-			upstreamName := br.ServicePortReference()
+				if _, ok := br.InvalidForGateways[gatewayNSName]; ok {
+					continue
+				}
 
-			if _, exist := uniqueUpstreams[upstreamName]; exist {
-				continue
-			}
+				upstreamName := br.ServicePortReference()
 
-			var errMsg string
+				if _, exist := uniqueUpstreams[upstreamName]; exist {
+					continue
+				}
 
-			allowedAddressType := getAllowedAddressType(ipFamily)
+				var errMsg string
 
-			eps, err := resolveUpstreamEndpoints(
-				ctx,
-				logger,
-				br,
-				serviceResolver,
-				referencedServices,
-				allowedAddressType,
-			)
-			if err != nil {
-				errMsg = err.Error()
-			}
+				// Use resolveUpstreamEndpoints to handle both regular and ExternalName services
+				eps, err := resolveUpstreamEndpoints(
+					ctx,
+					logger,
+					br,
+					serviceResolver,
+					referencedServices,
+					allowedAddressType,
+				)
+				if err != nil {
+					errMsg = err.Error()
+				}
 
-			uniqueUpstreams[upstreamName] = Upstream{
-				Name:      upstreamName,
-				Endpoints: eps,
-				ErrorMsg:  errMsg,
+				uniqueUpstreams[upstreamName] = Upstream{
+					Name:      upstreamName,
+					Endpoints: eps,
+					ErrorMsg:  errMsg,
+				}
 			}
 		}
 	}
@@ -264,11 +350,11 @@ func buildSSLKeyPairs(
 		if l.Valid && l.ResolvedSecret != nil {
 			id := generateSSLKeyPairID(*l.ResolvedSecret)
 			secret := secrets[*l.ResolvedSecret]
-			// The Data map keys are guaranteed to exist by the graph package.
-			// the CertBundle field is guaranteed to be non-nil by the graph package.
-			keyPairs[id] = SSLKeyPair{
-				Cert: secret.CertBundle.Cert.TLSCert,
-				Key:  secret.CertBundle.Cert.TLSPrivateKey,
+			if secret != nil && secret.CertBundle != nil {
+				keyPairs[id] = SSLKeyPair{
+					Cert: secret.CertBundle.Cert.TLSCert,
+					Key:  secret.CertBundle.Cert.TLSPrivateKey,
+				}
 			}
 		}
 	}
@@ -276,9 +362,11 @@ func buildSSLKeyPairs(
 	if gateway.Valid && gateway.SecretRef != nil {
 		id := generateSSLKeyPairID(*gateway.SecretRef)
 		secret := secrets[*gateway.SecretRef]
-		keyPairs[id] = SSLKeyPair{
-			Cert: secret.CertBundle.Cert.TLSCert,
-			Key:  secret.CertBundle.Cert.TLSPrivateKey,
+		if secret != nil && secret.CertBundle != nil {
+			keyPairs[id] = SSLKeyPair{
+				Cert: secret.CertBundle.Cert.TLSCert,
+				Key:  secret.CertBundle.Cert.TLSPrivateKey,
+			}
 		}
 	}
 
@@ -343,6 +431,20 @@ func buildCertBundles(
 	}
 
 	return bundles
+}
+
+func buildAuthSecrets(secrets map[types.NamespacedName]*graph.Secret) map[AuthFileID]AuthFileData {
+	authBasics := make(map[AuthFileID]AuthFileData, len(secrets))
+
+	for nsname, secret := range secrets {
+		if secret != nil && secret.Source != nil && secret.Source.Type == coreV1.SecretType(graph.SecretTypeHtpasswd) {
+			if data, exists := secret.Source.Data[graph.AuthKey]; exists {
+				id := AuthFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
+				authBasics[id] = data
+			}
+		}
+	}
+	return authBasics
 }
 
 func buildBackendGroups(servers []VirtualServer) []BackendGroup {
@@ -461,6 +563,7 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 func buildServers(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
 ) (http, ssl []VirtualServer) {
 	rulesForProtocol := map[v1.ProtocolType]portPathRules{
 		v1.HTTPProtocolType:  make(portPathRules),
@@ -468,7 +571,9 @@ func buildServers(
 	}
 
 	for _, l := range gateway.Listeners {
-		if l.Source.Protocol == v1.TLSProtocolType {
+		if l.Source.Protocol == v1.TLSProtocolType ||
+			l.Source.Protocol == v1.TCPProtocolType ||
+			l.Source.Protocol == v1.UDPProtocolType {
 			continue
 		}
 		if l.Valid {
@@ -478,7 +583,7 @@ func buildServers(
 				rulesForProtocol[l.Source.Protocol][l.Source.Port] = rules
 			}
 
-			rules.upsertListener(l, gateway, referencedServices)
+			rules.upsertListener(l, gateway, referencedServices, referencedSecrets)
 		}
 	}
 
@@ -543,6 +648,7 @@ func (hpr *hostPathRules) upsertListener(
 	l *graph.Listener,
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
 ) {
 	hpr.listenersExist = true
 	hpr.port = l.Source.Port
@@ -556,7 +662,7 @@ func (hpr *hostPathRules) upsertListener(
 			continue
 		}
 
-		hpr.upsertRoute(r, l, gateway, referencedServices)
+		hpr.upsertRoute(r, l, gateway, referencedServices, referencedSecrets)
 	}
 }
 
@@ -565,6 +671,7 @@ func (hpr *hostPathRules) upsertRoute(
 	listener *graph.Listener,
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
 ) {
 	var hostnames []string
 	GRPC := route.RouteType == graph.RouteTypeGRPC
@@ -610,7 +717,7 @@ func (hpr *hostPathRules) upsertRoute(
 
 		var filters HTTPFilters
 		if rule.Filters.Valid {
-			filters = createHTTPFilters(rule.Filters.Filters, idx, routeNsName)
+			filters = createHTTPFilters(rule.Filters.Filters, idx, routeNsName, referencedSecrets)
 		} else {
 			filters = HTTPFilters{
 				InvalidFilter: &InvalidHTTPFilter{},
@@ -914,7 +1021,12 @@ func getPath(path *v1.HTTPPathMatch) string {
 	return *path.Value
 }
 
-func createHTTPFilters(filters []graph.Filter, ruleIdx int, routeNsName types.NamespacedName) HTTPFilters {
+func createHTTPFilters(
+	filters []graph.Filter,
+	ruleIdx int,
+	routeNsName types.NamespacedName,
+	referencedSecrets map[types.NamespacedName]*graph.Secret,
+) HTTPFilters {
 	var result HTTPFilters
 
 	for _, f := range filters {
@@ -945,11 +1057,19 @@ func createHTTPFilters(filters []graph.Filter, ruleIdx int, routeNsName types.Na
 				result.ResponseHeaderModifiers = convertHTTPHeaderFilter(f.ResponseHeaderModifier)
 			}
 		case graph.FilterExtensionRef:
-			if f.ResolvedExtensionRef != nil && f.ResolvedExtensionRef.SnippetsFilter != nil {
-				result.SnippetsFilters = append(
-					result.SnippetsFilters,
-					convertSnippetsFilter(f.ResolvedExtensionRef.SnippetsFilter),
-				)
+			if f.ResolvedExtensionRef != nil {
+				if f.ResolvedExtensionRef.SnippetsFilter != nil {
+					result.SnippetsFilters = append(
+						result.SnippetsFilters,
+						convertSnippetsFilter(f.ResolvedExtensionRef.SnippetsFilter),
+					)
+				}
+				if f.ResolvedExtensionRef.AuthenticationFilter != nil {
+					result.AuthenticationFilter = convertAuthenticationFilter(
+						f.ResolvedExtensionRef.AuthenticationFilter,
+						referencedSecrets,
+					)
+				}
 			}
 		}
 	}
@@ -983,6 +1103,11 @@ func generateSSLKeyPairID(secret types.NamespacedName) SSLKeyPairID {
 // The ID is safe to use as a file name.
 func generateCertBundleID(caCertRef types.NamespacedName) CertBundleID {
 	return CertBundleID(fmt.Sprintf("cert_bundle_%s_%s", caCertRef.Namespace, caCertRef.Name))
+}
+
+// GenerateAuthFileID is used to generate IDs for both basic auth and jwt auth user files.
+func GenerateAuthFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("%s_%s", namespace, name))
 }
 
 func telemetryEnabled(gw *graph.Gateway) bool {
@@ -1085,6 +1210,7 @@ func buildBaseHTTPConfig(
 		// HTTP2 should be enabled by default
 		HTTP2:                   true,
 		IPFamily:                Dual,
+		Policies:                buildPolicies(gateway, gateway.Policies),
 		Snippets:                buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
 		NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 	}
@@ -1286,9 +1412,13 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 		}
 
 		if srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "" {
-			return &AccessLog{
+			accessLog := &AccessLog{
 				Format: *srcLogSettings.AccessLog.Format,
 			}
+			if srcLogSettings.AccessLog.Escape != nil {
+				accessLog.Escape = string(*srcLogSettings.AccessLog.Escape)
+			}
+			return accessLog
 		}
 	}
 

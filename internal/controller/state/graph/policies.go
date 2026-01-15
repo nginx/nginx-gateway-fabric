@@ -125,7 +125,7 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 		for _, ref := range policy.TargetRefs {
 			switch ref.Kind {
 			case kinds.Gateway:
-				attachPolicyToGateway(policy, ref, g.Gateways, ctlrName, logger)
+				attachPolicyToGateway(policy, ref, g.Gateways, g.Routes, ctlrName, logger)
 			case kinds.HTTPRoute, kinds.GRPCRoute:
 				route, exists := g.Routes[routeKeyForKind(ref.Kind, ref.Nsname)]
 				if !exists {
@@ -292,6 +292,7 @@ func attachPolicyToGateway(
 	policy *Policy,
 	ref PolicyTargetRef,
 	gateways map[types.NamespacedName]*Gateway,
+	routes map[RouteKey]*L7Route,
 	ctlrName string,
 	logger logr.Logger,
 ) {
@@ -306,6 +307,7 @@ func attachPolicyToGateway(
 		// Ancestor already exists, but still attach policy to gateway if it's valid
 		if exists && gw != nil && gw.Valid && gw.Source != nil {
 			gw.Policies = append(gw.Policies, policy)
+			propagateSnippetsPolicyToRoutes(policy, gw, routes)
 		}
 		return
 	}
@@ -350,6 +352,40 @@ func attachPolicyToGateway(
 
 	policy.Ancestors = append(policy.Ancestors, ancestor)
 	gw.Policies = append(gw.Policies, policy)
+	propagateSnippetsPolicyToRoutes(policy, gw, routes)
+}
+
+func propagateSnippetsPolicyToRoutes(
+	policy *Policy,
+	gw *Gateway,
+	routes map[RouteKey]*L7Route,
+) {
+	// Only SnippetsPolicy supports propagation from Gateway to Routes
+	if getPolicyKind(policy.Source) != kinds.SnippetsPolicy {
+		return
+	}
+
+	gwNsName := client.ObjectKeyFromObject(gw.Source)
+
+	for _, route := range routes {
+		for _, parentRef := range route.ParentRefs {
+			// Check if the route is attached to this specific gateway
+			if parentRef.Gateway != nil && parentRef.Gateway.NamespacedName == gwNsName {
+				// Avoid duplicate attachment if logic runs multiple times (though graph build is single pass)
+				// or if policy targets both.
+				alreadyAttached := false
+				for _, p := range route.Policies {
+					if p == policy {
+						alreadyAttached = true
+						break
+					}
+				}
+				if !alreadyAttached {
+					route.Policies = append(route.Policies, policy)
+				}
+			}
+		}
+	}
 }
 
 func processPolicies(
@@ -637,5 +673,15 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 			return
 		}
 		*conditionsList = append(*conditionsList, conditions.NewClientSettingsPolicyAffected())
+	case kinds.SnippetsPolicy:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewSnippetsPolicyAffected()) {
+			return
+		}
+		*conditionsList = append(*conditionsList, conditions.NewSnippetsPolicyAffected())
+	case kinds.ProxySettingsPolicy:
+		if conditions.HasMatchingCondition(*conditionsList, conditions.NewProxySettingsPolicyAffected()) {
+			return
+		}
+		*conditionsList = append(*conditionsList, conditions.NewProxySettingsPolicyAffected())
 	}
 }

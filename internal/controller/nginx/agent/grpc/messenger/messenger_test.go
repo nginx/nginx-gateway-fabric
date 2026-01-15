@@ -64,7 +64,7 @@ func TestSend(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	server := createServer()
@@ -90,7 +90,7 @@ func TestMessages(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	server := createServer()
@@ -108,7 +108,7 @@ func TestErrors(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	server := createErrorServer()

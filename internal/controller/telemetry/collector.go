@@ -71,6 +71,12 @@ type Data struct { //nolint //required to skip golangci-lint-full fieldalignment
 	InferencePoolCount int64
 	// BuildOS is the base operating system the control plane was built on (e.g. alpine, ubi).
 	BuildOS string
+	// GatewayAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+	// attached at the Gateway level.
+	GatewayAttachedProxySettingsPolicyCount int64
+	// RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
+	// attached at the Route level.
+	RouteAttachedProxySettingsPolicyCount int64
 }
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.
@@ -110,6 +116,53 @@ type NGFResourceCounts struct {
 	UpstreamSettingsPolicyCount int64
 	// GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway.
 	GatewayAttachedNpCount int64
+}
+
+func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
+	rc.BackendTLSPolicyCount = int64(len(g.BackendTLSPolicies))
+
+	for policyKey, policy := range g.NGFPolicies {
+		switch policyKey.GVK.Kind {
+		case kinds.ClientSettingsPolicy:
+			if len(policy.TargetRefs) == 0 {
+				continue
+			}
+
+			if policy.TargetRefs[0].Kind == kinds.Gateway {
+				rc.GatewayAttachedClientSettingsPolicyCount++
+			} else {
+				rc.RouteAttachedClientSettingsPolicyCount++
+			}
+		case kinds.ObservabilityPolicy:
+			rc.ObservabilityPolicyCount++
+		case kinds.UpstreamSettingsPolicy:
+			rc.UpstreamSettingsPolicyCount++
+		}
+	}
+}
+
+func CountProxySettingsPolicies(g *graph.Graph) (int64, int64) {
+	gatewayAttachedProxySettingsPolicyCount := int64(0)
+	routeAttachedProxySettingsPolicyCount := int64(0)
+
+	for policyKey, policy := range g.NGFPolicies {
+		if policyKey.GVK.Kind == kinds.ProxySettingsPolicy {
+			if len(policy.TargetRefs) == 0 {
+				continue
+			}
+
+			for _, tr := range policy.TargetRefs {
+				switch tr.Kind {
+				case kinds.Gateway:
+					gatewayAttachedProxySettingsPolicyCount++
+				case kinds.HTTPRoute, kinds.GRPCRoute:
+					routeAttachedProxySettingsPolicyCount++
+				}
+			}
+		}
+	}
+
+	return gatewayAttachedProxySettingsPolicyCount, routeAttachedProxySettingsPolicyCount
 }
 
 // DataCollectorConfig holds configuration parameters for DataCollectorImpl.
@@ -172,7 +225,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		return Data{}, fmt.Errorf("failed to collect NGF replica count: %w", err)
 	}
 
-	deploymentID, err := getDeploymentID(replicaSet)
+	_, deploymentID, err := getDeploymentNameAndID(replicaSet)
 	if err != nil {
 		return Data{}, fmt.Errorf("failed to get NGF deploymentID: %w", err)
 	}
@@ -186,6 +239,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		buildOs = "alpine"
 	}
 	inferencePoolCount := int64(len(g.ReferencedInferencePools))
+	gatewayAttachedProxySettingsPolicyCount, routeAttachedProxySettingsPolicyCount := CountProxySettingsPolicies(g)
 
 	data := Data{
 		Data: tel.Data{
@@ -198,17 +252,19 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 			InstallationID:      deploymentID,
 			ClusterNodeCount:    int64(clusterInfo.NodeCount),
 		},
-		NGFResourceCounts:              graphResourceCount,
-		ImageSource:                    c.cfg.ImageSource,
-		BuildOS:                        buildOs,
-		FlagNames:                      c.cfg.Flags.Names,
-		FlagValues:                     c.cfg.Flags.Values,
-		SnippetsFiltersDirectives:      snippetsFiltersDirectives,
-		SnippetsFiltersDirectivesCount: snippetsFiltersDirectivesCount,
-		NginxPodCount:                  nginxPodCount,
-		ControlPlanePodCount:           int64(replicaCount),
-		NginxOneConnectionEnabled:      c.cfg.NginxOneConsoleConnection,
-		InferencePoolCount:             inferencePoolCount,
+		NGFResourceCounts:                       graphResourceCount,
+		ImageSource:                             c.cfg.ImageSource,
+		BuildOS:                                 buildOs,
+		FlagNames:                               c.cfg.Flags.Names,
+		FlagValues:                              c.cfg.Flags.Values,
+		SnippetsFiltersDirectives:               snippetsFiltersDirectives,
+		SnippetsFiltersDirectivesCount:          snippetsFiltersDirectivesCount,
+		NginxPodCount:                           nginxPodCount,
+		ControlPlanePodCount:                    int64(replicaCount),
+		NginxOneConnectionEnabled:               c.cfg.NginxOneConsoleConnection,
+		InferencePoolCount:                      inferencePoolCount,
+		GatewayAttachedProxySettingsPolicyCount: gatewayAttachedProxySettingsPolicyCount,
+		RouteAttachedProxySettingsPolicyCount:   routeAttachedProxySettingsPolicyCount,
 	}
 
 	return data, nil
@@ -244,26 +300,7 @@ func collectGraphResourceCount(
 		}
 	}
 
-	ngfResourceCounts.BackendTLSPolicyCount = int64(len(g.BackendTLSPolicies))
-
-	for policyKey, policy := range g.NGFPolicies {
-		switch policyKey.GVK.Kind {
-		case kinds.ClientSettingsPolicy:
-			if len(policy.TargetRefs) == 0 {
-				continue
-			}
-
-			if policy.TargetRefs[0].Kind == kinds.Gateway {
-				ngfResourceCounts.GatewayAttachedClientSettingsPolicyCount++
-			} else {
-				ngfResourceCounts.RouteAttachedClientSettingsPolicyCount++
-			}
-		case kinds.ObservabilityPolicy:
-			ngfResourceCounts.ObservabilityPolicyCount++
-		case kinds.UpstreamSettingsPolicy:
-			ngfResourceCounts.UpstreamSettingsPolicyCount++
-		}
-	}
+	ngfResourceCounts.CountPolicies(g)
 
 	ngfResourceCounts.NginxProxyCount = int64(len(g.ReferencedNginxProxies))
 	ngfResourceCounts.SnippetsFilterCount = int64(len(g.SnippetsFilters))
@@ -356,22 +393,22 @@ func getReplicas(replicaSet *appsv1.ReplicaSet) (int, error) {
 	return int(*replicaSet.Spec.Replicas), nil
 }
 
-// getDeploymentID gets the deployment ID of the provided ReplicaSet.
-func getDeploymentID(replicaSet *appsv1.ReplicaSet) (string, error) {
+// getDeploymentNameAndID gets the deployment name and ID of the provided ReplicaSet.
+func getDeploymentNameAndID(replicaSet *appsv1.ReplicaSet) (string, string, error) {
 	replicaOwnerRefs := replicaSet.GetOwnerReferences()
 	if len(replicaOwnerRefs) != 1 {
-		return "", fmt.Errorf("expected one owner reference of the NGF ReplicaSet, got %d", len(replicaOwnerRefs))
+		return "", "", fmt.Errorf("expected one owner reference of the NGF ReplicaSet, got %d", len(replicaOwnerRefs))
 	}
 
 	if replicaOwnerRefs[0].Kind != "Deployment" {
-		return "", fmt.Errorf("expected replicaSet owner reference to be Deployment, got %s", replicaOwnerRefs[0].Kind)
+		return "", "", fmt.Errorf("expected replicaSet owner reference to be Deployment, got %s", replicaOwnerRefs[0].Kind)
 	}
 
 	if replicaOwnerRefs[0].UID == "" {
-		return "", fmt.Errorf("expected replicaSet owner reference to have a UID")
+		return "", "", fmt.Errorf("expected replicaSet owner reference to have a UID")
 	}
 
-	return string(replicaOwnerRefs[0].UID), nil
+	return replicaOwnerRefs[0].Name, string(replicaOwnerRefs[0].UID), nil
 }
 
 // collectClusterID gets the UID of the kube-system namespace.

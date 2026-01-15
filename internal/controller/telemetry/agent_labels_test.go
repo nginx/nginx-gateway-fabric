@@ -43,7 +43,7 @@ func TestCollect_Success(t *testing.T) {
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					Kind: "Deployment",
-					Name: "Deployment1",
+					Name: "ngf-deployment",
 					UID:  "test-uid-replicaSet",
 				},
 			},
@@ -72,14 +72,14 @@ func TestCollect_Success(t *testing.T) {
 	k8sClientReader.GetCalls(baseGetCalls)
 
 	c := telemetry.NewLabelCollector(cfg)
-	labels, err := c.Collect(context.TODO())
+	labels, err := c.Collect(t.Context())
 	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(labels).To(Equal(map[string]string{
 		"product-type":      "ngf",
 		"product-version":   "my-version",
 		"cluster-id":        "test-uid",
-		"control-name":      "ngf-pod",
+		"control-name":      "ngf-deployment",
 		"control-namespace": "nginx-gateway",
 		"control-id":        "test-uid-replicaSet",
 	}))
@@ -192,7 +192,7 @@ func TestCollect_Errors(t *testing.T) {
 					},
 				},
 			})),
-			wantErrContain: "failed to get NGF deploymentID",
+			wantErrContain: "failed to get NGF deployment info",
 		},
 	}
 
@@ -217,7 +217,7 @@ func TestCollect_Errors(t *testing.T) {
 
 			c := telemetry.NewLabelCollector(cfg)
 
-			labels, err := c.Collect(context.TODO())
+			labels, err := c.Collect(t.Context())
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(tt.wantErrContain))
 			g.Expect(labels).To(BeNil())

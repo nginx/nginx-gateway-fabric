@@ -23,6 +23,18 @@ type secretEntry struct {
 	err error
 }
 
+type SecretType string
+
+const (
+	// SecretTypeHtpasswd represents a Secret containing an htpasswd file for Basic Auth.
+	SecretTypeHtpasswd SecretType = "nginx.org/htpasswd" // #nosec G101
+)
+
+const (
+	// Key in the Secret data for Basic Auth credentials.
+	AuthKey = "auth"
+)
+
 // secretResolver wraps the cluster Secrets so that they can be resolved (includes validation). All resolved
 // Secrets are saved to be used later.
 type secretResolver struct {
@@ -51,10 +63,7 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 	case !exist:
 		validationErr = errors.New("secret does not exist")
 
-	case secret.Type != apiv1.SecretTypeTLS:
-		validationErr = fmt.Errorf("secret type must be %q not %q", apiv1.SecretTypeTLS, secret.Type)
-
-	default:
+	case secret.Type == apiv1.SecretTypeTLS:
 		// A TLS Secret is guaranteed to have these data fields.
 		cert := &Certificate{
 			TLSCert:       secret.Data[apiv1.TLSCertKey],
@@ -72,12 +81,19 @@ func (r *secretResolver) resolve(nsname types.NamespacedName) error {
 		}
 
 		certBundle = NewCertificateBundle(nsname, "Secret", cert)
+	case secret.Type == apiv1.SecretType(SecretTypeHtpasswd):
+		// Validate Htpasswd secret
+		if _, exists := secret.Data[AuthKey]; !exists {
+			validationErr = fmt.Errorf("missing required key %q in secret type %q", AuthKey, secret.Type)
+		}
+	default:
+		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)
 	}
 
 	r.resolvedSecrets[nsname] = &secretEntry{
 		Secret: Secret{
 			Source:     secret,
-			CertBundle: certBundle,
+			CertBundle: certBundle, // Set to nil when not a TLS secret.
 		},
 		err: validationErr,
 	}

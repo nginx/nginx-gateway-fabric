@@ -41,17 +41,44 @@ func PrepareRouteRequests(
 			r.Source.GetGeneration(),
 		)
 
-		status := v1alpha2.TLSRouteStatus{
-			RouteStatus: routeStatus,
-		}
+		switch r.Source.(type) {
+		case *v1alpha2.TLSRoute:
+			status := v1alpha2.TLSRouteStatus{
+				RouteStatus: routeStatus,
+			}
 
-		req := UpdateRequest{
-			NsName:       routeKey.NamespacedName,
-			ResourceType: &v1alpha2.TLSRoute{},
-			Setter:       newTLSRouteStatusSetter(status, gatewayCtlrName),
-		}
+			req := UpdateRequest{
+				NsName:       routeKey.NamespacedName,
+				ResourceType: &v1alpha2.TLSRoute{},
+				Setter:       newTLSRouteStatusSetter(status, gatewayCtlrName),
+			}
+			reqs = append(reqs, req)
 
-		reqs = append(reqs, req)
+		case *v1alpha2.TCPRoute:
+			status := v1alpha2.TCPRouteStatus{
+				RouteStatus: routeStatus,
+			}
+			req := UpdateRequest{
+				NsName:       routeKey.NamespacedName,
+				ResourceType: &v1alpha2.TCPRoute{},
+				Setter:       newTCPRouteStatusSetter(status, gatewayCtlrName),
+			}
+			reqs = append(reqs, req)
+
+		case *v1alpha2.UDPRoute:
+			status := v1alpha2.UDPRouteStatus{
+				RouteStatus: routeStatus,
+			}
+			req := UpdateRequest{
+				NsName:       routeKey.NamespacedName,
+				ResourceType: &v1alpha2.UDPRoute{},
+				Setter:       newUDPRouteStatusSetter(status, gatewayCtlrName),
+			}
+			reqs = append(reqs, req)
+
+		default:
+			panic(fmt.Sprintf("Unknown L4 route source type: %T", r.Source))
+		}
 	}
 
 	for routeKey, r := range routes {
@@ -206,12 +233,18 @@ func PrepareGatewayClassRequests(
 
 		apiConds := conditions.ConvertConditions(conds, gc.Source.Generation, transitionTime)
 
+		var suppFeatures []v1.SupportedFeature
+		// Skip reporting supported features if we are in BestEffort mode
+		if !gc.BestEffort {
+			suppFeatures = supportedFeatures(gc.ExperimentalSupported)
+		}
+
 		req := UpdateRequest{
 			NsName:       client.ObjectKeyFromObject(gc.Source),
 			ResourceType: &v1.GatewayClass{},
 			Setter: newGatewayClassStatusSetter(v1.GatewayClassStatus{
 				Conditions:        apiConds,
-				SupportedFeatures: supportedFeatures(gc.ExperimentalSupported),
+				SupportedFeatures: suppFeatures,
 			}),
 		}
 
@@ -219,6 +252,13 @@ func PrepareGatewayClassRequests(
 	}
 
 	for nsname, gwClass := range ignoredGwClasses {
+		var ignoredSuppFeatures []v1.SupportedFeature
+		// Skip reporting supported features if we are in BestEffort mode
+		// If gc is nil, we can safely populate supported features
+		if gc == nil || !gc.BestEffort {
+			ignoredSuppFeatures = supportedFeatures(false)
+		}
+
 		req := UpdateRequest{
 			NsName:       nsname,
 			ResourceType: &v1.GatewayClass{},
@@ -228,7 +268,7 @@ func PrepareGatewayClassRequests(
 					gwClass.Generation,
 					transitionTime,
 				),
-				SupportedFeatures: supportedFeatures(false),
+				SupportedFeatures: ignoredSuppFeatures,
 			}),
 		}
 
@@ -480,6 +520,39 @@ func PrepareSnippetsFilterRequests(
 			NsName:       nsname,
 			ResourceType: snippetsFilter.Source,
 			Setter:       newSnippetsFilterStatusSetter(status, gatewayCtlrName),
+		})
+	}
+
+	return reqs
+}
+
+func PrepareAuthenticationFilterRequests(
+	authenticationFilters map[types.NamespacedName]*graph.AuthenticationFilter,
+	transitionTime metav1.Time,
+	gatewayCtlrName string,
+) []UpdateRequest {
+	reqs := make([]UpdateRequest, 0, len(authenticationFilters))
+
+	for nsname, authenticationFilter := range authenticationFilters {
+		allConds := make([]conditions.Condition, 0, len(authenticationFilter.Conditions)+1)
+		allConds = append(allConds, conditions.NewAuthenticationFilterAccepted())
+		allConds = append(allConds, authenticationFilter.Conditions...)
+
+		conds := conditions.DeduplicateConditions(allConds)
+		apiConds := conditions.ConvertConditions(conds, authenticationFilter.Source.GetGeneration(), transitionTime)
+		status := ngfAPI.AuthenticationFilterStatus{
+			Controllers: []ngfAPI.ControllerStatus{
+				{
+					Conditions:     apiConds,
+					ControllerName: v1alpha2.GatewayController(gatewayCtlrName),
+				},
+			},
+		}
+
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: authenticationFilter.Source,
+			Setter:       newAuthenticationFilterStatusSetter(status, gatewayCtlrName),
 		})
 	}
 

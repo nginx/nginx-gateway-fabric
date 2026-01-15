@@ -32,7 +32,6 @@ type HTTPFieldsValidator interface {
 	ValidateMethodInMatch(method string) (valid bool, supportedValues []string)
 	ValidateRedirectScheme(scheme string) (valid bool, supportedValues []string)
 	ValidateRedirectPort(port int32) error
-	ValidateRedirectStatusCode(statusCode int) (valid bool, supportedValues []string)
 	ValidateHostname(hostname string) error
 	ValidateFilterHeaderName(name string) error
 	ValidateFilterHeaderValue(value string) error
@@ -70,18 +69,17 @@ type SkipValidator struct{}
 
 func (SkipValidator) SkipValidation() bool { return true }
 
-func (SkipValidator) ValidatePathInMatch(string) error                { return nil }
-func (SkipValidator) ValidatePathInRegexMatch(string) error           { return nil }
-func (SkipValidator) ValidateHeaderNameInMatch(string) error          { return nil }
-func (SkipValidator) ValidateHeaderValueInMatch(string) error         { return nil }
-func (SkipValidator) ValidateQueryParamNameInMatch(string) error      { return nil }
-func (SkipValidator) ValidateQueryParamValueInMatch(string) error     { return nil }
-func (SkipValidator) ValidateMethodInMatch(string) (bool, []string)   { return true, nil }
-func (SkipValidator) ValidateRedirectScheme(string) (bool, []string)  { return true, nil }
-func (SkipValidator) ValidateRedirectPort(int32) error                { return nil }
-func (SkipValidator) ValidateRedirectStatusCode(int) (bool, []string) { return true, nil }
-func (SkipValidator) ValidateHostname(string) error                   { return nil }
-func (SkipValidator) ValidateFilterHeaderName(string) error           { return nil }
-func (SkipValidator) ValidateFilterHeaderValue(string) error          { return nil }
-func (SkipValidator) ValidatePath(string) error                       { return nil }
-func (SkipValidator) ValidateDuration(string) (string, error)         { return "", nil }
+func (SkipValidator) ValidatePathInMatch(string) error               { return nil }
+func (SkipValidator) ValidatePathInRegexMatch(string) error          { return nil }
+func (SkipValidator) ValidateHeaderNameInMatch(string) error         { return nil }
+func (SkipValidator) ValidateHeaderValueInMatch(string) error        { return nil }
+func (SkipValidator) ValidateQueryParamNameInMatch(string) error     { return nil }
+func (SkipValidator) ValidateQueryParamValueInMatch(string) error    { return nil }
+func (SkipValidator) ValidateMethodInMatch(string) (bool, []string)  { return true, nil }
+func (SkipValidator) ValidateRedirectScheme(string) (bool, []string) { return true, nil }
+func (SkipValidator) ValidateRedirectPort(int32) error               { return nil }
+func (SkipValidator) ValidateHostname(string) error                  { return nil }
+func (SkipValidator) ValidateFilterHeaderName(string) error          { return nil }
+func (SkipValidator) ValidateFilterHeaderValue(string) error         { return nil }
+func (SkipValidator) ValidatePath(string) error                      { return nil }
+func (SkipValidator) ValidateDuration(string) (string, error)        { return "", nil }

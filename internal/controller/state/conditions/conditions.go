@@ -53,6 +53,10 @@ const (
 	// as another route.
 	RouteReasonHostnameConflict v1.RouteConditionReason = "HostnameConflict"
 
+	// RouteReasonMultipleRoutesOnListener is used with the "Accepted" condition when multiple
+	// L4 Routes are attached to the same listener, which is not supported.
+	RouteReasonMultipleRoutesOnListener v1.RouteConditionReason = "MultipleRoutesOnListener"
+
 	// RouteReasonUnsupportedConfiguration is used when the associated Gateway does not support the Route.
 	// Used with Accepted (false).
 	RouteReasonUnsupportedConfiguration v1.RouteConditionReason = "UnsupportedConfiguration"
@@ -127,8 +131,16 @@ const (
 	// ObservabilityPolicy is applied to a HTTPRoute, or GRPCRoute.
 	ObservabilityPolicyAffected v1.PolicyConditionType = "ObservabilityPolicyAffected"
 
+	// SnippetsPolicyAffected is used with the "PolicyAffected" condition when a
+	// SnippetsPolicy is applied to a Gateway.
+	SnippetsPolicyAffected v1.PolicyConditionType = "SnippetsPolicyAffected"
+
+	// ProxySettingsPolicyAffected is used with the "PolicyAffected" condition when a
+	// ProxySettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	ProxySettingsPolicyAffected v1.PolicyConditionType = "ProxySettingsPolicyAffected"
+
 	// PolicyAffectedReason is used with the "PolicyAffected" condition when a
-	// ObservabilityPolicy or ClientSettingsPolicy is applied to Gateways or Routes.
+	// ObservabilityPolicy, ClientSettingsPolicy, or ProxySettingsPolicy is applied to Gateways or Routes.
 	PolicyAffectedReason v1.PolicyConditionReason = "PolicyAffected"
 
 	// GatewayResolvedRefs condition indicates whether the controller was able to resolve the
@@ -427,6 +439,17 @@ func NewRouteHostnameConflict() Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonHostnameConflict),
 		Message: "Hostname(s) conflict with another Route of the same kind on the same port",
+	}
+}
+
+// NewRouteMultipleRoutesOnListener returns a Condition that indicates that the Route is not
+// accepted because of multiple.L4 Routes attached to the same listener, which is not supported.
+func NewRouteMultipleRoutesOnListener() Condition {
+	return Condition{
+		Type:    string(v1.RouteConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(RouteReasonMultipleRoutesOnListener),
+		Message: "Multiple L4 Routes are attached to the same listener, which is not supported",
 	}
 }
 
@@ -1123,6 +1146,28 @@ func NewSnippetsFilterAccepted() Condition {
 	}
 }
 
+// NewAuthenticationFilterInvalid returns a Condition that indicates that the AuthenticationFilter is not accepted
+// because it is syntactically or semantically invalid.
+func NewAuthenticationFilterInvalid(msg string) Condition {
+	return Condition{
+		Type:    string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(ngfAPI.AuthenticationFilterConditionReasonInvalid),
+		Message: msg,
+	}
+}
+
+// NewAuthenticationFilterAccepted returns a Condition that indicates that the AuthenticationFilter is accepted
+// because it is valid.
+func NewAuthenticationFilterAccepted() Condition {
+	return Condition{
+		Type:    string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(ngfAPI.AuthenticationFilterConditionReasonAccepted),
+		Message: "The AuthenticationFilter is accepted",
+	}
+}
+
 // NewObservabilityPolicyAffected returns a Condition that indicates that an ObservabilityPolicy
 // is applied to the resource.
 func NewObservabilityPolicyAffected() Condition {
@@ -1142,6 +1187,28 @@ func NewClientSettingsPolicyAffected() Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
 		Message: "The ClientSettingsPolicy is applied to the resource",
+	}
+}
+
+// NewSnippetsPolicyAffected returns a Condition that indicates that a SnippetsPolicy
+// is applied to the resource.
+func NewSnippetsPolicyAffected() Condition {
+	return Condition{
+		Type:    string(SnippetsPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "The SnippetsPolicy is applied to the resource",
+	}
+}
+
+// NewProxySettingsPolicyAffected returns a Condition that indicates that a ProxySettingsPolicy
+// is applied to the resource.
+func NewProxySettingsPolicyAffected() Condition {
+	return Condition{
+		Type:    string(ProxySettingsPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "The ProxySettingsPolicy is applied to the resource",
 	}
 }
 

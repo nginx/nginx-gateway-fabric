@@ -1,7 +1,7 @@
 
 # NGINX Gateway Fabric Helm Chart
 
-![Version: 2.2.2](https://img.shields.io/badge/Version-2.2.2-informational?style=flat-square) ![AppVersion: edge](https://img.shields.io/badge/AppVersion-edge-informational?style=flat-square)
+![Version: 2.3.0](https://img.shields.io/badge/Version-2.3.0-informational?style=flat-square) ![AppVersion: edge](https://img.shields.io/badge/AppVersion-edge-informational?style=flat-square)
 
 - [NGINX Gateway Fabric Helm Chart](#nginx-gateway-fabric-helm-chart)
   - [Introduction](#introduction)
@@ -246,7 +246,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginx.usage.resolver` | The nameserver used to resolve the NGINX Plus usage reporting endpoint. Used with NGINX Instance Manager. | string | `""` |
 | `nginx.usage.secretName` | The name of the Secret containing the JWT for NGINX Plus usage reporting. Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway). | string | `"nplus-license"` |
 | `nginx.usage.skipVerify` | Disable client verification of the NGINX Plus usage reporting server certificate. | bool | `false` |
-| `nginxGateway` | The nginxGateway section contains configuration for the NGINX Gateway Fabric control plane deployment. | object | `{"affinity":{},"autoscaling":{"enable":false},"config":{"logging":{"level":"info"}},"configAnnotations":{},"extraVolumeMounts":[],"extraVolumes":[],"gatewayClassAnnotations":{},"gatewayClassName":"nginx","gatewayControllerName":"gateway.nginx.org/nginx-gateway-controller","gwAPIExperimentalFeatures":{"enable":false},"gwAPIInferenceExtension":{"enable":false,"endpointPicker":{"disableTLS":false,"skipVerify":true}},"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric","tag":"edge"},"kind":"deployment","labels":{},"leaderElection":{"enable":true,"lockName":""},"lifecycle":{},"metrics":{"enable":true,"port":9113,"secure":false},"name":"","nodeSelector":{},"podAnnotations":{},"productTelemetry":{"enable":true},"readinessProbe":{"enable":true,"initialDelaySeconds":3,"port":8081},"replicas":1,"resources":{},"service":{"annotations":{},"labels":{}},"serviceAccount":{"annotations":{},"imagePullSecret":"","imagePullSecrets":[],"name":""},"snippetsFilters":{"enable":false},"terminationGracePeriodSeconds":30,"tolerations":[],"topologySpreadConstraints":[]}` |
+| `nginxGateway` | The nginxGateway section contains configuration for the NGINX Gateway Fabric control plane deployment. | object | `{"affinity":{},"autoscaling":{"enable":false},"config":{"logging":{"level":"info"}},"configAnnotations":{},"extraVolumeMounts":[],"extraVolumes":[],"gatewayClassAnnotations":{},"gatewayClassName":"nginx","gatewayControllerName":"gateway.nginx.org/nginx-gateway-controller","gwAPIExperimentalFeatures":{"enable":false},"gwAPIInferenceExtension":{"enable":false,"endpointPicker":{"disableTLS":false,"skipVerify":true}},"image":{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric","tag":"edge"},"kind":"deployment","labels":{},"leaderElection":{"enable":true,"lockName":""},"lifecycle":{},"metrics":{"enable":true,"port":9113,"secure":false},"name":"","nodeSelector":{},"podAnnotations":{},"priorityClassName":"","productTelemetry":{"enable":true},"readinessProbe":{"enable":true,"initialDelaySeconds":3,"port":8081},"replicas":1,"resources":{},"service":{"annotations":{},"labels":{}},"serviceAccount":{"annotations":{},"imagePullSecret":"","imagePullSecrets":[],"name":""},"snippetsFilters":{"enable":false},"snippetsPolicies":{"enable":false},"terminationGracePeriodSeconds":30,"tolerations":[],"topologySpreadConstraints":[]}` |
 | `nginxGateway.affinity` | The affinity of the NGINX Gateway Fabric control plane pod. | object | `{}` |
 | `nginxGateway.autoscaling` | Autoscaling configuration for the NGINX Gateway Fabric control plane. | object | `{"enable":false}` |
 | `nginxGateway.autoscaling.enable` | Enable or disable Horizontal Pod Autoscaler for the control plane. | bool | `false` |
@@ -275,6 +275,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.name` | The name of the NGINX Gateway Fabric deployment - if not present, then by default uses release name given during installation. | string | `""` |
 | `nginxGateway.nodeSelector` | The nodeSelector of the NGINX Gateway Fabric control plane pod. | object | `{}` |
 | `nginxGateway.podAnnotations` | Set of custom annotations for the NGINX Gateway Fabric pods. | object | `{}` |
+| `nginxGateway.priorityClassName` | The priority class name for the NGINX Gateway Fabric control plane pod. | string | `""` |
 | `nginxGateway.productTelemetry.enable` | Enable the collection of product telemetry. | bool | `true` |
 | `nginxGateway.readinessProbe.enable` | Enable the /readyz endpoint on the control plane. | bool | `true` |
 | `nginxGateway.readinessProbe.initialDelaySeconds` | The number of seconds after the Pod has started before the readiness probes are initiated. | int | `3` |
@@ -290,6 +291,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.serviceAccount.imagePullSecrets` | A list of secret names containing docker registry credentials for the control plane. Secrets must exist in the same namespace as the helm release. | list | `[]` |
 | `nginxGateway.serviceAccount.name` | The name of the service account of the NGINX Gateway Fabric control plane pods. Used for RBAC. | string | Autogenerated if not set or set to "" |
 | `nginxGateway.snippetsFilters.enable` | Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the generated NGINX config for HTTPRoute and GRPCRoute resources. | bool | `false` |
+| `nginxGateway.snippetsPolicies.enable` | Enable SnippetsPolicies feature. SnippetsPolicies allow inserting NGINX configuration into the generated NGINX config for Gateway resources. | bool | `false` |
 | `nginxGateway.terminationGracePeriodSeconds` | The termination grace period of the NGINX Gateway Fabric control plane pod. | int | `30` |
 | `nginxGateway.tolerations` | Tolerations for the NGINX Gateway Fabric control plane pod. | list | `[]` |
 | `nginxGateway.topologySpreadConstraints` | The topology spread constraints for the NGINX Gateway Fabric control plane pod. | list | `[]` |

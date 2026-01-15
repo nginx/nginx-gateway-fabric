@@ -47,6 +47,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 				Image:     "ngf-image",
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
 		},
 		baseLabelSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
@@ -177,17 +178,20 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		{
 			Port:       80,
 			Name:       "port-80",
+			Protocol:   corev1.ProtocolTCP,
 			TargetPort: intstr.FromInt(80),
 			NodePort:   30000,
 		},
 		{
 			Port:       8888,
 			Name:       "port-8888",
+			Protocol:   corev1.ProtocolTCP,
 			TargetPort: intstr.FromInt(8888),
 		},
 		{
 			Port:       9999,
 			Name:       "port-9999",
+			Protocol:   corev1.ProtocolTCP,
 			TargetPort: intstr.FromInt(9999),
 		},
 	}))
@@ -208,10 +212,12 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		{
 			ContainerPort: 80,
 			Name:          "port-80",
+			Protocol:      corev1.ProtocolTCP,
 		},
 		{
 			ContainerPort: 8888,
 			Name:          "port-8888",
+			Protocol:      corev1.ProtocolTCP,
 		},
 		{
 			ContainerPort: config.DefaultNginxMetricsPort,
@@ -220,6 +226,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		{
 			ContainerPort: 9999,
 			Name:          "port-9999",
+			Protocol:      corev1.ProtocolTCP,
 		},
 	}))
 
@@ -253,6 +260,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 				Version:   "1.0.0",
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
 		},
 		baseLabelSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
@@ -374,6 +382,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(container.Ports).To(ContainElement(corev1.ContainerPort{
 		ContainerPort: 8443,
 		Name:          "port-8443",
+		Protocol:      corev1.ProtocolTCP,
 		HostPort:      8443,
 	}))
 
@@ -494,6 +503,7 @@ func TestBuildNginxResourceObjects_DeploymentReplicasFromHPA(t *testing.T) {
 						Image:     "ngf-image",
 					},
 					AgentTLSSecretName: agentTLSTestSecretName,
+					AgentLabels:        make(map[string]string),
 				},
 				baseLabelSelector: metav1.LabelSelector{
 					MatchLabels: map[string]string{"app": "nginx"},
@@ -594,6 +604,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 				SkipVerify:          true,
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
@@ -747,6 +758,7 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 			},
 			NginxDockerSecretNames: []string{dockerTestSecretName, dockerSecretRegistry1Name, dockerSecretRegistry2Name},
 			AgentTLSSecretName:     agentTLSTestSecretName,
+			AgentLabels:            make(map[string]string),
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
@@ -838,6 +850,7 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 				Namespace: ngfNamespace,
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
@@ -924,6 +937,7 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 				Namespace: ngfNamespace,
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
@@ -997,6 +1011,7 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,
 			},
+			AgentLabels: make(map[string]string),
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{
@@ -1353,6 +1368,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 				Namespace:   "default",
 				ServiceName: "test-service",
 			},
+			AgentLabels: make(map[string]string),
 		},
 	}
 	objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
@@ -1422,6 +1438,8 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 
 	g.Expect(data).To(ContainSubstring("key1: val1"))
 	g.Expect(data).To(ContainSubstring("key2: val2"))
+	g.Expect(data).To(ContainSubstring("owner-name: default_test"))
+	g.Expect(data).To(ContainSubstring("owner-type: Deployment"))
 	g.Expect(data).To(ContainSubstring("host: console.example.com"))
 	g.Expect(data).To(ContainSubstring("port: 443"))
 	g.Expect(data).To(ContainSubstring("skip_verify: false"))
@@ -1542,6 +1560,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 				Image:     "ngf-image",
 			},
 			AgentTLSSecretName: agentTLSTestSecretName,
+			AgentLabels:        make(map[string]string),
 		},
 		baseLabelSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
@@ -1866,6 +1885,7 @@ func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
 			InferenceExtension:          true,
 			EndpointPickerDisableTLS:    true,
 			EndpointPickerTLSSkipVerify: true,
+			AgentLabels:                 make(map[string]string),
 		},
 		k8sClient: fakeClient,
 		baseLabelSelector: metav1.LabelSelector{

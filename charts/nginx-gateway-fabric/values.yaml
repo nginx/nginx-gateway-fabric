@@ -142,6 +142,9 @@ nginxGateway:
   # -- extraVolumeMounts are the additional volume mounts for the nginx-gateway container.
   extraVolumeMounts: []
 
+   # -- The priority class name for the NGINX Gateway Fabric control plane pod.
+  priorityClassName: ""
+
   # -- The termination grace period of the NGINX Gateway Fabric control plane pod.
   terminationGracePeriodSeconds: 30
 
@@ -230,6 +233,11 @@ nginxGateway:
   snippetsFilters:
     # -- Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the generated NGINX
     # config for HTTPRoute and GRPCRoute resources.
+    enable: false
+
+  snippetsPolicies:
+    # -- Enable SnippetsPolicies feature. SnippetsPolicies allow inserting NGINX configuration into the generated NGINX
+    # config for Gateway resources.
     enable: false
 
 # -- The nginx section contains the configuration for all NGINX data plane deployments
@@ -368,7 +376,6 @@ nginx:
   #     type: boolean
   #   ipFamily:
   #     description: IPFamily specifies the IP family to be used by the NGINX.
-  #     type: string
   #     enum:
   #       - ipv4
   #       - ipv6
@@ -378,7 +385,6 @@ nginx:
   #     description: RewriteClientIP defines configuration for rewriting the client IP to the original client's IP.
   #     properties:
   #       mode:
-  #         type: string
   #         enum:
   #           - ProxyProtocol
   #           - XForwardedFor
@@ -389,7 +395,6 @@ nginx:
   #         items:
   #           properties:
   #             type:
-  #               type: string
   #               enum:
   #                 - CIDR
   #                 - IPAddress
@@ -435,7 +440,6 @@ nginx:
   #       disabledFeatures:
   #         type: array
   #         items:
-  #           type: string
   #           enum:
   #             - DisableTracing
   #   metrics:
@@ -453,7 +457,6 @@ nginx:
   #     description: Logging defines logging related settings for NGINX.
   #     properties:
   #       errorLevel:
-  #         type: string
   #         enum:
   #           - debug
   #           - info
@@ -464,7 +467,6 @@ nginx:
   #           - alert
   #           - emerg
   #       agentLevel:
-  #         type: string
   #         enum:
   #           - debug
   #           - info
@@ -478,6 +480,12 @@ nginx:
   #           disable:
   #             type: boolean
   #             description: Disable turns off access logging when set to true.
+  #           escape:
+  #             description: Escape specifies how to escape characters in variables for access log. If not specified, 'default' escaping is used.
+  #             enum:
+  #               - default
+  #               - json
+  #               - none
   #           format:
   #             type: string
   #             description: Format specifies the custom log format string. If not specified, NGINX default 'combined' format is used.
@@ -490,7 +498,6 @@ nginx:
   #         items:
   #           properties:
   #             type:
-  #               type: string
   #               enum:
   #                 - CIDR
   #                 - IPAddress
@@ -512,13 +519,12 @@ nginx:
   #           type: object
   #           properties:
   #             type:
-  #               type: string
   #               enum:
   #                 - IPAddress
   #                 - Hostname
   #               description: Type specifies the type of address.
   #             value:
-  #               type: string
+  #               type: array
   #               minItems: 1
   #               maxItems: 253
   #               description: Value specifies the address value.
@@ -743,3 +749,8 @@ gateways: []
 #       allowedRoutes:
 #         namespaces:
 #           from: Same
+#   tls:
+#     backend:
+#       clientCertificateRef:
+#         name: gateway-client-cert
+#         kind: Secret

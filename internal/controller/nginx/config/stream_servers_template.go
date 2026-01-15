@@ -10,6 +10,17 @@ resolver_timeout {{ .DNSResolver.Timeout }};
 {{- end }}
 {{- end }}
 
+{{- if .SplitClients }}
+# Split clients configuration for weighted load balancing
+{{- range $sc := .SplitClients }}
+split_clients $connection ${{ $sc.VariableName }} {
+    {{- range $d := $sc.Distributions }}
+    {{ $d.Percent }}% {{ $d.Value }};
+    {{- end }}
+}
+{{- end }}
+{{- end }}
+
 {{- range $s := .Servers }}
 server {
 	{{- if or ($.IPFamily.IPv4) ($s.IsSocket) }}

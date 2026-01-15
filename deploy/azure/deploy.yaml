@@ -169,6 +169,8 @@ rules:
   - clientsettingspolicies
   - observabilitypolicies
   - upstreamsettingspolicies
+  - authenticationfilters
+  - proxysettingspolicies
   verbs:
   - list
   - watch
@@ -179,6 +181,8 @@ rules:
   - clientsettingspolicies/status
   - observabilitypolicies/status
   - upstreamsettingspolicies/status
+  - authenticationfilters/status
+  - proxysettingspolicies/status
   verbs:
   - update
 - apiGroups:

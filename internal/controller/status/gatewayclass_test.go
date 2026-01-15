@@ -41,6 +41,7 @@ func TestSupportedFeatures(t *testing.T) {
 
 	experimentalFeatures := []gatewayv1.FeatureName{
 		gatewayv1.FeatureName(features.SupportTLSRoute),
+		gatewayv1.FeatureName(features.SupportUDPRoute),
 	}
 
 	allFeatures := append(slices.Clone(standardFeatures), experimentalFeatures...)
