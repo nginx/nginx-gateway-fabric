@@ -421,6 +421,11 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					},
 					{
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
+						Directive: "limit_req",
+						Value:     "zone=rate-limit-policy_rl_rlp-multiple-rules_rule1 burst=3 delay=3",
+					},
+					{
+						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
 						Directive: "limit_req_log_level",
 						Value:     "warn",
 					},
@@ -428,6 +433,11 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
 						Directive: "limit_req_status",
 						Value:     "466",
+					},
+					{
+						File:      fmt.Sprintf("%s%s", filePrefix, "_rlp-multiple-rules_route.conf"),
+						Directive: "limit_req_dry_run",
+						Value:     "on",
 					},
 				}),
 			)
