@@ -1,0 +1,21 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: rlp-multiple-targets
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpc-route
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  rateLimit:
+    local:
+      rules:
+      - zoneSize: 10m
+        burst: 3
+        key: "$binary_remote_addr"
+        rate: 2r/m
+    logLevel: "info"
+    rejectCode: 429

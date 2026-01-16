@@ -554,7 +554,7 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 	})
 })
 
-func expectRequestToSucceed(appURL, address string, responseBodyMessage string) error {
+func expectRequestToSucceed(appURL, address, responseBodyMessage string) error {
 	request := framework.Request{
 		URL:     appURL,
 		Address: address,
