@@ -103,10 +103,10 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		})
 
 		Context("verify working traffic", func() {
-			It("should return custom error code response for HTTPRoute `coffee` when rate is exceeded", func() {
+			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
 				Eventually(
 					func() error {
-						return expectHTTPCodeWithParallelRequests(baseCoffeeURL, address, 466)
+						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -262,10 +262,10 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		})
 
 		Context("verify working traffic", func() {
-			It("should return custom error code response for HTTPRoute `coffee` when rate is exceeded", func() {
+			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
 				Eventually(
 					func() error {
-						return expectHTTPCodeWithParallelRequests(baseCoffeeURL, address, 429)
+						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 429)
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -367,10 +367,10 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		})
 
 		Context("verify working traffic", func() {
-			It("should return custom error code response for HTTPRoute `coffee` when rate is exceeded", func() {
+			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
 				Eventually(
 					func() error {
-						return expectHTTPCodeWithParallelRequests(baseCoffeeURL, address, 466)
+						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -525,6 +525,21 @@ func findTargetRefForAncestor(
 		}
 	}
 	return gatewayv1.LocalPolicyTargetReference{}, false
+}
+
+func verifyRateLimitPolicyWorksAsExpected(appURL, address, responseBodyMessage string, expectedCode int) error {
+	err := expectRequestToSucceed(appURL, address, responseBodyMessage)
+	if err != nil {
+		return fmt.Errorf("initial request did not succeed: %w", err)
+	}
+
+	err = expectHTTPCodeWithParallelRequests(appURL, address, expectedCode)
+	if err != nil {
+		return fmt.Errorf("did not receive expected HTTP code %d when rate limit was exceeded: %w",
+			expectedCode, err)
+	}
+
+	return nil
 }
 
 // expectHTTPCodeWithParallelRequests sends parallel requests to the given URL
