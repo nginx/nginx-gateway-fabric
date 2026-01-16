@@ -1190,7 +1190,7 @@ func (rm *ResourceManager) GetNginxConfig(
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.GetNginxConfigTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.RequestTimeout)
 	defer cancel()
 
 	buf := &bytes.Buffer{}

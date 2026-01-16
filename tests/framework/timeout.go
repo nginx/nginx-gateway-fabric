@@ -41,9 +41,6 @@ type TimeoutConfig struct {
 
 	// GatewayListenerUpdateTimeout represents the maximum time for Gateway Listener count to be updated.
 	GatewayListenerUpdateTimeout time.Duration
-
-	// GetNginxConfigTimeout represents the maximum time for getting NGINX configuration from the NGINX container.
-	GetNginxConfigTimeout time.Duration
 }
 
 // DefaultTimeoutConfig populates a TimeoutConfig with the default values.
@@ -62,6 +59,5 @@ func DefaultTimeoutConfig() TimeoutConfig {
 		TestForTrafficTimeout:        60 * time.Second,
 		KubernetesClientTimeout:      10 * time.Second,
 		GatewayListenerUpdateTimeout: 60 * time.Second,
-		GetNginxConfigTimeout:        90 * time.Second,
 	}
 }

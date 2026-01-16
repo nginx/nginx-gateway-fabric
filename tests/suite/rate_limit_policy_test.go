@@ -103,7 +103,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		})
 
 		Context("verify working traffic", func() {
-			It("should return 200 response for HTTPRoute `coffee`", func() {
+			It("should return custom error code response for HTTPRoute `coffee` when rate is exceeded", func() {
 				Eventually(
 					func() error {
 						return expectHTTPCodeWithParallelRequests(baseCoffeeURL, address, 466)
@@ -262,7 +262,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		})
 
 		Context("verify working traffic", func() {
-			It("should return 200 response for HTTPRoute `coffee`", func() {
+			It("should return custom error code response for HTTPRoute `coffee` when rate is exceeded", func() {
 				Eventually(
 					func() error {
 						return expectHTTPCodeWithParallelRequests(baseCoffeeURL, address, 429)
@@ -367,7 +367,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		})
 
 		Context("verify working traffic", func() {
-			It("should return 200 response for HTTPRoute `coffee`", func() {
+			It("should return custom error code response for HTTPRoute `coffee` when rate is exceeded", func() {
 				Eventually(
 					func() error {
 						return expectHTTPCodeWithParallelRequests(baseCoffeeURL, address, 466)
