@@ -35,7 +35,12 @@ const (
 
 const (
 	// AuthenticationFilter validation errors.
-	expectedBasicRequiredError = `for type=Basic, spec.basic must be set`
+	expectedBasicRequiredError       = "Basic requires spec.basic"
+	expectedJWTMustBeUnsetForBasic   = "spec.jwt must be unset"
+	expectedJWTRequiredError         = "JWT requires spec.jwt"
+	expectedBasicMustBeUnsetForJWT   = "spec.basic must be unset"
+	expectedFileMustBeUnsetForRemote = "File requires spec.file. spec.remote must be unset"
+	expectedRemoteMustBeUnsetForFile = "Remote requires spec.remote. spec.file must be unset"
 
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"
