@@ -97,14 +97,6 @@ const (
 //
 //nolint:lll
 type JWTAuth struct {
-	// Realm used by NGINX `auth_jwt` directive
-	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
-	// Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
-	Realm string `json:"realm"`
-
-	// Mode selects how JWT keys are provided: local file or remote JWKS.
-	Mode JWTKeyMode `json:"mode"`
-
 	// File specifies local JWKS configuration.
 	// Required when Mode == File.
 	//
@@ -142,13 +134,18 @@ type JWTAuth struct {
 	//
 	// +optional
 	KeyCache *Duration `json:"keyCache,omitempty"`
+
+	// Realm used by NGINX `auth_jwt` directive
+	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
+	// Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
+	Realm string `json:"realm"`
+
+	// Mode selects how JWT keys are provided: local file or remote JWKS.
+	Mode JWTKeyMode `json:"mode"`
 }
 
 // JWTFileKeySource specifies local JWKS key configuration.
 type JWTFileKeySource struct {
-	// SecretRef references a Secret containing the JWKS.
-	SecretRef LocalObjectReference `json:"secretRef"`
-
 	// KeyCache is the cache duration for keys.
 	// Configures `auth_jwt_key_cache` directive.
 	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
@@ -156,18 +153,21 @@ type JWTFileKeySource struct {
 	//
 	// +optional
 	KeyCache *Duration `json:"keyCache,omitempty"`
+
+	// SecretRef references a Secret containing the JWKS.
+	SecretRef LocalObjectReference `json:"secretRef"`
 }
 
 // RemoteKeySource specifies remote JWKS configuration.
 type RemoteKeySource struct {
-	// URL is the JWKS endpoint, e.g. "https://issuer.example.com/.well-known/jwks.json".
-	URL string `json:"url"`
-
 	// Cache configures NGINX proxy_cache for JWKS fetches made via auth_jwt_key_request.
 	// When set, NGF will render proxy_cache_path in http{} and attach proxy_cache to the internal JWKS location.
 	//
 	// +optional
 	Cache *JWKSCache `json:"cache,omitempty"`
+
+	// URL is the JWKS endpoint, e.g. "https://issuer.example.com/.well-known/jwks.json".
+	URL string `json:"url"`
 }
 
 // JWKSCache controls NGINX `proxy_cache_path` and `proxy_cache` settings used for JWKS responses.
@@ -186,10 +186,6 @@ type JWKSCache struct {
 	// +optional
 	KeysZoneName *string `json:"keysZoneName,omitempty"`
 
-	// KeysZoneSize is the size of the cache keys zone (e.g. "10m").
-	// This is required to avoid unbounded allocations.
-	KeysZoneSize string `json:"keysZoneSize"`
-
 	// MaxSize limits the total size of the cache (e.g. "50m").
 	//
 	// +optional
@@ -205,6 +201,10 @@ type JWKSCache struct {
 	//
 	// +optional
 	UseTempPath *bool `json:"useTempPath,omitempty"`
+
+	// KeysZoneSize is the size of the cache keys zone (e.g. "10m").
+	// This is required to avoid unbounded allocations.
+	KeysZoneSize string `json:"keysZoneSize"`
 }
 
 // JWTType represents NGINX auth_jwt_type.
