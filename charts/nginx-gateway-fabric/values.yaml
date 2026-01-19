@@ -245,6 +245,32 @@ nginxGateway:
     # the generated NGINX config for HTTPRoute and GRPCRoute resources.
     enable: false
 
+  # -- PLM (Policy Lifecycle Manager) storage configuration for WAF bundles.
+  # Used when WAF is enabled to fetch APPolicy and APLogConf bundles from S3-compatible storage.
+  plmStorage:
+    # -- The S3-compatible storage endpoint URL.
+    url: ""
+
+    # -- The name of the Secret containing S3 credentials for PLM storage.
+    # The Secret should have "accessKeyId" and "secretAccessKey" data fields.
+    # Must exist in the same namespace as the helm release.
+    # If not provided, anonymous access is used.
+    credentialsSecretName: ""
+
+    # -- TLS configuration for PLM storage connections.
+    tls:
+      # -- Path to the CA certificate file for TLS verification.
+      caCertPath: ""
+
+      # -- Path to the client certificate file for mutual TLS.
+      clientCertPath: ""
+
+      # -- Path to the client key file for mutual TLS.
+      clientKeyPath: ""
+
+      # -- Skip TLS certificate verification. Use only for testing.
+      insecureSkipVerify: false
+
 # -- The nginx section contains the configuration for all NGINX data plane deployments
 # installed by the NGINX Gateway Fabric control plane.
 nginx:

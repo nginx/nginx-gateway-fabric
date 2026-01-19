@@ -1,10 +1,6 @@
 package waf
 
 import (
-	"errors"
-	"fmt"
-	"net/url"
-
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -16,7 +12,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-// Validator validates a WAFPolicy.
+// Validator validates a WAFGatewayBindingPolicy.
 // Implements policies.Validator interface.
 type Validator struct {
 	genericValidator validation.GenericValidator
@@ -27,16 +23,23 @@ func NewValidator(genericValidator validation.GenericValidator) *Validator {
 	return &Validator{genericValidator: genericValidator}
 }
 
-// Validate validates the spec of a WAFPolicy.
+// Validate validates the spec of a WAFGatewayBindingPolicy.
 func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
-	wp := helpers.MustCastObject[*ngfAPI.WAFPolicy](policy)
+	wp := helpers.MustCastObject[*ngfAPI.WAFGatewayBindingPolicy](policy)
 
-	targetRefPath := field.NewPath("spec").Child("targetRef")
+	targetRefsPath := field.NewPath("spec").Child("targetRefs")
 	supportedKinds := []gatewayv1.Kind{kinds.Gateway, kinds.HTTPRoute, kinds.GRPCRoute}
 	supportedGroups := []gatewayv1.Group{gatewayv1.GroupName}
 
-	if err := policies.ValidateTargetRef(wp.Spec.TargetRef, targetRefPath, supportedGroups, supportedKinds); err != nil {
-		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
+	for i, targetRef := range wp.Spec.TargetRefs {
+		if err := policies.ValidateTargetRef(
+			targetRef,
+			targetRefsPath.Index(i),
+			supportedGroups,
+			supportedKinds,
+		); err != nil {
+			return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
+		}
 	}
 
 	if err := v.validateSettings(wp.Spec); err != nil {
@@ -46,7 +49,7 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 	return nil
 }
 
-// ValidateGlobalSettings validates a WAFPolicy with respect to the NginxProxy global settings.
+// ValidateGlobalSettings validates a WAFGatewayBindingPolicy with respect to the NginxProxy global settings.
 func (v *Validator) ValidateGlobalSettings(
 	_ policies.Policy,
 	globalSettings *policies.GlobalSettings,
@@ -57,7 +60,6 @@ func (v *Validator) ValidateGlobalSettings(
 		}
 	}
 
-	// FIXME(ciarams87): Update to condition reason from conditions package when available.
 	if !globalSettings.WAFEnabled {
 		return []conditions.Condition{
 			conditions.NewPolicyNotAcceptedNginxProxyNotSet("WAF is not enabled in NginxProxy"),
@@ -66,67 +68,30 @@ func (v *Validator) ValidateGlobalSettings(
 	return nil
 }
 
-// Conflicts returns false as we don't allow merging for WAFPolicies.
+// Conflicts returns false as we don't allow merging for WAFGatewayBindingPolicies.
 func (v Validator) Conflicts(_, _ policies.Policy) bool {
 	return false
 }
 
-func (v *Validator) validateSettings(spec ngfAPI.WAFPolicySpec) error {
+func (v *Validator) validateSettings(spec ngfAPI.WAFGatewayBindingPolicySpec) error {
 	var allErrs field.ErrorList
 	fieldPath := field.NewPath("spec")
 
-	if spec.PolicySource != nil {
-		allErrs = append(allErrs, v.validatePolicySource(*spec.PolicySource, fieldPath.Child("policySource"))...)
+	// Validate apPolicySource is set with a name.
+	// Resource existence and cross-namespace ReferenceGrant checks are handled at graph processing time.
+	if spec.ApPolicySource == nil {
+		allErrs = append(allErrs, field.Required(fieldPath.Child("apPolicySource"), "apPolicySource is required"))
+	} else if spec.ApPolicySource.Name == "" {
+		allErrs = append(allErrs, field.Required(fieldPath.Child("apPolicySource").Child("name"), "name is required"))
 	}
 
+	// Validate security logs if present
 	for i, sl := range spec.SecurityLogs {
 		logPath := fieldPath.Child("securityLogs").Index(i)
-		if sl.LogProfileBundle != nil {
-			allErrs = append(allErrs, v.validatePolicySource(*sl.LogProfileBundle, logPath.Child("logProfileBundle"))...)
+		if sl.ApLogConfSource.Name == "" {
+			allErrs = append(allErrs, field.Required(logPath.Child("apLogConfSource").Child("name"), "name is required"))
 		}
 	}
 
 	return allErrs.ToAggregate()
-}
-
-func (v *Validator) validatePolicySource(source ngfAPI.WAFPolicySource, fieldPath *field.Path) field.ErrorList {
-	var allErrs field.ErrorList
-
-	if err := v.validateFileLocation(source.FileLocation); err != nil {
-		allErrs = append(allErrs, field.Invalid(fieldPath.Child("fileLocation"), source.FileLocation, err.Error()))
-	}
-
-	if source.Polling != nil {
-		if source.Polling.ChecksumLocation != nil {
-			if err := v.validateFileLocation(*source.Polling.ChecksumLocation); err != nil {
-				path := fieldPath.Child("polling").Child("checksumLocation")
-				allErrs = append(allErrs, field.Invalid(path, *source.Polling.ChecksumLocation, err.Error()))
-			}
-		}
-	}
-
-	return allErrs
-}
-
-// validateFileLocation validates that the file location is a valid URL.
-// Supports HTTP and HTTPS URLs.
-func (v *Validator) validateFileLocation(location string) error {
-	if location == "" {
-		return errors.New("cannot be empty")
-	}
-
-	u, err := url.ParseRequestURI(location)
-	if err != nil {
-		return fmt.Errorf("invalid URL format: %w", err)
-	}
-
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return errors.New("scheme must be http or https")
-	}
-
-	if u.Host == "" {
-		return errors.New("host cannot be empty")
-	}
-
-	return nil
 }

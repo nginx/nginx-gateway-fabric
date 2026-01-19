@@ -65,8 +65,57 @@ const (
 	UpstreamSettingsPolicy = "UpstreamSettingsPolicy"
 	// RateLimitPolicy is the RateLimitPolicy kind.
 	RateLimitPolicy = "RateLimitPolicy"
-	// WAFPolicy is the WAFPolicy kind.
-	WAFPolicy = "WAFPolicy"
+	// WAFGatewayBindingPolicy is the WAFGatewayBindingPolicy kind.
+	WAFGatewayBindingPolicy = "WAFGatewayBindingPolicy"
+)
+
+// PLM (Policy Lifecycle Manager) kinds.
+// These are external CRDs managed by PLM that NGF watches for WAF support.
+const (
+	// APPolicy is the APPolicy kind from PLM.
+	APPolicy = "APPolicy"
+	// APLogConf is the APLogConf kind from PLM.
+	APLogConf = "APLogConf"
+)
+
+// PLM API Group and Version.
+const (
+	// PLMGroup is the API group for PLM CRDs.
+	PLMGroup = "appprotect.f5.com"
+	// PLMVersion is the API version for PLM CRDs.
+	PLMVersion = "v1beta1"
+)
+
+// PLM GroupVersionKind definitions.
+var (
+	// APPolicyGVK is the GroupVersionKind for APPolicy.
+	APPolicyGVK = schema.GroupVersionKind{
+		Group:   PLMGroup,
+		Version: PLMVersion,
+		Kind:    APPolicy,
+	}
+	// APLogConfGVK is the GroupVersionKind for APLogConf.
+	APLogConfGVK = schema.GroupVersionKind{
+		Group:   PLMGroup,
+		Version: PLMVersion,
+		Kind:    APLogConf,
+	}
+)
+
+// PLM GroupVersionResource definitions.
+var (
+	// APPolicyGVR is the GroupVersionResource for APPolicy.
+	APPolicyGVR = schema.GroupVersionResource{
+		Group:    PLMGroup,
+		Version:  PLMVersion,
+		Resource: "appolicies",
+	}
+	// APLogConfGVR is the GroupVersionResource for APLogConf.
+	APLogConfGVR = schema.GroupVersionResource{
+		Group:    PLMGroup,
+		Version:  PLMVersion,
+		Resource: "aplogconfs",
+	}
 )
 
 // MustExtractGVK is a function that extracts the GroupVersionKind (GVK) of a client.object.

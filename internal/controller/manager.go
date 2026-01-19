@@ -59,6 +59,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/waf"
 	ngxvalidation "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/plm"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
@@ -73,6 +74,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/predicate"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/runnables"
@@ -139,6 +141,17 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
+	// Create WAF fetcher for PLM storage (returns nil if not configured)
+	wafFetcher, err := createWAFFetcher(
+		cfg.PLMStorageConfig,
+		cfg.GatewayPodConfig.Namespace,
+		mgr.GetAPIReader(),
+		cfg.Logger,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create WAF fetcher: %w", err)
+	}
+
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 		GatewayCtlrName:  cfg.GatewayCtlrName,
 		GatewayClassName: cfg.GatewayClassName,
@@ -151,6 +164,7 @@ func StartManager(cfg config.Config) error {
 		EventRecorder:  recorder,
 		MustExtractGVK: mustExtractGVK,
 		PlusSecrets:    plusSecrets,
+		WAFFetcher:     wafFetcher,
 		FeatureFlags: graph.FeatureFlags{
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
@@ -358,7 +372,7 @@ func createPolicyManager(
 			Validator: ratelimit.NewValidator(validator),
 		},
 		{
-			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFGatewayBindingPolicy{}),
 			Validator: waf.NewValidator(validator),
 		},
 	}
@@ -682,11 +696,37 @@ func registerControllers(
 			},
 		},
 		{
-			objectType: &ngfAPIv1alpha1.WAFPolicy{},
+			objectType: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
 		},
+	}
+
+	// PLM resources (APPolicy, APLogConf) - only register if PLM storage is configured
+	// These are managed by the Policy Lifecycle Manager and we only watch status changes
+	if cfg.PLMStorageConfig.URL != "" {
+		plmResources := []ctlrCfg{
+			{
+				objectType: plm.NewAPPolicyUnstructured(),
+				name:       "appolicy",
+				options: []controller.Option{
+					controller.WithK8sPredicate(predicate.PLMStatusChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK:          &kinds.APPolicyGVK,
+			},
+			{
+				objectType: plm.NewAPLogConfUnstructured(),
+				name:       "aplogconf",
+				options: []controller.Option{
+					controller.WithK8sPredicate(predicate.PLMStatusChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK:          &kinds.APLogConfGVK,
+			},
+		}
+		controllerRegCfgs = append(controllerRegCfgs, plmResources...)
 	}
 
 	// BackendTLSPolicy v1 - conditionally register if CRD exists
@@ -933,6 +973,87 @@ func validateSecret(reader client.Reader, nsName types.NamespacedName, fields ..
 	return nil
 }
 
+// S3 credential secret field names.
+const (
+	plmAccessKeyIDField     = "accessKeyId"
+	plmSecretAccessKeyField = "secretAccessKey"
+)
+
+// createWAFFetcher creates an S3-compatible fetcher for WAF policy bundles from PLM storage.
+func createWAFFetcher(
+	plmCfg config.PLMStorageConfig,
+	namespace string,
+	reader client.Reader,
+	logger logr.Logger,
+) (fetch.Fetcher, error) {
+	// Return nil if PLM storage is not configured
+	if plmCfg.URL == "" {
+		return nil, nil //nolint:nilnil // nil fetcher with no error is intentional when PLM is not configured
+	}
+
+	var opts []fetch.Option
+
+	// Configure credentials if secret name is provided
+	if plmCfg.CredentialsSecretName != "" {
+		secretNsName := types.NamespacedName{
+			Namespace: namespace,
+			Name:      plmCfg.CredentialsSecretName,
+		}
+
+		secret, err := getValidatedSecret(reader, secretNsName, plmAccessKeyIDField, plmSecretAccessKeyField)
+		if err != nil {
+			return nil, err
+		}
+
+		opts = append(opts, fetch.WithCredentials(
+			string(secret.Data[plmAccessKeyIDField]),
+			string(secret.Data[plmSecretAccessKeyField]),
+		))
+	}
+
+	// Configure TLS if any TLS settings are provided
+	if plmCfg.TLSCACertPath != "" || plmCfg.TLSClientCertPath != "" || plmCfg.TLSInsecureSkipVerify {
+		tlsConfig, err := fetch.TLSConfigFromFiles(
+			plmCfg.TLSCACertPath,
+			plmCfg.TLSClientCertPath,
+			plmCfg.TLSClientKeyPath,
+			plmCfg.TLSInsecureSkipVerify,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create TLS config: %w", err)
+		}
+		opts = append(opts, fetch.WithTLSConfig(tlsConfig))
+	}
+
+	fetcher, err := fetch.NewS3Fetcher(plmCfg.URL, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create S3 fetcher: %w", err)
+	}
+
+	logger.Info("Created WAF fetcher for PLM storage", "url", plmCfg.URL)
+
+	return fetcher, nil
+}
+
+// getValidatedSecret retrieves a secret and validates it has the required fields.
+func getValidatedSecret(reader client.Reader, nsName types.NamespacedName, fields ...string) (*apiv1.Secret, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var secret apiv1.Secret
+	if err := reader.Get(ctx, nsName, &secret); err != nil {
+		return nil, fmt.Errorf("error getting %q Secret: %w", nsName.Name, err)
+	}
+
+	for _, field := range fields {
+		if _, ok := secret.Data[field]; !ok {
+			return nil, fmt.Errorf("secret %q does not have expected field %q", nsName.Name, field)
+		}
+	}
+
+	return &secret, nil
+}
+
 // 10 min jitter is enough per telemetry destination recommendation
 // For the default period of 24 hours, jitter will be 10min /(24*60)min  = 0.0069.
 const telemetryJitterFactor = 10.0 / (24 * 60) // added jitter is bound by jitterFactor * period
@@ -1017,7 +1138,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
 		&ngfAPIv1alpha1.RateLimitPolicyList{},
-		&ngfAPIv1alpha1.WAFPolicyList{},
+		&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 		partialObjectMetadataList,
 	}
 

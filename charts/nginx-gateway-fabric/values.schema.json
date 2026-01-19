@@ -946,6 +946,58 @@
           "title": "nodeSelector",
           "type": "object"
         },
+        "plmStorage": {
+          "description": "PLM (Policy Lifecycle Manager) storage configuration for WAF bundles.\nUsed when WAF is enabled to fetch APPolicy and APLogConf bundles from S3-compatible storage.",
+          "properties": {
+            "credentialsSecretName": {
+              "default": "",
+              "description": "The name of the Secret containing S3 credentials for PLM storage.\nThe Secret should have \"accessKeyId\" and \"secretAccessKey\" data fields.\nMust exist in the same namespace as the helm release.\nIf not provided, anonymous access is used.",
+              "title": "credentialsSecretName",
+              "type": "string"
+            },
+            "tls": {
+              "description": "TLS configuration for PLM storage connections.",
+              "properties": {
+                "caCertPath": {
+                  "default": "",
+                  "description": "Path to the CA certificate file for TLS verification.",
+                  "title": "caCertPath",
+                  "type": "string"
+                },
+                "clientCertPath": {
+                  "default": "",
+                  "description": "Path to the client certificate file for mutual TLS.",
+                  "title": "clientCertPath",
+                  "type": "string"
+                },
+                "clientKeyPath": {
+                  "default": "",
+                  "description": "Path to the client key file for mutual TLS.",
+                  "title": "clientKeyPath",
+                  "type": "string"
+                },
+                "insecureSkipVerify": {
+                  "default": false,
+                  "description": "Skip TLS certificate verification. Use only for testing.",
+                  "title": "insecureSkipVerify",
+                  "type": "boolean"
+                }
+              },
+              "required": [],
+              "title": "tls",
+              "type": "object"
+            },
+            "url": {
+              "default": "",
+              "description": "The S3-compatible storage endpoint URL.",
+              "title": "url",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "plmStorage",
+          "type": "object"
+        },
         "podAnnotations": {
           "description": "Set of custom annotations for the NGINX Gateway Fabric pods.",
           "required": [],

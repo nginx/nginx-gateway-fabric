@@ -8,6 +8,7 @@ import (
 	discoveryV1 "k8s.io/api/discovery/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,6 +23,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
@@ -58,6 +60,8 @@ type ChangeProcessorConfig struct {
 	MustExtractGVK kinds.MustExtractGVK
 	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
 	PlusSecrets map[types.NamespacedName][]graph.PlusSecretFile
+	// WAFFetcher is the S3-compatible fetcher for WAF policy bundles from PLM storage (nil if WAF not enabled).
+	WAFFetcher fetch.Fetcher
 	// Logger is the logger for this Change Processor.
 	Logger logr.Logger
 	// GatewayCtlrName is the name of the Gateway controller.
@@ -107,6 +111,8 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
 		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter),
 		InferencePools:        make(map[types.NamespacedName]*inference.InferencePool),
+		ApPolicies:            make(map[types.NamespacedName]*unstructured.Unstructured),
+		ApLogConfs:            make(map[types.NamespacedName]*unstructured.Unstructured),
 	}
 
 	processor := &ChangeProcessorImpl{
@@ -224,7 +230,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		},
 		{
-			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.WAFGatewayBindingPolicy{}),
 			store:     commonPolicyObjectStore,
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		},
@@ -257,6 +263,16 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),
 			store:     commonPolicyObjectStore,
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		},
+		{
+			gvk:       kinds.APPolicyGVK,
+			store:     newObjectStoreMapAdapter(clusterStore.ApPolicies),
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			gvk:       kinds.APLogConfGVK,
+			store:     newObjectStoreMapAdapter(clusterStore.ApLogConfs),
+			predicate: funcPredicate{stateChanged: isReferenced},
 		},
 	}
 
@@ -321,6 +337,7 @@ func (c *ChangeProcessorImpl) Process() *graph.Graph {
 		c.cfg.GatewayCtlrName,
 		c.cfg.GatewayClassName,
 		c.cfg.PlusSecrets,
+		c.cfg.WAFFetcher,
 		c.cfg.Validators,
 		c.cfg.Logger,
 		c.cfg.FeatureFlags,
