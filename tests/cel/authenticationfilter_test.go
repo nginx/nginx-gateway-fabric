@@ -83,7 +83,11 @@ func TestAuthenticationFilterJWTAuth(t *testing.T) {
 				JWT: &ngfAPIv1alpha1.JWTAuth{
 					Realm: "Restricted Area",
 					Mode:  ngfAPIv1alpha1.JWTKeyModeFile,
-					File:  &ngfAPIv1alpha1.JWTFileKeySource{SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwks-secret")}},
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+							Name: uniqueResourceName("jwks-secret"),
+						},
+					},
 				},
 			},
 		},
@@ -162,7 +166,11 @@ func TestAuthenticationFilterJWTAuth(t *testing.T) {
 				JWT: &ngfAPIv1alpha1.JWTAuth{
 					Realm: "Restricted Area",
 					Mode:  ngfAPIv1alpha1.JWTKeyModeRemote,
-					File:  &ngfAPIv1alpha1.JWTFileKeySource{SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwks-secret")}},
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+							Name: uniqueResourceName("jwks-secret"),
+						},
+					},
 				},
 			},
 			wantErrors: []string{expectedRemoteSpecToBeSetForRemoteMode},
