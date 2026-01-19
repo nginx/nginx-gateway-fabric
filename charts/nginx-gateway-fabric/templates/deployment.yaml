@@ -116,6 +116,24 @@ spec:
         {{- if .Values.nginxGateway.snippets.enable }}
         - --snippets
         {{- end }}
+        {{- if .Values.nginxGateway.plmStorage.url }}
+        - --plm-storage-url={{ .Values.nginxGateway.plmStorage.url }}
+        {{- if .Values.nginxGateway.plmStorage.credentialsSecretName }}
+        - --plm-storage-credentials-secret={{ .Values.nginxGateway.plmStorage.credentialsSecretName }}
+        {{- end }}
+        {{- if .Values.nginxGateway.plmStorage.tls.caCertPath }}
+        - --plm-storage-tls-ca-cert={{ .Values.nginxGateway.plmStorage.tls.caCertPath }}
+        {{- end }}
+        {{- if .Values.nginxGateway.plmStorage.tls.clientCertPath }}
+        - --plm-storage-tls-client-cert={{ .Values.nginxGateway.plmStorage.tls.clientCertPath }}
+        {{- end }}
+        {{- if .Values.nginxGateway.plmStorage.tls.clientKeyPath }}
+        - --plm-storage-tls-client-key={{ .Values.nginxGateway.plmStorage.tls.clientKeyPath }}
+        {{- end }}
+        {{- if .Values.nginxGateway.plmStorage.tls.insecureSkipVerify }}
+        - --plm-storage-tls-insecure-skip-verify
+        {{- end }}
+        {{- end }}
         {{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
         - --nginx-scc={{ include "nginx-gateway.scc-name" . }}-nginx
         {{- end}}

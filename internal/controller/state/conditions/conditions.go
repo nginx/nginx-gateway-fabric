@@ -121,17 +121,17 @@ const (
 	// has an overlapping hostname:port/path combination with another Route.
 	PolicyReasonTargetConflict v1.PolicyConditionReason = "TargetConflict"
 
-	// WAFPolicyFetchError is used with the "WAFPolicyFetchError" condition when a
-	// WAFPolicy or LogProfileBundle cannot be fetched from the specified file location.
-	WAFPolicyFetchError v1.PolicyConditionReason = "FetchError"
+	// WAFGatewayBindingPolicyFetchError is used with the "WAFGatewayBindingPolicyFetchError" condition when a
+	// WAFGatewayBindingPolicy ApPolicy or ApLogConf bundle cannot be fetched from PLM storage.
+	WAFGatewayBindingPolicyFetchError v1.PolicyConditionReason = "FetchError"
 
-	// WAFPolicyMessageSourceInvalid is a message used with the "PolicyInvalid" condition
-	// when the WAF policy source is invalid or incomplete.
-	WAFPolicyMessageSourceInvalid = "The WAF policy source is invalid or incomplete."
+	// WAFGatewayBindingPolicyMessageSourceInvalid is a message used with the "PolicyInvalid" condition
+	// when the ApPolicy reference is invalid or incomplete.
+	WAFGatewayBindingPolicyMessageSourceInvalid = "The ApPolicy reference is invalid or incomplete."
 
 	// WAFSecurityLogMessageSourceInvalid is a message used with the "PolicyInvalid" condition
-	// when the WAFSecurityLog source is invalid or incomplete.
-	WAFSecurityLogMessageSourceInvalid = "The WAFSecurityLog source is invalid or incomplete."
+	// when the ApLogConf reference is invalid or incomplete.
+	WAFSecurityLogMessageSourceInvalid = "The ApLogConf reference is invalid or incomplete."
 
 	// ClientSettingsPolicyAffected is used with the "PolicyAffected" condition when a
 	// ClientSettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
@@ -203,9 +203,13 @@ const (
 	// CACertificateRefs are invalid.
 	BackendTLSPolicyReasonNoValidCACertificate v1.PolicyConditionReason = "NoValidCACertificate"
 
-	// WAFPolicyAffected is used with the "PolicyAffected" condition when an
-	// WAFPolicyAffected is applied to a Gateway, HTTPRoute, or GRPCRoute.
-	WAFPolicyAffected v1.PolicyConditionType = "WAFPolicyAffected"
+	// WAFGatewayBindingPolicyAffected is used with the "PolicyAffected" condition when a
+	// WAFGatewayBindingPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	WAFGatewayBindingPolicyAffected v1.PolicyConditionType = "gateway.nginx.org/WAFGatewayBindingPolicyAffected"
+
+	// PolicyReasonPending is used with the "PolicyAccepted" condition when a Policy is pending
+	// external processing (e.g., PLM compilation for WAF policies).
+	PolicyReasonPending v1.PolicyConditionReason = "Pending"
 )
 
 // Condition defines a condition to be reported in the status of resources.
@@ -1351,23 +1355,179 @@ func NewInferencePoolInvalidExtensionref(msg string) Condition {
 	}
 }
 
-// NewWAFPolicyAffected returns a Condition that indicates that a WAFPolicy
+// NewWAFGatewayBindingPolicyAffected returns a Condition that indicates that a WAFGatewayBindingPolicy
 // is applied to the resource.
-func NewWAFPolicyAffected() Condition {
+func NewWAFGatewayBindingPolicyAffected() Condition {
 	return Condition{
-		Type:    string(WAFPolicyAffected),
+		Type:    string(WAFGatewayBindingPolicyAffected),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
-		Message: "WAFPolicy is applied to the resource",
+		Message: "WAFGatewayBindingPolicy is applied to the resource",
 	}
 }
 
-// NewWAFPolicyFetchError returns a Condition that indicates that there was an error fetching the WAF policy bundle.
-func NewWAFPolicyFetchError(msg string) Condition {
+// NewWAFGatewayBindingPolicyFetchError returns a Condition that indicates that there was an error fetching
+// the ApPolicy or ApLogConf bundle from PLM storage.
+func NewWAFGatewayBindingPolicyFetchError(msg string) Condition {
 	return Condition{
-		Type:    string(WAFPolicyFetchError),
+		Type:    string(WAFGatewayBindingPolicyFetchError),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(WAFPolicyFetchError),
-		Message: "Failed to fetch the policy bundle due to: " + msg,
+		Reason:  string(WAFGatewayBindingPolicyFetchError),
+		Message: "Failed to fetch the policy bundle from PLM storage due to: " + msg,
+	}
+}
+
+// NewPolicyNotAcceptedApPolicyNotFound returns a Condition that indicates that the referenced ApPolicy was not found.
+func NewPolicyNotAcceptedApPolicyNotFound(apPolicyName string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonTargetNotFound),
+		Message: fmt.Sprintf("The referenced ApPolicy %q was not found", apPolicyName),
+	}
+}
+
+// NewPolicyNotAcceptedApPolicyStatusError returns a Condition that indicates an error extracting ApPolicy status.
+func NewPolicyNotAcceptedApPolicyStatusError(errMsg string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: fmt.Sprintf("Failed to extract ApPolicy status: %s", errMsg),
+	}
+}
+
+// NewPolicyNotAcceptedApPolicyNotCompiled returns a Condition that indicates the ApPolicy is not yet compiled.
+func NewPolicyNotAcceptedApPolicyNotCompiled(apPolicyName string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonPending),
+		Message: fmt.Sprintf("The ApPolicy %q is pending compilation by PLM", apPolicyName),
+	}
+}
+
+// NewPolicyNotAcceptedApPolicyInvalid returns a Condition that indicates the ApPolicy compilation failed.
+func NewPolicyNotAcceptedApPolicyInvalid(errMsg string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: fmt.Sprintf("The ApPolicy is invalid: %s", errMsg),
+	}
+}
+
+// NewPolicyNotAcceptedApPolicyNoLocation returns a Condition that indicates the ApPolicy has no bundle location.
+func NewPolicyNotAcceptedApPolicyNoLocation(apPolicyName string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: fmt.Sprintf("The ApPolicy %q is ready but has no bundle location", apPolicyName),
+	}
+}
+
+// NewPolicyNotAcceptedApPolicyUnknownState returns a Condition that indicates the ApPolicy has an unknown state.
+func NewPolicyNotAcceptedApPolicyUnknownState(state string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: fmt.Sprintf("The ApPolicy has an unknown state: %q", state),
+	}
+}
+
+// NewPolicyNotAcceptedApLogConfNotFound returns a Condition that indicates the referenced ApLogConf was not found.
+func NewPolicyNotAcceptedApLogConfNotFound(apLogConfName string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonTargetNotFound),
+		Message: fmt.Sprintf("The referenced ApLogConf %q was not found", apLogConfName),
+	}
+}
+
+// NewPolicyNotAcceptedApLogConfStatusError returns a Condition that indicates an error extracting ApLogConf status.
+func NewPolicyNotAcceptedApLogConfStatusError(errMsg string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: fmt.Sprintf("Failed to extract ApLogConf status: %s", errMsg),
+	}
+}
+
+// NewPolicyNotAcceptedApLogConfNotCompiled returns a Condition that indicates the ApLogConf is not yet compiled.
+func NewPolicyNotAcceptedApLogConfNotCompiled(apLogConfName string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonPending),
+		Message: fmt.Sprintf("The ApLogConf %q is pending compilation by PLM", apLogConfName),
+	}
+}
+
+// NewPolicyNotAcceptedApLogConfInvalid returns a Condition that indicates the ApLogConf compilation failed.
+func NewPolicyNotAcceptedApLogConfInvalid(errMsg string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: fmt.Sprintf("The ApLogConf is invalid: %s", errMsg),
+	}
+}
+
+// NewPolicyNotAcceptedApLogConfNoLocation returns a Condition that indicates the ApLogConf has no bundle location.
+func NewPolicyNotAcceptedApLogConfNoLocation(apLogConfName string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: fmt.Sprintf("The ApLogConf %q is ready but has no bundle location", apLogConfName),
+	}
+}
+
+// NewPolicyNotAcceptedApLogConfUnknownState returns a Condition that indicates the ApLogConf has an unknown state.
+func NewPolicyNotAcceptedApLogConfUnknownState(state string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: fmt.Sprintf("The ApLogConf has an unknown state: %q", state),
+	}
+}
+
+// NewPolicyNotAcceptedBundleFetchError returns a Condition that indicates a bundle fetch error.
+func NewPolicyNotAcceptedBundleFetchError(errMsg string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(WAFGatewayBindingPolicyFetchError),
+		Message: fmt.Sprintf("Failed to fetch bundle from PLM storage: %s", errMsg),
+	}
+}
+
+// NewPolicyNotAcceptedApPolicyRefNotPermitted returns a Condition that indicates the cross-namespace
+// ApPolicy reference is not permitted by a ReferenceGrant.
+func NewPolicyNotAcceptedApPolicyRefNotPermitted(apPolicyName string) Condition {
+	return Condition{
+		Type:    string(v1.PolicyConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(v1.PolicyReasonInvalid),
+		Message: fmt.Sprintf("Cross-namespace reference to ApPolicy %q is not permitted by any ReferenceGrant", apPolicyName),
+	}
+}
+
+// NewPolicyNotAcceptedApLogConfRefNotPermitted returns a Condition that indicates the cross-namespace
+// ApLogConf reference is not permitted by a ReferenceGrant.
+func NewPolicyNotAcceptedApLogConfRefNotPermitted(apLogConfName string) Condition {
+	return Condition{
+		Type:   string(v1.PolicyConditionAccepted),
+		Status: metav1.ConditionFalse,
+		Reason: string(v1.PolicyReasonInvalid),
+		Message: fmt.Sprintf(
+			"Cross-namespace reference to ApLogConf %q is not permitted by any ReferenceGrant",
+			apLogConfName,
+		),
 	}
 }

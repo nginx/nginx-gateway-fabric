@@ -2960,7 +2960,7 @@ var _ = Describe("ChangeProcessor", func() {
 				snip, snipUpdated                               *ngfAPIv1alpha1.SnippetsPolicy
 				psp, pspUpdated                                 *ngfAPIv1alpha1.ProxySettingsPolicy
 				rlp, rlpUpdated                                 *ngfAPIv1alpha1.RateLimitPolicy
-				waf, wafUpdated                                 *ngfAPIv1alpha1.WAFPolicy
+				waf, wafUpdated                                 *ngfAPIv1alpha1.WAFGatewayBindingPolicy
 				cspKey, obsKey, uspKey, snipKey, pspKey, rlpKey, wafKey graph.PolicyKey
 			)
 
@@ -3188,31 +3188,30 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 				}
 
-				waf = &ngfAPIv1alpha1.WAFPolicy{
+				waf = &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "waf",
 						Namespace: "test",
 					},
-					Spec: ngfAPIv1alpha1.WAFPolicySpec{
-						TargetRef: v1.LocalPolicyTargetReference{
-							Group: v1.GroupName,
-							Kind:  kinds.Gateway,
-							Name:  "gw",
-						},
-						PolicySource: &ngfAPIv1alpha1.WAFPolicySource{
-							FileLocation: "http://example.com/policy.tgz",
+					Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+						TargetRefs: []v1.LocalPolicyTargetReference{
+							{
+								Group: v1.GroupName,
+								Kind:  kinds.Gateway,
+								Name:  "gw",
+							},
 						},
 					},
 				}
 
 				wafUpdated = waf.DeepCopy()
-				wafUpdated.Spec.PolicySource.FileLocation = "http://example.com/updated-policy.tgz"
+				// wafUpdated.Spec.ApPolicySource = "ns/name"
 
 				wafKey = graph.PolicyKey{
 					NsName: types.NamespacedName{Name: "waf", Namespace: "test"},
 					GVK: schema.GroupVersionKind{
 						Group:   ngfAPIv1alpha1.GroupName,
-						Kind:    kinds.WAFPolicy,
+						Kind:    kinds.WAFGatewayBindingPolicy,
 						Version: "v1alpha1",
 					},
 				}
@@ -3314,7 +3313,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.SnippetsPolicy{}, client.ObjectKeyFromObject(snip))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.ProxySettingsPolicy{}, client.ObjectKeyFromObject(psp))
 					processor.CaptureDeleteChange(&ngfAPIv1alpha1.RateLimitPolicy{}, client.ObjectKeyFromObject(rlp))
-					processor.CaptureDeleteChange(&ngfAPIv1alpha1.WAFPolicy{}, client.ObjectKeyFromObject(waf))
+					processor.CaptureDeleteChange(&ngfAPIv1alpha1.WAFGatewayBindingPolicy{}, client.ObjectKeyFromObject(waf))
 
 					graph := processor.Process()
 					Expect(graph).ToNot(BeNil())

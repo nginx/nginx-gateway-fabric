@@ -2,22 +2,25 @@
 package fetchfakes
 
 import (
+	"context"
 	"sync"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 )
 
 type FakeFetcher struct {
-	GetRemoteFileStub        func(string) ([]byte, error)
-	getRemoteFileMutex       sync.RWMutex
-	getRemoteFileArgsForCall []struct {
-		arg1 string
+	GetObjectStub        func(context.Context, string, string) ([]byte, error)
+	getObjectMutex       sync.RWMutex
+	getObjectArgsForCall []struct {
+		arg1 context.Context
+		arg2 string
+		arg3 string
 	}
-	getRemoteFileReturns struct {
+	getObjectReturns struct {
 		result1 []byte
 		result2 error
 	}
-	getRemoteFileReturnsOnCall map[int]struct {
+	getObjectReturnsOnCall map[int]struct {
 		result1 []byte
 		result2 error
 	}
@@ -25,18 +28,20 @@ type FakeFetcher struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeFetcher) GetRemoteFile(arg1 string) ([]byte, error) {
-	fake.getRemoteFileMutex.Lock()
-	ret, specificReturn := fake.getRemoteFileReturnsOnCall[len(fake.getRemoteFileArgsForCall)]
-	fake.getRemoteFileArgsForCall = append(fake.getRemoteFileArgsForCall, struct {
-		arg1 string
-	}{arg1})
-	stub := fake.GetRemoteFileStub
-	fakeReturns := fake.getRemoteFileReturns
-	fake.recordInvocation("GetRemoteFile", []interface{}{arg1})
-	fake.getRemoteFileMutex.Unlock()
+func (fake *FakeFetcher) GetObject(arg1 context.Context, arg2 string, arg3 string) ([]byte, error) {
+	fake.getObjectMutex.Lock()
+	ret, specificReturn := fake.getObjectReturnsOnCall[len(fake.getObjectArgsForCall)]
+	fake.getObjectArgsForCall = append(fake.getObjectArgsForCall, struct {
+		arg1 context.Context
+		arg2 string
+		arg3 string
+	}{arg1, arg2, arg3})
+	stub := fake.GetObjectStub
+	fakeReturns := fake.getObjectReturns
+	fake.recordInvocation("GetObject", []interface{}{arg1, arg2, arg3})
+	fake.getObjectMutex.Unlock()
 	if stub != nil {
-		return stub(arg1)
+		return stub(arg1, arg2, arg3)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
@@ -44,46 +49,46 @@ func (fake *FakeFetcher) GetRemoteFile(arg1 string) ([]byte, error) {
 	return fakeReturns.result1, fakeReturns.result2
 }
 
-func (fake *FakeFetcher) GetRemoteFileCallCount() int {
-	fake.getRemoteFileMutex.RLock()
-	defer fake.getRemoteFileMutex.RUnlock()
-	return len(fake.getRemoteFileArgsForCall)
+func (fake *FakeFetcher) GetObjectCallCount() int {
+	fake.getObjectMutex.RLock()
+	defer fake.getObjectMutex.RUnlock()
+	return len(fake.getObjectArgsForCall)
 }
 
-func (fake *FakeFetcher) GetRemoteFileCalls(stub func(string) ([]byte, error)) {
-	fake.getRemoteFileMutex.Lock()
-	defer fake.getRemoteFileMutex.Unlock()
-	fake.GetRemoteFileStub = stub
+func (fake *FakeFetcher) GetObjectCalls(stub func(context.Context, string, string) ([]byte, error)) {
+	fake.getObjectMutex.Lock()
+	defer fake.getObjectMutex.Unlock()
+	fake.GetObjectStub = stub
 }
 
-func (fake *FakeFetcher) GetRemoteFileArgsForCall(i int) string {
-	fake.getRemoteFileMutex.RLock()
-	defer fake.getRemoteFileMutex.RUnlock()
-	argsForCall := fake.getRemoteFileArgsForCall[i]
-	return argsForCall.arg1
+func (fake *FakeFetcher) GetObjectArgsForCall(i int) (context.Context, string, string) {
+	fake.getObjectMutex.RLock()
+	defer fake.getObjectMutex.RUnlock()
+	argsForCall := fake.getObjectArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
 }
 
-func (fake *FakeFetcher) GetRemoteFileReturns(result1 []byte, result2 error) {
-	fake.getRemoteFileMutex.Lock()
-	defer fake.getRemoteFileMutex.Unlock()
-	fake.GetRemoteFileStub = nil
-	fake.getRemoteFileReturns = struct {
+func (fake *FakeFetcher) GetObjectReturns(result1 []byte, result2 error) {
+	fake.getObjectMutex.Lock()
+	defer fake.getObjectMutex.Unlock()
+	fake.GetObjectStub = nil
+	fake.getObjectReturns = struct {
 		result1 []byte
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *FakeFetcher) GetRemoteFileReturnsOnCall(i int, result1 []byte, result2 error) {
-	fake.getRemoteFileMutex.Lock()
-	defer fake.getRemoteFileMutex.Unlock()
-	fake.GetRemoteFileStub = nil
-	if fake.getRemoteFileReturnsOnCall == nil {
-		fake.getRemoteFileReturnsOnCall = make(map[int]struct {
+func (fake *FakeFetcher) GetObjectReturnsOnCall(i int, result1 []byte, result2 error) {
+	fake.getObjectMutex.Lock()
+	defer fake.getObjectMutex.Unlock()
+	fake.GetObjectStub = nil
+	if fake.getObjectReturnsOnCall == nil {
+		fake.getObjectReturnsOnCall = make(map[int]struct {
 			result1 []byte
 			result2 error
 		})
 	}
-	fake.getRemoteFileReturnsOnCall[i] = struct {
+	fake.getObjectReturnsOnCall[i] = struct {
 		result1 []byte
 		result2 error
 	}{result1, result2}

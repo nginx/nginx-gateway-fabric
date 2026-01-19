@@ -7,6 +7,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,6 +24,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
@@ -48,6 +50,10 @@ type ClusterState struct {
 	SnippetsFilters       map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
 	AuthenticationFilters map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter
 	InferencePools        map[types.NamespacedName]*inference.InferencePool
+	// ApPolicies holds PLM-managed ApPolicy resources (unstructured since CRD is external).
+	ApPolicies map[types.NamespacedName]*unstructured.Unstructured
+	// ApLogConfs holds PLM-managed ApLogConf resources (unstructured since CRD is external).
+	ApLogConfs map[types.NamespacedName]*unstructured.Unstructured
 }
 
 // Graph is a Graph-like representation of Gateway API resources.
@@ -86,6 +92,10 @@ type Graph struct {
 	NGFPolicies map[PolicyKey]*Policy
 	// ReferencedWAFBundles includes the WAFPolicy Bundles that have been referenced by any Gateways or Routes.
 	ReferencedWAFBundles map[WAFBundleKey]*WAFBundleData
+	// ReferencedApPolicies includes ApPolicy resources referenced by WAFGatewayBindingPolicy resources.
+	ReferencedApPolicies map[types.NamespacedName]*unstructured.Unstructured
+	// ReferencedApLogConfs includes ApLogConf resources referenced by WAFGatewayBindingPolicy resources.
+	ReferencedApLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// AuthenticationFilters holds all the AuthenticationFilters.
@@ -157,6 +167,18 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 	case *ngfAPIv1alpha2.NginxProxy:
 		_, exists := g.ReferencedNginxProxies[nsname]
 		return exists
+	// ApPolicy and ApLogConf are unstructured types; check by GVK.
+	case *unstructured.Unstructured:
+		gvk := obj.GroupVersionKind()
+		switch gvk {
+		case kinds.APPolicyGVK:
+			_, exists := g.ReferencedApPolicies[nsname]
+			return exists
+		case kinds.APLogConfGVK:
+			_, exists := g.ReferencedApLogConfs[nsname]
+			return exists
+		}
+		return false
 	default:
 		return false
 	}
@@ -225,6 +247,7 @@ func BuildGraph(
 	controllerName string,
 	gcName string,
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
+	wafFetcher fetch.Fetcher,
 	validators validation.Validators,
 	logger logr.Logger,
 	featureFlags FeatureFlags,
@@ -309,19 +332,41 @@ func BuildGraph(
 
 	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
+	// Build WAF processing input from cluster state
+	var wafInput *WAFProcessingInput
+	if len(state.ApPolicies) > 0 || len(state.ApLogConfs) > 0 {
+		wafInput = &WAFProcessingInput{
+			ApPolicies:       state.ApPolicies,
+			ApLogConfs:       state.ApLogConfs,
+			Fetcher:          wafFetcher,
+			RefGrantResolver: refGrantResolver,
+		}
+	}
+
 	// policies must be processed last because they rely on the state of the other resources in the graph
-	processedPolicies, referencedWAFBundles := processPolicies(
+	processedPolicies, wafOutput := processPolicies(
 		state.NGFPolicies,
 		validators.PolicyValidator,
 		routes,
 		referencedServices,
 		gws,
+		wafInput,
 	)
 
 	// add status conditions to each targetRef based on the policies that affect them.
 	addPolicyAffectedStatusToTargetRefs(processedPolicies, routes, gws)
 
 	setPlusSecretContent(state.Secrets, plusSecrets)
+
+	// Extract WAF data from wafOutput
+	var referencedWAFBundles map[WAFBundleKey]*WAFBundleData
+	var referencedApPolicies map[types.NamespacedName]*unstructured.Unstructured
+	var referencedApLogConfs map[types.NamespacedName]*unstructured.Unstructured
+	if wafOutput != nil {
+		referencedWAFBundles = wafOutput.Bundles
+		referencedApPolicies = wafOutput.ReferencedApPolicies
+		referencedApLogConfs = wafOutput.ReferencedApLogConfs
+	}
 
 	g := &Graph{
 		GatewayClass:               gc,
@@ -341,6 +386,8 @@ func BuildGraph(
 		AuthenticationFilters:      processedAuthenticationFilters,
 		PlusSecrets:                plusSecrets,
 		ReferencedWAFBundles:       referencedWAFBundles,
+		ReferencedApPolicies:       referencedApPolicies,
+		ReferencedApLogConfs:       referencedApLogConfs,
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)

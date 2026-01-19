@@ -242,7 +242,7 @@ func convertWAFBundles(graphBundles map[graph.WAFBundleKey]*graph.WAFBundleData)
 
 		var dataplaneValue WAFBundle
 		if value != nil {
-			dataplaneValue = WAFBundle(*value)
+			dataplaneValue = WAFBundle(value.Data)
 		}
 
 		result[dataplaneKey] = dataplaneValue

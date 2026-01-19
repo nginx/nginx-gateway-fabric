@@ -769,10 +769,11 @@ func TestConvertWAFBundles(t *testing.T) {
 		{
 			name: "single bundle with data",
 			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
-				"bundle1.tgz": func() *graph.WAFBundleData {
-					data := graph.WAFBundleData([]byte("bundle data"))
-					return &data
-				}(),
+				"bundle1.tgz": {
+					Data:       []byte("bundle data"),
+					Location:   "bucket/path/bundle1.tgz",
+					BundleType: graph.WAFBundleTypePolicy,
+				},
 			},
 			expected: map[WAFBundleID]WAFBundle{
 				"bundle1.tgz": WAFBundle([]byte("bundle data")),
@@ -790,15 +791,17 @@ func TestConvertWAFBundles(t *testing.T) {
 		{
 			name: "multiple bundles with mixed data",
 			input: map[graph.WAFBundleKey]*graph.WAFBundleData{
-				"bundle1.tgz": func() *graph.WAFBundleData {
-					data := graph.WAFBundleData([]byte("first bundle"))
-					return &data
-				}(),
+				"bundle1.tgz": {
+					Data:       []byte("first bundle"),
+					Location:   "bucket/path/bundle1.tgz",
+					BundleType: graph.WAFBundleTypePolicy,
+				},
 				"bundle2.tgz": nil,
-				"bundle3.tgz": func() *graph.WAFBundleData {
-					data := graph.WAFBundleData([]byte("third bundle"))
-					return &data
-				}(),
+				"bundle3.tgz": {
+					Data:       []byte("third bundle"),
+					Location:   "bucket/path/bundle3.tgz",
+					BundleType: graph.WAFBundleTypeLogProfile,
+				},
 			},
 			expected: map[WAFBundleID]WAFBundle{
 				"bundle1.tgz": WAFBundle([]byte("first bundle")),

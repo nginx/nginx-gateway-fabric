@@ -22,11 +22,7 @@ app_protect_policy_file "{{ .BundlePath }}";
 {{- if .SecurityLogs }}
 app_protect_security_log_enable on;
 {{- range .SecurityLogs }}
-{{- if .LogProfile }}
-app_protect_security_log "{{ .LogProfile }}" {{ .Destination }};
-{{- else if .LogProfileBundlePath }}
 app_protect_security_log "{{ .LogProfileBundlePath }}" {{ .Destination }};
-{{- end }}
 {{- end }}
 {{- end }}
 `
@@ -55,16 +51,20 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 	files := make(policies.GenerateResultFiles, 0, len(pols))
 
 	for _, pol := range pols {
-		wp, ok := pol.(*ngfAPI.WAFPolicy)
+		wp, ok := pol.(*ngfAPI.WAFGatewayBindingPolicy)
 		if !ok {
 			continue
 		}
 
 		fields := map[string]any{}
 
-		if wp.Spec.PolicySource != nil && wp.Spec.PolicySource.FileLocation != "" {
-			fileLocation := wp.Spec.PolicySource.FileLocation
-			bundleName := helpers.ToSafeFileName(fileLocation)
+		if wp.Spec.ApPolicySource != nil {
+			// Generate bundle path from ApPolicy reference
+			namespace := wp.Namespace
+			if wp.Spec.ApPolicySource.Namespace != nil {
+				namespace = *wp.Spec.ApPolicySource.Namespace
+			}
+			bundleName := fmt.Sprintf("%s_%s", namespace, wp.Spec.ApPolicySource.Name)
 			bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 			fields["BundlePath"] = bundlePath
 		}
@@ -75,15 +75,14 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 			for _, secLog := range wp.Spec.SecurityLogs {
 				logEntry := map[string]string{}
 
-				if secLog.LogProfile != nil {
-					logEntry["LogProfile"] = string(*secLog.LogProfile)
+				// Generate log profile bundle path from ApLogConf reference
+				namespace := wp.Namespace
+				if secLog.ApLogConfSource.Namespace != nil {
+					namespace = *secLog.ApLogConfSource.Namespace
 				}
-
-				if secLog.LogProfileBundle != nil && secLog.LogProfileBundle.FileLocation != "" {
-					bundleName := helpers.ToSafeFileName(secLog.LogProfileBundle.FileLocation)
-					bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
-					logEntry["LogProfileBundlePath"] = bundlePath
-				}
+				bundleName := fmt.Sprintf("%s_%s", namespace, secLog.ApLogConfSource.Name)
+				bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
+				logEntry["LogProfileBundlePath"] = bundlePath
 
 				destination := formatSecurityLogDestination(secLog.Destination)
 				logEntry["Destination"] = destination
@@ -95,7 +94,7 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 		}
 
 		files = append(files, policies.File{
-			Name:    fmt.Sprintf("WafPolicy_%s_%s.conf", wp.Namespace, wp.Name),
+			Name:    fmt.Sprintf("WAFGatewayBindingPolicy_%s_%s.conf", wp.Namespace, wp.Name),
 			Content: helpers.MustExecuteTemplate(tmpl, fields),
 		})
 	}
