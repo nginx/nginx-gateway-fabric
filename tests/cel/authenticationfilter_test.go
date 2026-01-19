@@ -46,7 +46,7 @@ func TestAuthenticationFilterBasicAuth(t *testing.T) {
 					Mode:  ngfAPIv1alpha1.JWTKeyModeFile,
 				},
 			},
-			wantErrors: []string{expectedJWTMustBeUnsetForBasic},
+			wantErrors: []string{expectedBasicRequiredError},
 		},
 	}
 
@@ -117,7 +117,7 @@ func TestAuthenticationFilterJWTAuth(t *testing.T) {
 					Realm: "Restricted Area",
 				},
 			},
-			wantErrors: []string{expectedBasicMustBeUnsetForJWT},
+			wantErrors: []string{expectedJWTRequiredError},
 		},
 		{
 			name: "Validate: type=JWT with jwt.mode=File and jwt.file unset should be rejected",
@@ -129,7 +129,7 @@ func TestAuthenticationFilterJWTAuth(t *testing.T) {
 					File:  nil,
 				},
 			},
-			wantErrors: []string{expectedFileMustBeUnsetForRemote},
+			wantErrors: []string{expectedFileSpecToBeSetForFileMode},
 		},
 		{
 			name: "Validate: type=JWT with jwt.mode=Remote and jwt.remote unset should be rejected",
@@ -141,7 +141,7 @@ func TestAuthenticationFilterJWTAuth(t *testing.T) {
 					Remote: nil,
 				},
 			},
-			wantErrors: []string{expectedRemoteMustBeUnsetForFile},
+			wantErrors: []string{expectedRemoteSpecToBeSetForRemoteMode},
 		},
 		{
 			name: "Validate: type=JWT with jwt.mode=File and jwt.remote set should be rejected",
@@ -153,7 +153,7 @@ func TestAuthenticationFilterJWTAuth(t *testing.T) {
 					Remote: &ngfAPIv1alpha1.RemoteKeySource{URL: "https://example.com/.well-known/jwks.json"},
 				},
 			},
-			wantErrors: []string{expectedFileMustBeUnsetForRemote},
+			wantErrors: []string{expectedFileSpecToBeSetForFileMode},
 		},
 		{
 			name: "Validate: type=JWT with jwt.mode=Remote and jwt.file set should be rejected",
@@ -165,7 +165,7 @@ func TestAuthenticationFilterJWTAuth(t *testing.T) {
 					File:  &ngfAPIv1alpha1.JWTFileKeySource{SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwks-secret")}},
 				},
 			},
-			wantErrors: []string{expectedRemoteMustBeUnsetForFile},
+			wantErrors: []string{expectedRemoteSpecToBeSetForRemoteMode},
 		},
 	}
 

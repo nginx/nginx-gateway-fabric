@@ -34,7 +34,8 @@ type AuthenticationFilterList struct {
 }
 
 // AuthenticationFilterSpec defines the desired configuration.
-// +kubebuilder:validation:XValidation:message="Basic requires spec.basic. spec.jwt must be unset; JWT requires spec.jwt. spec.basic must be unset",rule="(self.type == 'Basic' && has(self.basic) && !has(self.jwt)) || (self.type == 'JWT' && has(self.jwt) && !has(self.basic))"
+// +kubebuilder:validation:XValidation:message="type Basic requires spec.basic to be set.",rule="self.type != 'Basic' || has(self.basic)"
+// +kubebuilder:validation:XValidation:message="type JWT requires spec.jwt to be set.",rule="self.type != 'JWT' || has(self.jwt)"
 //
 //nolint:lll
 type AuthenticationFilterSpec struct {
@@ -91,7 +92,10 @@ const (
 )
 
 // JWTAuth configures JWT-based authentication (NGINX Plus).
-// +kubebuilder:validation:XValidation:message="File requires spec.file. spec.remote must be unset; Remote requires spec.remote. spec.file must be unset",rule="(self.mode == 'File' && has(self.file) && !has(self.remote)) || (self.mode == 'Remote' && has(self.remote) && !has(self.file))"
+// +kubebuilder:validation:XValidation:message="mode File requires spec.file to be set.",rule="self.mode != 'File' || has(self.file)"
+// +kubebuilder:validation:XValidation:message="mode Remote requires spec.remote to be set.",rule="self.mode != 'Remote' || has(self.remote)"
+//
+//nolint:lll
 type JWTAuth struct {
 	// Realm used by NGINX `auth_jwt` directive
 	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt

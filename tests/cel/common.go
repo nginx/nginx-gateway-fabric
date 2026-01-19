@@ -35,12 +35,10 @@ const (
 
 const (
 	// AuthenticationFilter validation errors.
-	expectedBasicRequiredError       = "Basic requires spec.basic"
-	expectedJWTMustBeUnsetForBasic   = "spec.jwt must be unset"
-	expectedJWTRequiredError         = "JWT requires spec.jwt"
-	expectedBasicMustBeUnsetForJWT   = "spec.basic must be unset"
-	expectedFileMustBeUnsetForRemote = "File requires spec.file. spec.remote must be unset"
-	expectedRemoteMustBeUnsetForFile = "Remote requires spec.remote. spec.file must be unset"
+	expectedBasicRequiredError             = "type Basic requires spec.basic to be set"
+	expectedJWTRequiredError               = "type JWT requires spec.jwt to be set"
+	expectedFileSpecToBeSetForFileMode     = "mode File requires spec.file to be set."
+	expectedRemoteSpecToBeSetForRemoteMode = "mode Remote requires spec.remote to be set."
 
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"
