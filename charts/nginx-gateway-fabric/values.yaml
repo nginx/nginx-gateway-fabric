@@ -14,6 +14,10 @@ nginxGateway:
   # -- The name of the NGINX Gateway Fabric deployment - if not present, then by default uses release name given during installation.
   name: ""
 
+  # -- List of namespaces to watch for resources. If not set, all namespaces are watched.
+  # The controller's own namespace is always included.
+  watchNamespaces: []
+
   # @schema
   # required: true
   # type: string

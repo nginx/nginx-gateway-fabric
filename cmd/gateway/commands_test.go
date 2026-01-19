@@ -164,6 +164,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-tls-skip-verify",
 				"--endpoint-picker-disable-tls",
 				"--endpoint-picker-tls-skip-verify",
+				"--watch-namespaces=ns1,ns2",
 			},
 			wantErr: false,
 		},
@@ -502,6 +503,31 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--nginx-one-tls-skip-verify=not-a-bool",
 			},
 			wantErr: true,
+		},
+		{
+			name: "watch-namespaces is set to empty string",
+			args: []string{
+				"--watch-namespaces=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--watch-namespaces" flag: must be set`,
+		},
+		{
+			name: "watch-namespaces is invalid",
+			args: []string{
+				"--watch-namespaces=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--watch-namespaces" flag: invalid format: `,
+		},
+		{
+			name: "one watch-namespaces is invalid",
+			args: []string{
+				"--watch-namespaces=valid",
+				"--watch-namespaces=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--watch-namespaces" flag: invalid format: `,
 		},
 	}
 

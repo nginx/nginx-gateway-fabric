@@ -53,21 +53,19 @@ func (v *stringSliceValidatingValue) String() string {
 }
 
 func (v *stringSliceValidatingValue) Set(param string) error {
-	if err := v.validator(param); err != nil {
-		return err
-	}
-
-	stringReader := strings.NewReader(param)
-	csvReader := csv.NewReader(stringReader)
-	str, err := csvReader.Read()
-	if err != nil {
-		return err
+	params := strings.Split(param, ",")
+	for i, val := range params {
+		val = strings.TrimSpace(val)
+		if err := v.validator(val); err != nil {
+			return err
+		}
+		params[i] = val
 	}
 
 	if !v.changed {
-		v.values = str
+		v.values = params
 	} else {
-		v.values = append(v.values, str...)
+		v.values = append(v.values, params...)
 	}
 	v.changed = true
 

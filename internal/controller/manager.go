@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -27,6 +28,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	ctlr "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -392,6 +394,17 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 
 	clusterCfg := ctlr.GetConfigOrDie()
 	clusterCfg.Timeout = clusterTimeout
+
+	if len(cfg.WatchNamespaces) > 0 {
+		if !slices.Contains(cfg.WatchNamespaces, cfg.GatewayPodConfig.Namespace) {
+			cfg.WatchNamespaces = append(cfg.WatchNamespaces, cfg.GatewayPodConfig.Namespace)
+		}
+		namespaces := make(map[string]cache.Config)
+		for _, ns := range cfg.WatchNamespaces {
+			namespaces[ns] = cache.Config{}
+		}
+		options.Cache.DefaultNamespaces = namespaces
+	}
 
 	mgr, err := manager.New(clusterCfg, options)
 	if err != nil {

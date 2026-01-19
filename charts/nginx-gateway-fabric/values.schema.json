@@ -1098,6 +1098,14 @@
           },
           "title": "topologySpreadConstraints",
           "type": "array"
+        },
+        "watchNamespaces": {
+          "description": "List of namespaces to watch for resources. If not set, all namespaces are watched.\nThe controller's own namespace is always included.",
+          "items": {
+            "required": []
+          },
+          "title": "watchNamespaces",
+          "type": "array"
         }
       },
       "required": [
