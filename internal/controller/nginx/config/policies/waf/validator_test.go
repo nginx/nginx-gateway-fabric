@@ -16,20 +16,21 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-func createValidPolicy() *ngfAPI.WAFPolicy {
-	return &ngfAPI.WAFPolicy{
+func createValidPolicy() *ngfAPI.WAFGatewayBindingPolicy {
+	return &ngfAPI.WAFGatewayBindingPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
 		},
-		Spec: ngfAPI.WAFPolicySpec{
-			TargetRef: v1.LocalPolicyTargetReference{
-				Group: v1.GroupName,
-				Kind:  kinds.Gateway,
-				Name:  "gateway",
+		Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+			TargetRefs: []v1.LocalPolicyTargetReference{
+				{
+					Group: v1.GroupName,
+					Kind:  kinds.Gateway,
+					Name:  "gateway",
+				},
 			},
-			PolicySource: &ngfAPI.WAFPolicySource{
-				FileLocation: "https://example.com/policy.tgz",
-				Timeout:      helpers.GetPointer[ngfAPI.Duration]("30s"),
+			ApPolicySource: &ngfAPI.ApPolicyReference{
+				Name: "production-policy",
 			},
 		},
 	}
@@ -39,215 +40,137 @@ func TestValidator_Validate(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name          string
-		policy        *ngfAPI.WAFPolicy
+		policy        *ngfAPI.WAFGatewayBindingPolicy
 		expConditions []conditions.Condition
 	}{
-		// Target Reference Validation Tests
+		{
+			name:          "valid policy",
+			policy:        createValidPolicy(),
+			expConditions: nil,
+		},
 		{
 			name: "invalid target ref; unsupported group",
-			policy: &ngfAPI.WAFPolicy{
+			policy: &ngfAPI.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: "Unsupported",
-						Kind:  kinds.Gateway,
-						Name:  "gateway",
+				Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{
+							Group: "Unsupported",
+							Kind:  kinds.Gateway,
+							Name:  "gateway",
+						},
+					},
+					ApPolicySource: &ngfAPI.ApPolicyReference{
+						Name: "policy",
 					},
 				},
 			},
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.targetRef.group: Unsupported value: \"Unsupported\": " +
+				conditions.NewPolicyInvalid("spec.targetRefs[0].group: Unsupported value: \"Unsupported\": " +
 					"supported values: \"gateway.networking.k8s.io\""),
 			},
 		},
 		{
 			name: "invalid target ref; unsupported kind",
-			policy: &ngfAPI.WAFPolicy{
+			policy: &ngfAPI.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: v1.GroupName,
-						Kind:  "Unsupported",
-						Name:  "gateway",
+				Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{
+							Group: v1.GroupName,
+							Kind:  "Unsupported",
+							Name:  "gateway",
+						},
+					},
+					ApPolicySource: &ngfAPI.ApPolicyReference{
+						Name: "policy",
 					},
 				},
 			},
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.targetRef.kind: Unsupported value: \"Unsupported\": " +
+				conditions.NewPolicyInvalid("spec.targetRefs[0].kind: Unsupported value: \"Unsupported\": " +
 					"supported values: \"Gateway\", \"HTTPRoute\", \"GRPCRoute\""),
 			},
 		},
 		{
-			name: "invalid policy source file location - empty",
-			policy: &ngfAPI.WAFPolicy{
+			name: "missing apPolicySource",
+			policy: &ngfAPI.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: v1.GroupName,
-						Kind:  kinds.Gateway,
-						Name:  "gateway",
+				Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gateway",
+						},
 					},
-					PolicySource: &ngfAPI.WAFPolicySource{
-						FileLocation: "",
+					ApPolicySource: nil,
+				},
+			},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.apPolicySource: Required value: apPolicySource is required"),
+			},
+		},
+		{
+			name: "empty apPolicySource name",
+			policy: &ngfAPI.WAFGatewayBindingPolicy{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gateway",
+						},
+					},
+					ApPolicySource: &ngfAPI.ApPolicyReference{
+						Name: "",
 					},
 				},
 			},
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.policySource.fileLocation: Invalid value: \"\": " +
-					"cannot be empty"),
+				conditions.NewPolicyInvalid("spec.apPolicySource.name: Required value: name is required"),
 			},
 		},
 		{
-			name: "invalid policy source file location - malformed HTTP URL",
-			policy: &ngfAPI.WAFPolicy{
+			name: "valid policy with cross-namespace ApPolicy reference",
+			policy: &ngfAPI.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: v1.GroupName,
-						Kind:  kinds.Gateway,
-						Name:  "gateway",
+				Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gateway",
+						},
 					},
-					PolicySource: &ngfAPI.WAFPolicySource{
-						FileLocation: "https://",
+					ApPolicySource: &ngfAPI.ApPolicyReference{
+						Name:      "shared-policy",
+						Namespace: helpers.GetPointer("security"),
 					},
 				},
 			},
-			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.policySource.fileLocation: Invalid value: " +
-					"\"https://\": host cannot be empty"),
-			},
+			expConditions: nil,
 		},
 		{
-			name: "invalid security log profile bundle file location - empty",
-			policy: &ngfAPI.WAFPolicy{
+			name: "valid policy with security logs",
+			policy: &ngfAPI.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: v1.GroupName,
-						Kind:  kinds.Gateway,
-						Name:  "gateway",
+				Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gateway",
+						},
+					},
+					ApPolicySource: &ngfAPI.ApPolicyReference{
+						Name: "policy",
 					},
 					SecurityLogs: []ngfAPI.WAFSecurityLog{
 						{
-							LogProfileBundle: &ngfAPI.WAFPolicySource{
-								FileLocation: "",
-							},
-							Destination: ngfAPI.SecurityLogDestination{
-								Type: ngfAPI.SecurityLogDestinationTypeStderr,
-							},
-						},
-					},
-				},
-			},
-			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.securityLogs[0].logProfileBundle.fileLocation: Invalid value: " +
-					"\"\": cannot be empty"),
-			},
-		},
-		{
-			name: "valid security log profile bundle with checksum location",
-			policy: &ngfAPI.WAFPolicy{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: v1.GroupName,
-						Kind:  kinds.Gateway,
-						Name:  "gateway",
-					},
-					SecurityLogs: []ngfAPI.WAFSecurityLog{
-						{
-							LogProfileBundle: &ngfAPI.WAFPolicySource{
-								FileLocation: "https://example.com/profile.tgz",
-								Polling: &ngfAPI.WAFPolicyPolling{
-									ChecksumLocation: helpers.GetPointer("https://my-files/profile.tgz.sha256"),
-								},
-							},
-							Destination: ngfAPI.SecurityLogDestination{
-								Type: ngfAPI.SecurityLogDestinationTypeStderr,
-							},
-						},
-					},
-				},
-			},
-			expConditions: nil,
-		},
-		{
-			name:          "valid basic policy",
-			policy:        createValidPolicy(),
-			expConditions: nil,
-		},
-		{
-			name: "valid with minimal config - no policy source",
-			policy: &ngfAPI.WAFPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "default",
-				},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: v1.GroupName,
-						Kind:  kinds.HTTPRoute,
-						Name:  "route",
-					},
-				},
-			},
-			expConditions: nil,
-		},
-		{
-			name: "valid HTTPRoute target",
-			policy: &ngfAPI.WAFPolicy{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: v1.GroupName,
-						Kind:  kinds.HTTPRoute,
-						Name:  "route",
-					},
-					PolicySource: &ngfAPI.WAFPolicySource{
-						FileLocation: "https://my-files/route-policy.tgz",
-					},
-				},
-			},
-			expConditions: nil,
-		},
-		{
-			name: "valid GRPCRoute target",
-			policy: &ngfAPI.WAFPolicy{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: v1.GroupName,
-						Kind:  kinds.GRPCRoute,
-						Name:  "grpc-route",
-					},
-					PolicySource: &ngfAPI.WAFPolicySource{
-						FileLocation: "https://example.com/grpc-policy.tgz",
-					},
-				},
-			},
-			expConditions: nil,
-		},
-		{
-			name: "valid with complete configuration",
-			policy: &ngfAPI.WAFPolicy{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: v1.GroupName,
-						Kind:  kinds.Gateway,
-						Name:  "gateway",
-					},
-					PolicySource: &ngfAPI.WAFPolicySource{
-						FileLocation: "https://example.com/policy.tgz",
-						Polling: &ngfAPI.WAFPolicyPolling{
-							Enabled:          helpers.GetPointer(true),
-							Interval:         helpers.GetPointer[ngfAPI.Duration]("5m"),
-							ChecksumLocation: helpers.GetPointer("https://my-files/policy.tgz.sha256"),
-						},
-					},
-					SecurityLogs: []ngfAPI.WAFSecurityLog{
-						{
-							LogProfileBundle: &ngfAPI.WAFPolicySource{
-								FileLocation: "https://example.com/profile.tgz",
+							ApLogConfSource: ngfAPI.ApLogConfReference{
+								Name: "default-log",
 							},
 							Destination: ngfAPI.SecurityLogDestination{
 								Type: ngfAPI.SecurityLogDestinationTypeStderr,
@@ -259,38 +182,69 @@ func TestValidator_Validate(t *testing.T) {
 			expConditions: nil,
 		},
 		{
-			name: "invalid policy source polling checksum location",
-			policy: &ngfAPI.WAFPolicy{
+			name: "empty ApLogConfSource name",
+			policy: &ngfAPI.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-				Spec: ngfAPI.WAFPolicySpec{
-					TargetRef: v1.LocalPolicyTargetReference{
-						Group: v1.GroupName,
-						Kind:  kinds.Gateway,
-						Name:  "gateway",
+				Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gateway",
+						},
 					},
-					PolicySource: &ngfAPI.WAFPolicySource{
-						FileLocation: "https://example.com/policy.tgz",
-						Polling: &ngfAPI.WAFPolicyPolling{
-							ChecksumLocation: helpers.GetPointer("invalid-url"),
+					ApPolicySource: &ngfAPI.ApPolicyReference{
+						Name: "policy",
+					},
+					SecurityLogs: []ngfAPI.WAFSecurityLog{
+						{
+							ApLogConfSource: ngfAPI.ApLogConfReference{
+								Name: "",
+							},
+							Destination: ngfAPI.SecurityLogDestination{
+								Type: ngfAPI.SecurityLogDestinationTypeStderr,
+							},
 						},
 					},
 				},
 			},
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.policySource.polling.checksumLocation: Invalid value: " +
-					"\"invalid-url\": invalid URL format: parse \"invalid-url\": invalid URI for request"),
+				conditions.NewPolicyInvalid("spec.securityLogs[0].apLogConfSource.name: Required value: name is required"),
 			},
+		},
+		{
+			name: "multiple valid targetRefs",
+			policy: &ngfAPI.WAFGatewayBindingPolicy{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: ngfAPI.WAFGatewayBindingPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gateway1",
+						},
+						{
+							Group: v1.GroupName,
+							Kind:  kinds.Gateway,
+							Name:  "gateway2",
+						},
+					},
+					ApPolicySource: &ngfAPI.ApPolicyReference{
+						Name: "policy",
+					},
+				},
+			},
+			expConditions: nil,
 		},
 	}
 
-	v := waf.NewValidator(validation.GenericValidator{})
+	validator := waf.NewValidator(validation.GenericValidator{})
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-
-			conds := v.Validate(test.policy)
+			conds := validator.Validate(test.policy)
 			g.Expect(conds).To(Equal(test.expConditions))
 		})
 	}
@@ -298,57 +252,41 @@ func TestValidator_Validate(t *testing.T) {
 
 func TestValidator_ValidateGlobalSettings(t *testing.T) {
 	t.Parallel()
-
 	tests := []struct {
 		globalSettings    *policies.GlobalSettings
-		expectedCondition *conditions.Condition
 		name              string
+		expValidCondCount int
 	}{
+		{
+			name:              "nil global settings",
+			globalSettings:    nil,
+			expValidCondCount: 1,
+		},
+		{
+			name: "WAF not enabled",
+			globalSettings: &policies.GlobalSettings{
+				WAFEnabled: false,
+			},
+			expValidCondCount: 1,
+		},
 		{
 			name: "WAF enabled",
 			globalSettings: &policies.GlobalSettings{
 				WAFEnabled: true,
 			},
-			expectedCondition: nil,
-		},
-		{
-			name: "WAF disabled",
-			globalSettings: &policies.GlobalSettings{
-				WAFEnabled: false,
-			},
-			expectedCondition: &conditions.Condition{
-				Type:    "Accepted",
-				Status:  "False",
-				Reason:  "NginxProxyConfigNotSet",
-				Message: "WAF is not enabled in NginxProxy",
-			},
-		},
-		{
-			name:           "nil global settings",
-			globalSettings: nil,
-			expectedCondition: &conditions.Condition{
-				Type:    "Accepted",
-				Status:  "False",
-				Reason:  "NginxProxyConfigNotSet",
-				Message: "The NginxProxy configuration is either invalid or not attached to the GatewayClass",
-			},
+			expValidCondCount: 0,
 		},
 	}
+
+	validator := waf.NewValidator(validation.GenericValidator{})
+	pol := createValidPolicy()
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-
-			v := waf.NewValidator(validation.GenericValidator{})
-			result := v.ValidateGlobalSettings(createValidPolicy(), test.globalSettings)
-
-			if test.expectedCondition == nil {
-				g.Expect(result).To(BeNil())
-			} else {
-				g.Expect(result).To(HaveLen(1))
-				g.Expect(result[0]).To(Equal(*test.expectedCondition))
-			}
+			conds := validator.ValidateGlobalSettings(pol, test.globalSettings)
+			g.Expect(conds).To(HaveLen(test.expValidCondCount))
 		})
 	}
 }
@@ -357,11 +295,10 @@ func TestValidator_Conflicts(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	v := waf.NewValidator(validation.GenericValidator{})
-	policy1 := createValidPolicy()
-	policy2 := createValidPolicy()
+	validator := waf.NewValidator(validation.GenericValidator{})
+	pol1 := createValidPolicy()
+	pol2 := createValidPolicy()
 
-	// WAFPolicies should never conflict (always return false)
-	conflicts := v.Conflicts(policy1, policy2)
-	g.Expect(conflicts).To(BeFalse())
+	// WAFGatewayBindingPolicy doesn't support merging
+	g.Expect(validator.Conflicts(pol1, pol2)).To(BeFalse())
 }

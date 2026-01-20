@@ -1,7 +1,6 @@
 package waf_test
 
 import (
-	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -12,56 +11,69 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/waf"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 
-	apDirBase := "app_protect_policy_file \"/etc/app_protect/bundles"
-	apFileDirective := fmt.Sprintf("%s/%s", apDirBase, helpers.ToSafeFileName("http://example.com/policy.tgz"))
-	apSecLogBase := "app_protect_security_log \"/etc/app_protect/bundles"
-	apSecLogDirective := fmt.Sprintf("%s/%s", apSecLogBase, helpers.ToSafeFileName("http://example.com/custom-log.tgz"))
 	tests := []struct {
 		name       string
 		policy     policies.Policy
 		expStrings []string
 	}{
 		{
-			name: "basic case",
-			policy: &ngfAPIv1alpha1.WAFPolicy{
+			name: "basic case with ApPolicy reference",
+			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-name",
 					Namespace: "my-namespace",
 				},
-				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: &ngfAPIv1alpha1.WAFPolicySource{
-						FileLocation: "http://example.com/policy.tgz",
+				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+					ApPolicySource: &ngfAPIv1alpha1.ApPolicyReference{
+						Name: "production-policy",
 					},
 				},
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				apFileDirective,
+				"app_protect_policy_file \"/etc/app_protect/bundles/my-namespace_production-policy.tgz\";",
 			},
 		},
 		{
-			name: "security log with built-in profile and stderr destination",
-			policy: &ngfAPIv1alpha1.WAFPolicy{
+			name: "cross-namespace ApPolicy reference",
+			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "waf-policy",
+					Namespace: "app-ns",
+				},
+				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+					ApPolicySource: &ngfAPIv1alpha1.ApPolicyReference{
+						Name:      "shared-policy",
+						Namespace: func() *string { s := "security-ns"; return &s }(),
+					},
+				},
+			},
+			expStrings: []string{
+				"app_protect_enable on;",
+				"app_protect_policy_file \"/etc/app_protect/bundles/security-ns_shared-policy.tgz\";",
+			},
+		},
+		{
+			name: "security log with ApLogConf reference and stderr destination",
+			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-with-log",
 					Namespace: "test-ns",
 				},
-				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: &ngfAPIv1alpha1.WAFPolicySource{
-						FileLocation: "http://example.com/policy.tgz",
+				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+					ApPolicySource: &ngfAPIv1alpha1.ApPolicyReference{
+						Name: "base-policy",
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogProfile: func() *ngfAPIv1alpha1.LogProfile {
-								lp := ngfAPIv1alpha1.LogProfileDefault
-								return &lp
-							}(),
+							ApLogConfSource: ngfAPIv1alpha1.ApLogConfReference{
+								Name: "default-log",
+							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
 								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
 							},
@@ -71,23 +83,26 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				apFileDirective,
+				"app_protect_policy_file \"/etc/app_protect/bundles/test-ns_base-policy.tgz\";",
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"log_default\" stderr;",
+				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_default-log.tgz\" stderr;",
 			},
 		},
 		{
-			name: "security log with custom bundle and file destination",
-			policy: &ngfAPIv1alpha1.WAFPolicy{
+			name: "security log with file destination",
+			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "waf-custom-log",
+					Name:      "waf-file-log",
 					Namespace: "test-ns",
 				},
-				Spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+					ApPolicySource: &ngfAPIv1alpha1.ApPolicyReference{
+						Name: "base-policy",
+					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogProfileBundle: &ngfAPIv1alpha1.WAFPolicySource{
-								FileLocation: "http://example.com/custom-log.tgz",
+							ApLogConfSource: ngfAPIv1alpha1.ApLogConfReference{
+								Name: "custom-log",
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
 								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeFile,
@@ -101,24 +116,22 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_security_log_enable on;",
-				apSecLogDirective,
-				"/var/log/nginx/security.log;",
+				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_custom-log.tgz\" /var/log/nginx/security.log;",
 			},
 		},
 		{
 			name: "security log with syslog destination",
-			policy: &ngfAPIv1alpha1.WAFPolicy{
+			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-syslog",
 					Namespace: "test-ns",
 				},
-				Spec: ngfAPIv1alpha1.WAFPolicySpec{
+				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogProfile: func() *ngfAPIv1alpha1.LogProfile {
-								lp := ngfAPIv1alpha1.LogProfileBlocked
-								return &lp
-							}(),
+							ApLogConfSource: ngfAPIv1alpha1.ApLogConfReference{
+								Name: "blocked-log",
+							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
 								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeSyslog,
 								Syslog: &ngfAPIv1alpha1.SecurityLogSyslog{
@@ -131,35 +144,35 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"log_blocked\" syslog:server=syslog.example.com:514;",
+				"app_protect_security_log \"/etc/app_protect/bundles/test-ns_blocked-log.tgz\" " +
+					"syslog:server=syslog.example.com:514;",
 			},
 		},
 		{
-			name: "multiple security logs",
-			policy: &ngfAPIv1alpha1.WAFPolicy{
+			name: "multiple security logs with cross-namespace ApLogConf references",
+			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-multi-log",
-					Namespace: "test-ns",
+					Namespace: "app-ns",
 				},
-				Spec: ngfAPIv1alpha1.WAFPolicySpec{
-					PolicySource: &ngfAPIv1alpha1.WAFPolicySource{
-						FileLocation: "http://example.com/policy.tgz",
+				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+					ApPolicySource: &ngfAPIv1alpha1.ApPolicyReference{
+						Name: "policy",
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							LogProfile: func() *ngfAPIv1alpha1.LogProfile {
-								lp := ngfAPIv1alpha1.LogProfileAll
-								return &lp
-							}(),
+							ApLogConfSource: ngfAPIv1alpha1.ApLogConfReference{
+								Name: "log-all",
+							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
 								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
 							},
 						},
 						{
-							LogProfile: func() *ngfAPIv1alpha1.LogProfile {
-								lp := ngfAPIv1alpha1.LogProfileBlocked
-								return &lp
-							}(),
+							ApLogConfSource: ngfAPIv1alpha1.ApLogConfReference{
+								Name:      "log-blocked",
+								Namespace: func() *string { s := "security-ns"; return &s }(),
+							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
 								Type: ngfAPIv1alpha1.SecurityLogDestinationTypeFile,
 								File: &ngfAPIv1alpha1.SecurityLogFile{
@@ -172,10 +185,10 @@ func TestGenerate(t *testing.T) {
 			},
 			expStrings: []string{
 				"app_protect_enable on;",
-				apFileDirective,
+				"app_protect_policy_file \"/etc/app_protect/bundles/app-ns_policy.tgz\";",
 				"app_protect_security_log_enable on;",
-				"app_protect_security_log \"log_all\" stderr;",
-				"app_protect_security_log \"log_blocked\" /var/log/blocked.log;",
+				"app_protect_security_log \"/etc/app_protect/bundles/app-ns_log-all.tgz\" stderr;",
+				"app_protect_security_log \"/etc/app_protect/bundles/security-ns_log-blocked.tgz\" /var/log/blocked.log;",
 			},
 		},
 	}

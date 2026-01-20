@@ -10,4 +10,4 @@ resources:
   - bases/gateway.nginx.org_snippetsfilters.yaml
   - bases/gateway.nginx.org_snippetspolicies.yaml
   - bases/gateway.nginx.org_upstreamsettingspolicies.yaml
-  - bases/gateway.nginx.org_wafpolicies.yaml
+  - bases/gateway.nginx.org_wafgatewaybindingpolicies.yaml

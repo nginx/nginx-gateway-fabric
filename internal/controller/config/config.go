@@ -14,6 +14,8 @@ type Config struct {
 	AtomicLevel zap.AtomicLevel
 	// GatewayPodConfig contains information about this Pod.
 	GatewayPodConfig GatewayPodConfig
+	// PLMStorageConfig contains information about the PLM storage component.
+	PLMStorageConfig PLMStorageConfig
 	// Logger is the Zap Logger used by all components.
 	Logger logr.Logger
 	// NGINXSCCName is the name of the SecurityContextConstraints for the NGINX Pods. Only applicable in OpenShift.
@@ -40,26 +42,34 @@ type Config struct {
 	WatchNamespaces []string
 	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
 	NginxOneConsoleTelemetryConfig NginxOneConsoleTelemetryConfig
-	// ProductTelemetryConfig contains the configuration for collecting product telemetry.
-	ProductTelemetryConfig ProductTelemetryConfig
-	// HealthConfig specifies the health probe config.
-	HealthConfig HealthConfig
-	// MetricsConfig specifies the metrics config.
-	MetricsConfig MetricsConfig
-	// Plus indicates whether NGINX Plus is being used.
-	Plus bool
-	// ExperimentalFeatures indicates if experimental features are enabled.
-	ExperimentalFeatures bool
-	// InferenceExtension indicates if Gateway API Inference Extension support is enabled.
-	InferenceExtension bool
-	// SnippetsFilters indicates if SnippetsFilters are enabled.
-	SnippetsFilters bool
-	// SnippetsPolicies indicates if SnippetsPolicies are enabled.
-	SnippetsPolicies bool
-	// EndpointPickerDisableTLS indicates if TLS is disabled for EndpointPicker communication.
-	EndpointPickerDisableTLS bool
-	// EndpointPickerTLSSkipVerify indicates if secure verification is skipped for EndpointPicker communication.
-	EndpointPickerTLSSkipVerify bool
+	ProductTelemetryConfig         ProductTelemetryConfig
+	HealthConfig                   HealthConfig
+	MetricsConfig                  MetricsConfig
+	Plus                           bool
+	ExperimentalFeatures           bool
+	InferenceExtension             bool
+	SnippetsFilters                bool
+	SnippetsPolicies               bool
+	EndpointPickerDisableTLS       bool
+	EndpointPickerTLSSkipVerify    bool
+}
+
+// PLMStorageConfig contains the configuration for PLM storage service communication.
+type PLMStorageConfig struct {
+	// URL is the PLM storage service URL (HTTP or HTTPS).
+	URL string
+	// CredentialsSecretName is the name of the Secret containing S3 credentials.
+	// The Secret should have "accessKeyId" and "secretAccessKey" data fields.
+	// If empty, anonymous access is used.
+	CredentialsSecretName string
+	// TLSCACertPath is the path to the CA certificate file for TLS verification.
+	TLSCACertPath string
+	// TLSClientCertPath is the path to the client certificate file for mutual TLS.
+	TLSClientCertPath string
+	// TLSClientKeyPath is the path to the client key file for mutual TLS.
+	TLSClientKeyPath string
+	// TLSInsecureSkipVerify skips TLS certificate verification (not recommended for production).
+	TLSInsecureSkipVerify bool
 }
 
 // GatewayPodConfig contains information about this Pod.

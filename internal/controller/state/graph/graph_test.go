@@ -1826,6 +1826,7 @@ func TestBuildGraph(t *testing.T) {
 						},
 					},
 				},
+				nil, // wafFetcher
 				validation.Validators{
 					HTTPFieldsValidator: createAllValidValidator(),
 					GenericValidator:    &validationfakes.FakeGenericValidator{},

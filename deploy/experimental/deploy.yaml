@@ -203,6 +203,7 @@ rules:
   - upstreamsettingspolicies
   - authenticationfilters
   - proxysettingspolicies
+  - wafgatewaybindingpolicies
   verbs:
   - list
   - watch
@@ -215,6 +216,7 @@ rules:
   - upstreamsettingspolicies/status
   - authenticationfilters/status
   - proxysettingspolicies/status
+  - wafgatewaybindingpolicies/status
   verbs:
   - update
 - apiGroups:
