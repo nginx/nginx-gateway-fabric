@@ -2951,16 +2951,16 @@ var _ = Describe("ChangeProcessor", func() {
 
 		Describe("NGF Policy resource changes", Ordered, func() {
 			var (
-				gw                                              *v1.Gateway
-				route                                           *v1.HTTPRoute
-				svc                                             *apiv1.Service
-				csp, cspUpdated                                 *ngfAPIv1alpha1.ClientSettingsPolicy
-				obs, obsUpdated                                 *ngfAPIv1alpha2.ObservabilityPolicy
-				usp, uspUpdated                                 *ngfAPIv1alpha1.UpstreamSettingsPolicy
-				snip, snipUpdated                               *ngfAPIv1alpha1.SnippetsPolicy
-				psp, pspUpdated                                 *ngfAPIv1alpha1.ProxySettingsPolicy
-				rlp, rlpUpdated                                 *ngfAPIv1alpha1.RateLimitPolicy
-				waf, wafUpdated                                 *ngfAPIv1alpha1.WAFGatewayBindingPolicy
+				gw                                                      *v1.Gateway
+				route                                                   *v1.HTTPRoute
+				svc                                                     *apiv1.Service
+				csp, cspUpdated                                         *ngfAPIv1alpha1.ClientSettingsPolicy
+				obs, obsUpdated                                         *ngfAPIv1alpha2.ObservabilityPolicy
+				usp, uspUpdated                                         *ngfAPIv1alpha1.UpstreamSettingsPolicy
+				snip, snipUpdated                                       *ngfAPIv1alpha1.SnippetsPolicy
+				psp, pspUpdated                                         *ngfAPIv1alpha1.ProxySettingsPolicy
+				rlp, rlpUpdated                                         *ngfAPIv1alpha1.RateLimitPolicy
+				waf, wafUpdated                                         *ngfAPIv1alpha1.WAFGatewayBindingPolicy
 				cspKey, obsKey, uspKey, snipKey, pspKey, rlpKey, wafKey graph.PolicyKey
 			)
 
@@ -3184,7 +3184,7 @@ var _ = Describe("ChangeProcessor", func() {
 					GVK: schema.GroupVersionKind{
 						Group:   ngfAPIv1alpha1.GroupName,
 						Kind:    kinds.RateLimitPolicy,
-												Version: "v1alpha1",
+						Version: "v1alpha1",
 					},
 				}
 

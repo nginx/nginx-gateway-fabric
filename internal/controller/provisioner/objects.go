@@ -1074,7 +1074,7 @@ func (p *NginxProvisioner) buildNginxContainer(
 }
 
 // buildBaseVolumes builds the base volumes needed for NGINX.
-func (p *NginxProvisioner) buildBaseVolumes(names resourceNames,) []corev1.Volume {
+func (p *NginxProvisioner) buildBaseVolumes(names resourceNames) []corev1.Volume {
 	tokenAudience := fmt.Sprintf("%s.%s.svc", p.cfg.GatewayPodConfig.ServiceName, p.cfg.GatewayPodConfig.Namespace)
 
 	return []corev1.Volume{
