@@ -4,12 +4,12 @@ FROM scratch AS nginx-files
 # the following links can be replaced with local files if needed, i.e. ADD --chown=101:1001 <local_file> <container_file>
 ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.pub nginx_signing.rsa.pub
 
-FROM alpine:${ALPINE_VERSION}
+FROM alpine:3.22
 
 ARG NGINX_PLUS_VERSION=R36
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.7.0
-ARG APP_PROTECT_VERSION=34.5.442
+ARG APP_PROTECT_VERSION=36.5.575
 ARG INCLUDE_NAP_WAF=false
 ARG NJS_DIR
 ARG NGINX_CONF_DIR

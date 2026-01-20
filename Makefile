@@ -5,9 +5,8 @@ CHART_DIR = $(SELF_DIR)charts/nginx-gateway-fabric
 NGINX_CONF_DIR = internal/controller/nginx/conf
 NJS_DIR = internal/controller/nginx/modules/src
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
-NAP_WAF_ALPINE_VERSION = 3.19
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
-NGINX_DOCKER_BUILD_NAP_WAF_ARGS = --build-arg ALPINE_VERSION=$(NAP_WAF_ALPINE_VERSION) --build-arg INCLUDE_NAP_WAF=true
+NGINX_DOCKER_BUILD_NAP_WAF_ARGS = --build-arg INCLUDE_NAP_WAF=true
 BUILD_AGENT = local
 
 PROD_TELEMETRY_ENDPOINT = oss.edge.df.f5.com:443
