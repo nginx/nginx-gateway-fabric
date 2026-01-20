@@ -224,5 +224,23 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - cis.f5.com
+  resources:
+  - ingresslinks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cis.f5.com
+  resources:
+  - ingresslinks/status
+  verbs:
+  - get
 
 # +kubebuilder:scaffold:rules

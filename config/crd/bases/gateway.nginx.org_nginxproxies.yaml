@@ -116,6 +116,165 @@ spec:
                 required:
                 - addresses
                 type: object
+              gatewayLink:
+                description: GatewayLink defines the configuration for integrating
+                  with F5 BIG-IP Container Ingress Services.
+                properties:
+                  bigipRouteDomain:
+                    description: BigIPRouteDomain is the route domain ID for the BIG-IP
+                      virtual server.
+                    format: int32
+                    maximum: 65535
+                    minimum: 0
+                    type: integer
+                  enabled:
+                    description: Enabled indicates whether GatewayLink integration
+                      is enabled.
+                    type: boolean
+                  host:
+                    description: Host is the hostname for the BIG-IP virtual server.
+                    pattern: ^(([a-zA-Z0-9*]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9])$
+                    type: string
+                  iRules:
+                    description: |-
+                      IRules is a list of BIG-IP iRules to apply to the virtual server.
+                      Each iRule must be specified using the full path format: /partition/irule_name
+                      (e.g., "/Common/Proxy_Protocol_iRule").
+                      This field is required by F5 CIS.
+                    items:
+                      pattern: ^/[a-zA-Z]+([A-z0-9-_+]+/)+([-A-z0-9_.:]+/?)*$
+                      type: string
+                    minItems: 1
+                    type: array
+                  ipamLabel:
+                    description: |-
+                      IpamLabel is the label used by F5 IPAM Controller to allocate an IP address.
+                      The IPAM controller will assign an IP from the pool associated with this label.
+                      This is mutually exclusive with VirtualServerAddress.
+                    pattern: ^[a-zA-Z]+[-A-z0-9_.:]+[A-z0-9]+$
+                    type: string
+                  monitors:
+                    description: Monitors is a list of BIG-IP health monitors to associate
+                      with the virtual server pool.
+                    items:
+                      description: GatewayLinkMonitor defines a BIG-IP health monitor
+                        reference.
+                      properties:
+                        name:
+                          description: Name is the full path of the health monitor
+                            on BIG-IP (e.g., "/Common/http").
+                          pattern: ^/[a-zA-Z]+([A-z0-9-_+]+/)+([-A-z0-9_.:]+/?)*$
+                          type: string
+                        reference:
+                          description: Reference specifies the source of the monitor.
+                            Currently only "bigip" is supported.
+                          enum:
+                          - bigip
+                          type: string
+                      required:
+                      - name
+                      - reference
+                      type: object
+                    type: array
+                  multiCluster:
+                    description: |-
+                      MultiCluster defines the multi-cluster configuration for load balancing traffic
+                      across NGINX Gateway Fabric instances in multiple clusters.
+                    properties:
+                      localClusterName:
+                        description: |-
+                          LocalClusterName is the name of the current cluster as configured in the CIS deployment
+                          (--cluster-name flag).
+                        type: string
+                      remoteClusters:
+                        description: RemoteClusters is the list of remote clusters
+                          that also run NGINX Gateway Fabric.
+                        items:
+                          description: GatewayLinkRemoteCluster defines a remote cluster
+                            for multi-cluster load balancing.
+                          properties:
+                            clusterName:
+                              description: ClusterName is one of the names of the
+                                remote clusters as configured in the CIS deployment.
+                              type: string
+                            namespace:
+                              description: |-
+                                Namespace is the namespace of the NGINX Gateway Fabric service in the remote cluster.
+                                If not specified, defaults to the local Gateway's namespace.
+                              type: string
+                            service:
+                              description: |-
+                                Service is the name of the NGINX Gateway Fabric service in the remote cluster.
+                                If not specified, defaults to the local Gateway's service name.
+                              type: string
+                            weight:
+                              description: Weight is the load balancing weight for
+                                this cluster's service.
+                              format: int32
+                              maximum: 256
+                              minimum: 0
+                              type: integer
+                          required:
+                          - clusterName
+                          type: object
+                        minItems: 1
+                        type: array
+                    required:
+                    - localClusterName
+                    - remoteClusters
+                    type: object
+                  partition:
+                    description: |-
+                      Partition is the BIG-IP partition where resources will be created.
+                      Defaults to "Common" if not specified.
+                    pattern: ^[a-zA-Z]+[-A-z0-9_.]+$
+                    type: string
+                  tls:
+                    description: TLS defines the TLS configuration for the BIG-IP
+                      virtual server.
+                    properties:
+                      clientSSLs:
+                        description: |-
+                          ClientSSLs is a list of BIG-IP client SSL profiles or Kubernetes secret references.
+                          When reference is "bigip", use the full path format: /partition/profile_name (e.g., "/Common/clientssl").
+                          When reference is "secret", use the Kubernetes secret name.
+                        items:
+                          pattern: ^/?[a-zA-Z]+([-A-z0-9_+]+/)*([-A-z0-9_.:]+/?)*$
+                          type: string
+                        type: array
+                      reference:
+                        description: |-
+                          Reference specifies the source of the SSL profiles.
+                          "bigip" means the profiles exist on BIG-IP, "secret" means they are Kubernetes secrets.
+                        enum:
+                        - bigip
+                        - secret
+                        type: string
+                      serverSSLs:
+                        description: |-
+                          ServerSSLs is a list of BIG-IP server SSL profiles or Kubernetes secret references.
+                          When reference is "bigip", use the full path format: /partition/profile_name (e.g., "/Common/serverssl").
+                          When reference is "secret", use the Kubernetes secret name.
+                        items:
+                          pattern: ^/?[a-zA-Z]+([-A-z0-9_+]+/)*([-A-z0-9_.:]+/?)*$
+                          type: string
+                        type: array
+                    type: object
+                  virtualServerAddress:
+                    description: |-
+                      VirtualServerAddress is the static IP address to configure on BIG-IP for the virtual server.
+                      This is mutually exclusive with IpamLabel.
+                    pattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$
+                    type: string
+                  virtualServerName:
+                    description: VirtualServerName is a custom name for the BIG-IP
+                      virtual server.
+                    pattern: ^[a-zA-Z]+([A-z0-9-._+])*([A-z0-9])$
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: virtualServerAddress and ipamLabel are mutually exclusive
+                  rule: '!(has(self.virtualServerAddress) && has(self.ipamLabel))'
               ipFamily:
                 default: dual
                 description: |-

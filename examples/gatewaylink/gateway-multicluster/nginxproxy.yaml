@@ -1,0 +1,54 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: nginx-proxy-gatewaylink-multi
+spec:
+  # GatewayLink configuration with manual IP address
+  gatewayLink:
+    enabled: true
+    # Static IP address configured on BIG-IP
+    virtualServerAddress: "10.8.3.103"
+    # # If IPAM integration is enabled, F5 IPAM Controller will allocate
+    # # an IP from the pool associated with this label
+    # ipamLabel: "production"
+    # Define IRules (must use full path format: /partition/irule_name)
+    iRules:
+      - "/Common/Proxy_Protocol_iRule"
+    # TLS configuration for the BIG-IP virtual server
+    tls:
+      clientSSLs:
+        - "/Common/clientssl"
+      serverSSLs:
+        - "/Common/serverssl"
+      reference: bigip
+    # Multi-cluster configuration: CIS will load balance across clusters.
+    # Cluster names must match the names defined in the CIS deployment configmap.
+    multiCluster:
+      localClusterName: "cluster-1"
+      remoteClusters:
+        - clusterName: "cluster-2"
+        # # Namespace and service default to the local Gateway's values if omitted
+        # # but can be defined here if required
+        # namespace: ngf
+        # # The gateway service is dynamically deployed by NGF when a Gateway is created,
+        # # and follows the naming pattern "<gatewayName>-<gatewayClassName"
+        # service: my-gateway-nginx
+
+  # Configure Proxy Protocol to preserve client IPs from BIG-IP
+  rewriteClientIP:
+    mode: ProxyProtocol
+    trustedAddresses:
+      - type: CIDR
+        value: 10.8.0.0/14
+
+  kubernetes:
+    # NodePort is required for multi-cluster (CIS needs --pool-member-type=nodeport)
+    service:
+      type: NodePort
+    deployment:
+      container:
+        # Configure readiness probe
+        readinessProbe:
+          path: "/nginx-ready"  # ← Compatibility with CIS/BIG-IP
+          port: 8081
+          expose: true

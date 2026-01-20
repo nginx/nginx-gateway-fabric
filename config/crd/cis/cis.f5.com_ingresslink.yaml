@@ -1,0 +1,132 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ingresslinks.cis.f5.com
+spec:
+  group: cis.f5.com
+  names:
+    kind: IngressLink
+    shortNames:
+      - il
+    singular: ingresslink
+    plural: ingresslinks
+  scope: Namespaced
+  versions:
+    -
+      name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                partition:
+                  type: string
+                  pattern: '^[a-zA-Z]+[-A-z0-9_.]+$'
+                virtualServerAddress:
+                  type: string
+                  pattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$'
+                virtualServerName:
+                  type: string
+                  pattern: '^[a-zA-Z]+([A-z0-9-._+])*([A-z0-9])$'
+                host:
+                  type: string
+                  pattern: '^(([a-zA-Z0-9\*]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$'
+                ipamLabel:
+                  type: string
+                  pattern: '^[a-zA-Z]+[-A-z0-9_.:]+[A-z0-9]+$'
+                bigipRouteDomain:
+                  type: integer
+                  minimum: 0
+                  maximum: 65535
+                  default: 0
+                iRules:
+                  type: array
+                  items:
+                    type: string
+                    pattern: '^\/[a-zA-Z]+([A-z0-9-_+]+\/)+([-A-z0-9_.:]+\/?)*$'
+                monitors:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        pattern: '^\/[a-zA-Z]+([A-z0-9-_+]+\/)+([-A-z0-9_.:]+\/?)*$'
+                      reference:
+                        type: string
+                        enum: [ bigip ]
+                tls:
+                  type: object
+                  properties:
+                    clientSSLs:
+                      type: array
+                      items:
+                        type: string
+                        pattern: '^\/?[a-zA-Z]+([-A-z0-9_+]+\/)*([-A-z0-9_.:]+\/?)*$'
+                    serverSSLs:
+                      type: array
+                      items:
+                        type: string
+                        pattern: '^\/?[a-zA-Z]+([-A-z0-9_+]+\/)*([-A-z0-9_.:]+\/?)*$'
+                    reference:
+                      type: string
+                      enum: [ bigip, secret ]
+                multiClusterServices:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      clusterName:
+                        type: string
+                      namespace:
+                        type: string
+                      service:
+                        type: string
+                      weight:
+                        type: integer
+                        minimum: 0
+                        maximum: 256
+                    required:
+                      - clusterName
+                      - namespace
+                      - service
+                selector:
+                  properties:
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      type: object
+                  type: object
+              x-kubernetes-validations:
+                - rule: "!has(self.partition) || self.partition != 'Common'"
+                  message: "The partition cannot be 'Common' if specified."
+                - rule: "has(self.partition) == has(oldSelf.partition) && (!has(self.partition) || self.partition == oldSelf.partition)"
+                  message: "partition cannot be modified. Delete the resource and recreate with new partition"
+                - rule: "has(self.ipamLabel) || has(self.virtualServerAddress)"
+                  message: "either ipamLabel or virtualServerAddress needs to be specified."
+            status:
+              type: object
+              properties:
+                vsAddress:
+                  type: string
+                status:
+                  type: string
+                  default: pending
+                lastUpdated:
+                  type: string
+                error:
+                  type: string
+      additionalPrinterColumns:
+        - name: IPAMVSAddress
+          type: string
+          description: IP address of virtualServer
+          jsonPath: .status.vsAddress
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: { }

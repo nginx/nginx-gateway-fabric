@@ -17,6 +17,7 @@ TELEMETRY_ENDPOINT_INSECURE = false
 
 ENABLE_EXPERIMENTAL ?= false
 ENABLE_INFERENCE_EXTENSION ?= false
+ENABLE_GATEWAY_LINK ?= false
 
 # go build flags - should not be overridden by the user
 GO_LINKER_FlAGS_VARS = -X main.version=${VERSION} -X main.telemetryReportPeriod=${TELEMETRY_REPORT_PERIOD} -X main.telemetryEndpoint=${TELEMETRY_ENDPOINT} -X main.telemetryEndpointInsecure=${TELEMETRY_ENDPOINT_INSECURE}
@@ -158,6 +159,10 @@ uninstall-gateway-crds: ## Uninstall Gateway API CRDs
 install-inference-crds: ## Install Gateway API Inference Extension CRDs
 	kubectl kustomize $(SELF_DIR)config/crd/inference-extension | kubectl apply -f -
 
+.PHONY: install-gateway-link-crd
+install-gateway-link-crd:
+	kubectl apply -f $(SELF_DIR)config/crd/cis/
+
 .PHONY: uninstall-inference-crds
 uninstall-inference-crds: ## Uninstall Gateway API Inference Extension CRDs
 	kubectl kustomize $(SELF_DIR)config/crd/inference-extension | kubectl delete -f -
@@ -262,7 +267,10 @@ helm-install-local: install-gateway-crds ## Helm install NGF on configured kind 
 	@if [ "$(ENABLE_INFERENCE_EXTENSION)" = "true" ]; then \
 		$(MAKE) install-inference-crds; \
 	fi
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway $(HELM_PARAMETERS)
+	@if [ "$(ENABLE_GATEWAY_LINK)" = "true" ]; then \
+		$(MAKE) install-gateway-link-crd; \
+	fi
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) --set nginxGateway.gatewayLink.enable=$(ENABLE_GATEWAY_LINK) -n nginx-gateway $(HELM_PARAMETERS)
 
 .PHONY: helm-install-local-with-plus
 helm-install-local-with-plus: check-for-plus-usage-endpoint install-gateway-crds ## Helm install NGF with NGINX Plus on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build-with-plus.

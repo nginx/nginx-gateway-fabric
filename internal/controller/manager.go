@@ -257,6 +257,7 @@ func StartManager(cfg config.Config) error {
 			InferenceExtension:             cfg.InferenceExtension,
 			EndpointPickerDisableTLS:       cfg.EndpointPickerDisableTLS,
 			EndpointPickerTLSSkipVerify:    cfg.EndpointPickerTLSSkipVerify,
+			BigIPIngressLink:               cfg.BigIPIngressLink,
 		},
 	)
 	if err != nil {

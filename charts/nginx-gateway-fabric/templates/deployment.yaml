@@ -131,6 +131,9 @@ spec:
         - --plm-storage-skip-verify
         {{- end }}
         {{- end }}
+        {{- if .Values.nginxGateway.gatewayLink.enable }}
+        - --bigip-gateway-link
+        {{- end }}
         {{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
         - --nginx-scc={{ include "nginx-gateway.scc-name" . }}-nginx
         {{- end}}

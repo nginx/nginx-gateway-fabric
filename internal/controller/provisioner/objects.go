@@ -16,6 +16,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
@@ -80,6 +82,13 @@ type resourceNames struct {
 }
 
 // buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
+// ingressLinkGVK is the GroupVersionKind for F5 CIS IngressLink resources.
+var ingressLinkGVK = schema.GroupVersionKind{
+	Group:   "cis.f5.com",
+	Version: "v1",
+	Kind:    "IngressLink",
+}
+
 func (p *NginxProvisioner) buildNginxResourceObjects(
 	resourceName string,
 	gateway *gatewayv1.Gateway,
@@ -192,6 +201,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// service
 	// deployment/daemonset
 	// hpa
+	// ingresslink (if enabled)
 
 	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+3)
 	objects = append(objects, secretsList...)
@@ -208,6 +218,10 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 			errs = append(errs, fmt.Errorf("failed to set owner reference on HPA %s: %w", hpa.GetName(), err))
 		}
 		objects = append(objects, hpa)
+	}
+
+	if il := p.buildIngressLink(objectMeta, nProxyCfg, selectorLabels); il != nil {
+		objects = append(objects, il)
 	}
 
 	return objects, errors.Join(errs...)
@@ -333,6 +347,167 @@ func (p *NginxProvisioner) buildHPA(
 	}
 
 	return buildNginxDeploymentHPA(objectMeta, nProxyCfg.Kubernetes.Deployment.Autoscaling)
+}
+
+// buildIngressLink creates an IngressLink resource for F5 BIG-IP CIS integration.
+// The IngressLink connects the NGINX Service to BIG-IP, allowing external traffic
+// to be routed through BIG-IP to the NGINX pods.
+func (p *NginxProvisioner) buildIngressLink(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+) client.Object {
+	if !p.cfg.BigIPIngressLink {
+		return nil
+	}
+
+	if nProxyCfg == nil || nProxyCfg.GatewayLink == nil {
+		return nil
+	}
+
+	ilCfg := nProxyCfg.GatewayLink
+	if ilCfg.Enabled == nil || !*ilCfg.Enabled {
+		return nil
+	}
+
+	spec := buildIngressLinkSpec(ilCfg, objectMeta, selectorLabels)
+
+	il := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": ingressLinkGVK.Group + "/" + ingressLinkGVK.Version,
+			"kind":       ingressLinkGVK.Kind,
+			"metadata": map[string]any{
+				"name":        objectMeta.Name,
+				"namespace":   objectMeta.Namespace,
+				"labels":      objectMeta.Labels,
+				"annotations": objectMeta.Annotations,
+			},
+			"spec": spec,
+		},
+	}
+
+	return il
+}
+
+func buildIngressLinkSpec(
+	ilCfg *ngfAPIv1alpha2.GatewayLinkConfig,
+	objectMeta metav1.ObjectMeta,
+	selectorLabels map[string]string,
+) map[string]any {
+	spec := map[string]any{}
+
+	// Selector is not used when multiClusterServices is configured
+	if ilCfg.MultiCluster == nil {
+		spec["selector"] = map[string]any{
+			"matchLabels": selectorLabels,
+		}
+	}
+
+	setIngressLinkAddressing(spec, ilCfg)
+	setIngressLinkOptionalFields(spec, ilCfg)
+	setIngressLinkTLS(spec, ilCfg)
+	setIngressLinkMultiCluster(spec, ilCfg, objectMeta)
+
+	return spec
+}
+
+func setIngressLinkAddressing(spec map[string]any, ilCfg *ngfAPIv1alpha2.GatewayLinkConfig) {
+	if ilCfg.VirtualServerAddress != nil {
+		spec["virtualServerAddress"] = *ilCfg.VirtualServerAddress
+	} else if ilCfg.IpamLabel != nil {
+		spec["ipamLabel"] = *ilCfg.IpamLabel
+	}
+}
+
+func setIngressLinkOptionalFields(spec map[string]any, ilCfg *ngfAPIv1alpha2.GatewayLinkConfig) {
+	if ilCfg.VirtualServerName != nil {
+		spec["virtualServerName"] = *ilCfg.VirtualServerName
+	}
+	if ilCfg.Host != nil {
+		spec["host"] = *ilCfg.Host
+	}
+	if len(ilCfg.IRules) > 0 {
+		spec["iRules"] = ilCfg.IRules
+	}
+	if ilCfg.Partition != nil {
+		spec["partition"] = *ilCfg.Partition
+	}
+	if ilCfg.BigIPRouteDomain != nil {
+		spec["bigipRouteDomain"] = *ilCfg.BigIPRouteDomain
+	}
+	if len(ilCfg.Monitors) > 0 {
+		monitors := make([]any, 0, len(ilCfg.Monitors))
+		for _, m := range ilCfg.Monitors {
+			monitors = append(monitors, map[string]any{
+				"name":      m.Name,
+				"reference": m.Reference,
+			})
+		}
+		spec["monitors"] = monitors
+	}
+}
+
+func setIngressLinkTLS(spec map[string]any, ilCfg *ngfAPIv1alpha2.GatewayLinkConfig) {
+	if ilCfg.TLS == nil {
+		return
+	}
+
+	tls := map[string]any{}
+	if len(ilCfg.TLS.ClientSSLs) > 0 {
+		tls["clientSSLs"] = ilCfg.TLS.ClientSSLs
+	}
+	if len(ilCfg.TLS.ServerSSLs) > 0 {
+		tls["serverSSLs"] = ilCfg.TLS.ServerSSLs
+	}
+	if ilCfg.TLS.Reference != nil {
+		tls["reference"] = *ilCfg.TLS.Reference
+	}
+	if len(tls) > 0 {
+		spec["tls"] = tls
+	}
+}
+
+func setIngressLinkMultiCluster(
+	spec map[string]any,
+	ilCfg *ngfAPIv1alpha2.GatewayLinkConfig,
+	objectMeta metav1.ObjectMeta,
+) {
+	if ilCfg.MultiCluster == nil {
+		return
+	}
+
+	mcServices := make([]any, 0, len(ilCfg.MultiCluster.RemoteClusters)+1)
+
+	// Add the local cluster service
+	mcServices = append(mcServices, map[string]any{
+		"clusterName": ilCfg.MultiCluster.LocalClusterName,
+		"namespace":   objectMeta.Namespace,
+		"service":     objectMeta.Name,
+	})
+
+	// Add remote cluster services, defaulting to local name/namespace if not specified
+	for _, remote := range ilCfg.MultiCluster.RemoteClusters {
+		ns := objectMeta.Namespace
+		if remote.Namespace != nil {
+			ns = *remote.Namespace
+		}
+		svc := objectMeta.Name
+		if remote.Service != nil {
+			svc = *remote.Service
+		}
+
+		entry := map[string]any{
+			"clusterName": *remote.ClusterName,
+			"namespace":   ns,
+			"service":     svc,
+		}
+		if remote.Weight != nil {
+			entry["weight"] = *remote.Weight
+		}
+		mcServices = append(mcServices, entry)
+	}
+
+	spec["multiClusterServices"] = mcServices
 }
 
 func (p *NginxProvisioner) buildNginxSecrets(
@@ -711,7 +886,6 @@ func buildServicePorts(
 	sort.Slice(servicePorts, func(i, j int) bool {
 		return servicePorts[i].Port < servicePorts[j].Port
 	})
-
 	return servicePorts
 }
 

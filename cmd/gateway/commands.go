@@ -103,6 +103,7 @@ func createControllerCommand() *cobra.Command {
 		plmStorageCASecretFlag              = "plm-storage-ca-secret"          //nolint:gosec // not credentials
 		plmStorageClientSSLSecretFlag       = "plm-storage-client-ssl-secret"  //nolint:gosec // not credentials
 		plmStorageSkipVerifyFlag            = "plm-storage-skip-verify"
+		bigIPGatewayLinkFlag                = "bigip-gateway-link"
 	)
 
 	// flag values
@@ -163,8 +164,9 @@ func createControllerCommand() *cobra.Command {
 
 		disableProductTelemetry bool
 
-		snippetsFilters bool
-		snippets        bool
+		snippetsFilters  bool
+		snippets         bool
+		bigIPIngressLink bool
 
 		plus               bool
 		nginxDockerSecrets = stringSliceValidatingValue{
@@ -322,6 +324,7 @@ func createControllerCommand() *cobra.Command {
 					TLSClientSSLSecretName: plmStorageTLSClientSSLSecret,
 					TLSInsecureSkipVerify:  plmStorageTLSInsecureSkipVerify,
 				},
+				BigIPIngressLink: bigIPIngressLink,
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -550,6 +553,14 @@ func createControllerCommand() *cobra.Command {
 		"Enable Snippets feature through SnippetsFilter and SnippetsPolicy APIs. SnippetsFilters allow inserting "+
 			"NGINX configuration into the generated NGINX config for HTTPRoute and GRPCRoute resources. SnippetsPolicies "+
 			"allow inserting NGINX configuration into the generated NGINX config for Gateway resources.",
+	)
+
+	cmd.Flags().BoolVar(
+		&bigIPIngressLink,
+		bigIPGatewayLinkFlag,
+		false,
+		"Enable F5 BIG-IP IngressLink integration. When enabled, NGF will watch for IngressLink resources "+
+			"and can create them based on NginxProxy configuration to integrate with F5 CIS.",
 	)
 
 	cmd.Flags().Var(

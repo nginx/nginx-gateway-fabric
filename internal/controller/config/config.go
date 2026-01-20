@@ -62,6 +62,8 @@ type Config struct {
 	EndpointPickerDisableTLS bool
 	// EndpointPickerTLSSkipVerify indicates if secure verification is skipped for EndpointPicker communication.
 	EndpointPickerTLSSkipVerify bool
+	// BigIPIngressLink indicates if F5 BIG-IP IngressLink integration is enabled.
+	BigIPIngressLink bool
 }
 
 // PLMStorageConfig contains the configuration for PLM storage service communication.

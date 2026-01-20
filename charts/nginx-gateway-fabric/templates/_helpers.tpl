@@ -370,4 +370,24 @@ Create cluster RBAC rules.
   verbs:
   - use
   {{- end }}
+  {{- if .Values.nginxGateway.gatewayLink.enable }}
+- apiGroups:
+  - cis.f5.com
+  resources:
+  - ingresslinks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cis.f5.com
+  resources:
+  - ingresslinks/status
+  verbs:
+  - get
+  {{- end }}
 {{- end }}

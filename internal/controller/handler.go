@@ -121,6 +121,11 @@ type eventHandlerImpl struct {
 	// objectFilters contains all created objectFilters, with the key being a filterKey
 	objectFilters map[filterKey]objectFilter
 
+	// ingressLinkAddresses caches IngressLink addresses by Gateway NamespacedName.
+	// This is needed because updateStatuses reads gw.Source.Status.Addresses from the informer cache,
+	// which may not yet reflect the latest status update written by handleIngressLinkStatusUpdate.
+	ingressLinkAddresses map[types.NamespacedName]string
+
 	cfg        eventHandlerConfig
 	lock       sync.RWMutex
 	leaderLock sync.RWMutex
@@ -132,6 +137,7 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 	handler := &eventHandlerImpl{
 		cfg:                  cfg,
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
+		ingressLinkAddresses: make(map[types.NamespacedName]string),
 	}
 
 	handler.objectFilters = map[filterKey]objectFilter{
@@ -280,71 +286,164 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 			continue
 		}
 
-		var nginxReloadRes graph.NginxReloadResult
-		var gw *graph.Gateway
-		if item.Deployment.Name != "" {
-			gwNSName := types.NamespacedName{
-				Namespace: item.Deployment.Namespace,
-				Name:      strings.TrimSuffix(item.Deployment.Name, fmt.Sprintf("-%s", h.cfg.gatewayClassName)),
-			}
-
-			gw = gr.Gateways[gwNSName]
-		}
-
-		switch {
-		case item.Error != nil:
-			h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
-			nginxReloadRes.Error = item.Error
-		case gw != nil:
-			h.cfg.logger.Info("NGINX configuration was successfully updated")
-		}
-		if gw != nil {
-			gw.LatestReloadResult = nginxReloadRes
-		}
+		gw := h.getGatewayFromQueueItem(item, gr)
+		h.logAndRecordReloadResult(item, gw)
 
 		switch item.UpdateType {
 		case status.UpdateAll:
 			h.updateStatuses(ctx, gr, gw)
 		case status.UpdateGateway:
-			if gw == nil {
-				continue
-			}
-
-			gwAddresses, err := getGatewayAddresses(
-				ctx,
-				h.cfg.k8sClient,
-				item.GatewayService,
-				gw,
-				h.cfg.gatewayClassName,
-			)
-			if err != nil {
-				msg := "error getting Gateway Service IP address"
-				h.cfg.logger.Error(err, msg)
-				h.cfg.eventRecorder.Eventf(
-					item.GatewayService,
-					gw.Source,
-					v1.EventTypeWarning,
-					"GetServiceIPFailed",
-					"None",
-					msg+": %s",
-					err.Error(),
-				)
-				continue
-			}
-
-			transitionTime := metav1.Now()
-
-			gatewayStatuses := status.PrepareGatewayRequests(
-				gw,
-				transitionTime,
-				gwAddresses,
-				gw.LatestReloadResult,
-			)
-			h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
+			h.handleGatewayStatusUpdate(ctx, item, gw)
+		case status.UpdateGatewayIngressLink:
+			h.handleIngressLinkStatusUpdate(ctx, item, gw)
 		default:
-			panic(fmt.Sprintf("unknown event type %T", item.UpdateType))
+			panic(fmt.Sprintf("unknown update type %d", item.UpdateType))
 		}
 	}
+}
+
+func (h *eventHandlerImpl) getGatewayFromQueueItem(item *status.QueueObject, gr *graph.Graph) *graph.Gateway {
+	if item.Deployment.Name == "" {
+		return nil
+	}
+	gwNSName := types.NamespacedName{
+		Namespace: item.Deployment.Namespace,
+		Name:      strings.TrimSuffix(item.Deployment.Name, fmt.Sprintf("-%s", h.cfg.gatewayClassName)),
+	}
+	return gr.Gateways[gwNSName]
+}
+
+func (h *eventHandlerImpl) logAndRecordReloadResult(item *status.QueueObject, gw *graph.Gateway) {
+	var nginxReloadRes graph.NginxReloadResult
+	switch {
+	case item.Error != nil:
+		h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
+		nginxReloadRes.Error = item.Error
+	case gw != nil:
+		h.cfg.logger.Info("NGINX configuration was successfully updated")
+	}
+	if gw != nil {
+		gw.LatestReloadResult = nginxReloadRes
+	}
+}
+
+func (h *eventHandlerImpl) handleGatewayStatusUpdate(ctx context.Context, item *status.QueueObject, gw *graph.Gateway) {
+	if gw == nil {
+		return
+	}
+
+	gwAddresses, err := getGatewayAddresses(
+		ctx,
+		h.cfg.k8sClient,
+		item.GatewayService,
+		gw,
+		h.cfg.gatewayClassName,
+	)
+	if err != nil {
+		msg := "error getting Gateway Service IP address"
+		h.cfg.logger.Error(err, msg)
+		h.cfg.eventRecorder.Eventf(
+			item.GatewayService,
+			gw.Source,
+			v1.EventTypeWarning,
+			"GetServiceIPFailed",
+			"None",
+			msg+": %s",
+			err.Error(),
+		)
+		return
+	}
+
+	transitionTime := metav1.Now()
+
+	gatewayStatuses := status.PrepareGatewayRequests(
+		gw,
+		transitionTime,
+		gwAddresses,
+		gw.LatestReloadResult,
+	)
+	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
+}
+
+func (h *eventHandlerImpl) handleIngressLinkStatusUpdate(
+	ctx context.Context,
+	item *status.QueueObject,
+	gw *graph.Gateway,
+) {
+	if gw == nil {
+		return
+	}
+
+	// Cache the IngressLink address so updateStatuses can use it instead of
+	// relying on the potentially stale informer cache (gw.Source.Status.Addresses).
+	gwNSName := client.ObjectKeyFromObject(gw.Source)
+	h.ingressLinkAddresses[gwNSName] = item.IngressLinkAddress
+
+	gwAddresses := []gatewayv1.GatewayStatusAddress{
+		{
+			Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+			Value: item.IngressLinkAddress,
+		},
+	}
+
+	h.updateGatewayStatus(ctx, gw, gwAddresses)
+}
+
+func (h *eventHandlerImpl) updateGatewayStatus(
+	ctx context.Context,
+	gw *graph.Gateway,
+	gwAddresses []gatewayv1.GatewayStatusAddress,
+) {
+	transitionTime := metav1.Now()
+	gatewayStatuses := status.PrepareGatewayRequests(
+		gw,
+		transitionTime,
+		gwAddresses,
+		gw.LatestReloadResult,
+	)
+	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gatewayStatuses...)
+}
+
+// gatewayLinkEnabled returns true if GatewayLink integration is enabled for the Gateway.
+func gatewayLinkEnabled(gw *graph.Gateway) bool {
+	return gw.EffectiveNginxProxy != nil &&
+		gw.EffectiveNginxProxy.GatewayLink != nil &&
+		gw.EffectiveNginxProxy.GatewayLink.Enabled != nil &&
+		*gw.EffectiveNginxProxy.GatewayLink.Enabled
+}
+
+// getGatewayLinkAddresses returns the Gateway addresses for a GatewayLink-enabled Gateway.
+// It uses the following priority order:
+// 1. Cached IngressLink address (set by handleIngressLinkStatusUpdate when CIS updates IngressLink status)
+// 2. Static virtualServerAddress from NginxProxy config (known at creation time)
+// 3. Existing Gateway status addresses from the informer cache (fallback).
+func (h *eventHandlerImpl) getGatewayLinkAddresses(gw *graph.Gateway) []gatewayv1.GatewayStatusAddress {
+	gwNSName := client.ObjectKeyFromObject(gw.Source)
+
+	// Check cached IngressLink address first (most up-to-date source)
+	if addr, ok := h.ingressLinkAddresses[gwNSName]; ok && addr != "" {
+		return []gatewayv1.GatewayStatusAddress{
+			{
+				Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+				Value: addr,
+			},
+		}
+	}
+
+	// For manual IP case, use the virtualServerAddress from the NginxProxy config directly.
+	// This avoids waiting for CIS to populate the IngressLink status.
+	if gw.EffectiveNginxProxy.GatewayLink.VirtualServerAddress != nil {
+		return []gatewayv1.GatewayStatusAddress{
+			{
+				Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+				Value: *gw.EffectiveNginxProxy.GatewayLink.VirtualServerAddress,
+			},
+		}
+	}
+
+	// For IPAM case, preserve existing addresses from the informer cache as a fallback.
+	// The IngressLink watcher will update the address when CIS allocates one.
+	return gw.Source.Status.Addresses
 }
 
 func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, gw *graph.Gateway) {
@@ -356,19 +455,25 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		return
 	}
 
-	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
-	if err != nil {
-		msg := "error getting Gateway Service IP address"
-		h.cfg.logger.Error(err, msg)
-		h.cfg.eventRecorder.Eventf(
-			&v1.Service{},
-			gw.Source,
-			v1.EventTypeWarning,
-			"GetServiceIPFailed",
-			"None",
-			msg+": %s",
-			err.Error(),
-		)
+	var gwAddresses []gatewayv1.GatewayStatusAddress
+	if gatewayLinkEnabled(gw) {
+		gwAddresses = h.getGatewayLinkAddresses(gw)
+	} else {
+		var err error
+		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
+		if err != nil {
+			msg := "error getting Gateway Service IP address"
+			h.cfg.logger.Error(err, msg)
+			h.cfg.eventRecorder.Eventf(
+				&v1.Service{},
+				gw.Source,
+				v1.EventTypeWarning,
+				"GetServiceIPFailed",
+				"None",
+				msg+": %s",
+				err.Error(),
+			)
+		}
 	}
 
 	routeReqs := status.PrepareRouteRequests(
@@ -394,7 +499,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	// unfortunately, status is not on clusterState stored by the change processor, so we need to make a k8sAPI call here
 	ipList := &inference.InferencePoolList{}
 	if h.cfg.inferenceExtension {
-		err = h.cfg.k8sClient.List(ctx, ipList)
+		err := h.cfg.k8sClient.List(ctx, ipList)
 		if err != nil {
 			msg := "error listing InferencePools for status update"
 			h.cfg.logger.Error(err, msg)
@@ -434,6 +539,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 
 	// We put Gateway status updates separately from the rest of the statuses because we want to be able
 	// to update them separately from the rest of the graph whenever the public IP of NGF changes.
+	// When GatewayLink is enabled, gwAddresses are resolved via getGatewayLinkAddresses.
 	gwReqs := status.PrepareGatewayRequests(
 		gw,
 		transitionTime,

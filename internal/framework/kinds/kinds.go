@@ -45,6 +45,12 @@ const (
 	ConfigMap = "ConfigMap"
 )
 
+// F5 CIS kinds.
+const (
+	// IngressLink is the IngressLink kind from F5 CIS.
+	IngressLink = "IngressLink"
+)
+
 // NGINX Gateway Fabric kinds.
 const (
 	// ClientSettingsPolicy is the ClientSettingsPolicy kind.

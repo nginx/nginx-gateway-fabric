@@ -63,6 +63,7 @@ type Config struct {
 	InferenceExtension             bool
 	EndpointPickerDisableTLS       bool
 	EndpointPickerTLSSkipVerify    bool
+	BigIPIngressLink               bool
 }
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.
@@ -176,6 +177,7 @@ func NewNginxProvisioner(
 		dataplaneKeySecretName,
 		cfg.PlusUsageConfig,
 		isOpenshift,
+		cfg.BigIPIngressLink,
 	)
 	if err != nil {
 		return nil, nil, err

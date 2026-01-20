@@ -60,6 +60,7 @@ HELM_RENDERED=$(helm template test "$HELM_CHART_DIR" \
     --set nginxGateway.leaderElection.enable=true \
     --set nginxGateway.productTelemetry.enable=true \
     --set nginxGateway.plmStorage.url=somestring \
+    --set nginxGateway.gatewayLink.enable=true \
     --set nginx.plus=true \
     2>/dev/null)
 

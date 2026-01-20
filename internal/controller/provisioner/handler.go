@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -74,6 +75,7 @@ func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger,
 	}
 }
 
+//nolint:gocyclo
 func (h *eventHandler) handleUpsertEvent(ctx context.Context, e *events.UpsertEvent, logger logr.Logger) error {
 	switch obj := e.Resource.(type) {
 	case *gatewayv1.Gateway:
@@ -105,6 +107,11 @@ func (h *eventHandler) handleUpsertEvent(ctx context.Context, e *events.UpsertEv
 			if err := h.provisionResourceForAllGateways(ctx, logger, obj); err != nil {
 				return fmt.Errorf("error provisioning resource for all gateways: %w", err)
 			}
+		}
+	case *unstructured.Unstructured:
+		// Handle IngressLink status changes
+		if obj.GetKind() == ingressLinkGVK.Kind && obj.GetAPIVersion() == ingressLinkGVK.Group+"/"+ingressLinkGVK.Version {
+			h.handleIngressLinkUpdate(logger, obj)
 		}
 	default:
 		panic(fmt.Errorf("unknown resource type %T", e.Resource))
@@ -357,4 +364,63 @@ func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, sec
 	}
 
 	return errors.Join(allErrs...)
+}
+
+// handleIngressLinkUpdate processes IngressLink status changes and enqueues Gateway status updates
+// when the vsAddress field changes (i.e., when IPAM allocates an address).
+func (h *eventHandler) handleIngressLinkUpdate(logger logr.Logger, il *unstructured.Unstructured) {
+	objLabels := labels.Set(il.GetLabels())
+	if !h.labelSelector.Matches(objLabels) {
+		return
+	}
+
+	// Get the Gateway name from the labels
+	gatewayName := objLabels.Get(controller.GatewayLabel)
+	if gatewayName == "" {
+		gatewayName = il.GetAnnotations()[controller.GatewayLabel]
+	}
+
+	if gatewayName == "" {
+		logger.V(1).Info("IngressLink has no gateway label, skipping", "name", il.GetName())
+		return
+	}
+
+	// Extract vsAddress from status
+	vsAddress := getVSAddressFromIngressLink(il)
+	if vsAddress == "" {
+		logger.V(1).Info("IngressLink has no vsAddress in status, waiting for IPAM allocation",
+			"name", il.GetName(), "gateway", gatewayName)
+		return
+	}
+
+	logger.Info("IngressLink status updated with vsAddress",
+		"name", il.GetName(), "gateway", gatewayName, "vsAddress", vsAddress)
+
+	// Enqueue a status update to update the Gateway addresses
+	resourceName := controller.CreateNginxResourceName(gatewayName, h.gcName)
+	statusUpdate := &status.QueueObject{
+		Deployment:         types.NamespacedName{Namespace: il.GetNamespace(), Name: resourceName},
+		UpdateType:         status.UpdateGatewayIngressLink,
+		IngressLinkAddress: vsAddress,
+	}
+	h.provisioner.cfg.StatusQueue.Enqueue(statusUpdate)
+}
+
+// getVSAddressFromIngressLink extracts the status.vsAddress field from an IngressLink.
+func getVSAddressFromIngressLink(il *unstructured.Unstructured) string {
+	if il == nil {
+		return ""
+	}
+
+	statusMap, found, err := unstructured.NestedMap(il.Object, "status")
+	if err != nil || !found {
+		return ""
+	}
+
+	vsAddress, found, err := unstructured.NestedString(statusMap, "vsAddress")
+	if err != nil || !found {
+		return ""
+	}
+
+	return vsAddress
 }

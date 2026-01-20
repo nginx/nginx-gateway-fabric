@@ -106,6 +106,174 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DNSResolver *DNSResolver `json:"dnsResolver,omitempty"`
+	// GatewayLink defines the configuration for integrating with F5 BIG-IP Container Ingress Services.
+	//
+	// +optional
+	GatewayLink *GatewayLinkConfig `json:"gatewayLink,omitempty"`
+}
+
+// GatewayLinkConfig defines the configuration for integrating with F5 BIG-IP Container Ingress Services.
+// When enabled, NGF integrates with F5 CIS to configure BIG-IP
+// as an external load balancer in front of NGINX Gateway Fabric.
+//
+// +kubebuilder:validation:XValidation:message="virtualServerAddress and ipamLabel are mutually exclusive",rule="!(has(self.virtualServerAddress) && has(self.ipamLabel))"
+//
+//nolint:lll
+type GatewayLinkConfig struct {
+	// Enabled indicates whether GatewayLink integration is enabled.
+	//
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// VirtualServerAddress is the static IP address to configure on BIG-IP for the virtual server.
+	// This is mutually exclusive with IpamLabel.
+	//
+	// +kubebuilder:validation:Pattern=`^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$`
+	// +optional
+	VirtualServerAddress *string `json:"virtualServerAddress,omitempty"`
+
+	// VirtualServerName is a custom name for the BIG-IP virtual server.
+	//
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z]+([A-z0-9-._+])*([A-z0-9])$`
+	// +optional
+	VirtualServerName *string `json:"virtualServerName,omitempty"`
+
+	// IpamLabel is the label used by F5 IPAM Controller to allocate an IP address.
+	// The IPAM controller will assign an IP from the pool associated with this label.
+	// This is mutually exclusive with VirtualServerAddress.
+	//
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z]+[-A-z0-9_.:]+[A-z0-9]+$`
+	// +optional
+	IpamLabel *string `json:"ipamLabel,omitempty"`
+
+	// Host is the hostname for the BIG-IP virtual server.
+	//
+	// +kubebuilder:validation:Pattern=`^(([a-zA-Z0-9*]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9])$`
+	// +optional
+	Host *string `json:"host,omitempty"`
+
+	// Partition is the BIG-IP partition where resources will be created.
+	// Defaults to "Common" if not specified.
+	//
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z]+[-A-z0-9_.]+$`
+	// +optional
+	Partition *string `json:"partition,omitempty"`
+
+	// BigIPRouteDomain is the route domain ID for the BIG-IP virtual server.
+	//
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=65535
+	// +optional
+	BigIPRouteDomain *int32 `json:"bigipRouteDomain,omitempty"`
+
+	// TLS defines the TLS configuration for the BIG-IP virtual server.
+	//
+	// +optional
+	TLS *GatewayLinkTLS `json:"tls,omitempty"`
+
+	// MultiCluster defines the multi-cluster configuration for load balancing traffic
+	// across NGINX Gateway Fabric instances in multiple clusters.
+	//
+	// +optional
+	MultiCluster *GatewayLinkMultiCluster `json:"multiCluster,omitempty"`
+
+	// IRules is a list of BIG-IP iRules to apply to the virtual server.
+	// Each iRule must be specified using the full path format: /partition/irule_name
+	// (e.g., "/Common/Proxy_Protocol_iRule").
+	// This field is required by F5 CIS.
+	//
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:items:Pattern=`^/[a-zA-Z]+([A-z0-9-_+]+/)+([-A-z0-9_.:]+/?)*$`
+	IRules []string `json:"iRules,omitempty"`
+
+	// Monitors is a list of BIG-IP health monitors to associate with the virtual server pool.
+	//
+	// +optional
+	Monitors []GatewayLinkMonitor `json:"monitors,omitempty"`
+}
+
+// GatewayLinkTLS defines the TLS configuration for the BIG-IP virtual server.
+type GatewayLinkTLS struct {
+	// Reference specifies the source of the SSL profiles.
+	// "bigip" means the profiles exist on BIG-IP, "secret" means they are Kubernetes secrets.
+	//
+	// +kubebuilder:validation:Enum=bigip;secret
+	// +optional
+	Reference *string `json:"reference,omitempty"`
+
+	// ClientSSLs is a list of BIG-IP client SSL profiles or Kubernetes secret references.
+	// When reference is "bigip", use the full path format: /partition/profile_name (e.g., "/Common/clientssl").
+	// When reference is "secret", use the Kubernetes secret name.
+	//
+	// +kubebuilder:validation:items:Pattern=`^/?[a-zA-Z]+([-A-z0-9_+]+/)*([-A-z0-9_.:]+/?)*$`
+	// +optional
+	ClientSSLs []string `json:"clientSSLs,omitempty"`
+
+	// ServerSSLs is a list of BIG-IP server SSL profiles or Kubernetes secret references.
+	// When reference is "bigip", use the full path format: /partition/profile_name (e.g., "/Common/serverssl").
+	// When reference is "secret", use the Kubernetes secret name.
+	//
+	// +kubebuilder:validation:items:Pattern=`^/?[a-zA-Z]+([-A-z0-9_+]+/)*([-A-z0-9_.:]+/?)*$`
+	// +optional
+	ServerSSLs []string `json:"serverSSLs,omitempty"`
+}
+
+// GatewayLinkMonitor defines a BIG-IP health monitor reference.
+type GatewayLinkMonitor struct {
+	// Name is the full path of the health monitor on BIG-IP (e.g., "/Common/http").
+	//
+	// +kubebuilder:validation:Pattern=`^/[a-zA-Z]+([A-z0-9-_+]+/)+([-A-z0-9_.:]+/?)*$`
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Reference specifies the source of the monitor. Currently only "bigip" is supported.
+	//
+	// +kubebuilder:validation:Enum=bigip
+	// +kubebuilder:validation:Required
+	Reference string `json:"reference"`
+}
+
+// GatewayLinkMultiCluster defines the multi-cluster configuration for GatewayLink.
+// When configured, CIS will load balance traffic across NGINX Gateway Fabric instances
+// in multiple clusters.
+type GatewayLinkMultiCluster struct {
+	// LocalClusterName is the name of the current cluster as configured in the CIS deployment
+	// (--cluster-name flag).
+	//
+	// +kubebuilder:validation:Required
+	LocalClusterName string `json:"localClusterName"`
+
+	// RemoteClusters is the list of remote clusters that also run NGINX Gateway Fabric.
+	//
+	// +kubebuilder:validation:MinItems=1
+	RemoteClusters []GatewayLinkRemoteCluster `json:"remoteClusters"`
+}
+
+// GatewayLinkRemoteCluster defines a remote cluster for multi-cluster load balancing.
+type GatewayLinkRemoteCluster struct {
+	// ClusterName is one of the names of the remote clusters as configured in the CIS deployment.
+	//
+	// +kubebuilder:validation:Required
+	ClusterName *string `json:"clusterName"`
+
+	// Namespace is the namespace of the NGINX Gateway Fabric service in the remote cluster.
+	// If not specified, defaults to the local Gateway's namespace.
+	//
+	// +optional
+	Namespace *string `json:"namespace,omitempty"`
+
+	// Service is the name of the NGINX Gateway Fabric service in the remote cluster.
+	// If not specified, defaults to the local Gateway's service name.
+	//
+	// +optional
+	Service *string `json:"service,omitempty"`
+
+	// Weight is the load balancing weight for this cluster's service.
+	//
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=256
+	// +optional
+	Weight *int32 `json:"weight,omitempty"`
 }
 
 // WAFState defines the state of WAF functionality.
