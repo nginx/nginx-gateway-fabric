@@ -248,6 +248,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			store:     newObjectStoreMapAdapter(clusterStore.AuthenticationFilters),
 			predicate: nil, // we always want to write status to AuthenticationFilters so we don't filter them out
 		},
+		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		},
 	}
 
 	if cfg.SnippetsPolicies {

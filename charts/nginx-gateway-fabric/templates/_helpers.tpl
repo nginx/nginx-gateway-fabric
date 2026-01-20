@@ -229,6 +229,7 @@ Create namespaced RBAC rules.
   - upstreamsettingspolicies
   - authenticationfilters
   - proxysettingspolicies
+  - ratelimitpolicies
   {{- if .Values.nginxGateway.snippetsFilters.enable }}
   - snippetsfilters
   {{- end }}
@@ -247,6 +248,7 @@ Create namespaced RBAC rules.
   - upstreamsettingspolicies/status
   - authenticationfilters/status
   - proxysettingspolicies/status
+  - ratelimitpolicies/status
   {{- if .Values.nginxGateway.snippetsFilters.enable }}
   - snippetsfilters/status
   {{- end }}

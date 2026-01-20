@@ -55,3 +55,15 @@ func (p *SnippetsPolicy) GetPolicyStatus() gatewayv1.PolicyStatus {
 func (p *SnippetsPolicy) SetPolicyStatus(status gatewayv1.PolicyStatus) {
 	p.Status = status
 }
+
+func (p *RateLimitPolicy) GetTargetRefs() []gatewayv1.LocalPolicyTargetReference {
+	return p.Spec.TargetRefs
+}
+
+func (p *RateLimitPolicy) GetPolicyStatus() gatewayv1.PolicyStatus {
+	return p.Status
+}
+
+func (p *RateLimitPolicy) SetPolicyStatus(status gatewayv1.PolicyStatus) {
+	p.Status = status
+}

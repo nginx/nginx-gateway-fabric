@@ -59,6 +59,8 @@ const (
 	AuthenticationFilter = "AuthenticationFilter"
 	// UpstreamSettingsPolicy is the UpstreamSettingsPolicy kind.
 	UpstreamSettingsPolicy = "UpstreamSettingsPolicy"
+	// RateLimitPolicy is the RateLimitPolicy kind.
+	RateLimitPolicy = "RateLimitPolicy"
 )
 
 // MustExtractGVK is a function that extracts the GroupVersionKind (GVK) of a client.object.
