@@ -1,0 +1,13 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsPolicy
+metadata:
+  name: local-time-sp
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: gateway
+  snippets:
+    - context: http.server.location
+      value: proxy_set_header my_request_time "This is the custom request header we added in our
+             SnippetsPolicy which affects the whole Gateway! This is the local time - $time_local";

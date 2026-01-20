@@ -95,7 +95,7 @@ func createControllerCommand() *cobra.Command {
 		usageReportCASecretFlag             = "usage-report-ca-secret"         //nolint:gosec // not credentials
 		usageReportEnforceInitialReportFlag = "usage-report-enforce-initial-report"
 		snippetsFiltersFlag                 = "snippets-filters"
-		snippetsPoliciesFlag                = "snippets-policies"
+		snippetsFlag                        = "snippets"
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
 	)
@@ -158,8 +158,8 @@ func createControllerCommand() *cobra.Command {
 
 		disableProductTelemetry bool
 
-		snippetsFilters  bool
-		snippetsPolicies bool
+		snippetsFilters bool
+		snippets        bool
 
 		plus               bool
 		nginxDockerSecrets = stringSliceValidatingValue{
@@ -289,7 +289,7 @@ func createControllerCommand() *cobra.Command {
 					Values: flagValues,
 				},
 				SnippetsFilters:        snippetsFilters,
-				SnippetsPolicies:       snippetsPolicies,
+				Snippets:               snippets,
 				NginxDockerSecretNames: nginxDockerSecrets.values,
 				AgentTLSSecretName:     agentTLSSecretName.value,
 				NGINXSCCName:           nginxSCCName.value,
@@ -517,16 +517,19 @@ func createControllerCommand() *cobra.Command {
 		&snippetsFilters,
 		snippetsFiltersFlag,
 		false,
-		"Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the "+
-			"generated NGINX config for HTTPRoute and GRPCRoute resources.",
+		"Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration "+
+			"into the generated NGINX config for HTTPRoute and GRPCRoute resources.",
 	)
+	cmd.Flags().MarkDeprecated(snippetsFiltersFlag, "This flag is deprecated in favor of --snippets. "+
+		"The latter will enable snippets for both SnippetsFilters  and SnippetsPolicies.")
 
 	cmd.Flags().BoolVar(
-		&snippetsPolicies,
-		snippetsPoliciesFlag,
+		&snippets,
+		snippetsFlag,
 		false,
-		"Enable SnippetsPolicies feature. SnippetsPolicies allow inserting NGINX configuration into the "+
-			"generated NGINX config for Gateway resources.",
+		"Enable Snippets feature through SnippetsFilter and SnippetsPolicy APIs. SnippetsFilters allow inserting "+
+			"NGINX configuration into the generated NGINX config for HTTPRoute and GRPCRoute resources. SnippetsPolicies "+
+			"allow inserting NGINX configuration into the generated NGINX config for Gateway resources.",
 	)
 
 	cmd.Flags().Var(

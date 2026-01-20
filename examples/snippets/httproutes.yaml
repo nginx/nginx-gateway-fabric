@@ -18,7 +18,7 @@ spec:
           extensionRef:
             group: gateway.nginx.org
             kind: SnippetsFilter
-            name: rate-limiting-sf
+            name: request-time-sf
       backendRefs:
         - name: coffee
           port: 80
@@ -38,12 +38,6 @@ spec:
         - path:
             type: PathPrefix
             value: /tea
-      filters:
-        - type: ExtensionRef
-          extensionRef:
-            group: gateway.nginx.org
-            kind: SnippetsFilter
-            name: no-delay-rate-limiting-sf
       backendRefs:
         - name: tea
           port: 80
