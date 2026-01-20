@@ -151,6 +151,7 @@ rules:
   - ratelimitpolicies
   - snippetsfilters
   - authenticationfilters
+  - snippetspolicies
   verbs:
   - create
   - delete
@@ -169,6 +170,7 @@ rules:
   - ratelimitpolicies/status
   - snippetsfilters/status
   - authenticationfilters/status
+  - snippetspolicies/status
   verbs:
   - update
 - apiGroups:

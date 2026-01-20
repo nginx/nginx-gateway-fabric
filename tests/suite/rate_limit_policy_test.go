@@ -528,7 +528,7 @@ func findTargetRefForAncestor(
 }
 
 func verifyRateLimitPolicyWorksAsExpected(appURL, address, responseBodyMessage string, expectedCode int) error {
-	err := expectRequestToSucceed(appURL, address, responseBodyMessage)
+	err := framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, appURL, address, responseBodyMessage)
 	if err != nil {
 		return fmt.Errorf("initial request did not succeed: %w", err)
 	}

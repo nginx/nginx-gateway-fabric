@@ -3167,8 +3167,9 @@ var _ = Describe("ChangeProcessor", func() {
 				pspKey = graph.PolicyKey{
 					NsName: types.NamespacedName{Name: "psp", Namespace: "test"},
 					GVK: schema.GroupVersionKind{
-						Group: ngfAPIv1alpha1.GroupName,
-						Kind:  kinds.ProxySettingsPolicy,
+						Group:   ngfAPIv1alpha1.GroupName,
+						Kind:    kinds.ProxySettingsPolicy,
+						Version: "v1alpha1",
 					},
 				}
 
