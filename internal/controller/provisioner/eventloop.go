@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -35,6 +36,7 @@ func newEventLoop(
 	dataplaneKeySecret string,
 	usageConfig *config.UsageReportConfig,
 	isOpenshift bool,
+	bigIPIngressLink bool,
 ) (*events.EventLoop, error) {
 	nginxResourceLabelPredicate := predicate.NginxLabelPredicate(selector)
 
@@ -177,6 +179,23 @@ func newEventLoop(
 	}
 
 	eventCh := make(chan any)
+
+	// Register IngressLink controller separately since it uses unstructured type
+	// which isn't in the scheme and requires special handling
+	if bigIPIngressLink {
+		ingressLinkObj := &unstructured.Unstructured{}
+		ingressLinkObj.SetGroupVersionKind(ingressLinkGVK)
+		if err := controller.Register(
+			ctx,
+			ingressLinkObj,
+			"provisioner-IngressLink",
+			mgr,
+			eventCh,
+			controller.WithK8sPredicate(predicate.IngressLinkStatusChangedPredicate{}),
+		); err != nil {
+			return nil, fmt.Errorf("cannot register controller for IngressLink: %w", err)
+		}
+	}
 	for _, regCfg := range controllerRegCfgs {
 		gvk, err := apiutil.GVKForObject(regCfg.objectType, mgr.GetScheme())
 		if err != nil {

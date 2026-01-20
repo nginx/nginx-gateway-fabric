@@ -29,6 +29,7 @@ const (
 	defaultErrorLogLevel           = "info"
 	DefaultWorkerConnections       = int32(1024)
 	DefaultNginxReadinessProbePort = int32(8081)
+	DefaultNginxReadinessProbePath = "/readyz"
 	// DefaultLogFormatName is used when user provides custom access_log format.
 	DefaultLogFormatName = "ngf_user_defined_log_format"
 	// DefaultAccessLogPath is the default path for the access log.
@@ -1213,6 +1214,7 @@ func buildBaseHTTPConfig(
 		Policies:                buildPolicies(gateway, gateway.Policies),
 		Snippets:                buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
 		NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+		NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 	}
 
 	if gateway.Valid && gateway.SecretRef != nil {
@@ -1242,9 +1244,9 @@ func buildBaseHTTPConfig(
 		}
 	}
 
-	if port := getNginxReadinessProbePort(np); port != 0 {
-		baseConfig.NginxReadinessProbePort = port
-	}
+	baseConfig.NginxReadinessProbePort = GetNginxReadinessProbePort(np)
+
+	baseConfig.NginxReadinessProbePath = GetNginxReadinessProbePath(np)
 
 	baseConfig.RewriteClientIPSettings = buildRewriteClientIPConfig(np.RewriteClientIP)
 
@@ -1253,10 +1255,10 @@ func buildBaseHTTPConfig(
 	return baseConfig
 }
 
-func getNginxReadinessProbePort(np *graph.EffectiveNginxProxy) int32 {
-	var port int32
+func GetNginxReadinessProbePort(np *graph.EffectiveNginxProxy) int32 {
+	port := DefaultNginxReadinessProbePort
 
-	if np.Kubernetes != nil {
+	if np != nil && np.Kubernetes != nil {
 		var containerSpec *ngfAPIv1alpha2.ContainerSpec
 		if np.Kubernetes.Deployment != nil {
 			containerSpec = &np.Kubernetes.Deployment.Container
@@ -1268,6 +1270,23 @@ func getNginxReadinessProbePort(np *graph.EffectiveNginxProxy) int32 {
 		}
 	}
 	return port
+}
+
+func GetNginxReadinessProbePath(np *graph.EffectiveNginxProxy) string {
+	path := DefaultNginxReadinessProbePath
+
+	if np != nil && np.Kubernetes != nil {
+		var containerSpec *ngfAPIv1alpha2.ContainerSpec
+		if np.Kubernetes.Deployment != nil {
+			containerSpec = &np.Kubernetes.Deployment.Container
+		} else if np.Kubernetes.DaemonSet != nil {
+			containerSpec = &np.Kubernetes.DaemonSet.Container
+		}
+		if containerSpec != nil && containerSpec.ReadinessProbe != nil && containerSpec.ReadinessProbe.Path != nil {
+			path = *containerSpec.ReadinessProbe.Path
+		}
+	}
+	return path
 }
 
 // buildBaseStreamConfig generates the base stream context config that should be applied to all stream servers.

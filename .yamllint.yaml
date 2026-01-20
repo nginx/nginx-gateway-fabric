@@ -1,7 +1,7 @@
 ---
 ignore:
   - charts/nginx-gateway-fabric/templates
-  - config/crd/bases/
+  - config/crd/
   - deploy
   - site/static
 

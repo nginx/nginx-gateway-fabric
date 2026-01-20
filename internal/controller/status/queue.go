@@ -16,6 +16,8 @@ const (
 	UpdateAll = iota
 	// UpdateGateway means to just update the status of the Gateway resource.
 	UpdateGateway
+	// UpdateGatewayIngressLink means to update the Gateway status with the IngressLink address.
+	UpdateGatewayIngressLink
 )
 
 // QueueObject is the object to be passed to the queue for status updates.
@@ -23,9 +25,12 @@ type QueueObject struct {
 	// GatewayService is the Gateway Service that was updated. When set, UpdateType should be UpdateGateway.
 	// Set by the provisioner
 	GatewayService *corev1.Service
-	Error          error
-	Deployment     types.NamespacedName
-	UpdateType     UpdateType
+	// IngressLinkAddress is the IP address from the IngressLink status.vsAddress field.
+	// When set, UpdateType should be UpdateGatewayIngressLink.
+	IngressLinkAddress string
+	Error              error
+	Deployment         types.NamespacedName
+	UpdateType         UpdateType
 }
 
 // Queue represents a queue with unlimited size.

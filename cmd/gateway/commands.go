@@ -98,6 +98,7 @@ func createControllerCommand() *cobra.Command {
 		snippetsPoliciesFlag                = "snippets-policies"
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
+		bigIPGatewayLinkFlag                = "bigip-gateway-link"
 	)
 
 	// flag values
@@ -160,6 +161,7 @@ func createControllerCommand() *cobra.Command {
 
 		snippetsFilters  bool
 		snippetsPolicies bool
+		bigIPIngressLink bool
 
 		plus               bool
 		nginxDockerSecrets = stringSliceValidatingValue{
@@ -302,6 +304,7 @@ func createControllerCommand() *cobra.Command {
 				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 				WatchNamespaces:             watchNamespaces.values,
+				BigIPIngressLink:            bigIPIngressLink,
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -527,6 +530,14 @@ func createControllerCommand() *cobra.Command {
 		false,
 		"Enable SnippetsPolicies feature. SnippetsPolicies allow inserting NGINX configuration into the "+
 			"generated NGINX config for Gateway resources.",
+	)
+
+	cmd.Flags().BoolVar(
+		&bigIPIngressLink,
+		bigIPGatewayLinkFlag,
+		false,
+		"Enable F5 BIG-IP IngressLink integration. When enabled, NGF will watch for IngressLink resources "+
+			"and can create them based on NginxProxy configuration to integrate with F5 CIS.",
 	)
 
 	cmd.Flags().Var(

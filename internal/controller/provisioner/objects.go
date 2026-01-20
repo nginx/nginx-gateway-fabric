@@ -16,6 +16,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
@@ -46,6 +48,13 @@ const (
 )
 
 var emptyDirVolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+
+// ingressLinkGVK is the GroupVersionKind for F5 CIS IngressLink resources.
+var ingressLinkGVK = schema.GroupVersionKind{
+	Group:   "cis.f5.com",
+	Version: "v1",
+	Kind:    "IngressLink",
+}
 
 //nolint:gocyclo // will refactor at some point
 func (p *NginxProvisioner) buildNginxResourceObjects(
@@ -167,6 +176,12 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports[listener.Port] = protocol
 	}
 
+	// Add healthcheck port to service if expose is enabled
+	if isNginxReadinessProbeExposed(nProxyCfg) {
+		healthcheckPort := dataplane.GetNginxReadinessProbePort(nProxyCfg)
+		ports[healthcheckPort] = corev1.ProtocolTCP
+	}
+
 	// Create separate copies of objectMeta for service and deployment to avoid shared map references
 	serviceObjectMeta := metav1.ObjectMeta{
 		Name:        objectMeta.Name,
@@ -213,8 +228,9 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// service
 	// deployment/daemonset
 	// hpa
+	// ingresslink (if enabled)
 
-	objects := make([]client.Object, 0, len(configmaps)+len(secrets)+len(openshiftObjs)+3)
+	objects := make([]client.Object, 0, len(configmaps)+len(secrets)+len(openshiftObjs)+4)
 	objects = append(objects, secrets...)
 	objects = append(objects, configmaps...)
 	objects = append(objects, serviceAccount)
@@ -226,6 +242,10 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 
 	if hpa := p.buildHPA(objectMeta, nProxyCfg); hpa != nil {
 		objects = append(objects, hpa)
+	}
+
+	if il := p.buildIngressLink(objectMeta, nProxyCfg, selectorLabels); il != nil {
+		objects = append(objects, il)
 	}
 
 	return objects, errors.Join(errs...)
@@ -244,6 +264,75 @@ func (p *NginxProvisioner) buildHPA(
 	}
 
 	return buildNginxDeploymentHPA(objectMeta, nProxyCfg.Kubernetes.Deployment.Autoscaling)
+}
+
+// buildIngressLink creates an IngressLink resource for F5 BIG-IP CIS integration.
+// The IngressLink connects the NGINX Service to BIG-IP, allowing external traffic
+// to be routed through BIG-IP to the NGINX pods.
+func (p *NginxProvisioner) buildIngressLink(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+) client.Object {
+	if !p.cfg.BigIPIngressLink {
+		return nil
+	}
+
+	if nProxyCfg == nil || nProxyCfg.GatewayLink == nil {
+		return nil
+	}
+
+	ilCfg := nProxyCfg.GatewayLink
+	if ilCfg.Enabled == nil || !*ilCfg.Enabled {
+		return nil
+	}
+
+	// Build the IngressLink spec
+	spec := map[string]any{
+		"selector": map[string]any{
+			"matchLabels": selectorLabels,
+		},
+	}
+
+	// Set virtualServerAddress or ipamLabel (mutually exclusive, validated by API)
+	if ilCfg.VirtualServerAddress != nil {
+		spec["virtualServerAddress"] = *ilCfg.VirtualServerAddress
+	} else if ilCfg.IpamLabel != nil {
+		spec["ipamLabel"] = *ilCfg.IpamLabel
+	}
+
+	// Optional fields
+	if ilCfg.Host != nil {
+		spec["host"] = *ilCfg.Host
+	}
+
+	if len(ilCfg.IRules) > 0 {
+		spec["iRules"] = ilCfg.IRules
+	}
+
+	if ilCfg.Partition != nil {
+		spec["partition"] = *ilCfg.Partition
+	}
+
+	if ilCfg.BigIPRouteDomain != nil {
+		spec["bigipRouteDomain"] = *ilCfg.BigIPRouteDomain
+	}
+
+	il := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": ingressLinkGVK.Group + "/" + ingressLinkGVK.Version,
+			"kind":       ingressLinkGVK.Kind,
+			"metadata": map[string]any{
+				"name":        objectMeta.Name,
+				"namespace":   objectMeta.Namespace,
+				"labels":      objectMeta.Labels,
+				"annotations": objectMeta.Annotations,
+			},
+			"spec": spec,
+		},
+	}
+
+	return il
 }
 
 func (p *NginxProvisioner) buildNginxSecrets(
@@ -560,31 +649,7 @@ func buildNginxService(
 		}
 	}
 
-	servicePorts := make([]corev1.ServicePort, 0, len(ports))
-	for port, protocol := range ports {
-		servicePort := corev1.ServicePort{
-			Name:       fmt.Sprintf("port-%d", port),
-			Port:       port,
-			TargetPort: intstr.FromInt32(port),
-			Protocol:   protocol,
-		}
-
-		if serviceType != corev1.ServiceTypeClusterIP {
-			for _, nodePort := range serviceCfg.NodePorts {
-				if nodePort.ListenerPort == port {
-					servicePort.NodePort = nodePort.Port
-				}
-			}
-		}
-
-		servicePorts = append(servicePorts, servicePort)
-	}
-
-	// need to sort ports so everytime buildNginxService is called it will generate the exact same
-	// array of ports. This is needed to satisfy deterministic results of the method.
-	sort.Slice(servicePorts, func(i, j int) bool {
-		return servicePorts[i].Port < servicePorts[j].Port
-	})
+	servicePorts := setServicePorts(ports, serviceType, serviceCfg.NodePorts)
 
 	svc := &corev1.Service{
 		ObjectMeta: objectMeta,
@@ -611,6 +676,39 @@ func buildNginxService(
 	}
 
 	return svc, nil
+}
+
+func setServicePorts(
+	ports map[int32]corev1.Protocol,
+	serviceType corev1.ServiceType,
+	nodePorts []ngfAPIv1alpha2.NodePort,
+) []corev1.ServicePort {
+	servicePorts := make([]corev1.ServicePort, 0, len(ports))
+	for port, protocol := range ports {
+		servicePort := corev1.ServicePort{
+			Name:       fmt.Sprintf("port-%d", port),
+			Port:       port,
+			TargetPort: intstr.FromInt32(port),
+			Protocol:   protocol,
+		}
+
+		if serviceType != corev1.ServiceTypeClusterIP {
+			for _, nodePort := range nodePorts {
+				if nodePort.ListenerPort == port {
+					servicePort.NodePort = nodePort.Port
+				}
+			}
+		}
+
+		servicePorts = append(servicePorts, servicePort)
+	}
+
+	// need to sort ports so everytime buildNginxService is called it will generate the exact same
+	// array of ports. This is needed to satisfy deterministic results of the method.
+	sort.Slice(servicePorts, func(i, j int) bool {
+		return servicePorts[i].Port < servicePorts[j].Port
+	})
+	return servicePorts
 }
 
 func setSvcExternalIPs(svc *corev1.Service, addresses []gatewayv1.GatewaySpecAddress) {
@@ -1302,6 +1400,7 @@ func buildNginxDeploymentHPA(
 // have everywhere.
 func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName types.NamespacedName) []client.Object {
 	// order to delete:
+	// ingresslink (if enabled)
 	// deployment/daemonset
 	// service
 	// hpa
@@ -1313,6 +1412,17 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 	objectMeta := metav1.ObjectMeta{
 		Name:      deploymentNSName.Name,
 		Namespace: deploymentNSName.Namespace,
+	}
+
+	var objects []client.Object
+
+	// Add IngressLink for deletion if BigIP IngressLink is enabled
+	if p.cfg.BigIPIngressLink {
+		il := &unstructured.Unstructured{}
+		il.SetGroupVersionKind(ingressLinkGVK)
+		il.SetName(objectMeta.Name)
+		il.SetNamespace(objectMeta.Namespace)
+		objects = append(objects, il)
 	}
 
 	deployment := &appsv1.Deployment{
@@ -1328,7 +1438,7 @@ func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName
 		ObjectMeta: objectMeta,
 	}
 
-	objects := []client.Object{deployment, daemonSet, service, hpa}
+	objects = append(objects, deployment, daemonSet, service, hpa)
 
 	if p.isOpenshift {
 		role := &rbacv1.Role{
@@ -1440,8 +1550,8 @@ func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxPr
 	probe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/readyz",
-				Port: intstr.FromInt32(dataplane.DefaultNginxReadinessProbePort),
+				Path: dataplane.GetNginxReadinessProbePath(nProxyCfg),
+				Port: intstr.FromInt32(dataplane.GetNginxReadinessProbePort(nProxyCfg)),
 			},
 		},
 		InitialDelaySeconds: defaultInitialDelaySeconds,
@@ -1460,15 +1570,28 @@ func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxPr
 		return probe
 	}
 
-	if containerSpec.ReadinessProbe.Port != nil {
-		probe.HTTPGet.Port = intstr.FromInt32(*containerSpec.ReadinessProbe.Port)
-	}
-
 	if containerSpec.ReadinessProbe.InitialDelaySeconds != nil {
 		probe.InitialDelaySeconds = *containerSpec.ReadinessProbe.InitialDelaySeconds
 	}
 
 	return probe
+}
+
+// isNginxReadinessProbeExposed returns true if the readiness probe should be exposed
+// through the Gateway Service object for external load balancer healthchecks.
+func isNginxReadinessProbeExposed(nProxyCfg *graph.EffectiveNginxProxy) bool {
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
+		var containerSpec *ngfAPIv1alpha2.ContainerSpec
+		if nProxyCfg.Kubernetes.Deployment != nil {
+			containerSpec = &nProxyCfg.Kubernetes.Deployment.Container
+		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
+			containerSpec = &nProxyCfg.Kubernetes.DaemonSet.Container
+		}
+		if containerSpec != nil && containerSpec.ReadinessProbe != nil && containerSpec.ReadinessProbe.Expose != nil {
+			return *containerSpec.ReadinessProbe.Expose
+		}
+	}
+	return false
 }
 
 func DetermineNginxImageName(

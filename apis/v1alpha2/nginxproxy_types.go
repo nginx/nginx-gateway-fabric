@@ -99,6 +99,63 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DNSResolver *DNSResolver `json:"dnsResolver,omitempty"`
+	// GatewayLink defines the configuration for integrating with F5 BIG-IP Container Ingress Services.
+	//
+	// +optional
+	GatewayLink *GatewayLinkConfig `json:"gatewayLink,omitempty"`
+}
+
+// GatewayLinkConfig defines the configuration for integrating with F5 BIG-IP Container Ingress Services.
+// When enabled, NGF integrates with F5 CIS to configure BIG-IP
+// as an external load balancer in front of NGINX Gateway Fabric.
+//
+// +kubebuilder:validation:XValidation:message="virtualServerAddress and ipamLabel are mutually exclusive",rule="!(has(self.virtualServerAddress) && has(self.ipamLabel))"
+// +kubebuilder:validation:XValidation:message="virtualServerAddress or ipamLabel must be set when enabled is true",rule="!has(self.enabled) || self.enabled == false || has(self.virtualServerAddress) || has(self.ipamLabel)"
+// +kubebuilder:validation:XValidation:message="iRules must be set when enabled is true",rule="!has(self.enabled) || self.enabled == false || (has(self.iRules) && size(self.iRules) > 0)"
+//
+//nolint:lll
+type GatewayLinkConfig struct {
+	// Enabled indicates whether GatewayLink integration is enabled.
+	//
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// VirtualServerAddress is the static IP address to configure on BIG-IP for the virtual server.
+	// This is mutually exclusive with IpamLabel.
+	//
+	// +optional
+	VirtualServerAddress *string `json:"virtualServerAddress,omitempty"`
+
+	// IpamLabel is the label used by F5 IPAM Controller to allocate an IP address.
+	// The IPAM controller will assign an IP from the pool associated with this label.
+	// This is mutually exclusive with VirtualServerAddress.
+	//
+	// +optional
+	IpamLabel *string `json:"ipamLabel,omitempty"`
+
+	// Host is the hostname for the BIG-IP virtual server.
+	//
+	// +optional
+	Host *string `json:"host,omitempty"`
+
+	// Partition is the BIG-IP partition where resources will be created.
+	// Defaults to "Common" if not specified.
+	//
+	// +optional
+	Partition *string `json:"partition,omitempty"`
+
+	// BigIPRouteDomain is the route domain ID for the BIG-IP virtual server.
+	//
+	// +optional
+	BigIPRouteDomain *int32 `json:"bigipRouteDomain,omitempty"`
+
+	// IRules is a list of BIG-IP iRules to apply to the virtual server.
+	// Each iRule must be specified using the full path format: /partition/irule_name
+	// (e.g., "/Common/Proxy_Protocol_iRule").
+	// This field is required by F5 CIS.
+	//
+	// +kubebuilder:validation:MinItems=1
+	IRules []string `json:"iRules,omitempty"`
 }
 
 // Telemetry specifies the OpenTelemetry configuration.
@@ -724,6 +781,14 @@ type ReadinessProbeSpec struct {
 	// +kubebuilder:validation:Maximum=65535
 	Port *int32 `json:"port,omitempty"`
 
+	// Path is the path on which the readiness endpoint is exposed.
+	// If not specified, the default path is /readyz.
+	// Must start with a forward slash and contain only valid URL path characters.
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^/[^\s\$"'\\;{}]*$`
+	Path *string `json:"path,omitempty"`
+
 	// InitialDelaySeconds is the number of seconds after the container has
 	// started before the readiness probe is initiated.
 	// If not specified, the default is 3 seconds.
@@ -732,6 +797,13 @@ type ReadinessProbeSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=3600
 	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
+
+	// Expose toggles whether the endpoint should be exposed through
+	// the Gateway Service object. This allows an external LoadBalancer
+	// to perform healthchecks. Default is false.
+	//
+	// +optional
+	Expose *bool `json:"expose,omitempty"`
 }
 
 // Image is the NGINX image to use.

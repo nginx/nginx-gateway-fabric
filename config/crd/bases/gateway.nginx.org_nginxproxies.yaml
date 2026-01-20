@@ -116,6 +116,59 @@ spec:
                 required:
                 - addresses
                 type: object
+              gatewayLink:
+                description: GatewayLink defines the configuration for integrating
+                  with F5 BIG-IP Container Ingress Services.
+                properties:
+                  bigipRouteDomain:
+                    description: BigIPRouteDomain is the route domain ID for the BIG-IP
+                      virtual server.
+                    format: int32
+                    type: integer
+                  enabled:
+                    description: Enabled indicates whether GatewayLink integration
+                      is enabled.
+                    type: boolean
+                  host:
+                    description: Host is the hostname for the BIG-IP virtual server.
+                    type: string
+                  iRules:
+                    description: |-
+                      IRules is a list of BIG-IP iRules to apply to the virtual server.
+                      Each iRule must be specified using the full path format: /partition/irule_name
+                      (e.g., "/Common/Proxy_Protocol_iRule").
+                      This field is required by F5 CIS.
+                    items:
+                      type: string
+                    minItems: 1
+                    type: array
+                  ipamLabel:
+                    description: |-
+                      IpamLabel is the label used by F5 IPAM Controller to allocate an IP address.
+                      The IPAM controller will assign an IP from the pool associated with this label.
+                      This is mutually exclusive with VirtualServerAddress.
+                    type: string
+                  partition:
+                    description: |-
+                      Partition is the BIG-IP partition where resources will be created.
+                      Defaults to "Common" if not specified.
+                    type: string
+                  virtualServerAddress:
+                    description: |-
+                      VirtualServerAddress is the static IP address to configure on BIG-IP for the virtual server.
+                      This is mutually exclusive with IpamLabel.
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: virtualServerAddress and ipamLabel are mutually exclusive
+                  rule: '!(has(self.virtualServerAddress) && has(self.ipamLabel))'
+                - message: virtualServerAddress or ipamLabel must be set when enabled
+                    is true
+                  rule: '!has(self.enabled) || self.enabled == false || has(self.virtualServerAddress)
+                    || has(self.ipamLabel)'
+                - message: iRules must be set when enabled is true
+                  rule: '!has(self.enabled) || self.enabled == false || (has(self.iRules)
+                    && size(self.iRules) > 0)'
               ipFamily:
                 default: dual
                 description: |-
@@ -426,6 +479,12 @@ spec:
                             description: ReadinessProbe defines the readiness probe
                               for the NGINX container.
                             properties:
+                              expose:
+                                description: |-
+                                  Expose toggles whether the endpoint should be exposed through
+                                  the Gateway Service object. This allows an external LoadBalancer
+                                  to perform healthchecks. Default is false.
+                                type: boolean
                               initialDelaySeconds:
                                 description: |-
                                   InitialDelaySeconds is the number of seconds after the container has
@@ -435,6 +494,13 @@ spec:
                                 maximum: 3600
                                 minimum: 0
                                 type: integer
+                              path:
+                                description: |-
+                                  Path is the path on which the readiness endpoint is exposed.
+                                  If not specified, the default path is /readyz.
+                                  Must start with a forward slash and contain only valid URL path characters.
+                                pattern: ^/[^\s\$"'\\;{}]*$
+                                type: string
                               port:
                                 description: |-
                                   Port is the port on which the readiness endpoint is exposed.
@@ -4672,6 +4738,12 @@ spec:
                             description: ReadinessProbe defines the readiness probe
                               for the NGINX container.
                             properties:
+                              expose:
+                                description: |-
+                                  Expose toggles whether the endpoint should be exposed through
+                                  the Gateway Service object. This allows an external LoadBalancer
+                                  to perform healthchecks. Default is false.
+                                type: boolean
                               initialDelaySeconds:
                                 description: |-
                                   InitialDelaySeconds is the number of seconds after the container has
@@ -4681,6 +4753,13 @@ spec:
                                 maximum: 3600
                                 minimum: 0
                                 type: integer
+                              path:
+                                description: |-
+                                  Path is the path on which the readiness endpoint is exposed.
+                                  If not specified, the default path is /readyz.
+                                  Must start with a forward slash and contain only valid URL path characters.
+                                pattern: ^/[^\s\$"'\\;{}]*$
+                                type: string
                               port:
                                 description: |-
                                   Port is the port on which the readiness endpoint is exposed.

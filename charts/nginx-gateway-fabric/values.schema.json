@@ -779,6 +779,19 @@
           "required": [],
           "title": "gatewayControllerName"
         },
+        "gatewayLink": {
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable F5 BIG-IP GatewayLink integration. When enabled, NGF will integrate dataplane instances with F5 CIS\nbased on provided NginxProxy configuration.",
+              "title": "enable",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "gatewayLink",
+          "type": "object"
+        },
         "gwAPIExperimentalFeatures": {
           "properties": {
             "enable": {
