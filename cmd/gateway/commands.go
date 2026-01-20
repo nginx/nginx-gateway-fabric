@@ -521,7 +521,7 @@ func createControllerCommand() *cobra.Command {
 			"into the generated NGINX config for HTTPRoute and GRPCRoute resources.",
 	)
 	_ = cmd.Flags().MarkDeprecated(snippetsFiltersFlag, "This flag is deprecated in favor of --snippets. "+
-		"The latter will enable snippets for both SnippetsFilters  and SnippetsPolicies.")
+		"The latter will enable snippets for both SnippetsFilters and SnippetsPolicies.")
 
 	cmd.Flags().BoolVar(
 		&snippets,
