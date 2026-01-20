@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os/exec"
 	"slices"
 	"strings"
@@ -557,6 +558,55 @@ var _ = Describe("Graceful Recovery test", Ordered, FlakeAttempts(2), Label("gra
 		runRestartNodeAbruptlyTest(teaURL, coffeeURL, files, &ns)
 	})
 })
+
+func expectRequestToSucceed(appURL, address, responseBodyMessage string) error {
+	request := framework.Request{
+		URL:     appURL,
+		Address: address,
+		Timeout: timeoutConfig.RequestTimeout,
+	}
+	resp, err := framework.Get(request)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("http status was not 200, got %d: %w", resp.StatusCode, err)
+	}
+
+	if !strings.Contains(resp.Body, responseBodyMessage) {
+		return fmt.Errorf("expected response body to contain correct body message, got: %s", resp.Body)
+	}
+
+	return err
+}
+
+// The function is expecting the request to fail (hence the name) because NGINX is not there to route the request.
+// The purpose of the graceful recovery test is to simulate various failure scenarios including NGINX
+// container restarts, NGF pod restarts, and Kubernetes node restarts to show the system can recover
+// after these real world scenarios and resume serving application traffic after recovery.
+// In this case, we verify that our requests fail and then that eventually are successful again - verifying that
+// NGINX went down and came back up again.
+// We only want an error returned from this particular function if it does not appear that NGINX has
+// stopped serving traffic.
+func expectRequestToFail(appURL, address string) error {
+	request := framework.Request{
+		URL:     appURL,
+		Address: address,
+		Timeout: timeoutConfig.RequestTimeout,
+	}
+	resp, err := framework.Get(request)
+	if resp.StatusCode != 0 {
+		return errors.New("expected http status to be 0")
+	}
+
+	if resp.Body != "" {
+		return fmt.Errorf("expected response body to be empty, instead received: %s", resp.Body)
+	}
+
+	if err == nil {
+		return errors.New("expected request to error")
+	}
+
+	return nil
+}
 
 func getNginxErrorLogs(nginxPodName, namespace string) string {
 	nginxLogs, err := resourceManager.GetPodLogs(
