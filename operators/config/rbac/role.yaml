@@ -35,6 +35,12 @@ rules:
   - update
   - watch
 - apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - "*"
+- apiGroups:
   - autoscaling
   resources:
   - horizontalpodautoscalers

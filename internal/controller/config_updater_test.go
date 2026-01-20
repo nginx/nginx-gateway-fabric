@@ -8,7 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	k8sEvents "k8s.io/client-go/tools/events"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/controllerfakes"
@@ -81,7 +81,7 @@ func TestUpdateControlPlane(t *testing.T) {
 				},
 			}
 
-			fakeEventRecorder := record.NewFakeRecorder(1)
+			fakeEventRecorder := k8sEvents.NewFakeRecorder(1)
 
 			err := updateControlPlane(test.nginxGateway, logger, fakeEventRecorder, nsname, fakeLogSetter)
 

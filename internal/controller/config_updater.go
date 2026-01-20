@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"k8s.io/client-go/tools/record"
+	k8sEvents "k8s.io/client-go/tools/events"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -20,7 +20,7 @@ import (
 func updateControlPlane(
 	cfg *ngfAPI.NginxGateway,
 	logger logr.Logger,
-	eventRecorder record.EventRecorder,
+	eventRecorder k8sEvents.EventRecorder,
 	configNSName types.NamespacedName,
 	logLevelSetter logLevelSetter,
 ) error {
@@ -45,15 +45,17 @@ func updateControlPlane(
 	} else {
 		msg := "NginxGateway configuration was deleted; using defaults"
 		logger.Info(msg)
-		eventRecorder.Event(
+		eventRecorder.Eventf(
 			&ngfAPI.NginxGateway{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: configNSName.Namespace,
 					Name:      configNSName.Name,
 				},
 			},
+			nil,
 			apiv1.EventTypeWarning,
 			"ResourceDeleted",
+			"UsingDefaults",
 			msg,
 		)
 	}

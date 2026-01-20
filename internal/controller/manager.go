@@ -26,7 +26,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
+	k8sEvents "k8s.io/client-go/tools/events"
 	ctlr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -112,7 +112,7 @@ func StartManager(cfg config.Config) error {
 	}
 
 	recorderName := fmt.Sprintf("nginx-gateway-fabric-%s", cfg.GatewayClassName)
-	recorder := mgr.GetEventRecorderFor(recorderName)
+	recorder := mgr.GetEventRecorder(recorderName)
 
 	logLevelSetter := newMultiLogLevelSetter(newZapLogLevelSetter(cfg.AtomicLevel))
 
@@ -520,7 +520,7 @@ func registerControllers(
 	ctx context.Context,
 	cfg config.Config,
 	mgr manager.Manager,
-	recorder record.EventRecorder,
+	recorder k8sEvents.EventRecorder,
 	logLevelSetter logLevelSetter,
 	eventCh chan interface{},
 	controlConfigNSName types.NamespacedName,
@@ -1017,7 +1017,7 @@ func prepareFirstEventBatchPreparerArgs(
 func setInitialConfig(
 	reader client.Reader,
 	logger logr.Logger,
-	eventRecorder record.EventRecorder,
+	eventRecorder k8sEvents.EventRecorder,
 	logLevelSetter logLevelSetter,
 	configName types.NamespacedName,
 ) error {

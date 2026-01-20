@@ -15,7 +15,7 @@ import (
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
@@ -50,7 +50,7 @@ var _ = Describe("eventHandler", func() {
 		fakeNginxUpdater  *agentfakes.FakeNginxUpdater
 		fakeProvisioner   *provisionerfakes.FakeProvisioner
 		fakeStatusUpdater *statusfakes.FakeGroupUpdater
-		fakeEventRecorder *record.FakeRecorder
+		fakeEventRecorder *k8sEvents.FakeRecorder
 		fakeK8sClient     client.WithWatch
 		queue             *status.Queue
 		namespace         = "nginx-gateway"
@@ -114,7 +114,7 @@ var _ = Describe("eventHandler", func() {
 		fakeProvisioner = &provisionerfakes.FakeProvisioner{}
 		fakeProvisioner.RegisterGatewayReturns(nil)
 		fakeStatusUpdater = &statusfakes.FakeGroupUpdater{}
-		fakeEventRecorder = record.NewFakeRecorder(1)
+		fakeEventRecorder = k8sEvents.NewFakeRecorder(1)
 		zapLogLevelSetter = newZapLogLevelSetter(zap.NewAtomicLevel())
 		queue = status.NewQueue()
 
@@ -904,7 +904,7 @@ var _ = Describe("ensureInferencePoolServices", func() {
 	var (
 		handler           *eventHandlerImpl
 		fakeK8sClient     client.Client
-		fakeEventRecorder *record.FakeRecorder
+		fakeEventRecorder *k8sEvents.FakeRecorder
 		namespace         = "test-ns"
 		poolName          = "my-inference-pool"
 		poolUID           = types.UID("pool-uid")
@@ -912,7 +912,7 @@ var _ = Describe("ensureInferencePoolServices", func() {
 
 	BeforeEach(func() {
 		fakeK8sClient = fake.NewFakeClient()
-		fakeEventRecorder = record.NewFakeRecorder(1)
+		fakeEventRecorder = k8sEvents.NewFakeRecorder(1)
 		handler = newEventHandlerImpl(eventHandlerConfig{
 			ctx:           context.Background(),
 			k8sClient:     fakeK8sClient,

@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
+	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -180,7 +180,7 @@ func defaultNginxProvisioner(
 				Namespace:    ngfNamespace,
 			},
 			Logger:        logr.Discard(),
-			EventRecorder: &record.FakeRecorder{},
+			EventRecorder: &k8sEvents.FakeRecorder{},
 			GCName:        "nginx",
 			Plus:          true,
 			PlusUsageConfig: &config.UsageReportConfig{
