@@ -144,11 +144,29 @@ func TestValidateHTTPSListener(t *testing.T) {
 				TLS: &v1.ListenerTLSConfig{
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
-					Options:         map[v1.AnnotationKey]v1.AnnotationValue{"key": "val"},
+					Options:         map[v1.AnnotationKey]v1.AnnotationValue{"unsupported-key": "val"},
 				},
 			},
-			expected: conditions.NewListenerUnsupportedValue("tls.options: Forbidden: options are not supported"),
-			name:     "invalid options",
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[unsupported-key]: Unsupported value: "unsupported-key": ` +
+					`supported values: "nginx.org/ssl-protocols", "nginx.org/ssl-ciphers", "nginx.org/ssl-prefer-server-ciphers"`,
+			),
+			name: "unsupported options",
+		},
+		{
+			l: v1.Listener{
+				Port: 443,
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-protocols": "TLSv1.2 TLSv1.3",
+						"nginx.org/ssl-ciphers":   "HIGH:!aNULL:!MD5",
+					},
+				},
+			},
+			expected: nil,
+			name:     "valid supported options",
 		},
 		{
 			l: v1.Listener{

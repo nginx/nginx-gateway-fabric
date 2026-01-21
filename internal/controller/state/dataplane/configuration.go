@@ -792,9 +792,7 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 		}
 
 		if l.ResolvedSecret != nil {
-			s.SSL = &SSL{
-				KeyPairID: generateSSLKeyPairID(*l.ResolvedSecret),
-			}
+			s.SSL = hpr.buildSSL(l)
 		}
 
 		for _, r := range rules {
@@ -855,6 +853,26 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 	})
 
 	return servers
+}
+
+func (*hostPathRules) buildSSL(listener *graph.Listener) *SSL {
+	ssl := &SSL{
+		KeyPairID: generateSSLKeyPairID(*listener.ResolvedSecret),
+	}
+
+	if listener.Source.TLS.Options != nil {
+		if protocols, ok := listener.Source.TLS.Options["nginx.org/ssl-protocols"]; ok {
+			ssl.Protocols = string(protocols)
+		}
+		if ciphers, ok := listener.Source.TLS.Options["nginx.org/ssl-ciphers"]; ok {
+			ssl.Ciphers = string(ciphers)
+		}
+		if prefer, ok := listener.Source.TLS.Options["nginx.org/ssl-prefer-server-ciphers"]; ok {
+			ssl.PreferServerCiphers = (string(prefer) == "on")
+		}
+	}
+
+	return ssl
 }
 
 // maxServerCount returns the maximum number of VirtualServers that can be built from the host path rules.

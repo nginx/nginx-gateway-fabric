@@ -3,6 +3,7 @@ package graph
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -447,9 +448,7 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 		}
 
 		if len(listener.TLS.Options) > 0 {
-			path := tlsPath.Child("options")
-			valErr := field.Forbidden(path, "options are not supported")
-			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			conds = append(conds, sslOptionsCondtitions(listener, tlsPath)...)
 		}
 
 		if len(listener.TLS.CertificateRefs) == 0 {
@@ -484,6 +483,72 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 
 		return conds, true
 	}
+}
+
+func sslOptionsCondtitions(listener v1.Listener, tlsPath *field.Path) (conds []conditions.Condition) {
+	supportedOptions := map[v1.AnnotationKey]bool{
+		"nginx.org/ssl-protocols":             true,
+		"nginx.org/ssl-ciphers":               true,
+		"nginx.org/ssl-prefer-server-ciphers": true,
+	}
+
+	for optionKey, optionValue := range listener.TLS.Options {
+		if !supportedOptions[optionKey] {
+			path := tlsPath.Child("options").Key(string(optionKey))
+			valErr := field.NotSupported(path, optionKey, []string{
+				"nginx.org/ssl-protocols",
+				"nginx.org/ssl-ciphers",
+				"nginx.org/ssl-prefer-server-ciphers",
+			})
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		// Validate ssl-protocols values
+		if optionKey == "nginx.org/ssl-protocols" {
+			allowedProtocols := map[string]bool{
+				"SSLv2":   true,
+				"SSLv3":   true,
+				"TLSv1":   true,
+				"TLSv1.1": true,
+				"TLSv1.2": true,
+				"TLSv1.3": true,
+			}
+
+			protocols := strings.Fields(string(optionValue))
+			for _, protocol := range protocols {
+				if !allowedProtocols[protocol] {
+					path := tlsPath.Child("options").Key(string(optionKey))
+					valErr := field.NotSupported(path, protocol, []string{
+						"SSLv2", "SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3",
+					})
+					conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+				}
+			}
+		}
+
+		// Validate ssl-prefer-server-ciphers values
+		if optionKey == "nginx.org/ssl-prefer-server-ciphers" {
+			value := string(optionValue)
+			if value != "on" && value != "off" {
+				path := tlsPath.Child("options").Key(string(optionKey))
+				valErr := field.NotSupported(path, value, []string{"on", "off"})
+				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			}
+		}
+
+		// Validate ssl-ciphers values
+		if optionKey == "nginx.org/ssl-ciphers" {
+			value := string(optionValue)
+			cipherRegex := regexp.MustCompile(`^([A-Za-z0-9-+_]+|!?[A-Za-z0-9-+_]+)(:([A-Za-z0-9-+_]+|!?[A-Za-z0-9-+_]+))*$`)
+			if !cipherRegex.MatchString(value) {
+				path := tlsPath.Child("options").Key(string(optionKey))
+				valErr := field.Invalid(path, value, "invalid ssl ciphers")
+				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			}
+		}
+	}
+
+	return conds
 }
 
 // isL4Protocol checks if the protocol is a Layer 4 protocol (TCP or UDP).

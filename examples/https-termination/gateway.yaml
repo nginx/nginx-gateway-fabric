@@ -17,3 +17,7 @@ spec:
       - kind: Secret
         name: cafe-secret
         namespace: certificate
+      options:
+        nginx.org/ssl-protocols: "TLSv1.2 TLSv1.3"
+        nginx.org/ssl-ciphers: "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5"
+        nginx.org/ssl-prefer-server-ciphers: "on"

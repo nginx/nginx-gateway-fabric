@@ -2648,6 +2648,125 @@ func TestBuildConfiguration(t *testing.T) {
 			}),
 			msg: "SnippetsFilters scoped per gateway - no routes reference SnippetsFilters",
 		},
+		{
+			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+				// Create test resources specifically for TLS options test
+				tlsHR, _, tlsRoute := createTestResources(
+					"tls-hr-1",
+					"foo.example.com",
+					"listener-443-tls-options",
+					pathAndType{path: "/", pathType: prefix},
+				)
+
+				listenerTLSOptions := v1.Listener{
+					Name:     "listener-443-tls-options",
+					Hostname: nil,
+					Port:     443,
+					Protocol: v1.HTTPSProtocolType,
+					TLS: &v1.ListenerTLSConfig{
+						Mode: helpers.GetPointer(v1.TLSModeTerminate),
+						CertificateRefs: []v1.SecretObjectReference{
+							{
+								Kind:      (*v1.Kind)(helpers.GetPointer("Secret")),
+								Namespace: helpers.GetPointer(v1.Namespace(secret1NsName.Namespace)),
+								Name:      v1.ObjectName(secret1NsName.Name),
+							},
+						},
+						Options: map[v1.AnnotationKey]v1.AnnotationValue{
+							"nginx.org/ssl-protocols":             "TLSv1.2 TLSv1.3",
+							"nginx.org/ssl-ciphers":               "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
+							"nginx.org/ssl-prefer-server-ciphers": "on",
+						},
+					},
+				}
+
+				gw := g.Gateways[gatewayNsName]
+				gw.Listeners = append(gw.Listeners, &graph.Listener{
+					Name:        "listener-443-tls-options",
+					GatewayName: gatewayNsName,
+					Source:      listenerTLSOptions,
+					Valid:       true,
+					Routes: map[graph.RouteKey]*graph.L7Route{
+						graph.CreateRouteKey(tlsHR): tlsRoute,
+					},
+					ResolvedSecret: &secret1NsName,
+				})
+				g.Routes = map[graph.RouteKey]*graph.L7Route{
+					graph.CreateRouteKey(tlsHR): tlsRoute,
+				}
+				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+					secret1NsName: secret1,
+				}
+				g.ReferencedServices = map[types.NamespacedName]*graph.ReferencedService{
+					{Name: "foo", Namespace: "test"}: {},
+				}
+				return g
+			}),
+			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+				// Use the same test resources created in the graph setup above
+				_, expTLSGroups, _ := createTestResources(
+					"tls-hr-1",
+					"foo.example.com",
+					"listener-443-tls-options",
+					pathAndType{path: "/", pathType: prefix},
+				)
+
+				conf.HTTPServers = []VirtualServer{}
+				conf.SSLServers = []VirtualServer{
+					{
+						IsDefault: true,
+						Port:      443,
+					},
+					{
+						IsDefault: false,
+						Port:      443,
+						Hostname:  "foo.example.com",
+						SSL: &SSL{
+							KeyPairID:           "ssl_keypair_test_secret-1",
+							Protocols:           "TLSv1.2 TLSv1.3",
+							Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
+							PreferServerCiphers: true,
+						},
+						PathRules: []PathRule{
+							{
+								Path:     "/",
+								PathType: PathTypePrefix,
+								MatchRules: []MatchRule{
+									{
+										BackendGroup: setPathRuleIdx(expTLSGroups[0], 0),
+										Source: &metav1.ObjectMeta{
+											Namespace: "test",
+											Name:      "tls-hr-1",
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						IsDefault: false,
+						Port:      443,
+						Hostname:  "~^",
+						SSL: &SSL{
+							KeyPairID:           "ssl_keypair_test_secret-1",
+							Protocols:           "",
+							Ciphers:             "",
+							PreferServerCiphers: false,
+						},
+					},
+				}
+				conf.Upstreams = []Upstream{fooUpstream}
+				conf.BackendGroups = []BackendGroup{setPathRuleIdx(expTLSGroups[0], 0)}
+				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{
+					"ssl_keypair_test_secret-1": {
+						Cert: []byte("cert-1"),
+						Key:  []byte("privateKey-1"),
+					},
+				}
+				return conf
+			}),
+			msg: "https listener with TLS options (protocols, ciphers, prefer-server-ciphers)",
+		},
 	}
 
 	for _, test := range tests {

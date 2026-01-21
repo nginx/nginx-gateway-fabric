@@ -168,8 +168,11 @@ func createSSLServer(
 	server := http.Server{
 		ServerName: virtualServer.Hostname,
 		SSL: &http.SSL{
-			Certificate:    generatePEMFileName(virtualServer.SSL.KeyPairID),
-			CertificateKey: generatePEMFileName(virtualServer.SSL.KeyPairID),
+			Certificate:         generatePEMFileName(virtualServer.SSL.KeyPairID),
+			CertificateKey:      generatePEMFileName(virtualServer.SSL.KeyPairID),
+			Protocols:           virtualServer.SSL.Protocols,
+			Ciphers:             virtualServer.SSL.Ciphers,
+			PreferServerCiphers: virtualServer.SSL.PreferServerCiphers,
 		},
 		Locations: locs,
 		GRPC:      grpc,
