@@ -139,6 +139,7 @@ Create namespaced RBAC rules.
   - watch
 - apiGroups:
   - events.k8s.io
+  - ""
   resources:
   - events
   verbs:

@@ -284,7 +284,7 @@ func (p *NginxProvisioner) provisionNginx(
 				gateway,
 				corev1.EventTypeWarning,
 				"CreateOrUpdateFailed",
-				"",
+				"None",
 				"Failed to create or update nginx resource: %s",
 				fullErr.Error(),
 			)
@@ -360,7 +360,7 @@ func (p *NginxProvisioner) provisionNginx(
 				gateway,
 				corev1.EventTypeWarning,
 				"RestartFailed",
-				"",
+				"None",
 				"Failed to restart nginx after agent config update: %s",
 				err.Error(),
 			)
@@ -402,7 +402,7 @@ func (p *NginxProvisioner) reprovisionNginx(
 				gateway,
 				corev1.EventTypeWarning,
 				"CreateFailed",
-				"",
+				"None",
 				"Failed to create nginx resource: %s",
 				err.Error(),
 			)
@@ -443,7 +443,7 @@ func (p *NginxProvisioner) deprovisionNginx(ctx context.Context, gatewayNSName t
 					},
 					corev1.EventTypeWarning,
 					"DeleteFailed",
-					"",
+					"None",
 					"Failed to delete nginx resource: %s",
 					err.Error(),
 				)
@@ -472,7 +472,7 @@ func (p *NginxProvisioner) deleteObject(ctx context.Context, obj client.Object) 
 			nil,
 			corev1.EventTypeWarning,
 			"DeleteFailed",
-			"",
+			"None",
 			"Failed to delete nginx resource: %s",
 			err.Error(),
 		)
