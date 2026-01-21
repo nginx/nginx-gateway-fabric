@@ -18,7 +18,7 @@ spec:
           extensionRef:
             group: gateway.nginx.org
             kind: SnippetsFilter
-            name: request-time-sf
+            name: limit-except-sf
       backendRefs:
         - name: coffee
           port: 80

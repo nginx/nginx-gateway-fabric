@@ -1,9 +1,0 @@
-apiVersion: gateway.nginx.org/v1alpha1
-kind: SnippetsFilter
-metadata:
-  name: request-time-sf
-spec:
-  snippets:
-    - context: http.server.location
-      value: add_header request_processing_time "This is the custom response header we added in
-             our SnippetsFilter that shows the request time in seconds - $request_time" always;

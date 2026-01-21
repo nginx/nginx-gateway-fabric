@@ -1,0 +1,13 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: limit-except-sf
+spec:
+  snippets:
+    - context: http.server.location
+      # yamllint disable rule:indentation
+      value: |
+        limit_except GET {
+          deny all;
+        }
+      # yamllint enable rule:indentation

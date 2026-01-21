@@ -240,7 +240,7 @@ nginxGateway:
     enable: false
 
   snippetsFilters:
-    # -- This flag is deprecated in favor of --snippets. The latter will enable snippets for both SnippetsFilters
+    # -- This flag is deprecated in favor of the snippets.enable flag. The latter will enable snippets for both SnippetsFilters
     # and SnippetsPolicies. Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into
     # the generated NGINX config for HTTPRoute and GRPCRoute resources.
     enable: false
