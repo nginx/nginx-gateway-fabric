@@ -38,6 +38,10 @@ const (
 	// the Gateway itself; in this situation we need an additional policy to generate the http context
 	// configuration.
 	InternalRateLimitShadowPolicyAnnotationKey = "nginx.org/internal-annotation-http-context-only"
+
+	sslProtocolsKey           = "nginx.org/ssl-protocols"
+	sslCiphersKey             = "nginx.org/ssl-ciphers"
+	sslPreferServerCiphersKey = "nginx.org/ssl-prefer-server-ciphers"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -860,14 +864,14 @@ func (*hostPathRules) buildSSL(listener *graph.Listener) *SSL {
 		KeyPairID: generateSSLKeyPairID(*listener.ResolvedSecret),
 	}
 
-	if listener.Source.TLS.Options != nil {
-		if protocols, ok := listener.Source.TLS.Options["nginx.org/ssl-protocols"]; ok {
+	if listener.Source.TLS != nil && listener.Source.TLS.Options != nil {
+		if protocols, ok := listener.Source.TLS.Options[sslProtocolsKey]; ok {
 			ssl.Protocols = string(protocols)
 		}
-		if ciphers, ok := listener.Source.TLS.Options["nginx.org/ssl-ciphers"]; ok {
+		if ciphers, ok := listener.Source.TLS.Options[sslCiphersKey]; ok {
 			ssl.Ciphers = string(ciphers)
 		}
-		if prefer, ok := listener.Source.TLS.Options["nginx.org/ssl-prefer-server-ciphers"]; ok {
+		if prefer, ok := listener.Source.TLS.Options[sslPreferServerCiphersKey]; ok {
 			ssl.PreferServerCiphers = (string(prefer) == "on")
 		}
 	}

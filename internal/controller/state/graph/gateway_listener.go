@@ -18,6 +18,25 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
+const (
+	sslProtocolsKey           = "nginx.org/ssl-protocols"
+	sslCiphersKey             = "nginx.org/ssl-ciphers"
+	sslPreferServerCiphersKey = "nginx.org/ssl-prefer-server-ciphers"
+
+	// Examples of allowed ciphers:
+	//
+	// Single cipher:                   AES128-GCM-SHA256
+	// Cipher suite with exclusion:     HIGH:!aNULL
+	// Multiple ciphers with exclusion: ECDHE-RSA-AES256-GCM-SHA384:AES128-SHA:!MD5
+	// Single exclusion:                !LOW.
+	sslCiphersRegx = `^!?[A-Za-z0-9-+_]+(:!?[A-Za-z0-9-+_]+)*$`
+)
+
+var (
+	sslProtocolsValues           = []string{"SSLv2", "SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"}
+	sslPreferServerCiphersValues = []string{"on", "off"}
+)
+
 // Listener represents a Listener of the Gateway resource.
 // For now, we only support HTTP and HTTPS listeners.
 type Listener struct {
@@ -448,7 +467,7 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 		}
 
 		if len(listener.TLS.Options) > 0 {
-			conds = append(conds, sslOptionsCondtitions(listener, tlsPath)...)
+			conds = append(conds, validateListenerTLSOptions(listener, tlsPath)...)
 		}
 
 		if len(listener.TLS.CertificateRefs) == 0 {
@@ -485,61 +504,56 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 	}
 }
 
-func sslOptionsCondtitions(listener v1.Listener, tlsPath *field.Path) (conds []conditions.Condition) {
+func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (conds []conditions.Condition) {
 	supportedOptions := map[v1.AnnotationKey]bool{
-		"nginx.org/ssl-protocols":             true,
-		"nginx.org/ssl-ciphers":               true,
-		"nginx.org/ssl-prefer-server-ciphers": true,
+		sslProtocolsKey:           true,
+		sslCiphersKey:             true,
+		sslPreferServerCiphersKey: true,
 	}
 
 	for optionKey, optionValue := range listener.TLS.Options {
 		if !supportedOptions[optionKey] {
 			path := tlsPath.Child("options").Key(string(optionKey))
 			valErr := field.NotSupported(path, optionKey, []string{
-				"nginx.org/ssl-protocols",
-				"nginx.org/ssl-ciphers",
-				"nginx.org/ssl-prefer-server-ciphers",
+				sslProtocolsKey,
+				sslCiphersKey,
+				sslPreferServerCiphersKey,
 			})
 			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
 		}
 
 		// Validate ssl-protocols values
-		if optionKey == "nginx.org/ssl-protocols" {
-			allowedProtocols := map[string]bool{
-				"SSLv2":   true,
-				"SSLv3":   true,
-				"TLSv1":   true,
-				"TLSv1.1": true,
-				"TLSv1.2": true,
-				"TLSv1.3": true,
+		if optionKey == sslProtocolsKey {
+			allowedProtocols := make(map[string]bool)
+
+			for _, value := range sslProtocolsValues {
+				allowedProtocols[value] = true
 			}
 
 			protocols := strings.Fields(string(optionValue))
 			for _, protocol := range protocols {
 				if !allowedProtocols[protocol] {
 					path := tlsPath.Child("options").Key(string(optionKey))
-					valErr := field.NotSupported(path, protocol, []string{
-						"SSLv2", "SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3",
-					})
+					valErr := field.NotSupported(path, protocol, sslProtocolsValues)
 					conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
 				}
 			}
 		}
 
 		// Validate ssl-prefer-server-ciphers values
-		if optionKey == "nginx.org/ssl-prefer-server-ciphers" {
+		if optionKey == sslPreferServerCiphersKey {
 			value := string(optionValue)
 			if value != "on" && value != "off" {
 				path := tlsPath.Child("options").Key(string(optionKey))
-				valErr := field.NotSupported(path, value, []string{"on", "off"})
+				valErr := field.NotSupported(path, value, sslPreferServerCiphersValues)
 				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
 			}
 		}
 
 		// Validate ssl-ciphers values
-		if optionKey == "nginx.org/ssl-ciphers" {
+		if optionKey == sslCiphersKey {
 			value := string(optionValue)
-			cipherRegex := regexp.MustCompile(`^([A-Za-z0-9-+_]+|!?[A-Za-z0-9-+_]+)(:([A-Za-z0-9-+_]+|!?[A-Za-z0-9-+_]+))*$`)
+			cipherRegex := regexp.MustCompile(sslCiphersRegx)
 			if !cipherRegex.MatchString(value) {
 				path := tlsPath.Child("options").Key(string(optionKey))
 				valErr := field.Invalid(path, value, "invalid ssl ciphers")
