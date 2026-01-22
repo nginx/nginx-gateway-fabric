@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	sslProtocolsKey           = "nginx.org/ssl-protocols"
-	sslCiphersKey             = "nginx.org/ssl-ciphers"
-	sslPreferServerCiphersKey = "nginx.org/ssl-prefer-server-ciphers"
+	SslProtocolsKey           = "nginx.org/ssl-protocols"
+	SslCiphersKey             = "nginx.org/ssl-ciphers"
+	SslPreferServerCiphersKey = "nginx.org/ssl-prefer-server-ciphers"
 
 	// Examples of allowed ciphers:
 	//
@@ -506,24 +506,24 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 
 func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (conds []conditions.Condition) {
 	supportedOptions := map[v1.AnnotationKey]bool{
-		sslProtocolsKey:           true,
-		sslCiphersKey:             true,
-		sslPreferServerCiphersKey: true,
+		SslProtocolsKey:           true,
+		SslCiphersKey:             true,
+		SslPreferServerCiphersKey: true,
 	}
 
 	for optionKey, optionValue := range listener.TLS.Options {
 		if !supportedOptions[optionKey] {
 			path := tlsPath.Child("options").Key(string(optionKey))
 			valErr := field.NotSupported(path, optionKey, []string{
-				sslProtocolsKey,
-				sslCiphersKey,
-				sslPreferServerCiphersKey,
+				SslProtocolsKey,
+				SslCiphersKey,
+				SslPreferServerCiphersKey,
 			})
 			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
 		}
 
 		// Validate ssl-protocols values
-		if optionKey == sslProtocolsKey {
+		if optionKey == SslProtocolsKey {
 			allowedProtocols := make(map[string]bool)
 
 			for _, value := range sslProtocolsValues {
@@ -531,6 +531,11 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 			}
 
 			protocols := strings.Fields(string(optionValue))
+			if len(protocols) == 0 {
+				path := tlsPath.Child("options").Key(string(optionKey))
+				valErr := field.NotSupported(path, "", sslProtocolsValues)
+				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			}
 			for _, protocol := range protocols {
 				if !allowedProtocols[protocol] {
 					path := tlsPath.Child("options").Key(string(optionKey))
@@ -541,7 +546,7 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		}
 
 		// Validate ssl-prefer-server-ciphers values
-		if optionKey == sslPreferServerCiphersKey {
+		if optionKey == SslPreferServerCiphersKey {
 			value := string(optionValue)
 			if value != "on" && value != "off" {
 				path := tlsPath.Child("options").Key(string(optionKey))
@@ -551,7 +556,7 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		}
 
 		// Validate ssl-ciphers values
-		if optionKey == sslCiphersKey {
+		if optionKey == SslCiphersKey {
 			value := string(optionValue)
 			cipherRegex := regexp.MustCompile(sslCiphersRegx)
 			if !cipherRegex.MatchString(value) {

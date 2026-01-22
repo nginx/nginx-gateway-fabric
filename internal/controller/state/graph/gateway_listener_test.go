@@ -193,6 +193,23 @@ func TestValidateHTTPSListener(t *testing.T) {
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
 					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-protocols": "",
+					},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[nginx.org/ssl-protocols]: Unsupported value: "": ` +
+					`supported values: "SSLv2", "SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"`,
+			),
+			name: "invalid nginx.org/ssl-protocols empty value",
+		},
+		{
+			l: v1.Listener{
+				Port: 443,
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
 						"nginx.org/ssl-ciphers": "unknown!",
 					},
 				},
@@ -209,6 +226,22 @@ func TestValidateHTTPSListener(t *testing.T) {
 					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
 					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
 					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-ciphers": "",
+					},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[nginx.org/ssl-ciphers]: Invalid value: "": invalid ssl ciphers`,
+			),
+			name: "invalid nginx.org/ssl-ciphers empty value",
+		},
+		{
+			l: v1.Listener{
+				Port: 443,
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
 						"nginx.org/ssl-prefer-server-ciphers": "unknown",
 					},
 				},
@@ -217,6 +250,22 @@ func TestValidateHTTPSListener(t *testing.T) {
 				`tls.options[nginx.org/ssl-prefer-server-ciphers]: Unsupported value: "unknown": supported values: "on", "off"`,
 			),
 			name: "invalid nginx.org/ssl-prefer-server-ciphers value",
+		},
+		{
+			l: v1.Listener{
+				Port: 443,
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-prefer-server-ciphers": "",
+					},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[nginx.org/ssl-prefer-server-ciphers]: Unsupported value: "": supported values: "on", "off"`,
+			),
+			name: "invalid nginx.org/ssl-prefer-server-ciphers empty value",
 		},
 		{
 			l: v1.Listener{
