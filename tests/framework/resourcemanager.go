@@ -622,7 +622,7 @@ func (rm *ResourceManager) GetLBIPAddress(namespace string) (string, error) {
 		if svc.Spec.Type == core.ServiceTypeLoadBalancer {
 			nsName = types.NamespacedName{Namespace: svc.GetNamespace(), Name: svc.GetName()}
 			if err := rm.waitForLBStatusToBeReady(ctx, nsName); err != nil {
-				return "", fmt.Errorf("error getting status from LoadBalancer service: %w", err)
+				return "", fmt.Errorf("error getting status from LoadBalancer service, increased timeout: %w", err)
 			}
 		}
 	}
