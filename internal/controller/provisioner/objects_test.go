@@ -1527,6 +1527,55 @@ func TestBuildReadinessProbe(t *testing.T) {
 				InitialDelaySeconds: 10,
 			},
 		},
+		{
+			name: "custom path is set in readinessProbe, custom probe with path is returned",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+								Port:                helpers.GetPointer[int32](8080),
+								Path:                helpers.GetPointer("/custom/health"),
+								InitialDelaySeconds: helpers.GetPointer[int32](5),
+							},
+						},
+					},
+				},
+			},
+			expected: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/custom/health",
+						Port: intstr.FromInt32(8080),
+					},
+				},
+				InitialDelaySeconds: 5,
+			},
+		},
+		{
+			name: "daemonset with custom readiness probe configuration",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+								Port: helpers.GetPointer[int32](7777),
+								Path: helpers.GetPointer("/status"),
+							},
+						},
+					},
+				},
+			},
+			expected: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/status",
+						Port: intstr.FromInt32(7777),
+					},
+				},
+				InitialDelaySeconds: 3,
+			},
+		},
 	}
 
 	for _, tt := range tests {

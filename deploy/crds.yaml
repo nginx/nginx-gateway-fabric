@@ -1213,6 +1213,13 @@ spec:
                                 maximum: 3600
                                 minimum: 0
                                 type: integer
+                              path:
+                                description: |-
+                                  Path is the path on which the readiness endpoint is exposed.
+                                  If not specified, the default path is /readyz.
+                                  Must start with a forward slash and contain only valid URL path characters.
+                                pattern: ^/[^\s\$"'\\;{}]*$
+                                type: string
                               port:
                                 description: |-
                                   Port is the port on which the readiness endpoint is exposed.
@@ -5459,6 +5466,13 @@ spec:
                                 maximum: 3600
                                 minimum: 0
                                 type: integer
+                              path:
+                                description: |-
+                                  Path is the path on which the readiness endpoint is exposed.
+                                  If not specified, the default path is /readyz.
+                                  Must start with a forward slash and contain only valid URL path characters.
+                                pattern: ^/[^\s\$"'\\;{}]*$
+                                type: string
                               port:
                                 description: |-
                                   Port is the port on which the readiness endpoint is exposed.

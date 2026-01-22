@@ -1440,8 +1440,8 @@ func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxPr
 	probe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/readyz",
-				Port: intstr.FromInt32(dataplane.DefaultNginxReadinessProbePort),
+				Path: dataplane.GetNginxReadinessProbePath(nProxyCfg),
+				Port: intstr.FromInt32(dataplane.GetNginxReadinessProbePort(nProxyCfg)),
 			},
 		},
 		InitialDelaySeconds: defaultInitialDelaySeconds,
@@ -1458,10 +1458,6 @@ func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxPr
 
 	if containerSpec == nil || containerSpec.ReadinessProbe == nil {
 		return probe
-	}
-
-	if containerSpec.ReadinessProbe.Port != nil {
-		probe.HTTPGet.Port = intstr.FromInt32(*containerSpec.ReadinessProbe.Port)
 	}
 
 	if containerSpec.ReadinessProbe.InitialDelaySeconds != nil {

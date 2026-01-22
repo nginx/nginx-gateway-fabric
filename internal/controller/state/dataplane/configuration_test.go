@@ -161,6 +161,7 @@ type commonTestCase struct {
 
 var defaultBaseHTTPConfig = BaseHTTPConfig{
 	NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+	NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 	HTTP2:                   true,
 	IPFamily:                Dual,
 }
@@ -6043,7 +6044,12 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 					},
 				},
 			},
-			expected: defaultBaseHTTPConfig,
+			expected: BaseHTTPConfig{
+				NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+				NginxReadinessProbePath: DefaultNginxReadinessProbePath,
+				IPFamily:                Dual,
+				HTTP2:                   true,
+			},
 		},
 		{
 			msg: "readiness probe is configured for deployment kind",
@@ -6062,6 +6068,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			},
 			expected: BaseHTTPConfig{
 				NginxReadinessProbePort: int32(7020),
+				NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 				IPFamily:                Dual,
 				HTTP2:                   true,
 			},
@@ -6083,6 +6090,75 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			},
 			expected: BaseHTTPConfig{
 				NginxReadinessProbePort: int32(8881),
+				NginxReadinessProbePath: DefaultNginxReadinessProbePath,
+				IPFamily:                Dual,
+				HTTP2:                   true,
+			},
+		},
+		{
+			msg: "readiness probe is configured for deployment with custom path",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+									Port: helpers.GetPointer(int32(9090)),
+									Path: helpers.GetPointer("/custom/health"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: BaseHTTPConfig{
+				NginxReadinessProbePort: int32(9090),
+				NginxReadinessProbePath: "/custom/health",
+				IPFamily:                Dual,
+				HTTP2:                   true,
+			},
+		},
+		{
+			msg: "readiness probe is configured for daemonset with custom path",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+									Port: helpers.GetPointer(int32(7777)),
+									Path: helpers.GetPointer("/status"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: BaseHTTPConfig{
+				NginxReadinessProbePort: int32(7777),
+				NginxReadinessProbePath: "/status",
+				IPFamily:                Dual,
+				HTTP2:                   true,
+			},
+		},
+		{
+			msg: "readiness probe is configured with only custom path and no port",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+						Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+							Container: ngfAPIv1alpha2.ContainerSpec{
+								ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+									Path: helpers.GetPointer("/healthz"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: BaseHTTPConfig{
+				NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+				NginxReadinessProbePath: "/healthz",
 				IPFamily:                Dual,
 				HTTP2:                   true,
 			},
@@ -6425,6 +6501,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 					HTTP2:                   true,
 					IPFamily:                Dual,
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 					GatewaySecretID:         "ssl_keypair_test_secret-1",
 				}
 				return conf
@@ -6649,6 +6726,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					HTTP2:                    false,
 					IPFamily:                 Dual,
 					NginxReadinessProbePort:  DefaultNginxReadinessProbePort,
+					NginxReadinessProbePath:  DefaultNginxReadinessProbePath,
 					DisableSNIHostValidation: true,
 				}
 				return conf
@@ -6679,6 +6757,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					HTTP2:                   true,
 					IPFamily:                IPv4,
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 				}
 				return conf
 			}),
@@ -6708,6 +6787,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					HTTP2:                   true,
 					IPFamily:                IPv6,
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 				}
 				return conf
 			}),
@@ -6753,6 +6833,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 						Mode:             RewriteIPModeProxyProtocol,
 					},
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 				}
 				return conf
 			}),

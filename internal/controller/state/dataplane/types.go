@@ -487,11 +487,13 @@ type BaseHTTPConfig struct {
 	IPFamily IPFamilyType
 	// GatewaySecretID is the ID of the secret that contains the gateway backend TLS certificate.
 	GatewaySecretID SSLKeyPairID
+	// NginxReadinessProbePath is the path on which the health check endpoint for NGINX is exposed.
+	NginxReadinessProbePath string
 	// Policies holds the policies attached to the Gateway for the http context.
 	Policies []policies.Policy
 	// Snippets contain the snippets that apply to the http context.
 	Snippets []Snippet
-	// RewriteIPSettings defines configuration for rewriting the client IP to the original client's IP.
+	// RewriteClientIPSettings defines configuration for rewriting the client IP to the original client's IP.
 	RewriteClientIPSettings RewriteClientIPSettings
 	// NginxReadinessProbePort is the port on which the health check endpoint for NGINX is exposed.
 	NginxReadinessProbePort int32
