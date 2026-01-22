@@ -309,8 +309,9 @@ func TestBuildTLSRoute(t *testing.T) {
 		{
 			gtr: duplicateParentRefsGtr,
 			expected: &L4Route{
-				Source: duplicateParentRefsGtr,
-				Valid:  false,
+				Source:    duplicateParentRefsGtr,
+				RouteType: RouteTypeTLS,
+				Valid:     false,
 			},
 			gateway:  createGateway(),
 			services: map[types.NamespacedName]*apiv1.Service{},
@@ -329,6 +330,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: invalidHostnameGtr,
 			expected: &L4Route{
 				Source:     invalidHostnameGtr,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Conditions: []conditions.Condition{conditions.NewRouteUnsupportedValue(
 					"Spec.hostnames[0]: Invalid value: \"hi....com\": a lowercase RFC 1" +
@@ -348,6 +350,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: noRulesGtr,
 			expected: &L4Route{
 				Source:     noRulesGtr,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
@@ -368,6 +371,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: validRefSameNs,
 			expected: &L4Route{
 				Source:     validRefSameNs,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
@@ -397,6 +401,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: validRefSameNs,
 			expected: &L4Route{
 				Source:     validRefSameNs,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
@@ -426,6 +431,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: backedRefDNEGtr,
 			expected: &L4Route{
 				Source:     backedRefDNEGtr,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
@@ -455,6 +461,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: wrongBackendRefGroupGtr,
 			expected: &L4Route{
 				Source:     wrongBackendRefGroupGtr,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
@@ -483,6 +490,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: wrongBackendRefKindGtr,
 			expected: &L4Route{
 				Source:     wrongBackendRefKindGtr,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
@@ -511,6 +519,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: diffNsBackendRef,
 			expected: &L4Route{
 				Source:     diffNsBackendRef,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
@@ -539,6 +548,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: portNilBackendRefGtr,
 			expected: &L4Route{
 				Source:     portNilBackendRefGtr,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
@@ -565,7 +575,8 @@ func TestBuildTLSRoute(t *testing.T) {
 		{
 			gtr: ipFamilyMismatchGtr,
 			expected: &L4Route{
-				Source: ipFamilyMismatchGtr,
+				Source:    ipFamilyMismatchGtr,
+				RouteType: RouteTypeTLS,
 				ParentRefs: []ParentRef{
 					{
 						SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
@@ -610,6 +621,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: diffNsBackendRef,
 			expected: &L4Route{
 				Source:     diffNsBackendRef,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
@@ -636,6 +648,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: validRefSameNs,
 			expected: &L4Route{
 				Source:     validRefSameNs,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{
@@ -662,6 +675,7 @@ func TestBuildTLSRoute(t *testing.T) {
 			gtr: validRefSameNs,
 			expected: &L4Route{
 				Source:     validRefSameNs,
+				RouteType:  RouteTypeTLS,
 				ParentRefs: []ParentRef{parentRefGraph},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{

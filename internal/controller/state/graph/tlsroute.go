@@ -17,7 +17,8 @@ func buildTLSRoute(
 	refGrantResolver func(resource toResource) bool,
 ) *L4Route {
 	r := &L4Route{
-		Source: gtr,
+		Source:    gtr,
+		RouteType: RouteTypeTLS,
 	}
 
 	sectionNameRefs, err := buildSectionNameRefs(gtr.Spec.ParentRefs, gtr.Namespace, gws)

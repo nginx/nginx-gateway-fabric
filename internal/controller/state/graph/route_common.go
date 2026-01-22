@@ -93,6 +93,8 @@ const (
 type L4RouteKey struct {
 	// NamespacedName is the NamespacedName of the Route.
 	NamespacedName types.NamespacedName
+	// RouteType is the type of the Route.
+	RouteType RouteType
 }
 
 // RouteKey is the unique identifier for a L7Route.
@@ -106,6 +108,8 @@ type RouteKey struct {
 type L4Route struct {
 	// Source is the source Gateway API object of the Route.
 	Source client.Object
+	// RouteType is the type (tls, tcp or udp) of the Route.
+	RouteType RouteType
 	// ParentRefs describe the references to the parents in a Route.
 	ParentRefs []ParentRef
 	// Conditions define the conditions to be reported in the status of the Route.
@@ -240,8 +244,21 @@ func CreateRouteKey(obj client.Object) RouteKey {
 
 // CreateRouteKeyL4 takes a client.Object and creates a L4RouteKey.
 func CreateRouteKeyL4(obj client.Object) L4RouteKey {
+	nsName := client.ObjectKeyFromObject(obj)
+	var routeType RouteType
+	switch obj.(type) {
+	case *v1alpha.TLSRoute:
+		routeType = RouteTypeTLS
+	case *v1alpha.TCPRoute:
+		routeType = RouteTypeTCP
+	case *v1alpha.UDPRoute:
+		routeType = RouteTypeUDP
+	default:
+		panic(fmt.Sprintf("Unknown type: %T", obj))
+	}
 	return L4RouteKey{
-		NamespacedName: client.ObjectKeyFromObject(obj),
+		NamespacedName: nsName,
+		RouteType:      routeType,
 	}
 }
 
@@ -1446,7 +1463,8 @@ func buildGenericL4Route(
 	services map[types.NamespacedName]*apiv1.Service,
 ) *L4Route {
 	r := &L4Route{
-		Source: config.source,
+		Source:    config.source,
+		RouteType: config.routeType,
 	}
 
 	sectionNameRefs, err := buildSectionNameRefs(config.parentRefs, config.namespace, gws)

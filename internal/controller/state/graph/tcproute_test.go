@@ -309,8 +309,9 @@ func TestBuildTCPRoute(t *testing.T) {
 				{Namespace: "test", Name: "gateway"}: createGateway(),
 			},
 			expected: &L4Route{
-				Source: duplicateParentRefsTCPR,
-				Valid:  false,
+				Source:    duplicateParentRefsTCPR,
+				RouteType: RouteTypeTCP,
+				Valid:     false,
 			},
 		},
 		{
@@ -329,6 +330,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     noRulesTCPR,
+				RouteType:  RouteTypeTCP,
 				Valid:      false,
 				Attachable: false,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -346,6 +348,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			services: map[types.NamespacedName]*apiv1.Service{},
 			expected: &L4Route{
 				Source:     backendRefDNETCPR,
+				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -377,6 +380,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     wrongBackendRefGroupTCPR,
+				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -406,6 +410,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     wrongBackendRefKindTCPR,
+				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -438,6 +443,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     diffNsBackendRefTCPR,
+				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -468,6 +474,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     portNilBackendRefTCPR,
+				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -503,6 +510,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     ipFamilyMismatchTCPR,
+				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{
@@ -547,6 +555,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     validSingleBackendTCPR,
+				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -577,6 +586,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     validMultiBackendTCPR,
+				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -616,6 +626,7 @@ func TestBuildTCPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     multiRuleTCPR,
+				RouteType:  RouteTypeTCP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
