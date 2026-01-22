@@ -338,24 +338,72 @@ app_protect_security_log /shared_volume/blocked-log-profile.tgz syslog:server=sy
 
 ## API, Customer Driven Interfaces, and User Experience
 
-### NGF Control Plane CLI Arguments for PLM Storage
+### NGF Control Plane Configuration for PLM Storage
 
-NGF control plane provides CLI arguments for configuring PLM storage service communication. These are set at installation time via Helm chart values or deployment arguments.
+NGF control plane requires configuration to communicate with the PLM storage service (S3-compatible). This includes the storage endpoint URL, authentication credentials, and optional TLS settings.
 
-**CLI Arguments:**
+> **Note:** PLM is still under active development. The exact authentication and TLS requirements may evolve as PLM matures. This section will be updated as the PLM storage API is finalized.
+
+#### Configuration Approach
+
+NGF uses Kubernetes Secrets for all sensitive PLM storage configuration:
+
+- **Credentials Secret**: Contains S3 access credentials (`accessKeyId` and `secretAccessKey`)
+- **TLS Secret** (optional): Contains TLS certificates for secure communication
+
+Secret names are passed via CLI flags, and NGF reads the Secret contents at startup. This approach:
+
+- Follows Kubernetes best practices for credential management
+- Aligns with how NGF handles other secrets (NGINX Plus license, usage reporting)
+- Avoids embedding credentials in deployment manifests
+- Supports credential rotation via Secret updates (requires pod restart)
+
+#### CLI Arguments
 
 ```bash
-# PLM storage service URL
+# PLM storage service URL (required when WAF enabled)
 --plm-storage-url=https://plm-storage-service.plm-system.svc.cluster.local
 
-# TLS configuration for storage communication
---plm-storage-tls-ca-cert=/etc/ngf/plm-ca/ca.crt
---plm-storage-tls-client-cert=/etc/ngf/plm-client/tls.crt
---plm-storage-tls-client-key=/etc/ngf/plm-client/tls.key
---plm-storage-tls-insecure-skip-verify=false
+# Secret containing S3 credentials (accessKeyId and secretAccessKey fields)
+--plm-storage-credentials-secret=plm-storage-credentials
+
+# TLS configuration (optional)
+--plm-storage-tls-secret=plm-storage-tls        # Secret with ca.crt, tls.crt, tls.key
+--plm-storage-tls-insecure-skip-verify=false    # Skip TLS verification (dev only)
 ```
 
-**Helm Chart Configuration Example:**
+#### Secrets Format
+
+**Credentials Secret:**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: plm-storage-credentials
+  namespace: nginx-gateway
+type: Opaque
+data:
+  accessKeyId: <base64-encoded-access-key>
+  secretAccessKey: <base64-encoded-secret-key>
+```
+
+**TLS Secret (optional):**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: plm-storage-tls
+  namespace: nginx-gateway
+type: Opaque
+data:
+  ca.crt: <base64-encoded-ca-certificate>       # CA certificate for server verification
+  tls.crt: <base64-encoded-client-certificate>  # Client certificate for mutual TLS (optional)
+  tls.key: <base64-encoded-client-key>          # Client key for mutual TLS (optional)
+```
+
+#### Helm Chart Configuration
 
 ```yaml
 # values.yaml
@@ -364,84 +412,69 @@ nginxGateway:
     # Storage service URL (required when WAF enabled)
     url: "https://plm-storage-service.plm-system.svc.cluster.local"
 
-    # TLS configuration (optional)
+    # Secret containing S3 credentials
+    # Secret must have "accessKeyId" and "secretAccessKey" fields
+    credentialsSecretName: "plm-storage-credentials"
+
+    # TLS configuration
     tls:
-      # Skip TLS certificate verification (not recommended for production)
+      # Secret containing TLS certificates (ca.crt, optional tls.crt/tls.key)
+      secretName: "plm-storage-tls"
+
+      # Skip TLS certificate verification (development only)
       insecureSkipVerify: false
-
-      # Custom CA certificate for verifying storage service certificate
-      # Creates a Secret and mounts to NGF pod
-      caCertificate:
-        # Inline PEM-encoded certificate
-        value: |
-          -----BEGIN CERTIFICATE-----
-          ...
-          -----END CERTIFICATE-----
-        # OR reference existing Secret
-        secretRef:
-          name: plm-storage-ca-cert
-          key: ca.crt
-
-      # Optional: Client certificate for mutual TLS
-      clientCertificate:
-        # Reference existing Secret with tls.crt and tls.key
-        secretRef:
-          name: plm-storage-client-cert
 ```
 
-**Deployment Example:**
+#### Configuration Options
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: nginx-gateway
-  namespace: nginx-gateway
-spec:
-  template:
-    spec:
-      containers:
-      - name: nginx-gateway
-        image: ghcr.io/nginxinc/nginx-gateway-fabric:edge
-        args:
-        - --gateway-ctlr-name=gateway.nginx.org/nginx-gateway-controller
-        - --gatewayclass=nginx
-        - --plm-storage-url=https://plm-storage-service.plm-system.svc.cluster.local
-        - --plm-storage-tls-ca-cert=/etc/ngf/plm-ca/ca.crt
-        - --plm-storage-tls-client-cert=/etc/ngf/plm-client/tls.crt
-        - --plm-storage-tls-client-key=/etc/ngf/plm-client/tls.key
-        volumeMounts:
-        - name: plm-ca-cert
-          mountPath: /etc/ngf/plm-ca
-          readOnly: true
-        - name: plm-client-cert
-          mountPath: /etc/ngf/plm-client
-          readOnly: true
-      volumes:
-      - name: plm-ca-cert
-        secret:
-          secretName: plm-storage-ca-cert
-      - name: plm-client-cert
-        secret:
-          secretName: plm-storage-client-cert
-```
+| CLI Argument                             | Description                                                    | Default | Required         |
+|------------------------------------------|----------------------------------------------------------------|---------|------------------|
+| `--plm-storage-url`                      | PLM storage service URL (HTTP or HTTPS)                        | -       | When WAF enabled |
+| `--plm-storage-credentials-secret`       | Name of Secret containing S3 credentials                       | -       | No*              |
+| `--plm-storage-tls-secret`               | Name of Secret containing TLS certificates                     | -       | No               |
+| `--plm-storage-tls-insecure-skip-verify` | Skip TLS certificate verification                              | false   | No               |
 
-**Configuration Options:**
+\* Credentials may be required depending on PLM storage RBAC configuration.
 
-| CLI Argument                            | Description                                           | Default | Required         |
-|-----------------------------------------|-------------------------------------------------------|---------|------------------|
-| `--plm-storage-url`                     | PLM storage service URL (HTTP or HTTPS)               | -       | When WAF enabled |
-| `--plm-storage-tls-ca-cert`             | Path to CA certificate file for TLS verification      | -       | No               |
-| `--plm-storage-tls-client-cert`         | Path to client certificate file for mutual TLS        | -       | No               |
-| `--plm-storage-tls-client-key`          | Path to client key file for mutual TLS                | -       | No               |
-| `--plm-storage-tls-insecure-skip-verify`| Skip TLS certificate verification                     | false   | No               |
+#### Security Recommendations
 
-**Security Recommendations:**
-
-- **Development**: Use HTTP without TLS for simplicity: `--plm-storage-url=http://plm-storage-service...`
-- **Production**: Always use HTTPS with CA validation: `--plm-storage-url=https://...` and `--plm-storage-tls-ca-cert=...`
-- **High Security**: Use mutual TLS with client certificates
+- **Development**: Use HTTP without TLS for simplicity, or HTTPS with `--plm-storage-tls-insecure-skip-verify=true`
+- **Production**: Always use HTTPS with proper TLS verification via `--plm-storage-tls-secret`
+- **High Security**: Enable mutual TLS by including `tls.crt` and `tls.key` in the TLS Secret
 - **Never use** `--plm-storage-tls-insecure-skip-verify=true` in production
+
+#### Design Decision: Reading Secrets via API vs Volume Mounts
+
+Two approaches were considered for accessing PLM storage credentials and TLS certificates:
+
+1. **Reading Secrets via Kubernetes API** (watching Secrets):
+   - More responsive to changes (immediate)
+   - Requires additional controller logic to watch Secrets and recreate S3 client
+   - Adds complexity and potential failure modes
+
+2. **Reading Secrets via API at startup** (current approach):
+   - Simpler implementation - read Secret contents once at startup
+   - Consistent with how NGF handles other secrets (Plus license, usage reporting)
+   - Credential rotation requires pod restart
+   - No additional controller complexity
+
+The current design uses approach #2 (reading at startup) because:
+- PLM storage credentials are unlikely to rotate frequently
+- Simplicity and consistency with existing patterns outweigh the benefit of dynamic reloading
+- A pod restart is a reasonable expectation for credential rotation
+
+Dynamic credential reloading can be added in the future if there's a demonstrated need.
+
+#### Open Questions (PLM Integration)
+
+The following details depend on PLM's final implementation:
+
+1. **Authentication mechanism**: Will PLM use static S3 credentials, or support other authentication methods (e.g., IAM roles, service account tokens)?
+2. **Credential provisioning**: How will credentials be provisioned to NGF? Will PLM create the Secret, or will operators need to create it manually?
+3. **TLS requirements**: Will TLS be required in production? What certificate chain will PLM storage use?
+4. **Credential rotation**: Will PLM support credential rotation, and if so, how will NGF be notified?
+
+These questions will be resolved as PLM development progresses
 
 ### NginxProxy Resource Extension
 
@@ -467,8 +500,8 @@ metadata:
   namespace: applications
 spec:
   # Policy attachment - targets Gateway for inherited protection
-  targetRef:
-    group: gateway.networking.k8s.io
+  targetRefs:
+  - group: gateway.networking.k8s.io
     kind: Gateway
     name: secure-gateway
     namespace: applications
@@ -508,8 +541,8 @@ metadata:
   namespace: applications
 spec:
   # Policy attachment - targets specific HTTPRoute to override Gateway policy
-  targetRef:
-    group: gateway.networking.k8s.io
+  targetRefs:
+  - group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: admin-route
     namespace: applications
@@ -692,7 +725,7 @@ spec:
     backendRefs:
     - name: admin-service
       port: 8080
-  # Uses admin-strict-policy WAFGatewayBindingPolicy override via targetRef
+  # Uses admin-strict-policy WAFGatewayBindingPolicy override via targetRefs
 ```
 
 #### GRPCRoute Integration
@@ -748,23 +781,39 @@ The `WAFGatewayBindingPolicy` CRD includes the `gateway.networking.k8s.io/policy
 
 ### Status Conditions
 
-The `WAFGatewayBindingPolicy` includes status conditions following Gateway API policy patterns:
+The `WAFGatewayBindingPolicy` includes status conditions following Gateway API policy patterns. Each condition has a Type and Reason:
 
-| **Reason**                    | **Description**                                                                                   | **Example Message**                                               |
-|-------------------------------|---------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
-| **Accepted**                  | Policy is valid and accepted                                                                      | "Policy is accepted and watching ApPolicy and ApLogConf status"   |
-| **ApPolicyNotFound**          | Referenced ApPolicy does not exist                                                                | "ApPolicy 'prod-policy' not found in namespace 'security'"        |
-| **ApPolicyNotCompiled**       | Referenced ApPolicy exists but is not yet compiled                                                | "ApPolicy is not yet compiled by PLM"                             |
-| **ApLogConfNotFound**         | Referenced ApLogConf does not exist                                                               | "ApLogConf 'log-profile' not found in namespace 'security'"       |
-| **ApLogConfNotCompiled**      | Referenced ApLogConf exists but is not yet compiled                                               | "ApLogConf is not yet compiled by PLM"                            |
-| **PolicyFetchError**          | Failed to fetch policy bundle from storage location                                               | "Failed to fetch policy bundle from in-cluster storage: timeout"  |
-| **LogProfileFetchError**      | Failed to fetch log profile bundle from storage location                                          | "Failed to fetch log profile bundle from in-cluster storage"      |
-| **PolicyIntegrityInvalid**    | Checksum verification failed for policy bundle                                                    | "Policy integrity check failed: checksum mismatch"                |
-| **LogProfileIntegrityInvalid**| Checksum verification failed for log profile bundle                                               | "Log profile integrity check failed: checksum mismatch"           |
-| **PolicyDeployed**            | Policy and log profiles successfully deployed to data plane                                       | "Policy and log profiles successfully deployed to Gateway"        |
-| **PolicyDeployedUpdate**      | Updated policy or log profiles successfully deployed                                              | "Policy update successfully deployed"                             |
-| **PolicyDeploymentError**     | Data plane failed to apply policy or log profiles                                                 | "Failed to deploy WAF policy to NGINX Pods"                       |
-| **ReferenceNotPermitted**     | Cross-namespace reference not allowed by ReferenceGrant                                           | "Cross-namespace ApPolicy reference requires ReferenceGrant"      |
+#### Accepted Condition
+
+The `Accepted` condition indicates whether the policy is valid and can be applied.
+
+| **Reason**           | **Status** | **Description**                                                   | **Example Message**                                                    |
+|----------------------|------------|-------------------------------------------------------------------|------------------------------------------------------------------------|
+| `Accepted`           | True       | Policy is valid and accepted                                      | "The Policy is accepted"                                               |
+| `Invalid`            | False      | Policy is syntactically or semantically invalid                   | "spec.apPolicySource.name is required"                                 |
+| `TargetNotFound`     | False      | Target Gateway or Route does not exist                            | "Gateway 'secure-gateway' not found in namespace 'applications'"       |
+| `Conflicted`         | False      | Another WAFGatewayBindingPolicy targets the same resource         | "WAFGatewayBindingPolicy 'other-policy' already targets this Gateway"  |
+
+#### ResolvedRefs Condition
+
+The `ResolvedRefs` condition indicates whether all referenced resources (ApPolicy, ApLogConf) are resolved and valid.
+
+| **Reason**           | **Status** | **Description**                                                   | **Example Message**                                                    |
+|----------------------|------------|-------------------------------------------------------------------|------------------------------------------------------------------------|
+| `ResolvedRefs`       | True       | All ApPolicy and ApLogConf references are resolved                | "All references are resolved"                                          |
+| `InvalidRef`         | False      | Referenced ApPolicy or ApLogConf does not exist or is not compiled| "ApPolicy 'prod-policy' not found in namespace 'security'"             |
+| `RefNotPermitted`    | False      | Cross-namespace reference not allowed by ReferenceGrant           | "Cross-namespace ApPolicy reference requires ReferenceGrant"           |
+
+#### Programmed Condition (Optional)
+
+The `Programmed` condition indicates whether the policy has been successfully deployed to the data plane.
+
+| **Reason**           | **Status** | **Description**                                                   | **Example Message**                                                    |
+|----------------------|------------|-------------------------------------------------------------------|------------------------------------------------------------------------|
+| `Programmed`         | True       | Policy and log profiles deployed to data plane                    | "Policy successfully deployed to Gateway"                              |
+| `FetchError`         | False      | Failed to fetch bundle from PLM storage                           | "Failed to fetch policy bundle: connection timeout"                    |
+| `IntegrityError`     | False      | Checksum verification failed                                      | "Policy integrity check failed: checksum mismatch"                     |
+| `DeploymentError`    | False      | Data plane failed to apply policy                                 | "Failed to deploy WAF policy to NGINX Pods"                            |
 
 ### Example WAFGatewayBindingPolicy Status
 
@@ -779,8 +828,13 @@ status:
     conditions:
     - type: Accepted
       status: "True"
-      reason: PolicyDeployed
-      message: "Policy and log profiles successfully deployed to Gateway"
+      reason: Accepted
+      message: "The Policy is accepted"
+      lastTransitionTime: "2025-08-15T10:35:00Z"
+    - type: ResolvedRefs
+      status: "True"
+      reason: ResolvedRefs
+      message: "All references are resolved"
       lastTransitionTime: "2025-08-15T10:35:00Z"
 
   # Additional status information
@@ -1003,20 +1057,36 @@ NGF control plane handles all external communication and policy/log profile dist
 
 ## Open Questions
 
-1. **Storage Service Specification**:
-   - What is the exact in-cluster storage service contract? Service name and namespace (e.g., plm-storage-service.plm-system.svc.cluster.local)?
-   - Rate limiting considerations
-   - TLS support and certificate requirements
-   - The API will be S3 confirmant, so we can use the AWS SDK
+1. **PLM Storage Service**:
+   - What is the exact in-cluster storage service endpoint? (e.g., `plm-storage-service.plm-system.svc.cluster.local`)
+   - Rate limiting considerations for bundle fetches
+   - The API will be S3 conformant, so we can use the AWS SDK
 
-2. **TLS Configuration**: What are the TLS requirements for production deployments?
-   - Should TLS be required by default or optional?
-   - Certificate format and validation requirements
+2. **Authentication and Credentials**:
+   - Will PLM use static S3 credentials, or support other authentication methods (e.g., IAM roles, service account tokens)?
+   - How will credentials be provisioned to NGF? Will PLM create the Secret, or will operators need to create it manually?
+   - Will PLM support credential rotation, and if so, how will NGF be notified?
+
+3. **TLS Configuration**:
+   - Will TLS be required in production?
+   - What certificate chain will PLM storage use?
    - Support for custom CA certificates
    - Mutual TLS requirements for enhanced security
 
-3. **Policy Reload Mechanism**: Does NGINX require reload when policies or log profiles change?
-   - No: can you use ap reload functionality (mechanism TBC)
+4. **Policy Reload Mechanism**: Does NGINX require reload when policies or log profiles change?
+   - No: can use NAP reload functionality (mechanism TBC)
+
+5. **Configuration Location (CLI flags vs NginxGateway CRD)**:
+   - PLM storage configuration is currently proposed as CLI flags/Helm values (set at install time)
+   - An alternative would be to configure PLM storage in the NginxGateway CRD, which would:
+     - Allow dynamic configuration changes without pod restart
+     - Consolidate control plane configuration in one Kubernetes-native resource
+     - Expand the NginxGateway CRD beyond just dynamic logging configuration
+   - Trade-offs to consider:
+     - PLM storage config is infrastructure-level and unlikely to change frequently
+     - Moving to CRD adds controller complexity for watching configuration changes
+     - Consistency concern: if some control plane config is in CRD and some in CLI flags, this may be confusing
+   - Decision deferred until PLM requirements are clearer and there's a broader vision for what NginxGateway CRD should contain
 
 ## References
 
@@ -1028,7 +1098,34 @@ NGF control plane handles all external communication and policy/log profile dist
 ## Appendix: Complete Configuration Example
 
 ```yaml
-# 1. NGF Deployment with PLM storage CLI arguments
+# 1. PLM Storage Credentials Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: plm-storage-credentials
+  namespace: nginx-gateway
+type: Opaque
+data:
+  accessKeyId: <base64-encoded-access-key>
+  secretAccessKey: <base64-encoded-secret-key>
+
+---
+# 2. PLM Storage TLS Secret (optional, for HTTPS with custom CA or mutual TLS)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: plm-storage-tls
+  namespace: nginx-gateway
+type: Opaque
+data:
+  ca.crt: <base64-encoded-ca-certificate>
+  # Optional: for mutual TLS
+  # tls.crt: <base64-encoded-client-certificate>
+  # tls.key: <base64-encoded-client-key>
+
+---
+# 3. NGF Deployment with PLM storage configuration
+# Note: When using Helm, these args are configured via values.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1045,23 +1142,11 @@ spec:
         - --gatewayclass=nginx
         # PLM storage configuration
         - --plm-storage-url=https://plm-storage-service.plm-system.svc.cluster.local
-        volumeMounts:
-        - name: plm-ca-cert
-          mountPath: /etc/ngf/plm-ca
-          readOnly: true
-        - name: plm-client-cert
-          mountPath: /etc/ngf/plm-client
-          readOnly: true
-      volumes:
-      - name: plm-ca-cert
-        secret:
-          secretName: plm-storage-ca-cert
-      - name: plm-client-cert
-        secret:
-          secretName: plm-storage-client-cert
+        - --plm-storage-credentials-secret=plm-storage-credentials
+        - --plm-storage-tls-secret=plm-storage-tls
 
 ---
-# 2. Enable WAF on NginxProxy
+# 4. Enable WAF on NginxProxy
 apiVersion: gateway.nginx.org/v1alpha2
 kind: NginxProxy
 metadata:
@@ -1177,10 +1262,10 @@ metadata:
   namespace: applications
 spec:
   targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: secure-gateway
-      namespace: applications
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: secure-gateway
+    namespace: applications
 
   apPolicySource:
     name: "production-web-policy"
