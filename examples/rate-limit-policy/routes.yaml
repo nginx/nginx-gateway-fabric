@@ -44,6 +44,8 @@ spec:
   parentRefs:
   - name: gateway
     sectionName: http
+  hostnames:
+  - "grpc.example.com"
   rules:
   - matches:
     - method:

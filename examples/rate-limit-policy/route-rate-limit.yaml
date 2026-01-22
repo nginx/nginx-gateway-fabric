@@ -1,20 +1,19 @@
 apiVersion: gateway.nginx.org/v1alpha1
 kind: RateLimitPolicy
 metadata:
-  name: grpcroute-rate-limit
+  name: route-rate-limit
 spec:
   targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
   - group: gateway.networking.k8s.io
     kind: GRPCRoute
     name: grpc-route
   rateLimit:
     local:
       rules:
-      - zoneSize: 20m
-        noDelay: true
-        burst: 5
+      - zoneSize: 10m
         key: "$binary_remote_addr"
-        rate: 20r/s
-    dryRun: true
-    logLevel: "warn"
-    rejectCode: 466
+        rate: 1r/s
+        burst: 3
