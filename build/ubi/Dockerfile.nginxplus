@@ -10,6 +10,8 @@ FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:2ffc9bc521deb28ae11b336c29
 
 FROM redhat/ubi9-minimal:9.7-1768783948 AS ubi-nginx-plus
 
+RUN microdnf -y update glib2 && microdnf clean all
+
 ARG NGINX_PLUS_VERSION=R36
 
 # renovate: datasource=github-tags depName=nginx/agent
