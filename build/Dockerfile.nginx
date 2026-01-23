@@ -6,6 +6,10 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/keys/nginx_signing.rsa.p
 
 FROM nginx:1.29.4-alpine-otel
 
+# the following apk update and add is to address CVE-2026-22801/CVE-2026-22695.
+# once a new base image is available with these package updates, this can be removed.
+RUN apk update && apk add --no-cache 'libpng>=1.6.54-r0'
+
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.6.2
 ARG NJS_DIR
