@@ -640,7 +640,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			expected:          &AuthenticationFilter{},
 		},
 		{
-			name: "invalid filter (Valid=false)",
+			name: "basic auth invalid",
 			filter: &graph.AuthenticationFilter{
 				Source: &ngfAPIv1alpha1.AuthenticationFilter{},
 				Valid:  false,
@@ -684,6 +684,61 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 					Realm:           "",
 				},
 			},
+		},
+		{
+			name: "basic auth secret not referenced and source is not nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Basic: &ngfAPIv1alpha1.BasicAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-basic"},
+							Realm:     "",
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: false,
+			},
+			referencedSecrets: map[types.NamespacedName]*graph.Secret{
+				{Namespace: "test", Name: "non-auth-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "non-auth-secret"},
+						Data: map[string][]byte{
+							graph.AuthKey: []byte("user:$apr1$cred"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{},
+		},
+		{
+			name: "basic auth secret referenced and source is nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Basic: &ngfAPIv1alpha1.BasicAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "auth-basic"},
+							Realm:     "",
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*graph.Secret{
+				{Namespace: "test", Name: "auth-basic"}: {
+					Source: nil,
+				},
+			},
+			expected: &AuthenticationFilter{},
 		},
 	}
 
