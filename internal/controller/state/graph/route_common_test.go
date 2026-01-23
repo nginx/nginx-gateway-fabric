@@ -2381,7 +2381,12 @@ func TestBindL4RouteToListeners(t *testing.T) {
 						Routes:     map[RouteKey]*L7Route{},
 						L4Routes: map[L4RouteKey]*L4Route{
 							// Pre-populate with an existing TCP route
-							{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tcp-route-1"}}: {
+							{
+								NamespacedName: types.NamespacedName{
+									Namespace: "test", Name: "tcp-route-1",
+								},
+								RouteType: RouteTypeTCP,
+							}: {
 								Source: &v1alpha2.TCPRoute{
 									ObjectMeta: metav1.ObjectMeta{
 										Namespace: "test",
@@ -2426,7 +2431,13 @@ func TestBindL4RouteToListeners(t *testing.T) {
 					Routes:     map[RouteKey]*L7Route{},
 					L4Routes: map[L4RouteKey]*L4Route{
 						// Should still have only the original route
-						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tcp-route-1"}}: {
+						{
+							NamespacedName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "tcp-route-1",
+							},
+							RouteType: RouteTypeTCP,
+						}: {
 							Source: &v1alpha2.TCPRoute{
 								ObjectMeta: metav1.ObjectMeta{
 									Namespace: "test",
@@ -2725,6 +2736,7 @@ func TestBuildL4RoutesForGatewaysTCPAndUDP(t *testing.T) {
 					route := routes[CreateRouteKeyL4(expectedRoute)]
 					g.Expect(route).ToNot(BeNil())
 					g.Expect(route.Source).To(Equal(tt.tlsRoutes[nsName]))
+					g.Expect(route.RouteType).To(Equal(RouteTypeTLS))
 				}
 			}
 
@@ -2734,6 +2746,7 @@ func TestBuildL4RoutesForGatewaysTCPAndUDP(t *testing.T) {
 					route := routes[CreateRouteKeyL4(expectedRoute)]
 					g.Expect(route).ToNot(BeNil())
 					g.Expect(route.Source).To(Equal(tt.tcpRoutes[nsName]))
+					g.Expect(route.RouteType).To(Equal(RouteTypeTCP))
 				}
 			}
 
@@ -2743,6 +2756,7 @@ func TestBuildL4RoutesForGatewaysTCPAndUDP(t *testing.T) {
 					route := routes[CreateRouteKeyL4(expectedRoute)]
 					g.Expect(route).ToNot(BeNil())
 					g.Expect(route.Source).To(Equal(tt.udpRoutes[nsName]))
+					g.Expect(route.RouteType).To(Equal(RouteTypeUDP))
 				}
 			}
 		})
@@ -2812,7 +2826,13 @@ func TestBindToListenerL4TCPUDPConflicts(t *testing.T) {
 			name:      "TCP route - same route attaches again (idempotent)",
 			routeKind: "TCPRoute",
 			existingRoutes: map[L4RouteKey]*L4Route{
-				{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tcp-route-1"}}: {},
+				{
+					NamespacedName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "tcp-route-1",
+					},
+					RouteType: RouteTypeTCP,
+				}: {},
 			},
 			currentRouteName:       "tcp-route-1",
 			expectedAllowed:        true,
@@ -2824,7 +2844,13 @@ func TestBindToListenerL4TCPUDPConflicts(t *testing.T) {
 			name:      "TCP route - different route conflicts",
 			routeKind: "TCPRoute",
 			existingRoutes: map[L4RouteKey]*L4Route{
-				{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tcp-route-1"}}: {},
+				{
+					NamespacedName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "tcp-route-1",
+					},
+					RouteType: RouteTypeTCP,
+				}: {},
 			},
 			currentRouteName:       "tcp-route-2",
 			expectedAllowed:        true,
@@ -2846,7 +2872,13 @@ func TestBindToListenerL4TCPUDPConflicts(t *testing.T) {
 			name:      "UDP route - same route attaches again (idempotent)",
 			routeKind: "UDPRoute",
 			existingRoutes: map[L4RouteKey]*L4Route{
-				{NamespacedName: types.NamespacedName{Namespace: "test", Name: "udp-route-1"}}: {},
+				{
+					NamespacedName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "udp-route-1",
+					},
+					RouteType: RouteTypeUDP,
+				}: {},
 			},
 			currentRouteName:       "udp-route-1",
 			expectedAllowed:        true,
@@ -2858,7 +2890,13 @@ func TestBindToListenerL4TCPUDPConflicts(t *testing.T) {
 			name:      "UDP route - different route conflicts",
 			routeKind: "UDPRoute",
 			existingRoutes: map[L4RouteKey]*L4Route{
-				{NamespacedName: types.NamespacedName{Namespace: "test", Name: "udp-route-1"}}: {},
+				{
+					NamespacedName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "udp-route-1",
+					},
+					RouteType: RouteTypeUDP,
+				}: {},
 			},
 			currentRouteName:       "udp-route-2",
 			expectedAllowed:        true,
@@ -2870,7 +2908,13 @@ func TestBindToListenerL4TCPUDPConflicts(t *testing.T) {
 			name:      "TLS route - multiple routes can attach (has hostname discriminator)",
 			routeKind: "TLSRoute",
 			existingRoutes: map[L4RouteKey]*L4Route{
-				{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tls-route-1"}}: {},
+				{
+					NamespacedName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "tls-route-1",
+					},
+					RouteType: RouteTypeTLS,
+				}: {},
 			},
 			currentRouteName:       "tls-route-2",
 			expectedAllowed:        true,

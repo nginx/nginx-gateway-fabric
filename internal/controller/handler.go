@@ -327,7 +327,7 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 					gw.Source,
 					v1.EventTypeWarning,
 					"GetServiceIPFailed",
-					"",
+					"None",
 					msg+": %s",
 					err.Error(),
 				)
@@ -367,7 +367,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 			gw.Source,
 			v1.EventTypeWarning,
 			"GetServiceIPFailed",
-			"",
+			"None",
 			msg+": %s",
 			err.Error(),
 		)
@@ -405,7 +405,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 				nil,
 				v1.EventTypeWarning,
 				"ListInferencePoolsFailed",
-				"",
+				"None",
 				msg+": %s",
 				err.Error(),
 			)
@@ -512,7 +512,7 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 			nil,
 			v1.EventTypeWarning,
 			"UpdateFailed",
-			"",
+			"None",
 			msg+": %s",
 			err.Error(),
 		)
@@ -725,7 +725,7 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 				},
 				v1.EventTypeWarning,
 				"ServiceCreateOrUpdateFailed",
-				"",
+				"None",
 				"%s %q: %v", msg, pool.Source.Name, err,
 			)
 			continue

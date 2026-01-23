@@ -1051,30 +1051,30 @@
           "title": "serviceAccount",
           "type": "object"
         },
+        "snippets": {
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable Snippets feature through SnippetsFilter and SnippetsPolicy APIs. SnippetsFilters allow inserting\nNGINX configuration into the generated NGINX config for HTTPRoute and GRPCRoute resources. SnippetsPolicies\nallow inserting NGINX configuration into the generated NGINX config for Gateway resources.",
+              "title": "enable",
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "title": "snippets",
+          "type": "object"
+        },
         "snippetsFilters": {
           "properties": {
             "enable": {
               "default": false,
-              "description": "Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the generated NGINX\nconfig for HTTPRoute and GRPCRoute resources.",
+              "description": "This flag is deprecated in favor of the snippets.enable flag. The latter will enable snippets for both SnippetsFilters\nand SnippetsPolicies. Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into\nthe generated NGINX config for HTTPRoute and GRPCRoute resources.",
               "title": "enable",
               "type": "boolean"
             }
           },
           "required": [],
           "title": "snippetsFilters",
-          "type": "object"
-        },
-        "snippetsPolicies": {
-          "properties": {
-            "enable": {
-              "default": false,
-              "description": "Enable SnippetsPolicies feature. SnippetsPolicies allow inserting NGINX configuration into the generated NGINX\nconfig for Gateway resources.",
-              "title": "enable",
-              "type": "boolean"
-            }
-          },
-          "required": [],
-          "title": "snippetsPolicies",
           "type": "object"
         },
         "terminationGracePeriodSeconds": {

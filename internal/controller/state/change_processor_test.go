@@ -426,7 +426,7 @@ var _ = Describe("ChangeProcessor", func() {
 				Logger:           logr.Discard(),
 				Validators:       createAlwaysValidValidators(),
 				MustExtractGVK:   kinds.NewMustExtractGKV(createScheme()),
-				SnippetsPolicies: true,
+				Snippets:         true,
 			})
 		})
 
@@ -950,7 +950,8 @@ var _ = Describe("ChangeProcessor", func() {
 				}
 
 				expRouteTR1 = &graph.L4Route{
-					Source: tr1,
+					Source:    tr1,
+					RouteType: graph.RouteTypeTLS,
 					ParentRefs: []graph.ParentRef{
 						{
 							Attachment: &graph.ParentRefAttachmentStatus{
@@ -986,7 +987,8 @@ var _ = Describe("ChangeProcessor", func() {
 				}
 
 				expRouteTR2 = &graph.L4Route{
-					Source: tr2,
+					Source:    tr2,
+					RouteType: graph.RouteTypeTLS,
 					ParentRefs: []graph.ParentRef{
 						{
 							Attachment: &graph.ParentRefAttachmentStatus{

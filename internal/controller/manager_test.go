@@ -221,10 +221,10 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "snippets policies enabled",
+			name: "snippets enabled",
 			cfg: config.Config{
 				GatewayClassName: gcName,
-				SnippetsPolicies: true,
+				Snippets:         true,
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
@@ -247,6 +247,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&gatewayv1.GRPCRouteList{},
 				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.SnippetsFilterList{},
 				&ngfAPIv1alpha1.SnippetsPolicyList{},
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
@@ -304,8 +305,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				GatewayClassName:     gcName,
 				ExperimentalFeatures: true,
 				InferenceExtension:   true,
-				SnippetsFilters:      true,
-				SnippetsPolicies:     true,
+				Snippets:             true,
 			},
 			discoveredCRDs: map[string]bool{
 				"BackendTLSPolicy": true,
