@@ -88,7 +88,11 @@ collector:
                 port: {{ .MetricsPort }}
     pipelines:
         metrics:
+{{- if .NginxOneReporting }}
+            "ngf":
+{{- else }}
             "default":
+{{- end}}
                 receivers: ["host_metrics", "nginx_metrics"]
                 exporters: ["prometheus"]
 {{- end }}
