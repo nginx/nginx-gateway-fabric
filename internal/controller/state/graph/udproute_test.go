@@ -309,8 +309,9 @@ func TestBuildUDPRoute(t *testing.T) {
 				{Namespace: "test", Name: "gateway"}: createGateway(),
 			},
 			expected: &L4Route{
-				Source: duplicateParentRefsUDPR,
-				Valid:  false,
+				Source:    duplicateParentRefsUDPR,
+				RouteType: RouteTypeUDP,
+				Valid:     false,
 			},
 		},
 		{
@@ -329,6 +330,7 @@ func TestBuildUDPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     noRulesUDPR,
+				RouteType:  RouteTypeUDP,
 				Valid:      false,
 				Attachable: false,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -346,6 +348,7 @@ func TestBuildUDPRoute(t *testing.T) {
 			services: map[types.NamespacedName]*apiv1.Service{},
 			expected: &L4Route{
 				Source:     backendRefDNEUDPR,
+				RouteType:  RouteTypeUDP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -377,6 +380,7 @@ func TestBuildUDPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     wrongBackendRefGroupUDPR,
+				RouteType:  RouteTypeUDP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -406,6 +410,7 @@ func TestBuildUDPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     wrongBackendRefKindUDPR,
+				RouteType:  RouteTypeUDP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -438,6 +443,7 @@ func TestBuildUDPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     diffNsBackendRefUDPR,
+				RouteType:  RouteTypeUDP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -468,6 +474,7 @@ func TestBuildUDPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     portNilBackendRefUDPR,
+				RouteType:  RouteTypeUDP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -503,6 +510,7 @@ func TestBuildUDPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     ipFamilyMismatchUDPR,
+				RouteType:  RouteTypeUDP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{
@@ -547,6 +555,7 @@ func TestBuildUDPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     validSingleBackendUDPR,
+				RouteType:  RouteTypeUDP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -577,6 +586,7 @@ func TestBuildUDPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     validMultiBackendUDPR,
+				RouteType:  RouteTypeUDP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
@@ -616,6 +626,7 @@ func TestBuildUDPRoute(t *testing.T) {
 			},
 			expected: &L4Route{
 				Source:     multiRuleUDPR,
+				RouteType:  RouteTypeUDP,
 				Valid:      true,
 				Attachable: true,
 				ParentRefs: []ParentRef{parentRefGraph},
