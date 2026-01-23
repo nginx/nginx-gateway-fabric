@@ -276,7 +276,7 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 
 	// List of distinct NGINX directives and their counts from SnippetsFilters, and SnippetsPolicy.
 	snippetsFiltersDirectives, snippetsFiltersDirectivesCount := collectSnippetsFilterDirectives(g)
-	SnippetsPoliciesDirectives, SnippetsPoliciesDirectivesCount := collectSnippetsPoliciesDirectives(g)
+	snippetsPoliciesDirectives, snippetsPoliciesDirectivesCount := collectSnippetsPoliciesDirectives(g)
 
 	nginxPodCount := getNginxPodCount(g, clusterInfo.NodeCount)
 
@@ -305,8 +305,8 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		FlagValues:                              c.cfg.Flags.Values,
 		SnippetsFiltersDirectives:               snippetsFiltersDirectives,
 		SnippetsFiltersDirectivesCount:          snippetsFiltersDirectivesCount,
-		SnippetsPoliciesDirectives:              SnippetsPoliciesDirectives,
-		SnippetsPoliciesDirectivesCount:         SnippetsPoliciesDirectivesCount,
+		SnippetsPoliciesDirectives:              snippetsPoliciesDirectives,
+		SnippetsPoliciesDirectivesCount:         snippetsPoliciesDirectivesCount,
 		NginxPodCount:                           nginxPodCount,
 		ControlPlanePodCount:                    int64(replicaCount),
 		NginxOneConnectionEnabled:               c.cfg.NginxOneConsoleConnection,
@@ -398,13 +398,12 @@ func computeRouteCount(
 	}
 
 	for _, r := range l4routes {
-		if r.RouteType == graph.RouteTypeTLS {
+		switch r.RouteType {
+		case graph.RouteTypeTLS:
 			tlsRouteCount++
-		}
-		if r.RouteType == graph.RouteTypeTCP {
+		case graph.RouteTypeTCP:
 			tcpRouteCount++
-		}
-		if r.RouteType == graph.RouteTypeUDP {
+		case graph.RouteTypeUDP:
 			udpRouteCount++
 		}
 	}
@@ -563,10 +562,12 @@ func parseNginxContext(ctx ngfAPI.NginxContext) string {
 
 func collectSnippetsFilterDirectives(g *graph.Graph) ([]string, []int64) {
 	directiveContextMap := make(map[sfDirectiveContext]int)
+
 	for _, sf := range g.SnippetsFilters {
 		if sf == nil {
 			continue
 		}
+
 		for nginxContext, snippetValue := range sf.Snippets {
 			directives := parseSnippetValueIntoDirectives(snippetValue)
 			for _, directive := range directives {
@@ -578,16 +579,19 @@ func collectSnippetsFilterDirectives(g *graph.Graph) ([]string, []int64) {
 			}
 		}
 	}
+
 	return parseDirectiveContextMapIntoLists(directiveContextMap)
 }
 
 func collectSnippetsPoliciesDirectives(g *graph.Graph) ([]string, []int64) {
 	directiveContextMap := make(map[sfDirectiveContext]int)
+
 	// Build a set of existing gateways to validate target references.
 	gatewaySet := make(map[types.NamespacedName]struct{}, len(g.Gateways))
 	for nsName := range g.Gateways {
 		gatewaySet[nsName] = struct{}{}
 	}
+
 	// Deduplicate policies by resource name.
 	// Avoids double counting when targeting multiple gateways.
 	processedPolicies := make(map[types.NamespacedName]struct{})
@@ -599,10 +603,12 @@ func collectSnippetsPoliciesDirectives(g *graph.Graph) ([]string, []int64) {
 		if !ok || sp == nil {
 			continue
 		}
+
 		// Deduplicate by policy resource name.
 		if _, seen := processedPolicies[policyKey.NsName]; seen {
 			continue
 		}
+
 		// Policy is considered attached when targeting at least one Gateway.
 		attached := false
 		for _, tr := range policy.TargetRefs {
@@ -628,6 +634,7 @@ func collectSnippetsPoliciesDirectives(g *graph.Graph) ([]string, []int64) {
 			}
 		}
 	}
+
 	return parseDirectiveContextMapIntoLists(directiveContextMap)
 }
 

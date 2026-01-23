@@ -329,16 +329,6 @@ var _ = Describe("Collector", Ordered, func() {
 								},
 							},
 						},
-						// // Extra gateway to test attachment of SnippetsPolicy.
-						// {Name: "gateway5"}: {
-						// 	EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-						// 		Kubernetes: &v1alpha2.KubernetesSpec{
-						// 			Deployment: &v1alpha2.DeploymentSpec{
-						// 				Replicas: helpers.GetPointer(int32(3)),
-						// 			},
-						// 		},
-						// 	},
-						// },
 					},
 					IgnoredGatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
 						{Name: "ignoredGC1"}: {},

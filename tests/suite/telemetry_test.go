@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -55,8 +54,6 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 			Expect(err).ToNot(HaveOccurred())
 			return strings.Contains(logs, "dataType: Str(ngf-product-telemetry)")
 		}
-
-		time.Sleep(10 * time.Minute)
 
 		// Wait until the collector has received the telemetry data
 		Eventually(matchFirstExpectedLine, "30s", "5s").Should(BeTrue())
