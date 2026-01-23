@@ -203,17 +203,18 @@ func convertAuthenticationFilter(
 	}
 
 	if specBasic := filter.Source.Spec.Basic; specBasic != nil {
-		// It is safe to assume the referenced secret exists and is valid due to prior validation.
-		referencedSecret := referencedSecrets[types.NamespacedName{
+		referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
 			Namespace: filter.Source.Namespace,
 			Name:      specBasic.SecretRef.Name,
 		}]
 
-		result.Basic = &AuthBasic{
-			SecretName:      specBasic.SecretRef.Name,
-			SecretNamespace: referencedSecret.Source.Namespace,
-			Data:            referencedSecret.Source.Data[graph.AuthKey],
-			Realm:           specBasic.Realm,
+		if isReferenced && referencedSecret.Source != nil {
+			result.Basic = &AuthBasic{
+				SecretName:      specBasic.SecretRef.Name,
+				SecretNamespace: referencedSecret.Source.Namespace,
+				Data:            referencedSecret.Source.Data[graph.AuthKey],
+				Realm:           specBasic.Realm,
+			}
 		}
 	}
 
