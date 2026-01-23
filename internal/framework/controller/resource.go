@@ -3,6 +3,7 @@ package controller
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 )
 
 const (
@@ -41,6 +42,9 @@ func truncateAndHashName(name string, suffix string) string {
 	if len(name) > maxNameLen {
 		truncName = name[:maxNameLen]
 	}
+
+	// Remove trailing dashes to avoid double-dash when separator is added
+	truncName = strings.TrimRight(truncName, sep)
 
 	return truncName + sep + hashStr + sep + suffix
 }
