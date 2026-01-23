@@ -110,7 +110,7 @@ spec:
         {{- end }}
         - --endpoint-picker-tls-skip-verify={{ .Values.nginxGateway.gwAPIInferenceExtension.endpointPicker.skipVerify }}
         {{- end }}
-        {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
+        {{- if .Values.nginxGateway.snippetsFilters.enable }}
         - --snippets-filters
         {{- end }}
         {{- if .Values.nginxGateway.snippets.enable }}

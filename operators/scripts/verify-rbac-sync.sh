@@ -56,7 +56,7 @@ echo "Rendering Helm chart with all features enabled..."
 HELM_RENDERED=$(helm template test "$HELM_CHART_DIR" \
     --set nginxGateway.gwAPIExperimentalFeatures.enable=true \
     --set nginxGateway.gwAPIInferenceExtension.enable=true \
-    --set nginxGateway.snippetsFilters.enable=true \
+    --set nginxGateway.snippets.enable=true \
     --set nginxGateway.leaderElection.enable=true \
     --set nginxGateway.productTelemetry.enable=true \
     --set nginx.plus=true \
