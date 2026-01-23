@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	SslProtocolsKey           = "nginx.org/ssl-protocols"
-	SslCiphersKey             = "nginx.org/ssl-ciphers"
-	SslPreferServerCiphersKey = "nginx.org/ssl-prefer-server-ciphers"
+	SSLProtocolsKey           = "nginx.org/ssl-protocols"
+	SSLCiphersKey             = "nginx.org/ssl-ciphers"
+	SSLPreferServerCiphersKey = "nginx.org/ssl-prefer-server-ciphers"
 
 	// Examples of allowed ciphers:
 	//
@@ -506,24 +506,24 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 
 func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (conds []conditions.Condition) {
 	supportedOptions := map[v1.AnnotationKey]bool{
-		SslProtocolsKey:           true,
-		SslCiphersKey:             true,
-		SslPreferServerCiphersKey: true,
+		SSLProtocolsKey:           true,
+		SSLCiphersKey:             true,
+		SSLPreferServerCiphersKey: true,
 	}
 
 	for optionKey, optionValue := range listener.TLS.Options {
 		if !supportedOptions[optionKey] {
 			path := tlsPath.Child("options").Key(string(optionKey))
 			valErr := field.NotSupported(path, optionKey, []string{
-				SslProtocolsKey,
-				SslCiphersKey,
-				SslPreferServerCiphersKey,
+				SSLProtocolsKey,
+				SSLCiphersKey,
+				SSLPreferServerCiphersKey,
 			})
 			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
 		}
 
 		// Validate ssl-protocols values
-		if optionKey == SslProtocolsKey {
+		if optionKey == SSLProtocolsKey {
 			allowedProtocols := make(map[string]bool)
 
 			for _, value := range sslProtocolsValues {
@@ -546,7 +546,7 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		}
 
 		// Validate ssl-prefer-server-ciphers values
-		if optionKey == SslPreferServerCiphersKey {
+		if optionKey == SSLPreferServerCiphersKey {
 			value := string(optionValue)
 			if value != "on" && value != "off" {
 				path := tlsPath.Child("options").Key(string(optionKey))
@@ -556,7 +556,7 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		}
 
 		// Validate ssl-ciphers values
-		if optionKey == SslCiphersKey {
+		if optionKey == SSLCiphersKey {
 			value := string(optionValue)
 			cipherRegex := regexp.MustCompile(sslCiphersRegx)
 			if !cipherRegex.MatchString(value) {

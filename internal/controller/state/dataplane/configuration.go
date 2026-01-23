@@ -861,13 +861,13 @@ func (*hostPathRules) buildSSL(listener *graph.Listener) *SSL {
 	}
 
 	if listener.Source.TLS != nil && listener.Source.TLS.Options != nil {
-		if protocols, ok := listener.Source.TLS.Options[graph.SslProtocolsKey]; ok {
+		if protocols, ok := listener.Source.TLS.Options[graph.SSLProtocolsKey]; ok {
 			ssl.Protocols = string(protocols)
 		}
-		if ciphers, ok := listener.Source.TLS.Options[graph.SslCiphersKey]; ok {
+		if ciphers, ok := listener.Source.TLS.Options[graph.SSLCiphersKey]; ok {
 			ssl.Ciphers = string(ciphers)
 		}
-		if prefer, ok := listener.Source.TLS.Options[graph.SslPreferServerCiphersKey]; ok {
+		if prefer, ok := listener.Source.TLS.Options[graph.SSLPreferServerCiphersKey]; ok {
 			ssl.PreferServerCiphers = (string(prefer) == "on")
 		}
 	}
