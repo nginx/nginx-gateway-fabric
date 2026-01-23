@@ -56,6 +56,16 @@ server {
     ssl_certificate {{ $s.SSL.Certificate }};
     ssl_certificate_key {{ $s.SSL.CertificateKey }};
 
+          {{- if $s.SSL.Protocols }}
+    ssl_protocols {{ $s.SSL.Protocols }};
+          {{- end }}
+          {{- if $s.SSL.Ciphers }}
+    ssl_ciphers {{ $s.SSL.Ciphers }};
+          {{- end }}
+          {{- if $s.SSL.PreferServerCiphers }}
+    ssl_prefer_server_ciphers on;
+          {{- end }}
+
           {{- if not $.DisableSNIHostValidation }}
     if ($ssl_server_name != $host) {
         return 421;

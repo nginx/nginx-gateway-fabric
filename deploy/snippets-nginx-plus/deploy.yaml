@@ -322,7 +322,6 @@ spec:
         - --metrics-port=9113
         - --health-port=8081
         - --leader-election-lock-name=nginx-gateway-leader-election
-        - --snippets-filters
         - --snippets
         env:
         - name: POD_NAMESPACE

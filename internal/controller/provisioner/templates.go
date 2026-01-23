@@ -79,6 +79,8 @@ auxiliary_command:
 {{- end }}
 {{- if .EnableMetrics }}
 collector:
+    log:
+       path: "stdout"
     exporters:
         prometheus:
             server:
@@ -86,7 +88,7 @@ collector:
                 port: {{ .MetricsPort }}
     pipelines:
         metrics:
-            "ngf":
+            "default":
                 receivers: ["host_metrics", "nginx_metrics"]
                 exporters: ["prometheus"]
 {{- end }}
