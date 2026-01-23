@@ -133,7 +133,10 @@ func TestExecuteServers(t *testing.T) {
 			{
 				Hostname: "cafe.example.com",
 				SSL: &dataplane.SSL{
-					KeyPairID: "test-keypair",
+					KeyPairID:           "test-keypair",
+					Protocols:           "TLSv1.2 TLSv1.3",
+					Ciphers:             "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
+					PreferServerCiphers: true,
 				},
 				Port: 8443,
 				PathRules: []dataplane.PathRule{
@@ -170,14 +173,17 @@ func TestExecuteServers(t *testing.T) {
 	}
 
 	expSubStrings := map[string]int{
-		"listen 8080 default_server;":                                        1,
-		"listen 8080;":                                                       2,
-		"listen 8443 ssl;":                                                   2,
-		"listen 8443 ssl default_server;":                                    1,
-		"server_name example.com;":                                           2,
-		"server_name cafe.example.com;":                                      2,
-		"ssl_certificate /etc/nginx/secrets/test-keypair.pem;":               2,
-		"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;":           2,
+		"listen 8080 default_server;":                              1,
+		"listen 8080;":                                             2,
+		"listen 8443 ssl;":                                         2,
+		"listen 8443 ssl default_server;":                          1,
+		"server_name example.com;":                                 2,
+		"server_name cafe.example.com;":                            2,
+		"ssl_certificate /etc/nginx/secrets/test-keypair.pem;":     2,
+		"ssl_certificate_key /etc/nginx/secrets/test-keypair.pem;": 2,
+		"ssl_protocols TLSv1.2 TLSv1.3;":                           1,
+		"ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5;": 1,
+		"ssl_prefer_server_ciphers on;":                                      1,
 		"proxy_ssl_server_name on;":                                          1,
 		"status_zone":                                                        0,
 		"include /etc/nginx/includes/location-snippet.conf":                  1,
@@ -237,6 +243,87 @@ func TestExecuteServers(t *testing.T) {
 	for _, res := range results {
 		g.Expect(expectedResults).To(HaveKey(res.dest), "executeServers returned unexpected result destination")
 
+		assertData := expectedResults[res.dest]
+		assertData(g, string(res.data))
+	}
+}
+
+func TestExecuteServers_TLSOptions(t *testing.T) {
+	t.Parallel()
+	conf := dataplane.Configuration{
+		SSLServers: []dataplane.VirtualServer{
+			{
+				Hostname: "test-protocols-only.com",
+				SSL: &dataplane.SSL{
+					KeyPairID: "test-keypair-1",
+					Protocols: "TLSv1.3",
+				},
+				Port: 8443,
+			},
+			{
+				Hostname: "test-ciphers-only.com",
+				SSL: &dataplane.SSL{
+					KeyPairID: "test-keypair-2",
+					Ciphers:   "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384",
+				},
+				Port: 8443,
+			},
+			{
+				Hostname: "test-prefer-server-ciphers.com",
+				SSL: &dataplane.SSL{
+					KeyPairID:           "test-keypair-3",
+					PreferServerCiphers: true,
+				},
+				Port: 8443,
+			},
+			{
+				Hostname: "test-all-options.com",
+				SSL: &dataplane.SSL{
+					KeyPairID:           "test-keypair-4",
+					Protocols:           "TLSv1.2 TLSv1.3",
+					Ciphers:             "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
+					PreferServerCiphers: true,
+				},
+				Port: 8443,
+			},
+		},
+	}
+
+	expSubStrings := map[string]int{
+		"ssl_protocols TLSv1.3;": 1,
+		"ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;":                1,
+		"ssl_prefer_server_ciphers on;":                                                         2,
+		"ssl_protocols TLSv1.2 TLSv1.3;":                                                        1,
+		"ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5;": 1,
+		"ssl_certificate /etc/nginx/secrets/test-keypair-1.pem;":                                1,
+		"ssl_certificate /etc/nginx/secrets/test-keypair-2.pem;":                                1,
+		"ssl_certificate /etc/nginx/secrets/test-keypair-3.pem;":                                1,
+		"ssl_certificate /etc/nginx/secrets/test-keypair-4.pem;":                                1,
+	}
+
+	type assertion func(g *WithT, data string)
+
+	expectedResults := map[string]assertion{
+		httpConfigFile: func(g *WithT, data string) {
+			for expSubStr, expCount := range expSubStrings {
+				g.Expect(strings.Count(data, expSubStr)).To(Equal(expCount))
+			}
+		},
+		httpMatchVarsFile: func(g *WithT, data string) {
+			g.Expect(data).To(Equal("{}"))
+		},
+	}
+
+	g := NewWithT(t)
+
+	fakeGenerator := &policiesfakes.FakeGenerator{}
+	gen := GeneratorImpl{}
+	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker)
+
+	g.Expect(results).To(HaveLen(len(expectedResults)))
+
+	for _, res := range results {
+		g.Expect(expectedResults).To(HaveKey(res.dest))
 		assertData := expectedResults[res.dest]
 		assertData(g, string(res.data))
 	}
