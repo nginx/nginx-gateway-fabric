@@ -150,7 +150,7 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.StringSlice("SnippetsFiltersDirectives", nil),
 		attribute.IntSlice("SnippetsFiltersDirectivesCount", nil),
 
-		// Nested GFResourceCounts attributes
+		// Nested NGFResourceCounts attributes
 		attribute.Int64("GatewayCount", 0),
 		attribute.Int64("GatewayClassCount", 0),
 		attribute.Int64("HTTPRouteCount", 0),
