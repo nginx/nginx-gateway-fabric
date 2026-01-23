@@ -105,8 +105,11 @@ type Return struct {
 
 // SSL holds all SSL related configuration.
 type SSL struct {
-	Certificate    string
-	CertificateKey string
+	Certificate         string
+	CertificateKey      string
+	Protocols           string
+	Ciphers             string
+	PreferServerCiphers bool
 }
 
 // StatusCode is an HTTP status code.
