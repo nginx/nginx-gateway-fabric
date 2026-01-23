@@ -546,72 +546,63 @@ type sfDirectiveContext struct {
 	context   string
 }
 
+func parseNginxContext(ctx ngfAPI.NginxContext) string {
+	switch ctx {
+	case ngfAPI.NginxContextMain:
+		return "main"
+	case ngfAPI.NginxContextHTTP:
+		return "http"
+	case ngfAPI.NginxContextHTTPServer:
+		return "server"
+	case ngfAPI.NginxContextHTTPServerLocation:
+		return "location"
+	default:
+		return "unknown"
+	}
+}
+
 func collectSnippetsFilterDirectives(g *graph.Graph) ([]string, []int64) {
 	directiveContextMap := make(map[sfDirectiveContext]int)
-
 	for _, sf := range g.SnippetsFilters {
 		if sf == nil {
 			continue
 		}
-
 		for nginxContext, snippetValue := range sf.Snippets {
-			var parsedContext string
-
-			switch nginxContext {
-			case ngfAPI.NginxContextMain:
-				parsedContext = "main"
-			case ngfAPI.NginxContextHTTP:
-				parsedContext = "http"
-			case ngfAPI.NginxContextHTTPServer:
-				parsedContext = "server"
-			case ngfAPI.NginxContextHTTPServerLocation:
-				parsedContext = "location"
-			default:
-				parsedContext = "unknown"
-			}
-
 			directives := parseSnippetValueIntoDirectives(snippetValue)
 			for _, directive := range directives {
 				directiveContext := sfDirectiveContext{
 					directive: directive,
-					context:   parsedContext,
+					context:   parseNginxContext(nginxContext),
 				}
 				directiveContextMap[directiveContext]++
 			}
 		}
 	}
-
 	return parseDirectiveContextMapIntoLists(directiveContextMap)
 }
 
 func collectSnippetsPoliciesDirectives(g *graph.Graph) ([]string, []int64) {
 	directiveContextMap := make(map[sfDirectiveContext]int)
-
 	// Build a set of existing gateways to validate target references.
 	gatewaySet := make(map[types.NamespacedName]struct{}, len(g.Gateways))
 	for nsName := range g.Gateways {
 		gatewaySet[nsName] = struct{}{}
 	}
-
 	// Deduplicate policies by resource name.
 	// Avoids double counting when targeting multiple gateways.
 	processedPolicies := make(map[types.NamespacedName]struct{})
-
 	for policyKey, policy := range g.NGFPolicies {
 		if policyKey.GVK.Kind != kinds.SnippetsPolicy {
 			continue
 		}
-
 		sp, ok := policy.Source.(*ngfAPI.SnippetsPolicy)
 		if !ok || sp == nil {
 			continue
 		}
-
 		// Deduplicate by policy resource name.
 		if _, seen := processedPolicies[policyKey.NsName]; seen {
 			continue
 		}
-
 		// Policy is considered attached when targeting at least one Gateway.
 		attached := false
 		for _, tr := range policy.TargetRefs {
@@ -625,36 +616,18 @@ func collectSnippetsPoliciesDirectives(g *graph.Graph) ([]string, []int64) {
 		if !attached {
 			continue
 		}
-
 		processedPolicies[policyKey.NsName] = struct{}{}
-
 		for _, snippet := range sp.Spec.Snippets {
-			var parsedContext string
-
-			switch snippet.Context {
-			case ngfAPI.NginxContextMain:
-				parsedContext = "main"
-			case ngfAPI.NginxContextHTTP:
-				parsedContext = "http"
-			case ngfAPI.NginxContextHTTPServer:
-				parsedContext = "server"
-			case ngfAPI.NginxContextHTTPServerLocation:
-				parsedContext = "location"
-			default:
-				parsedContext = "unknown"
-			}
-
 			directives := parseSnippetValueIntoDirectives(snippet.Value)
 			for _, directive := range directives {
 				directiveContext := sfDirectiveContext{
 					directive: directive,
-					context:   parsedContext,
+					context:   parseNginxContext(snippet.Context),
 				}
 				directiveContextMap[directiveContext]++
 			}
 		}
 	}
-
 	return parseDirectiveContextMapIntoLists(directiveContextMap)
 }
 

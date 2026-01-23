@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -55,6 +56,8 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 			return strings.Contains(logs, "dataType: Str(ngf-product-telemetry)")
 		}
 
+		time.Sleep(10 * time.Minute)
+
 		// Wait until the collector has received the telemetry data
 		Eventually(matchFirstExpectedLine, "30s", "5s").Should(BeTrue())
 
@@ -93,6 +96,12 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 				"SnippetsFilterCount: Int(0)",
 				"UpstreamSettingsPolicyCount: Int(0)",
 				"GatewayAttachedNpCount: Int(0)",
+				"GatewayAttachedRateLimitPolicyCount: Int(0)",
+				"RouteAttachedRateLimitPolicyCount: Int(0)",
+				"AuthenticationFilterCount: Int(0)",
+				"SnippetsPolicyCount: Int(0)",
+				"TCPRouteCount: Int(0)",
+				"UDPRouteCount: Int(0)",
 				"NginxPodCount: Int(0)",
 				"ControlPlanePodCount: Int(1)",
 				"NginxOneConnectionEnabled: Bool(false)",
@@ -100,6 +109,8 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 				"BuildOS:",
 				"GatewayAttachedProxySettingsPolicyCount: Int(0)",
 				"RouteAttachedProxySettingsPolicyCount: Int(0)",
+				"SnippetsPoliciesDirectives: Slice",
+				"SnippetsPoliciesDirectivesCount: Slice",
 			},
 		)
 	})
