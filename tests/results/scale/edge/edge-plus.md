@@ -6,14 +6,14 @@ NGINX Plus: true
 
 NGINX Gateway Fabric:
 
-- Commit: 89aee48bf6e660a828ffd32ca35fc7f52e358e00
-- Date: 2025-12-12T20:04:38Z
+- Commit: eb3a090367b0c4a450224993fc4eed39e6dd9dc4
+- Date: 2026-01-22T21:37:34Z
 - Dirty: false
 
 GKE Cluster:
 
 - Node count: 12
-- k8s version: v1.33.5-gke.1308000
+- k8s version: v1.33.5-gke.2072000
 - vCPUs per node: 16
 - RAM per node: 65851520Ki
 - Max pods per node: 110
@@ -24,19 +24,19 @@ GKE Cluster:
 
 ### Event Batch Processing
 
-- Total: 249
-- Average Time: 16ms
+- Total: 250
+- Average Time: 15ms
 - Event Batch Processing distribution:
-	- 500.0ms: 243
-	- 1000.0ms: 249
-	- 5000.0ms: 249
-	- 10000.0ms: 249
-	- 30000.0ms: 249
-	- +Infms: 249
+	- 500.0ms: 245
+	- 1000.0ms: 250
+	- 5000.0ms: 250
+	- 10000.0ms: 250
+	- 30000.0ms: 250
+	- +Infms: 250
 
 ### Errors
 
-- NGF errors: 3
+- NGF errors: 2
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -50,19 +50,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 321
-- Average Time: 14ms
+- Total: 314
+- Average Time: 11ms
 - Event Batch Processing distribution:
-	- 500.0ms: 315
-	- 1000.0ms: 320
-	- 5000.0ms: 321
-	- 10000.0ms: 321
-	- 30000.0ms: 321
-	- +Infms: 321
+	- 500.0ms: 309
+	- 1000.0ms: 314
+	- 5000.0ms: 314
+	- 10000.0ms: 314
+	- 30000.0ms: 314
+	- +Infms: 314
 
 ### Errors
 
-- NGF errors: 1
+- NGF errors: 2
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -76,15 +76,15 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 1310
-- Average Time: 166ms
+- Total: 1360
+- Average Time: 157ms
 - Event Batch Processing distribution:
-	- 500.0ms: 1235
-	- 1000.0ms: 1310
-	- 5000.0ms: 1310
-	- 10000.0ms: 1310
-	- 30000.0ms: 1310
-	- +Infms: 1310
+	- 500.0ms: 1355
+	- 1000.0ms: 1360
+	- 5000.0ms: 1360
+	- 10000.0ms: 1360
+	- 30000.0ms: 1360
+	- +Infms: 1360
 
 ### Errors
 
@@ -102,19 +102,19 @@ The logs are attached only if there are errors.
 
 ### Event Batch Processing
 
-- Total: 83
-- Average Time: 209ms
+- Total: 145
+- Average Time: 155ms
 - Event Batch Processing distribution:
-	- 500.0ms: 69
-	- 1000.0ms: 81
-	- 5000.0ms: 83
-	- 10000.0ms: 83
-	- 30000.0ms: 83
-	- +Infms: 83
+	- 500.0ms: 144
+	- 1000.0ms: 145
+	- 5000.0ms: 145
+	- 10000.0ms: 145
+	- 30000.0ms: 145
+	- +Infms: 145
 
 ### Errors
 
-- NGF errors: 1
+- NGF errors: 2
 - NGF container restarts: 0
 - NGINX errors: 0
 - NGINX container restarts: 0
@@ -127,9 +127,9 @@ The logs are attached only if there are errors.
 ## Test TestScale_HTTPMatches
 
 ```text
-Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
-Duration      [total, attack, wait]             30s, 29.999s, 951.219µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  728.696µs, 964.757µs, 943.409µs, 1.057ms, 1.107ms, 1.273ms, 13.167ms
+Requests      [total, rate, throughput]         30000, 1000.03, 1000.01
+Duration      [total, attack, wait]             30s, 29.999s, 665.716µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  571.778µs, 743.901µs, 715.677µs, 807.185µs, 844.855µs, 1.009ms, 32.795ms
 Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
@@ -137,9 +137,9 @@ Status Codes  [code:count]                      200:30000
 Error Set:
 ```
 ```text
-Requests      [total, rate, throughput]         30000, 1000.04, 1000.01
-Duration      [total, attack, wait]             30s, 29.999s, 965.495µs
-Latencies     [min, mean, 50, 90, 95, 99, max]  828.389µs, 1.069ms, 1.046ms, 1.169ms, 1.226ms, 1.407ms, 16.348ms
+Requests      [total, rate, throughput]         30000, 1000.02, 1000.00
+Duration      [total, attack, wait]             30s, 29.999s, 797.277µs
+Latencies     [min, mean, 50, 90, 95, 99, max]  686.032µs, 889.101µs, 865.087µs, 962.117µs, 1.003ms, 1.19ms, 24.292ms
 Bytes In      [total, mean]                     4830000, 161.00
 Bytes Out     [total, mean]                     0, 0.00
 Success       [ratio]                           100.00%
