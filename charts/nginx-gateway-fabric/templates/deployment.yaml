@@ -110,11 +110,11 @@ spec:
         {{- end }}
         - --endpoint-picker-tls-skip-verify={{ .Values.nginxGateway.gwAPIInferenceExtension.endpointPicker.skipVerify }}
         {{- end }}
-        {{- if .Values.nginxGateway.snippetsFilters.enable }}
+        {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
         - --snippets-filters
         {{- end }}
-        {{- if .Values.nginxGateway.snippetsPolicies.enable }}
-        - --snippets-policies
+        {{- if .Values.nginxGateway.snippets.enable }}
+        - --snippets
         {{- end }}
         {{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
         - --nginx-scc={{ include "nginx-gateway.scc-name" . }}-nginx

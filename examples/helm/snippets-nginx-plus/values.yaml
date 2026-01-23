@@ -1,6 +1,6 @@
 nginxGateway:
   name: nginx-gateway
-  snippetsFilters:
+  snippets:
     enable: true
 
 nginx:

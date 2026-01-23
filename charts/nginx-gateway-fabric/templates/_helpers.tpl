@@ -231,10 +231,10 @@ Create namespaced RBAC rules.
   - authenticationfilters
   - proxysettingspolicies
   - ratelimitpolicies
-  {{- if .Values.nginxGateway.snippetsFilters.enable }}
+  {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters
   {{- end }}
-  {{- if .Values.nginxGateway.snippetsPolicies.enable }}
+  {{- if .Values.nginxGateway.snippets.enable }}
   - snippetspolicies
   {{- end }}
   verbs:
@@ -250,10 +250,10 @@ Create namespaced RBAC rules.
   - authenticationfilters/status
   - proxysettingspolicies/status
   - ratelimitpolicies/status
-  {{- if .Values.nginxGateway.snippetsFilters.enable }}
+  {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters/status
   {{- end }}
-  {{- if .Values.nginxGateway.snippetsPolicies.enable }}
+  {{- if .Values.nginxGateway.snippets.enable }}
   - snippetspolicies/status
   {{- end }}
   verbs:

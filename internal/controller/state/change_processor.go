@@ -64,8 +64,8 @@ type ChangeProcessorConfig struct {
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
 	GatewayClassName string
-	// SnippetsPolicies indicates if SnippetsPolicies are enabled.
-	SnippetsPolicies bool
+	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
+	Snippets bool
 	// FeaturesFlags holds the feature flags for building the Graph.
 	FeatureFlags graph.FeatureFlags
 }
@@ -255,7 +255,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		},
 	}
 
-	if cfg.SnippetsPolicies {
+	if cfg.Snippets {
 		trackingUpdaterCfg = append(trackingUpdaterCfg, changeTrackingUpdaterObjectTypeCfg{
 			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.SnippetsPolicy{}),
 			store:     commonPolicyObjectStore,

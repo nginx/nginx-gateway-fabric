@@ -11,11 +11,5 @@ spec:
     local:
       rules:
       - zoneSize: 10m
-        delay: 3
-        noDelay: false
-        burst: 5
         key: "$binary_remote_addr"
         rate: 10r/s
-    dryRun: false
-    logLevel: "info"
-    rejectCode: 429

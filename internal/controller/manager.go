@@ -156,7 +156,7 @@ func StartManager(cfg config.Config) error {
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
 		},
-		SnippetsPolicies: cfg.SnippetsPolicies,
+		Snippets: cfg.Snippets,
 	})
 
 	var handlerCollector handlerMetricsCollector = collectors.NewControllerNoopCollector()
@@ -361,7 +361,7 @@ func createPolicyManager(
 		},
 	}
 
-	if cfg.SnippetsPolicies {
+	if cfg.Snippets {
 		cfgs = append(cfgs, policies.ManagerConfig{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.SnippetsPolicy{}),
 			Validator: snippetspolicy.NewValidator(),
@@ -752,7 +752,7 @@ func registerControllers(
 		}
 	}
 
-	if cfg.SnippetsFilters {
+	if cfg.SnippetsFilters || cfg.Snippets {
 		controllerRegCfgs = append(controllerRegCfgs,
 			ctlrCfg{
 				objectType: &ngfAPIv1alpha1.SnippetsFilter{},
@@ -763,7 +763,7 @@ func registerControllers(
 		)
 	}
 
-	if cfg.SnippetsPolicies {
+	if cfg.Snippets {
 		controllerRegCfgs = append(controllerRegCfgs,
 			ctlrCfg{
 				objectType: &ngfAPIv1alpha1.SnippetsPolicy{},
@@ -1007,14 +1007,14 @@ func prepareFirstEventBatchPreparerArgs(
 		objectLists = append(objectLists, &inference.InferencePoolList{})
 	}
 
-	if cfg.SnippetsFilters {
+	if cfg.SnippetsFilters || cfg.Snippets {
 		objectLists = append(
 			objectLists,
 			&ngfAPIv1alpha1.SnippetsFilterList{},
 		)
 	}
 
-	if cfg.SnippetsPolicies {
+	if cfg.Snippets {
 		objectLists = append(
 			objectLists,
 			&ngfAPIv1alpha1.SnippetsPolicyList{},

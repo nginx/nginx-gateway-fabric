@@ -200,6 +200,7 @@ rules:
   - proxysettingspolicies
   - ratelimitpolicies
   - snippetsfilters
+  - snippetspolicies
   verbs:
   - list
   - watch
@@ -214,6 +215,7 @@ rules:
   - proxysettingspolicies/status
   - ratelimitpolicies/status
   - snippetsfilters/status
+  - snippetspolicies/status
   verbs:
   - update
 - apiGroups:
@@ -313,14 +315,11 @@ spec:
         - --config=nginx-gateway-config
         - --service=nginx-gateway
         - --agent-tls-secret=agent-tls
-        - --nginx-docker-secret=nginx-plus-registry-secret
-        - --nginx-plus
-        - --usage-report-secret=nplus-license
-        - --usage-report-enforce-initial-report=true
         - --metrics-port=9113
         - --health-port=8081
         - --leader-election-lock-name=nginx-gateway-leader-election
         - --snippets-filters
+        - --snippets
         env:
         - name: POD_NAMESPACE
           valueFrom:
@@ -470,7 +469,7 @@ spec:
       container:
         image:
           pullPolicy: Always
-          repository: private-registry.nginx.com/nginx-gateway-fabric/nginx-plus
+          repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
           tag: edge
       replicas: 1
     service:

@@ -426,7 +426,7 @@ var _ = Describe("ChangeProcessor", func() {
 				Logger:           logr.Discard(),
 				Validators:       createAlwaysValidValidators(),
 				MustExtractGVK:   kinds.NewMustExtractGKV(createScheme()),
-				SnippetsPolicies: true,
+				Snippets:         true,
 			})
 		})
 
