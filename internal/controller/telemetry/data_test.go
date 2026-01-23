@@ -41,6 +41,12 @@ func TestDataAttributes(t *testing.T) {
 			SnippetsFilterCount:                      13,
 			UpstreamSettingsPolicyCount:              14,
 			GatewayAttachedNpCount:                   15,
+			GatewayAttachedRateLimitPolicyCount:      19,
+			RouteAttachedRateLimitPolicyCount:        20,
+			AuthenticationFilterCount:                21,
+			SnippetsPolicyCount:                      22,
+			TCPRouteCount:                            23,
+			UDPRouteCount:                            24,
 		},
 		SnippetsFiltersDirectives:               []string{"main-three-count", "http-two-count", "server-one-count"},
 		SnippetsFiltersDirectivesCount:          []int64{3, 2, 1},
@@ -50,9 +56,14 @@ func TestDataAttributes(t *testing.T) {
 		InferencePoolCount:                      16,
 		GatewayAttachedProxySettingsPolicyCount: 17,
 		RouteAttachedProxySettingsPolicyCount:   18,
+		SnippetsPoliciesDirectives:              []string{"main-three-count", "http-two-count"},
+		SnippetsPoliciesDirectivesCount:         []int64{3, 2},
 	}
 
+	// Define the expected attributes
+	// Ordered by attributes defined in Data struct
 	expected := []attribute.KeyValue{
+		// Top level attributes
 		attribute.String("dataType", "ngf-product-telemetry"),
 		attribute.String("ImageSource", "local"),
 		attribute.String("ProjectName", "NGF"),
@@ -70,6 +81,8 @@ func TestDataAttributes(t *testing.T) {
 			[]string{"main-three-count", "http-two-count", "server-one-count"},
 		),
 		attribute.IntSlice("SnippetsFiltersDirectivesCount", []int{3, 2, 1}),
+
+		// Nested GFResourceCounts attributes
 		attribute.Int64("GatewayCount", 1),
 		attribute.Int64("GatewayClassCount", 2),
 		attribute.Int64("HTTPRouteCount", 3),
@@ -86,6 +99,14 @@ func TestDataAttributes(t *testing.T) {
 		attribute.Int64("SnippetsFilterCount", 13),
 		attribute.Int64("UpstreamSettingsPolicyCount", 14),
 		attribute.Int64("GatewayAttachedNpCount", 15),
+		attribute.Int64("GatewayAttachedRateLimitPolicyCount", 19),
+		attribute.Int64("RouteAttachedRateLimitPolicyCount", 20),
+		attribute.Int64("AuthenticationFilterCount", 21),
+		attribute.Int64("SnippetsPolicyCount", 22),
+		attribute.Int64("TCPRouteCount", 23),
+		attribute.Int64("UDPRouteCount", 24),
+
+		// Top level attributes
 		attribute.Int64("NginxPodCount", 3),
 		attribute.Int64("ControlPlanePodCount", 3),
 		attribute.Bool("NginxOneConnectionEnabled", true),
@@ -93,6 +114,11 @@ func TestDataAttributes(t *testing.T) {
 		attribute.String("BuildOS", ""),
 		attribute.Int64("GatewayAttachedProxySettingsPolicyCount", 17),
 		attribute.Int64("RouteAttachedProxySettingsPolicyCount", 18),
+		attribute.StringSlice(
+			"SnippetsPoliciesDirectives",
+			[]string{"main-three-count", "http-two-count"},
+		),
+		attribute.IntSlice("SnippetsPoliciesDirectivesCount", []int{3, 2}),
 	}
 
 	result := data.Attributes()
@@ -105,7 +131,10 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 	t.Parallel()
 	data := Data{}
 
+	// Define the expected attributes
+	// Ordered by attributes defined in Data struct
 	expected := []attribute.KeyValue{
+		// Top level attributes
 		attribute.String("dataType", "ngf-product-telemetry"),
 		attribute.String("ImageSource", ""),
 		attribute.String("ProjectName", ""),
@@ -120,6 +149,8 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.StringSlice("FlagValues", nil),
 		attribute.StringSlice("SnippetsFiltersDirectives", nil),
 		attribute.IntSlice("SnippetsFiltersDirectivesCount", nil),
+
+		// Nested GFResourceCounts attributes
 		attribute.Int64("GatewayCount", 0),
 		attribute.Int64("GatewayClassCount", 0),
 		attribute.Int64("HTTPRouteCount", 0),
@@ -136,6 +167,14 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.Int64("SnippetsFilterCount", 0),
 		attribute.Int64("UpstreamSettingsPolicyCount", 0),
 		attribute.Int64("GatewayAttachedNpCount", 0),
+		attribute.Int64("GatewayAttachedRateLimitPolicyCount", 0),
+		attribute.Int64("RouteAttachedRateLimitPolicyCount", 0),
+		attribute.Int64("AuthenticationFilterCount", 0),
+		attribute.Int64("SnippetsPolicyCount", 0),
+		attribute.Int64("TCPRouteCount", 0),
+		attribute.Int64("UDPRouteCount", 0),
+
+		// Top level attributes
 		attribute.Int64("NginxPodCount", 0),
 		attribute.Int64("ControlPlanePodCount", 0),
 		attribute.Bool("NginxOneConnectionEnabled", false),
@@ -143,6 +182,8 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.String("BuildOS", ""),
 		attribute.Int64("GatewayAttachedProxySettingsPolicyCount", 0),
 		attribute.Int64("RouteAttachedProxySettingsPolicyCount", 0),
+		attribute.StringSlice("SnippetsPoliciesDirectives", nil),
+		attribute.IntSlice("SnippetsPoliciesDirectivesCount", nil),
 	}
 
 	result := data.Attributes()

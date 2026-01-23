@@ -28,6 +28,12 @@ func (d *NGFResourceCounts) Attributes() []attribute.KeyValue {
 	attrs = append(attrs, attribute.Int64("SnippetsFilterCount", d.SnippetsFilterCount))
 	attrs = append(attrs, attribute.Int64("UpstreamSettingsPolicyCount", d.UpstreamSettingsPolicyCount))
 	attrs = append(attrs, attribute.Int64("GatewayAttachedNpCount", d.GatewayAttachedNpCount))
+	attrs = append(attrs, attribute.Int64("GatewayAttachedRateLimitPolicyCount", d.GatewayAttachedRateLimitPolicyCount))
+	attrs = append(attrs, attribute.Int64("RouteAttachedRateLimitPolicyCount", d.RouteAttachedRateLimitPolicyCount))
+	attrs = append(attrs, attribute.Int64("AuthenticationFilterCount", d.AuthenticationFilterCount))
+	attrs = append(attrs, attribute.Int64("SnippetsPolicyCount", d.SnippetsPolicyCount))
+	attrs = append(attrs, attribute.Int64("TCPRouteCount", d.TCPRouteCount))
+	attrs = append(attrs, attribute.Int64("UDPRouteCount", d.UDPRouteCount))
 
 	return attrs
 }

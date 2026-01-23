@@ -77,6 +77,15 @@ type Data struct { //nolint //required to skip golangci-lint-full fieldalignment
 	// RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
 	// attached at the Route level.
 	RouteAttachedProxySettingsPolicyCount int64
+	// SnippetsPoliciesDirectives contains the directive-context strings of all applied SnippetsPolicy.
+	// Both lists are ordered first by count, then by lexicographical order of the context string,
+	// then lastly by directive string.
+	SnippetsPoliciesDirectives []string
+	// SnippetsPoliciesDirectivesCount contains the count of the directive-context strings, where each count
+	// corresponds to the string from SnippetsPoliciesDirectives at the same index.
+	// Both lists are ordered first by count, then by lexicographical order of the context string,
+	// then lastly by directive string.
+	SnippetsPoliciesDirectivesCount []int64
 }
 
 // NGFResourceCounts stores the counts of all relevant resources that NGF processes and generates configuration from.
@@ -116,6 +125,18 @@ type NGFResourceCounts struct {
 	UpstreamSettingsPolicyCount int64
 	// GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway.
 	GatewayAttachedNpCount int64
+	// GatewayAttachedRateLimitPolicyCount is the number of RateLimitPolicy resources attached at the Gateway level.
+	GatewayAttachedRateLimitPolicyCount int64
+	// RouteAttachedRateLimitPolicyCount is the number of RateLimitPolicy resources attached at the Route level.
+	RouteAttachedRateLimitPolicyCount int64
+	// AuthenticationFilterCount is the number of AuthenticationFilters.
+	AuthenticationFilterCount int64
+	// SnippetsPolicyCount is the number of SnippetsPolicies.
+	SnippetsPolicyCount int64
+	// TCPRouteCount is the number of relevant TCPRoutes.
+	TCPRouteCount int64
+	// UDPRouteCount is the number of relevant UDPRoutes.
+	UDPRouteCount int64
 }
 
 func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
@@ -133,12 +154,35 @@ func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
 			} else {
 				rc.RouteAttachedClientSettingsPolicyCount++
 			}
+		case kinds.RateLimitPolicy:
+			if len(policy.TargetRefs) == 0 {
+				continue
+			}
+
+			// RateLimitPolicy can be attached to both Gateways and Routes.
+			// When targeting routes, it can target both HTTPRoute and GRPCRoute.
+			for _, targetRef := range policy.TargetRefs {
+				switch targetRef.Kind {
+				case kinds.Gateway:
+					rc.GatewayAttachedRateLimitPolicyCount++
+				case kinds.HTTPRoute, kinds.GRPCRoute:
+					rc.RouteAttachedRateLimitPolicyCount++
+				}
+			}
+
+		case kinds.SnippetsPolicy:
+			rc.SnippetsPolicyCount++
 		case kinds.ObservabilityPolicy:
 			rc.ObservabilityPolicyCount++
 		case kinds.UpstreamSettingsPolicy:
 			rc.UpstreamSettingsPolicyCount++
 		}
 	}
+}
+
+func (rc *NGFResourceCounts) CountFilters(g *graph.Graph) {
+	rc.AuthenticationFilterCount = int64(len(g.AuthenticationFilters))
+	rc.SnippetsFilterCount = int64(len(g.SnippetsFilters))
 }
 
 func CountProxySettingsPolicies(g *graph.Graph) (int64, int64) {
@@ -230,7 +274,9 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		return Data{}, fmt.Errorf("failed to get NGF deploymentID: %w", err)
 	}
 
+	// List of distinct NGINX directives and their counts from SnippetsFilters, and SnippetsPolicy.
 	snippetsFiltersDirectives, snippetsFiltersDirectivesCount := collectSnippetsFilterDirectives(g)
+	SnippetsPoliciesDirectives, SnippetsPoliciesDirectivesCount := collectSnippetsPoliciesDirectives(g)
 
 	nginxPodCount := getNginxPodCount(g, clusterInfo.NodeCount)
 
@@ -259,6 +305,8 @@ func (c DataCollectorImpl) Collect(ctx context.Context) (Data, error) {
 		FlagValues:                              c.cfg.Flags.Values,
 		SnippetsFiltersDirectives:               snippetsFiltersDirectives,
 		SnippetsFiltersDirectivesCount:          snippetsFiltersDirectivesCount,
+		SnippetsPoliciesDirectives:              SnippetsPoliciesDirectives,
+		SnippetsPoliciesDirectivesCount:         SnippetsPoliciesDirectivesCount,
 		NginxPodCount:                           nginxPodCount,
 		ControlPlanePodCount:                    int64(replicaCount),
 		NginxOneConnectionEnabled:               c.cfg.NginxOneConsoleConnection,
@@ -288,6 +336,8 @@ func collectGraphResourceCount(
 	ngfResourceCounts.HTTPRouteCount = routeCounts.HTTPRouteCount
 	ngfResourceCounts.GRPCRouteCount = routeCounts.GRPCRouteCount
 	ngfResourceCounts.TLSRouteCount = routeCounts.TLSRouteCount
+	ngfResourceCounts.TCPRouteCount = routeCounts.TCPRouteCount
+	ngfResourceCounts.UDPRouteCount = routeCounts.UDPRouteCount
 
 	ngfResourceCounts.SecretCount = int64(len(g.ReferencedSecrets))
 	ngfResourceCounts.ServiceCount = int64(len(g.ReferencedServices))
@@ -301,9 +351,9 @@ func collectGraphResourceCount(
 	}
 
 	ngfResourceCounts.CountPolicies(g)
+	ngfResourceCounts.CountFilters(g)
 
 	ngfResourceCounts.NginxProxyCount = int64(len(g.ReferencedNginxProxies))
-	ngfResourceCounts.SnippetsFilterCount = int64(len(g.SnippetsFilters))
 
 	var gatewayAttachedNPCount int64
 	if g.GatewayClass != nil && g.GatewayClass.NginxProxy != nil {
@@ -324,6 +374,8 @@ type RouteCounts struct {
 	HTTPRouteCount int64
 	GRPCRouteCount int64
 	TLSRouteCount  int64
+	TCPRouteCount  int64
+	UDPRouteCount  int64
 }
 
 func computeRouteCount(
@@ -332,6 +384,9 @@ func computeRouteCount(
 ) RouteCounts {
 	httpRouteCount := int64(0)
 	grpcRouteCount := int64(0)
+	tlsRouteCount := int64(0)
+	tcpRouteCount := int64(0)
+	udpRouteCount := int64(0)
 
 	for _, r := range routes {
 		if r.RouteType == graph.RouteTypeHTTP {
@@ -342,10 +397,24 @@ func computeRouteCount(
 		}
 	}
 
+	for _, r := range l4routes {
+		if r.RouteType == graph.RouteTypeTLS {
+			tlsRouteCount++
+		}
+		if r.RouteType == graph.RouteTypeTCP {
+			tcpRouteCount++
+		}
+		if r.RouteType == graph.RouteTypeUDP {
+			udpRouteCount++
+		}
+	}
+
 	return RouteCounts{
 		HTTPRouteCount: httpRouteCount,
 		GRPCRouteCount: grpcRouteCount,
-		TLSRouteCount:  int64(len(l4routes)),
+		TLSRouteCount:  tlsRouteCount,
+		TCPRouteCount:  tcpRouteCount,
+		UDPRouteCount:  udpRouteCount,
 	}
 }
 
@@ -502,6 +571,80 @@ func collectSnippetsFilterDirectives(g *graph.Graph) ([]string, []int64) {
 			}
 
 			directives := parseSnippetValueIntoDirectives(snippetValue)
+			for _, directive := range directives {
+				directiveContext := sfDirectiveContext{
+					directive: directive,
+					context:   parsedContext,
+				}
+				directiveContextMap[directiveContext]++
+			}
+		}
+	}
+
+	return parseDirectiveContextMapIntoLists(directiveContextMap)
+}
+
+func collectSnippetsPoliciesDirectives(g *graph.Graph) ([]string, []int64) {
+	directiveContextMap := make(map[sfDirectiveContext]int)
+
+	// Build a set of existing gateways to validate target references.
+	gatewaySet := make(map[types.NamespacedName]struct{}, len(g.Gateways))
+	for nsName := range g.Gateways {
+		gatewaySet[nsName] = struct{}{}
+	}
+
+	// Deduplicate policies by resource name.
+	// Avoids double counting when targeting multiple gateways.
+	processedPolicies := make(map[types.NamespacedName]struct{})
+
+	for policyKey, policy := range g.NGFPolicies {
+		if policyKey.GVK.Kind != kinds.SnippetsPolicy {
+			continue
+		}
+
+		sp, ok := policy.Source.(*ngfAPI.SnippetsPolicy)
+		if !ok || sp == nil {
+			continue
+		}
+
+		// Deduplicate by policy resource name.
+		if _, seen := processedPolicies[policyKey.NsName]; seen {
+			continue
+		}
+
+		// Policy is considered attached when targeting at least one Gateway.
+		attached := false
+		for _, tr := range policy.TargetRefs {
+			if tr.Kind == kinds.Gateway {
+				if _, exists := gatewaySet[tr.Nsname]; exists {
+					attached = true
+					break
+				}
+			}
+		}
+		if !attached {
+			continue
+		}
+
+		processedPolicies[policyKey.NsName] = struct{}{}
+
+		for _, snippet := range sp.Spec.Snippets {
+			var parsedContext string
+
+			switch snippet.Context {
+			case ngfAPI.NginxContextMain:
+				parsedContext = "main"
+			case ngfAPI.NginxContextHTTP:
+				parsedContext = "http"
+			case ngfAPI.NginxContextHTTPServer:
+				parsedContext = "server"
+			case ngfAPI.NginxContextHTTPServerLocation:
+				parsedContext = "location"
+			default:
+				parsedContext = "unknown"
+			}
+
+			directives := parseSnippetValueIntoDirectives(snippet.Value)
 			for _, directive := range directives {
 				directiveContext := sfDirectiveContext{
 					directive: directive,

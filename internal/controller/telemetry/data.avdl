@@ -105,6 +105,24 @@ attached at the Gateway level. */
 		/** GatewayAttachedNpCount is the total number of NginxProxy resources that are attached to a Gateway. */
 		long? GatewayAttachedNpCount = null;
 		
+		/** GatewayAttachedRateLimitPolicyCount is the number of RateLimitPolicy resources attached at the Gateway level. */
+		long? GatewayAttachedRateLimitPolicyCount = null;
+		
+		/** RouteAttachedRateLimitPolicyCount is the number of RateLimitPolicy resources attached at the Route level. */
+		long? RouteAttachedRateLimitPolicyCount = null;
+		
+		/** AuthenticationFilterCount is the number of AuthenticationFilters. */
+		long? AuthenticationFilterCount = null;
+		
+		/** SnippetsPolicyCount is the number of SnippetsPolicies. */
+		long? SnippetsPolicyCount = null;
+		
+		/** TCPRouteCount is the number of relevant TCPRoutes. */
+		long? TCPRouteCount = null;
+		
+		/** UDPRouteCount is the number of relevant UDPRoutes. */
+		long? UDPRouteCount = null;
+		
 		/** NginxPodCount is the total number of Nginx data plane Pods. */
 		long? NginxPodCount = null;
 		
@@ -127,6 +145,17 @@ attached at the Gateway level. */
 		/** RouteAttachedProxySettingsPolicyCount is the number of relevant ProxySettingsPolicies
 attached at the Route level. */
 		long? RouteAttachedProxySettingsPolicyCount = null;
+		
+		/** SnippetsPoliciesDirectives contains the directive-context strings of all applied SnippetsPolicy.
+Both lists are ordered first by count, then by lexicographical order of the context string,
+then lastly by directive string. */
+		union {null, array<string>} SnippetsPoliciesDirectives = null;
+		
+		/** SnippetsPoliciesDirectivesCount contains the count of the directive-context strings, where each count
+corresponds to the string from SnippetsPoliciesDirectives at the same index.
+Both lists are ordered first by count, then by lexicographical order of the context string,
+then lastly by directive string. */
+		union {null, array<long>} SnippetsPoliciesDirectivesCount = null;
 		
 	}
 }
