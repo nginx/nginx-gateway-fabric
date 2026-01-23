@@ -82,7 +82,7 @@ func TestDataAttributes(t *testing.T) {
 		),
 		attribute.IntSlice("SnippetsFiltersDirectivesCount", []int{3, 2, 1}),
 
-		// Nested GFResourceCounts attributes
+		// Nested NGFResourceCounts attributes
 		attribute.Int64("GatewayCount", 1),
 		attribute.Int64("GatewayClassCount", 2),
 		attribute.Int64("HTTPRouteCount", 3),
