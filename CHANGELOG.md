@@ -10,7 +10,7 @@ _January 28, 2026_
 
 FEATURES:
 
-- Add session persistence support for NGINX OSS and NGINX Plus. OSS and Plus users can configure `ip_hash` via `UpstreamSettingsPolicy` to provide client IP–based session affinity, while NGINX Plus users can configure `sessionPersistence` on `HTTPRoute` and `GRPCRoute` to enable cookie-based session persistence. Cookie-based session persistence is available only to NGINX Plus users and is currently in experimental mode. [4468](https://github.com/nginx/nginx-gateway-fabric/pull/4468)
+- Add session persistence support for NGINX OSS and NGINX Plus. OSS and Plus users can configure `ip_hash` via `UpstreamSettingsPolicy` to provide client IP–based session affinity, while NGINX Plus users can configure `sessionPersistence` on `HTTPRoute` and `GRPCRoute` to enable cookie-based session persistence. Cookie-based session persistence is available only to NGINX Plus users and is currently in experimental mode. [4471](https://github.com/nginx/nginx-gateway-fabric/pull/4471)
 - Support Rate Limiting through RateLimitPolicy. [4633](https://github.com/nginx/nginx-gateway-fabric/pull/4633)
 - Support watching subset of namespaces. [4606](https://github.com/nginx/nginx-gateway-fabric/pull/4606)
 - Allow users to specify `escape` format when customizing the data plane access logs. [4530](https://github.com/nginx/nginx-gateway-fabric/pull/4530). Thanks to [michasHL](https://github.com/michasHL).
@@ -20,11 +20,10 @@ FEATURES:
 - Add CRD discovery for BackendTLSPolicy and experimental CRDs to enable running in clusters with older Gateway API versions installed. [4569](https://github.com/nginx/nginx-gateway-fabric/pull/4569)
 - Support for Snippets at the Gateway level through SnippetsPolicy. [4461](https://github.com/nginx/nginx-gateway-fabric/pull/4461). Thanks to [fabian4](https://github.com/fabian4).
 - Add ability to configure proxy buffer settings through the new ProxySettingsPolicy API. [4592](https://github.com/nginx/nginx-gateway-fabric/pull/4592)
+- Add support for TLS options on Gateway. [4639](https://github.com/nginx/nginx-gateway-fabric/pull/4639)
 
 BUG FIXES:
 
-- Fix issue where agent's Pod IP cannot be used to track the connecting data plane Pod. [4470](https://github.com/nginx/nginx-gateway-fabric/pull/4470)
-- Fix an issue where nginx pod could not connect to control plane when hostnetwork is enabled. [4481](https://github.com/nginx/nginx-gateway-fabric/pull/4481)
 - Fix an issue where the data plane would restart whenever the control plane restarted. [4555](https://github.com/nginx/nginx-gateway-fabric/pull/4555)
 - Write agent collector logs to stdout instead of disk to fix memory consumption issues. [4656](https://github.com/nginx/nginx-gateway-fabric/pull/4656)
 
@@ -32,8 +31,13 @@ HELM CHART:
 
 - The version of the Helm chart is now 2.4.0
 - Allow setting priorityClassName on control plane pod. [4356](https://github.com/nginx/nginx-gateway-fabric/pull/4356). Thanks to [starlightromero](https://github.com/starlightromero).
-- Add support for the `Gatway.spec.tls` field. [4514](https://github.com/nginx/nginx-gateway-fabric/pull/4514). Thanks to [kwentine](https://github.com/kwentine).
+- Add support for the `gatway.spec.tls` field. [4514](https://github.com/nginx/nginx-gateway-fabric/pull/4514). Thanks to [kwentine](https://github.com/kwentine).
+- Add support for `gateway.spec.addresses` to Gateway configuration. [4605](https://github.com/nginx/nginx-gateway-fabric/pull/4605) Thanks to [rushikesh-outbound](https://github.com/rushikesh-outbound).
 - `nginxGateway.snippetsFilters.enable` value in the Helm chart and `--snippets-filters` flag in Kubernetes manifests has been deprecated in favour of the `nginxGateway.snippets.enable` value and `--snippets` flag. The new `snippets` value and flag will enable both `SnippetsFilter` and `SnippetsPolicy` APIs. View the updated guide on [Snippets](https://docs.nginx.com/nginx-gateway-fabric/traffic-management/snippets/) for more.
+
+MAINTENANCE:
+
+- Refactor unit tests to use `t.Context()` instead of `context.TODO()` or `context.Background()` to prevent potential goroutine leaks. [4355](https://github.com/nginx/nginx-gateway-fabric/pull/4355). Thanks to [richie-king](https://github.com/richie-king).
 
 COMPATIBILITY:
 
