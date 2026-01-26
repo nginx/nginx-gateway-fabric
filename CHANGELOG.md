@@ -6,66 +6,51 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.4.0
 
-* Use container UUID instead of IP address for tracking agent by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4470
-* Preserve external controller annotations for deployment and daemonSet by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4468
-* Add Session Persistence support for NGINX OSS and Plus users by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4471
-* Fix hostNetwork data plane pod connection issue by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4481
-* feat(chart): add priorityClassName for control plane pod by @starlightromero in https://github.com/nginx/nginx-gateway-fabric/pull/4356
-* Include Gateway TLS spec in Helm template by @kwentine in https://github.com/nginx/nginx-gateway-fabric/pull/4514
-* Allow users to specify  format when customizing the data plane access logs by @michasHL in https://github.com/nginx/nginx-gateway-fabric/pull/4530
-* Enables keepAlive directive to 16 by default by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4524
-* Add TCPRoute and UDPRoute Support for L4 Load Balancing by @Skcey in https://github.com/nginx/nginx-gateway-fabric/pull/4518
-* Prevent unnecessary data plane restarts by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4555
-* Support Basic Auth through AuthenticationFilter by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/4575
-* feat: Add CRD discovery for BackendTLSPolicy and experimental CRDs by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4569
-* Add SnippetsPolicy for Gateway level by @fabian4 in https://github.com/nginx/nginx-gateway-fabric/pull/4461
-* Add proxy settings policy by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4592
-* Support watching subset of namespaces by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4606
-* Support Rate Limiting through RateLimitPolicy by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/4633
-* Ensure agent collector logs go to stdout by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/4656
-
-%%DATE%%
+_January 28, 2026_
 
 FEATURES:
 
--
+- Add session persistence support for NGINX OSS and NGINX Plus. OSS and Plus users can configure `ip_hash` via `UpstreamSettingsPolicy` to provide client IP–based session affinity, while NGINX Plus users can configure `sessionPersistence` on `HTTPRoute` and `GRPCRoute` to enable cookie-based session persistence. Cookie-based session persistence is available only to NGINX Plus users and is currently in experimental mode. [4468](https://github.com/nginx/nginx-gateway-fabric/pull/4468)
+- Support Rate Limiting through RateLimitPolicy. [4633](https://github.com/nginx/nginx-gateway-fabric/pull/4633)
+- Support watching subset of namespaces. [4606](https://github.com/nginx/nginx-gateway-fabric/pull/4606)
+- Allow users to specify `escape` format when customizing the data plane access logs. [4530](https://github.com/nginx/nginx-gateway-fabric/pull/4530). Thanks to [michasHL](https://github.com/michasHL).
+- Enables the `keepAlive` directive with a default value of 16 to reduce connection setup overhead. This default can be overridden by an UpstreamSettingsPolicy, or disabled entirely by setting `keepAlive.connections` to 0. [4524](https://github.com/nginx/nginx-gateway-fabric/pull/4524)
+- Support for TCPRoute and UDPRoute. [4518](https://github.com/nginx/nginx-gateway-fabric/pull/4518). Thanks to [Skcey](https://github.com/Skcey).
+- Support Basic Auth through AuthenticationFilter. [4575](https://github.com/nginx/nginx-gateway-fabric/pull/4575)
+- Add CRD discovery for BackendTLSPolicy and experimental CRDs to enable running in clusters with older Gateway API versions installed. [4569](https://github.com/nginx/nginx-gateway-fabric/pull/4569)
+- Support for Snippets at the Gateway level through SnippetsPolicy. [4461](https://github.com/nginx/nginx-gateway-fabric/pull/4461). Thanks to [fabian4](https://github.com/fabian4).
+- Add ability to configure proxy buffer settings through the new ProxySettingsPolicy API. [4592](https://github.com/nginx/nginx-gateway-fabric/pull/4592)
 
 BUG FIXES:
 
--
-
-DOCUMENTATION:
-
--
+- Fix issue where agent's Pod IP cannot be used to track the connecting data plane Pod. [4470](https://github.com/nginx/nginx-gateway-fabric/pull/4470)
+- Fix an issue where nginx pod could not connect to control plane when hostnetwork is enabled. [4481](https://github.com/nginx/nginx-gateway-fabric/pull/4481)
+- Fix an issue where the data plane would restart whenever the control plane restarted. [4555](https://github.com/nginx/nginx-gateway-fabric/pull/4555)
+- Write agent collector logs to stdout instead of disk to fix memory consumption issues. [4656](https://github.com/nginx/nginx-gateway-fabric/pull/4656)
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.4.0
--
-
-UPGRADE:
-
--
-
-KNOWN ISSUES:
-
--
+- Allow setting priorityClassName on control plane pod. [4356](https://github.com/nginx/nginx-gateway-fabric/pull/4356). Thanks to [starlightromero](https://github.com/starlightromero).
+- Add support for the `Gatway.spec.tls` field. [4514](https://github.com/nginx/nginx-gateway-fabric/pull/4514). Thanks to [kwentine](https://github.com/kwentine).
+- `nginxGateway.snippetsFilters.enable` value in the Helm chart and `--snippets-filters` flag in Kubernetes manifests has been deprecated in favour of the `nginxGateway.snippets.enable` value and `--snippets` flag. The new `snippets` value and flag will enable both `SnippetsFilter` and `SnippetsPolicy` APIs. View the updated guide on [Snippets](https://docs.nginx.com/nginx-gateway-fabric/traffic-management/snippets/) for more.
 
 COMPATIBILITY:
 
-- Gateway API version: ``
-- Gateway API Inference Extension version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- NGINX Agent version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.4.1`
+- Gateway API Inference Extension version: `1.1.0`
+- NGINX version: `1.29.4`
+- NGINX Plus version: `R36`
+- NGINX Agent version: `v3.6.2`
+- Kubernetes version: `1.25+`
 
 CONTAINER IMAGES:
 
 - Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.4.0`
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.0`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.4.0`
-- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:2.4.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.2.0`
+
 ## Release 2.3.0
 
 _December 18, 2025_
