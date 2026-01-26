@@ -15,6 +15,7 @@ import (
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -34,7 +35,7 @@ var (
 			Name:      "plus-secret",
 		},
 		Data: map[string][]byte{
-			"license.jwt": []byte("license"),
+			secrets.LicenseJWTKey: []byte("license"),
 		},
 	}
 	convertedPlusSecret = map[types.NamespacedName][]PlusSecretFile{
@@ -42,7 +43,7 @@ var (
 			{
 				Type:      PlusReportJWTToken,
 				Content:   []byte("license"),
-				FieldName: "license.jwt",
+				FieldName: secrets.LicenseJWTKey,
 			},
 		},
 	}
@@ -472,7 +473,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					client.ObjectKeyFromObject(plusSecret): {
 						{
 							Type:      PlusReportJWTToken,
-							FieldName: "license.jwt",
+							FieldName: secrets.LicenseJWTKey,
 						},
 					},
 				},
@@ -728,13 +729,16 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 				ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{
 					client.ObjectKeyFromObject(nginxProxyGlobal): {Source: nginxProxyGlobal, Valid: true},
 				},
-				ReferencedSecrets: map[types.NamespacedName]*Secret{
+				ReferencedSecrets: map[types.NamespacedName]*secrets.Secret{
 					client.ObjectKeyFromObject(secretDiffNs): {
 						Source: secretDiffNs,
-						CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(secretDiffNs), "Secret", &Certificate{
-							TLSCert:       cert,
-							TLSPrivateKey: key,
-						}),
+						CertBundle: secrets.NewCertificateBundle(
+							client.ObjectKeyFromObject(secretDiffNs),
+							"Secret",
+							&secrets.Certificate{
+								TLSCert:       cert,
+								TLSPrivateKey: key,
+							}),
 					},
 				},
 			},
@@ -865,13 +869,16 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 				ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{
 					client.ObjectKeyFromObject(nginxProxyGlobal): {Source: nginxProxyGlobal, Valid: true},
 				},
-				ReferencedSecrets: map[types.NamespacedName]*Secret{
+				ReferencedSecrets: map[types.NamespacedName]*secrets.Secret{
 					client.ObjectKeyFromObject(secretSameNs): {
 						Source: secretSameNs,
-						CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(secretSameNs), "Secret", &Certificate{
-							TLSCert:       cert,
-							TLSPrivateKey: key,
-						}),
+						CertBundle: secrets.NewCertificateBundle(
+							client.ObjectKeyFromObject(secretSameNs),
+							"Secret",
+							&secrets.Certificate{
+								TLSCert:       cert,
+								TLSPrivateKey: key,
+							}),
 					},
 				},
 			},
@@ -936,13 +943,16 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 				ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{
 					client.ObjectKeyFromObject(nginxProxyGlobal): {Source: nginxProxyGlobal, Valid: true},
 				},
-				ReferencedSecrets: map[types.NamespacedName]*Secret{
+				ReferencedSecrets: map[types.NamespacedName]*secrets.Secret{
 					client.ObjectKeyFromObject(secretSameNs): {
 						Source: secretSameNs,
-						CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(secretSameNs), "Secret", &Certificate{
-							TLSCert:       cert,
-							TLSPrivateKey: key,
-						}),
+						CertBundle: secrets.NewCertificateBundle(
+							client.ObjectKeyFromObject(secretSameNs),
+							"Secret",
+							&secrets.Certificate{
+								TLSCert:       cert,
+								TLSPrivateKey: key,
+							}),
 					},
 				},
 			},
@@ -964,7 +974,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 					client.ObjectKeyFromObject(plusSecret): {
 						{
 							Type:      PlusReportJWTToken,
-							FieldName: "license.jwt",
+							FieldName: secrets.LicenseJWTKey,
 						},
 					},
 				},

@@ -25,6 +25,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift/openshiftfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/controllerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -519,7 +520,7 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, agentTLSSecret)
 	provisioner.cfg.Plus = false
@@ -582,7 +583,7 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, agentTLSSecret)
 	provisioner.cfg.Plus = false

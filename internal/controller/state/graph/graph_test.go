@@ -23,12 +23,93 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
+)
+
+var (
+	cert = []byte(`-----BEGIN CERTIFICATE-----
+MIIDLjCCAhYCCQDAOF9tLsaXWjANBgkqhkiG9w0BAQsFADBaMQswCQYDVQQGEwJV
+UzELMAkGA1UECAwCQ0ExITAfBgNVBAoMGEludGVybmV0IFdpZGdpdHMgUHR5IEx0
+ZDEbMBkGA1UEAwwSY2FmZS5leGFtcGxlLmNvbSAgMB4XDTE4MDkxMjE2MTUzNVoX
+DTIzMDkxMTE2MTUzNVowWDELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNBMSEwHwYD
+VQQKDBhJbnRlcm5ldCBXaWRnaXRzIFB0eSBMdGQxGTAXBgNVBAMMEGNhZmUuZXhh
+bXBsZS5jb20wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCp6Kn7sy81
+p0juJ/cyk+vCAmlsfjtFM2muZNK0KtecqG2fjWQb55xQ1YFA2XOSwHAYvSdwI2jZ
+ruW8qXXCL2rb4CZCFxwpVECrcxdjm3teViRXVsYImmJHPPSyQgpiobs9x7DlLc6I
+BA0ZjUOyl0PqG9SJexMV73WIIa5rDVSF2r4kSkbAj4Dcj7LXeFlVXH2I5XwXCptC
+n67JCg42f+k8wgzcRVp8XZkZWZVjwq9RUKDXmFB2YyN1XEWdZ0ewRuKYUJlsm692
+skOrKQj0vkoPn41EE/+TaVEpqLTRoUY3rzg7DkdzfdBizFO2dsPNFx2CW0jXkNLv
+Ko25CZrOhXAHAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAKHFCcyOjZvoHswUBMdL
+RdHIb383pWFynZq/LuUovsVA58B0Cg7BEfy5vWVVrq5RIkv4lZ81N29x21d1JH6r
+jSnQx+DXCO/TJEV5lSCUpIGzEUYaUPgRyjsM/NUdCJ8uHVhZJ+S6FA+CnOD9rn2i
+ZBePCI5rHwEXwnnl8ywij3vvQ5zHIuyBglWr/Qyui9fjPpwWUvUm4nv5SMG9zCV7
+PpuwvuatqjO1208BjfE/cZHIg8Hw9mvW9x9C+IQMIMDE7b/g6OcK7LGTLwlFxvA8
+7WjEequnayIphMhKRXVf1N349eN98Ez38fOTHTPbdJjFA/PcC+Gyme+iGt5OQdFh
+yRE=
+-----END CERTIFICATE-----`)
+	key = []byte(`-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAqeip+7MvNadI7if3MpPrwgJpbH47RTNprmTStCrXnKhtn41k
+G+ecUNWBQNlzksBwGL0ncCNo2a7lvKl1wi9q2+AmQhccKVRAq3MXY5t7XlYkV1bG
+CJpiRzz0skIKYqG7Pcew5S3OiAQNGY1DspdD6hvUiXsTFe91iCGuaw1Uhdq+JEpG
+wI+A3I+y13hZVVx9iOV8FwqbQp+uyQoONn/pPMIM3EVafF2ZGVmVY8KvUVCg15hQ
+dmMjdVxFnWdHsEbimFCZbJuvdrJDqykI9L5KD5+NRBP/k2lRKai00aFGN684Ow5H
+c33QYsxTtnbDzRcdgltI15DS7yqNuQmazoVwBwIDAQABAoIBAQCPSdSYnQtSPyql
+FfVFpTOsoOYRhf8sI+ibFxIOuRauWehhJxdm5RORpAzmCLyL5VhjtJme223gLrw2
+N99EjUKb/VOmZuDsBc6oCF6QNR58dz8cnORTewcotsJR1pn1hhlnR5HqJJBJask1
+ZEnUQfcXZrL94lo9JH3E+Uqjo1FFs8xxE8woPBqjZsV7pRUZgC3LhxnwLSExyFo4
+cxb9SOG5OmAJozStFoQ2GJOes8rJ5qfdvytgg9xbLaQL/x0kpQ62BoFMBDdqOePW
+KfP5zZ6/07/vpj48yA1Q32PzobubsBLd3Kcn32jfm1E7prtWl+JeOFiOznBQFJbN
+4qPVRz5hAoGBANtWyxhNCSLu4P+XgKyckljJ6F5668fNj5CzgFRqJ09zn0TlsNro
+FTLZcxDqnR3HPYM42JERh2J/qDFZynRQo3cg3oeivUdBVGY8+FI1W0qdub/L9+yu
+edOZTQ5XmGGp6r6jexymcJim/OsB3ZnYOpOrlD7SPmBvzNLk4MF6gxbXAoGBAMZO
+0p6HbBmcP0tjFXfcKE77ImLm0sAG4uHoUx0ePj/2qrnTnOBBNE4MvgDuTJzy+caU
+k8RqmdHCbHzTe6fzYq/9it8sZ77KVN1qkbIcuc+RTxA9nNh1TjsRne74Z0j1FCLk
+hHcqH0ri7PYSKHTE8FvFCxZYdbuB84CmZihvxbpRAoGAIbjqaMYPTYuklCda5S79
+YSFJ1JzZe1Kja//tDw1zFcgVCKa31jAwciz0f/lSRq3HS1GGGmezhPVTiqLfeZqc
+R0iKbhgbOcVVkJJ3K0yAyKwPTumxKHZ6zImZS0c0am+RY9YGq5T7YrzpzcfvpiOU
+ffe3RyFT7cfCmfoOhDCtzukCgYB30oLC1RLFOrqn43vCS51zc5zoY44uBzspwwYN
+TwvP/ExWMf3VJrDjBCH+T/6sysePbJEImlzM+IwytFpANfiIXEt/48Xf60Nx8gWM
+uHyxZZx/NKtDw0V8vX1POnq2A5eiKa+8jRARYKJLYNdfDuwolxvG6bZhkPi/4EtT
+3Y18sQKBgHtKbk+7lNJVeswXE5cUG6EDUsDe/2Ua7fXp7FcjqBEoap1LSw+6TXp0
+ZgrmKE8ARzM47+EJHUviiq/nupE15g0kJW3syhpU9zZLO7ltB0KIkO9ZRcmUjo8Q
+cpLlHMAqbLJ8WYGJCkhiWxyal6hYTyWY4cVkC0xtTl/hUE9IeNKo
+-----END RSA PRIVATE KEY-----`)
+
+	invalidCert = []byte(`-----BEGIN CERTIFICATE-----
+-----END CERTIFICATE-----`)
+	invalidKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
+-----END RSA PRIVATE KEY-----`)
+)
+
+const (
+	caBlock = `-----BEGIN CERTIFICATE-----
+MIIDSDCCAjACCQDKWvrpwiIyCDANBgkqhkiG9w0BAQsFADBmMQswCQYDVQQGEwJV
+UzELMAkGA1UECAwCQ0ExFjAUBgNVBAcMDVNhbiBGcmFuc2lzY28xDjAMBgNVBAoM
+BU5HSU5YMQwwCgYDVQQLDANLSUMxFDASBgNVBAMMC2V4YW1wbGUuY29tMB4XDTIw
+MTExMjIxMjg0MloXDTMwMTExMDIxMjg0MlowZjELMAkGA1UEBhMCVVMxCzAJBgNV
+BAgMAkNBMRYwFAYDVQQHDA1TYW4gRnJhbnNpc2NvMQ4wDAYDVQQKDAVOR0lOWDEM
+MAoGA1UECwwDS0lDMRQwEgYDVQQDDAtleGFtcGxlLmNvbTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAMrlKMqrHfMR4mgaL2zZG2DYYfKCFVmINjlYuOeC
+FDTcRgQKtu2YcCxZYBADwHZxEf6NIKtVsMWLhSNS/Nc0BmtiQM/IExhlCiDC6Sl8
+ONrI3w7qJzN6IUERB6tVlQt07rgM0V26UTYu0Ikv1Y8trfLYPZckzBkorQjpcium
+qoP2BJf4yyc9LqpxtlWKxelkunVL5ijMEzpj9gEE26TEHbsdEbhoR8g0OeHZqH7e
+mXCnSIBR0A/o/s6noGNX+F19lY7Tgw77jOuQQ5Ysi+7nhN2lKvcC819RX7oMpgvt
+V5B3nI0mF6BaznjeTs4yQcr1Sm3UTVBwX9ZuvL7RbIXkUm8CAwEAATANBgkqhkiG
+9w0BAQsFAAOCAQEAgm04w6OIWGj6tka9ccccnblF0oZzeEAIywjvR5sDcPdvLIeM
+eesJy6rFH4DBmMygpcIxJGrSOzZlF3LMvw7zK4stqNtm1HiprF8bzxfTffVYncg6
+hVKErHtZ2FZRj/2TMJ01aRDZSuVbL6UJiokpU6xxT7yy0dFZkKrjUR349gKxRqJw
+Am2as0bhi51EqK1GEx3m4c0un2vNh5qP2hv6e/Qze6P96vefNaSk9QMFfuB1kSAk
+fGpkiL7bjmjnhKwAmf8jDWDZltB6S56Qy2QjPR8JoOusbYxar4c6EcIwVHv6mdgP
+yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
+-----END CERTIFICATE-----
+`
 )
 
 func TestBuildGraph(t *testing.T) {
@@ -47,7 +128,7 @@ func TestBuildGraph(t *testing.T) {
 			Namespace: "service",
 		},
 		Data: map[string]string{
-			"ca.crt": caBlock,
+			secrets.CAKey: caBlock,
 		},
 	}
 
@@ -585,7 +666,7 @@ func TestBuildGraph(t *testing.T) {
 			Name:      "plus-secret",
 		},
 		Data: map[string][]byte{
-			"license.jwt": []byte("license"),
+			secrets.LicenseJWTKey: []byte("license"),
 		},
 	}
 
@@ -1668,20 +1749,26 @@ func TestBuildGraph(t *testing.T) {
 				CreateRouteKeyL4(tcpr): routeTCP,
 				CreateRouteKeyL4(udpr): routeUDP,
 			},
-			ReferencedSecrets: map[types.NamespacedName]*Secret{
+			ReferencedSecrets: map[types.NamespacedName]*secrets.Secret{
 				client.ObjectKeyFromObject(secret): {
 					Source: secret,
-					CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", &Certificate{
-						TLSCert:       cert,
-						TLSPrivateKey: key,
-					}),
+					CertBundle: secrets.NewCertificateBundle(
+						client.ObjectKeyFromObject(secret),
+						"Secret",
+						&secrets.Certificate{
+							TLSCert:       cert,
+							TLSPrivateKey: key,
+						}),
 				},
 				client.ObjectKeyFromObject(gatewaySecret): {
 					Source: gatewaySecret,
-					CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(gatewaySecret), "Secret", &Certificate{
-						TLSCert:       cert,
-						TLSPrivateKey: key,
-					}),
+					CertBundle: secrets.NewCertificateBundle(
+						client.ObjectKeyFromObject(gatewaySecret),
+						"Secret",
+						&secrets.Certificate{
+							TLSCert:       cert,
+							TLSPrivateKey: key,
+						}),
 				},
 			},
 			ReferencedNamespaces: map[types.NamespacedName]*v1.Namespace{
@@ -1711,12 +1798,15 @@ func TestBuildGraph(t *testing.T) {
 					Valid:      true,
 				},
 			},
-			ReferencedCaCertConfigMaps: map[types.NamespacedName]*CaCertConfigMap{
+			ReferencedCaCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{
 				client.ObjectKeyFromObject(cm): {
 					Source: cm,
-					CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(cm), "ConfigMap", &Certificate{
-						CACert: []byte(caBlock),
-					}),
+					CertBundle: secrets.NewCertificateBundle(
+						client.ObjectKeyFromObject(cm),
+						"ConfigMap",
+						&secrets.Certificate{
+							CACert: []byte(caBlock),
+						}),
 				},
 			},
 			BackendTLSPolicies: map[types.NamespacedName]*BackendTLSPolicy{
@@ -1753,7 +1843,7 @@ func TestBuildGraph(t *testing.T) {
 					{
 						Type:      PlusReportJWTToken,
 						Content:   []byte("license"),
-						FieldName: "license.jwt",
+						FieldName: secrets.LicenseJWTKey,
 					},
 				},
 			},
@@ -1826,7 +1916,7 @@ func TestBuildGraph(t *testing.T) {
 					client.ObjectKeyFromObject(plusSecret): {
 						{
 							Type:      PlusReportJWTToken,
-							FieldName: "license.jwt",
+							FieldName: secrets.LicenseJWTKey,
 						},
 					},
 				},
@@ -1992,7 +2082,7 @@ func TestIsReferenced(t *testing.T) {
 
 	graph := &Graph{
 		Gateways: gw,
-		ReferencedSecrets: map[types.NamespacedName]*Secret{
+		ReferencedSecrets: map[types.NamespacedName]*secrets.Secret{
 			client.ObjectKeyFromObject(baseSecret): {
 				Source: baseSecret,
 			},
@@ -2006,12 +2096,15 @@ func TestIsReferenced(t *testing.T) {
 		ReferencedInferencePools: map[types.NamespacedName]*ReferencedInferencePool{
 			client.ObjectKeyFromObject(inferenceInGraph): {},
 		},
-		ReferencedCaCertConfigMaps: map[types.NamespacedName]*CaCertConfigMap{
+		ReferencedCaCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{
 			client.ObjectKeyFromObject(baseConfigMap): {
 				Source: baseConfigMap,
-				CertBundle: NewCertificateBundle(client.ObjectKeyFromObject(baseConfigMap), "ConfigMap", &Certificate{
-					CACert: []byte(caBlock),
-				}),
+				CertBundle: secrets.NewCertificateBundle(
+					client.ObjectKeyFromObject(baseConfigMap),
+					"ConfigMap",
+					&secrets.Certificate{
+						CACert: []byte(caBlock),
+					}),
 			},
 		},
 		ReferencedNginxProxies: map[types.NamespacedName]*NginxProxy{

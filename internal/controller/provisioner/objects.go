@@ -27,6 +27,7 @@ import (
 	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -121,7 +122,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		Annotations: annotations,
 	}
 
-	secrets, err := p.buildNginxSecrets(
+	secretsList, err := p.buildNginxSecrets(
 		objectMeta,
 		agentTLSSecretName,
 		dockerSecretNames,
@@ -214,8 +215,8 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// deployment/daemonset
 	// hpa
 
-	objects := make([]client.Object, 0, len(configmaps)+len(secrets)+len(openshiftObjs)+3)
-	objects = append(objects, secrets...)
+	objects := make([]client.Object, 0, len(configmaps)+len(secretsList)+len(openshiftObjs)+3)
+	objects = append(objects, secretsList...)
 	objects = append(objects, configmaps...)
 	objects = append(objects, serviceAccount)
 	if p.isOpenshift {
@@ -255,7 +256,7 @@ func (p *NginxProvisioner) buildNginxSecrets(
 	clientSSLSecretName string,
 	dataplaneKeySecretName string,
 ) ([]client.Object, error) {
-	var secrets []client.Object
+	var secretsList []client.Object
 	var errs []error
 
 	if agentTLSSecretName != "" {
@@ -272,7 +273,7 @@ func (p *NginxProvisioner) buildNginxSecrets(
 		if err != nil {
 			errs = append(errs, err)
 		} else {
-			secrets = append(secrets, newSecret)
+			secretsList = append(secretsList, newSecret)
 		}
 	}
 
@@ -290,14 +291,14 @@ func (p *NginxProvisioner) buildNginxSecrets(
 		if err != nil {
 			errs = append(errs, err)
 		} else {
-			secrets = append(secrets, newSecret)
+			secretsList = append(secretsList, newSecret)
 		}
 	}
 
 	// need to sort secrets so everytime buildNginxSecrets is called it will generate the exact same
 	// array of secrets. This is needed to satisfy deterministic results of the method.
-	sort.Slice(secrets, func(i, j int) bool {
-		return secrets[i].GetName() < secrets[j].GetName()
+	sort.Slice(secretsList, func(i, j int) bool {
+		return secretsList[i].GetName() < secretsList[j].GetName()
 	})
 
 	if jwtSecretName != "" {
@@ -314,7 +315,7 @@ func (p *NginxProvisioner) buildNginxSecrets(
 		if err != nil {
 			errs = append(errs, err)
 		} else {
-			secrets = append(secrets, newSecret)
+			secretsList = append(secretsList, newSecret)
 		}
 	}
 
@@ -332,7 +333,7 @@ func (p *NginxProvisioner) buildNginxSecrets(
 		if err != nil {
 			errs = append(errs, err)
 		} else {
-			secrets = append(secrets, newSecret)
+			secretsList = append(secretsList, newSecret)
 		}
 	}
 
@@ -350,7 +351,7 @@ func (p *NginxProvisioner) buildNginxSecrets(
 		if err != nil {
 			errs = append(errs, err)
 		} else {
-			secrets = append(secrets, newSecret)
+			secretsList = append(secretsList, newSecret)
 		}
 	}
 
@@ -368,11 +369,11 @@ func (p *NginxProvisioner) buildNginxSecrets(
 		if err != nil {
 			errs = append(errs, err)
 		} else {
-			secrets = append(secrets, newSecret)
+			secretsList = append(secretsList, newSecret)
 		}
 	}
 
-	return secrets, errors.Join(errs...)
+	return secretsList, errors.Join(errs...)
 }
 
 func (p *NginxProvisioner) getAndUpdateSecret(
@@ -1130,8 +1131,8 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		if jwtSecretName != "" {
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
 				Name:      "nginx-plus-license",
-				MountPath: "/etc/nginx/license.jwt",
-				SubPath:   "license.jwt",
+				MountPath: "/etc/nginx/" + secrets.LicenseJWTKey,
+				SubPath:   secrets.LicenseJWTKey,
 			})
 			spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
 				Name:         "nginx-plus-license",
