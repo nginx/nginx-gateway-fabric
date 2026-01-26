@@ -4,6 +4,68 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.4.0
+
+* Use container UUID instead of IP address for tracking agent by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4470
+* Preserve external controller annotations for deployment and daemonSet by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4468
+* Add Session Persistence support for NGINX OSS and Plus users by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4471
+* Fix hostNetwork data plane pod connection issue by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4481
+* feat(chart): add priorityClassName for control plane pod by @starlightromero in https://github.com/nginx/nginx-gateway-fabric/pull/4356
+* Include Gateway TLS spec in Helm template by @kwentine in https://github.com/nginx/nginx-gateway-fabric/pull/4514
+* Allow users to specify  format when customizing the data plane access logs by @michasHL in https://github.com/nginx/nginx-gateway-fabric/pull/4530
+* Enables keepAlive directive to 16 by default by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/4524
+* Add TCPRoute and UDPRoute Support for L4 Load Balancing by @Skcey in https://github.com/nginx/nginx-gateway-fabric/pull/4518
+* Prevent unnecessary data plane restarts by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4555
+* Support Basic Auth through AuthenticationFilter by @shaun-nx in https://github.com/nginx/nginx-gateway-fabric/pull/4575
+* feat: Add CRD discovery for BackendTLSPolicy and experimental CRDs by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4569
+* Add SnippetsPolicy for Gateway level by @fabian4 in https://github.com/nginx/nginx-gateway-fabric/pull/4461
+* Add proxy settings policy by @ciarams87 in https://github.com/nginx/nginx-gateway-fabric/pull/4592
+* Support watching subset of namespaces by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/4606
+* Support Rate Limiting through RateLimitPolicy by @bjee19 in https://github.com/nginx/nginx-gateway-fabric/pull/4633
+* Ensure agent collector logs go to stdout by @dhurley in https://github.com/nginx/nginx-gateway-fabric/pull/4656
+
+%%DATE%%
+
+FEATURES:
+
+-
+
+BUG FIXES:
+
+-
+
+DOCUMENTATION:
+
+-
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.4.0
+-
+
+UPGRADE:
+
+-
+
+KNOWN ISSUES:
+
+-
+
+COMPATIBILITY:
+
+- Gateway API version: ``
+- Gateway API Inference Extension version: ``
+- NGINX version: ``
+- NGINX Plus version: ``
+- NGINX Agent version: ``
+- Kubernetes version: ``
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.4.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.4.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:2.4.0`
 ## Release 2.3.0
 
 _December 18, 2025_
