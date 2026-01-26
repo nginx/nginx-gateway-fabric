@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -66,17 +67,18 @@ type Config struct {
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.
 type NginxProvisioner struct {
-	store     *store
 	k8sClient client.Client
+	store     *store
+	// gatewaysBeingRegistered is a map of Gateway names that are currently being registered.
+	gatewaysBeingRegistered *sync.Map
+	baseLabelSelector       metav1.LabelSelector
 	// resourcesToDeleteOnStartup contains a list of Gateway names that no longer exist
 	// but have nginx resources tied to them that need to be deleted.
 	resourcesToDeleteOnStartup []types.NamespacedName
-	baseLabelSelector          metav1.LabelSelector
 	cfg                        Config
+	lock                       sync.RWMutex
 	leader                     bool
 	isOpenshift                bool
-
-	lock sync.RWMutex
 }
 
 var apiChecker openshift.APIChecker = &openshift.APICheckerImpl{}
@@ -157,6 +159,7 @@ func NewNginxProvisioner(
 		resourcesToDeleteOnStartup: []types.NamespacedName{},
 		cfg:                        cfg,
 		isOpenshift:                isOpenshift,
+		gatewaysBeingRegistered:    &sync.Map{},
 	}
 
 	handler, err := newEventHandler(store, provisioner, selector, cfg.GCName)
@@ -233,7 +236,7 @@ func (p *NginxProvisioner) provisionNginx(
 
 	objNames := make([]string, 0, len(objects))
 	for _, obj := range objects {
-		objNames = append(objNames, obj.GetName())
+		objNames = append(objNames, fmt.Sprintf("%s (%s)", obj.GetName(), reflect.TypeOf(obj).Elem().Name()))
 	}
 
 	p.cfg.Logger.Info(
@@ -520,6 +523,9 @@ func (p *NginxProvisioner) RegisterGateway(
 	}
 
 	gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
+	p.gatewaysBeingRegistered.Store(gatewayNSName, struct{}{})
+	defer p.gatewaysBeingRegistered.Delete(gatewayNSName)
+
 	if updated := p.store.registerResourceInGatewayConfig(gatewayNSName, gateway); !updated {
 		return nil
 	}

@@ -173,6 +173,11 @@ func (h *eventHandler) updateOrDeleteResources(
 		return nil
 	}
 
+	// Check if the gateway is being registered
+	if _, ok := h.provisioner.gatewaysBeingRegistered.Load(gatewayNSName); ok {
+		return nil
+	}
+
 	h.store.registerResourceInGatewayConfig(gatewayNSName, obj)
 	if err := h.provisionResource(ctx, logger, gatewayNSName, obj); err != nil {
 		return fmt.Errorf("error updating nginx resource: %w", err)
