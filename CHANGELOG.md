@@ -10,9 +10,9 @@ _January 28, 2026_
 
 FEATURES:
 
-- Add session persistence support for NGINX OSS and NGINX Plus. OSS and Plus users can configure `ip_hash` via `UpstreamSettingsPolicy` to provide client IP–based session affinity, while NGINX Plus users can configure `sessionPersistence` on `HTTPRoute` and `GRPCRoute` to enable cookie-based session persistence. Cookie-based session persistence is available only to NGINX Plus users and is currently in experimental mode. [4471](https://github.com/nginx/nginx-gateway-fabric/pull/4471)
-- Support Rate Limiting through RateLimitPolicy. [4633](https://github.com/nginx/nginx-gateway-fabric/pull/4633)
-- Support watching subset of namespaces. [4606](https://github.com/nginx/nginx-gateway-fabric/pull/4606)
+- Add session persistence support for NGINX OSS and NGINX Plus. OSS and Plus users can configure `ip_hash` via `UpstreamSettingsPolicy` to provide client IP–based session affinity, while NGINX Plus users can configure `sessionPersistence` on `HTTPRoute` and `GRPCRoute` rules to enable cookie-based session persistence. Cookie-based session persistence is available only to NGINX Plus users and is currently in experimental mode. [4471](https://github.com/nginx/nginx-gateway-fabric/pull/4471)
+- Support Rate Limiting through RateLimitPolicy API. [4633](https://github.com/nginx/nginx-gateway-fabric/pull/4633)
+- Allow configuring specific namespaces to watch for resources, instead of watching all namespaces by default. [4606](https://github.com/nginx/nginx-gateway-fabric/pull/4606)
 - Allow users to specify `escape` format when customizing the data plane access logs. [4530](https://github.com/nginx/nginx-gateway-fabric/pull/4530). Thanks to [michasHL](https://github.com/michasHL).
 - Enables the `keepAlive` directive with a default value of 16 to reduce connection setup overhead. This default can be overridden by an UpstreamSettingsPolicy, or disabled entirely by setting `keepAlive.connections` to 0. [4524](https://github.com/nginx/nginx-gateway-fabric/pull/4524)
 - Support for TCPRoute and UDPRoute. [4518](https://github.com/nginx/nginx-gateway-fabric/pull/4518). Thanks to [Skcey](https://github.com/Skcey).

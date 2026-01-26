@@ -89,8 +89,6 @@ The following table lists the software versions NGINX Gateway Fabric supports.
 | 1.4.0                | 1.1.0       | 1.25+      | 1.27.1    | R32        | ---         |
 | 1.3.0                | 1.1.0       | 1.25+      | 1.27.0    | R32        | ---         |
 | 1.2.0                | 1.0.0       | 1.23+      | 1.25.4    | R31        | ---         |
-| 1.1.0                | 1.0.0       | 1.23+      | 1.25.3    | n/a        | ---         |
-| 1.0.0                | 0.8.1       | 1.23+      | 1.25.2    | n/a        | ---         |
 
 ## SBOM (Software Bill of Materials)
 
