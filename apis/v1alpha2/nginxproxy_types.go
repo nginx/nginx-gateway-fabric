@@ -740,6 +740,13 @@ type ReadinessProbeSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=3600
 	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
+
+	// Expose toggles whether the endpoint should be exposed through
+	// the Gateway Service object. This allows an external LoadBalancer
+	// to perform healthchecks. Default is false.
+	//
+	// +optional
+	Expose *bool `json:"expose,omitempty"`
 }
 
 // Image is the NGINX image to use.

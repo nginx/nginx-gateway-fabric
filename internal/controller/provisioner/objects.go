@@ -167,6 +167,12 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports[listener.Port] = protocol
 	}
 
+	// Add healthcheck port to service if expose is enabled
+	if isNginxReadinessProbeExposed(nProxyCfg) {
+		healthcheckPort := dataplane.GetNginxReadinessProbePort(nProxyCfg)
+		ports[healthcheckPort] = corev1.ProtocolTCP
+	}
+
 	// Create separate copies of objectMeta for service and deployment to avoid shared map references
 	serviceObjectMeta := metav1.ObjectMeta{
 		Name:        objectMeta.Name,
@@ -1465,6 +1471,23 @@ func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxPr
 	}
 
 	return probe
+}
+
+// isNginxReadinessProbeExposed returns true if the readiness probe should be exposed
+// through the Gateway Service object for external load balancer healthchecks.
+func isNginxReadinessProbeExposed(nProxyCfg *graph.EffectiveNginxProxy) bool {
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
+		var containerSpec *ngfAPIv1alpha2.ContainerSpec
+		if nProxyCfg.Kubernetes.Deployment != nil {
+			containerSpec = &nProxyCfg.Kubernetes.Deployment.Container
+		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
+			containerSpec = &nProxyCfg.Kubernetes.DaemonSet.Container
+		}
+		if containerSpec != nil && containerSpec.ReadinessProbe != nil && containerSpec.ReadinessProbe.Expose != nil {
+			return *containerSpec.ReadinessProbe.Expose
+		}
+	}
+	return false
 }
 
 func DetermineNginxImageName(

@@ -426,6 +426,12 @@ spec:
                             description: ReadinessProbe defines the readiness probe
                               for the NGINX container.
                             properties:
+                              expose:
+                                description: |-
+                                  Expose toggles whether the endpoint should be exposed through
+                                  the Gateway Service object. This allows an external LoadBalancer
+                                  to perform healthchecks. Default is false.
+                                type: boolean
                               initialDelaySeconds:
                                 description: |-
                                   InitialDelaySeconds is the number of seconds after the container has
@@ -4679,6 +4685,12 @@ spec:
                             description: ReadinessProbe defines the readiness probe
                               for the NGINX container.
                             properties:
+                              expose:
+                                description: |-
+                                  Expose toggles whether the endpoint should be exposed through
+                                  the Gateway Service object. This allows an external LoadBalancer
+                                  to perform healthchecks. Default is false.
+                                type: boolean
                               initialDelaySeconds:
                                 description: |-
                                   InitialDelaySeconds is the number of seconds after the container has
