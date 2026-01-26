@@ -45,6 +45,9 @@ type store struct {
 	// nginxResources is a map of Gateway NamespacedNames and their associated nginx resources.
 	nginxResources map[types.NamespacedName]*NginxResources
 
+	// deletingGateways is a set of Gateways that are currently being deleted.
+	deletingGateways map[types.NamespacedName]struct{}
+
 	dockerSecretNames  map[string]struct{}
 	agentTLSSecretName string
 
@@ -56,7 +59,9 @@ type store struct {
 	// NGINX One Dataplane key secret
 	dataplaneKeySecretName string
 
-	lock sync.RWMutex
+	// deletingGatewaysLock protects access to deletingGateways.
+	deletingGatewaysLock sync.RWMutex
+	lock                 sync.RWMutex
 }
 
 func newStore(
@@ -75,6 +80,7 @@ func newStore(
 	return &store{
 		gateways:               make(map[types.NamespacedName]*gatewayv1.Gateway),
 		nginxResources:         make(map[types.NamespacedName]*NginxResources),
+		deletingGateways:       make(map[types.NamespacedName]struct{}),
 		dockerSecretNames:      dockerSecretNamesMap,
 		agentTLSSecretName:     agentTLSSecretName,
 		jwtSecretName:          jwtSecretName,
@@ -476,4 +482,19 @@ func getResourceVersionForSecret(resources *NginxResources, secret *corev1.Secre
 	}
 
 	return ""
+}
+
+// markGatewayDeleting marks a Gateway as being deleted.
+func (s *store) markGatewayDeleting(nsName types.NamespacedName) {
+	s.deletingGatewaysLock.Lock()
+	defer s.deletingGatewaysLock.Unlock()
+	s.deletingGateways[nsName] = struct{}{}
+}
+
+// isGatewayDeleting checks if a Gateway is marked as being deleted.
+func (s *store) isGatewayDeleting(nsName types.NamespacedName) bool {
+	s.deletingGatewaysLock.RLock()
+	defer s.deletingGatewaysLock.RUnlock()
+	_, exists := s.deletingGateways[nsName]
+	return exists
 }

@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -47,6 +48,11 @@ const (
 )
 
 var emptyDirVolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+
+// setOwnerReference is a helper to set owner reference on an object.
+func (p *NginxProvisioner) setOwnerReference(obj client.Object, gateway *gatewayv1.Gateway) error {
+	return controllerutil.SetControllerReference(gateway, obj, p.k8sClient.Scheme())
+}
 
 //nolint:gocyclo // will refactor at some point
 func (p *NginxProvisioner) buildNginxResourceObjects(
@@ -130,28 +136,44 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		caSecretName,
 		clientSSLSecretName,
 		dataplaneKeySecretName,
+		gateway,
 	)
 	if err != nil {
 		errs = append(errs, err)
 	}
 
-	configmaps := p.buildNginxConfigMaps(
+	configmaps, configMapErrs := p.buildNginxConfigMaps(
 		objectMeta,
 		nProxyCfg,
 		ngxIncludesConfigMapName,
 		ngxAgentConfigMapName,
 		caSecretName != "",
 		clientSSLSecretName != "",
+		gateway,
 	)
+	if configMapErrs != nil {
+		errs = append(errs, configMapErrs...)
+	}
 
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta:                   objectMeta,
 		AutomountServiceAccountToken: helpers.GetPointer(false),
 	}
 
+	if err := p.setOwnerReference(serviceAccount, gateway); err != nil {
+		errs = append(
+			errs,
+			fmt.Errorf("failed to set owner reference on ServiceAccount %s: %w", serviceAccount.GetName(), err),
+		)
+	}
+
 	var openshiftObjs []client.Object
 	if p.isOpenshift {
-		openshiftObjs = p.buildOpenshiftObjects(objectMeta)
+		var openShiftErrs []error
+		openshiftObjs, openShiftErrs = p.buildOpenshiftObjects(objectMeta, gateway)
+		if openShiftErrs != nil {
+			errs = append(errs, openShiftErrs...)
+		}
 	}
 
 	ports := make(map[int32]corev1.Protocol)
@@ -197,6 +219,13 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		errs = append(errs, err)
 	}
 
+	if err := p.setOwnerReference(service, gateway); err != nil {
+		errs = append(
+			errs,
+			fmt.Errorf("failed to set owner reference on Service %s: %w", service.GetName(), err),
+		)
+	}
+
 	deployment, err := p.buildNginxDeployment(
 		deploymentObjectMeta,
 		nProxyCfg,
@@ -213,6 +242,10 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	)
 	if err != nil {
 		errs = append(errs, err)
+	}
+
+	if err := p.setOwnerReference(deployment, gateway); err != nil {
+		errs = append(errs, fmt.Errorf("failed to set owner reference on Deployment %s: %w", deployment.GetName(), err))
 	}
 
 	// order to install resources:
@@ -235,6 +268,9 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	objects = append(objects, service, deployment)
 
 	if hpa := p.buildHPA(objectMeta, nProxyCfg); hpa != nil {
+		if err := p.setOwnerReference(hpa, gateway); err != nil {
+			errs = append(errs, fmt.Errorf("failed to set owner reference on HPA %s: %w", hpa.GetName(), err))
+		}
 		objects = append(objects, hpa)
 	}
 
@@ -264,122 +300,81 @@ func (p *NginxProvisioner) buildNginxSecrets(
 	caSecretName string,
 	clientSSLSecretName string,
 	dataplaneKeySecretName string,
+	gateway *gatewayv1.Gateway,
 ) ([]client.Object, error) {
 	var secretsList []client.Object
+	var dockerSecrets []client.Object
 	var errs []error
 
-	if agentTLSSecretName != "" {
+	addSecret := func(
+		sourceSecretName string,
+		targetSecretName string,
+		secretType corev1.SecretType,
+	) *corev1.Secret {
+		if targetSecretName == "" {
+			return nil
+		}
 		newSecret, err := p.getAndUpdateSecret(
-			p.cfg.AgentTLSSecretName,
+			sourceSecretName,
 			metav1.ObjectMeta{
-				Name:        agentTLSSecretName,
+				Name:        targetSecretName,
 				Namespace:   objectMeta.Namespace,
 				Labels:      objectMeta.Labels,
 				Annotations: objectMeta.Annotations,
 			},
-			corev1.SecretTypeTLS,
+			secretType,
 		)
 		if err != nil {
 			errs = append(errs, err)
-		} else {
-			secretsList = append(secretsList, newSecret)
+			return nil
 		}
+		if err := p.setOwnerReference(newSecret, gateway); err != nil {
+			errs = append(errs, fmt.Errorf("failed to set owner reference on Secret %s: %w", newSecret.GetName(), err))
+			return nil
+		}
+		return newSecret
 	}
 
-	for newName, origName := range dockerSecretNames {
-		newSecret, err := p.getAndUpdateSecret(
-			origName,
-			metav1.ObjectMeta{
-				Name:        newName,
-				Namespace:   objectMeta.Namespace,
-				Labels:      objectMeta.Labels,
-				Annotations: objectMeta.Annotations,
-			},
-			corev1.SecretTypeDockerConfigJson,
-		)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			secretsList = append(secretsList, newSecret)
-		}
+	// agent TLS Secret
+	if secret := addSecret(p.cfg.AgentTLSSecretName, agentTLSSecretName, corev1.SecretTypeTLS); secret != nil {
+		secretsList = append(secretsList, secret)
 	}
 
-	// need to sort secrets so everytime buildNginxSecrets is called it will generate the exact same
-	// array of secrets. This is needed to satisfy deterministic results of the method.
-	sort.Slice(secretsList, func(i, j int) bool {
-		return secretsList[i].GetName() < secretsList[j].GetName()
+	// docker Secrets
+	for targetSecretName, sourceSecretName := range dockerSecretNames {
+		if secret := addSecret(sourceSecretName, targetSecretName, corev1.SecretTypeDockerConfigJson); secret != nil {
+			dockerSecrets = append(dockerSecrets, secret)
+		}
+	}
+	sort.Slice(dockerSecrets, func(i, j int) bool {
+		return dockerSecrets[i].GetName() < dockerSecrets[j].GetName()
 	})
+	secretsList = append(secretsList, dockerSecrets...)
 
-	if jwtSecretName != "" {
-		newSecret, err := p.getAndUpdateSecret(
-			p.cfg.PlusUsageConfig.SecretName,
-			metav1.ObjectMeta{
-				Name:        jwtSecretName,
-				Namespace:   objectMeta.Namespace,
-				Labels:      objectMeta.Labels,
-				Annotations: objectMeta.Annotations,
-			},
-			corev1.SecretTypeOpaque,
-		)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			secretsList = append(secretsList, newSecret)
+	// plus Secrets (in order: jwt, ca, clientSSL)
+	if p.cfg.PlusUsageConfig != nil {
+		if secret := addSecret(p.cfg.PlusUsageConfig.SecretName, jwtSecretName, corev1.SecretTypeOpaque); secret != nil {
+			secretsList = append(secretsList, secret)
 		}
-	}
-
-	if caSecretName != "" {
-		newSecret, err := p.getAndUpdateSecret(
-			p.cfg.PlusUsageConfig.CASecretName,
-			metav1.ObjectMeta{
-				Name:        caSecretName,
-				Namespace:   objectMeta.Namespace,
-				Labels:      objectMeta.Labels,
-				Annotations: objectMeta.Annotations,
-			},
-			corev1.SecretTypeOpaque,
-		)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			secretsList = append(secretsList, newSecret)
+		if secret := addSecret(p.cfg.PlusUsageConfig.CASecretName, caSecretName, corev1.SecretTypeOpaque); secret != nil {
+			secretsList = append(secretsList, secret)
 		}
-	}
-
-	if clientSSLSecretName != "" {
-		newSecret, err := p.getAndUpdateSecret(
+		if secret := addSecret(
 			p.cfg.PlusUsageConfig.ClientSSLSecretName,
-			metav1.ObjectMeta{
-				Name:        clientSSLSecretName,
-				Namespace:   objectMeta.Namespace,
-				Labels:      objectMeta.Labels,
-				Annotations: objectMeta.Annotations,
-			},
+			clientSSLSecretName,
 			corev1.SecretTypeTLS,
-		)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			secretsList = append(secretsList, newSecret)
+		); secret != nil {
+			secretsList = append(secretsList, secret)
 		}
 	}
 
-	if dataplaneKeySecretName != "" {
-		newSecret, err := p.getAndUpdateSecret(
-			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
-			metav1.ObjectMeta{
-				Name:        dataplaneKeySecretName,
-				Namespace:   objectMeta.Namespace,
-				Labels:      objectMeta.Labels,
-				Annotations: objectMeta.Annotations,
-			},
-			corev1.SecretTypeOpaque,
-		)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			secretsList = append(secretsList, newSecret)
-		}
+	// Dataplane Key Secret
+	if secret := addSecret(
+		p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+		dataplaneKeySecretName,
+		corev1.SecretTypeOpaque,
+	); secret != nil {
+		secretsList = append(secretsList, secret)
 	}
 
 	return secretsList, errors.Join(errs...)
@@ -415,14 +410,32 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 	ngxAgentConfigMapName string,
 	caSecret bool,
 	clientSSLSecret bool,
-) []client.Object {
-	var logging *ngfAPIv1alpha2.NginxLogging
-	if nProxyCfg != nil && nProxyCfg.Logging != nil {
-		logging = nProxyCfg.Logging
+	gateway *gatewayv1.Gateway,
+) ([]client.Object, []error) {
+	var errs []error
+
+	bootstrapCM := p.buildBootstrapConfigMap(objectMeta, nProxyCfg, ngxIncludesConfigMapName, caSecret, clientSSLSecret)
+	if err := p.setOwnerReference(bootstrapCM, gateway); err != nil {
+		errs = append(errs, fmt.Errorf("failed to set owner reference on ConfigMap %s: %w", bootstrapCM.GetName(), err))
 	}
 
+	agentCM := p.buildAgentConfigMap(objectMeta, nProxyCfg, ngxAgentConfigMapName)
+	if err := p.setOwnerReference(agentCM, gateway); err != nil {
+		errs = append(errs, fmt.Errorf("failed to set owner reference on ConfigMap %s: %w", agentCM.GetName(), err))
+	}
+
+	return []client.Object{bootstrapCM, agentCM}, errs
+}
+
+func (p *NginxProvisioner) buildBootstrapConfigMap(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	name string,
+	caSecret bool,
+	clientSSLSecret bool,
+) *corev1.ConfigMap {
 	logLevel := defaultNginxErrorLogLevel
-	if logging != nil && logging.ErrorLevel != nil {
+	if nProxyCfg != nil && nProxyCfg.Logging != nil && nProxyCfg.Logging.ErrorLevel != nil {
 		logLevel = string(*nProxyCfg.Logging.ErrorLevel)
 	}
 
@@ -436,14 +449,13 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		"WorkerConnections": workerConnections,
 	}
 
-	// Create events ConfigMap data using template
 	eventsFields := map[string]interface{}{
 		"WorkerConnections": workerConnections,
 	}
 
-	bootstrapCM := &corev1.ConfigMap{
+	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        ngxIncludesConfigMapName,
+			Name:        name,
 			Namespace:   objectMeta.Namespace,
 			Labels:      objectMeta.Labels,
 			Annotations: objectMeta.Annotations,
@@ -461,10 +473,17 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 			"UsageCASecret":        caSecret,
 			"UsageClientSSLSecret": clientSSLSecret,
 		}
-
-		bootstrapCM.Data["mgmt.conf"] = string(helpers.MustExecuteTemplate(mgmtTemplate, mgmtFields))
+		cm.Data["mgmt.conf"] = string(helpers.MustExecuteTemplate(mgmtTemplate, mgmtFields))
 	}
 
+	return cm
+}
+
+func (p *NginxProvisioner) buildAgentConfigMap(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	name string,
+) *corev1.ConfigMap {
 	metricsPort := config.DefaultNginxMetricsPort
 	port, enableMetrics := graph.MetricsEnabledForNginxProxy(nProxyCfg)
 	if port != nil {
@@ -488,8 +507,8 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		"AgentLabels":   p.cfg.AgentLabels,
 	}
 
-	if logging != nil && logging.AgentLevel != nil {
-		agentFields["LogLevel"] = *logging.AgentLevel
+	if nProxyCfg != nil && nProxyCfg.Logging != nil && nProxyCfg.Logging.AgentLevel != nil {
+		agentFields["LogLevel"] = *nProxyCfg.Logging.AgentLevel
 	}
 
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
@@ -499,9 +518,9 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		agentFields["EndpointTLSSkipVerify"] = p.cfg.NginxOneConsoleTelemetryConfig.EndpointTLSSkipVerify
 	}
 
-	agentCM := &corev1.ConfigMap{
+	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        ngxAgentConfigMapName,
+			Name:        name,
 			Namespace:   objectMeta.Namespace,
 			Labels:      objectMeta.Labels,
 			Annotations: objectMeta.Annotations,
@@ -510,11 +529,13 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 			"nginx-agent.conf": string(helpers.MustExecuteTemplate(agentTemplate, agentFields)),
 		},
 	}
-
-	return []client.Object{bootstrapCM, agentCM}
 }
 
-func (p *NginxProvisioner) buildOpenshiftObjects(objectMeta metav1.ObjectMeta) []client.Object {
+func (p *NginxProvisioner) buildOpenshiftObjects(
+	objectMeta metav1.ObjectMeta,
+	gateway *gatewayv1.Gateway,
+) ([]client.Object, []error) {
+	var errs []error
 	role := &rbacv1.Role{
 		ObjectMeta: objectMeta,
 		Rules: []rbacv1.PolicyRule{
@@ -526,6 +547,11 @@ func (p *NginxProvisioner) buildOpenshiftObjects(objectMeta metav1.ObjectMeta) [
 			},
 		},
 	}
+
+	if err := p.setOwnerReference(role, gateway); err != nil {
+		errs = append(errs, fmt.Errorf("failed to set owner reference on Role %s: %w", role.GetName(), err))
+	}
+
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: objectMeta,
 		RoleRef: rbacv1.RoleRef{
@@ -542,7 +568,11 @@ func (p *NginxProvisioner) buildOpenshiftObjects(objectMeta metav1.ObjectMeta) [
 		},
 	}
 
-	return []client.Object{role, roleBinding}
+	if err := p.setOwnerReference(roleBinding, gateway); err != nil {
+		errs = append(errs, fmt.Errorf("failed to set owner reference on RoleBinding %s: %w", roleBinding.GetName(), err))
+	}
+
+	return []client.Object{role, roleBinding}, errs
 }
 
 func buildNginxService(
@@ -1326,136 +1356,86 @@ func buildNginxDeploymentHPA(
 // TODO(sberman): see about how this can be made more elegant. Maybe create some sort of Object factory
 // that can better store/build all the objects we need, to reduce the amount of duplicate object lists that we
 // have everywhere.
-func (p *NginxProvisioner) buildNginxResourceObjectsForDeletion(deploymentNSName types.NamespacedName) []client.Object {
-	// order to delete:
-	// deployment/daemonset
-	// service
-	// hpa
-	// role/binding (if openshift)
-	// serviceaccount
-	// configmaps
-	// secrets
+func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
+	deploymentNSName types.NamespacedName,
+) []client.Object {
+	// Order to delete:
+	// 1. deployment/daemonset
+	// 2. service
+	// 3. hpa
+	// 4. role/binding (if openshift)
+	// 5. serviceaccount
+	// 6. configmaps
+	// 7. secrets
 
-	objectMeta := metav1.ObjectMeta{
-		Name:      deploymentNSName.Name,
-		Namespace: deploymentNSName.Namespace,
-	}
+	var objects []client.Object
 
-	deployment := &appsv1.Deployment{
-		ObjectMeta: objectMeta,
-	}
-	daemonSet := &appsv1.DaemonSet{
-		ObjectMeta: objectMeta,
-	}
-	service := &corev1.Service{
-		ObjectMeta: objectMeta,
-	}
-	hpa := &autoscalingv2.HorizontalPodAutoscaler{
-		ObjectMeta: objectMeta,
-	}
-
-	objects := []client.Object{deployment, daemonSet, service, hpa}
-
-	if p.isOpenshift {
-		role := &rbacv1.Role{
-			ObjectMeta: objectMeta,
-		}
-		roleBinding := &rbacv1.RoleBinding{
-			ObjectMeta: objectMeta,
-		}
-		objects = append(objects, role, roleBinding)
-	}
-
-	serviceAccount := &corev1.ServiceAccount{
-		ObjectMeta: objectMeta,
-	}
-	bootstrapCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      controller.CreateNginxResourceName(deploymentNSName.Name, nginxIncludesConfigMapNameSuffix),
+	meta := func(name string) metav1.ObjectMeta {
+		return metav1.ObjectMeta{
+			Name:      name,
 			Namespace: deploymentNSName.Namespace,
-		},
-	}
-	agentCM := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      controller.CreateNginxResourceName(deploymentNSName.Name, nginxAgentConfigMapNameSuffix),
-			Namespace: deploymentNSName.Namespace,
-		},
+		}
 	}
 
-	objects = append(objects, serviceAccount, bootstrapCM, agentCM)
+	resourceName := func(suffix string) string {
+		return controller.CreateNginxResourceName(deploymentNSName.Name, suffix)
+	}
 
-	agentTLSSecretName := controller.CreateNginxResourceName(
-		deploymentNSName.Name,
-		p.cfg.AgentTLSSecretName,
+	baseMeta := meta(deploymentNSName.Name)
+
+	// 1. Deployment/DaemonSet
+	objects = append(objects,
+		&appsv1.Deployment{ObjectMeta: baseMeta},
+		&appsv1.DaemonSet{ObjectMeta: baseMeta},
 	)
-	agentTLSSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      agentTLSSecretName,
-			Namespace: deploymentNSName.Namespace,
-		},
+
+	// 2. Service
+	objects = append(objects, &corev1.Service{ObjectMeta: baseMeta})
+
+	// 3. HPA
+	objects = append(objects, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: baseMeta})
+
+	// 4. OpenShift Role/RoleBinding
+	if p.isOpenshift {
+		objects = append(objects,
+			&rbacv1.Role{ObjectMeta: baseMeta},
+			&rbacv1.RoleBinding{ObjectMeta: baseMeta},
+		)
 	}
-	objects = append(objects, agentTLSSecret)
+
+	// 5. ServiceAccount
+	objects = append(objects, &corev1.ServiceAccount{ObjectMeta: baseMeta})
+
+	// 6. ConfigMaps
+	objects = append(objects,
+		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxIncludesConfigMapNameSuffix))},
+		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxAgentConfigMapNameSuffix))},
+	)
+
+	// 7. Secrets
+	objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.AgentTLSSecretName))})
 
 	for _, name := range p.cfg.NginxDockerSecretNames {
-		newName := controller.CreateNginxResourceName(deploymentNSName.Name, name)
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      newName,
-				Namespace: deploymentNSName.Namespace,
-			},
-		}
-		objects = append(objects, secret)
+		objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(name))})
 	}
 
-	var jwtSecretName, caSecretName, clientSSLSecretName string
-	if p.cfg.Plus {
+	if p.cfg.Plus && p.cfg.PlusUsageConfig != nil {
 		if p.cfg.PlusUsageConfig.CASecretName != "" {
-			caSecretName = controller.CreateNginxResourceName(deploymentNSName.Name, p.cfg.PlusUsageConfig.CASecretName)
-			caSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      caSecretName,
-					Namespace: deploymentNSName.Namespace,
-				},
-			}
-			objects = append(objects, caSecret)
+			objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.PlusUsageConfig.CASecretName))})
 		}
 		if p.cfg.PlusUsageConfig.ClientSSLSecretName != "" {
-			clientSSLSecretName = controller.CreateNginxResourceName(
-				deploymentNSName.Name,
-				p.cfg.PlusUsageConfig.ClientSSLSecretName,
-			)
-			clientSSLSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clientSSLSecretName,
-					Namespace: deploymentNSName.Namespace,
-				},
-			}
-			objects = append(objects, clientSSLSecret)
+			objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.PlusUsageConfig.ClientSSLSecretName))})
 		}
-
-		jwtSecretName = controller.CreateNginxResourceName(deploymentNSName.Name, p.cfg.PlusUsageConfig.SecretName)
-		jwtSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      jwtSecretName,
-				Namespace: deploymentNSName.Namespace,
-			},
+		if p.cfg.PlusUsageConfig.SecretName != "" {
+			objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.PlusUsageConfig.SecretName))})
 		}
-		objects = append(objects, jwtSecret)
 	}
 
-	var dataplaneKeySecretName string
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-		dataplaneKeySecretName = controller.CreateNginxResourceName(
-			deploymentNSName.Name,
-			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+		objects = append(
+			objects,
+			&corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName))},
 		)
-		dataplaneKeySecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      dataplaneKeySecretName,
-				Namespace: deploymentNSName.Namespace,
-			},
-		}
-		objects = append(objects, dataplaneKeySecret)
 	}
 
 	return objects
