@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.20
+# syntax=docker/dockerfile:1.21
 FROM scratch AS nginx-files
 
 # Repository and key files for UBI-based builds
@@ -8,7 +8,9 @@ ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:2ffc9bc521deb28ae11b336c298572b26fd523ccfb9c8812c6da63f651936610 AS ubi9-packages
 
-FROM redhat/ubi9-minimal:9.7-1764794109 AS ubi-nginx
+FROM redhat/ubi9-minimal:9.7-1768783948 AS ubi-nginx
+
+RUN microdnf -y update glib2 && microdnf clean all
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.6.2

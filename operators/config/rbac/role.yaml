@@ -35,6 +35,12 @@ rules:
   - update
   - watch
 - apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - "*"
+- apiGroups:
   - autoscaling
   resources:
   - horizontalpodautoscalers
@@ -148,8 +154,10 @@ rules:
   - observabilitypolicies
   - proxysettingspolicies
   - upstreamsettingspolicies
+  - ratelimitpolicies
   - snippetsfilters
   - authenticationfilters
+  - snippetspolicies
   verbs:
   - create
   - delete
@@ -165,8 +173,10 @@ rules:
   - observabilitypolicies/status
   - proxysettingspolicies/status
   - upstreamsettingspolicies/status
+  - ratelimitpolicies/status
   - snippetsfilters/status
   - authenticationfilters/status
+  - snippetspolicies/status
   verbs:
   - update
 - apiGroups:

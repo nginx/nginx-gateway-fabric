@@ -27,6 +27,8 @@ func (d *Data) Attributes() []attribute.KeyValue {
 	attrs = append(attrs, attribute.String("BuildOS", d.BuildOS))
 	attrs = append(attrs, attribute.Int64("GatewayAttachedProxySettingsPolicyCount", d.GatewayAttachedProxySettingsPolicyCount))
 	attrs = append(attrs, attribute.Int64("RouteAttachedProxySettingsPolicyCount", d.RouteAttachedProxySettingsPolicyCount))
+	attrs = append(attrs, attribute.StringSlice("SnippetsPoliciesDirectives", d.SnippetsPoliciesDirectives))
+	attrs = append(attrs, attribute.Int64Slice("SnippetsPoliciesDirectivesCount", d.SnippetsPoliciesDirectivesCount))
 
 	return attrs
 }

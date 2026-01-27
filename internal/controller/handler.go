@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/tools/record"
+	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
@@ -65,7 +65,7 @@ type eventHandlerConfig struct {
 	// logLevelSetter is used to update the logging level.
 	logLevelSetter logLevelSetter
 	// eventRecorder records events for Kubernetes resources.
-	eventRecorder record.EventRecorder
+	eventRecorder k8sEvents.EventRecorder
 	// deployCtxCollector collects the deployment context for N+ licensing
 	deployCtxCollector licensing.Collector
 	// graphBuiltHealthChecker sets the health of the Pod to Ready once we've built our initial graph.
@@ -324,8 +324,10 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 				h.cfg.logger.Error(err, msg)
 				h.cfg.eventRecorder.Eventf(
 					item.GatewayService,
+					gw.Source,
 					v1.EventTypeWarning,
 					"GetServiceIPFailed",
+					"None",
 					msg+": %s",
 					err.Error(),
 				)
@@ -362,8 +364,10 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		h.cfg.logger.Error(err, msg)
 		h.cfg.eventRecorder.Eventf(
 			&v1.Service{},
+			gw.Source,
 			v1.EventTypeWarning,
 			"GetServiceIPFailed",
+			"None",
 			msg+": %s",
 			err.Error(),
 		)
@@ -398,8 +402,10 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 			h.cfg.logger.Error(err, msg)
 			h.cfg.eventRecorder.Eventf(
 				&inference.InferencePoolList{},
+				nil,
 				v1.EventTypeWarning,
 				"ListInferencePoolsFailed",
+				"None",
 				msg+": %s",
 				err.Error(),
 			)
@@ -503,8 +509,10 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 		logger.Error(err, msg)
 		h.cfg.eventRecorder.Eventf(
 			cfg,
+			nil,
 			v1.EventTypeWarning,
 			"UpdateFailed",
+			"None",
 			msg+": %s",
 			err.Error(),
 		)
@@ -709,8 +717,15 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 			h.cfg.logger.Error(err, msg, "Service", svc.Name, "InferencePool", pool.Source.Name)
 			h.cfg.eventRecorder.Eventf(
 				svc,
+				&inference.InferencePool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      pool.Source.Name,
+						Namespace: pool.Source.Namespace,
+					},
+				},
 				v1.EventTypeWarning,
 				"ServiceCreateOrUpdateFailed",
+				"None",
 				"%s %q: %v", msg, pool.Source.Name, err,
 			)
 			continue

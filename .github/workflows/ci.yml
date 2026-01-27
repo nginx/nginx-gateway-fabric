@@ -77,7 +77,7 @@ jobs:
           [[ -n "${INPUT_OPERATOR_VERSION}" ]] && echo "✅ Valid operator version format: ${INPUT_OPERATOR_VERSION}"
 
       - name: Checkout Repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
@@ -112,7 +112,7 @@ jobs:
       helm_changes: ${{ steps.filter.outputs.charts }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
       - name: Configure GOPROXY
@@ -177,7 +177,7 @@ jobs:
     needs: vars
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Configure GOPROXY
         id: goproxy
@@ -218,7 +218,7 @@ jobs:
     needs: vars
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Node.js Environment
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
@@ -245,7 +245,7 @@ jobs:
       issues: write # for goreleaser/goreleaser-action to close milestone
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
@@ -279,7 +279,7 @@ jobs:
           echo "GOCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
 
       - name: Create/Update Draft
-        uses: lucacome/draft-release@0ebb400b90474a1b791602046abf8394e9f5402d # v2.0.2
+        uses: lucacome/draft-release@63b16bb66ce9106da096d2c903216742430e9f56 # v2.0.3
         with:
           minor-label: "enhancement"
           major-label: "change"
@@ -292,7 +292,7 @@ jobs:
 
       - name: Download Syft
         if: ${{ inputs.is_production_release }}
-        uses: anchore/sbom-action/download-syft@0b82b0b1a22399a1c542d4d656f70cd903571b5c # v0.21.1
+        uses: anchore/sbom-action/download-syft@62ad5284b8ced813296287a0b63906cb364b73ee # v0.22.0
 
       - name: Install Cosign
         if: ${{ inputs.is_production_release }}
@@ -351,7 +351,7 @@ jobs:
         gateway: ${{ fromJson(needs.binary.outputs.json) }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Configure GOPROXY
         id: goproxy
@@ -567,7 +567,7 @@ jobs:
       packages: write # for helm to push to GHCR
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
@@ -596,7 +596,7 @@ jobs:
     needs: vars
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Configure GOPROXY
         id: goproxy

@@ -9,7 +9,7 @@ import (
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -53,7 +53,7 @@ type ChangeProcessorConfig struct {
 	// Validators validate resources according to data-plane specific rules.
 	Validators validation.Validators
 	// EventRecorder records events for Kubernetes resources.
-	EventRecorder record.EventRecorder
+	EventRecorder events.EventRecorder
 	// MustExtractGVK is a function that extracts schema.GroupVersionKind from a client.Object.
 	MustExtractGVK kinds.MustExtractGVK
 	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
@@ -64,8 +64,8 @@ type ChangeProcessorConfig struct {
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
 	GatewayClassName string
-	// SnippetsPolicies indicates if SnippetsPolicies are enabled.
-	SnippetsPolicies bool
+	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
+	Snippets bool
 	// FeaturesFlags holds the feature flags for building the Graph.
 	FeatureFlags graph.FeatureFlags
 }
@@ -248,9 +248,14 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			store:     newObjectStoreMapAdapter(clusterStore.AuthenticationFilters),
 			predicate: nil, // we always want to write status to AuthenticationFilters so we don't filter them out
 		},
+		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		},
 	}
 
-	if cfg.SnippetsPolicies {
+	if cfg.Snippets {
 		trackingUpdaterCfg = append(trackingUpdaterCfg, changeTrackingUpdaterObjectTypeCfg{
 			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.SnippetsPolicy{}),
 			store:     commonPolicyObjectStore,

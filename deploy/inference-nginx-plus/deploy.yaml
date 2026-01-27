@@ -116,6 +116,7 @@ rules:
   - list
   - watch
 - apiGroups:
+  - events.k8s.io
   - ""
   resources:
   - events
@@ -197,6 +198,7 @@ rules:
   - upstreamsettingspolicies
   - authenticationfilters
   - proxysettingspolicies
+  - ratelimitpolicies
   verbs:
   - list
   - watch
@@ -209,6 +211,7 @@ rules:
   - upstreamsettingspolicies/status
   - authenticationfilters/status
   - proxysettingspolicies/status
+  - ratelimitpolicies/status
   verbs:
   - update
 - apiGroups:

@@ -233,15 +233,16 @@ nginxGateway:
       # See: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1556
       skipVerify: true
 
-
-  snippetsFilters:
-    # -- Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into the generated NGINX
-    # config for HTTPRoute and GRPCRoute resources.
+  snippets:
+    # -- Enable Snippets feature through SnippetsFilter and SnippetsPolicy APIs. SnippetsFilters allow inserting
+    # NGINX configuration into the generated NGINX config for HTTPRoute and GRPCRoute resources. SnippetsPolicies
+    # allow inserting NGINX configuration into the generated NGINX config for Gateway resources.
     enable: false
 
-  snippetsPolicies:
-    # -- Enable SnippetsPolicies feature. SnippetsPolicies allow inserting NGINX configuration into the generated NGINX
-    # config for Gateway resources.
+  snippetsFilters:
+    # -- This flag is deprecated in favor of the snippets.enable flag. The latter will enable snippets for both SnippetsFilters
+    # and SnippetsPolicies. Enable SnippetsFilters feature. SnippetsFilters allow inserting NGINX configuration into
+    # the generated NGINX config for HTTPRoute and GRPCRoute resources.
     enable: false
 
 # -- The nginx section contains the configuration for all NGINX data plane deployments

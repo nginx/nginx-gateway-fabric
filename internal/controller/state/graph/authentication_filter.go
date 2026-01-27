@@ -85,8 +85,8 @@ func validateAuthenticationFilter(
 	//revive:disable-next-line:unnecessary-stmt future-proof switch form; additional auth types will be added
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
-		sec := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
-		if err := secretResolver.resolve(sec); err != nil {
+		authBasicSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
+		if err := secretResolver.resolve(authBasicSecretNsName); err != nil {
 			allErrs = append(allErrs, field.Invalid(
 				field.NewPath("spec.basic.secretRef"),
 				af.Spec.Basic.SecretRef.Name,

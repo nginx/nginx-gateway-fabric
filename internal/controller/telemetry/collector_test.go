@@ -169,15 +169,17 @@ var _ = Describe("Collector", Ordered, func() {
 				InstallationID:      string(ngfReplicaSet.ObjectMeta.OwnerReferences[0].UID),
 				ClusterNodeCount:    1,
 			},
-			NGFResourceCounts:              telemetry.NGFResourceCounts{},
-			ControlPlanePodCount:           1,
-			ImageSource:                    "local",
-			BuildOS:                        "alpine",
-			FlagNames:                      flags.Names,
-			FlagValues:                     flags.Values,
-			SnippetsFiltersDirectives:      []string{},
-			SnippetsFiltersDirectivesCount: []int64{},
-			NginxOneConnectionEnabled:      true,
+			NGFResourceCounts:               telemetry.NGFResourceCounts{},
+			ControlPlanePodCount:            1,
+			ImageSource:                     "local",
+			BuildOS:                         "alpine",
+			FlagNames:                       flags.Names,
+			FlagValues:                      flags.Values,
+			SnippetsFiltersDirectives:       []string{},
+			SnippetsFiltersDirectivesCount:  []int64{},
+			SnippetsPoliciesDirectives:      []string{},
+			SnippetsPoliciesDirectivesCount: []int64{},
+			NginxOneConnectionEnabled:       true,
 		}
 
 		k8sClientReader = &kubernetesfakes.FakeReader{}
@@ -340,9 +342,13 @@ var _ = Describe("Collector", Ordered, func() {
 						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "gr-2"}}: {RouteType: graph.RouteTypeGRPC},
 					},
 					L4Routes: map[graph.L4RouteKey]*graph.L4Route{
-						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tr-1"}}: {},
-						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tr-2"}}: {},
-						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tr-3"}}: {},
+						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tls-1"}}: {RouteType: graph.RouteTypeTLS},
+						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tls-2"}}: {RouteType: graph.RouteTypeTLS},
+						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tls-3"}}: {RouteType: graph.RouteTypeTLS},
+						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tcp-1"}}: {RouteType: graph.RouteTypeTCP},
+						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tcp-2"}}: {RouteType: graph.RouteTypeTCP},
+						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "udp-1"}}: {RouteType: graph.RouteTypeUDP},
+						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "udp-2"}}: {RouteType: graph.RouteTypeUDP},
 					},
 					ReferencedSecrets: map[types.NamespacedName]*graph.Secret{
 						client.ObjectKeyFromObject(secret1): {
@@ -400,6 +406,135 @@ var _ = Describe("Collector", Ordered, func() {
 							NsName: types.NamespacedName{Namespace: "test", Name: "ProxySettingsPolicy-4"},
 							GVK:    schema.GroupVersionKind{Kind: kinds.ProxySettingsPolicy},
 						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}, {Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "SnippetsPolicy-1"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.SnippetsPolicy},
+						}: {
+							TargetRefs: []graph.PolicyTargetRef{
+								{
+									Kind: kinds.Gateway,
+									Nsname: types.NamespacedName{
+										Name: "gateway1",
+									},
+								},
+							},
+							Source: &ngfAPI.SnippetsPolicy{
+								Spec: ngfAPI.SnippetsPolicySpec{
+									Snippets: []ngfAPI.Snippet{
+										{
+											Context: ngfAPI.NginxContextMain,
+											Value:   "worker_priority 0;",
+										},
+										{
+											Context: ngfAPI.NginxContextHTTP,
+											Value:   "aio on;",
+										},
+									},
+								},
+							},
+						},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "SnippetsPolicy-2"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.SnippetsPolicy},
+						}: {
+							TargetRefs: []graph.PolicyTargetRef{
+								{
+									Kind: kinds.Gateway,
+									Nsname: types.NamespacedName{
+										Name: "gateway2",
+									},
+								},
+							},
+							Source: &ngfAPI.SnippetsPolicy{
+								Spec: ngfAPI.SnippetsPolicySpec{
+									Snippets: []ngfAPI.Snippet{
+										{
+											Context: ngfAPI.NginxContextMain,
+											// String representation of NGINX values on same line
+											Value: "worker_priority 0; worker_rlimit_nofile 100;",
+										},
+										{
+											Context: ngfAPI.NginxContextHTTP,
+											// String representation of multi-line yaml value using | character
+											Value: "aio on;\nclient_body_timeout 70s;\n",
+										},
+									},
+								},
+							},
+						},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "SnippetsPolicy-3"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.SnippetsPolicy},
+						}: {
+							TargetRefs: []graph.PolicyTargetRef{
+								{
+									Kind: kinds.Gateway,
+									Nsname: types.NamespacedName{
+										Name: "gateway3",
+									},
+								},
+							},
+							Source: &ngfAPI.SnippetsPolicy{
+								Spec: ngfAPI.SnippetsPolicySpec{
+									Snippets: []ngfAPI.Snippet{
+										{
+											Context: ngfAPI.NginxContextMain,
+											// String representation of multi-line yaml value using > character
+											Value: "worker_priority 0; worker_rlimit_nofile 100;\n",
+										},
+										{
+											Context: ngfAPI.NginxContextHTTP,
+											// String representation of multi-line yaml using no special character
+											// besides a new line
+											Value: "aio on; client_body_timeout 70s;",
+										},
+									},
+								},
+							},
+						},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "SnippetsPolicy-4"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.SnippetsPolicy},
+						}: {
+							TargetRefs: []graph.PolicyTargetRef{
+								{
+									Kind: kinds.Gateway,
+									Nsname: types.NamespacedName{
+										Name: "gateway4",
+									},
+								},
+							},
+							Source: &ngfAPI.SnippetsPolicy{
+								Spec: ngfAPI.SnippetsPolicySpec{
+									Snippets: []ngfAPI.Snippet{
+										{
+											Context: ngfAPI.NginxContextMain,
+											Value:   "worker_priority 0;",
+										},
+										{
+											Context: ngfAPI.NginxContextMain,
+											Value:   "worker_rlimit_nofile 100;",
+										},
+										{
+											Context: ngfAPI.NginxContextHTTP,
+											Value:   "aio on;",
+										},
+										{
+											Context: ngfAPI.NginxContextHTTP,
+											Value:   "client_body_timeout 70s;",
+										},
+									},
+								},
+							},
+						},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "RateLimitPolicy-1"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "RateLimitPolicy-2"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
 					},
 					ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
 						{Namespace: "test", Name: "NginxProxy-1"}: &gcNP,
@@ -432,6 +567,21 @@ var _ = Describe("Collector", Ordered, func() {
 								// Tests lexicographical ordering when count and context is the same
 								ngfAPI.NginxContextMain:       "worker_rlimit_core 1m;",
 								ngfAPI.NginxContextHTTPServer: "auth_delay 10s;",
+							},
+						},
+					},
+					AuthenticationFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+						{Namespace: "test", Name: "af-1"}: {
+							Source: &ngfAPI.AuthenticationFilter{
+								Spec: ngfAPI.AuthenticationFilterSpec{
+									Basic: &ngfAPI.BasicAuth{
+										SecretRef: ngfAPI.LocalObjectReference{
+											Name: "basic-auth-secret",
+										},
+										Realm: "Restricted Area",
+									},
+									Type: ngfAPI.AuthTypeBasic,
+								},
 							},
 						},
 					},
@@ -498,6 +648,12 @@ var _ = Describe("Collector", Ordered, func() {
 					GatewayClassCount:                        3,
 					HTTPRouteCount:                           3,
 					TLSRouteCount:                            3,
+					TCPRouteCount:                            2,
+					UDPRouteCount:                            2,
+					RouteAttachedRateLimitPolicyCount:        2,
+					GatewayAttachedRateLimitPolicyCount:      1,
+					AuthenticationFilterCount:                1,
+					SnippetsPolicyCount:                      4,
 					SecretCount:                              3,
 					ServiceCount:                             3,
 					EndpointCount:                            5,
@@ -535,6 +691,18 @@ var _ = Describe("Collector", Ordered, func() {
 					1,
 					1,
 					1,
+				}
+				expData.SnippetsPoliciesDirectives = []string{
+					"aio-http",
+					"worker_priority-main",
+					"client_body_timeout-http",
+					"worker_rlimit_nofile-main",
+				}
+				expData.SnippetsPoliciesDirectivesCount = []int64{
+					4,
+					4,
+					3,
+					3,
 				}
 
 				// one gateway with one replica + one gateway with three replicas + one gateway with replica field
@@ -685,9 +853,12 @@ var _ = Describe("Collector", Ordered, func() {
 				},
 				Routes: map[graph.RouteKey]*graph.L7Route{
 					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "hr-1"}}: {RouteType: graph.RouteTypeHTTP},
+					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "gr-1"}}: {RouteType: graph.RouteTypeGRPC},
 				},
 				L4Routes: map[graph.L4RouteKey]*graph.L4Route{
-					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tr-1"}}: {},
+					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tls-1"}}: {RouteType: graph.RouteTypeTLS},
+					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tcp-1"}}: {RouteType: graph.RouteTypeTCP},
+					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "udp-1"}}: {RouteType: graph.RouteTypeUDP},
 				},
 				ReferencedSecrets: map[types.NamespacedName]*graph.Secret{
 					client.ObjectKeyFromObject(secret): {
@@ -734,12 +905,27 @@ var _ = Describe("Collector", Ordered, func() {
 						NsName: types.NamespacedName{Namespace: "test", Name: "ProxySettingsPolicy-empty"},
 						GVK:    schema.GroupVersionKind{Kind: kinds.ProxySettingsPolicy},
 					}: {},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "SnippetsPolicy-1"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.SnippetsPolicy},
+					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "RateLimitPolicy-1"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "RateLimitPolicy-2"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.RateLimitPolicy},
+					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
 					{Namespace: "test", Name: "NginxProxy-1"}: {Valid: true},
 				},
 				SnippetsFilters: map[types.NamespacedName]*graph.SnippetsFilter{
 					{Namespace: "test", Name: "sf-1"}: {},
+				},
+				AuthenticationFilters: map[types.NamespacedName]*graph.AuthenticationFilter{
+					{Namespace: "test", Name: "af-1"}: {},
 				},
 				BackendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
 					{Namespace: "test", Name: "BackendTLSPolicy-1"}: {},
@@ -817,6 +1003,13 @@ var _ = Describe("Collector", Ordered, func() {
 					GatewayClassCount:                        1,
 					HTTPRouteCount:                           1,
 					TLSRouteCount:                            1,
+					TCPRouteCount:                            1,
+					UDPRouteCount:                            1,
+					RouteAttachedRateLimitPolicyCount:        2,
+					GatewayAttachedRateLimitPolicyCount:      1,
+					AuthenticationFilterCount:                1,
+					SnippetsPolicyCount:                      1,
+					GRPCRouteCount:                           1,
 					SecretCount:                              1,
 					ServiceCount:                             1,
 					EndpointCount:                            1,

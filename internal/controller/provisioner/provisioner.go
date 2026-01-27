@@ -19,7 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/tools/record"
+	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -47,7 +47,7 @@ type Provisioner interface {
 // Config is the configuration for the Provisioner.
 type Config struct {
 	DeploymentStore                agent.DeploymentStorer
-	EventRecorder                  record.EventRecorder
+	EventRecorder                  k8sEvents.EventRecorder
 	PlusUsageConfig                *config.UsageReportConfig
 	StatusQueue                    *status.Queue
 	GatewayPodConfig               *config.GatewayPodConfig
@@ -281,8 +281,10 @@ func (p *NginxProvisioner) provisionNginx(
 			fullErr := errors.Join(err, upsertErr)
 			p.cfg.EventRecorder.Eventf(
 				obj,
+				gateway,
 				corev1.EventTypeWarning,
 				"CreateOrUpdateFailed",
+				"None",
 				"Failed to create or update nginx resource: %s",
 				fullErr.Error(),
 			)
@@ -355,8 +357,10 @@ func (p *NginxProvisioner) provisionNginx(
 		if err := p.k8sClient.Update(updateCtx, object); err != nil && !apierrors.IsConflict(err) {
 			p.cfg.EventRecorder.Eventf(
 				object,
+				gateway,
 				corev1.EventTypeWarning,
 				"RestartFailed",
+				"None",
 				"Failed to restart nginx after agent config update: %s",
 				err.Error(),
 			)
@@ -395,8 +399,10 @@ func (p *NginxProvisioner) reprovisionNginx(
 		if err := p.k8sClient.Create(createCtx, obj); err != nil && !apierrors.IsAlreadyExists(err) {
 			p.cfg.EventRecorder.Eventf(
 				obj,
+				gateway,
 				corev1.EventTypeWarning,
 				"CreateFailed",
+				"None",
 				"Failed to create nginx resource: %s",
 				err.Error(),
 			)
@@ -429,8 +435,15 @@ func (p *NginxProvisioner) deprovisionNginx(ctx context.Context, gatewayNSName t
 			if err := p.k8sClient.Delete(deleteCtx, obj); err != nil && !apierrors.IsNotFound(err) {
 				p.cfg.EventRecorder.Eventf(
 					obj,
+					&gatewayv1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      gatewayNSName.Name,
+							Namespace: gatewayNSName.Namespace,
+						},
+					},
 					corev1.EventTypeWarning,
 					"DeleteFailed",
+					"None",
 					"Failed to delete nginx resource: %s",
 					err.Error(),
 				)
@@ -456,8 +469,10 @@ func (p *NginxProvisioner) deleteObject(ctx context.Context, obj client.Object) 
 	if err := p.k8sClient.Delete(deleteCtx, obj); err != nil && !apierrors.IsNotFound(err) {
 		p.cfg.EventRecorder.Eventf(
 			obj,
+			nil,
 			corev1.EventTypeWarning,
 			"DeleteFailed",
+			"None",
 			"Failed to delete nginx resource: %s",
 			err.Error(),
 		)

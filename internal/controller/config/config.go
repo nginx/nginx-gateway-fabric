@@ -54,8 +54,8 @@ type Config struct {
 	InferenceExtension bool
 	// SnippetsFilters indicates if SnippetsFilters are enabled.
 	SnippetsFilters bool
-	// SnippetsPolicies indicates if SnippetsPolicies are enabled.
-	SnippetsPolicies bool
+	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
+	Snippets bool
 	// EndpointPickerDisableTLS indicates if TLS is disabled for EndpointPicker communication.
 	EndpointPickerDisableTLS bool
 	// EndpointPickerTLSSkipVerify indicates if secure verification is skipped for EndpointPicker communication.

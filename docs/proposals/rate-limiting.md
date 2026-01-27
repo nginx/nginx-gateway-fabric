@@ -101,11 +101,16 @@ type RateLimitPolicySpec struct {
     //
     // Support: Gateway, HTTPRoute, GRPCRoute
     //
+    // Note: A single policy cannot target both Gateway and Route kinds simultaneously.
+    // Use separate policies: one targeting Gateway (for inherited settings) and others
+    // targeting specific Routes (for overrides).
+    //
     // +kubebuilder:validation:MinItems=1
     // +kubebuilder:validation:MaxItems=16
     // +kubebuilder:validation:XValidation:message="TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute",rule="self.all(t, t.kind == 'Gateway' || t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute')"
-	  // +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.all(t, t.group=='gateway.networking.k8s.io')"
-	  // +kubebuilder:validation:XValidation:message="TargetRef Kind and Name combination must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name) && (p1.kind == p2.kind)))"
+    // +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io",rule="self.all(t, t.group=='gateway.networking.k8s.io')"
+    // +kubebuilder:validation:XValidation:message="TargetRef Kind and Name combination must be unique",rule="self.all(p1, self.exists_one(p2, (p1.name == p2.name) && (p1.kind == p2.kind)))"
+    // +kubebuilder:validation:XValidation:message="Cannot mix Gateway kind with HTTPRoute or GRPCRoute kinds in targetRefs",rule="!(self.exists(t, t.kind == 'Gateway') && self.exists(t, t.kind == 'HTTPRoute' || t.kind == 'GRPCRoute'))"
     TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 
     // RateLimit defines the Rate Limit settings.
@@ -120,61 +125,6 @@ type RateLimit struct {
     //
     // +optional
     Local *LocalRateLimit `json:"local,omitempty"`
-}
-
-// LocalRateLimit contains the local rate limit rules.
-type LocalRateLimit struct {
-    // Rules contains the list of rate limit rules.
-    //
-    // +optional
-    Rules *RateLimitRule[] `json:"rules,omitempty"`
-}
-
-// RateLimitRule contains settings for a RateLimit Rule.
-type RateLimitRule struct {
-    // Rate represents the rate of requests permitted. The rate is specified in requests per second (r/s)
-    // or requests per minute (r/m).
-    //
-    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    Rate Rate `json:"rate"`
-
-    // Key represents the key to which the rate limit is applied.
-    //
-    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    Key string `json:"key"`
-
-    // ZoneSize is the size of the shared memory zone.
-    //
-    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
-    //
-    // +optional
-    ZoneSize *Size `json:"zoneSize,omitempty"`
-
-    // Delay specifies a limit at which excessive requests become delayed. Default value is zero, which means all excessive requests are delayed.
-    //
-    // Default: 0
-    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
-    //
-    // +optional
-    Delay *int32 `json:"delay,omitempty"`
-
-    // NoDelay disables the delaying of excessive requests while requests are being limited. Overrides delay if both are set.
-    //
-    // Default: false
-    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
-    //
-    // +optional
-    NoDelay *bool `json:"noDelay,omitempty"`
-
-    // Burst sets the maximum burst size of requests. If the requests rate exceeds the rate configured for a zone,
-    // their processing is delayed such that requests are processed at a defined rate. Excessive requests are delayed
-    // until their number exceeds the maximum burst size in which case the request is terminated with an error.
-    //
-    // Default: 0
-    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
-    //
-    // +optional
-    Burst *int32 `json:"burst,omitempty"`
 
     // DryRun enables the dry run mode. In this mode, the rate limit is not actually applied, but the number of excessive requests is accounted as usual in the shared memory zone.
     //
@@ -192,7 +142,7 @@ type RateLimitRule struct {
     // +optional
     LogLevel *RateLimitLogLevel `json:"logLevel,omitempty"`
 
-    // RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400..599.
+    // RejectCode sets the status code to return in response to rejected requests. Must fall into the range 400-599.
     //
     // Default: 503
     // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_status
@@ -201,6 +151,67 @@ type RateLimitRule struct {
     // +kubebuilder:validation:Minimum=400
     // +kubebuilder:validation:Maximum=599
     RejectCode *int32 `json:"rejectCode,omitempty"`
+}
+
+// LocalRateLimit contains the local rate limit rules.
+type LocalRateLimit struct {
+    // Rules contains the list of rate limit rules.
+    //
+    // +optional
+    Rules []RateLimitRule `json:"rules,omitempty"`
+}
+
+// RateLimitRule contains settings for a RateLimit Rule.
+//
+// +kubebuilder:validation:XValidation:message="NoDelay cannot be true when Delay is also set",rule="!(has(self.noDelay) && has(self.delay) && self.noDelay == true)"
+type RateLimitRule struct {
+    // Rate represents the rate of requests permitted. The rate is specified in requests per second (r/s)
+    // or requests per minute (r/m).
+    //
+    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
+    Rate Rate `json:"rate"`
+
+    // Key represents the key to which the rate limit is applied. The key can contain text, variables,
+	  // and their combination.
+	  //
+	  // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
+	  //
+	  // +kubebuilder:validation:Pattern=`^(?:[^ \t\r\n;{}#$]+|\$\w+)+$`
+    Key string `json:"key"`
+
+    // ZoneSize is the size of the shared memory zone.
+    //
+    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone
+    //
+    // +optional
+    ZoneSize *Size `json:"zoneSize,omitempty"`
+
+    // Delay specifies a limit at which excessive requests become delayed. Default value is zero, which means all excessive requests are delayed.
+    //
+    // Default: 0
+    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
+    //
+    // +optional
+    Delay *int32 `json:"delay,omitempty"`
+
+    // NoDelay disables the delaying of excessive requests while requests are being limited.
+    // NoDelay cannot be true when Delay is also set.
+    //
+    // Default: false
+    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
+    //
+    // +optional
+    NoDelay *bool `json:"noDelay,omitempty"`
+
+    // Burst sets the maximum burst size of requests. If the requests rate exceeds the rate configured for a zone,
+    // their processing is delayed such that requests are processed at a defined rate. Excessive requests are delayed
+    // until their number exceeds the maximum burst size in which case the request is terminated with an error.
+    //
+    // Default: 0
+    // Directive: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req
+    //
+    // +optional
+    Burst *int32 `json:"burst,omitempty"`
 }
 
 // Size is a string value representing a size. Size can be specified in bytes, kilobytes (k), megabytes (m).
@@ -268,6 +279,8 @@ The following Conditions must be populated on the `RateLimitPolicy` CRD:
 
 Note: The `Programmed` condition is part of the updated GEP-713 specification and should be implemented for this policy. Existing policies (ClientSettingsPolicy, UpstreamSettingsPolicy, ObservabilityPolicy) may not have implemented this condition yet and should be updated in future work.
 
+When multiple RateLimitPolicies select the same target and specify any of dryRun, logLevel, or rejectCode, only one policy will be applied. The controller selects the policy with the highest priority (based on time created, if created at the same time, ties are calculated on alphabetical order sorting of the policy name) and rejected policies will have the `Accepted` Condition set to false with the reason `Conflicted`.
+
 #### Setting Status on Objects Affected by a Policy
 
 In the Policy Attachment GEP, there's a provisional status described [here](https://gateway-api.sigs.k8s.io/geps/gep-713/#target-object-status) that involves adding a Condition to all objects affected by a Policy.
@@ -332,9 +345,9 @@ spec:
         delay: 5
         noDelay: false
         burst: 5
-        dryRun: false
-        logLevel: error
-        rejectCode: 503
+    dryRun: false
+    logLevel: error
+    rejectCode: 503
 status:
   ancestors:
   - ancestorRef:
@@ -378,28 +391,30 @@ spec:
         delay: 5
         noDelay: false
         burst: 5
-        dryRun: false
-        logLevel: error
-        rejectCode: 503
+    dryRun: false
+    logLevel: error
+    rejectCode: 503
 ```
 
 ## Attachment and Inheritance
 
 The `RateLimitPolicy` may be attached to Gateways, HTTPRoutes, and GRPCRoutes.
 
+**Important Constraint**: A single `RateLimitPolicy` instance cannot target both Gateway and Route kinds simultaneously. This prevents configuration conflicts and ensures clear policy boundaries. To configure both Gateway-level limits and Route-level limits, use separate policy instances.
+
 There are three possible attachment scenarios:
 
 **1. Gateway Attachment**
 
-When a `RateLimitPolicy` is attached to a Gateway only, all the HTTPRoutes and GRPCRoutes attached to the Gateway inherit the rate limit settings. A singular rate limit zone is created for the Gateway, and `limit_req` directives targeting the zone are propagated downwards to the `location` directives of the HTTPRoutes and GRPCRoutes attached to the Gateway.
+When a `RateLimitPolicy` is attached to a Gateway only, all the HTTPRoutes and GRPCRoutes attached to the Gateway inherit the rate limit settings. All of the NGINX directives are set at the `http` context.
 
 **2: Route Attachment**
 
 When a `RateLimitPolicy` is attached to an HTTPRoute or GRPCRoute only, the settings in that policy apply to that Route only. The rate limit zone in the policy will be created at the top level `http` directive, but the rate limit rules in the `location` directives of the route will only exist on routes with the `RateLimitPolicy` attached. Other Routes attached to the same Gateway will not have the rate limit rules applied to them.
 
-**3: Gateway and Route Attachment**
+**3: Gateway and Route Attachment (Separate Policies)**
 
-When a `RateLimitPolicy` is attached to a Gateway and one or more of the Routes that are attached to that Gateway, there is no conflict in policies. The `RateLimitPolicy` attached to the Gateway will generate its rate limit rule that gets applied to all the Routes attached to the Gateway and the `RateLimitPolicy` attached to the Route will generate its rate limit rule that gets applied to its specific `location` directives. In this case, the Route would end up with its own rate limit rule, in addition to the rate limit rule passed down from the Gateway.
+When separate `RateLimitPolicy` instances are used - one attached to a Gateway and others attached to Routes that are attached to that Gateway, there are no conflict in policies. The `RateLimitPolicy` attached to the Gateway will generate its configuration at the `http` context and the `RateLimitPolicy` instance(s) attached to the Route will generate the rate limit zone at the `http` context and its own rate limit rules at its specific `location` contexts. In this case, the Route would end up with its own rate limit rule, in addition to being affected by the rate limit rule set at the `http` context.
 
 As a consequence, there is no way to overwrite / negate a `RateLimitPolicy` from a Gateway by attaching another policy to the Route.
 
@@ -407,11 +422,10 @@ As a consequence, there is no way to overwrite / negate a `RateLimitPolicy` from
 
 The strategy for implementing the effective policy is:
 
-- When a `RateLimitPolicy` is attached to a Gateway, generate a singular `limit_req_zone` directive, unique to that policy and Gateway, at the `http` block, and a `limit_req` directive at each of the `location` blocks generated by Routes attached to the Gateway.
-- When a `RateLimitPolicy` is attached to an HTTPRoute or GRPCRoute, generate a singular `limit_req_zone`, unique to that policy and Route, directive at the `http` block, and a `limit_req` directive at each of the `location` blocks generated for the Route.
-- When multiple `RateLimitPolicies` are attached to a Gateway, generate a unique `limit_req_zone` for each policy-gateway pair.
-- When a `RateLimitPolicy` is attached to a Gateway, and there exists a Route which is attached to that Gateway which also has a `RateLimitPolicy` attached to it, the `location` blocks generated for that Route will have the `limit_req` directive with the Gateway `RateLimitPolicy` zone, and whatever `limit_req` directives generated by the `RateLimitPolicy` attached to the Route.
-- When a `RateLimitPolicy` is targeting a Gateway and Routes that are attached to the same Gateway, only a singular `limit_req_zone`, unique to that policy and Gateway is generated, and the `location` blocks from the Routes contain a `limit_req` directive targeting that zone.
+- When a `RateLimitPolicy` is attached to a Gateway, generate a `limit_req_zone` directive, unique to that policy and rule index, at the `http` block. The `limit_req` directive and other NGINX directives setting log level, reject code, and dry run are also set at the `http` context.
+- When a `RateLimitPolicy` is attached to an HTTPRoute or GRPCRoute, generate a singular `limit_req_zone`, unique to that policy and rule index, directive at the `http` block, and a `limit_req` directive at each of the `location` blocks generated for the Route. The other NGINX directives setting log level, reject code, and dry run are set at the `location` contexts.
+- When multiple `RateLimitPolicies` are attached to a Gateway, generate a unique `limit_req_zone` for each policy pair.
+- When a `RateLimitPolicy` is attached to a Gateway, and there exists a Route which is attached to that Gateway which also has a `RateLimitPolicy` attached to it, the Gateway level `RateLimitPolicy` will generate all of its NGINX configuration at the `http` context while the Route level `RateLimitPolicy` will generate its `limit_req_zone` directive at the `http` context and the other configuration at the `location` context.
 
 NGINX rate limit configuration should not be generated on internal location blocks generated for the purpose of internal rewriting logic. If done so, a request directed to an external location might be counted multiple times if there are internal locations.
 
@@ -437,6 +451,8 @@ Key validation rules:
 
 - `Size` fields must match the pattern `^\d{1,4}(k|m)?$` to ensure valid NGINX size values
 - TargetRef must reference Gateway, HTTPRoute, or GRPCRoute only
+- On a singular rate limit rule, `NoDelay` cannot be true when `Delay` is also set.
+- TargetRefs cannot mix Gateway kind with HTTPRoute or GRPCRoute kinds in the same policy (a policy must target either Gateway OR Routes, not both)
 
 ## Alternatives
 

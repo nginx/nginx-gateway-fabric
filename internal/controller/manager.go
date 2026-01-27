@@ -26,7 +26,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
+	k8sEvents "k8s.io/client-go/tools/events"
 	ctlr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,6 +54,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/ratelimit"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/snippetspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	ngxvalidation "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
@@ -112,7 +113,7 @@ func StartManager(cfg config.Config) error {
 	}
 
 	recorderName := fmt.Sprintf("nginx-gateway-fabric-%s", cfg.GatewayClassName)
-	recorder := mgr.GetEventRecorderFor(recorderName)
+	recorder := mgr.GetEventRecorder(recorderName)
 
 	logLevelSetter := newMultiLogLevelSetter(newZapLogLevelSetter(cfg.AtomicLevel))
 
@@ -155,7 +156,7 @@ func StartManager(cfg config.Config) error {
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
 		},
-		SnippetsPolicies: cfg.SnippetsPolicies,
+		Snippets: cfg.Snippets,
 	})
 
 	var handlerCollector handlerMetricsCollector = collectors.NewControllerNoopCollector()
@@ -354,9 +355,13 @@ func createPolicyManager(
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),
 			Validator: upstreamsettings.NewValidator(validator, cfg.Plus),
 		},
+		{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),
+			Validator: ratelimit.NewValidator(validator),
+		},
 	}
 
-	if cfg.SnippetsPolicies {
+	if cfg.Snippets {
 		cfgs = append(cfgs, policies.ManagerConfig{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.SnippetsPolicy{}),
 			Validator: snippetspolicy.NewValidator(),
@@ -520,7 +525,7 @@ func registerControllers(
 	ctx context.Context,
 	cfg config.Config,
 	mgr manager.Manager,
-	recorder record.EventRecorder,
+	recorder k8sEvents.EventRecorder,
 	logLevelSetter logLevelSetter,
 	eventCh chan interface{},
 	controlConfigNSName types.NamespacedName,
@@ -647,6 +652,12 @@ func registerControllers(
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
 		},
+		{
+			objectType: &ngfAPIv1alpha1.RateLimitPolicy{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
 	}
 
 	// BackendTLSPolicy v1 - conditionally register if CRD exists
@@ -741,7 +752,7 @@ func registerControllers(
 		}
 	}
 
-	if cfg.SnippetsFilters {
+	if cfg.SnippetsFilters || cfg.Snippets {
 		controllerRegCfgs = append(controllerRegCfgs,
 			ctlrCfg{
 				objectType: &ngfAPIv1alpha1.SnippetsFilter{},
@@ -752,7 +763,7 @@ func registerControllers(
 		)
 	}
 
-	if cfg.SnippetsPolicies {
+	if cfg.Snippets {
 		controllerRegCfgs = append(controllerRegCfgs,
 			ctlrCfg{
 				objectType: &ngfAPIv1alpha1.SnippetsPolicy{},
@@ -971,6 +982,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
+		&ngfAPIv1alpha1.RateLimitPolicyList{},
 		partialObjectMetadataList,
 	}
 
@@ -995,14 +1007,14 @@ func prepareFirstEventBatchPreparerArgs(
 		objectLists = append(objectLists, &inference.InferencePoolList{})
 	}
 
-	if cfg.SnippetsFilters {
+	if cfg.SnippetsFilters || cfg.Snippets {
 		objectLists = append(
 			objectLists,
 			&ngfAPIv1alpha1.SnippetsFilterList{},
 		)
 	}
 
-	if cfg.SnippetsPolicies {
+	if cfg.Snippets {
 		objectLists = append(
 			objectLists,
 			&ngfAPIv1alpha1.SnippetsPolicyList{},
@@ -1017,7 +1029,7 @@ func prepareFirstEventBatchPreparerArgs(
 func setInitialConfig(
 	reader client.Reader,
 	logger logr.Logger,
-	eventRecorder record.EventRecorder,
+	eventRecorder k8sEvents.EventRecorder,
 	logLevelSetter logLevelSetter,
 	configName types.NamespacedName,
 ) error {

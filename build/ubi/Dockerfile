@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.20
+# syntax=docker/dockerfile:1.21
 FROM golang:1.25 AS builder
 
 WORKDIR /go/src/github.com/nginx/nginx-gateway-fabric
@@ -11,7 +11,10 @@ RUN make build
 
 FROM golang:1.25 AS ca-certs-provider
 
-FROM redhat/ubi9-minimal:9.7-1764794109 AS ngf-ubi-minimal
+FROM redhat/ubi9-minimal:9.7-1768783948 AS ngf-ubi-minimal
+
+RUN microdnf -y update glib2 && microdnf clean all
+
 # CA certs are needed for telemetry report so that NGF can verify the server's certificate.
 COPY --from=ca-certs-provider --link /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 USER 101:1001

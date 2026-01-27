@@ -1064,6 +1064,7 @@ func TestBuildGraph(t *testing.T) {
 		Valid:      true,
 		Attachable: true,
 		Source:     tr,
+		RouteType:  RouteTypeTLS,
 		ParentRefs: []ParentRef{
 			{
 				Idx: 0,
@@ -1146,6 +1147,7 @@ func TestBuildGraph(t *testing.T) {
 		Valid:      true,
 		Attachable: true,
 		Source:     tr2,
+		RouteType:  RouteTypeTLS,
 		ParentRefs: []ParentRef{
 			{
 				Idx: 0,
@@ -1220,6 +1222,7 @@ func TestBuildGraph(t *testing.T) {
 		Valid:      true,
 		Attachable: true,
 		Source:     tcpr,
+		RouteType:  RouteTypeTCP,
 		ParentRefs: []ParentRef{
 			{
 				Idx: 0,
@@ -1296,6 +1299,7 @@ func TestBuildGraph(t *testing.T) {
 		Valid:      true,
 		Attachable: true,
 		Source:     udpr,
+		RouteType:  RouteTypeUDP,
 		ParentRefs: []ParentRef{
 			{
 				Idx: 0,

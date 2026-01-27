@@ -3,6 +3,7 @@ package graph
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,6 +16,25 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
+)
+
+const (
+	SSLProtocolsKey           = "nginx.org/ssl-protocols"
+	SSLCiphersKey             = "nginx.org/ssl-ciphers"
+	SSLPreferServerCiphersKey = "nginx.org/ssl-prefer-server-ciphers"
+
+	// Examples of allowed ciphers:
+	//
+	// Single cipher:                   AES128-GCM-SHA256
+	// Cipher suite with exclusion:     HIGH:!aNULL
+	// Multiple ciphers with exclusion: ECDHE-RSA-AES256-GCM-SHA384:AES128-SHA:!MD5
+	// Single exclusion:                !LOW.
+	sslCiphersRegx = `^!?[A-Za-z0-9-+_]+(:!?[A-Za-z0-9-+_]+)*$`
+)
+
+var (
+	sslProtocolsValues           = []string{"SSLv2", "SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"}
+	sslPreferServerCiphersValues = []string{"on", "off"}
 )
 
 // Listener represents a Listener of the Gateway resource.
@@ -447,9 +467,7 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 		}
 
 		if len(listener.TLS.Options) > 0 {
-			path := tlsPath.Child("options")
-			valErr := field.Forbidden(path, "options are not supported")
-			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			conds = append(conds, validateListenerTLSOptions(listener, tlsPath)...)
 		}
 
 		if len(listener.TLS.CertificateRefs) == 0 {
@@ -484,6 +502,72 @@ func createHTTPSListenerValidator(protectedPorts ProtectedPorts) listenerValidat
 
 		return conds, true
 	}
+}
+
+func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (conds []conditions.Condition) {
+	supportedOptions := map[v1.AnnotationKey]bool{
+		SSLProtocolsKey:           true,
+		SSLCiphersKey:             true,
+		SSLPreferServerCiphersKey: true,
+	}
+
+	for optionKey, optionValue := range listener.TLS.Options {
+		if !supportedOptions[optionKey] {
+			path := tlsPath.Child("options").Key(string(optionKey))
+			valErr := field.NotSupported(path, optionKey, []string{
+				SSLProtocolsKey,
+				SSLCiphersKey,
+				SSLPreferServerCiphersKey,
+			})
+			conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+		}
+
+		// Validate ssl-protocols values
+		if optionKey == SSLProtocolsKey {
+			allowedProtocols := make(map[string]bool)
+
+			for _, value := range sslProtocolsValues {
+				allowedProtocols[value] = true
+			}
+
+			protocols := strings.Fields(string(optionValue))
+			if len(protocols) == 0 {
+				path := tlsPath.Child("options").Key(string(optionKey))
+				valErr := field.NotSupported(path, "", sslProtocolsValues)
+				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			}
+			for _, protocol := range protocols {
+				if !allowedProtocols[protocol] {
+					path := tlsPath.Child("options").Key(string(optionKey))
+					valErr := field.NotSupported(path, protocol, sslProtocolsValues)
+					conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+				}
+			}
+		}
+
+		// Validate ssl-prefer-server-ciphers values
+		if optionKey == SSLPreferServerCiphersKey {
+			value := string(optionValue)
+			if value != "on" && value != "off" {
+				path := tlsPath.Child("options").Key(string(optionKey))
+				valErr := field.NotSupported(path, value, sslPreferServerCiphersValues)
+				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			}
+		}
+
+		// Validate ssl-ciphers values
+		if optionKey == SSLCiphersKey {
+			value := string(optionValue)
+			cipherRegex := regexp.MustCompile(sslCiphersRegx)
+			if !cipherRegex.MatchString(value) {
+				path := tlsPath.Child("options").Key(string(optionKey))
+				valErr := field.Invalid(path, value, "invalid ssl ciphers")
+				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			}
+		}
+	}
+
+	return conds
 }
 
 // isL4Protocol checks if the protocol is a Layer 4 protocol (TCP or UDP).

@@ -138,6 +138,7 @@ Create namespaced RBAC rules.
   - list
   - watch
 - apiGroups:
+  - events.k8s.io
   - ""
   resources:
   - events
@@ -229,10 +230,11 @@ Create namespaced RBAC rules.
   - upstreamsettingspolicies
   - authenticationfilters
   - proxysettingspolicies
-  {{- if .Values.nginxGateway.snippetsFilters.enable }}
+  - ratelimitpolicies
+  {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters
   {{- end }}
-  {{- if .Values.nginxGateway.snippetsPolicies.enable }}
+  {{- if .Values.nginxGateway.snippets.enable }}
   - snippetspolicies
   {{- end }}
   verbs:
@@ -247,10 +249,11 @@ Create namespaced RBAC rules.
   - upstreamsettingspolicies/status
   - authenticationfilters/status
   - proxysettingspolicies/status
-  {{- if .Values.nginxGateway.snippetsFilters.enable }}
+  - ratelimitpolicies/status
+  {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters/status
   {{- end }}
-  {{- if .Values.nginxGateway.snippetsPolicies.enable }}
+  {{- if .Values.nginxGateway.snippets.enable }}
   - snippetspolicies/status
   {{- end }}
   verbs:
