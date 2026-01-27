@@ -483,7 +483,9 @@ func TestBuildNginxResourceObjects_ExposeHealthcheck(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeClient := fake.NewFakeClient(agentTLSSecret)
+			// Create a copy of the secret to avoid data race with parallel tests
+			secretCopy := agentTLSSecret.DeepCopy()
+			fakeClient := fake.NewFakeClient(secretCopy)
 			provisioner := &NginxProvisioner{
 				cfg: Config{
 					GatewayPodConfig: &config.GatewayPodConfig{

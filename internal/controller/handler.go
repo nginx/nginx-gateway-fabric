@@ -402,10 +402,11 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		return
 	}
 
-	// If GatewayLink is enabled, don't update addresses from Service.
-	// The address will be set by the IngressLink status watcher instead.
 	var gwAddresses []gatewayv1.GatewayStatusAddress
-	if !gatewayLinkEnabled(gw) {
+	if gatewayLinkEnabled(gw) {
+		// Preserve existing Gateway addresses set by the IngressLink watcher
+		gwAddresses = gw.Source.Status.Addresses
+	} else {
 		var err error
 		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 		if err != nil {
@@ -482,6 +483,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 
 	// We put Gateway status updates separately from the rest of the statuses because we want to be able
 	// to update them separately from the rest of the graph whenever the public IP of NGF changes.
+	// When GatewayLink is enabled, gwAddresses will be nil here - the IngressLink watcher sets the address.
 	gwReqs := status.PrepareGatewayRequests(
 		gw,
 		transitionTime,
