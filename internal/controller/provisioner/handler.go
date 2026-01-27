@@ -317,6 +317,11 @@ func (h *eventHandler) waitUntilGatewayRegistrationIsFinished(ctx context.Contex
 	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
+	// Check immediately first
+	if _, ok := h.provisioner.gatewaysBeingRegistered.Load(gatewayNSName); !ok {
+		return
+	}
+
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
