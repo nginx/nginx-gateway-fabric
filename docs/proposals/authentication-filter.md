@@ -76,8 +76,8 @@ This portion also contains:
       - Understanding JWT claims
       - Understanding nested claim
       - Understand claim enforcement
-    - Processing claims
-    - Processing nested claims
+      - Processing claims
+      - Processing nested claims
  - Route Attachment
  - Resource status
 
@@ -966,7 +966,7 @@ http {
 }
 ```
 
-### Processing claims
+#### Processing claims
 
 This section will cover the proposed specification for JWT claim enforcement, as well as nested claims.
 Claims can be required for both `File` and `Remote` modes.
@@ -1012,7 +1012,7 @@ This spec is configured a JWT payload with these claims:
 }
 ```
 
-### Processing nested claims
+#### Processing nested claims
 
 The overall spec for nested claims will be similar to how standard claims are processed.
 The main difference will be how NGINX expected them to be defined and processed.
