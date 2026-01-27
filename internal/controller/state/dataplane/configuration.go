@@ -1237,12 +1237,10 @@ func buildBaseHTTPConfig(
 ) BaseHTTPConfig {
 	baseConfig := BaseHTTPConfig{
 		// HTTP2 should be enabled by default
-		HTTP2:                   true,
-		IPFamily:                Dual,
-		Policies:                buildPolicies(gateway, gateway.Policies),
-		Snippets:                buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
-		NginxReadinessProbePort: DefaultNginxReadinessProbePort,
-		NginxReadinessProbePath: DefaultNginxReadinessProbePath,
+		HTTP2:    true,
+		IPFamily: Dual,
+		Policies: buildPolicies(gateway, gateway.Policies),
+		Snippets: buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
 	}
 
 	// Create HTTP context policies for route-targeting RateLimitPolicies
@@ -1259,6 +1257,11 @@ func buildBaseHTTPConfig(
 
 	// safe to access EffectiveNginxProxy since we only call this function when the Gateway is not nil.
 	np := gateway.EffectiveNginxProxy
+
+	// These helpers handle np == nil internally, so call them before the nil check.
+	baseConfig.NginxReadinessProbePort = GetNginxReadinessProbePort(np)
+	baseConfig.NginxReadinessProbePath = GetNginxReadinessProbePath(np)
+
 	if np == nil {
 		return baseConfig
 	}
@@ -1279,10 +1282,6 @@ func buildBaseHTTPConfig(
 			baseConfig.IPFamily = IPv6
 		}
 	}
-
-	baseConfig.NginxReadinessProbePort = GetNginxReadinessProbePort(np)
-
-	baseConfig.NginxReadinessProbePath = GetNginxReadinessProbePath(np)
 
 	baseConfig.RewriteClientIPSettings = buildRewriteClientIPConfig(np.RewriteClientIP)
 

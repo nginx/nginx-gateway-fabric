@@ -729,7 +729,7 @@ type ReadinessProbeSpec struct {
 	// Must start with a forward slash and contain only valid URL path characters.
 	//
 	// +optional
-	// +kubebuilder:validation:Pattern=`^/[^\s\$"'\\;{}]*$`
+	// +kubebuilder:validation:Pattern=`^/[a-zA-Z0-9/_\-\.~]*$`
 	Path *string `json:"path,omitempty"`
 
 	// InitialDelaySeconds is the number of seconds after the container has

@@ -523,7 +523,7 @@ func TestBuildNginxResourceObjects_ExposeHealthcheck(t *testing.T) {
 
 			healthcheckPort := corev1.ServicePort{
 				Port:       9091,
-				Name:       "port-9091",
+				Name:       "health",
 				Protocol:   corev1.ProtocolTCP,
 				TargetPort: intstr.FromInt(9091),
 			}
