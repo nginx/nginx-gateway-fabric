@@ -402,14 +402,6 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 func TestBuildNginxResourceObjects_ExposeHealthcheck(t *testing.T) {
 	t.Parallel()
 
-	agentTLSSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      agentTLSTestSecretName,
-			Namespace: ngfNamespace,
-		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
-	}
-
 	gateway := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "gw",
@@ -483,6 +475,13 @@ func TestBuildNginxResourceObjects_ExposeHealthcheck(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
+			agentTLSSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentTLSTestSecretName,
+					Namespace: ngfNamespace,
+				},
+				Data: map[string][]byte{"tls.crt": []byte("tls")},
+			}
 			fakeClient := fake.NewFakeClient(agentTLSSecret)
 			provisioner := &NginxProvisioner{
 				cfg: Config{
