@@ -208,6 +208,27 @@ type JWTAuth struct {
   // +optional
   Remote *RemoteKeySource `json:"remote,omitempty"`
 
+  // Require defines claims that must match exactly (e.g. iss, aud).
+  // These translate into NGINX maps and auth_jwt_require directives.
+  // Example directives and maps:
+  //
+  //  auth_jwt_require $valid_jwt_iss;
+  //  auth_jwt_require $valid_jwt_aud;
+  //
+  //  map $jwt_claim_iss $valid_jwt_iss {
+  //      "https://issuer.example.com" 1;
+  //      "https://issuer.example1.com" 1;
+  //      default 0;
+  //  }
+  //  map $jwt_claim_aud $valid_jwt_aud {
+  //      "api" 1;
+  //      "cli" 1;
+  //      default 0;
+  //  }
+  //
+  // +optional
+  Require *JWTRequiredClaims `json:"require,omitempty"`
+
   // Leeway is the acceptable clock skew for exp/nbf checks.
   // Configures `auth_jwt_leeway` directive.
   // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
@@ -243,6 +264,42 @@ type RemoteKeySource struct {
   // TLS defines HTTPS client parameters for retrieving JWKS.
   // +optional
   TLS *RemoteTLSConfig `json:"tls,omitempty"`
+}
+
+// JWTRequiredClaims specifies exact-match requirements for JWT claims.
+type JWTRequiredClaims struct {
+  // Issuer (iss) required exact value.
+  //
+  // +optional
+  Iss []string `json:"iss,omitempty"`
+
+  // Audience (aud) required exact value.
+  //
+  // +optional
+  Aud []string `json:"aud,omitempty"`
+
+  // Subject (sub) required exact value
+  //
+  // +optional
+  Sub []string `json:"sub,omitempty"`
+
+  // User defined custom claims
+  //
+  // +optional
+  Claims []JWTCustomClaim `json:"claims,omitempty"`
+}
+
+// JWTCustomClaim specifies custom user claims and values.
+// +kubebuilder:validation:XValidation:message="exactly one of value or values must be set",rule="has(self.value) != has(self.values)"
+// +kubebuilder:validation:XValidation:message="value must be non-empty when set",rule="!has(self.value) || size(self.value) > 0"
+// +kubebuilder:validation:XValidation:message="values must be non-empty when set",rule="!has(self.values) || size(self.values) > 0"
+type JWTCustomClaim struct {
+  Name   string   `json:"name"`
+  // Exactly one of Value or Values must be set.
+  // +optional
+  Value  *string  `json:"value,omitempty"`
+  // +optional
+  Values []string `json:"values,omitempty"`
 }
 
 // RemoteTLSConfig defines TLS settings for remote JWKS retrieval.
@@ -636,9 +693,9 @@ Below are `two` potential NGINX configurations based on the mode used.
 
 1. NGINX Config when using `Mode: File` (i.e. locally referenced JWKS key)
 
-For JWT Auth, NGF will store the file used by `auth_jwt_key_file` in `/etc/nginx/secrets/`
-The full path to the file will be `/etc/nginx/secrets/jwt_auth_<secret-namespace>_<secret-name>`
-In this case, the full path will be `/etc/nginx/secrets/jwt_auth_default_jwt-keys-secure`
+For JWT Auth, NGF will store the file used by `auth_jwt_key_file` in `/etc/nginx/secrets/`.
+The full path to the file will be `/etc/nginx/secrets/jwt_auth_<secret-namespace>_<secret-name>`.
+In this case, the full path will be `/etc/nginx/secrets/jwt_auth_default_jwt-keys-secure`.
 
 ```nginx
 http {
@@ -825,7 +882,7 @@ Users may also choose to set custom claims. Common ones are `email` and `name`.
 }
 ```
 
-User defined variables can each be accessed through the `$jwt_claim_` variable, where the name the of the claim is appended to the end of the variable name
+User defined variables can each be accessed through the `$jwt_claim_` variable, where the name the of the claim is appended to the end of the variable name.
 For example, the `user` claim will be `$jwt_claim_used` with the value of `john doe`.
 
 #### Understanding nested claims
@@ -937,7 +994,9 @@ spec:
         - name: "tenant" # Set `auth_jwt_require $jwt_claim_tenant;`
           value: "acme-co"
         - name: "roles"
-          value: ["reader", "admin"] # User defined list of roles.
+          values: # User defined list of roles.
+          - "reader"
+          - "admin"
 ```
 
 This spec is configured a JWT payload with these claims:
@@ -956,7 +1015,7 @@ This spec is configured a JWT payload with these claims:
 ### Processing nested claims
 
 The overall spec for nested claims will be similar to how standard claims are processed.
-The main difference will be how NGNIX expected them to be defined and processed.
+The main difference will be how NGINX expected them to be defined and processed.
 
 Let's start with the JWT payload this time.
 These are the claims we will process. This time `roles` is nested under `realm_access`:
@@ -987,18 +1046,20 @@ spec:
         uri: https://issuer.example.com/.well-known/jwks.json
       require:
         claims:
-        - name: "realm_access/roles" # Nested claim.
-          value: ["reader", "admin"] # User defined list of roles.
+        - name: "realm_access/roles"
+          values: # User defined list of roles.
+          - "reader"
+          - "admin"
         - name: "email"
           value: "user@example.com"
 ```
 
-To process the nested claim, the names of bot the top-level and nested claim are specified as one string separate by a forward-slash `/`.
+To process the nested claim, the names of bot the top-level and nested claim are specified as one string separate by a slash `/`.
 It's important to note that [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519) does not explicitly define prohibited characters for JWT claim names.
 Instead, it's advised to avoid characters that are reserved in URI such as slash `/`.
 Given this, it feels safe to assume that we can separate these by the slash character when parsing the claim.
 
-For nested claims and claims including a dot (“.”), the value of the variable cannot be evaluated by NIGINX.
+For nested claims and claims including a dot (“.”), the value of the variable cannot be evaluated by NGINX.
 To handle these, the [`auth_jwt_claim_set`](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_claim_set) directive should be used instead.
 
 In the case of the nested claim `realm_access/roles`, and `email` this should be defined like this:
@@ -1033,7 +1094,7 @@ Only one `AuthenticationFilter` may be referenced in a single rule.
 In a scenario where a route rule references multiple `AuthenticationFilter` resources, that route rule will set to `Invalid`.
 The route resource will display the `UnresolvedRefs` message to inform the user that the rule has been `Rejected`.
 
-This behavior falls in line with the expected behavior of filters in the Gateway API, which generally allows only one type of a specific filter (authentication, rewriting, etc.) within a rule.
+This behavior falls in line with the expected behavior of filters in the Gateway API, which generally allows only one type of specific filter (authentication, rewriting, etc.) within a rule.
 
 Here is an example of an HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule.
 In this scenario, the route rule for `/api` will be marked as `Invalid`.
@@ -1358,8 +1419,6 @@ spec:
     kind: Secret
     name: basic-auth-users
 ```
-
-
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
