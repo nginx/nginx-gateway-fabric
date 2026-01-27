@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -169,12 +170,9 @@ func (h *eventHandler) updateOrDeleteResources(
 		return nil
 	}
 
-	if h.store.getResourceVersionForObject(gatewayNSName, obj) == obj.GetResourceVersion() {
-		return nil
-	}
+	h.waitUntilGatewayRegistrationIsFinished(ctx, gatewayNSName)
 
-	// Check if the gateway is being registered
-	if _, ok := h.provisioner.gatewaysBeingRegistered.Load(gatewayNSName); ok {
+	if h.store.getResourceVersionForObject(gatewayNSName, obj) == obj.GetResourceVersion() {
 		return nil
 	}
 
@@ -312,4 +310,24 @@ func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, sec
 	}
 
 	return errors.Join(allErrs...)
+}
+
+// waitUntilGatewayRegistionIsFinished attempts to wait until the gateway registration is finished.
+func (h *eventHandler) waitUntilGatewayRegistrationIsFinished(ctx context.Context, gatewayNSName types.NamespacedName) {
+	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-newCtx.Done():
+			return
+		case <-ticker.C:
+			if _, ok := h.provisioner.gatewaysBeingRegistered.Load(gatewayNSName); !ok {
+				return
+			}
+		}
+	}
 }
