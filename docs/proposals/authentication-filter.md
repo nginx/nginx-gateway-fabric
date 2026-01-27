@@ -6,7 +6,7 @@
 ## Summary
 
 Design and implement a means for users of NGINX Gateway Fabric to enable authentication on requests to their backend applications.
-This new filter should eventually expose all forms of authentication available through NGINX, both Open Source and Plus.
+This filter should eventually expose all forms of authentication available through NGINX, both Open Source and Plus.
 
 ## Goals
 
@@ -28,7 +28,6 @@ This new filter should eventually expose all forms of authentication available t
 This document focuses explicitly on Authentication (AuthN) and not Authorization (AuthZ). Authentication (AuthN) defines the verification of identity. It asks the question, "Who are you?". This is different from Authorization (AuthZ), which follows Authentication. It asks the question, "What are you allowed to do?"
 
 This document also focuses on HTTP Basic Authentication and JWT Authentication. Other authentication methods such as OpenID Connect (OIDC) are mentioned but are not part of the CRD design. These will be covered in future design and implementation tasks.
-
 
 ## Use Cases
 
@@ -62,13 +61,25 @@ requested resource.
 This portion of the proposal will cover API design and interaction experience for use of Basic Auth and JWT.
 This portion also contains:
 
-1. The Golang API
-2. Example spec for Basic Auth
-    - Example HTTPRoute resources and NGINX configuration
-3. Example spec for JWT Auth
-    - Example HTTPRoute resources
-    - Examples for Local & Remote JWKS configuration
-    - Example NGINX configuration for both Local & Remote JWKS
+- The Golang API
+- Basic Auth
+    - Proposed spec for Basic Auth
+    - Secret creation and reference for Basic Auth
+    - Example HTTPRoute resource
+    - Generated NGINX configuration
+- JWT Auth
+    - Proposed spec for JWT Auth
+    - Secret creation and reference for JWT Auth
+    - Example HTTPRoute resource
+    - Generated NGINX configuration
+    - JWT claims
+      - Understanding JWT claims
+      - Understanding nested claim
+      - Understand claim enforcement
+    - Processing claims
+    - Processing nested claims
+ - Route Attachment
+ - Resource status
 
 ### Golang API
 
@@ -89,8 +100,8 @@ import (
 // +kubebuilder:resource:categories=nginx-gateway-fabric,shortName=authfilter;authenticationfilter
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// AuthenticationFilter configures request authentication (Basic or JWT) and is
-// referenced by HTTPRoute filters via ExtensionRef.
+// AuthenticationFilter configures request authentication and is
+// attached using as a filter via ExtensionRef.
 type AuthenticationFilter struct {
   metav1.TypeMeta   `json:",inline"`
   metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -98,10 +109,7 @@ type AuthenticationFilter struct {
   // Spec defines the desired state of the AuthenticationFilter.
   Spec AuthenticationFilterSpec `json:"spec"`
 
-  // Status defines the state of the AuthenticationFilter, following the same
-  // pattern as SnippetsFilter: per-controller conditions with an Accepted condition.
-  //
-  // +optional
+  // Status defines the state of the AuthenticationFilter.
   Status AuthenticationFilterStatus `json:"status,omitempty"`
 }
 
@@ -115,27 +123,23 @@ type AuthenticationFilterList struct {
 }
 
 // AuthenticationFilterSpec defines the desired configuration.
-// Exactly one of Basic or JWT must be set according to Type.
-// +kubebuilder:validation:XValidation:message="for type=Basic, spec.basic must be set and spec.jwt must be empty; for type=JWT, spec.jwt must be set and spec.basic must be empty",rule="self.type == 'Basic' ? self.basic != null && self.jwt == null : self.type == 'JWT' ? self.jwt != null && self.basic == null : false"
-// +kubebuilder:validation:XValidation:message="type 'Basic' requires spec.basic to be set. All other spec types must be unset",rule="self.type == 'Basic' ? self.type != null && self.jwt == null : true"
-// +kubebuilder:validation:XValidation:message="type 'JWT' requires spec.jwt to be set. All other spec types must be unset",rule="self.type == 'JWT' ? self.type != null && self.basic == null : true"
-// +kubebuilder:validation:XValidation:message="when spec.basic is set, type must be 'Basic'",rule="self.basic != null ? self.type == 'Basic' : true"
-// +kubebuilder:validation:XValidation:message="when spec.jwt is set, type must be 'JWT'",rule="self.jwt != null ? self.type == 'JWT' : true"
+// +kubebuilder:validation:XValidation:message="type Basic requires spec.basic to be set.",rule="self.type != 'Basic' || has(self.basic)"
+// +kubebuilder:validation:XValidation:message="type JWT requires spec.jwt to be set.",rule="self.type != 'JWT' || has(self.jwt)"
+//
+//nolint:lll
 type AuthenticationFilterSpec struct {
-  // Type selects the authentication mechanism.
-  Type AuthType `json:"type"`
-
   // Basic configures HTTP Basic Authentication.
-  // Required when Type == Basic.
   //
   // +optional
   Basic *BasicAuth `json:"basic,omitempty"`
 
   // JWT configures JSON Web Token authentication (NGINX Plus).
-  // Required when Type == JWT.
   //
   // +optional
   JWT *JWTAuth `json:"jwt,omitempty"`
+
+  // Type selects the authentication mechanism.
+  Type AuthType `json:"type"`
 }
 
 // AuthType defines the authentication mechanism.
@@ -143,7 +147,9 @@ type AuthenticationFilterSpec struct {
 type AuthType string
 
 const (
+  // AuthTypeBasic is the HTTP Basic Authentication mechanism.
   AuthTypeBasic AuthType = "Basic"
+  // AuthTypeJWT is the JWT Authentication mechanism.
   AuthTypeJWT   AuthType = "JWT"
 )
 
@@ -169,29 +175,32 @@ type LocalObjectReference struct {
 type JWTKeyMode string
 
 const (
+  // JWTKeyModeFile configures JWT to fetch JWKS from a local secret.
   JWTKeyModeFile   JWTKeyMode = "File"
+  // JWTKeyModeRemote configures JWT to fetch JWKS from a remote source.
   JWTKeyModeRemote JWTKeyMode = "Remote"
 )
 
 // JWTAuth configures JWT-based authentication (NGINX Plus).
-// +kubebuilder:validation:XValidation:message="mode 'File' requires file set and remote unset",rule="self.mode == 'File' ? self.file != null && self.remote == null : true"
-// +kubebuilder:validation:XValidation:message="mode 'Remote' requires remote set and file unset",rule="self.mode == 'Remote' ? self.remote != null && self.file == null : true"
-// +kubebuilder:validation:XValidation:message="when file is set, mode must be 'File'",rule="self.file != null ? self.mode == 'File' : true"
-// +kubebuilder:validation:XValidation:message="when remote is set, mode must be 'Remote'",rule="self.remote != null ? self.mode == 'Remote' : true"
+// +kubebuilder:validation:XValidation:message="mode File requires spec.file to be set.",rule="self.mode != 'File' || has(self.file)"
+// +kubebuilder:validation:XValidation:message="mode Remote requires spec.remote to be set.",rule="self.mode != 'Remote' || has(self.remote)"
+//
+//nolint:lll
 type JWTAuth struct {
-  // Realm used by NGINX `auth_jwt` directive
-  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
-  // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
-  Realm string `json:"realm"`
-
-  // Mode selects how JWT keys are provided: local file or remote JWKS.
-  Mode JWTKeyMode `json:"mode"`
-
   // File specifies local JWKS configuration.
   // Required when Mode == File.
   //
   // +optional
   File *JWTFileKeySource `json:"file,omitempty"`
+
+  // KeyCache is the cache duration for keys.
+  // Configures `auth_jwt_key_cache` directive.
+  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
+  // Example: "auth_jwt_key_cache 10m;".
+  // Default: 10m.
+  //
+  // +optional
+  KeyCache *Duration `json:"keyCache,omitempty"`
 
   // Remote specifies remote JWKS configuration.
   // Required when Mode == Remote.
@@ -203,56 +212,56 @@ type JWTAuth struct {
   // Configures `auth_jwt_leeway` directive.
   // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
   // Example: "auth_jwt_leeway 60s".
+  // Default: 0s.
   //
   // +optional
-  Leeway *v1alpha1.Duration `json:"leeway,omitempty"`
+  Leeway *Duration `json:"leeway,omitempty"`
 
-  // Type sets token type: signed | encrypted | nested.
-  // Default: signed.
-  // Configures `auth_jwt_type` directive.
-  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_type
-  // Example: "auth_jwt_type signed;".
-  //
-  // +optional
-  // +kubebuilder:default=signed
-  Type *JWTType `json:"type,omitempty"`
+  // Realm used by NGINX `auth_jwt` directive
+  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
+  // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
+  Realm string `json:"realm"`
 
-  // KeyCache is the cache duration for keys.
-  // Configures auth_jwt_key_cache directive.
-  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
-  // Example: "auth_jwt_key_cache 10m".
-  //
-  // +optional
-  KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
+  // Mode selects how JWT keys are provided: local file or remote JWKS.
+  Mode JWTKeyMode `json:"mode"`
 }
 
 // JWTFileKeySource specifies local JWKS key configuration.
 type JWTFileKeySource struct {
   // SecretRef references a Secret containing the JWKS.
   SecretRef LocalObjectReference `json:"secretRef"`
-
-  // KeyCache is the cache duration for keys.
-  // Configures `auth_jwt_key_cache` directive.
-  // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
-  // Example: "auth_jwt_key_cache 10m;".
-  //
-  // +optional
-  KeyCache *v1alpha1.Duration `json:"keyCache,omitempty"`
 }
 
  // RemoteKeySource specifies remote JWKS configuration.
 type RemoteKeySource struct {
-  // URL is the JWKS endpoint, e.g. "https://issuer.example.com/.well-known/jwks.json".
-  URL string `json:"url"`
-
   // Cache configures NGINX proxy_cache for JWKS fetches made via auth_jwt_key_request.
   // When set, NGF will render proxy_cache_path in http{} and attach proxy_cache to the internal JWKS location.
   //
   // +optional
   Cache *JWKSCache `json:"cache,omitempty"`
+
+  // TLS defines HTTPS client parameters for retrieving JWKS.
+  // +optional
+  TLS *RemoteTLSConfig `json:"tls,omitempty"`
 }
 
- // JWKSCache controls NGINX `proxy_cache_path` and `proxy_cache` settings used for JWKS responses.
+// RemoteTLSConfig defines TLS settings for remote JWKS retrieval.
+type RemoteTLSConfig struct {
+  // CertificateRef references a Secret containing client TLS cert and key.
+  // Expectes secret type kubernetes.io/tls.
+  //
+  // +optional
+  CertificateRef *gatewayv1.SecretObjectReference `json:"certificateRef,omitempty"`
+
+
+  // Verify controls server certificate verification.
+  //
+  // +optional
+  // +kubebuilder:default=true
+  Verify *bool `json:"verify,omitempty"`
+}
+
+ // JWKSCache uses NGINX `proxy_cache_path` and `proxy_cache` directives for caching remote JSON Web Key Sets.
 type JWKSCache struct {
   // Levels specifies the directory hierarchy for cached files.
   // Used in `proxy_cache_path` directive.
@@ -267,10 +276,6 @@ type JWKSCache struct {
   //
   // +optional
   KeysZoneName *string `json:"keysZoneName,omitempty"`
-
-  // KeysZoneSize is the size of the cache keys zone (e.g. "10m").
-  // This is required to avoid unbounded allocations.
-  KeysZoneSize string `json:"keysZoneSize"`
 
   // MaxSize limits the total size of the cache (e.g. "50m").
   //
@@ -287,26 +292,11 @@ type JWKSCache struct {
   //
   // +optional
   UseTempPath *bool `json:"useTempPath,omitempty"`
+
+  // KeysZoneSize is the size of the cache keys zone (e.g. "10m").
+  // This is required to avoid unbounded allocations.
+  KeysZoneSize string `json:"keysZoneSize"`
 }
-
-// JWTType represents NGINX auth_jwt_type.
-// +kubebuilder:validation:Enum=signed;encrypted;nested
-type JWTType string
-
-const (
-  JWTTypeSigned    JWTType = "signed"
-  JWTTypeEncrypted JWTType = "encrypted"
-  JWTTypeNested    JWTType = "nested"
-)
-
-// AuthScheme enumerates supported WWW-Authenticate schemes.
-// +kubebuilder:validation:Enum=Basic;Bearer
-type AuthScheme string
-
-const (
-  AuthSchemeBasic  AuthScheme = "Basic"
-  AuthSchemeBearer AuthScheme = "Bearer"
-)
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
 type AuthenticationFilterStatus struct {
@@ -343,7 +333,9 @@ const (
 )
 ```
 
-### Example Spec for Basic Auth
+## Basic Auth
+
+### Proposed Spec for Basic Auth
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -360,7 +352,7 @@ spec:
 
 In the case of Basic Auth, the deployed Secret and HTTPRoute may look like this:
 
-#### Secret Referenced by Filter
+### Secret creation and reference for Basic Auth
 
 For Basic Auth, we will process a custom secret type of `nginx.org/htpasswd`.
 This will allow us to be more confident that the user is providing us with the appropriate kind of secret for this use case.
@@ -406,7 +398,7 @@ data:
   auth: YWRtaW46JGFwcjEkWnhZMTIzNDUkYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4Lwp1c2VyOiRhcHIxJEFiQzk4NzY1JG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpSktMLwo=
 ```
 
-#### HTTPRoute that will reference this filter
+### Example HTTPRoute resource
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -434,7 +426,7 @@ spec:
       port: 80
 ```
 
-#### Generated NGINX Config
+### Generated NGINX configuration
 
 For Basic Auth, NGF will store the file used by `auth_basic_user_file` in `/etc/nginx/secrets/`
 The full path to the file will be `/etc/nginx/secrets/basic_auth_<secret-namespace>_<secret-name>`
@@ -458,9 +450,6 @@ http {
             # Path is generated by NGF using the name and key from the secret
             auth_basic_user_file /etc/nginx/secrets/basic_auth_default_basic_auth_user;
 
-            # Optional: do not forward client Authorization header to upstream
-            proxy_set_header Authorization "";
-
             # NGF standard proxy headers
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -474,14 +463,18 @@ http {
 }
 ```
 
-### Example spec for JWT Auth
+## JWT Auth
+
+### Proposed spec for JWT Auth
 
 For JWT Auth, there are two options.
 
 1. Local JWKS file stored as a Secret of type `nginx.org/jwt`
 2. Remote JWKS from an external identity provider (IdP) such as Keycloak
 
-#### Example JWT AuthenticationFilter with Local JWKS
+#### Spec for local JWKS
+
+This mode will access the public JSON Web Key (JWK) from a kubenertes secret.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -496,15 +489,14 @@ spec:
     mode: File
     file:
       secretRef:
-        name: jwt-keys-secure
-      keyCache: 10m  # Optional cache time for keys (auth_jwt_key_cache)
-    # Acceptable clock skew for exp/nbf
-    leeway: 60s # Configures auth_jwt_leeway
-    # Sets auth_jwt_type
-    type: signed # signed | encrypted | nested
+        name: jwt-keys-securey
 ```
 
-#### Example JWT AuthenticationFilter with Remote JWKS
+#### Spec for remote JWKS
+
+This mode will access the public JSON Web Key Set (JWKS) from a remote server.
+This could be a self-hosted server or a hosted identity provider (IdP).
+To ensure a secure connection can be established to the remote JWKS URI,
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -518,16 +510,16 @@ spec:
     # Key verification mode. Local file or Remote JWKS
     mode: Remote
     remote:
-      url: https://issuer.example.com/.well-known/jwks.json
-    # Acceptable clock skew for exp/nbf
-    leeway: 60s # Configures auth_jwt_leeway
-    # Sets auth_jwt_type
-    type: signed # signed | encrypted | nested
-    # Optional cache duration for keys (auth_jwt_key_cache)
-    keyCache: 10m
+      uri: https://issuer.example.com/.well-known/jwks.json
+      tls:
+        certificateRef:
+          name: cafe-secret
+        verify: true # Defaults to true
 ```
 
-#### Secret Referenced by Filter
+
+
+### Secret creation and reference for JWT Auth
 
 For JWT Auth, we will process a custom secret type of `nginx.org/jwt`.
 This will allow us to be more confident that the user is providing us with the appropriate kind of secret for this use case.
@@ -610,7 +602,7 @@ data:
   auth: ewogICJrZXlzIjogWwogICAgewogICAgICAia3R5IjogIlJTQSIsCiAgICAgICJhbGciOiAiUlMyNTYiLAogICAgICAidXNlIjogInNpZyIsCiAgICAgICJraWQiOiAibXkta2V5LWlkIiwKICAgICAgIm4iOiAiUVVFek5FVkJOMFkyUmpORE4wWkZOelUxTjBKRU4wUkdNelUxTkVFelJqWkJRakl3TWtSRE16azVSVFF3TVRGRVEwRXdRa00yUmpoRU1qWTRNa1pHTURrME16QXhOekpETUVOQlFUUXpSa014TWtRMU5FTTVPVFV6UkRjM05UTTJSRUkyT0VVMU9EWXdRalUxTWtFMk4wUXlORUkwUmtRMk1qQTBORFJETTBJMk5FWkJNemhETmprM05qTkVRekl5T0RORVFVRTRORVE0T1VOR05rUTJNVGxDUmpCRU1USkNSamxCTVRFNVJEZzBNRGRET0RNMVEwRTBOa0ZCTWtNeU16VTBSRGs0TjBORE9VTkJRek5GTlRZMFEwUXdRVEJGUTBVd1FqZEZOakV4UVVGR05EaENSRVF6UkROQk0wSkJNa1F4TkVVM1F6RXpRVUpGUkVFNVJURkNNelk0T0RrMlEwTTBRemRDTkRZMk9URkRPRFpCUlRoRVFqazVNMEl4TlVWQ1FUZ3hNRFl5UWtRM09FUTNSRVZDTURrM09UQXhNa1JFTUVZMFFqVkZRVGxHUWpORk5EVkNORUUwT0VaR09UYzFPVVF6TTBFNU9FTTJNRE15UmpFMU9UY3lRekJHT0VOQlFUUkNNVEl3TkRJeE5VRkdOVUl3TVRJeVJESkRNVU0yTkVGR1JFVXpSVFl4TlVVd1FqSXdNMEZFTXpZNE5UUXpSVEJHTmpnMU9EQkNSRUk1TXpNMFFUUkRSREU1TWtZMU1EaEdOVVl3T1RBeVJVUkVOVVpFTVVKQk1VSkZSakJDTmtZMlJEVTJRalZDTWpjM1JEZENSRVJETmpaQk0wRkdOVEpDUVRFNVEwTXpPVFF6UVVZNFF6VTRNMEk1UmpNMFJFRTNRVVE9IiwKICAgICAgImUiOiAiWlZNPSIKICAgIH0KICBdCn0K
 ```
 
-#### HTTPRoute that Will Reference this Filter
+### Example HTTPRoute resource
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -638,7 +630,7 @@ spec:
       port: 80
 ```
 
-#### Generated NGINX Config
+### Generated NGINX configuration
 
 Below are `two` potential NGINX configurations based on the mode used.
 
@@ -655,16 +647,6 @@ http {
         server 10.0.0.11:80;
     }
 
-    # Exact claim matching via maps for iss/aud
-    map $jwt_claim_iss $valid_jwt_iss {
-        "https://issuer.example.com" 1;
-        default 0;
-    }
-    map $jwt_claim_aud $valid_jwt_aud {
-        "api" 1;
-        default 0;
-    }
-
     server {
         listen 80;
         server_name api.example.com;
@@ -679,23 +661,14 @@ http {
             # Optional: key cache duration
             auth_jwt_key_cache 10m;
 
-            # Leeway for exp/nbf
-            auth_jwt_leeway 60s;
-
-            # Token type
-            auth_jwt_type signed;
-
             # Required claims (enforced via maps above)
             auth_jwt_require $valid_jwt_iss;
             auth_jwt_require $valid_jwt_aud;
 
-            # Identity headers to pass back on success
-            add_header X-User-Id        $jwt_claim_sub always;
-            add_header X-User-Email     $jwt_claim_email always;
-            add_header X-Auth-Mechanism "jwt" always;
-
-            # Optional: do not forward client Authorization header to upstream
-            proxy_set_header Authorization "";
+            # Pass identity headers to upstream on success
+            proxy_set_header X-User-Id        $jwt_claim_sub always;
+            proxy_set_header X-User-Email     $jwt_claim_email always;
+            proxy_set_header X-Auth-Mechanism "jwt" always;
 
             # NGF standard proxy headers
             proxy_set_header Host $host;
@@ -712,31 +685,26 @@ http {
 
 1. NGINX Config when using `Mode: Remote`
 
-These are some directives the `Remote` mode uses over the `File` mode:
+When using the `Remote` mode, the `auth_jwt_key_request` directive is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal-<namespace>-<name>_jwks_uri` to redirect the request to the external auth provider (e.g. Keycloak), In this example, the name will be `/_ngf-internal-default-api-jwt_jwks_uri`.
+To improve the overall performance of remote requests, `proxy_cache_path` is used to configure caching of the JWKS after an initial request. This allows subsequent requests to avoid re-authentication for a time.
+In additional, `auth_jwt_key_cache` is specified to locally cache the JWKS received from the IdP.
 
-- `auth_jwt_key_request`: When using the `Remote` mode, this is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal_jwks_uri` to redirect the request to the external auth provider (e.g. Keycloak)
-- `proxy_cache_path`: This is used to configure caching of the JWKS after an initial request, allowing subsequent requests to avoid re-authentication for a time
+Since it is likely that the caching configuration will be available through other resources, it's important that the `proxy_cache_path` configuration for JWT will not collide with other configurations.
+To ensure this, we can do the following
+- Set `proxy_cache_path` path `/var/cache/nginx/jwks/<filter-namespace>_<filter-name>`, and do not make this path configurable. Assuming we follow a similar pattern for other resource, this will ensure the cache path is unique between various `AutenticationFilter` resources, as well as across other resources configuring caching.
+- Set `key_zone` to `auth_jwt_<filter-namespace>_<filter-name>`. Similar to how the path is set, this will ensure uniqueness across resources.
 
+Caching will be enabled by default
+
+Here is an example of what the NGINX configuration would look like:
 ```nginx
 http {
     # Serve JWKS from cache after the first fetch
-    proxy_cache_path /var/cache/nginx/jwks levels=1:2 keys_zone=jwks_jwt_auth:10m max_size=50m inactive=10m use_temp_path=off;
+    proxy_cache_path /var/cache/nginx/jwks/default_jwt-auth levels=1:2 keys_zone=auth_jwt_default_jwt-auth:10m max_size=50m inactive=10m use_temp_path=off;
 
     upstream backend_default {
         server 10.0.0.10:80;
         server 10.0.0.11:80;
-    }
-
-    # Exact claim matching via maps for iss/aud
-    map $jwt_claim_iss $valid_jwt_iss {
-        "https://issuer.example.com" 1;
-        "https://issuer.example1.com" 1;
-        default 0;
-    }
-    map $jwt_claim_aud $valid_jwt_aud {
-        "api" 1;
-        "cli" 1;
-        default 0;
     }
 
     server {
@@ -751,20 +719,10 @@ http {
             # Optional: key cache duration
             auth_jwt_key_cache 10m;
 
-            # Leeway for exp/nbf
-            auth_jwt_leeway 60s;
-
-            # Token type
-            auth_jwt_type signed;
-
-            # Required claims (enforced via maps above)
-            auth_jwt_require $valid_jwt_iss;
-            auth_jwt_require $valid_jwt_aud;
-
-            # Identity headers to pass back on success
-            add_header X-User-Id        $jwt_claim_sub always;
-            add_header X-User-Email     $jwt_claim_email always;
-            add_header X-Auth-Mechanism "jwt" always;
+            # Pass identity headers to upstream on success
+            proxy_set_header X-User-Id        $jwt_claim_sub always;
+            proxy_set_header X-User-Email     $jwt_claim_email always;
+            proxy_set_header X-Auth-Mechanism "jwt" always;
 
             # Optional: do not forward client Authorization header to upstream
             proxy_set_header Authorization "";
@@ -780,20 +738,23 @@ http {
         }
 
         # Internal endpoint to fetch JWKS from IdP
-        location = /_ngf-internal_jwks_uri {
+        location = /_ngf-internal-default-api-jwt_jwks_uri {
             internal;
             # Enable caching of JWKS
-            proxy_cache jwks_jwt_auth;
+            proxy_cache auth_jwt_default_jwt-auth;
             proxy_pass  https://issuer.example.com/.well-known/jwks.json;
         }
     }
 }
 ```
 
-### Caching Configuration
+### Cache specification
 
-Users may also choose to change the caching configuration set by `proxy_cache_path`.
-This can be made available in the `cache` configuration under `jwt.remote.cache`
+JWT caching is enabled by default.
+Three configuration options are available for caching.
+- `keyCache.ttl`: Sets the duration of key caching for `auth_jwt_key_cache`. Defaults to `10m`.
+- `proxyCache.size`: Sets the `max_size` option for `proxy_cache_path` for JWT auth. Defaults to `50m`.
+- `proxyCache.ttl`: Set the `inactive` option for `proxy_cache_path` for JWT auth. Defaults to `10m`.
 
 ```yaml
 kind: AuthenticationFilter
@@ -805,20 +766,257 @@ spec:
     realm: "Restricted"
     mode: Remote
     remote:
-      url: https://issuer.example.com/.well-known/jwks.json
-      cache:
-        levels: "1:2"               # optional; defaults to "1:2"
-        keysZoneName: jwks_jwtauth  # optional; controller can default to a derived name
-        keysZoneSize: 10m           # required; size for keys_zone
-        maxSize: 50m                # optional; limit total cache size
-        inactive: 10m               # optional; inactivity TTL before eviction
-        useTempPath: false          # optional; sets use_temp_path
+      uri: https://issuer.example.com/.well-known/jwks.json
+      keyCache:
+        ttl: 10m
+      proxyCache:
+        size: 50m
+        ttl: 10m
 ```
 
-### Attachment
+### JWT claims
 
-Filters must be attached to an HTTPRoute/GRPCRoute at the `rules.matches` level.
-This means that a single `AuthenticationFilter` may be attached multiple times to a single HTTPRoute/GRPCRoute.
+A common use case for JWT authentication is to enforce fields within a JWT payload to be required.
+These fields are referred to as claims.
+
+This section will discuss JWT claims, as well as a proposed specification for configuring to enforce NGINX to require the presence of specific claims and/or values of those claims.
+
+#### Understanding JWT claims
+
+JWT claims are fields/attributes contained within a JSON Web Token. These handle authorization (AuthZ).
+
+Here is an example of a JWT payload containing the standard registered claims outlined in [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519#page-9):
+```json
+{
+  "iss": "https://issuer.example.com",
+  "sub": "user-12345",
+  "aud": ["api", "cli"],
+  "exp": 1924992000,
+  "nbf": 1737931200,
+  "iat": 1737930900,
+  "jti": "3f4c2f2a-2e02-4f7b-bb4b-0a1b2c3d4e5f",
+}
+```
+
+The Subject (`sub`) claim typically contains details on the user such as their username.
+The Audience (`aud`) claim identifies what access the claim is intended for. For example, this JWT is claiming to have API and CLI access.
+The Issuer (`iss`) claim identifies who issued this token.
+The Expiration Time (`exp`), Not Before (`nbf`) and Issued At (`iat`) claims help with the lifecycle of a token. They ensure requests using tokens outside these time constrains are rejected.
+The JWT ID (`jti`) claim is a unique identifier for the token.
+
+NOTE: Both the Audience (`aud`) and Issuer (`iss`) claims in a JWT payload can be either a single string or an array. They will only ever be an array if it contains more than one value.
+
+Users may also choose to set custom claims. Common ones are `email` and `name`.
+```json
+{
+  // User defined claims
+  "name": "john doe",
+  "roles": ["reader", "admin"],
+  "tenant": "acme-co",
+
+  // Standard registered claims
+  "iss": "https://issuer.example.com",
+  "sub": "user-12345",
+  "aud": "api",
+  "exp": 1924992000,
+  "nbf": 1737931200,
+  "iat": 1737930900,
+  "jti": "3f4c2f2a-2e02-4f7b-bb4b-0a1b2c3d4e5f",
+}
+```
+
+User defined variables can each be accessed through the `$jwt_claim_` variable, where the name the of the claim is appended to the end of the variable name
+For example, the `user` claim will be `$jwt_claim_used` with the value of `john doe`.
+
+#### Understanding nested claims
+
+It's possible that JWT payloads can contain nested claims. This is there certain, non-standard claims, like `roles` or `user`, are nested under other top-level claims.
+Here is an example where the `roles`, claims is nested under the new `realm_access` claim, and the `user` claim now contains the `tenant` claim as a nested claim:
+```json
+{
+  "realm_access": {
+    "roles": ["reader", "admin"]
+  },
+  "user": {
+    "tenant": "acme-eu"
+  },
+}
+```
+
+Claims provide a means to enhance the security of JWT authentication and improve access control through requiring specific claims and claim values.
+
+#### Understand claim enforcement
+
+NGINX defines the `auth_jwt_require` directive to handle JWT claim enforcement.
+The two most common claims to enforce as issuer `iss`, and audience `aud`.
+
+When NGINX successfully validates a token, the `iss`, `aud` and `sub` claims are automatically exposed as variables. `$jwt_claim_iss`, `$jwt_claim_aud` and `$jwt_claim_sub`.
+
+There are two ways to enforce claims.
+
+1. The presence of the claim.
+
+This is the simplest, and least recommended approach. By declaring `auth_jwt_require $jwt_claim_iss`, NGINX will check for the presence or absence of this claim.
+If the claim is absent, NGINX throws an error. It will not validate the value of the claim.
+
+2. Validate claim values.
+
+This approach is provides a more secure and robust experience.
+
+Let's say a user wants to enforce a token to contain one of two issuers, `https://issuer.example.com` or `https://issuer.example1.com`. Let's also say the value of audience can be either `api` or `cli`.
+
+For NGINX to manage this, a map must be defined to check the values stored in `$jwt_claim_iss`, and `$jwt_claim_aud`, returning a 1 if there is a match, or a 0.
+
+This map would look like this:
+```nginx
+http{
+    map $jwt_claim_iss $valid_jwt_iss {
+        "https://issuer.example.com" 1;
+        "https://issuer.example1.com" 1;
+        default 0;
+    }
+    map $jwt_claim_aud $valid_jwt_aud {
+        "api" 1;
+        "cli" 1;
+        default 0;
+    }
+}
+```
+
+We would then set `$valid_jwt_iss` and `$valid_jwt_aud` as required claims within the location:
+```nginx
+http {
+    map $jwt_claim_iss $valid_jwt_iss {
+        "https://issuer.example.com" 1;
+        "https://issuer.example1.com" 1;
+        default 0;
+    }
+    map $jwt_claim_aud $valid_jwt_aud {
+        "api" 1;
+        "cli" 1;
+        default 0;
+    }
+
+  location /api {
+    # Other NGINX fields..
+
+    auth_jwt_require $valid_jwt_iss;
+    auth_jwt_require $valid_jwt_aud;
+
+
+    proxy_pass ...
+  }
+}
+```
+
+### Processing claims
+
+This section will cover the proposed specification for JWT claim enforcement, as well as nested claims.
+Claims can be required for both `File` and `Remote` modes.
+
+```yaml
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-auth
+spec:
+  type: JWT
+  jwt:
+    realm: "Restricted"
+    mode: Remote
+      remote:
+        uri: https://issuer.example.com/.well-known/jwks.json
+      require:
+        iss:
+         - "https://issuer.example.com" # List with single value.
+        aud:
+         - "api"
+         - "cli"
+        sub: "user-12345"
+        claims:
+        - name: "tenant" # Set `auth_jwt_require $jwt_claim_tenant;`
+          value: "acme-co"
+        - name: "roles"
+          value: ["reader", "admin"] # User defined list of roles.
+```
+
+This spec is configured a JWT payload with these claims:
+```json
+{
+  // Standard registered claims
+  "iss": "https://issuer.example.com",
+  "aud": ["api", "cli"],
+  "sub": "user-12345",
+  // User defined claims
+  "tenant": "acme-co",
+  "roles": ["reader", "admin"],
+}
+```
+
+### Processing nested claims
+
+The overall spec for nested claims will be similar to how standard claims are processed.
+The main difference will be how NGNIX expected them to be defined and processed.
+
+Let's start with the JWT payload this time.
+These are the claims we will process. This time `roles` is nested under `realm_access`:
+```json
+{
+  // Standard registered claims
+  "iss": "https://issuer.example.com",
+  "aud": ["api", "cli"],
+  "sub": "user-12345",
+  // User defined claims
+  "email": "user@example.com",
+  "realm_access": {
+    "roles": ["reader", "admin"]
+  },
+}
+```
+```yaml
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: jwt-auth
+spec:
+  type: JWT
+  jwt:
+    realm: "Restricted"
+    mode: Remote
+      remote:
+        uri: https://issuer.example.com/.well-known/jwks.json
+      require:
+        claims:
+        - name: "realm_access/roles" # Nested claim.
+          value: ["reader", "admin"] # User defined list of roles.
+        - name: "email"
+          value: "user@example.com"
+```
+
+To process the nested claim, the names of bot the top-level and nested claim are specified as one string separate by a forward-slash `/`.
+It's important to note that [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519) does not explicitly define prohibited characters for JWT claim names.
+Instead, it's advised to avoid characters that are reserved in URI such as slash `/`.
+Given this, it feels safe to assume that we can separate these by the slash character when parsing the claim.
+
+For nested claims and claims including a dot (“.”), the value of the variable cannot be evaluated by NIGINX.
+To handle these, the [`auth_jwt_claim_set`](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_claim_set) directive should be used instead.
+
+In the case of the nested claim `realm_access/roles`, and `email` this should be defined like this:
+
+```nginx
+auth_jwt_claim_set $roles realm_access roles;
+auth_jwt_claim_set $email email;
+```
+
+This will set the value of `$roles` to `["reader", "admin"]`, and the value of `$email` set to `user@example.com`.
+Since the email contains a dot, this needs to be processed the same way.
+
+### Route Attachment
+
+Filters must be attached to a route resource (HTTPRoute, GRPCRoute, etc...) at the `rules.matches` level.
+An `AuthenticaitonFilter` MAY be referenced by multiple rules.
+An `AuthenticationFilter` MUST NOT be referenced more than once within a single rule.
+This is expanded upon in the **Resource status** section.
 
 #### Basic example
 
@@ -826,19 +1024,19 @@ This example shows a single HTTPRoute, with a single `filter` defined in a `rule
 
 ![reference-1](/docs/images/authentication-filter/reference-1.png)
 
-### Status
+### Resource status
 
-#### Referencing multiple AuthenticationFilter Resources in a Single Rule
+#### Referencing multiple AuthenticationFilter resources in a single rule
 
-Only a single `AuthenticationFilter` may be referenced in a single rule.
+Only one `AuthenticationFilter` may be referenced in a single rule.
 
 In a scenario where a route rule references multiple `AuthenticationFilter` resources, that route rule will set to `Invalid`.
-
-The HTTPRoute/GRPCRoute resource will display an `UnresolvedRef` message to inform the user that the rule has been `Rejected`.
+The route resource will display the `UnresolvedRefs` message to inform the user that the rule has been `Rejected`.
 
 This behavior falls in line with the expected behavior of filters in the Gateway API, which generally allows only one type of a specific filter (authentication, rewriting, etc.) within a rule.
 
-Below is an example of an **invalid** HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule:
+Here is an example of an HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule.
+In this scenario, the route rule for `/api` will be marked as `Invalid`.
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -874,7 +1072,7 @@ spec:
 #### Referencing an AuthenticationFilter Resource that is Invalid
 
 Note: With appropriate use of CEL validation, we are less likely to encounter a scenario where an `AuthenticationFilter` has been deployed to the cluster with an invalid configuration.
-If this does happen, and a route rule references this `AuthenticationFilter`, the route rule will be set to `Invalid` and the HTTPRoute/GRPCRoute will display the `UnresolvedRef` status.
+If this does happen, and a route rule references this `AuthenticationFilter`, the route rule will be set to `Invalid` and the route resource will display the `UnresolvedRef` status.
 
 #### Attaching a JWT AuthenticationFilter to a Route When Using NGINX OSS
 
@@ -1178,6 +1376,16 @@ spec:
     realm: "Restricted"
 ```
 
+### JWT auth types
+
+NGINX provides a directive called `auth_jwt_type`, which can be set to `signed` (default), `encrypted` or `nested`
+This document proposes initially supporting only `signed`, as both `encrypted` and `nested` types requires the Gateway to have access to private keys to decrypt the JWKS.
+
+#### Use case for encrypted and nested
+
+In scenarios where tokens pass through components such as a CDN, WAF, or a shared gateway, encrypted and nested tokens will not expose their claim contents.
+JWEs (Encrypted JSON Web Token) will keep their claims unreadable to anyone without the private key.
+
 ### Additional Fields for JWT
 
 `require`, `tokenSource` and `propagation` are some additional fields that may be included in future updates to the API.
@@ -1194,16 +1402,15 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    keys:
       mode: Remote
       remote:
-        url: https://issuer.example.com/.well-known/jwks.json
+        uri: https://issuer.example.com/.well-known/jwks.json
 
     # Required claims (exact matching done via maps in NGINX; see config)
     require:
       iss:
         - "https://issuer.example.com"
-        - "https://issuer2.example.com"
+        - "https://issuer-2.example.com"
       aud:
         - "api"
         - "cli"
