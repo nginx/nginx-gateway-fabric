@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
@@ -376,4 +377,52 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 
 	g.Expect(store.getGateway(client.ObjectKeyFromObject(gateway))).To(BeNil())
 	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deployment), &appsv1.Deployment{})).ToNot(Succeed())
+}
+
+func TestWaitUntilGatewayRegistrationIsFinished(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	ctx := t.Context()
+	gatewayNSName := types.NamespacedName{
+		Namespace: "default",
+		Name:      "gw",
+	}
+
+	store := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "", "")
+
+	labelSelector := metav1.LabelSelector{
+		MatchLabels: map[string]string{"app": "nginx"},
+	}
+	gcName := "nginx"
+
+	// shorten the timeout for the test
+	gatewayRegistrationTimeout = 250 * time.Millisecond
+	t.Cleanup(func() { gatewayRegistrationTimeout = 5 * time.Second })
+
+	t.Run("gateway being registered", func(t *testing.T) {
+		t.Parallel()
+		provisioner, _, _ := defaultNginxProvisioner()
+		handler, err := newEventHandler(store, provisioner, labelSelector, gcName)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		provisioner.gatewaysBeingRegistered.Store(gatewayNSName, struct{}{})
+
+		actual := handler.waitUntilGatewayRegistrationIsFinished(ctx, gatewayNSName)
+
+		g.Expect(actual).To(BeFalse())
+	})
+
+	t.Run("no gateway being registered", func(t *testing.T) {
+		t.Parallel()
+		provisioner, _, _ := defaultNginxProvisioner()
+		handler, err := newEventHandler(store, provisioner, labelSelector, gcName)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		provisioner.gatewaysBeingRegistered.Delete(gatewayNSName)
+
+		actual := handler.waitUntilGatewayRegistrationIsFinished(ctx, gatewayNSName)
+
+		g.Expect(actual).To(BeTrue())
+	})
 }

@@ -24,6 +24,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 )
 
+var gatewayRegistrationTimeout = 5 * time.Second
+
 // eventHandler ensures each Gateway for the specific GatewayClass has a corresponding Deployment
 // of NGF configured to use that specific Gateway.
 //
@@ -313,13 +315,15 @@ func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, sec
 }
 
 // waitUntilGatewayRegistionIsFinished attempts to wait until the gateway registration is finished.
-func (h *eventHandler) waitUntilGatewayRegistrationIsFinished(ctx context.Context, gatewayNSName types.NamespacedName) {
-	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+func (h *eventHandler) waitUntilGatewayRegistrationIsFinished(
+	ctx context.Context, gatewayNSName types.NamespacedName,
+) bool {
+	newCtx, cancel := context.WithTimeout(ctx, gatewayRegistrationTimeout)
 	defer cancel()
 
 	// Check immediately first
 	if _, ok := h.provisioner.gatewaysBeingRegistered.Load(gatewayNSName); !ok {
-		return
+		return true
 	}
 
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -328,10 +332,10 @@ func (h *eventHandler) waitUntilGatewayRegistrationIsFinished(ctx context.Contex
 	for {
 		select {
 		case <-newCtx.Done():
-			return
+			return false
 		case <-ticker.C:
 			if _, ok := h.provisioner.gatewaysBeingRegistered.Load(gatewayNSName); !ok {
-				return
+				return true
 			}
 		}
 	}
