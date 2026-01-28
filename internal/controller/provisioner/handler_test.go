@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -8,8 +9,11 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
@@ -377,3 +381,134 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	g.Expect(store.getGateway(client.ObjectKeyFromObject(gateway))).To(BeNil())
 	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deployment), &appsv1.Deployment{})).ToNot(Succeed())
 }
+
+func TestEventHandler_GetResourceVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		k8sGetError          error
+		name                 string
+		storeResourceVersion string
+		k8sResourceVersion   string
+		expectedResult       string
+		deepCopySucceeds     bool
+	}{
+		{
+			name:                 "resource version found in store",
+			storeResourceVersion: "42",
+			k8sResourceVersion:   "100", // should be ignored
+			deepCopySucceeds:     true,
+			expectedResult:       "42",
+		},
+		{
+			name:                 "resource version not in store, found via k8s client",
+			storeResourceVersion: "",
+			k8sResourceVersion:   "100",
+			deepCopySucceeds:     true,
+			expectedResult:       "100",
+		},
+		{
+			name:                 "resource version not in store, k8s client fails",
+			storeResourceVersion: "",
+			k8sResourceVersion:   "100", // should be ignored due to error
+			k8sGetError:          errors.New("not found"),
+			deepCopySucceeds:     true,
+			expectedResult:       "",
+		},
+		{
+			name:                 "resource version not in store, deepCopy fails",
+			storeResourceVersion: "",
+			k8sResourceVersion:   "100", // should be ignored due to deepCopy failure
+			deepCopySucceeds:     false,
+			expectedResult:       "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			// Create test objects
+			gatewayNSName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
+
+			deployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-deployment",
+					Namespace:       "default",
+					ResourceVersion: test.k8sResourceVersion,
+				},
+			}
+
+			// Create store with mock behavior
+			store := newStore(nil, "", "", "", "", "")
+			if test.storeResourceVersion != "" {
+				// Set up the store to return the expected resource version
+				store.nginxResources[gatewayNSName] = &NginxResources{
+					Deployment: metav1.ObjectMeta{
+						Name:            "test-deployment",
+						Namespace:       "default",
+						ResourceVersion: test.storeResourceVersion,
+					},
+				}
+			}
+
+			// Create fake k8s client
+			var fakeClient client.Client
+			if test.k8sGetError == nil {
+				fakeClient = fake.NewClientBuilder().
+					WithScheme(createScheme()).
+					WithObjects(deployment).
+					Build()
+			} else {
+				// Empty client that will return errors
+				fakeClient = fake.NewClientBuilder().
+					WithScheme(createScheme()).
+					Build()
+			}
+
+			// Create test object that may fail deepCopy
+			var testObj client.Object
+			if test.deepCopySucceeds {
+				testObj = deployment
+			} else {
+				// Create a mock object that fails deepCopy type assertion
+				testObj = &mockObject{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "default",
+					},
+				}
+			}
+
+			// Create handler
+			provisioner, _, _ := defaultNginxProvisioner()
+			labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}}
+			handler, err := newEventHandler(store, provisioner, fakeClient, labelSelector, "nginx")
+			g.Expect(err).ToNot(HaveOccurred())
+
+			result := handler.getResourceVersion(t.Context(), gatewayNSName, testObj)
+			g.Expect(result).To(Equal(test.expectedResult))
+		})
+	}
+}
+
+// mockObject is a test helper that fails the client.Object type assertion in deepCopy.
+type mockObject struct {
+	metav1.ObjectMeta
+}
+
+func (m *mockObject) GetObjectKind() schema.ObjectKind { return &mockObjectKind{} }
+func (m *mockObject) DeepCopyObject() runtime.Object   { return &nonClientObject{} }
+
+// nonClientObject is returned by mockObject.DeepCopyObject() and doesn't implement client.Object.
+type nonClientObject struct{}
+
+func (n *nonClientObject) GetObjectKind() schema.ObjectKind { return &mockObjectKind{} }
+func (n *nonClientObject) DeepCopyObject() runtime.Object   { return &nonClientObject{} }
+
+// mockObjectKind implements schema.ObjectKind for testing.
+type mockObjectKind struct{}
+
+func (m *mockObjectKind) SetGroupVersionKind(_ schema.GroupVersionKind) {}
+func (m *mockObjectKind) GroupVersionKind() schema.GroupVersionKind     { return schema.GroupVersionKind{} }

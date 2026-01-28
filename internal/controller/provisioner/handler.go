@@ -172,18 +172,7 @@ func (h *eventHandler) updateOrDeleteResources(
 		return nil
 	}
 
-	// If the resource has just being created the store may not have been updated yet.
-	// If the resource version is empty, use the k8s client to get the current resource version.
-	resourceVersion := h.store.getResourceVersionForObject(gatewayNSName, obj)
-	if resourceVersion == "" {
-		storeObject, ok := obj.DeepCopyObject().(client.Object)
-		if ok {
-			getError := h.k8sClient.Get(ctx, client.ObjectKeyFromObject(storeObject), storeObject)
-			if getError == nil {
-				resourceVersion = storeObject.GetResourceVersion()
-			}
-		}
-	}
+	resourceVersion := h.getResourceVersion(ctx, gatewayNSName, obj)
 
 	if resourceVersion == obj.GetResourceVersion() {
 		return nil
@@ -195,6 +184,28 @@ func (h *eventHandler) updateOrDeleteResources(
 	}
 
 	return nil
+}
+
+// getResourceVersion gets the resource version for the object from the store.
+// If the resource version is not found in the store, it uses the k8s client to get the current
+// resource version.
+func (h *eventHandler) getResourceVersion(
+	ctx context.Context,
+	gatewayNSName types.NamespacedName,
+	obj client.Object,
+) string {
+	resourceVersion := h.store.getResourceVersionForObject(gatewayNSName, obj)
+	if resourceVersion == "" {
+		storeObject, ok := obj.DeepCopyObject().(client.Object)
+		if ok {
+			getError := h.k8sClient.Get(ctx, client.ObjectKeyFromObject(storeObject), storeObject)
+			if getError == nil {
+				resourceVersion = storeObject.GetResourceVersion()
+			}
+		}
+	}
+
+	return resourceVersion
 }
 
 func (h *eventHandler) provisionResource(
