@@ -292,7 +292,7 @@ jobs:
 
       - name: Download Syft
         if: ${{ inputs.is_production_release }}
-        uses: anchore/sbom-action/download-syft@62ad5284b8ced813296287a0b63906cb364b73ee # v0.22.0
+        uses: anchore/sbom-action/download-syft@deef08a0db64bfad603422135db61477b16cef56 # v0.22.1
 
       - name: Install Cosign
         if: ${{ inputs.is_production_release }}

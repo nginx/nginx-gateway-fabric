@@ -223,12 +223,14 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 	defaultConfig := dataplane.Configuration{
 		BaseHTTPConfig: dataplane.BaseHTTPConfig{
 			NginxReadinessProbePort: dataplane.DefaultNginxReadinessProbePort,
+			NginxReadinessProbePath: dataplane.DefaultNginxReadinessProbePath,
 		},
 	}
 
-	customPortConfig := dataplane.Configuration{
+	customPortPathConfig := dataplane.Configuration{
 		BaseHTTPConfig: dataplane.BaseHTTPConfig{
 			NginxReadinessProbePort: 9090,
+			NginxReadinessProbePath: "/nginx-ready",
 		},
 	}
 
@@ -236,6 +238,7 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 		BaseHTTPConfig: dataplane.BaseHTTPConfig{
 			NginxReadinessProbePort: dataplane.DefaultNginxReadinessProbePort,
 			IPFamily:                dataplane.IPv4,
+			NginxReadinessProbePath: dataplane.DefaultNginxReadinessProbePath,
 		},
 	}
 
@@ -243,12 +246,13 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 		BaseHTTPConfig: dataplane.BaseHTTPConfig{
 			NginxReadinessProbePort: dataplane.DefaultNginxReadinessProbePort,
 			IPFamily:                dataplane.IPv6,
+			NginxReadinessProbePath: dataplane.DefaultNginxReadinessProbePath,
 		},
 	}
 
 	tests := []struct {
 		name             string
-		expectedPort     string
+		expectedPath     string
 		expectedListen   string
 		expectedNoListen string
 		conf             dataplane.Configuration
@@ -256,38 +260,38 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 		{
 			name:           "default nginx readiness probe port",
 			conf:           defaultConfig,
-			expectedPort:   "8081",
+			expectedPath:   "/readyz",
 			expectedListen: "listen 8081;",
 		},
 		{
 			name:           "default nginx readiness probe port on ipv6",
 			conf:           defaultConfig,
-			expectedPort:   "8081",
+			expectedPath:   "/readyz",
 			expectedListen: "listen [::]:8081;",
 		},
 		{
 			name:           "custom nginx readiness probe 9090",
-			conf:           customPortConfig,
-			expectedPort:   "9090",
+			conf:           customPortPathConfig,
+			expectedPath:   "/nginx-ready",
 			expectedListen: "listen 9090;",
 		},
 		{
 			name:           "custom nginx readiness probe 9090 on ipv6",
-			conf:           customPortConfig,
-			expectedPort:   "9090",
+			conf:           customPortPathConfig,
+			expectedPath:   "/nginx-ready",
 			expectedListen: "listen [::]:9090;",
 		},
 		{
 			name:             "custom ipv4 nginx readiness probe does not have ipv6 listen",
 			conf:             customIPv4Config,
-			expectedPort:     "8081",
+			expectedPath:     "/readyz",
 			expectedListen:   "listen 8081;",
 			expectedNoListen: "listen [::]:8081;",
 		},
 		{
 			name:             "custom ipv6 nginx readiness probe does not have ipv4 listen",
 			conf:             customIPv6Config,
-			expectedPort:     "8081",
+			expectedPath:     "/readyz",
 			expectedListen:   "listen [::]:8081;",
 			expectedNoListen: "listen 8081;",
 		},
@@ -314,7 +318,7 @@ func TestExecuteBaseHttp_NginxReadinessProbePort(t *testing.T) {
 			// check that the health check server block is present
 			g.Expect(httpConfig).To(ContainSubstring("server {"))
 			g.Expect(httpConfig).To(ContainSubstring("access_log off;"))
-			g.Expect(httpConfig).To(ContainSubstring("location = /readyz {"))
+			g.Expect(httpConfig).To(ContainSubstring(fmt.Sprintf("location = %s {", test.expectedPath)))
 			g.Expect(httpConfig).To(ContainSubstring("return 200;"))
 		})
 	}

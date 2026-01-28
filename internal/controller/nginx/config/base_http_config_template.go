@@ -54,7 +54,7 @@ server {
     listen [::]:{{ .NginxReadinessProbePort }};
 		{{- end }}
 
-    location = /readyz {
+    location = {{ .NginxReadinessProbePath }} {
         access_log off;
         return 200;
     }
