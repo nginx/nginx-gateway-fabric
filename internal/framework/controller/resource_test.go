@@ -34,6 +34,12 @@ func TestCreateNginxResourceName(t *testing.T) {
 			expected: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-1930ffb3-suffix",
 			msg:      "prefix + suffix is longer than max",
 		},
+		{
+			prefix:   strings.Repeat("c", 46) + "-" + strings.Repeat("d", 10),
+			suffix:   "suffix",
+			expected: "cccccccccccccccccccccccccccccccccccccccccccccc-016f7bbf-suffix",
+			msg:      "truncation lands on dash character - should not produce double-dash",
+		},
 	}
 
 	for _, test := range tests {
@@ -44,6 +50,7 @@ func TestCreateNginxResourceName(t *testing.T) {
 			name := CreateNginxResourceName(test.prefix, test.suffix)
 			g.Expect(len(name)).To(BeNumerically("<=", MaxServiceNameLen))
 			g.Expect(name).To(Equal(test.expected), "expected %q, got %q", test.expected, name)
+			g.Expect(name).NotTo(ContainSubstring("--"))
 		})
 	}
 }
@@ -71,6 +78,11 @@ func TestCreateInferencePoolServiceName(t *testing.T) {
 			expected: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-af3f976c-pool-svc",
 			msg:      "prefix + suffix is longer than max",
 		},
+		{
+			name:     strings.Repeat("c", 45) + "-" + strings.Repeat("d", 10),
+			expected: "ccccccccccccccccccccccccccccccccccccccccccccc-f51d0ccb-pool-svc",
+			msg:      "truncation lands on dash character - should not produce double-dash",
+		},
 	}
 
 	for _, test := range tests {
@@ -81,6 +93,7 @@ func TestCreateInferencePoolServiceName(t *testing.T) {
 			serviceName := CreateInferencePoolServiceName(test.name)
 			g.Expect(len(serviceName)).To(BeNumerically("<=", MaxServiceNameLen))
 			g.Expect(serviceName).To(Equal(test.expected), "expected %q, got %q", test.expected, serviceName)
+			g.Expect(serviceName).NotTo(ContainSubstring("--"))
 		})
 	}
 }

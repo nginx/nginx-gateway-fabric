@@ -168,6 +168,13 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports[listener.Port] = protocol
 	}
 
+	// Add healthcheck port to service if expose is enabled
+	var healthcheckPort int32
+	if isNginxReadinessProbeExposed(nProxyCfg) {
+		healthcheckPort = dataplane.GetNginxReadinessProbePort(nProxyCfg)
+		ports[healthcheckPort] = corev1.ProtocolTCP
+	}
+
 	// Create separate copies of objectMeta for service and deployment to avoid shared map references
 	serviceObjectMeta := metav1.ObjectMeta{
 		Name:        objectMeta.Name,
@@ -183,7 +190,9 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		Annotations: maps.Clone(objectMeta.Annotations),
 	}
 
-	service, err := buildNginxService(serviceObjectMeta, nProxyCfg, ports, selectorLabels, gateway.Spec.Addresses)
+	service, err := buildNginxService(
+		serviceObjectMeta, nProxyCfg, ports, healthcheckPort, selectorLabels, gateway.Spec.Addresses,
+	)
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -540,6 +549,7 @@ func buildNginxService(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ports map[int32]corev1.Protocol,
+	healthcheckPort int32,
 	selectorLabels map[string]string,
 	addresses []gatewayv1.GatewaySpecAddress,
 ) (*corev1.Service, error) {
@@ -561,31 +571,7 @@ func buildNginxService(
 		}
 	}
 
-	servicePorts := make([]corev1.ServicePort, 0, len(ports))
-	for port, protocol := range ports {
-		servicePort := corev1.ServicePort{
-			Name:       fmt.Sprintf("port-%d", port),
-			Port:       port,
-			TargetPort: intstr.FromInt32(port),
-			Protocol:   protocol,
-		}
-
-		if serviceType != corev1.ServiceTypeClusterIP {
-			for _, nodePort := range serviceCfg.NodePorts {
-				if nodePort.ListenerPort == port {
-					servicePort.NodePort = nodePort.Port
-				}
-			}
-		}
-
-		servicePorts = append(servicePorts, servicePort)
-	}
-
-	// need to sort ports so everytime buildNginxService is called it will generate the exact same
-	// array of ports. This is needed to satisfy deterministic results of the method.
-	sort.Slice(servicePorts, func(i, j int) bool {
-		return servicePorts[i].Port < servicePorts[j].Port
-	})
+	servicePorts := buildServicePorts(ports, healthcheckPort, serviceType, serviceCfg.NodePorts)
 
 	svc := &corev1.Service{
 		ObjectMeta: objectMeta,
@@ -612,6 +598,45 @@ func buildNginxService(
 	}
 
 	return svc, nil
+}
+
+func buildServicePorts(
+	ports map[int32]corev1.Protocol,
+	healthcheckPort int32,
+	serviceType corev1.ServiceType,
+	nodePorts []ngfAPIv1alpha2.NodePort,
+) []corev1.ServicePort {
+	servicePorts := make([]corev1.ServicePort, 0, len(ports))
+	for port, protocol := range ports {
+		name := fmt.Sprintf("port-%d", port)
+		if healthcheckPort > 0 && port == healthcheckPort {
+			name = "health"
+		}
+		servicePort := corev1.ServicePort{
+			Name:       name,
+			Port:       port,
+			TargetPort: intstr.FromInt32(port),
+			Protocol:   protocol,
+		}
+
+		if serviceType != corev1.ServiceTypeClusterIP {
+			for _, nodePort := range nodePorts {
+				if nodePort.ListenerPort == port {
+					servicePort.NodePort = nodePort.Port
+				}
+			}
+		}
+
+		servicePorts = append(servicePorts, servicePort)
+	}
+
+	// need to sort ports so everytime buildNginxService is called it will generate the exact same
+	// array of ports. This is needed to satisfy deterministic results of the method.
+	sort.Slice(servicePorts, func(i, j int) bool {
+		return servicePorts[i].Port < servicePorts[j].Port
+	})
+
+	return servicePorts
 }
 
 func setSvcExternalIPs(svc *corev1.Service, addresses []gatewayv1.GatewaySpecAddress) {
@@ -1441,8 +1466,8 @@ func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxPr
 	probe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/readyz",
-				Port: intstr.FromInt32(dataplane.DefaultNginxReadinessProbePort),
+				Path: dataplane.GetNginxReadinessProbePath(nProxyCfg),
+				Port: intstr.FromInt32(dataplane.GetNginxReadinessProbePort(nProxyCfg)),
 			},
 		},
 		InitialDelaySeconds: defaultInitialDelaySeconds,
@@ -1461,15 +1486,28 @@ func (p *NginxProvisioner) buildReadinessProbe(nProxyCfg *graph.EffectiveNginxPr
 		return probe
 	}
 
-	if containerSpec.ReadinessProbe.Port != nil {
-		probe.HTTPGet.Port = intstr.FromInt32(*containerSpec.ReadinessProbe.Port)
-	}
-
 	if containerSpec.ReadinessProbe.InitialDelaySeconds != nil {
 		probe.InitialDelaySeconds = *containerSpec.ReadinessProbe.InitialDelaySeconds
 	}
 
 	return probe
+}
+
+// isNginxReadinessProbeExposed returns true if the readiness probe should be exposed
+// through the Gateway Service object for external load balancer healthchecks.
+func isNginxReadinessProbeExposed(nProxyCfg *graph.EffectiveNginxProxy) bool {
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
+		var containerSpec *ngfAPIv1alpha2.ContainerSpec
+		if nProxyCfg.Kubernetes.Deployment != nil {
+			containerSpec = &nProxyCfg.Kubernetes.Deployment.Container
+		} else if nProxyCfg.Kubernetes.DaemonSet != nil {
+			containerSpec = &nProxyCfg.Kubernetes.DaemonSet.Container
+		}
+		if containerSpec != nil && containerSpec.ReadinessProbe != nil && containerSpec.ReadinessProbe.Expose != nil {
+			return *containerSpec.ReadinessProbe.Expose
+		}
+	}
+	return false
 }
 
 func DetermineNginxImageName(

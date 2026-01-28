@@ -723,9 +723,19 @@ func (in *ReadinessProbeSpec) DeepCopyInto(out *ReadinessProbeSpec) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.Path != nil {
+		in, out := &in.Path, &out.Path
+		*out = new(string)
+		**out = **in
+	}
 	if in.InitialDelaySeconds != nil {
 		in, out := &in.InitialDelaySeconds, &out.InitialDelaySeconds
 		*out = new(int32)
+		**out = **in
+	}
+	if in.Expose != nil {
+		in, out := &in.Expose, &out.Expose
+		*out = new(bool)
 		**out = **in
 	}
 }

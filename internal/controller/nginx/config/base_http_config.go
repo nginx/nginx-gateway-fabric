@@ -24,6 +24,7 @@ type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
 	GatewaySecretID         dataplane.SSLKeyPairID
+	NginxReadinessProbePath string
 	Includes                []shared.Include
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
@@ -46,6 +47,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		HTTP2:                   conf.BaseHTTPConfig.HTTP2,
 		Includes:                includes,
 		NginxReadinessProbePort: conf.BaseHTTPConfig.NginxReadinessProbePort,
+		NginxReadinessProbePath: conf.BaseHTTPConfig.NginxReadinessProbePath,
 		IPFamily:                getIPFamily(conf.BaseHTTPConfig),
 		DNSResolver:             buildDNSResolver(conf.BaseHTTPConfig.DNSResolver),
 		AccessLog:               buildAccessLog(conf.Logging.AccessLog),
