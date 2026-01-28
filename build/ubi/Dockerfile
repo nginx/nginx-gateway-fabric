@@ -11,7 +11,7 @@ RUN make build
 
 FROM golang:1.25 AS ca-certs-provider
 
-FROM redhat/ubi9-minimal:9.7-1768783948 AS ngf-ubi-minimal
+FROM redhat/ubi9-minimal:9.7-1769056855 AS ngf-ubi-minimal
 
 RUN microdnf -y update glib2 && microdnf clean all
 

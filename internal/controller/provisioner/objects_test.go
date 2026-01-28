@@ -399,6 +399,144 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(hpa.Spec.MaxReplicas).To(Equal(int32(5)))
 }
 
+func TestBuildNginxResourceObjects_ExposeHealthcheck(t *testing.T) {
+	t.Parallel()
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{
+				{Name: "http", Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+			},
+		},
+	}
+
+	resourceName := "gw-nginx"
+
+	tests := []struct {
+		nProxyCfg                  *graph.EffectiveNginxProxy
+		name                       string
+		expectHealthcheckPortInSvc bool
+	}{
+		{
+			name: "expose is true - healthcheck port should be in service",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+								Port:   helpers.GetPointer[int32](9091),
+								Expose: helpers.GetPointer(true),
+							},
+						},
+					},
+				},
+			},
+			expectHealthcheckPortInSvc: true,
+		},
+		{
+			name: "expose is false - healthcheck port should not be in service",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+								Port:   helpers.GetPointer[int32](9091),
+								Expose: helpers.GetPointer(false),
+							},
+						},
+					},
+				},
+			},
+			expectHealthcheckPortInSvc: false,
+		},
+		{
+			name: "expose is not set - healthcheck port should not be in service",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+								Port: helpers.GetPointer[int32](9091),
+							},
+						},
+					},
+				},
+			},
+			expectHealthcheckPortInSvc: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			agentTLSSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentTLSTestSecretName,
+					Namespace: ngfNamespace,
+				},
+				Data: map[string][]byte{"tls.crt": []byte("tls")},
+			}
+			fakeClient := fake.NewFakeClient(agentTLSSecret)
+			provisioner := &NginxProvisioner{
+				cfg: Config{
+					GatewayPodConfig: &config.GatewayPodConfig{
+						Namespace: ngfNamespace,
+						Version:   "1.0.0",
+					},
+					AgentTLSSecretName: agentTLSTestSecretName,
+					AgentLabels:        make(map[string]string),
+				},
+				baseLabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "nginx",
+					},
+				},
+				k8sClient: fakeClient,
+			}
+
+			objects, err := provisioner.buildNginxResourceObjects(resourceName, gateway, test.nProxyCfg)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// Find the service object
+			var svc *corev1.Service
+			for _, obj := range objects {
+				if s, ok := obj.(*corev1.Service); ok {
+					svc = s
+					break
+				}
+			}
+			g.Expect(svc).ToNot(BeNil())
+
+			// Verify listener port is always present
+			g.Expect(svc.Spec.Ports).To(ContainElement(corev1.ServicePort{
+				Port:       80,
+				Name:       "port-80",
+				Protocol:   corev1.ProtocolTCP,
+				TargetPort: intstr.FromInt(80),
+			}))
+
+			healthcheckPort := corev1.ServicePort{
+				Port:       9091,
+				Name:       "health",
+				Protocol:   corev1.ProtocolTCP,
+				TargetPort: intstr.FromInt(9091),
+			}
+
+			if test.expectHealthcheckPortInSvc {
+				g.Expect(svc.Spec.Ports).To(ContainElement(healthcheckPort))
+			} else {
+				g.Expect(svc.Spec.Ports).ToNot(ContainElement(healthcheckPort))
+			}
+		})
+	}
+}
+
 func TestBuildNginxResourceObjects_DeploymentReplicasFromHPA(t *testing.T) {
 	t.Parallel()
 
@@ -1525,6 +1663,55 @@ func TestBuildReadinessProbe(t *testing.T) {
 					},
 				},
 				InitialDelaySeconds: 10,
+			},
+		},
+		{
+			name: "custom path is set in readinessProbe, custom probe with path is returned",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+								Port:                helpers.GetPointer[int32](8080),
+								Path:                helpers.GetPointer("/custom/health"),
+								InitialDelaySeconds: helpers.GetPointer[int32](5),
+							},
+						},
+					},
+				},
+			},
+			expected: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/custom/health",
+						Port: intstr.FromInt32(8080),
+					},
+				},
+				InitialDelaySeconds: 5,
+			},
+		},
+		{
+			name: "daemonset with custom readiness probe configuration",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+						Container: ngfAPIv1alpha2.ContainerSpec{
+							ReadinessProbe: &ngfAPIv1alpha2.ReadinessProbeSpec{
+								Port: helpers.GetPointer[int32](7777),
+								Path: helpers.GetPointer("/status"),
+							},
+						},
+					},
+				},
+			},
+			expected: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/status",
+						Port: intstr.FromInt32(7777),
+					},
+				},
+				InitialDelaySeconds: 3,
 			},
 		},
 	}
