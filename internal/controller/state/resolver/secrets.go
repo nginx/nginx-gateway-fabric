@@ -2,7 +2,6 @@ package resolver
 
 import (
 	"fmt"
-	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -13,21 +12,14 @@ import (
 type secretEntry struct {
 	secrets.Secret
 	// err holds the corresponding error if the Secret is invalid or does not exist.
-	err  error
-	lock sync.RWMutex
+	err error
 }
 
 func (s *secretEntry) setError(err error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
 	s.err = err
 }
 
 func (s *secretEntry) error() error {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
 	return s.err
 }
 
@@ -41,6 +33,8 @@ func (s *secretEntry) validate(obj client.Object) {
 	var certBundle *secrets.CertificateBundle
 
 	switch {
+	// Any future Secret keys that are needed MUST be added to cache/transform.go
+	// in order to track them.
 	case secret.Type == v1.SecretTypeTLS:
 		// A TLS Secret is guaranteed to have these data fields.
 		cert := &secrets.Certificate{

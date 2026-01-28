@@ -425,6 +425,10 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 	return mgr, nil
 }
 
+// buildManagerCache builds the cache options for the manager.
+// It ensures that we only cache things that we care about. It strips ManagedFields
+// from all resources (we don't use them) and adds additional transforms for specific resources
+// (GatewayClass, Secret, ConfigMap).
 func buildManagerCache(cfg config.Config) cache.Options {
 	var cacheOpts cache.Options
 	if len(cfg.WatchNamespaces) > 0 {

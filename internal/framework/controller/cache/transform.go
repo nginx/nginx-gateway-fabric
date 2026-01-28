@@ -37,6 +37,7 @@ func TransformSecret() cache.TransformFunc {
 		}
 
 		keys := []string{
+			secrets.AuthKey,
 			secrets.LicenseJWTKey,
 			secrets.CAKey,
 			secrets.TLSCertKey,

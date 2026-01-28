@@ -2,7 +2,6 @@ package resolver
 
 import (
 	"fmt"
-	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,20 +15,13 @@ type configMapEntry struct {
 	// err holds the corresponding error if the ConfigMap is invalid or does not exist.
 	err             error
 	caCertConfigMap configmaps.CaCertConfigMap
-	lock            sync.RWMutex
 }
 
 func (c *configMapEntry) setError(err error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
 	c.err = err
 }
 
 func (c *configMapEntry) error() error {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
 	return c.err
 }
 
@@ -42,6 +34,8 @@ func (c *configMapEntry) validate(obj client.Object) {
 	var validationErr error
 	cert := &secrets.Certificate{}
 
+	// Any future ConfigMap keys that are needed MUST be added to cache/transform.go
+	// in order to track them.
 	if cm.Data != nil {
 		if _, exists := cm.Data[secrets.CAKey]; exists {
 			validationErr = secrets.ValidateCA([]byte(cm.Data[secrets.CAKey]))

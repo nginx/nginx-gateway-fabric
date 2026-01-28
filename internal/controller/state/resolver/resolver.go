@@ -54,7 +54,7 @@ type ServiceResolverImpl struct {
 }
 
 // NewServiceResolverImpl creates a new instance of a ServiceResolverImpl.
-func NewServiceResolverImpl(c client.Client) *ServiceResolverImpl {
+func NewServiceResolverImpl(c client.Reader) *ServiceResolverImpl {
 	return &ServiceResolverImpl{reader: c}
 }
 
