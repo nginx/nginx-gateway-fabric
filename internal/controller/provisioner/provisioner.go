@@ -67,11 +67,9 @@ type Config struct {
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.
 type NginxProvisioner struct {
-	k8sClient client.Client
-	store     *store
-	// gatewaysBeingRegistered is a map of Gateway names that are currently being registered.
-	gatewaysBeingRegistered *sync.Map
-	baseLabelSelector       metav1.LabelSelector
+	k8sClient         client.Client
+	store             *store
+	baseLabelSelector metav1.LabelSelector
 	// resourcesToDeleteOnStartup contains a list of Gateway names that no longer exist
 	// but have nginx resources tied to them that need to be deleted.
 	resourcesToDeleteOnStartup []types.NamespacedName
@@ -159,10 +157,9 @@ func NewNginxProvisioner(
 		resourcesToDeleteOnStartup: []types.NamespacedName{},
 		cfg:                        cfg,
 		isOpenshift:                isOpenshift,
-		gatewaysBeingRegistered:    &sync.Map{},
 	}
 
-	handler, err := newEventHandler(store, provisioner, selector, cfg.GCName)
+	handler, err := newEventHandler(store, provisioner, mgr.GetClient(), selector, cfg.GCName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error initializing eventHandler: %w", err)
 	}
@@ -523,9 +520,6 @@ func (p *NginxProvisioner) RegisterGateway(
 	}
 
 	gatewayNSName := client.ObjectKeyFromObject(gateway.Source)
-	p.gatewaysBeingRegistered.Store(gatewayNSName, struct{}{})
-	defer p.gatewaysBeingRegistered.Delete(gatewayNSName)
-
 	if updated := p.store.registerResourceInGatewayConfig(gatewayNSName, gateway); !updated {
 		return nil
 	}

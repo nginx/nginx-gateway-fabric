@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -24,8 +23,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 )
 
-var gatewayRegistrationTimeout = 5 * time.Second
-
 // eventHandler ensures each Gateway for the specific GatewayClass has a corresponding Deployment
 // of NGF configured to use that specific Gateway.
 //
@@ -33,6 +30,7 @@ var gatewayRegistrationTimeout = 5 * time.Second
 type eventHandler struct {
 	store         *store
 	provisioner   *NginxProvisioner
+	k8sClient     client.Client
 	labelSelector labels.Selector
 	// gcName is the GatewayClass name for this control plane.
 	gcName string
@@ -41,6 +39,7 @@ type eventHandler struct {
 func newEventHandler(
 	store *store,
 	provisioner *NginxProvisioner,
+	k8sClient client.Client,
 	selector metav1.LabelSelector,
 	gcName string,
 ) (*eventHandler, error) {
@@ -52,6 +51,7 @@ func newEventHandler(
 	return &eventHandler{
 		store:         store,
 		provisioner:   provisioner,
+		k8sClient:     k8sClient,
 		labelSelector: labelSelector,
 		gcName:        gcName,
 	}, nil
@@ -172,9 +172,20 @@ func (h *eventHandler) updateOrDeleteResources(
 		return nil
 	}
 
-	h.waitUntilGatewayRegistrationIsFinished(ctx, gatewayNSName)
+	// If the resource has just being created the store may not have been updated yet.
+	// If the resource version is empty, use the k8s client to get the current resource version.
+	resourceVersion := h.store.getResourceVersionForObject(gatewayNSName, obj)
+	if resourceVersion == "" {
+		storeObject, ok := obj.DeepCopyObject().(client.Object)
+		if ok {
+			getError := h.k8sClient.Get(ctx, client.ObjectKeyFromObject(storeObject), storeObject)
+			if getError == nil {
+				resourceVersion = storeObject.GetResourceVersion()
+			}
+		}
+	}
 
-	if h.store.getResourceVersionForObject(gatewayNSName, obj) == obj.GetResourceVersion() {
+	if resourceVersion == obj.GetResourceVersion() {
 		return nil
 	}
 
@@ -312,31 +323,4 @@ func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, sec
 	}
 
 	return errors.Join(allErrs...)
-}
-
-// waitUntilGatewayRegistionIsFinished attempts to wait until the gateway registration is finished.
-func (h *eventHandler) waitUntilGatewayRegistrationIsFinished(
-	ctx context.Context, gatewayNSName types.NamespacedName,
-) bool {
-	newCtx, cancel := context.WithTimeout(ctx, gatewayRegistrationTimeout)
-	defer cancel()
-
-	// Check immediately first
-	if _, ok := h.provisioner.gatewaysBeingRegistered.Load(gatewayNSName); !ok {
-		return true
-	}
-
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-newCtx.Done():
-			return false
-		case <-ticker.C:
-			if _, ok := h.provisioner.gatewaysBeingRegistered.Load(gatewayNSName); !ok {
-				return true
-			}
-		}
-	}
 }

@@ -2,7 +2,6 @@ package provisioner
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -206,8 +205,7 @@ func defaultNginxProvisioner(
 				"control-namespace": "my-control-plane-namespace",
 			},
 		},
-		leader:                  true,
-		gatewaysBeingRegistered: &sync.Map{},
+		leader: true,
 	}, fakeClient, deploymentStore
 }
 
