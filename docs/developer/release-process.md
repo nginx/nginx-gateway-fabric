@@ -43,7 +43,7 @@ To create a new release, follow these steps:
     - Once the release branch is created, reach out to the infra team to get it added to the runner permissions.
 4. Once the release branch pipeline completes, run tests using the `release-X.X-rc` images that are pushed to Github (for example, `release-1.3-rc`).
    1. Kick off the [longevity tests](https://github.com/nginx/nginx-gateway-fabric/blob/main/tests/README.md#longevity-testing) for both OSS and Plus. You'll need to create two clusters and VMs for this. Before running, update your `vars.env` file with the proper image tag and prefixes. NGF and nginx images will be available from `ghcr.io`, and nginx plus will be available in GCP (`us-docker.pkg.dev/<GCP_PROJECT_ID>/nginx-gateway-fabric/nginx-plus`). These tests need to run for 4 days before releasing. The results can be added to the NFR results that are collected in the next step.
-   2. Kick off the [NFR workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/nfr.yml) in the browser. For `image_tag`, use `release-X.X-rc`, and for `version`, use the upcoming `X.Y.Z` NGF version. Run the workflow on the new release branch. This will run all of the NFR tests which are automated and open a PR with the results files when it is complete. Review this PR and make any necessary changes before merging. Once merged, be sure to cherry-pick the commit to the main branch as well (the original PR targets the release branch).
+   2. Kick off the [NFR workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/nfr.yml) in the browser. For `image_tag`, use `release-X.X-rc`, and for `version`, use the upcoming `X.Y.Z` NGF version. Run the workflow on the new release branch. This will run all of the NFR tests which are automated and open a PR with the results files when it is complete. Review this PR and make any necessary changes before merging. Once merged, be sure to cherry-pick the commit to the release branch (set the `needs cherry pick` label on the main PR).
    3. Run the IPv6 tests using the `make ipv6-tests` target. This must be run from within the `tests` directory. An example of running this script for release 2.1.0 would look like this: `make ipv6-test TAG=release-2.1-rc`
 5. Run the [Release PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/release-pr.yml) workflow to update the repo files for the release. Then there are a few manual steps to complete:
    1. Update the [README](/README.md) to include information about the release.
@@ -115,7 +115,7 @@ To create a new release, follow these steps:
    format `Release X.Y.Z`.
 2. If the fix applies to both the latest release and the main branch, then:
    1. Prepare and merge a fix PR into the in the main branch.
-   2. Prepare and merge a fix PR (with a cherry-pick commit) into the existing release branch.
+   2. Cherry-pick (set the `needs cherry pick` label on the main PR) into the existing release branch.
 3. Alternatively, if the fix only applies to the latest release, prepare and merge a fix PR into the existing release
    branch.
 4. Test the release branch for release-readiness.
