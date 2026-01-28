@@ -78,8 +78,8 @@ This portion also contains:
       - Understand claim enforcement
       - Processing claims
       - Processing nested claims
- - Route Attachment
- - Resource status
+  - Route Attachment
+  - Resource status
 
 ### Golang API
 
