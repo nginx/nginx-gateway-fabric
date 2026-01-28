@@ -1224,7 +1224,7 @@ spec:
                                   Path is the path on which the readiness endpoint is exposed.
                                   If not specified, the default path is /readyz.
                                   Must start with a forward slash and contain only valid URL path characters.
-                                pattern: ^/[^\s\$"'\\;{}]*$
+                                pattern: ^/[a-zA-Z0-9/_\-\.~]*$
                                 type: string
                               port:
                                 description: |-
@@ -5483,7 +5483,7 @@ spec:
                                   Path is the path on which the readiness endpoint is exposed.
                                   If not specified, the default path is /readyz.
                                   Must start with a forward slash and contain only valid URL path characters.
-                                pattern: ^/[^\s\$"'\\;{}]*$
+                                pattern: ^/[a-zA-Z0-9/_\-\.~]*$
                                 type: string
                               port:
                                 description: |-
