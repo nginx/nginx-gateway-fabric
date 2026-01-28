@@ -941,7 +941,7 @@ spec:
           - "admin"
 ```
 
-This spec is configured a JWT payload with these claims:
+This spec is configured to process a JWT payload with these claims:
 ```json
 {
   // Standard registered claims
