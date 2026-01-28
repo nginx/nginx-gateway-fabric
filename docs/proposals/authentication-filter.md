@@ -197,7 +197,6 @@ type JWTAuth struct {
   // Configures `auth_jwt_key_cache` directive.
   // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
   // Example: "auth_jwt_key_cache 10m;".
-  // Default: 10m.
   //
   // +optional
   KeyCache *Duration `json:"keyCache,omitempty"`
@@ -255,13 +254,11 @@ type JWTFileKeySource struct {
 
  // RemoteKeySource specifies remote JWKS configuration.
 type RemoteKeySource struct {
-  // Cache configures NGINX proxy_cache for JWKS fetches made via auth_jwt_key_request.
-  // When set, NGF will render proxy_cache_path in http{} and attach proxy_cache to the internal JWKS location.
-  //
-  // +optional
-  Cache *JWKSCache `json:"cache,omitempty"`
+  // URI is the JWKS endpoint, e.g. "https://issuer.example.com/.well-known/jwks.json".
+  URI string `json:"url"`
 
   // TLS defines HTTPS client parameters for retrieving JWKS.
+  //
   // +optional
   TLS *RemoteTLSConfig `json:"tls,omitempty"`
 }
@@ -743,22 +740,13 @@ http {
 1. NGINX Config when using `Mode: Remote`
 
 When using the `Remote` mode, the `auth_jwt_key_request` directive is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal-<namespace>-<name>_jwks_uri` to redirect the request to the external auth provider (e.g. Keycloak), In this example, the name will be `/_ngf-internal-default-api-jwt_jwks_uri`.
-To improve the overall performance of remote requests, `proxy_cache_path` is used to configure caching of the JWKS after an initial request. This allows subsequent requests to avoid re-authentication for a time.
-In additional, `auth_jwt_key_cache` is specified to locally cache the JWKS received from the IdP.
-
-Since it is likely that the caching configuration will be available through other resources, it's important that the `proxy_cache_path` configuration for JWT will not collide with other configurations.
-To ensure this, we can do the following
-- Set `proxy_cache_path` path `/var/cache/nginx/jwks/<filter-namespace>_<filter-name>`, and do not make this path configurable. Assuming we follow a similar pattern for other resource, this will ensure the cache path is unique between various `AutenticationFilter` resources, as well as across other resources configuring caching.
-- Set `key_zone` to `auth_jwt_<filter-namespace>_<filter-name>`. Similar to how the path is set, this will ensure uniqueness across resources.
+To improve the overall performance of remote requests, `auth_jwt_key_cache` can be specified to locally cache the JWKS received from the IdP. This prevents repeated calls to the IdP for a period of time.
 
 Caching will be enabled by default
 
 Here is an example of what the NGINX configuration would look like:
 ```nginx
 http {
-    # Serve JWKS from cache after the first fetch
-    proxy_cache_path /var/cache/nginx/jwks/default_jwt-auth levels=1:2 keys_zone=auth_jwt_default_jwt-auth:10m max_size=50m inactive=10m use_temp_path=off;
-
     upstream backend_default {
         server 10.0.0.10:80;
         server 10.0.0.11:80;
@@ -797,8 +785,6 @@ http {
         # Internal endpoint to fetch JWKS from IdP
         location = /_ngf-internal-default-api-jwt_jwks_uri {
             internal;
-            # Enable caching of JWKS
-            proxy_cache auth_jwt_default_jwt-auth;
             proxy_pass  https://issuer.example.com/.well-known/jwks.json;
         }
     }
@@ -807,12 +793,9 @@ http {
 
 ### Cache specification
 
-JWT caching is enabled by default.
-Three configuration options are available for caching.
-- `keyCache.ttl`: Sets the duration of key caching for `auth_jwt_key_cache`. Defaults to `10m`.
-- `proxyCache.size`: Sets the `max_size` option for `proxy_cache_path` for JWT auth. Defaults to `50m`.
-- `proxyCache.ttl`: Set the `inactive` option for `proxy_cache_path` for JWT auth. Defaults to `10m`.
-
+JWT key caching will be `disabled` by default.
+This is to ensure that, by default, users don't encounter scenarios where stale keys are served.
+To enable caching, users can set `keyCache` with the duration they wish the JWKS to be cached form:
 ```yaml
 kind: AuthenticationFilter
 metadata:
@@ -824,11 +807,7 @@ spec:
     mode: Remote
     remote:
       uri: https://issuer.example.com/.well-known/jwks.json
-      keyCache:
-        ttl: 10m
-      proxyCache:
-        size: 50m
-        ttl: 10m
+      keyCache: 10m
 ```
 
 ### JWT claims
