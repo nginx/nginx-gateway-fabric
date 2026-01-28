@@ -60,8 +60,6 @@ type eventHandlerConfig struct {
 	generator ngxConfig.Generator
 	// k8sClient is a Kubernetes API client.
 	k8sClient client.Client
-	// k8sReader is a Kubernets API reader.
-	k8sReader client.Reader
 	// logLevelSetter is used to update the logging level.
 	logLevelSetter logLevelSetter
 	// eventRecorder records events for Kubernetes resources.

@@ -14,6 +14,8 @@ import (
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 )
 
 const (
@@ -132,7 +134,7 @@ func CreateLicenseSecret(rm ResourceManager, namespace, filename string) error {
 			Namespace: namespace,
 		},
 		Data: map[string][]byte{
-			"license.jwt": conf,
+			secrets.LicenseJWTKey: conf,
 		},
 	}
 

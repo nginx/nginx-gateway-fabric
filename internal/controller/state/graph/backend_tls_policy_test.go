@@ -9,9 +9,12 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -78,7 +81,7 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, nil, test.gateways)
+			processed := processBackendTLSPolicies(test.backendTLSPolicies, nil, test.gateways)
 
 			g.Expect(processed).To(Equal(test.expected))
 		})
@@ -421,29 +424,44 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 		},
 	}
 
-	configMaps := map[types.NamespacedName]*v1.ConfigMap{
-		{Namespace: "test", Name: "configmap"}: {
+	resources := map[resolver.ResourceKey]client.Object{
+		{
+			ResourceType: resolver.ResourceTypeConfigMap,
+			NamespacedName: types.NamespacedName{
+				Name:      "configmap",
+				Namespace: "test",
+			},
+		}: &v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "configmap",
 				Namespace: "test",
 			},
 			Data: map[string]string{
-				CAKey: caBlock,
+				secrets.CAKey: caBlock,
 			},
 		},
-		{Namespace: "test", Name: "invalid"}: {
+		{
+			ResourceType: resolver.ResourceTypeConfigMap,
+			NamespacedName: types.NamespacedName{
+				Name:      "invalid",
+				Namespace: "test",
+			},
+		}: &v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "invalid",
 				Namespace: "test",
 			},
 			Data: map[string]string{
-				CAKey: "invalid",
+				secrets.CAKey: "invalid",
 			},
 		},
-	}
-
-	secretMaps := map[types.NamespacedName]*v1.Secret{
-		{Namespace: "test", Name: testSecretName}: {
+		{
+			ResourceType: resolver.ResourceTypeSecret,
+			NamespacedName: types.NamespacedName{
+				Name:      testSecretName,
+				Namespace: "test",
+			},
+		}: &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      testSecretName,
 				Namespace: "test",
@@ -452,10 +470,16 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 			Data: map[string][]byte{
 				v1.TLSCertKey:       cert,
 				v1.TLSPrivateKeyKey: key,
-				CAKey:               []byte(caBlock),
+				secrets.CAKey:       []byte(caBlock),
 			},
 		},
-		{Namespace: "test", Name: "invalid-secret"}: {
+		{
+			ResourceType: resolver.ResourceTypeSecret,
+			NamespacedName: types.NamespacedName{
+				Name:      "invalid-secret",
+				Namespace: "test",
+			},
+		}: &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "invalid-secret",
 				Namespace: "test",
@@ -463,19 +487,18 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 			Data: map[string][]byte{
 				v1.TLSCertKey:       invalidCert,
 				v1.TLSPrivateKeyKey: invalidKey,
-				CAKey:               []byte("invalid-cert"),
+				secrets.CAKey:       []byte("invalid-cert"),
 			},
 		},
 	}
 
-	configMapResolver := newConfigMapResolver(configMaps)
-	secretMapResolver := newSecretResolver(secretMaps)
+	resourceResolver := resolver.NewResourceResolver(resources)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			valid, ignored, conds := validateBackendTLSPolicy(test.tlsPolicy, configMapResolver, secretMapResolver)
+			valid, ignored, conds := validateBackendTLSPolicy(test.tlsPolicy, resourceResolver)
 
 			g.Expect(valid).To(Equal(test.isValid))
 			g.Expect(ignored).To(Equal(test.ignored))

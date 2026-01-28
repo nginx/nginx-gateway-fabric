@@ -11,6 +11,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -89,7 +90,7 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 
 	tokenFile := agent.File{
 		Meta: &pb.FileMeta{
-			Name:        secretsFolder + "/license.jwt",
+			Name:        secretsFolder + "/" + secrets.LicenseJWTKey,
 			Hash:        filesHelper.GenerateHash(tokenContent),
 			Permissions: file.SecretFileMode,
 			Size:        int64(len(tokenContent)),

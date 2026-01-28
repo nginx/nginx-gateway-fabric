@@ -1,9 +1,7 @@
-1e4b4d2f9e11f8ea7a1cced14889e3e59a049f46:internal/state/secrets_test.go:private-key:42
-1e4b4d2f9e11f8ea7a1cced14889e3e59a049f46:internal/state/graph_test.go:private-key:42
-68d1f6eb80d23c8650c11629459dd6a06c986ca1:internal/state/graph/graph_test.go:private-key:44
-890fddb787ff3560b9b743647a36b649d498ae51:internal/state/graph/secret_test.go:private-key:35
-890fddb787ff3560b9b743647a36b649d498ae51:internal/state/change_processor_test.go:private-key:211
-internal/controller/state/graph/config_maps_test.go:private-key:35
+internal/controller/state/change_processor_test.go:private-key:357
+internal/controller/state/graph/graph_test.go:private-key:57
+internal/controller/state/resolver/secrets_test.go:private-key:39
+internal/controller/state/resolver/secrets_test.go:private-key:69
 examples/basic-authentication/basic-auth.yaml:generic-api-key:8
 examples/basic-authentication/basic-auth.yaml:generic-api-key:31
 examples/secure-traffic/gateway.yaml:kubernetes-secret-yaml:1

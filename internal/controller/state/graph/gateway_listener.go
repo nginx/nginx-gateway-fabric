@@ -14,6 +14,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -69,13 +70,13 @@ type Listener struct {
 
 func buildListeners(
 	gw *v1.Gateway,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 	protectedPorts ProtectedPorts,
 ) []*Listener {
 	listeners := make([]*Listener, 0, len(gw.Spec.Listeners))
 
-	listenerFactory := newListenerConfiguratorFactory(gw, secretResolver, refGrantResolver, protectedPorts)
+	listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, protectedPorts)
 
 	for _, gl := range gw.Spec.Listeners {
 		configurator := listenerFactory.getConfiguratorForListener(gl)
@@ -108,7 +109,7 @@ func (f *listenerConfiguratorFactory) getConfiguratorForListener(l v1.Listener) 
 
 func newListenerConfiguratorFactory(
 	gw *v1.Gateway,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 	protectedPorts ProtectedPorts,
 ) *listenerConfiguratorFactory {
@@ -154,7 +155,7 @@ func newListenerConfiguratorFactory(
 				sharedOverlappingTLSConfigResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
-				createExternalReferencesForTLSSecretsResolver(gw.Namespace, secretResolver, refGrantResolver),
+				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
 			},
 		},
 		tls: &listenerConfigurator{
@@ -266,12 +267,12 @@ func (c *listenerConfigurator) configure(listener v1.Listener, gwNSName types.Na
 
 	// resolvers might add different conditions to the listener, so we run them all.
 
-	for _, resolver := range c.conflictResolvers {
-		resolver(l)
+	for _, conflictResolver := range c.conflictResolvers {
+		conflictResolver(l)
 	}
 
-	for _, resolver := range c.externalReferenceResolvers {
-		resolver(l)
+	for _, externalReferenceResolver := range c.externalReferenceResolvers {
+		externalReferenceResolver(l)
 	}
 
 	return l
@@ -674,7 +675,7 @@ func createPortConflictResolver() listenerConflictResolver {
 
 func createExternalReferencesForTLSSecretsResolver(
 	gwNs string,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 ) listenerExternalReferenceResolver {
 	return func(l *Listener) {
@@ -700,7 +701,7 @@ func createExternalReferencesForTLSSecretsResolver(
 			}
 		}
 
-		if err := secretResolver.resolve(certRefNsName); err != nil {
+		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, certRefNsName); err != nil {
 			path := field.NewPath("tls", "certificateRefs").Index(0)
 			// field.NotFound could be better, but it doesn't allow us to set the error message.
 			valErr := field.Invalid(path, certRefNsName, err.Error())

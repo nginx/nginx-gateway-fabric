@@ -7,6 +7,7 @@ import (
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -48,7 +49,7 @@ func getAuthenticationFilterResolverForNamespace(
 
 func processAuthenticationFilters(
 	authenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 ) map[types.NamespacedName]*AuthenticationFilter {
 	if len(authenticationFilters) == 0 {
 		return nil
@@ -57,7 +58,7 @@ func processAuthenticationFilters(
 	processed := make(map[types.NamespacedName]*AuthenticationFilter, len(authenticationFilters))
 
 	for nsname, af := range authenticationFilters {
-		if cond := validateAuthenticationFilter(af, nsname, secretResolver); cond != nil {
+		if cond := validateAuthenticationFilter(af, nsname, resourceResolver); cond != nil {
 			processed[nsname] = &AuthenticationFilter{
 				Source:     af,
 				Conditions: []conditions.Condition{*cond},
@@ -78,7 +79,7 @@ func processAuthenticationFilters(
 func validateAuthenticationFilter(
 	af *ngfAPI.AuthenticationFilter,
 	nsname types.NamespacedName,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 ) *conditions.Condition {
 	var allErrs field.ErrorList
 
@@ -86,7 +87,7 @@ func validateAuthenticationFilter(
 	switch af.Spec.Type {
 	case ngfAPI.AuthTypeBasic:
 		authBasicSecretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: af.Spec.Basic.SecretRef.Name}
-		if err := secretResolver.resolve(authBasicSecretNsName); err != nil {
+		if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, authBasicSecretNsName); err != nil {
 			allErrs = append(allErrs, field.Invalid(
 				field.NewPath("spec.basic.secretRef"),
 				af.Spec.Basic.SecretRef.Name,

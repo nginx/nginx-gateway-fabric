@@ -10,6 +10,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 )
 
 func TestGenerateCertificates(t *testing.T) {
@@ -89,16 +91,16 @@ func TestCreateSecrets(t *testing.T) {
 		serverSecret := &corev1.Secret{}
 		err = fakeClient.Get(t.Context(), client.ObjectKey{Name: serverSecretName, Namespace: "default"}, serverSecret)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(serverSecret.Data["ca.crt"]).To(Equal(certConfig.caCertificate))
-		g.Expect(serverSecret.Data["tls.crt"]).To(Equal(certConfig.serverCertificate))
-		g.Expect(serverSecret.Data["tls.key"]).To(Equal(certConfig.serverKey))
+		g.Expect(serverSecret.Data[secrets.CAKey]).To(Equal(certConfig.caCertificate))
+		g.Expect(serverSecret.Data[secrets.TLSCertKey]).To(Equal(certConfig.serverCertificate))
+		g.Expect(serverSecret.Data[secrets.TLSKeyKey]).To(Equal(certConfig.serverKey))
 
 		clientSecret := &corev1.Secret{}
 		err = fakeClient.Get(t.Context(), client.ObjectKey{Name: clientSecretName, Namespace: "default"}, clientSecret)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(clientSecret.Data["ca.crt"]).To(Equal(certConfig.caCertificate))
-		g.Expect(clientSecret.Data["tls.crt"]).To(Equal(certConfig.clientCertificate))
-		g.Expect(clientSecret.Data["tls.key"]).To(Equal(certConfig.clientKey))
+		g.Expect(clientSecret.Data[secrets.CAKey]).To(Equal(certConfig.caCertificate))
+		g.Expect(clientSecret.Data[secrets.TLSCertKey]).To(Equal(certConfig.clientCertificate))
+		g.Expect(clientSecret.Data[secrets.TLSKeyKey]).To(Equal(certConfig.clientKey))
 
 		// If overwrite is false, then no updates should occur. If true, then updates should occur.
 		newCertConfig, err := generateCertificates("nginx", "default", "new-DNS-name")
@@ -116,11 +118,11 @@ func TestCreateSecrets(t *testing.T) {
 
 		err = fakeClient.Get(t.Context(), client.ObjectKey{Name: serverSecretName, Namespace: "default"}, serverSecret)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(serverSecret.Data["tls.crt"]).To(Equal(expCertConfig.serverCertificate))
+		g.Expect(serverSecret.Data[secrets.TLSCertKey]).To(Equal(expCertConfig.serverCertificate))
 
 		err = fakeClient.Get(t.Context(), client.ObjectKey{Name: clientSecretName, Namespace: "default"}, clientSecret)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(clientSecret.Data["tls.crt"]).To(Equal(expCertConfig.clientCertificate))
+		g.Expect(clientSecret.Data[secrets.TLSCertKey]).To(Equal(expCertConfig.clientCertificate))
 	}
 
 	for _, test := range tests {

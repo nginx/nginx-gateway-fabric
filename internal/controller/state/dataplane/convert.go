@@ -10,6 +10,7 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/mirror"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -193,7 +194,7 @@ func convertSnippetsFilter(filter *graph.SnippetsFilter) SnippetsFilter {
 
 func convertAuthenticationFilter(
 	filter *graph.AuthenticationFilter,
-	referencedSecrets map[types.NamespacedName]*graph.Secret,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 ) *AuthenticationFilter {
 	result := &AuthenticationFilter{}
 
@@ -212,7 +213,7 @@ func convertAuthenticationFilter(
 			result.Basic = &AuthBasic{
 				SecretName:      specBasic.SecretRef.Name,
 				SecretNamespace: referencedSecret.Source.Namespace,
-				Data:            referencedSecret.Source.Data[graph.AuthKey],
+				Data:            referencedSecret.Source.Data[secrets.AuthKey],
 				Realm:           specBasic.Realm,
 			}
 		}

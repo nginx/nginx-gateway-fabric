@@ -10,6 +10,7 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -65,7 +66,7 @@ func processGateways(
 
 func buildGateways(
 	gws map[types.NamespacedName]*v1.Gateway,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 	gc *GatewayClass,
 	refGrantResolver *referenceGrantResolver,
 	nps map[types.NamespacedName]*NginxProxy,
@@ -92,7 +93,7 @@ func buildGateways(
 
 		effectiveNginxProxy := buildEffectiveNginxProxy(gcNp, np)
 
-		conds, valid, secretRefNsName := validateGateway(gw, gc, np, experimentalFeatures, secretResolver, refGrantResolver)
+		conds, valid, secretRefNsName := validateGateway(gw, gc, np, experimentalFeatures, resourceResolver, refGrantResolver)
 
 		protectedPorts := make(ProtectedPorts)
 		if port, enabled := MetricsEnabledForNginxProxy(effectiveNginxProxy); enabled {
@@ -121,7 +122,7 @@ func buildGateways(
 		} else {
 			builtGateways[gwNsName] = &Gateway{
 				Source:              gw,
-				Listeners:           buildListeners(gw, secretResolver, refGrantResolver, protectedPorts),
+				Listeners:           buildListeners(gw, resourceResolver, refGrantResolver, protectedPorts),
 				NginxProxy:          np,
 				EffectiveNginxProxy: effectiveNginxProxy,
 				Valid:               true,
@@ -184,7 +185,7 @@ func validateGateway(
 	gc *GatewayClass,
 	npCfg *NginxProxy,
 	experimentalFeatures bool,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 ) ([]conditions.Condition, bool, *types.NamespacedName) {
 	var conds []conditions.Condition
@@ -213,7 +214,7 @@ func validateGateway(
 			conds = append(conds, conditions.NewGatewayUnsupportedValue(valErr.Error())...)
 		} else {
 			secretNsName, secretNs := getGatewayCertSecretNsName(gw)
-			if err := secretResolver.resolve(*secretNsName); err != nil {
+			if err := resourceResolver.Resolve(resolver.ResourceTypeSecret, *secretNsName); err != nil {
 				path := field.NewPath("backend.clientCertificateRef")
 				valErr := field.Invalid(path, secretNsName, err.Error())
 				conds = append(conds, conditions.NewGatewaySecretRefInvalid(valErr.Error()))

@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -17,6 +18,9 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -64,7 +68,7 @@ type Graph struct {
 	// It is different from the other maps, because it includes entries for Secrets that do not exist
 	// in the cluster. We need such entries so that we can query the Graph to determine if a Secret is referenced
 	// by the Gateway, including the case when the Secret is newly created.
-	ReferencedSecrets map[types.NamespacedName]*Secret
+	ReferencedSecrets map[types.NamespacedName]*secrets.Secret
 	// ReferencedNamespaces includes Namespaces with labels that match the Gateway Listener's label selector.
 	ReferencedNamespaces map[types.NamespacedName]*v1.Namespace
 	// ReferencedServices includes the NamespacedNames of all the Services that are referenced by at least one Route.
@@ -73,7 +77,7 @@ type Graph struct {
 	// that are referenced by at least one Route.
 	ReferencedInferencePools map[types.NamespacedName]*ReferencedInferencePool
 	// ReferencedCaCertConfigMaps includes ConfigMaps that have been referenced by any BackendTLSPolicies.
-	ReferencedCaCertConfigMaps map[types.NamespacedName]*CaCertConfigMap
+	ReferencedCaCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap
 	// ReferencedNginxProxies includes NginxProxies that have been referenced by a GatewayClass or a Gateway.
 	ReferencedNginxProxies map[types.NamespacedName]*NginxProxy
 	// BackendTLSPolicies holds BackendTLSPolicy resources.
@@ -244,14 +248,12 @@ func BuildGraph(
 		featureFlags.Experimental,
 	)
 
-	secretResolver := newSecretResolver(state.Secrets)
-	configMapResolver := newConfigMapResolver(state.ConfigMaps)
-
+	resourceResolver := newResourceResolver(state)
 	refGrantResolver := newReferenceGrantResolver(state.ReferenceGrants)
 
 	gws := buildGateways(
 		processedGws,
-		secretResolver,
+		resourceResolver,
 		gc,
 		refGrantResolver,
 		processedNginxProxies,
@@ -260,14 +262,13 @@ func BuildGraph(
 
 	processedBackendTLSPolicies := processBackendTLSPolicies(
 		state.BackendTLSPolicies,
-		configMapResolver,
-		secretResolver,
+		resourceResolver,
 		gws,
 	)
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 
-	processedAuthenticationFilters := processAuthenticationFilters(state.AuthenticationFilters, secretResolver)
+	processedAuthenticationFilters := processAuthenticationFilters(state.AuthenticationFilters, resourceResolver)
 
 	routes := buildRoutesForGateways(
 		validators.HTTPFieldsValidator,
@@ -326,11 +327,11 @@ func BuildGraph(
 		Routes:                     routes,
 		L4Routes:                   l4routes,
 		IgnoredGatewayClasses:      processedGwClasses.Ignored,
-		ReferencedSecrets:          secretResolver.getResolvedSecrets(),
+		ReferencedSecrets:          resourceResolver.GetSecrets(),
 		ReferencedNamespaces:       referencedNamespaces,
 		ReferencedServices:         referencedServices,
 		ReferencedInferencePools:   referencedInferencePools,
-		ReferencedCaCertConfigMaps: configMapResolver.getResolvedConfigMaps(),
+		ReferencedCaCertConfigMaps: resourceResolver.GetConfigMaps(),
 		ReferencedNginxProxies:     processedNginxProxies,
 		BackendTLSPolicies:         processedBackendTLSPolicies,
 		NGFPolicies:                processedPolicies,
@@ -351,6 +352,26 @@ func gatewayExists(gwNsName types.NamespacedName, gateways map[types.NamespacedN
 
 	_, exists := gateways[gwNsName]
 	return exists
+}
+
+func newResourceResolver(state ClusterState) resolver.Resolver {
+	resources := make(map[resolver.ResourceKey]client.Object)
+	for nsname, cm := range state.ConfigMaps {
+		key := resolver.ResourceKey{
+			NamespacedName: nsname,
+			ResourceType:   resolver.ResourceTypeConfigMap,
+		}
+		resources[key] = cm
+	}
+	for nsname, s := range state.Secrets {
+		key := resolver.ResourceKey{
+			NamespacedName: nsname,
+			ResourceType:   resolver.ResourceTypeSecret,
+		}
+		resources[key] = s
+	}
+
+	return resolver.NewResourceResolver(resources)
 }
 
 // SecretFileType describes the type of Secret file used for NGINX Plus.

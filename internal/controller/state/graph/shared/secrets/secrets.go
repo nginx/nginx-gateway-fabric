@@ -1,4 +1,4 @@
-package graph
+package secrets
 
 import (
 	"crypto/tls"
@@ -7,19 +7,50 @@ import (
 	"encoding/pem"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// CAKey certificate key for optional root certificate authority.
-const CAKey = "ca.crt"
+// Secret represents a Secret resource.
+type Secret struct {
+	// Source holds the actual Secret resource. Can be nil if the Secret does not exist.
+	Source *corev1.Secret
+
+	// CertBundle holds actual certificate data.
+	CertBundle *CertificateBundle
+}
+
+type SecretType string
+
+const (
+	// SecretTypeHtpasswd represents a Secret containing an htpasswd file for Basic Auth.
+	SecretTypeHtpasswd SecretType = "nginx.org/htpasswd" // #nosec G101
+)
+
+const (
+	// AuthKey is the Secret key for Basic Auth credentials.
+	AuthKey = "auth"
+
+	// CAKey is the certificate key for optional root certificate authority.
+	CAKey = "ca.crt"
+
+	// TLSCertKey is the certificate key for TLS certificates.
+	TLSCertKey = corev1.TLSCertKey
+
+	// TLSKeyKey is the key for TLS private keys.
+	TLSKeyKey = corev1.TLSPrivateKeyKey
+
+	// LicenseJWTKey is the key for the NGINX Plus license JWT.
+	LicenseJWTKey = "license.jwt"
+)
 
 // CertificateBundle is used to submit certificate data to nginx that is kubernetes aware.
 type CertificateBundle struct {
 	Cert *Certificate
 
 	Name types.NamespacedName
-	Kind v1.Kind
+	Kind gatewayv1.Kind
 }
 
 // Certificate houses the real certificate data that is sent to the configurator.
@@ -36,13 +67,13 @@ type Certificate struct {
 func NewCertificateBundle(name types.NamespacedName, kind string, cert *Certificate) *CertificateBundle {
 	return &CertificateBundle{
 		Name: name,
-		Kind: v1.Kind(kind),
+		Kind: gatewayv1.Kind(kind),
 		Cert: cert,
 	}
 }
 
-// validateTLS checks to make sure a ssl certificate key pair is valid.
-func validateTLS(tlsCert, tlsPrivateKey []byte) error {
+// ValidateTLS checks to make sure a ssl certificate key pair is valid.
+func ValidateTLS(tlsCert, tlsPrivateKey []byte) error {
 	_, err := tls.X509KeyPair(tlsCert, tlsPrivateKey)
 	if err != nil {
 		return fmt.Errorf("tls secret is invalid: %w", err)
@@ -51,8 +82,8 @@ func validateTLS(tlsCert, tlsPrivateKey []byte) error {
 	return nil
 }
 
-// validateCA validates the ca.crt entry in the Certificate. If it is valid, the function returns nil.
-func validateCA(caData []byte) error {
+// ValidateCA validates the ca.crt entry in the Certificate. If it is valid, the function returns nil.
+func ValidateCA(caData []byte) error {
 	data := make([]byte, base64.StdEncoding.DecodedLen(len(caData)))
 	_, err := base64.StdEncoding.Decode(data, caData)
 	if err != nil {

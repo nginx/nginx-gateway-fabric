@@ -11,6 +11,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -34,8 +35,7 @@ type BackendTLSPolicy struct {
 
 func processBackendTLSPolicies(
 	backendTLSPolicies map[types.NamespacedName]*v1.BackendTLSPolicy,
-	configMapResolver *configMapResolver,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 	gateways map[types.NamespacedName]*Gateway,
 ) map[types.NamespacedName]*BackendTLSPolicy {
 	if len(backendTLSPolicies) == 0 || len(gateways) == 0 {
@@ -46,7 +46,7 @@ func processBackendTLSPolicies(
 	for nsname, backendTLSPolicy := range backendTLSPolicies {
 		var caCertRef types.NamespacedName
 
-		valid, ignored, conds := validateBackendTLSPolicy(backendTLSPolicy, configMapResolver, secretResolver)
+		valid, ignored, conds := validateBackendTLSPolicy(backendTLSPolicy, resourceResolver)
 
 		if valid && !ignored && backendTLSPolicy.Spec.Validation.CACertificateRefs != nil {
 			caCertRef = types.NamespacedName{
@@ -67,8 +67,7 @@ func processBackendTLSPolicies(
 
 func validateBackendTLSPolicy(
 	backendTLSPolicy *v1.BackendTLSPolicy,
-	configMapResolver *configMapResolver,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 ) (valid, ignored bool, conds []conditions.Condition) {
 	valid = true
 	ignored = false
@@ -89,7 +88,7 @@ func validateBackendTLSPolicy(
 		conds = append(conds, conditions.NewPolicyInvalid(msg))
 
 	case len(caCertRefs) > 0:
-		certConds := validateBackendTLSCACertRef(backendTLSPolicy, configMapResolver, secretResolver)
+		certConds := validateBackendTLSCACertRef(backendTLSPolicy, resourceResolver)
 		if len(certConds) > 0 {
 			valid = false
 			conds = append(conds, certConds...)
@@ -129,8 +128,7 @@ func validateBackendTLSHostname(btp *v1.BackendTLSPolicy) error {
 
 func validateBackendTLSCACertRef(
 	btp *v1.BackendTLSPolicy,
-	configMapResolver *configMapResolver,
-	secretResolver *secretResolver,
+	resourceResolver resolver.Resolver,
 ) []conditions.Condition {
 	if len(btp.Spec.Validation.CACertificateRefs) != 1 {
 		path := field.NewPath("validation.caCertificateRefs")
@@ -163,26 +161,15 @@ func validateBackendTLSCACertRef(
 		Name:      string(selectedCertRef.Name),
 	}
 
-	switch selectedCertRef.Kind {
-	case "ConfigMap":
-		if err := configMapResolver.resolve(nsName); err != nil {
-			path := field.NewPath("validation.caCertificateRefs[0]")
-			valErr := field.Invalid(path, selectedCertRef, err.Error())
-			return []conditions.Condition{
-				conditions.NewBackendTLSPolicyInvalidCACertificateRef(valErr.Error()),
-				conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
-			}
-		}
-	case "Secret":
-		if err := secretResolver.resolve(nsName); err != nil {
-			path := field.NewPath("validation.caCertificateRefs[0]")
-			valErr := field.Invalid(path, selectedCertRef, err.Error())
-			return []conditions.Condition{
-				conditions.NewBackendTLSPolicyInvalidCACertificateRef(valErr.Error()),
-				conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
-			}
+	if err := resourceResolver.Resolve(resolver.ResourceType(selectedCertRef.Kind), nsName); err != nil {
+		path := field.NewPath("validation.caCertificateRefs[0]")
+		valErr := field.Invalid(path, selectedCertRef, err.Error())
+		return []conditions.Condition{
+			conditions.NewBackendTLSPolicyInvalidCACertificateRef(valErr.Error()),
+			conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
 		}
 	}
+
 	return nil
 }
 

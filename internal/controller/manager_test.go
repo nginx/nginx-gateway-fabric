@@ -26,6 +26,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/crd/crdfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
 
@@ -418,7 +419,7 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			Name:      "nplus-license",
 		},
 		Data: map[string][]byte{
-			plusLicenseField: []byte("data"),
+			secrets.LicenseJWTKey: []byte("data"),
 		},
 	}
 
@@ -438,7 +439,7 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			Name:      "ca",
 		},
 		Data: map[string][]byte{
-			plusCAField: []byte("data"),
+			secrets.CAKey: []byte("data"),
 		},
 	}
 
@@ -458,8 +459,8 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			Name:      "client",
 		},
 		Data: map[string][]byte{
-			plusClientCertField: []byte("data"),
-			plusClientKeyField:  []byte("data"),
+			secrets.TLSCertKey: []byte("data"),
+			secrets.TLSKeyKey:  []byte("data"),
 		},
 	}
 
@@ -470,7 +471,7 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 		},
 		Data: map[string][]byte{
 			"wrong":            []byte("data"),
-			plusClientKeyField: []byte("data"),
+			secrets.TLSCertKey: []byte("data"),
 		},
 	}
 
@@ -480,8 +481,8 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			Name:      "client",
 		},
 		Data: map[string][]byte{
-			plusClientCertField: []byte("data"),
-			"wrong":             []byte("data"),
+			secrets.TLSCertKey: []byte("data"),
+			"wrong":            []byte("data"),
 		},
 	}
 
@@ -512,7 +513,7 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{
 				{Name: jwtSecret.Name, Namespace: jwtSecret.Namespace}: {
 					{
-						FieldName: plusLicenseField,
+						FieldName: secrets.LicenseJWTKey,
 						Type:      graph.PlusReportJWTToken,
 					},
 				},
@@ -532,13 +533,13 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{
 				{Name: jwtSecret.Name, Namespace: jwtSecret.Namespace}: {
 					{
-						FieldName: plusLicenseField,
+						FieldName: secrets.LicenseJWTKey,
 						Type:      graph.PlusReportJWTToken,
 					},
 				},
 				{Name: caSecret.Name, Namespace: jwtSecret.Namespace}: {
 					{
-						FieldName: plusCAField,
+						FieldName: secrets.CAKey,
 						Type:      graph.PlusReportCACertificate,
 					},
 				},
@@ -559,23 +560,23 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{
 				{Name: jwtSecret.Name, Namespace: jwtSecret.Namespace}: {
 					{
-						FieldName: plusLicenseField,
+						FieldName: secrets.LicenseJWTKey,
 						Type:      graph.PlusReportJWTToken,
 					},
 				},
 				{Name: caSecret.Name, Namespace: jwtSecret.Namespace}: {
 					{
-						FieldName: plusCAField,
+						FieldName: secrets.CAKey,
 						Type:      graph.PlusReportCACertificate,
 					},
 				},
 				{Name: clientSecret.Name, Namespace: jwtSecret.Namespace}: {
 					{
-						FieldName: plusClientCertField,
+						FieldName: secrets.TLSCertKey,
 						Type:      graph.PlusReportClientSSLCertificate,
 					},
 					{
-						FieldName: plusClientKeyField,
+						FieldName: secrets.TLSKeyKey,
 						Type:      graph.PlusReportClientSSLKey,
 					},
 				},

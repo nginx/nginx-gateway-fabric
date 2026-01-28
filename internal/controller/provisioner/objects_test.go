@@ -22,6 +22,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -35,7 +36,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	fakeClient := fake.NewFakeClient(agentTLSSecret)
 
@@ -141,8 +142,8 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, agentTLSTestSecretName)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 	g.Expect(secret.GetAnnotations()).To(Equal(expAnnotations))
-	g.Expect(secret.Data).To(HaveKey("tls.crt"))
-	g.Expect(secret.Data["tls.crt"]).To(Equal([]byte("tls")))
+	g.Expect(secret.Data).To(HaveKey(secrets.TLSCertKey))
+	g.Expect(secret.Data[secrets.TLSCertKey]).To(Equal([]byte("tls")))
 
 	cmObj := objects[1]
 	cm, ok := cmObj.(*corev1.ConfigMap)
@@ -249,7 +250,7 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	fakeClient := fake.NewFakeClient(agentTLSSecret)
 
@@ -589,7 +590,7 @@ func TestBuildNginxResourceObjects_DeploymentReplicasFromHPA(t *testing.T) {
 					Name:      agentTLSTestSecretName,
 					Namespace: ngfNamespace,
 				},
-				Data: map[string][]byte{"tls.crt": []byte("tls")},
+				Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 			}
 
 			var fakeClient client.Client
@@ -701,28 +702,28 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	jwtSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jwtTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"license.jwt": []byte("jwt")},
+		Data: map[string][]byte{secrets.LicenseJWTKey: []byte("jwt")},
 	}
 	caSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      caTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"ca.crt": []byte("ca")},
+		Data: map[string][]byte{secrets.CAKey: []byte("ca")},
 	}
 	clientSSLSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clientTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 
 	fakeClient := fake.NewFakeClient(agentTLSSecret, jwtSecret, caSecret, clientSSLSecret)
@@ -791,8 +792,8 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, jwtTestSecretName)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 	g.Expect(secret.GetAnnotations()).To(Equal(expAnnotations))
-	g.Expect(secret.Data).To(HaveKey("license.jwt"))
-	g.Expect(secret.Data["license.jwt"]).To(Equal([]byte("jwt")))
+	g.Expect(secret.Data).To(HaveKey(secrets.LicenseJWTKey))
+	g.Expect(secret.Data[secrets.LicenseJWTKey]).To(Equal([]byte("jwt")))
 
 	secretObj = objects[2]
 	secret, ok = secretObj.(*corev1.Secret)
@@ -800,8 +801,8 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, caTestSecretName)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 	g.Expect(secret.GetAnnotations()).To(Equal(expAnnotations))
-	g.Expect(secret.Data).To(HaveKey("ca.crt"))
-	g.Expect(secret.Data["ca.crt"]).To(Equal([]byte("ca")))
+	g.Expect(secret.Data).To(HaveKey(secrets.CAKey))
+	g.Expect(secret.Data[secrets.CAKey]).To(Equal([]byte("ca")))
 
 	secretObj = objects[3]
 	secret, ok = secretObj.(*corev1.Secret)
@@ -809,8 +810,8 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(secret.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, clientTestSecretName)))
 	g.Expect(secret.GetLabels()).To(Equal(expLabels))
 	g.Expect(secret.GetAnnotations()).To(Equal(expAnnotations))
-	g.Expect(secret.Data).To(HaveKey("tls.crt"))
-	g.Expect(secret.Data["tls.crt"]).To(Equal([]byte("tls")))
+	g.Expect(secret.Data).To(HaveKey(secrets.TLSCertKey))
+	g.Expect(secret.Data[secrets.TLSCertKey]).To(Equal([]byte("tls")))
 
 	cmObj := objects[4]
 	cm, ok := cmObj.(*corev1.ConfigMap)
@@ -840,8 +841,8 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(initContainer.Command).To(ContainElement("/includes/mgmt.conf"))
 	g.Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
 		Name:      "nginx-plus-license",
-		MountPath: "/etc/nginx/license.jwt",
-		SubPath:   "license.jwt",
+		MountPath: "/etc/nginx/" + secrets.LicenseJWTKey,
+		SubPath:   secrets.LicenseJWTKey,
 	}))
 	g.Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
 		Name:      "nginx-plus-usage-certs",
@@ -859,7 +860,7 @@ func TestBuildNginxResourceObjects_DockerSecrets(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 
 	dockerSecret := &corev1.Secret{
@@ -978,7 +979,7 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	fakeClient := fake.NewFakeClient(agentTLSSecret)
 
@@ -1064,7 +1065,7 @@ func TestBuildNginxResourceObjects_OpenShift(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	fakeClient := fake.NewFakeClient(agentTLSSecret)
 
@@ -1124,7 +1125,7 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	dataplaneKeySecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1735,7 +1736,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	fakeClient := fake.NewFakeClient(agentTLSSecret)
 
@@ -2059,7 +2060,7 @@ func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	fakeClient := fake.NewFakeClient(agentTLSSecret)
 

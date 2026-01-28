@@ -7,10 +7,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -21,11 +24,17 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 	filter2NsName := types.NamespacedName{Namespace: "other", Name: "filter-2"}
 	invalidFilterNsName := types.NamespacedName{Namespace: "test", Name: "invalid"}
 
-	secrets := map[types.NamespacedName]*corev1.Secret{
-		{Namespace: "test", Name: "secret1"}:  createHtpasswdSecret("test", "secret1", true),
-		{Namespace: "other", Name: "secret2"}: createHtpasswdSecret("other", "secret2", true),
+	resources := map[resolver.ResourceKey]client.Object{
+		{
+			ResourceType:   resolver.ResourceTypeSecret,
+			NamespacedName: types.NamespacedName{Namespace: "test", Name: "secret1"},
+		}: createHtpasswdSecret("test", "secret1", true),
+		{
+			ResourceType:   resolver.ResourceTypeSecret,
+			NamespacedName: types.NamespacedName{Namespace: "other", Name: "secret2"},
+		}: createHtpasswdSecret("other", "secret2", true),
 	}
-	secretResolver := newSecretResolver(secrets)
+	resourceResolver := resolver.NewResourceResolver(resources)
 
 	filter1 := createAuthenticationFilter(filter1NsName, "secret1", true)
 	filter2 := createAuthenticationFilter(filter2NsName, "secret2", true)
@@ -66,7 +75,7 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 					Conditions: []conditions.Condition{
 						conditions.NewAuthenticationFilterInvalid(
 							"spec.basic.secretRef: Invalid value: \"unresolved\": " +
-								"secret does not exist",
+								"Secret test/unresolved does not exist",
 						),
 					},
 					Valid: false,
@@ -79,7 +88,7 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			processed := processAuthenticationFilters(tt.authenticationFiltersInput, secretResolver)
+			processed := processAuthenticationFilters(tt.authenticationFiltersInput, resourceResolver)
 			g.Expect(processed).To(BeEquivalentTo(tt.expProcessed))
 		})
 	}
@@ -90,7 +99,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 
 	type args struct {
 		filter    *ngfAPI.AuthenticationFilter
-		secrets   map[types.NamespacedName]*corev1.Secret
+		resources map[resolver.ResourceKey]client.Object
 		secNsName types.NamespacedName
 	}
 
@@ -107,8 +116,11 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					types.NamespacedName{Namespace: "test", Name: "af"},
 					"hp",
 					true).Source,
-				secrets: map[types.NamespacedName]*corev1.Secret{
-					{Namespace: "test", Name: "hp"}: createHtpasswdSecret("test", "hp", true),
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "hp"},
+					}: createHtpasswdSecret("test", "hp", true),
 				},
 			},
 			expCond: conditions.Condition{},
@@ -121,10 +133,10 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					"not-found",
 					false).Source,
 				secNsName: types.NamespacedName{Namespace: "test", Name: "af"},
-				secrets:   map[types.NamespacedName]*corev1.Secret{},
+				resources: map[resolver.ResourceKey]client.Object{},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
-				"secret does not exist",
+				"Secret test/not-found does not exist",
 			),
 		},
 		{
@@ -135,8 +147,11 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					"secret-type",
 					false).Source,
 				secNsName: types.NamespacedName{Namespace: "test", Name: "secret-type"},
-				secrets: map[types.NamespacedName]*corev1.Secret{
-					{Namespace: "test", Name: "secret-type"}: {
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "secret-type"},
+					}: &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "secret-type"},
 						Type:       corev1.SecretTypeOpaque,
 						Data:       map[string][]byte{"auth": []byte("user:pass")},
@@ -155,8 +170,11 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					"hp-missing",
 					false).Source,
 				secNsName: types.NamespacedName{Namespace: "test", Name: "af"},
-				secrets: map[types.NamespacedName]*corev1.Secret{
-					{Namespace: "test", Name: "hp-missing"}: createHtpasswdSecret("test", "hp-missing", false),
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "hp-missing"},
+					}: createHtpasswdSecret("test", "hp-missing", false),
 				},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
@@ -170,8 +188,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			resolver := newSecretResolver(tt.args.secrets)
-			cond := validateAuthenticationFilter(tt.args.filter, tt.args.secNsName, resolver)
+			resourceResolver := resolver.NewResourceResolver(tt.args.resources)
+			cond := validateAuthenticationFilter(tt.args.filter, tt.args.secNsName, resourceResolver)
 
 			if tt.expCond != (conditions.Condition{}) {
 				g.Expect(cond).ToNot(BeNil())
@@ -324,11 +342,11 @@ func createHtpasswdSecret(ns, name string, withAuth bool) *corev1.Secret {
 			Namespace: ns,
 			Name:      name,
 		},
-		Type: corev1.SecretType(SecretTypeHtpasswd),
+		Type: corev1.SecretType(secrets.SecretTypeHtpasswd),
 		Data: map[string][]byte{},
 	}
 	if withAuth {
-		sec.Data[AuthKey] = []byte("user:pass")
+		sec.Data[secrets.AuthKey] = []byte("user:pass")
 	}
 	return sec
 }
