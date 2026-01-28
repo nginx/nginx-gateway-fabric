@@ -724,6 +724,14 @@ type ReadinessProbeSpec struct {
 	// +kubebuilder:validation:Maximum=65535
 	Port *int32 `json:"port,omitempty"`
 
+	// Path is the path on which the readiness endpoint is exposed.
+	// If not specified, the default path is /readyz.
+	// Must start with a forward slash and contain only valid URL path characters.
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^/[a-zA-Z0-9/_\-\.~]*$`
+	Path *string `json:"path,omitempty"`
+
 	// InitialDelaySeconds is the number of seconds after the container has
 	// started before the readiness probe is initiated.
 	// If not specified, the default is 3 seconds.
@@ -732,6 +740,13 @@ type ReadinessProbeSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=3600
 	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
+
+	// Expose toggles whether the endpoint should be exposed through
+	// the Gateway Service object. This allows an external LoadBalancer
+	// to perform healthchecks. Default is false.
+	//
+	// +optional
+	Expose *bool `json:"expose,omitempty"`
 }
 
 // Image is the NGINX image to use.

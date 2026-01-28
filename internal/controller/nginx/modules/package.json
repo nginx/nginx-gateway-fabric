@@ -10,9 +10,9 @@
     "clean": "rm -rf node_modules coverage"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.0.17",
-    "prettier": "3.8.0",
-    "vitest": "^4.0.17"
+    "@vitest/coverage-v8": "^4.0.18",
+    "prettier": "3.8.1",
+    "vitest": "^4.0.18"
   },
   "type": "module"
 }
