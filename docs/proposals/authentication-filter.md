@@ -315,43 +315,6 @@ type RemoteTLSConfig struct {
   Verify *bool `json:"verify,omitempty"`
 }
 
- // JWKSCache uses NGINX `proxy_cache_path` and `proxy_cache` directives for caching remote JSON Web Key Sets.
-type JWKSCache struct {
-  // Levels specifies the directory hierarchy for cached files.
-  // Used in `proxy_cache_path` directive.
-  // https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_path
-  // Example: "levels=1:2".
-  //
-  // +optional
-  Levels *string `json:"levels,omitempty"`
-
-  // KeysZoneName is the name of the cache keys zone.
-  // If omitted, the controller SHOULD derive a unique, stable name per filter instance.
-  //
-  // +optional
-  KeysZoneName *string `json:"keysZoneName,omitempty"`
-
-  // MaxSize limits the total size of the cache (e.g. "50m").
-  //
-  // +optional
-  MaxSize *string `json:"maxSize,omitempty"`
-
-  // Inactive defines the inactivity timeout before cached items are evicted (e.g. "10m").
-  //
-  // +optional
-  Inactive *string `json:"inactive,omitempty"`
-
-  // UseTempPath controls whether a temporary file is used for cache writes.
-  // Maps to use_temp_path=(on|off). Default: false (off).
-  //
-  // +optional
-  UseTempPath *bool `json:"useTempPath,omitempty"`
-
-  // KeysZoneSize is the size of the cache keys zone (e.g. "10m").
-  // This is required to avoid unbounded allocations.
-  KeysZoneSize string `json:"keysZoneSize"`
-}
-
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
 type AuthenticationFilterStatus struct {
   // Controllers is a list of Gateway API controllers that processed the AuthenticationFilter
