@@ -1303,7 +1303,7 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							ObservedGeneration: 2,
 							LastTransitionTime: transitionTime,
 							Reason:             string(conditions.GatewayReasonResolvedRefs),
-							Message:            "The ParametersRef resource is resolved",
+							Message:            "The referenced resources are resolved",
 						},
 					},
 					Listeners: []v1.ListenerStatus{
@@ -1329,8 +1329,8 @@ func TestBuildGatewayStatuses(t *testing.T) {
 				},
 				Valid: true,
 				Conditions: []conditions.Condition{
-					conditions.NewGatewayRefNotFound(),
 					conditions.NewGatewayInvalidParameters("The ParametersRef not found"),
+					conditions.NewGatewayRefInvalid("The ParametersRef not found"),
 				},
 			},
 			expected: map[types.NamespacedName]v1.GatewayStatus{
@@ -1346,14 +1346,6 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							Message:            "The Gateway is programmed",
 						},
 						{
-							Type:               string(conditions.GatewayResolvedRefs),
-							Status:             metav1.ConditionFalse,
-							ObservedGeneration: 2,
-							LastTransitionTime: transitionTime,
-							Reason:             string(conditions.GatewayReasonParamsRefNotFound),
-							Message:            "The ParametersRef resource could not be found",
-						},
-						{
 							Type:               string(v1.GatewayConditionAccepted),
 							Status:             metav1.ConditionTrue,
 							ObservedGeneration: 2,
@@ -1361,6 +1353,14 @@ func TestBuildGatewayStatuses(t *testing.T) {
 							Reason:             string(v1.GatewayReasonInvalidParameters),
 							Message: "The Gateway is accepted, but ParametersRef is ignored due to an error: " +
 								"The ParametersRef not found",
+						},
+						{
+							Type:               string(conditions.GatewayResolvedRefs),
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: 2,
+							LastTransitionTime: transitionTime,
+							Reason:             string(conditions.GatewayClassReasonParamsRefInvalid),
+							Message:            "The ParametersRef not found",
 						},
 					},
 					Listeners: []v1.ListenerStatus{
