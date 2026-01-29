@@ -123,6 +123,11 @@ type eventHandlerImpl struct {
 	// objectFilters contains all created objectFilters, with the key being a filterKey
 	objectFilters map[filterKey]objectFilter
 
+	// ingressLinkAddresses caches IngressLink addresses by Gateway NamespacedName.
+	// This is needed because updateStatuses reads gw.Source.Status.Addresses from the informer cache,
+	// which may not yet reflect the latest status update written by handleIngressLinkStatusUpdate.
+	ingressLinkAddresses map[types.NamespacedName]string
+
 	cfg        eventHandlerConfig
 	lock       sync.RWMutex
 	leaderLock sync.RWMutex
@@ -134,6 +139,7 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 	handler := &eventHandlerImpl{
 		cfg:                  cfg,
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
+		ingressLinkAddresses: make(map[types.NamespacedName]string),
 	}
 
 	handler.objectFilters = map[filterKey]objectFilter{
@@ -360,6 +366,11 @@ func (h *eventHandlerImpl) handleIngressLinkStatusUpdate(
 		return
 	}
 
+	// Cache the IngressLink address so updateStatuses can use it instead of
+	// relying on the potentially stale informer cache (gw.Source.Status.Addresses).
+	gwNSName := client.ObjectKeyFromObject(gw.Source)
+	h.ingressLinkAddresses[gwNSName] = item.IngressLinkAddress
+
 	gwAddresses := []gatewayv1.GatewayStatusAddress{
 		{
 			Type:  helpers.GetPointer(gatewayv1.IPAddressType),
@@ -393,6 +404,40 @@ func gatewayLinkEnabled(gw *graph.Gateway) bool {
 		*gw.EffectiveNginxProxy.GatewayLink.Enabled
 }
 
+// getGatewayLinkAddresses returns the Gateway addresses for a GatewayLink-enabled Gateway.
+// It uses the following priority order:
+// 1. Cached IngressLink address (set by handleIngressLinkStatusUpdate when CIS updates IngressLink status)
+// 2. Static virtualServerAddress from NginxProxy config (known at creation time)
+// 3. Existing Gateway status addresses from the informer cache (fallback).
+func (h *eventHandlerImpl) getGatewayLinkAddresses(gw *graph.Gateway) []gatewayv1.GatewayStatusAddress {
+	gwNSName := client.ObjectKeyFromObject(gw.Source)
+
+	// Check cached IngressLink address first (most up-to-date source)
+	if addr, ok := h.ingressLinkAddresses[gwNSName]; ok && addr != "" {
+		return []gatewayv1.GatewayStatusAddress{
+			{
+				Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+				Value: addr,
+			},
+		}
+	}
+
+	// For manual IP case, use the virtualServerAddress from the NginxProxy config directly.
+	// This avoids waiting for CIS to populate the IngressLink status.
+	if gw.EffectiveNginxProxy.GatewayLink.VirtualServerAddress != nil {
+		return []gatewayv1.GatewayStatusAddress{
+			{
+				Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+				Value: *gw.EffectiveNginxProxy.GatewayLink.VirtualServerAddress,
+			},
+		}
+	}
+
+	// For IPAM case, preserve existing addresses from the informer cache as a fallback.
+	// The IngressLink watcher will update the address when CIS allocates one.
+	return gw.Source.Status.Addresses
+}
+
 func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, gw *graph.Gateway) {
 	transitionTime := metav1.Now()
 	gcReqs := status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
@@ -404,8 +449,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 
 	var gwAddresses []gatewayv1.GatewayStatusAddress
 	if gatewayLinkEnabled(gw) {
-		// Preserve existing Gateway addresses set by the IngressLink watcher
-		gwAddresses = gw.Source.Status.Addresses
+		gwAddresses = h.getGatewayLinkAddresses(gw)
 	} else {
 		var err error
 		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
@@ -483,7 +527,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 
 	// We put Gateway status updates separately from the rest of the statuses because we want to be able
 	// to update them separately from the rest of the graph whenever the public IP of NGF changes.
-	// When GatewayLink is enabled, gwAddresses will be nil here - the IngressLink watcher sets the address.
+	// When GatewayLink is enabled, gwAddresses are resolved via getGatewayLinkAddresses.
 	gwReqs := status.PrepareGatewayRequests(
 		gw,
 		transitionTime,

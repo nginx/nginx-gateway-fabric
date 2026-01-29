@@ -1,0 +1,36 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: nginx-proxy-gatewaylink-test
+spec:
+  # GatewayLink configuration with manual IP address
+  gatewayLink:
+    enabled: true
+    # Static IP address configured on BIG-IP
+    virtualServerAddress: "10.8.3.101"
+    # # If IPAM integration is enabled, F5 IPAM Controller will allocate
+    # # an IP from the pool associated with this label
+    # ipamLabel: "test"
+    # Define IRules (must use full path format: /partition/irule_name)
+    iRules:
+      - "/Common/Proxy_Protocol_iRule"
+
+  # Configure Proxy Protocol to preserve client IPs from BIG-IP
+  rewriteClientIP:
+    mode: ProxyProtocol
+    trustedAddresses:
+      - type: CIDR
+        value: 10.8.0.0/14
+
+  kubernetes:
+    # Use ClusterIP since BIG-IP handles external traffic routing
+    # Use NodePort if CIS is deployed with --pool-member-type=nodeport
+    service:
+      type: ClusterIP
+    deployment:
+      container:
+        # Configure readiness probe
+        readinessProbe:
+          path: "/nginx-ready"  # ← Compatibility with CIS/BIG-IP
+          port: 8081
+          expose: true

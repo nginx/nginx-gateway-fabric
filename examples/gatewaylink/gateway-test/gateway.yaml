@@ -8,7 +8,7 @@ spec:
     parametersRef:
       group: gateway.nginx.org
       kind: NginxProxy
-      name: nginx-proxy-gatewaylink
+      name: nginx-proxy-gatewaylink-test
   listeners:
     - name: http
       port: 80

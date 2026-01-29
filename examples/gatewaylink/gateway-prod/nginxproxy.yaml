@@ -1,14 +1,16 @@
 apiVersion: gateway.nginx.org/v1alpha2
 kind: NginxProxy
 metadata:
-  name: nginx-proxy-gatewaylink
+  name: nginx-proxy-gatewaylink-prod
 spec:
   # GatewayLink configuration with manual IP address
   gatewayLink:
     enabled: true
     # Static IP address configured on BIG-IP
-    virtualServerAddress: "10.8.3.101"
-    host: cafe.example.com
+    virtualServerAddress: "10.8.3.102"
+    # # If IPAM integration is enabled, F5 IPAM Controller will allocate
+    # # an IP from the pool associated with this label
+    # ipamLabel: "production"
     # Define IRules (must use full path format: /partition/irule_name)
     iRules:
       - "/Common/Proxy_Protocol_iRule"
