@@ -57,14 +57,14 @@ func (p *NginxProvisioner) setOwnerReference(obj client.Object, gateway *gateway
 // resourceNames holds all the generated resource names.
 type resourceNames struct {
 	// new name -> original name
-	dockerSecrets map[string]string
-	ngxIncludes   string
-	ngxAgent      string
-	agentTLS      string
-	jwt           string
-	ca            string
-	clientSSL     string
-	dataplaneKey  string
+	dockerSecrets          map[string]string
+	nginxIncludesConfigMap string
+	nginxAgentConfigMap    string
+	agentTLS               string
+	jwt                    string
+	ca                     string
+	clientSSL              string
+	dataplaneKey           string
 }
 
 // buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
@@ -80,7 +80,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// do some processing to ensure the generated results are the same each time.
 
 	// build resource names
-	names := p.buildResourceNames(resourceName)
+	resourceNames := p.buildResourceNames(resourceName)
 
 	// build labels, annotations, and objectMeta
 	selectorLabels, labels, annotations := p.buildLabelsAndAnnotations(resourceName, gateway)
@@ -94,12 +94,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// build secrets
 	secretsList, secretsErr := p.buildNginxSecrets(
 		objectMeta,
-		names.agentTLS,
-		names.dockerSecrets,
-		names.jwt,
-		names.ca,
-		names.clientSSL,
-		names.dataplaneKey,
+		resourceNames,
 		gateway,
 	)
 	if secretsErr != nil {
@@ -109,10 +104,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	configmaps, configMapErrs := p.buildNginxConfigMaps(
 		objectMeta,
 		nProxyCfg,
-		names.ngxIncludes,
-		names.ngxAgent,
-		names.ca != "",
-		names.clientSSL != "",
+		resourceNames,
 		gateway,
 	)
 	if configMapErrs != nil {
@@ -164,16 +156,9 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	deployment, err := p.buildNginxDeployment(
 		cloneObjectMeta(objectMeta),
 		nProxyCfg,
-		names.ngxIncludes,
-		names.ngxAgent,
 		ports,
 		selectorLabels,
-		names.agentTLS,
-		names.dockerSecrets,
-		names.jwt,
-		names.ca,
-		names.clientSSL,
-		names.dataplaneKey,
+		resourceNames,
 	)
 	if err != nil {
 		errs = append(errs, err)
@@ -219,10 +204,10 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 // buildResourceNames builds all the resource names for a given gateway resource name.
 func (p *NginxProvisioner) buildResourceNames(resourceName string) resourceNames {
 	names := resourceNames{
-		ngxIncludes:   controller.CreateNginxResourceName(resourceName, nginxIncludesConfigMapNameSuffix),
-		ngxAgent:      controller.CreateNginxResourceName(resourceName, nginxAgentConfigMapNameSuffix),
-		agentTLS:      controller.CreateNginxResourceName(resourceName, p.cfg.AgentTLSSecretName),
-		dockerSecrets: make(map[string]string),
+		nginxIncludesConfigMap: controller.CreateNginxResourceName(resourceName, nginxIncludesConfigMapNameSuffix),
+		nginxAgentConfigMap:    controller.CreateNginxResourceName(resourceName, nginxAgentConfigMapNameSuffix),
+		agentTLS:               controller.CreateNginxResourceName(resourceName, p.cfg.AgentTLSSecretName),
+		dockerSecrets:          make(map[string]string),
 	}
 
 	if p.cfg.Plus {
@@ -340,12 +325,7 @@ func (p *NginxProvisioner) buildHPA(
 
 func (p *NginxProvisioner) buildNginxSecrets(
 	objectMeta metav1.ObjectMeta,
-	agentTLSSecretName string,
-	dockerSecretNames map[string]string,
-	jwtSecretName string,
-	caSecretName string,
-	clientSSLSecretName string,
-	dataplaneKeySecretName string,
+	names resourceNames,
 	gateway *gatewayv1.Gateway,
 ) ([]client.Object, error) {
 	var secretsList []client.Object
@@ -382,12 +362,12 @@ func (p *NginxProvisioner) buildNginxSecrets(
 	}
 
 	// agent TLS Secret
-	if secret := addSecret(p.cfg.AgentTLSSecretName, agentTLSSecretName, corev1.SecretTypeTLS); secret != nil {
+	if secret := addSecret(p.cfg.AgentTLSSecretName, names.agentTLS, corev1.SecretTypeTLS); secret != nil {
 		secretsList = append(secretsList, secret)
 	}
 
 	// docker Secrets
-	for targetSecretName, sourceSecretName := range dockerSecretNames {
+	for targetSecretName, sourceSecretName := range names.dockerSecrets {
 		if secret := addSecret(sourceSecretName, targetSecretName, corev1.SecretTypeDockerConfigJson); secret != nil {
 			dockerSecrets = append(dockerSecrets, secret)
 		}
@@ -399,15 +379,15 @@ func (p *NginxProvisioner) buildNginxSecrets(
 
 	// plus Secrets (in order: jwt, ca, clientSSL)
 	if p.cfg.PlusUsageConfig != nil {
-		if secret := addSecret(p.cfg.PlusUsageConfig.SecretName, jwtSecretName, corev1.SecretTypeOpaque); secret != nil {
+		if secret := addSecret(p.cfg.PlusUsageConfig.SecretName, names.jwt, corev1.SecretTypeOpaque); secret != nil {
 			secretsList = append(secretsList, secret)
 		}
-		if secret := addSecret(p.cfg.PlusUsageConfig.CASecretName, caSecretName, corev1.SecretTypeOpaque); secret != nil {
+		if secret := addSecret(p.cfg.PlusUsageConfig.CASecretName, names.ca, corev1.SecretTypeOpaque); secret != nil {
 			secretsList = append(secretsList, secret)
 		}
 		if secret := addSecret(
 			p.cfg.PlusUsageConfig.ClientSSLSecretName,
-			clientSSLSecretName,
+			names.clientSSL,
 			corev1.SecretTypeTLS,
 		); secret != nil {
 			secretsList = append(secretsList, secret)
@@ -417,7 +397,7 @@ func (p *NginxProvisioner) buildNginxSecrets(
 	// Dataplane Key Secret
 	if secret := addSecret(
 		p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
-		dataplaneKeySecretName,
+		names.dataplaneKey,
 		corev1.SecretTypeOpaque,
 	); secret != nil {
 		secretsList = append(secretsList, secret)
@@ -452,20 +432,23 @@ func (p *NginxProvisioner) getAndUpdateSecret(
 func (p *NginxProvisioner) buildNginxConfigMaps(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
-	ngxIncludesConfigMapName string,
-	ngxAgentConfigMapName string,
-	caSecret bool,
-	clientSSLSecret bool,
+	names resourceNames,
 	gateway *gatewayv1.Gateway,
 ) ([]client.Object, []error) {
 	var errs []error
 
-	bootstrapCM := p.buildBootstrapConfigMap(objectMeta, nProxyCfg, ngxIncludesConfigMapName, caSecret, clientSSLSecret)
+	bootstrapCM := p.buildBootstrapConfigMap(
+		objectMeta,
+		nProxyCfg,
+		names.nginxIncludesConfigMap,
+		names.ca != "",
+		names.clientSSL != "",
+	)
 	if err := p.setOwnerReference(bootstrapCM, gateway); err != nil {
 		errs = append(errs, fmt.Errorf("failed to set owner reference on ConfigMap %s: %w", bootstrapCM.GetName(), err))
 	}
 
-	agentCM := p.buildAgentConfigMap(objectMeta, nProxyCfg, ngxAgentConfigMapName)
+	agentCM := p.buildAgentConfigMap(objectMeta, nProxyCfg, names.nginxAgentConfigMap)
 	if err := p.setOwnerReference(agentCM, gateway); err != nil {
 		errs = append(errs, fmt.Errorf("failed to set owner reference on ConfigMap %s: %w", agentCM.GetName(), err))
 	}
@@ -749,29 +732,15 @@ func setSvcLoadBalancerSettings(svcCfg ngfAPIv1alpha2.ServiceSpec, svcSpec *core
 func (p *NginxProvisioner) buildNginxDeployment(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
-	ngxIncludesConfigMapName string,
-	ngxAgentConfigMapName string,
 	ports map[int32]corev1.Protocol,
 	selectorLabels map[string]string,
-	agentTLSSecretName string,
-	dockerSecretNames map[string]string,
-	jwtSecretName string,
-	caSecretName string,
-	clientSSLSecretName string,
-	dataplaneKeySecretName string,
+	names resourceNames,
 ) (client.Object, error) {
 	podTemplateSpec := p.buildNginxPodTemplateSpec(
 		objectMeta,
 		nProxyCfg,
-		ngxIncludesConfigMapName,
-		ngxAgentConfigMapName,
 		ports,
-		agentTLSSecretName,
-		dockerSecretNames,
-		jwtSecretName,
-		caSecretName,
-		clientSSLSecretName,
-		dataplaneKeySecretName,
+		names,
 	)
 
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.DaemonSet != nil {
@@ -939,15 +908,8 @@ func applyPatches(obj client.Object, patches []ngfAPIv1alpha2.Patch) error {
 func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	objectMeta metav1.ObjectMeta,
 	nProxyCfg *graph.EffectiveNginxProxy,
-	ngxIncludesConfigMapName string,
-	ngxAgentConfigMapName string,
 	ports map[int32]corev1.Protocol,
-	agentTLSSecretName string,
-	dockerSecretNames map[string]string,
-	jwtSecretName string,
-	caSecretName string,
-	clientSSLSecretName string,
-	dataplaneKeySecretName string,
+	names resourceNames,
 ) corev1.PodTemplateSpec {
 	containerPorts := make([]corev1.ContainerPort, 0, len(ports))
 	for port, protocol := range ports {
@@ -1117,7 +1079,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 					VolumeSource: corev1.VolumeSource{
 						ConfigMap: &corev1.ConfigMapVolumeSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: ngxAgentConfigMapName,
+								Name: names.nginxAgentConfigMap,
 							},
 						},
 					},
@@ -1126,7 +1088,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 					Name: "nginx-agent-tls",
 					VolumeSource: corev1.VolumeSource{
 						Secret: &corev1.SecretVolumeSource{
-							SecretName: agentTLSSecretName,
+							SecretName: names.agentTLS,
 						},
 					},
 				},
@@ -1145,7 +1107,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 					VolumeSource: corev1.VolumeSource{
 						ConfigMap: &corev1.ConfigMapVolumeSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: ngxIncludesConfigMapName,
+								Name: names.nginxIncludesConfigMap,
 							},
 						},
 					},
@@ -1201,7 +1163,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		}
 	}
 
-	for name := range dockerSecretNames {
+	for name := range names.dockerSecrets {
 		ref := corev1.LocalObjectReference{Name: name}
 		spec.Spec.ImagePullSecrets = append(spec.Spec.ImagePullSecrets, ref)
 	}
@@ -1229,7 +1191,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			VolumeSource: emptyDirVolumeSource,
 		})
 
-		if jwtSecretName != "" {
+		if names.jwt != "" {
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
 				Name:      "nginx-plus-license",
 				MountPath: "/etc/nginx/" + secrets.LicenseJWTKey,
@@ -1237,10 +1199,10 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			})
 			spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
 				Name:         "nginx-plus-license",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: jwtSecretName}},
+				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: names.jwt}},
 			})
 		}
-		if caSecretName != "" || clientSSLSecretName != "" {
+		if names.ca != "" || names.clientSSL != "" {
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
 				Name:      "nginx-plus-usage-certs",
 				MountPath: "/etc/nginx/certs-bootstrap/",
@@ -1248,18 +1210,18 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 
 			sources := []corev1.VolumeProjection{}
 
-			if caSecretName != "" {
+			if names.ca != "" {
 				sources = append(sources, corev1.VolumeProjection{
 					Secret: &corev1.SecretProjection{
-						LocalObjectReference: corev1.LocalObjectReference{Name: caSecretName},
+						LocalObjectReference: corev1.LocalObjectReference{Name: names.ca},
 					},
 				})
 			}
 
-			if clientSSLSecretName != "" {
+			if names.clientSSL != "" {
 				sources = append(sources, corev1.VolumeProjection{
 					Secret: &corev1.SecretProjection{
-						LocalObjectReference: corev1.LocalObjectReference{Name: clientSSLSecretName},
+						LocalObjectReference: corev1.LocalObjectReference{Name: names.clientSSL},
 					},
 				})
 			}
@@ -1287,7 +1249,7 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		})
 		spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
 			Name:         "agent-dataplane-key",
-			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: dataplaneKeySecretName}},
+			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: names.dataplaneKey}},
 		})
 
 		spec.Spec.Containers[0].VolumeMounts = volumeMounts

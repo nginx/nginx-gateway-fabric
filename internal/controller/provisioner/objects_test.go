@@ -1519,14 +1519,13 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 		},
 	}
 
+	resourceName := "gw-nginx"
+	names := provisioner.buildResourceNames(resourceName)
 	// Test with default worker connections (nil NginxProxy config)
 	configMaps, errs := provisioner.buildNginxConfigMaps(
 		objectMeta,
 		nil,
-		"test-bootstrap",
-		"test-agent",
-		false,
-		false,
+		names,
 		gateway,
 	)
 	g.Expect(errs).To(BeNil())
@@ -1541,10 +1540,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 	configMaps, errs = provisioner.buildNginxConfigMaps(
 		objectMeta,
 		nProxyCfgEmpty,
-		"test-bootstrap",
-		"test-agent",
-		false,
-		false,
+		names,
 		gateway,
 	)
 	g.Expect(errs).To(BeNil())
@@ -1562,10 +1558,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 	configMaps, errs = provisioner.buildNginxConfigMaps(
 		objectMeta,
 		nProxyCfg,
-		"test-bootstrap",
-		"test-agent",
-		false,
-		false,
+		names,
 		gateway,
 	)
 	g.Expect(errs).To(BeNil())
@@ -1611,13 +1604,12 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 		},
 	}
 
+	resourceName := "gw-nginx"
+	names := provisioner.buildResourceNames(resourceName)
 	configMaps, errs := provisioner.buildNginxConfigMaps(
 		objectMeta,
 		nProxyCfgEmpty,
-		"test-bootstrap",
-		"test-agent",
-		true,
-		true,
+		names,
 		gateway,
 	)
 	g.Expect(errs).To(BeNil())
