@@ -1,7 +1,6 @@
 package provisioner
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -316,7 +315,6 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	batch := events.EventBatch{upsertEvent}
 	handler.HandleEventBatch(ctx, logger, batch)
 	store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), deployment)
-	fmt.Println("gateways", handler.store.gateways)
 
 	// if deployment is deleted, it should be re-created since Gateway still exists
 	deleteEvent := &events.DeleteEvent{Type: deployment, NamespacedName: client.ObjectKeyFromObject(deployment)}

@@ -54,7 +54,20 @@ func (p *NginxProvisioner) setOwnerReference(obj client.Object, gateway *gateway
 	return controllerutil.SetControllerReference(gateway, obj, p.k8sClient.Scheme())
 }
 
-//nolint:gocyclo // will refactor at some point
+// resourceNames holds all the generated resource names.
+type resourceNames struct {
+	// new name -> original name
+	dockerSecrets map[string]string
+	ngxIncludes   string
+	ngxAgent      string
+	agentTLS      string
+	jwt           string
+	ca            string
+	clientSSL     string
+	dataplaneKey  string
+}
+
+// buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
 func (p *NginxProvisioner) buildNginxResourceObjects(
 	resourceName string,
 	gateway *gatewayv1.Gateway,
@@ -66,61 +79,11 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// an object's field by ranging over a map, since ranging over a map is done in random order, we need to
 	// do some processing to ensure the generated results are the same each time.
 
-	ngxIncludesConfigMapName := controller.CreateNginxResourceName(resourceName, nginxIncludesConfigMapNameSuffix)
-	ngxAgentConfigMapName := controller.CreateNginxResourceName(resourceName, nginxAgentConfigMapNameSuffix)
-	agentTLSSecretName := controller.CreateNginxResourceName(resourceName, p.cfg.AgentTLSSecretName)
+	// build resource names
+	names := p.buildResourceNames(resourceName)
 
-	var jwtSecretName, caSecretName, clientSSLSecretName string
-	if p.cfg.Plus {
-		jwtSecretName = controller.CreateNginxResourceName(resourceName, p.cfg.PlusUsageConfig.SecretName)
-		if p.cfg.PlusUsageConfig.CASecretName != "" {
-			caSecretName = controller.CreateNginxResourceName(resourceName, p.cfg.PlusUsageConfig.CASecretName)
-		}
-		if p.cfg.PlusUsageConfig.ClientSSLSecretName != "" {
-			clientSSLSecretName = controller.CreateNginxResourceName(resourceName, p.cfg.PlusUsageConfig.ClientSSLSecretName)
-		}
-	}
-
-	var dataplaneKeySecretName string
-	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-		dataplaneKeySecretName = controller.CreateNginxResourceName(
-			resourceName,
-			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
-		)
-	}
-
-	// map key is the new name, value is the original name
-	dockerSecretNames := make(map[string]string)
-	for _, name := range p.cfg.NginxDockerSecretNames {
-		newName := controller.CreateNginxResourceName(resourceName, name)
-		dockerSecretNames[newName] = name
-	}
-
-	selectorLabels := make(map[string]string)
-	maps.Copy(selectorLabels, p.baseLabelSelector.MatchLabels)
-	selectorLabels[controller.AppNameLabel] = resourceName
-
-	labels := make(map[string]string)
-	annotations := make(map[string]string)
-
-	if len(gateway.GetName()) > controller.MaxServiceNameLen {
-		annotations[controller.GatewayLabel] = gateway.GetName()
-	} else {
-		selectorLabels[controller.GatewayLabel] = gateway.GetName()
-	}
-
-	maps.Copy(labels, selectorLabels)
-
-	if gateway.Spec.Infrastructure != nil {
-		for key, value := range gateway.Spec.Infrastructure.Labels {
-			labels[string(key)] = string(value)
-		}
-
-		for key, value := range gateway.Spec.Infrastructure.Annotations {
-			annotations[string(key)] = string(value)
-		}
-	}
-
+	// build labels, annotations, and objectMeta
+	selectorLabels, labels, annotations := p.buildLabelsAndAnnotations(resourceName, gateway)
 	objectMeta := metav1.ObjectMeta{
 		Name:        resourceName,
 		Namespace:   gateway.GetNamespace(),
@@ -128,43 +91,38 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		Annotations: annotations,
 	}
 
-	secretsList, err := p.buildNginxSecrets(
+	// build secrets
+	secretsList, secretsErr := p.buildNginxSecrets(
 		objectMeta,
-		agentTLSSecretName,
-		dockerSecretNames,
-		jwtSecretName,
-		caSecretName,
-		clientSSLSecretName,
-		dataplaneKeySecretName,
+		names.agentTLS,
+		names.dockerSecrets,
+		names.jwt,
+		names.ca,
+		names.clientSSL,
+		names.dataplaneKey,
 		gateway,
 	)
-	if err != nil {
-		errs = append(errs, err)
+	if secretsErr != nil {
+		errs = append(errs, secretsErr)
 	}
 
 	configmaps, configMapErrs := p.buildNginxConfigMaps(
 		objectMeta,
 		nProxyCfg,
-		ngxIncludesConfigMapName,
-		ngxAgentConfigMapName,
-		caSecretName != "",
-		clientSSLSecretName != "",
+		names.ngxIncludes,
+		names.ngxAgent,
+		names.ca != "",
+		names.clientSSL != "",
 		gateway,
 	)
 	if configMapErrs != nil {
 		errs = append(errs, configMapErrs...)
 	}
 
-	serviceAccount := &corev1.ServiceAccount{
-		ObjectMeta:                   objectMeta,
-		AutomountServiceAccountToken: helpers.GetPointer(false),
-	}
-
-	if err := p.setOwnerReference(serviceAccount, gateway); err != nil {
-		errs = append(
-			errs,
-			fmt.Errorf("failed to set owner reference on ServiceAccount %s: %w", serviceAccount.GetName(), err),
-		)
+	// build service account
+	serviceAccount, err := p.buildServiceAccount(objectMeta, gateway)
+	if err != nil {
+		errs = append(errs, err)
 	}
 
 	var openshiftObjs []client.Object
@@ -176,19 +134,8 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		}
 	}
 
-	ports := make(map[int32]corev1.Protocol)
-	for _, listener := range gateway.Spec.Listeners {
-		var protocol corev1.Protocol
-		switch listener.Protocol {
-		case gatewayv1.TCPProtocolType:
-			protocol = corev1.ProtocolTCP
-		case gatewayv1.UDPProtocolType:
-			protocol = corev1.ProtocolUDP
-		default:
-			protocol = corev1.ProtocolTCP
-		}
-		ports[listener.Port] = protocol
-	}
+	// build ports from gateway listeners
+	ports := p.buildPortsFromListeners(gateway.Spec.Listeners)
 
 	// Add healthcheck port to service if expose is enabled
 	var healthcheckPort int32
@@ -197,55 +144,47 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		ports[healthcheckPort] = corev1.ProtocolTCP
 	}
 
-	// Create separate copies of objectMeta for service and deployment to avoid shared map references
-	serviceObjectMeta := metav1.ObjectMeta{
-		Name:        objectMeta.Name,
-		Namespace:   objectMeta.Namespace,
-		Labels:      maps.Clone(objectMeta.Labels),
-		Annotations: maps.Clone(objectMeta.Annotations),
-	}
-
-	deploymentObjectMeta := metav1.ObjectMeta{
-		Name:        objectMeta.Name,
-		Namespace:   objectMeta.Namespace,
-		Labels:      maps.Clone(objectMeta.Labels),
-		Annotations: maps.Clone(objectMeta.Annotations),
-	}
-
+	// build service
 	service, err := buildNginxService(
-		serviceObjectMeta, nProxyCfg, ports, healthcheckPort, selectorLabels, gateway.Spec.Addresses,
+		cloneObjectMeta(objectMeta),
+		nProxyCfg,
+		ports,
+		healthcheckPort,
+		selectorLabels,
+		gateway.Spec.Addresses,
 	)
 	if err != nil {
 		errs = append(errs, err)
 	}
-
 	if err := p.setOwnerReference(service, gateway); err != nil {
-		errs = append(
-			errs,
-			fmt.Errorf("failed to set owner reference on Service %s: %w", service.GetName(), err),
-		)
+		errs = append(errs, fmt.Errorf("failed to set owner reference on Service %s: %w", service.GetName(), err))
 	}
 
+	// build deployment/daemonset
 	deployment, err := p.buildNginxDeployment(
-		deploymentObjectMeta,
+		cloneObjectMeta(objectMeta),
 		nProxyCfg,
-		ngxIncludesConfigMapName,
-		ngxAgentConfigMapName,
+		names.ngxIncludes,
+		names.ngxAgent,
 		ports,
 		selectorLabels,
-		agentTLSSecretName,
-		dockerSecretNames,
-		jwtSecretName,
-		caSecretName,
-		clientSSLSecretName,
-		dataplaneKeySecretName,
+		names.agentTLS,
+		names.dockerSecrets,
+		names.jwt,
+		names.ca,
+		names.clientSSL,
+		names.dataplaneKey,
 	)
 	if err != nil {
 		errs = append(errs, err)
 	}
-
 	if err := p.setOwnerReference(deployment, gateway); err != nil {
-		errs = append(errs, fmt.Errorf("failed to set owner reference on Deployment %s: %w", deployment.GetName(), err))
+		errs = append(errs, fmt.Errorf(
+			"failed to set owner reference on %s %s: %w",
+			deployment.GetObjectKind().GroupVersionKind().Kind,
+			deployment.GetName(),
+			err,
+		))
 	}
 
 	// order to install resources:
@@ -275,6 +214,113 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	}
 
 	return objects, errors.Join(errs...)
+}
+
+// buildResourceNames builds all the resource names for a given gateway resource name.
+func (p *NginxProvisioner) buildResourceNames(resourceName string) resourceNames {
+	names := resourceNames{
+		ngxIncludes:   controller.CreateNginxResourceName(resourceName, nginxIncludesConfigMapNameSuffix),
+		ngxAgent:      controller.CreateNginxResourceName(resourceName, nginxAgentConfigMapNameSuffix),
+		agentTLS:      controller.CreateNginxResourceName(resourceName, p.cfg.AgentTLSSecretName),
+		dockerSecrets: make(map[string]string),
+	}
+
+	if p.cfg.Plus {
+		names.jwt = controller.CreateNginxResourceName(resourceName, p.cfg.PlusUsageConfig.SecretName)
+		if p.cfg.PlusUsageConfig.CASecretName != "" {
+			names.ca = controller.CreateNginxResourceName(resourceName, p.cfg.PlusUsageConfig.CASecretName)
+		}
+		if p.cfg.PlusUsageConfig.ClientSSLSecretName != "" {
+			names.clientSSL = controller.CreateNginxResourceName(resourceName, p.cfg.PlusUsageConfig.ClientSSLSecretName)
+		}
+	}
+
+	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
+		names.dataplaneKey = controller.CreateNginxResourceName(
+			resourceName,
+			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
+		)
+	}
+
+	for _, name := range p.cfg.NginxDockerSecretNames {
+		newName := controller.CreateNginxResourceName(resourceName, name)
+		names.dockerSecrets[newName] = name
+	}
+
+	return names
+}
+
+// buildLabelsAndAnnotations builds labels and annotations for NGINX resources.
+func (p *NginxProvisioner) buildLabelsAndAnnotations(
+	resourceName string,
+	gateway *gatewayv1.Gateway,
+) (selectorLabels, labels, annotations map[string]string) {
+	selectorLabels = make(map[string]string)
+	maps.Copy(selectorLabels, p.baseLabelSelector.MatchLabels)
+	selectorLabels[controller.AppNameLabel] = resourceName
+
+	annotations = make(map[string]string)
+	if len(gateway.GetName()) > controller.MaxServiceNameLen {
+		annotations[controller.GatewayLabel] = gateway.GetName()
+	} else {
+		selectorLabels[controller.GatewayLabel] = gateway.GetName()
+	}
+
+	labels = make(map[string]string)
+	maps.Copy(labels, selectorLabels)
+
+	if gateway.Spec.Infrastructure != nil {
+		for key, value := range gateway.Spec.Infrastructure.Labels {
+			labels[string(key)] = string(value)
+		}
+		for key, value := range gateway.Spec.Infrastructure.Annotations {
+			annotations[string(key)] = string(value)
+		}
+	}
+
+	return selectorLabels, labels, annotations
+}
+
+// buildServiceAccount builds the ServiceAccount for NGINX deployment/daemonset.
+func (p *NginxProvisioner) buildServiceAccount(
+	objectMeta metav1.ObjectMeta,
+	gateway *gatewayv1.Gateway,
+) (*corev1.ServiceAccount, error) {
+	serviceAccount := &corev1.ServiceAccount{
+		ObjectMeta:                   objectMeta,
+		AutomountServiceAccountToken: helpers.GetPointer(false),
+	}
+	if err := p.setOwnerReference(serviceAccount, gateway); err != nil {
+		return serviceAccount, fmt.Errorf(
+			"failed to set owner reference on ServiceAccount %s: %w", serviceAccount.GetName(),
+			err,
+		)
+	}
+	return serviceAccount, nil
+}
+
+// buildPortsFromListeners builds a map of ports to protocols from the Gateway listeners.
+func (p *NginxProvisioner) buildPortsFromListeners(listeners []gatewayv1.Listener) map[int32]corev1.Protocol {
+	ports := make(map[int32]corev1.Protocol, len(listeners))
+	for _, listener := range listeners {
+		switch listener.Protocol {
+		case gatewayv1.UDPProtocolType:
+			ports[listener.Port] = corev1.ProtocolUDP
+		default:
+			ports[listener.Port] = corev1.ProtocolTCP
+		}
+	}
+	return ports
+}
+
+// cloneObjectMeta clones the given ObjectMeta.
+func cloneObjectMeta(meta metav1.ObjectMeta) metav1.ObjectMeta {
+	return metav1.ObjectMeta{
+		Name:        meta.Name,
+		Namespace:   meta.Namespace,
+		Labels:      maps.Clone(meta.Labels),
+		Annotations: maps.Clone(meta.Annotations),
+	}
 }
 
 func isAutoscalingEnabled(dep *ngfAPIv1alpha2.DeploymentSpec) bool {

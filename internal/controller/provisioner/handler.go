@@ -109,8 +109,8 @@ func (h *eventHandler) handleUpsertEvent(ctx context.Context, e *events.UpsertEv
 	return nil
 }
 
-// getGatewayForManagedResource checks if the object is managed by us and returns the Gateway's NamespacedName.
-// Returns false if the object doesn't match our label selector.
+// getGatewayForManagedResource checks if the object is managed by us and returns the
+// associated Gateway's NamespacedName. Returns false if the object doesn't match our label selector.
 func (h *eventHandler) getGatewayForManagedResource(obj client.Object) (types.NamespacedName, bool) {
 	objLabels := labels.Set(obj.GetLabels())
 	if !h.labelSelector.Matches(objLabels) {
@@ -174,7 +174,7 @@ func (h *eventHandler) updateOrDeleteResources(
 			h.provisioner.setResourceToDelete(gatewayNSName)
 			return nil
 		}
-		logger.Info("Gateway not found, will be garbage collected",
+		logger.Info("Gateway not found, associated resources will be garbage collected",
 			"resource", obj.GetName(), "gateway", gatewayNSName)
 		return nil
 	}
@@ -286,8 +286,8 @@ func (h *eventHandler) provisionResourceForAllGateways(
 //nolint:gocyclo // will refactor at some point
 func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, secret string) error {
 	var allErrs []error
-
 	gateways := h.store.getGateways()
+
 	for gateway := range gateways {
 		resources := h.store.getNginxResourcesForGateway(gateway)
 		if resources == nil {
