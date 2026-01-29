@@ -71,7 +71,9 @@ jobs:
           delete-branch: true
           branch: operator/bundle-${{ inputs.operator-version }}
           author: nginx-bot <integrations@nginx.com>
+          base: main
           committer: nginx-bot <integrations@nginx.com>
+          labels: needs cherry pick
           body: |
             This automated PR generates the operator bundle for v${{ inputs.operator-version }}.
 

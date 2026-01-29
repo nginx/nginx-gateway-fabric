@@ -32,15 +32,17 @@ jobs:
       - name: Set image reference
         id: image
         run: |
+          TAG="${{ inputs.tag }}"
+          TAG="${TAG#v}"
           case "${{ inputs.image }}" in
             ngf)
-              echo "ref=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric:${{ inputs.tag }}-ubi" >> $GITHUB_OUTPUT
+              echo "ref=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric:${TAG}-ubi" >> $GITHUB_OUTPUT
               ;;
             nginx)
-              echo "ref=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx:${{ inputs.tag }}-ubi" >> $GITHUB_OUTPUT
+              echo "ref=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx:${TAG}-ubi" >> $GITHUB_OUTPUT
               ;;
             operator)
-              echo "ref=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator:${{ inputs.tag }}" >> $GITHUB_OUTPUT
+              echo "ref=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator:${TAG}" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "Error: Unknown image type: ${{ inputs.image }}"
