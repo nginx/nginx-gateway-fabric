@@ -88,7 +88,6 @@ To create a new release, follow these steps:
     4. `GW_API_PREV_VERSION` in tests Makefile, if necessary.
     5. Any references in the docs to the previous release.
     6. Any installation instructions to ensure that the supported Gateway API and NGF versions are correct. Specifically, helm README.
-    7. The operator bundle changes.
 9. Prepare and merge a PR into the main branch of the [documentation repository](https://github.com/nginx/documentation) from the relevant release branch, such as `ngf-release-2.0`.
    - In the NGF repo, run `make generate-api-docs` and copy the generated file from `docs/api/content.md` into the documentation repo to `content/ngf/reference/api.md`.
    - Update the HTML file located at `layouts/shortcodes/version-ngf.html` with the latest version. Ensure you do not add an empty line to the file.
