@@ -27,6 +27,7 @@ spec:
     # Use NodePort if CIS is deployed with --pool-member-type=nodeport
     service:
       type: ClusterIP
+      externalTrafficPolicy: Cluster
     deployment:
       container:
         # Configure readiness probe

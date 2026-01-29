@@ -287,36 +287,7 @@ func (p *NginxProvisioner) buildIngressLink(
 		return nil
 	}
 
-	// Build the IngressLink spec
-	spec := map[string]any{
-		"selector": map[string]any{
-			"matchLabels": selectorLabels,
-		},
-	}
-
-	// Set virtualServerAddress or ipamLabel (mutually exclusive, validated by API)
-	if ilCfg.VirtualServerAddress != nil {
-		spec["virtualServerAddress"] = *ilCfg.VirtualServerAddress
-	} else if ilCfg.IpamLabel != nil {
-		spec["ipamLabel"] = *ilCfg.IpamLabel
-	}
-
-	// Optional fields
-	if ilCfg.Host != nil {
-		spec["host"] = *ilCfg.Host
-	}
-
-	if len(ilCfg.IRules) > 0 {
-		spec["iRules"] = ilCfg.IRules
-	}
-
-	if ilCfg.Partition != nil {
-		spec["partition"] = *ilCfg.Partition
-	}
-
-	if ilCfg.BigIPRouteDomain != nil {
-		spec["bigipRouteDomain"] = *ilCfg.BigIPRouteDomain
-	}
+	spec := buildIngressLinkSpec(ilCfg, objectMeta, selectorLabels)
 
 	il := &unstructured.Unstructured{
 		Object: map[string]any{
@@ -333,6 +304,127 @@ func (p *NginxProvisioner) buildIngressLink(
 	}
 
 	return il
+}
+
+func buildIngressLinkSpec(
+	ilCfg *ngfAPIv1alpha2.GatewayLinkConfig,
+	objectMeta metav1.ObjectMeta,
+	selectorLabels map[string]string,
+) map[string]any {
+	spec := map[string]any{}
+
+	// Selector is not used when multiClusterServices is configured
+	if ilCfg.MultiCluster == nil {
+		spec["selector"] = map[string]any{
+			"matchLabels": selectorLabels,
+		}
+	}
+
+	setIngressLinkAddressing(spec, ilCfg)
+	setIngressLinkOptionalFields(spec, ilCfg)
+	setIngressLinkTLS(spec, ilCfg)
+	setIngressLinkMultiCluster(spec, ilCfg, objectMeta)
+
+	return spec
+}
+
+func setIngressLinkAddressing(spec map[string]any, ilCfg *ngfAPIv1alpha2.GatewayLinkConfig) {
+	if ilCfg.VirtualServerAddress != nil {
+		spec["virtualServerAddress"] = *ilCfg.VirtualServerAddress
+	} else if ilCfg.IpamLabel != nil {
+		spec["ipamLabel"] = *ilCfg.IpamLabel
+	}
+}
+
+func setIngressLinkOptionalFields(spec map[string]any, ilCfg *ngfAPIv1alpha2.GatewayLinkConfig) {
+	if ilCfg.VirtualServerName != nil {
+		spec["virtualServerName"] = *ilCfg.VirtualServerName
+	}
+	if ilCfg.Host != nil {
+		spec["host"] = *ilCfg.Host
+	}
+	if len(ilCfg.IRules) > 0 {
+		spec["iRules"] = ilCfg.IRules
+	}
+	if ilCfg.Partition != nil {
+		spec["partition"] = *ilCfg.Partition
+	}
+	if ilCfg.BigIPRouteDomain != nil {
+		spec["bigipRouteDomain"] = *ilCfg.BigIPRouteDomain
+	}
+	if len(ilCfg.Monitors) > 0 {
+		monitors := make([]any, 0, len(ilCfg.Monitors))
+		for _, m := range ilCfg.Monitors {
+			monitors = append(monitors, map[string]any{
+				"name":      m.Name,
+				"reference": m.Reference,
+			})
+		}
+		spec["monitors"] = monitors
+	}
+}
+
+func setIngressLinkTLS(spec map[string]any, ilCfg *ngfAPIv1alpha2.GatewayLinkConfig) {
+	if ilCfg.TLS == nil {
+		return
+	}
+
+	tls := map[string]any{}
+	if len(ilCfg.TLS.ClientSSLs) > 0 {
+		tls["clientSSLs"] = ilCfg.TLS.ClientSSLs
+	}
+	if len(ilCfg.TLS.ServerSSLs) > 0 {
+		tls["serverSSLs"] = ilCfg.TLS.ServerSSLs
+	}
+	if ilCfg.TLS.Reference != nil {
+		tls["reference"] = *ilCfg.TLS.Reference
+	}
+	if len(tls) > 0 {
+		spec["tls"] = tls
+	}
+}
+
+func setIngressLinkMultiCluster(
+	spec map[string]any,
+	ilCfg *ngfAPIv1alpha2.GatewayLinkConfig,
+	objectMeta metav1.ObjectMeta,
+) {
+	if ilCfg.MultiCluster == nil {
+		return
+	}
+
+	mcServices := make([]any, 0, len(ilCfg.MultiCluster.RemoteClusters)+1)
+
+	// Add the local cluster service
+	mcServices = append(mcServices, map[string]any{
+		"clusterName": ilCfg.MultiCluster.LocalClusterName,
+		"namespace":   objectMeta.Namespace,
+		"service":     objectMeta.Name,
+	})
+
+	// Add remote cluster services, defaulting to local name/namespace if not specified
+	for _, remote := range ilCfg.MultiCluster.RemoteClusters {
+		ns := objectMeta.Namespace
+		if remote.Namespace != nil {
+			ns = *remote.Namespace
+		}
+		svc := objectMeta.Name
+		if remote.Service != nil {
+			svc = *remote.Service
+		}
+
+		entry := map[string]any{
+			"clusterName": *remote.ClusterName,
+			"namespace":   ns,
+			"service":     svc,
+		}
+		if remote.Weight != nil {
+			entry["weight"] = *remote.Weight
+		}
+		mcServices = append(mcServices, entry)
+	}
+
+	spec["multiClusterServices"] = mcServices
 }
 
 func (p *NginxProvisioner) buildNginxSecrets(

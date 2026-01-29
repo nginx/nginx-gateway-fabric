@@ -14,6 +14,23 @@ spec:
     # Define IRules (must use full path format: /partition/irule_name)
     iRules:
       - "/Common/Proxy_Protocol_iRule"
+    # TLS configuration for the BIG-IP virtual server
+    tls:
+      clientSSLs:
+        - "/Common/clientssl"
+      serverSSLs:
+        - "/Common/serverssl"
+      reference: bigip
+    # Multi-cluster configuration: CIS will load balance across clusters.
+    # Cluster names must match the names defined in the CIS deployment configmap.
+    multiCluster:
+      localClusterName: "cluster-1"
+      remoteClusters:
+        - clusterName: "cluster-2"
+          # # namespace and service default to the local Gateway's values if omitted
+          # # but can be defined here if required
+          # namespace: ngf
+          # service: my-gateway-nginx
 
   # Configure Proxy Protocol to preserve client IPs from BIG-IP
   rewriteClientIP:
@@ -23,11 +40,9 @@ spec:
         value: 10.8.0.0/14
 
   kubernetes:
-    # Use ClusterIP since BIG-IP handles external traffic routing
-    # Use NodePort if CIS is deployed with --pool-member-type=nodeport
+    # NodePort is required for multi-cluster (CIS needs --pool-member-type=nodeport)
     service:
-      type: ClusterIP
-      externalTrafficPolicy: Cluster
+      type: NodePort
     deployment:
       container:
         # Configure readiness probe
