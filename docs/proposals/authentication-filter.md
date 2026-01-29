@@ -491,7 +491,7 @@ For JWT Auth, there are two options.
 
 #### Spec for local JWKS
 
-This mode will access the public JSON Web Key (JWK) from a kubenertes secret.
+This mode will access the public JSON Web Key (JWK) from a Kubernetes secret.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -533,8 +533,6 @@ spec:
           name: cafe-secret
         verify: true # Defaults to true
 ```
-
-
 
 ### Secret creation and reference for JWT Auth
 
@@ -682,11 +680,6 @@ http {
             auth_jwt_require $valid_jwt_iss;
             auth_jwt_require $valid_jwt_aud;
 
-            # Pass identity headers to upstream on success
-            proxy_set_header X-User-Id        $jwt_claim_sub always;
-            proxy_set_header X-User-Email     $jwt_claim_email always;
-            proxy_set_header X-Auth-Mechanism "jwt" always;
-
             # NGF standard proxy headers
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -725,11 +718,6 @@ http {
             # Optional: key cache duration
             auth_jwt_key_cache 10m;
 
-            # Pass identity headers to upstream on success
-            proxy_set_header X-User-Id        $jwt_claim_sub always;
-            proxy_set_header X-User-Email     $jwt_claim_email always;
-            proxy_set_header X-Auth-Mechanism "jwt" always;
-
             # Optional: do not forward client Authorization header to upstream
             proxy_set_header Authorization "";
 
@@ -746,11 +734,34 @@ http {
         # Internal endpoint to fetch JWKS from IdP
         location = /_ngf-internal-default_api-jwt_jwks_uri {
             internal;
-            proxy_pass  https://issuer.example.com/.well-known/jwks.json;
+            proxy_pass https://issuer.example.com/.well-known/jwks.json;
         }
     }
 }
 ```
+
+### Resolving remote IdP JWKS URI
+
+For JWT Remote authentication, NGINX will require a [resolver](https://nginx.org/en/docs/http/ngx_http_core_module.html#resolver) to be defined with one more resolver addresses.
+
+Currently, the `NginxProxy` resource is the only way to define resolvers.
+This will set the resolvers at the `http` context, which will affect all configurations that require a resolver to function.
+
+Here is an example of an `NginxProxy` with an IPAddress resolver defined:
+```yaml
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: nginx-proxy
+spec:
+  dnsResolver:
+    addresses:
+    - type: IPAddress
+      value: "8.8.8.8"
+```
+
+It will be the responsibility of the infrastructure provider to manage and configure these resolvers.
+We will need to document this aspect of the JWT Remote use case.
 
 ### Cache specification
 
