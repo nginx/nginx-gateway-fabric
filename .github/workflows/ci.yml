@@ -287,7 +287,7 @@ jobs:
           notes-header: |
             *Below is the auto-generated changelog, which includes all PRs that went into the release.
             For a shorter version that highlights only important changes, see [CHANGELOG.md](https://github.com/nginx/nginx-gateway-fabric/blob/{{version}}/CHANGELOG.md).*
-        if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
 
       - name: Download Syft
         if: ${{ inputs.is_production_release }}
