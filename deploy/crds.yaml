@@ -1053,13 +1053,6 @@ spec:
                 x-kubernetes-validations:
                 - message: virtualServerAddress and ipamLabel are mutually exclusive
                   rule: '!(has(self.virtualServerAddress) && has(self.ipamLabel))'
-                - message: virtualServerAddress or ipamLabel must be set when enabled
-                    is true
-                  rule: '!has(self.enabled) || self.enabled == false || has(self.virtualServerAddress)
-                    || has(self.ipamLabel)'
-                - message: iRules must be set when enabled is true
-                  rule: '!has(self.enabled) || self.enabled == false || (has(self.iRules)
-                    && size(self.iRules) > 0)'
               ipFamily:
                 default: dual
                 description: |-

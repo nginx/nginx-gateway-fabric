@@ -110,8 +110,6 @@ type NginxProxySpec struct {
 // as an external load balancer in front of NGINX Gateway Fabric.
 //
 // +kubebuilder:validation:XValidation:message="virtualServerAddress and ipamLabel are mutually exclusive",rule="!(has(self.virtualServerAddress) && has(self.ipamLabel))"
-// +kubebuilder:validation:XValidation:message="virtualServerAddress or ipamLabel must be set when enabled is true",rule="!has(self.enabled) || self.enabled == false || has(self.virtualServerAddress) || has(self.ipamLabel)"
-// +kubebuilder:validation:XValidation:message="iRules must be set when enabled is true",rule="!has(self.enabled) || self.enabled == false || (has(self.iRules) && size(self.iRules) > 0)"
 //
 //nolint:lll
 type GatewayLinkConfig struct {

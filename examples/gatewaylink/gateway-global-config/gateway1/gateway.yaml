@@ -4,11 +4,6 @@ metadata:
   name: my-gateway
 spec:
   gatewayClassName: nginx
-  infrastructure:
-    parametersRef:
-      group: gateway.nginx.org
-      kind: NginxProxy
-      name: nginx-proxy-gatewaylink-multi
   listeners:
     - name: http
       port: 80
