@@ -30,6 +30,7 @@ import (
 type eventHandler struct {
 	store         *store
 	provisioner   *NginxProvisioner
+	k8sClient     client.Client
 	labelSelector labels.Selector
 	// gcName is the GatewayClass name for this control plane.
 	gcName string
@@ -38,6 +39,7 @@ type eventHandler struct {
 func newEventHandler(
 	store *store,
 	provisioner *NginxProvisioner,
+	k8sClient client.Client,
 	selector metav1.LabelSelector,
 	gcName string,
 ) (*eventHandler, error) {
@@ -49,6 +51,7 @@ func newEventHandler(
 	return &eventHandler{
 		store:         store,
 		provisioner:   provisioner,
+		k8sClient:     k8sClient,
 		labelSelector: labelSelector,
 		gcName:        gcName,
 	}, nil
@@ -169,7 +172,9 @@ func (h *eventHandler) updateOrDeleteResources(
 		return nil
 	}
 
-	if h.store.getResourceVersionForObject(gatewayNSName, obj) == obj.GetResourceVersion() {
+	resourceVersion := h.getResourceVersion(ctx, gatewayNSName, obj)
+
+	if resourceVersion == obj.GetResourceVersion() {
 		return nil
 	}
 
@@ -179,6 +184,28 @@ func (h *eventHandler) updateOrDeleteResources(
 	}
 
 	return nil
+}
+
+// getResourceVersion gets the resource version for the object from the store.
+// If the resource version is not found in the store, it uses the k8s client to get the current
+// resource version.
+func (h *eventHandler) getResourceVersion(
+	ctx context.Context,
+	gatewayNSName types.NamespacedName,
+	obj client.Object,
+) string {
+	resourceVersion := h.store.getResourceVersionForObject(gatewayNSName, obj)
+	if resourceVersion == "" {
+		storeObject, ok := obj.DeepCopyObject().(client.Object)
+		if ok {
+			getError := h.k8sClient.Get(ctx, client.ObjectKeyFromObject(storeObject), storeObject)
+			if getError == nil {
+				resourceVersion = storeObject.GetResourceVersion()
+			}
+		}
+	}
+
+	return resourceVersion
 }
 
 func (h *eventHandler) provisionResource(
