@@ -198,6 +198,8 @@ jobs:
           author: nginx-bot <integrations@nginx.com>
           committer: nginx-bot <integrations@nginx.com>
           branch: tests/nfr-tests-${{ needs.vars.outputs.version }}
+          labels: ${{ github.event_name != 'schedule' && 'needs cherry pick' || '' }}
+          base: main
           delete-branch: true
           title: NFR Test Results for NGF version ${{ needs.vars.outputs.version }}
           add-paths: |
