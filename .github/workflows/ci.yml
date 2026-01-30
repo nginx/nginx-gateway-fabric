@@ -283,12 +283,11 @@ jobs:
         with:
           minor-label: "enhancement"
           major-label: "change"
-          publish: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) && true || false }}
           collapse-after: 20
           notes-header: |
             *Below is the auto-generated changelog, which includes all PRs that went into the release.
             For a shorter version that highlights only important changes, see [CHANGELOG.md](https://github.com/nginx/nginx-gateway-fabric/blob/{{version}}/CHANGELOG.md).*
-        if: ${{ (github.event_name == 'push' && github.ref != 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.release_version != '') }}
+        if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
 
       - name: Download Syft
         if: ${{ inputs.is_production_release }}
@@ -555,7 +554,7 @@ jobs:
       k8s-version: ${{ matrix.k8s-version }}
       tag: ${{ inputs.release_version || '' }}
     secrets: inherit
-    if: ${{ needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' }}
+    if: ${{ needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' || inputs.is_production_release }}
 
   publish-helm:
     name: Package and Publish Helm Chart
@@ -573,7 +572,7 @@ jobs:
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -628,3 +627,16 @@ jobs:
       - name: Run Tests
         run: make test-cel-validation
         working-directory: ./tests
+
+  publish-release:
+    name: Publish Draft Release
+    runs-on: ubuntu-24.04
+    needs: publish-helm
+    if: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
+    permissions:
+      contents: write
+    steps:
+      - name: Publish Release
+        run: gh release edit ${{ inputs.release_version }} --draft=false --repo ${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

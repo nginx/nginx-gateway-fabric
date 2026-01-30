@@ -93,7 +93,7 @@ jobs:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Login to GAR
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: us-docker.pkg.dev
           username: oauth2accesstoken
@@ -199,6 +199,7 @@ jobs:
           committer: nginx-bot <integrations@nginx.com>
           branch: tests/nfr-tests-${{ needs.vars.outputs.version }}
           base: main
+          labels: ${{ github.event_name != 'schedule' && 'needs cherry pick' || '' }}
           delete-branch: true
           title: NFR Test Results for NGF version ${{ needs.vars.outputs.version }}
           add-paths: |
