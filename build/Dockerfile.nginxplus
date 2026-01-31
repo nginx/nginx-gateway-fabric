@@ -9,6 +9,7 @@ FROM alpine:3.22
 ARG NGINX_PLUS_VERSION=R36
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.6.2
+ARG NGINX_AGENT_BRANCH=release-3.7.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
@@ -19,8 +20,19 @@ RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
     addgroup -g 1001 -S nginx \
     && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
     && printf "%s\n" "https://pkgs.nginx.com/plus/${NGINX_PLUS_VERSION}/alpine/v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && printf "%s\n" "https://pkgs.nginx.com/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && apk add --no-cache nginx-plus nginx-plus-module-njs nginx-plus-module-otel nginx-agent=${NGINX_AGENT_VERSION#v}
+    && apk add --no-cache nginx-plus nginx-plus-module-njs nginx-plus-module-otel
+
+# Build nginx-agent from source using the fix branch
+RUN apk add --no-cache git go make \
+    && git clone --branch ${NGINX_AGENT_BRANCH} --depth 1 https://github.com/nginx/agent.git /tmp/agent \
+    && cd /tmp/agent \
+    && make build \
+    && cp /tmp/agent/build/nginx-agent /usr/bin/nginx-agent \
+    && mkdir -p /etc/nginx-agent \
+    && cp /tmp/agent/nginx-agent.conf /etc/nginx-agent/ \
+    && cd / \
+    && rm -rf /tmp/agent \
+    && apk del git go make
 
 RUN apk add --no-cache bash \
     && mkdir -p /usr/lib/nginx/modules \
