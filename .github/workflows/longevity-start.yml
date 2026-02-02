@@ -17,6 +17,14 @@ on:
         default: both
         type: choice
         options: [oss, plus, both]
+      zone:
+        description: GKE cluster zone
+        required: true
+        default: us-west1-b
+      region:
+        description: GKE cluster region
+        required: true
+        default: us-west1
 
 env:
   PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
@@ -29,17 +37,17 @@ jobs:
     name: Set up vars
     runs-on: ubuntu-24.04
     outputs:
-      version: ${{ github.event.inputs.version || 'edge' }}
-      image_tag: ${{ github.event.inputs.image_tag || 'edge' }}
+      version: ${{ inputs.version || 'edge' }}
+      image_tag: ${{ inputs.image_tag || 'edge' }}
       types: ${{ steps.var.outputs.types }}
     steps:
       - name: Set vars
         id: var
         run: |
-          if ${{ github.event.inputs.type == 'both' }}; then
+          if ${{ inputs.type == 'both' }}; then
           echo 'types=["oss","plus"]' >> $GITHUB_OUTPUT
           else
-          echo 'types=["${{ github.event.inputs.type }}"]' >> $GITHUB_OUTPUT
+          echo 'types=["${{ inputs.type }}"]' >> $GITHUB_OUTPUT
           fi
 
   setup-and-run-tests:
@@ -87,8 +95,8 @@ jobs:
           echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
           echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
           echo "GKE_CLUSTER_NAME=longevity-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
-          echo "GKE_CLUSTER_ZONE=us-west1-b" >> vars.env
-          echo "GKE_CLUSTER_REGION=us-west1" >> vars.env
+          echo "GKE_CLUSTER_ZONE=${{ inputs.zone }}" >> vars.env
+          echo "GKE_CLUSTER_REGION=${{ inputs.region }}" >> vars.env
           echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
           echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
           echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
