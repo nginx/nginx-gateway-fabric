@@ -372,6 +372,9 @@ func (p *NginxProvisioner) buildNginxSecrets(
 			dockerSecrets = append(dockerSecrets, secret)
 		}
 	}
+
+	// need to sort secrets so everytime buildNginxSecrets is called it will generate the exact same
+	// array of secrets. This is needed to satisfy deterministic results of the method.
 	sort.Slice(dockerSecrets, func(i, j int) bool {
 		return dockerSecrets[i].GetName() < dockerSecrets[j].GetName()
 	})
