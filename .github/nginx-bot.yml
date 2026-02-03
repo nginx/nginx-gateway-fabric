@@ -1,4 +1,4 @@
-prAssigneeFromIssueNumber: 583
+prAssigneeFromIssueNumber: 4631
 warnMissingIssue: true
 missingIssueMessage: |
   Please make sure to include the issue number in the PR description to automatically close the issue when the PR is merged.
