@@ -30,7 +30,7 @@ import (
 type eventHandler struct {
 	store         *store
 	provisioner   *NginxProvisioner
-	k8sClient     client.Client
+	k8sClient     client.Reader
 	labelSelector labels.Selector
 	// gcName is the GatewayClass name for this control plane.
 	gcName string
@@ -39,7 +39,7 @@ type eventHandler struct {
 func newEventHandler(
 	store *store,
 	provisioner *NginxProvisioner,
-	k8sClient client.Client,
+	k8sClient client.Reader,
 	selector metav1.LabelSelector,
 	gcName string,
 ) (*eventHandler, error) {
@@ -172,7 +172,7 @@ func (h *eventHandler) updateOrDeleteResources(
 		return nil
 	}
 
-	resourceVersion := h.getResourceVersion(ctx, gatewayNSName, obj)
+	resourceVersion := h.getResourceVersion(ctx, logger, gatewayNSName, obj)
 
 	if resourceVersion == obj.GetResourceVersion() {
 		return nil
@@ -191,6 +191,7 @@ func (h *eventHandler) updateOrDeleteResources(
 // resource version.
 func (h *eventHandler) getResourceVersion(
 	ctx context.Context,
+	logger logr.Logger,
 	gatewayNSName types.NamespacedName,
 	obj client.Object,
 ) string {
@@ -201,6 +202,8 @@ func (h *eventHandler) getResourceVersion(
 			getError := h.k8sClient.Get(ctx, client.ObjectKeyFromObject(storeObject), storeObject)
 			if getError == nil {
 				resourceVersion = storeObject.GetResourceVersion()
+			} else {
+				logger.Error(getError, "error finding already provisioned resource")
 			}
 		}
 	}
