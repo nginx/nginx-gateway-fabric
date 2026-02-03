@@ -13,7 +13,7 @@ FROM redhat/ubi9-minimal:9.7-1769056855 AS ubi-nginx
 RUN microdnf -y update glib2 && microdnf clean all
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.6.2
+ARG NGINX_AGENT_VERSION=v3.7.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
