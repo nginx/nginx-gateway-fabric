@@ -52,6 +52,10 @@ func createScheme() *runtime.Scheme {
 	return scheme
 }
 
+func createFakeClientWithScheme(objects ...client.Object) client.Client {
+	return fake.NewClientBuilder().WithScheme(createScheme()).WithObjects(objects...).Build()
+}
+
 func expectResourcesToExist(t *testing.T, g *WithT, k8sClient client.Client, nsName types.NamespacedName, plus bool) {
 	t.Helper()
 	g.Expect(k8sClient.Get(t.Context(), nsName, &appsv1.Deployment{})).To(Succeed())
@@ -271,6 +275,7 @@ func TestEnable(t *testing.T) {
 
 	provisioner.Enable(t.Context())
 	g.Expect(provisioner.isLeader()).To(BeTrue())
+
 	g.Expect(provisioner.resourcesToDeleteOnStartup).To(BeEmpty())
 	expectResourcesToNotExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"})
 }
@@ -490,7 +495,7 @@ func TestNonLeaderProvisioner(t *testing.T) {
 	g.Expect(provisioner.reprovisionNginx(t.Context(), "gw-nginx", nil, nil)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
-	g.Expect(provisioner.deprovisionNginx(t.Context(), nsName)).To(Succeed())
+	g.Expect(provisioner.deprovisionNginxForInvalidGateway(t.Context(), nsName)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
 }
