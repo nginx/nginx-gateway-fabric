@@ -43,7 +43,7 @@ update-go-modules: ## Update the gateway-api go modules to latest main version
 
 .PHONY: build-test-runner-image
 build-test-runner-image: ## Build conformance test runner image
-	cd ../ && docker build --platform $(GOOS)/$(GOARCH) -t $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) -f tests/conformance/Dockerfile .
+	docker build --platform $(GOOS)/$(GOARCH) -t $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) -f conformance/Dockerfile ./..
 
 .PHONY: build-crossplane-image
 build-crossplane-image: ## Build the crossplane image

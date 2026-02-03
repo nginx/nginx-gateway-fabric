@@ -18,7 +18,6 @@ limitations under the License.
 package conformance
 
 import (
-	"embed"
 	"os"
 	"testing"
 
@@ -57,83 +56,6 @@ const (
 	ngfReleaseName = "nginx-gateway-fabric"
 	infraNamespace = "gateway-conformance-infra"
 )
-
-var (
-	manifests embed.FS
-)
-
-// collectNGFLogsOnFailure collects NGF pod logs when tests fail
-func collectNGFLogsOnFailure(t *testing.T, g Gomega) {
-	if t.Failed() {
-		t.Logf("Tests failed, collecting logs...")
-
-		// Create a resource manager to access cluster resources
-		k8sConfig := ctlr.GetConfigOrDie()
-		scheme := k8sRuntime.NewScheme()
-		g.Expect(core.AddToScheme(scheme)).To(Not(HaveOccurred()))
-		g.Expect(apps.AddToScheme(scheme)).To(Not(HaveOccurred()))
-		g.Expect(apiext.AddToScheme(scheme)).To(Not(HaveOccurred()))
-		g.Expect(coordination.AddToScheme(scheme)).To(Not(HaveOccurred()))
-		g.Expect(v1.Install(scheme)).To(Not(HaveOccurred()))
-		g.Expect(batchv1.AddToScheme(scheme)).To(Not(HaveOccurred()))
-		g.Expect(ngfAPIv1alpha1.AddToScheme(scheme)).To(Not(HaveOccurred()))
-		g.Expect(ngfAPIv1alpha2.AddToScheme(scheme)).To(Not(HaveOccurred()))
-
-		options := client.Options{
-			Scheme: scheme,
-		}
-		k8sClient, err := client.New(k8sConfig, options)
-		g.Expect(err).To(Not(HaveOccurred()))
-
-		clientGoClient, err := kubernetes.NewForConfig(k8sConfig)
-		g.Expect(err).To(Not(HaveOccurred()))
-
-		timeoutConfig := framework.DefaultTimeoutConfig()
-		rm := framework.ResourceManager{
-			K8sClient:      k8sClient,
-			ClientGoClient: clientGoClient,
-			K8sConfig:      k8sConfig,
-			FS:             manifests,
-			TimeoutConfig:  timeoutConfig,
-		}
-
-		// Get NGF container logs
-		pods, err := rm.GetPods(ngfNamespace, nil)
-		g.Expect(err).To(Not(HaveOccurred()))
-
-		for _, pod := range pods {
-			for _, container := range pod.Spec.Containers {
-				containerLogs, err := rm.GetPodLogs(pod.Namespace, pod.Name, &core.PodLogOptions{
-					Container: container.Name,
-				})
-				if err != nil {
-					t.Logf("Failed to get %s container logs from pod %s: %v", container.Name, pod.Name, err)
-				} else {
-					t.Logf("Container %s logs for pod %s:\n%s", container.Name, pod.Name, containerLogs)
-				}
-			}
-		}
-
-		// Get NGINX container logs
-		pods, err = rm.GetPods(infraNamespace, nil)
-		g.Expect(err).To(Not(HaveOccurred()))
-
-		for _, pod := range pods {
-			for _, container := range pod.Spec.Containers {
-				if container.Name == "nginx" {
-					containerLogs, err := rm.GetPodLogs(pod.Namespace, pod.Name, &core.PodLogOptions{
-						Container: container.Name,
-					})
-					if err != nil {
-						t.Logf("Failed to get %s container logs from pod %s: %v", container.Name, pod.Name, err)
-					} else {
-						t.Logf("Container %s logs for pod %s:\n%s", container.Name, pod.Name, containerLogs)
-					}
-				}
-			}
-		}
-	}
-}
 
 func TestConformance(t *testing.T) {
 	g := NewWithT(t)
@@ -216,4 +138,68 @@ func TestInferenceExtensionConformance(t *testing.T) {
 
 	opts.ConformanceProfiles.Insert(inference_conformance.GatewayLayerProfileName)
 	inference_conformance.RunConformanceWithOptions(t, opts)
+}
+
+// collectNGFLogsOnFailure collects NGF pod logs when tests fail
+func collectNGFLogsOnFailure(t *testing.T, g Gomega) {
+	if t.Failed() {
+		t.Logf("Tests failed, collecting logs...")
+
+		// Create a resource manager to access cluster resources
+		k8sConfig := ctlr.GetConfigOrDie()
+		scheme := k8sRuntime.NewScheme()
+		g.Expect(core.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(apps.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(apiext.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(coordination.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(v1.Install(scheme)).To(Not(HaveOccurred()))
+		g.Expect(batchv1.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(ngfAPIv1alpha1.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(ngfAPIv1alpha2.AddToScheme(scheme)).To(Not(HaveOccurred()))
+
+		options := client.Options{
+			Scheme: scheme,
+		}
+		k8sClient, err := client.New(k8sConfig, options)
+		g.Expect(err).To(Not(HaveOccurred()))
+
+		clientGoClient, err := kubernetes.NewForConfig(k8sConfig)
+		g.Expect(err).To(Not(HaveOccurred()))
+
+		timeoutConfig := framework.DefaultTimeoutConfig()
+		rm := framework.ResourceManager{
+			K8sClient:      k8sClient,
+			ClientGoClient: clientGoClient,
+			K8sConfig:      k8sConfig,
+			TimeoutConfig:  timeoutConfig,
+		}
+
+		// Get NGF container logs
+		collectLogs(t, g, rm, ngfNamespace, "nginx-gateway")
+
+		// Get NGINX container logs
+		collectLogs(t, g, rm, infraNamespace, "nginx")
+	}
+}
+
+func collectLogs(t*testing.T,  g Gomega, rm framework.ResourceManager, namespace, containerName string) {
+	t.Helper()
+
+	pods, err := rm.GetPods(namespace, nil)
+	g.Expect(err).To(Not(HaveOccurred()))
+
+	for _, pod := range pods {
+		for _, container := range pod.Spec.Containers {
+			if container.Name == containerName {
+				containerLogs, err := rm.GetPodLogs(pod.Namespace, pod.Name, &core.PodLogOptions{
+					Container: container.Name,
+				})
+				if err != nil {
+					t.Logf("Failed to get %s container logs from pod %s: %v", container.Name, pod.Name, err)
+				} else {
+					t.Logf("Container %s logs for pod %s:\n%s", container.Name, pod.Name, containerLogs)
+				}
+			}
+		}
+	}
 }
