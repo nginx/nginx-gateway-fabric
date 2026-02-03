@@ -138,9 +138,9 @@
                       },
                       "value": {
                         "description": "Value specifies the address value.",
-                        "maxItems": 253,
-                        "minItems": 1,
-                        "type": "array"
+                        "maxLength": 253,
+                        "minLength": 1,
+                        "type": "string"
                       }
                     },
                     "required": [
