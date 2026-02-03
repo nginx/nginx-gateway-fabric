@@ -529,9 +529,9 @@ nginx:
   #                 - Hostname
   #               description: Type specifies the type of address.
   #             value:
-  #               type: array
-  #               minItems: 1
-  #               maxItems: 253
+  #               type: string
+  #               minLength: 1
+  #               maxLength: 253
   #               description: Value specifies the address value.
   #           required:
   #             - type
