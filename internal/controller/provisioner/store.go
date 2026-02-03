@@ -45,6 +45,9 @@ type store struct {
 	// nginxResources is a map of Gateway NamespacedNames and their associated nginx resources.
 	nginxResources map[types.NamespacedName]*NginxResources
 
+	// deletingGateways is a set of Gateways that are currently being deleted.
+	deletingGateways sync.Map
+
 	dockerSecretNames  map[string]struct{}
 	agentTLSSecretName string
 
@@ -75,6 +78,7 @@ func newStore(
 	return &store{
 		gateways:               make(map[types.NamespacedName]*gatewayv1.Gateway),
 		nginxResources:         make(map[types.NamespacedName]*NginxResources),
+		deletingGateways:       sync.Map{},
 		dockerSecretNames:      dockerSecretNamesMap,
 		agentTLSSecretName:     agentTLSSecretName,
 		jwtSecretName:          jwtSecretName,
@@ -476,4 +480,15 @@ func getResourceVersionForSecret(resources *NginxResources, secret *corev1.Secre
 	}
 
 	return ""
+}
+
+// markGatewayDeleting marks a Gateway as being deleted.
+func (s *store) markGatewayDeleting(nsName types.NamespacedName) {
+	s.deletingGateways.Store(nsName, struct{}{})
+}
+
+// isGatewayDeleting checks if a Gateway is marked as being deleted.
+func (s *store) isGatewayDeleting(nsName types.NamespacedName) bool {
+	_, exists := s.deletingGateways.Load(nsName)
+	return exists
 }
