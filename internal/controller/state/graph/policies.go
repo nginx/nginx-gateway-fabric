@@ -827,7 +827,7 @@ func processApPolicyReference(
 				fromWAFGatewayBindingPolicy(wafPolicy.Namespace),
 			) {
 			policy.Conditions = append(policy.Conditions,
-				conditions.NewPolicyNotAcceptedApPolicyRefNotPermitted(apPolicyNsName.String()))
+				conditions.NewPolicyRefsNotResolvedApPolicyRefNotPermitted(apPolicyNsName.String()))
 			policy.Valid = false
 			return false
 		}
@@ -836,7 +836,7 @@ func processApPolicyReference(
 	apPolicy, exists := wafInput.ApPolicies[apPolicyNsName]
 	if !exists {
 		policy.Conditions = append(policy.Conditions,
-			conditions.NewPolicyNotAcceptedApPolicyNotFound(apPolicyNsName.String()))
+			conditions.NewPolicyRefsNotResolvedApPolicyNotFound(apPolicyNsName.String()))
 		policy.Valid = false
 		return false
 	}
@@ -846,7 +846,7 @@ func processApPolicyReference(
 	apStatus, err := plm.ExtractAPPolicyStatus(apPolicy)
 	if err != nil {
 		policy.Conditions = append(policy.Conditions,
-			conditions.NewPolicyNotAcceptedApPolicyStatusError(err.Error()))
+			conditions.NewPolicyRefsNotResolvedApPolicyStatusError(err.Error()))
 		policy.Valid = false
 		return false
 	}
@@ -890,7 +890,7 @@ func processSecurityLogs(
 					fromWAFGatewayBindingPolicy(wafPolicy.Namespace),
 				) {
 				policy.Conditions = append(policy.Conditions,
-					conditions.NewPolicyNotAcceptedApLogConfRefNotPermitted(apLogConfNsName.String()))
+					conditions.NewPolicyRefsNotResolvedApLogConfRefNotPermitted(apLogConfNsName.String()))
 				policy.Valid = false
 				continue
 			}
@@ -899,7 +899,7 @@ func processSecurityLogs(
 		apLogConf, exists := wafInput.ApLogConfs[apLogConfNsName]
 		if !exists {
 			policy.Conditions = append(policy.Conditions,
-				conditions.NewPolicyNotAcceptedApLogConfNotFound(apLogConfNsName.String()))
+				conditions.NewPolicyRefsNotResolvedApLogConfNotFound(apLogConfNsName.String()))
 			policy.Valid = false
 			continue
 		}
@@ -909,7 +909,7 @@ func processSecurityLogs(
 		apLogStatus, err := plm.ExtractAPLogConfStatus(apLogConf)
 		if err != nil {
 			policy.Conditions = append(policy.Conditions,
-				conditions.NewPolicyNotAcceptedApLogConfStatusError(err.Error()))
+				conditions.NewPolicyRefsNotResolvedApLogConfStatusError(err.Error()))
 			policy.Valid = false
 			continue
 		}
@@ -966,7 +966,7 @@ func fetchApPolicyBundle(
 	case "", plm.StatePending, plm.StateProcessing:
 		// Not yet compiled - this is not an error, just pending.
 		// Empty state means PLM has not yet set the status on this resource.
-		cond := conditions.NewPolicyNotAcceptedApPolicyNotCompiled(nsName.String())
+		cond := conditions.NewPolicyRefsNotResolvedApPolicyNotCompiled(nsName.String())
 		return nil, &cond
 	case plm.StateInvalid:
 		// Compilation failed
@@ -974,17 +974,17 @@ func fetchApPolicyBundle(
 		if len(status.Processing.Errors) > 0 {
 			errMsg = strings.Join(status.Processing.Errors, "; ")
 		}
-		cond := conditions.NewPolicyNotAcceptedApPolicyInvalid(errMsg)
+		cond := conditions.NewPolicyRefsNotResolvedApPolicyInvalid(errMsg)
 		return nil, &cond
 	case plm.StateReady:
 		// Ready to fetch
 		if status.Bundle.Location == "" {
-			cond := conditions.NewPolicyNotAcceptedApPolicyNoLocation(nsName.String())
+			cond := conditions.NewPolicyRefsNotResolvedApPolicyNoLocation(nsName.String())
 			return nil, &cond
 		}
 	default:
 		// Unknown state
-		cond := conditions.NewPolicyNotAcceptedApPolicyUnknownState(status.Bundle.State)
+		cond := conditions.NewPolicyRefsNotResolvedApPolicyUnknownState(status.Bundle.State)
 		return nil, &cond
 	}
 
@@ -1002,14 +1002,14 @@ func fetchApPolicyBundle(
 	bucket, key := parseBundleLocation(status.Bundle.Location)
 	data, err := fetcher.GetObject(context.Background(), bucket, key)
 	if err != nil {
-		cond := conditions.NewPolicyNotAcceptedBundleFetchError(err.Error())
+		cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
 		return nil, &cond
 	}
 
 	// Verify checksum if provided
 	if status.Bundle.Sha256 != "" {
 		if err := verifyChecksum(data, status.Bundle.Sha256); err != nil {
-			cond := conditions.NewPolicyNotAcceptedBundleFetchError(err.Error())
+			cond := conditions.NewPolicyNotProgrammedIntegrityError(err.Error())
 			return nil, &cond
 		}
 	}
@@ -1031,22 +1031,22 @@ func fetchApLogConfBundle(
 	switch status.Bundle.State {
 	case "", plm.StatePending, plm.StateProcessing:
 		// Empty state means PLM has not yet set the status on this resource.
-		cond := conditions.NewPolicyNotAcceptedApLogConfNotCompiled(nsName.String())
+		cond := conditions.NewPolicyRefsNotResolvedApLogConfNotCompiled(nsName.String())
 		return nil, &cond
 	case plm.StateInvalid:
 		errMsg := "ApLogConf compilation failed"
 		if len(status.Processing.Errors) > 0 {
 			errMsg = strings.Join(status.Processing.Errors, "; ")
 		}
-		cond := conditions.NewPolicyNotAcceptedApLogConfInvalid(errMsg)
+		cond := conditions.NewPolicyRefsNotResolvedApLogConfInvalid(errMsg)
 		return nil, &cond
 	case plm.StateReady:
 		if status.Bundle.Location == "" {
-			cond := conditions.NewPolicyNotAcceptedApLogConfNoLocation(nsName.String())
+			cond := conditions.NewPolicyRefsNotResolvedApLogConfNoLocation(nsName.String())
 			return nil, &cond
 		}
 	default:
-		cond := conditions.NewPolicyNotAcceptedApLogConfUnknownState(status.Bundle.State)
+		cond := conditions.NewPolicyRefsNotResolvedApLogConfUnknownState(status.Bundle.State)
 		return nil, &cond
 	}
 
@@ -1061,14 +1061,14 @@ func fetchApLogConfBundle(
 	bucket, key := parseBundleLocation(status.Bundle.Location)
 	data, err := fetcher.GetObject(context.Background(), bucket, key)
 	if err != nil {
-		cond := conditions.NewPolicyNotAcceptedBundleFetchError(err.Error())
+		cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
 		return nil, &cond
 	}
 
 	// Verify checksum if provided
 	if status.Bundle.Sha256 != "" {
 		if err := verifyChecksum(data, status.Bundle.Sha256); err != nil {
-			cond := conditions.NewPolicyNotAcceptedBundleFetchError(err.Error())
+			cond := conditions.NewPolicyNotProgrammedIntegrityError(err.Error())
 			return nil, &cond
 		}
 	}
