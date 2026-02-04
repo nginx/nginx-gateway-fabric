@@ -78,6 +78,7 @@ This portion also contains:
       - Understand claim enforcement
       - Processing claims
       - Processing nested claims
+    - JWT Authentication Capabilities
 - Route Attachment
 - Resource status
 
@@ -984,6 +985,7 @@ These are the claims we will process. This time `roles` is nested under `realm_a
   },
 }
 ```
+
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
 kind: AuthenticationFilter
@@ -1023,6 +1025,26 @@ auth_jwt_claim_set $email email;
 
 This will set the value of `$roles` to `["reader", "admin"]`, and the value of `$email` set to `user@example.com`.
 Since the email contains a dot, this needs to be processed the same way.
+
+### JWT Authentication Capabilities
+
+The table below summarizes the capabilities enabled by the current JWT Authentication proposal.
+
+| Capability | API fields | NGINX directive | Notes |
+|---|---|---|---|
+| Enable JWT authentication and set realm | `spec.type = "JWT"`; `spec.jwt.realm` | `auth_jwt "<realm>"` | Currently does not expose defining `token` |
+| Provide JWT keys from local JWKS (Secret) | `spec.jwt.mode = "File"`; `spec.jwt.file.secretRef.name`; Secret type `nginx.org/jwt`; data key `auth` | `auth_jwt_key_file /etc/nginx/secrets/jwt_auth_<namespace>_<secret-name>` | Secret must exist in same namespace and must be of type `nginx.org/jwt` |
+| Secret handling/validation for local JWKS | Secret type `nginx.org/jwt`; data key `auth`; `LocalObjectReference` | Validates presence/type/key; NGF loads JWKS into key file | Cross-namespace secrets not supported initially; future work may add `ReferenceGrant`-based access |
+| Provide JWT keys from remote JWKS | `spec.jwt.mode = "Remote"`; `spec.jwt.remote.uri`; `spec.jwt.remote.tls.secretRef` (type `kubernetes.io/tls`); `spec.jwt.remote.tls.verify` (default `true`) | `auth_jwt_key_request /_ngf-internal-<namespace>_<filter-name>_jwks_uri`; internal location `proxy_pass` to remote JWKS; optional client TLS. | Requires DNS resolver via `NginxProxy.spec.dnsResolver`; `verify` controls server cert verification; key caching optional |
+| Configure DNS resolver for remote JWKS | `NginxProxy.spec.dnsResolver.addresses` (separate resource) | `resolver` set at `http` context for name resolution used by `auth_jwt_key_request` | Required for remote JWKS URIs; managed outside the filter |
+| Configure JWT key cache duration | `spec.jwt.keyCache` (Duration) | `auth_jwt_key_cache <duration>` | Disabled by default to avoid stale keys |
+| Configure acceptable clock skew for `exp`/`nbf` | `spec.jwt.leeway` (Duration) | `auth_jwt_leeway <duration>` | Applies only if `exp`/`nbf` claims are present; default `0s` |
+| Require exact-match issuer (`iss`) values | `spec.jwt.require.iss: []string` | `map $jwt_claim_iss $valid_jwt_iss { ... }`; `auth_jwt_require $valid_jwt_iss` | Supports multiple allowed issuers; `iss` may be string or array in a JWT claim |
+| Require exact-match audience (`aud`) values | `spec.jwt.require.aud: []string` | `map $jwt_claim_aud $valid_jwt_aud { ... }`; `auth_jwt_require $valid_jwt_aud` | Supports single or multiple audiences; `aud` may be string or array in a JWT claim |
+| Require exact-match subject (`sub`) values | `spec.jwt.require.sub: []string` | `map $jwt_claim_sub $valid_jwt_sub { ... }`; `auth_jwt_require $valid_jwt_sub` | Multiple allowed subjects supported |
+| Require exact-match custom claim values | `spec.jwt.require.claims[]`: `{ name, value \| values }` | For flat claims: `map $jwt_claim_<name> $valid_<name> { ... }`; `auth_jwt_require $valid_<name>` | Exactly one of `value` or `values` must be set and non-empty; enforces presence and allowed values |
+| Require exact-match nested/dotted custom claims | `spec.jwt.require.claims[].name` accepts path like `parent/child` | `auth_jwt_claim_set $var parent child`; `map $var $valid_var { ... }`; `auth_jwt_require $valid_var` | Use `auth_jwt_claim_set` for nested or dotted claims; slash-separated path identifies nested segments |
+
 
 ### Route Attachment
 
