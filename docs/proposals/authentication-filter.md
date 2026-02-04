@@ -228,7 +228,8 @@ type JWTAuth struct {
   // +optional
   Require *JWTRequiredClaims `json:"require,omitempty"`
 
-  // Leeway is the acceptable clock skew for exp/nbf checks.
+  // Leeway is the acceptable clock skew for exp & nbf claims.
+  // If exp & nbf claims are not defined, this directive takes no affect.
   // Configures `auth_jwt_leeway` directive.
   // https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
   // Example: "auth_jwt_leeway 60s".
@@ -809,7 +810,7 @@ Here is an example of a JWT payload containing the standard registered claims ou
 The Subject (`sub`) claim typically contains details on the user such as their username.
 The Audience (`aud`) claim identifies what access the claim is intended for. For example, this JWT is claiming to have API and CLI access.
 The Issuer (`iss`) claim identifies who issued this token.
-The Expiration Time (`exp`), Not Before (`nbf`) and Issued At (`iat`) claims help with the lifecycle of a token. They ensure requests using tokens outside these time constrains are rejected.
+The Expiration Time (`exp`), Not Before (`nbf`) and Issued At (`iat`) claims help with the lifecycle of a token. They ensure requests using tokens outside these time constrains are rejected. The (auth_jwt_leeway)[https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway] directive interacts with the `exp` and `nbf` claims. When these two claims are verified, this directive will set a maximum allowable leeway to compensate for (clock skew)[https://en.wikipedia.org/wiki/Clock_skew].
 The JWT ID (`jti`) claim is a unique identifier for the token.
 
 NOTE: Both the Audience (`aud`) and Issuer (`iss`) claims in a JWT payload can be either a single string or an array. They will only ever be an array if it contains more than one value.
