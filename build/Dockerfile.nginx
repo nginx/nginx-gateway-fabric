@@ -11,7 +11,7 @@ FROM nginx:1.29.4-alpine-otel
 RUN apk update && apk add --no-cache 'libpng>=1.6.54-r0'
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.6.2
+ARG NGINX_AGENT_VERSION=v3.7.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT

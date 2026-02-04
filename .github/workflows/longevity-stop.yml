@@ -1,22 +1,8 @@
-name: Non Functional Testing
+name: Stop Longevity Tests
 
 on:
   workflow_dispatch:
     inputs:
-      test_label:
-        description: NFR test to run. Choose between a specific test or all tests
-        required: true
-        default: all
-        type: choice
-        options:
-          [
-            performance,
-            upgrade,
-            scale,
-            zero-downtime-scale,
-            reconfiguration,
-            all,
-          ]
       version:
         description: Version of NGF under test
         required: true
@@ -31,17 +17,22 @@ on:
         default: both
         type: choice
         options: [oss, plus, both]
+      id:
+        description: The Github run ID from the longevity test startup pipeline
+        required: true
       open_pull_request:
         description: Whether or not to open a PR with the test results
         required: true
         default: true
         type: boolean
-  schedule:
-    - cron: "0 16 1,15 * *" # Run on the 1st and 15th of every month at 16:00 UTC
-
-defaults:
-  run:
-    shell: bash
+      zone:
+        description: GKE cluster zone
+        required: true
+        default: us-west1-b
+      region:
+        description: GKE cluster region
+        required: true
+        default: us-west1
 
 env:
   PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
@@ -54,22 +45,21 @@ jobs:
     name: Set up vars
     runs-on: ubuntu-24.04
     outputs:
-      test_label: ${{ github.event.inputs.test_label || 'all' }}
-      version: ${{ github.event.inputs.version || 'edge' }}
-      image_tag: ${{ github.event.inputs.image_tag || 'edge' }}
+      version: ${{ inputs.version || 'edge' }}
+      image_tag: ${{ inputs.image_tag || 'edge' }}
       types: ${{ steps.var.outputs.types }}
     steps:
       - name: Set vars
         id: var
         run: |
-          if ${{ github.event.inputs.type == 'both' || github.event_name == 'schedule' }}; then
+          if ${{ inputs.type == 'both' }}; then
           echo 'types=["oss","plus"]' >> $GITHUB_OUTPUT
           else
-          echo 'types=["${{ github.event.inputs.type }}"]' >> $GITHUB_OUTPUT
+          echo 'types=["${{ inputs.type }}"]' >> $GITHUB_OUTPUT
           fi
 
-  setup-and-run-tests:
-    name: Setup and Run NFR Tests
+  teardown-tests:
+    name: Teardown Longevity Tests
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -92,7 +82,7 @@ jobs:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Login to GAR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: us-docker.pkg.dev
           username: oauth2accesstoken
@@ -107,61 +97,35 @@ jobs:
       - name: Setup dotenv file
         working-directory: ./tests/scripts
         run: |
-          echo "RESOURCE_NAME=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
+          echo "RESOURCE_NAME=longevity-tests-${{ inputs.id }}-${{ matrix.type }}" >> vars.env
           echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
-          echo "PREFIX=ghcr.io/nginx/nginx-gateway-fabric" >> vars.env
-          echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
-          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
-          echo "GKE_CLUSTER_NAME=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
-          echo "GKE_CLUSTER_ZONE=us-west1-b" >> vars.env
-          echo "GKE_CLUSTER_REGION=us-west1" >> vars.env
+          echo "GKE_CLUSTER_NAME=longevity-tests-${{ inputs.id }}-${{ matrix.type }}" >> vars.env
+          echo "GKE_CLUSTER_ZONE=${{ inputs.zone }}" >> vars.env
+          echo "GKE_CLUSTER_REGION=${{ inputs.region }}" >> vars.env
           echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
           echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
           echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
-          echo "NETWORK_TAGS=nfr-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
+          echo "NETWORK_TAGS=longevity-tests-${{ inputs.id }}-${{ matrix.type }}" >> vars.env
           echo "NGF_BRANCH=${{ github.ref_name }}" >> vars.env
           echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
           echo "ADD_VM_IP_AUTH_NETWORKS=true" >> vars.env
           echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
-          echo "GINKGO_LABEL=" >> vars.env
           echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
-          echo "GKE_NUM_NODES=12" >> vars.env
-          echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
-          echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
 
-      - name: Setup license file for plus
-        if: matrix.type == 'plus'
-        env:
-          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
-        run: echo "${PLUS_LICENSE}" > license.jwt
-
-      - name: Create GKE cluster
+      - name: Update firewall
         working-directory: ./tests
-        run: make create-gke-cluster CI=true
+        run: make update-firewall-with-local-ip
 
-      - name: Create and setup VM
-        working-directory: ./tests
-        run: make create-and-setup-vm
-
-      - name: Create and setup Router
-        working-directory: ./tests
-        run: make create-gke-router || true
-
-      - name: Run Tests
+      - name: Stop Longevity Tests
         continue-on-error: true
         working-directory: ./tests
-        run: |
-          if ${{ needs.vars.outputs.test_label != 'all' }}; then
-          sed -i '/^GINKGO_LABEL=/s/=.*/="${{ needs.vars.outputs.test_label }}"/' "scripts/vars.env" && make nfr-test CI=true;
-          else
-          make nfr-test CI=true;
-          fi
+        run: make stop-longevity-test
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: results-${{ matrix.type }}
-          path: tests/results/**/*-${{ matrix.type }}.*
+          path: tests/results/longevity/*-${{ matrix.type }}.*
 
       - name: Cleanup
         working-directory: ./tests
@@ -178,7 +142,7 @@ jobs:
     permissions:
       contents: write # needed for opening PR with the results files
       pull-requests: write # needed for opening PR with the results files
-    needs: [vars, setup-and-run-tests]
+    needs: [vars, teardown-tests]
     if: ${{ inputs.open_pull_request == true }}
     steps:
       - name: Checkout Repository
@@ -194,20 +158,19 @@ jobs:
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: NFR Test Results for NGF version ${{ needs.vars.outputs.version }}
+          commit-message: Longevity Test Results for NGF version ${{ needs.vars.outputs.version }}
           author: nginx-bot <integrations@nginx.com>
           committer: nginx-bot <integrations@nginx.com>
-          branch: tests/nfr-tests-${{ needs.vars.outputs.version }}
+          branch: tests/longevity-tests-${{ needs.vars.outputs.version }}
           base: main
-          labels: ${{ github.event_name != 'schedule' && 'needs cherry pick' || '' }}
+          labels: needs cherry pick
           delete-branch: true
-          title: NFR Test Results for NGF version ${{ needs.vars.outputs.version }}
+          title: Longevity Test Results for NGF version ${{ needs.vars.outputs.version }}
           add-paths: |
             tests/results/
           body: |
-            Update with NFR test results for NGF version ${{ needs.vars.outputs.version }} ${{ needs.vars.outputs.types }}
-            - Auto-generated by the NFR tests workflow run ${{ github.run_id }}
+            Update with Longevity test results for NGF version ${{ needs.vars.outputs.version }} ${{ needs.vars.outputs.types }}
+            - Auto-generated by the Longevity tests workflow run ${{ github.run_id }}
             - Tests ran using Docker image tag ${{ needs.vars.outputs.image_tag }}
-            - ${{ needs.vars.outputs.test_label }} test(s) ran
           assignees: ${{ github.actor }}
-          draft: ${{ github.event_name != 'schedule' }}
+          draft: true
