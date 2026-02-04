@@ -70,14 +70,11 @@ type PLMStorageConfig struct {
 	URL string
 	// CredentialsSecretName is the name of the Secret containing S3 credentials.
 	// The Secret should have "accessKeyId" and "secretAccessKey" data fields.
-	// If empty, anonymous access is used.
 	CredentialsSecretName string
-	// TLSCACertPath is the path to the CA certificate file for TLS verification.
-	TLSCACertPath string
-	// TLSClientCertPath is the path to the client certificate file for mutual TLS.
-	TLSClientCertPath string
-	// TLSClientKeyPath is the path to the client key file for mutual TLS.
-	TLSClientKeyPath string
+	// TLSCACertSecretName is the is the name of the Secret containing the CA certificate file for TLS verification.
+	TLSCACertSecretName string
+	// TLSClientSSLSecretName is the path to the client certificate file for mutual TLS.
+	TLSClientSSLSecretName string
 	// TLSInsecureSkipVerify skips TLS certificate verification (not recommended for production).
 	TLSInsecureSkipVerify bool
 }

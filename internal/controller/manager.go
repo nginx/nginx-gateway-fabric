@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -973,10 +974,10 @@ func validateSecret(reader client.Reader, nsName types.NamespacedName, fields ..
 	return nil
 }
 
-// S3 credential secret field names.
+// S3 credential details.
 const (
-	plmAccessKeyIDField     = "accessKeyId"
-	plmSecretAccessKeyField = "secretAccessKey"
+	plmAccessKeyID          = "adminKey"
+	plmSecretAccessKeyField = "seaweedfs_admin_secret"
 )
 
 // createWAFFetcher creates an S3-compatible fetcher for WAF policy bundles from PLM storage.
@@ -999,24 +1000,30 @@ func createWAFFetcher(
 			Namespace: namespace,
 			Name:      plmCfg.CredentialsSecretName,
 		}
+		if parts := strings.SplitN(plmCfg.CredentialsSecretName, "/", 2); len(parts) == 2 {
+			secretNsName.Namespace = parts[0]
+			secretNsName.Name = parts[1]
+		}
 
-		secret, err := getValidatedSecret(reader, secretNsName, plmAccessKeyIDField, plmSecretAccessKeyField)
+		secret, err := getValidatedSecret(reader, secretNsName, plmSecretAccessKeyField)
 		if err != nil {
 			return nil, err
 		}
 
 		opts = append(opts, fetch.WithCredentials(
-			string(secret.Data[plmAccessKeyIDField]),
+			plmAccessKeyID,
 			string(secret.Data[plmSecretAccessKeyField]),
 		))
 	}
 
-	// Configure TLS if any TLS settings are provided
-	if plmCfg.TLSCACertPath != "" || plmCfg.TLSClientCertPath != "" || plmCfg.TLSInsecureSkipVerify {
+	// TODO(ciarams87): update tls to use secrets when supported
+	// // Configure TLS if any TLS settings are provided
+	if plmCfg.TLSCACertSecretName != "" || plmCfg.TLSClientSSLSecretName != "" {
+		// TODO(ciarams87): get certs from secrets
 		tlsConfig, err := fetch.TLSConfigFromFiles(
-			plmCfg.TLSCACertPath,
-			plmCfg.TLSClientCertPath,
-			plmCfg.TLSClientKeyPath,
+			"",
+			"",
+			"",
 			plmCfg.TLSInsecureSkipVerify,
 		)
 		if err != nil {

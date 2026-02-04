@@ -215,5 +215,14 @@ rules:
   - update
   - use
   - watch
+- apiGroups:
+  - appprotect.f5.com
+  resources:
+  - aplogconfs
+  - appolicies
+  verbs:
+  - get
+  - list
+  - watch
 
 # +kubebuilder:scaffold:rules

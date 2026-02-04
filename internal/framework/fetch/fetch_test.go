@@ -83,6 +83,12 @@ func TestNewS3Fetcher(t *testing.T) {
 			},
 			expectError: false,
 		},
+		{
+			name:        "endpoint without scheme gets http prepended",
+			endpointURL: "storage.example.svc.cluster.local:8333",
+			options:     []Option{},
+			expectError: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -97,7 +103,7 @@ func TestNewS3Fetcher(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(fetcher).ToNot(BeNil())
 				g.Expect(fetcher.client).ToNot(BeNil())
-				g.Expect(fetcher.endpointURL).To(Equal(tc.endpointURL))
+				g.Expect(fetcher.endpointURL).To(HavePrefix("http"))
 			}
 		})
 	}

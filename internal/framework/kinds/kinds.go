@@ -83,7 +83,7 @@ const (
 	// PLMGroup is the API group for PLM CRDs.
 	PLMGroup = "appprotect.f5.com"
 	// PLMVersion is the API version for PLM CRDs.
-	PLMVersion = "v1beta1"
+	PLMVersion = "v1"
 )
 
 // PLM GroupVersionKind definitions.

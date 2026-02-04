@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -69,7 +70,12 @@ type S3Fetcher struct {
 
 // NewS3Fetcher creates a new S3Fetcher for the given endpoint URL.
 // The endpoint URL should be the storage service URL.
+// If the URL does not include a scheme, http:// is prepended.
 func NewS3Fetcher(endpointURL string, opts ...Option) (*S3Fetcher, error) {
+	if !strings.Contains(endpointURL, "://") {
+		endpointURL = "http://" + endpointURL
+	}
+
 	fetcher := &S3Fetcher{
 		endpointURL: endpointURL,
 		timeout:     defaultTimeout,
@@ -141,6 +147,8 @@ func (f *S3Fetcher) createS3Client() (*s3.Client, error) {
 	}
 
 	awsOpts = append(awsOpts, config.WithHTTPClient(httpClient))
+	// Set a default region; required by the AWS SDK but unused by S3-compatible storage like SeaweedFS/MinIO.
+	awsOpts = append(awsOpts, config.WithRegion("us-east-1"))
 
 	cfg, err := config.LoadDefaultConfig(context.Background(), awsOpts...)
 	if err != nil {
@@ -156,6 +164,7 @@ func (f *S3Fetcher) createS3Client() (*s3.Client, error) {
 	return client, nil
 }
 
+// TODO(ciarams87): Update to use secrets when supported
 // TLSConfigFromFiles creates a TLS configuration from certificate files.
 func TLSConfigFromFiles(
 	caCertPath, clientCertPath, clientKeyPath string,
