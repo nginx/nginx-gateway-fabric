@@ -22,6 +22,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry/telemetryfakes"
@@ -350,7 +351,7 @@ var _ = Describe("Collector", Ordered, func() {
 						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "udp-1"}}: {RouteType: graph.RouteTypeUDP},
 						{NamespacedName: types.NamespacedName{Namespace: "test", Name: "udp-2"}}: {RouteType: graph.RouteTypeUDP},
 					},
-					ReferencedSecrets: map[types.NamespacedName]*graph.Secret{
+					ReferencedSecrets: map[types.NamespacedName]*secrets.Secret{
 						client.ObjectKeyFromObject(secret1): {
 							Source: secret1,
 						},
@@ -860,7 +861,7 @@ var _ = Describe("Collector", Ordered, func() {
 					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "tcp-1"}}: {RouteType: graph.RouteTypeTCP},
 					{NamespacedName: types.NamespacedName{Namespace: "test", Name: "udp-1"}}: {RouteType: graph.RouteTypeUDP},
 				},
-				ReferencedSecrets: map[types.NamespacedName]*graph.Secret{
+				ReferencedSecrets: map[types.NamespacedName]*secrets.Secret{
 					client.ObjectKeyFromObject(secret): {
 						Source: secret,
 					},

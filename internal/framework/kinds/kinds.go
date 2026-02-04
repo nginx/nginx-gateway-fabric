@@ -39,6 +39,10 @@ const (
 const (
 	// Service is the Service kind.
 	Service = "Service"
+	// Secret is the Secret kind.
+	Secret = "Secret"
+	// ConfigMap is the ConfigMap kind.
+	ConfigMap = "ConfigMap"
 )
 
 // NGINX Gateway Fabric kinds.

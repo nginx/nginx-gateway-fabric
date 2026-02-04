@@ -25,6 +25,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift/openshiftfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/controllerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -49,6 +50,10 @@ func createScheme() *runtime.Scheme {
 	utilruntime.Must(autoscalingv2.AddToScheme(scheme))
 
 	return scheme
+}
+
+func createFakeClientWithScheme(objects ...client.Object) client.Client {
+	return fake.NewClientBuilder().WithScheme(createScheme()).WithObjects(objects...).Build()
 }
 
 func expectResourcesToExist(t *testing.T, g *WithT, k8sClient client.Client, nsName types.NamespacedName, plus bool) {
@@ -270,6 +275,7 @@ func TestEnable(t *testing.T) {
 
 	provisioner.Enable(t.Context())
 	g.Expect(provisioner.isLeader()).To(BeTrue())
+
 	g.Expect(provisioner.resourcesToDeleteOnStartup).To(BeEmpty())
 	expectResourcesToNotExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"})
 }
@@ -489,7 +495,7 @@ func TestNonLeaderProvisioner(t *testing.T) {
 	g.Expect(provisioner.reprovisionNginx(t.Context(), "gw-nginx", nil, nil)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
-	g.Expect(provisioner.deprovisionNginx(t.Context(), nsName)).To(Succeed())
+	g.Expect(provisioner.deprovisionNginxForInvalidGateway(t.Context(), nsName)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
 }
@@ -519,7 +525,7 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, agentTLSSecret)
 	provisioner.cfg.Plus = false
@@ -582,7 +588,7 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, agentTLSSecret)
 	provisioner.cfg.Plus = false

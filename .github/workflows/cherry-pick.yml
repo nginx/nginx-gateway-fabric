@@ -1,0 +1,40 @@
+name: Cherry-pick to Latest Release Branch
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  cherry-pick:
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'needs cherry pick') && github.event.pull_request.merged == true }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set release branch variable
+        id: branch
+        run: |
+          branch=$(git branch -a | egrep '^\s+remotes/origin/release' | awk '{print $1}' | sort -u | tail -n 1)
+          release_branch=$(basename ${branch})
+          echo "branch=${release_branch}" >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
+
+      - name: Cherry pick into ${{ steps.branch.outputs.branch }}
+        uses: carloscastrojumo/github-cherry-pick-action@503773289f4a459069c832dc628826685b75b4b3 # v1.0.10
+        with:
+          branch: ${{ steps.branch.outputs.branch }}
+          token: ${{ secrets.NGINX_PAT }}
+          author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
+          cherry-pick-branch: ${{ github.event.pull_request.head.ref }}-cherrypick

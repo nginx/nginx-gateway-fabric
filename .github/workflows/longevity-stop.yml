@@ -1,0 +1,176 @@
+name: Stop Longevity Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version of NGF under test
+        required: true
+        default: edge
+      image_tag:
+        description: Tag of the NGF and NGINX Docker images
+        required: true
+        default: edge
+      type:
+        description: Type of NGINX image to test
+        required: true
+        default: both
+        type: choice
+        options: [oss, plus, both]
+      id:
+        description: The Github run ID from the longevity test startup pipeline
+        required: true
+      open_pull_request:
+        description: Whether or not to open a PR with the test results
+        required: true
+        default: true
+        type: boolean
+      zone:
+        description: GKE cluster zone
+        required: true
+        default: us-west1-b
+      region:
+        description: GKE cluster region
+        required: true
+        default: us-west1
+
+env:
+  PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
+
+permissions:
+  contents: read
+
+jobs:
+  vars:
+    name: Set up vars
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ inputs.version || 'edge' }}
+      image_tag: ${{ inputs.image_tag || 'edge' }}
+      types: ${{ steps.var.outputs.types }}
+    steps:
+      - name: Set vars
+        id: var
+        run: |
+          if ${{ inputs.type == 'both' }}; then
+          echo 'types=["oss","plus"]' >> $GITHUB_OUTPUT
+          else
+          echo 'types=["${{ inputs.type }}"]' >> $GITHUB_OUTPUT
+          fi
+
+  teardown-tests:
+    name: Teardown Longevity Tests
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # needed for authenticating to GCP
+    needs: vars
+    strategy:
+      fail-fast: false
+      matrix:
+        type: ${{ fromJson(needs.vars.outputs.types) }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: access_token
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Login to GAR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: us-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: kubectl
+
+      - name: Setup dotenv file
+        working-directory: ./tests/scripts
+        run: |
+          echo "RESOURCE_NAME=longevity-tests-${{ inputs.id }}-${{ matrix.type }}" >> vars.env
+          echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
+          echo "GKE_CLUSTER_NAME=longevity-tests-${{ inputs.id }}-${{ matrix.type }}" >> vars.env
+          echo "GKE_CLUSTER_ZONE=${{ inputs.zone }}" >> vars.env
+          echo "GKE_CLUSTER_REGION=${{ inputs.region }}" >> vars.env
+          echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
+          echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
+          echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
+          echo "NETWORK_TAGS=longevity-tests-${{ inputs.id }}-${{ matrix.type }}" >> vars.env
+          echo "NGF_BRANCH=${{ github.ref_name }}" >> vars.env
+          echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
+          echo "ADD_VM_IP_AUTH_NETWORKS=true" >> vars.env
+          echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
+          echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
+
+      - name: Update firewall
+        working-directory: ./tests
+        run: make update-firewall-with-local-ip
+
+      - name: Stop Longevity Tests
+        continue-on-error: true
+        working-directory: ./tests
+        run: make stop-longevity-test
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: results-${{ matrix.type }}
+          path: tests/results/longevity/*-${{ matrix.type }}.*
+
+      - name: Cleanup
+        working-directory: ./tests
+        if: always()
+        run: |
+          bash scripts/cleanup-vm.sh true
+          bash scripts/cleanup-router.sh true
+          make delete-gke-cluster
+          rm -rf scripts/vars.env
+
+  pr-results:
+    name: Open PR with results
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # needed for opening PR with the results files
+      pull-requests: write # needed for opening PR with the results files
+    needs: [vars, teardown-tests]
+    if: ${{ inputs.open_pull_request == true }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          path: tests/results/
+          merge-multiple: true
+
+      - name: Open a PR with the results
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: Longevity Test Results for NGF version ${{ needs.vars.outputs.version }}
+          author: nginx-bot <integrations@nginx.com>
+          committer: nginx-bot <integrations@nginx.com>
+          branch: tests/longevity-tests-${{ needs.vars.outputs.version }}
+          base: main
+          labels: needs cherry pick
+          delete-branch: true
+          title: Longevity Test Results for NGF version ${{ needs.vars.outputs.version }}
+          add-paths: |
+            tests/results/
+          body: |
+            Update with Longevity test results for NGF version ${{ needs.vars.outputs.version }} ${{ needs.vars.outputs.types }}
+            - Auto-generated by the Longevity tests workflow run ${{ github.run_id }}
+            - Tests ran using Docker image tag ${{ needs.vars.outputs.image_tag }}
+          assignees: ${{ github.actor }}
+          draft: true

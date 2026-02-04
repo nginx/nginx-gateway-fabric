@@ -21,14 +21,15 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/filewatcher"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/interceptor"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 )
 
 const (
 	keepAliveTime    = 15 * time.Second
 	keepAliveTimeout = 10 * time.Second
-	caCertPath       = "/var/run/secrets/ngf/ca.crt"
-	tlsCertPath      = "/var/run/secrets/ngf/tls.crt"
-	tlsKeyPath       = "/var/run/secrets/ngf/tls.key"
+	caCertPath       = "/var/run/secrets/ngf/" + secrets.CAKey
+	tlsCertPath      = "/var/run/secrets/ngf/" + secrets.TLSCertKey
+	tlsKeyPath       = "/var/run/secrets/ngf/" + secrets.TLSKeyKey
 )
 
 var ErrStatusInvalidConnection = status.Error(codes.Unauthenticated, "invalid connection")

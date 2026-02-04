@@ -31,6 +31,11 @@ on:
         default: both
         type: choice
         options: [oss, plus, both]
+      open_pull_request:
+        description: Whether or not to open a PR with the test results
+        required: true
+        default: true
+        type: boolean
   schedule:
     - cron: "0 16 1,15 * *" # Run on the 1st and 15th of every month at 16:00 UTC
 
@@ -40,10 +45,6 @@ defaults:
 
 env:
   PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
-
-concurrency:
-  group: ${{ github.ref_name }}-nfr
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -57,8 +58,6 @@ jobs:
       version: ${{ github.event.inputs.version || 'edge' }}
       image_tag: ${{ github.event.inputs.image_tag || 'edge' }}
       types: ${{ steps.var.outputs.types }}
-    permissions:
-      contents: read
     steps:
       - name: Set vars
         id: var
@@ -93,7 +92,7 @@ jobs:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Login to GAR
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: us-docker.pkg.dev
           username: oauth2accesstoken
@@ -180,6 +179,7 @@ jobs:
       contents: write # needed for opening PR with the results files
       pull-requests: write # needed for opening PR with the results files
     needs: [vars, setup-and-run-tests]
+    if: ${{ inputs.open_pull_request == true }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -198,6 +198,8 @@ jobs:
           author: nginx-bot <integrations@nginx.com>
           committer: nginx-bot <integrations@nginx.com>
           branch: tests/nfr-tests-${{ needs.vars.outputs.version }}
+          base: main
+          labels: ${{ github.event_name != 'schedule' && 'needs cherry pick' || '' }}
           delete-branch: true
           title: NFR Test Results for NGF version ${{ needs.vars.outputs.version }}
           add-paths: |
