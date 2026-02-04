@@ -963,8 +963,9 @@ func fetchApPolicyBundle(
 	fetcher fetch.Fetcher,
 ) (*WAFBundleData, *conditions.Condition) {
 	switch status.Bundle.State {
-	case plm.StatePending, plm.StateProcessing:
-		// Not yet compiled - this is not an error, just pending
+	case "", plm.StatePending, plm.StateProcessing:
+		// Not yet compiled - this is not an error, just pending.
+		// Empty state means PLM has not yet set the status on this resource.
 		cond := conditions.NewPolicyNotAcceptedApPolicyNotCompiled(nsName.String())
 		return nil, &cond
 	case plm.StateInvalid:
@@ -1028,7 +1029,8 @@ func fetchApLogConfBundle(
 	fetcher fetch.Fetcher,
 ) (*WAFBundleData, *conditions.Condition) {
 	switch status.Bundle.State {
-	case plm.StatePending, plm.StateProcessing:
+	case "", plm.StatePending, plm.StateProcessing:
+		// Empty state means PLM has not yet set the status on this resource.
 		cond := conditions.NewPolicyNotAcceptedApLogConfNotCompiled(nsName.String())
 		return nil, &cond
 	case plm.StateInvalid:

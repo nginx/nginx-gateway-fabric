@@ -17,8 +17,6 @@ type BundleStatus struct {
 	Location string
 	// Sha256 is the SHA256 hash of the bundle file.
 	Sha256 string
-	// CompilerVersion is the version of the compiler used to build this bundle.
-	CompilerVersion string
 }
 
 // ProcessingStatus contains the compiler/validation metadata from APPolicy/APLogConf status.
@@ -39,6 +37,8 @@ type APPolicyStatus struct {
 	Bundle BundleStatus
 	// Processing holds the compiler/validation metadata.
 	Processing ProcessingStatus
+	// ObservedGeneration is the generation of the APPolicy that was last processed.
+	ObservedGeneration int64
 }
 
 // APLogConfStatus contains the relevant status fields extracted from an APLogConf CRD.
@@ -48,6 +48,8 @@ type APLogConfStatus struct {
 	Bundle BundleStatus
 	// Processing holds the compiler/validation metadata.
 	Processing ProcessingStatus
+	// ObservedGeneration is the generation of the APLogConf that was last processed.
+	ObservedGeneration int64
 }
 
 // PLM Bundle State constants.
@@ -80,6 +82,11 @@ func ExtractAPPolicyStatus(obj *unstructured.Unstructured) (*APPolicyStatus, err
 	// Extract processing info from status.processing
 	result.Processing = extractProcessingStatus(status)
 
+	// Extract observedGeneration from status.observedGeneration
+	if og, found, err := unstructured.NestedInt64(status, "observedGeneration"); err == nil && found {
+		result.ObservedGeneration = og
+	}
+
 	return result, nil
 }
 
@@ -101,11 +108,16 @@ func ExtractAPLogConfStatus(obj *unstructured.Unstructured) (*APLogConfStatus, e
 	// Extract processing info from status.processing
 	result.Processing = extractProcessingStatus(status)
 
+	// Extract observedGeneration from status.observedGeneration
+	if og, found, err := unstructured.NestedInt64(status, "observedGeneration"); err == nil && found {
+		result.ObservedGeneration = og
+	}
+
 	return result, nil
 }
 
 // extractBundleStatus extracts the bundle status from a status map.
-func extractBundleStatus(status map[string]interface{}) BundleStatus {
+func extractBundleStatus(status map[string]any) BundleStatus {
 	bundle := BundleStatus{}
 
 	bundleMap, found, err := unstructured.NestedMap(status, "bundle")
@@ -125,15 +137,11 @@ func extractBundleStatus(status map[string]interface{}) BundleStatus {
 		bundle.Sha256 = sha256
 	}
 
-	if compilerVersion, found, err := unstructured.NestedString(bundleMap, "compilerVersion"); err == nil && found {
-		bundle.CompilerVersion = compilerVersion
-	}
-
 	return bundle
 }
 
 // extractProcessingStatus extracts the processing status from a status map.
-func extractProcessingStatus(status map[string]interface{}) ProcessingStatus {
+func extractProcessingStatus(status map[string]any) ProcessingStatus {
 	processing := ProcessingStatus{}
 
 	processingMap, found, err := unstructured.NestedMap(status, "processing")

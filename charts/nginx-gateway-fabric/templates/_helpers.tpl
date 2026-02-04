@@ -276,6 +276,17 @@ Create namespaced RBAC rules.
   verbs:
   - update
   {{- end }}
+  {{- if .Values.nginxGateway.plmStorage.url }}
+- apiGroups:
+  - appprotect.f5.com
+  resources:
+  - appolicies
+  - aplogconfs
+  verbs:
+  - get
+  - list
+  - watch
+  {{- end }}
   {{- if .Values.nginxGateway.leaderElection.enable }}
 - apiGroups:
   - coordination.k8s.io

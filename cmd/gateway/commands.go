@@ -100,9 +100,8 @@ func createControllerCommand() *cobra.Command {
 		watchNamespacesFlag                 = "watch-namespaces"
 		plmStorageURLFlag                   = "plm-storage-url"
 		plmStorageCredentialsSecretFlag     = "plm-storage-credentials-secret" //nolint:gosec // not credentials
-		plmStorageTLSCACertFlag             = "plm-storage-tls-ca-cert"
-		plmStorageTLSClientCertFlag         = "plm-storage-tls-client-cert"
-		plmStorageTLSClientKeyFlag          = "plm-storage-tls-client-key"
+		plmStorageTLSCACertSecretFlag       = "plm-storage-tls-ca-cert"        //nolint:gosec // not credentials
+		plmStorageTLSClientSSLSecretFlag    = "plm-storage-tls-client-ssl"     //nolint:gosec // not credentials
 		plmStorageTLSInsecureSkipVerifyFlag = "plm-storage-tls-insecure-skip-verify"
 	)
 
@@ -183,9 +182,8 @@ func createControllerCommand() *cobra.Command {
 			validator: validateEndpointOptionalPort,
 		}
 		plmStorageCredentialsSecret     string
-		plmStorageTLSCACertPath         string
-		plmStorageTLSClientCertPath     string
-		plmStorageTLSClientKeyPath      string
+		plmStorageTLSCACertSecret       string
+		plmStorageTLSClientSSLSecret    string
 		plmStorageTLSInsecureSkipVerify bool
 	)
 
@@ -318,12 +316,11 @@ func createControllerCommand() *cobra.Command {
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 				WatchNamespaces:             watchNamespaces.values,
 				PLMStorageConfig: config.PLMStorageConfig{
-					URL:                   plmStorageURL.value,
-					CredentialsSecretName: plmStorageCredentialsSecret,
-					TLSCACertPath:         plmStorageTLSCACertPath,
-					TLSClientCertPath:     plmStorageTLSClientCertPath,
-					TLSClientKeyPath:      plmStorageTLSClientKeyPath,
-					TLSInsecureSkipVerify: plmStorageTLSInsecureSkipVerify,
+					URL:                    plmStorageURL.value,
+					CredentialsSecretName:  plmStorageCredentialsSecret,
+					TLSCACertSecretName:    plmStorageTLSCACertSecret,
+					TLSClientSSLSecretName: plmStorageTLSClientSSLSecret,
+					TLSInsecureSkipVerify:  plmStorageTLSInsecureSkipVerify,
 				},
 			}
 
@@ -572,37 +569,28 @@ func createControllerCommand() *cobra.Command {
 	cmd.Flags().Var(
 		&plmStorageURL,
 		plmStorageURLFlag,
-		"The URL of the PLM storage service (HTTP or HTTPS). Required when WAF is enabled.",
+		"The URL of the PLM storage service. Required when WAF is enabled.",
 	)
 
 	cmd.Flags().StringVar(
 		&plmStorageCredentialsSecret,
 		plmStorageCredentialsSecretFlag,
 		"",
-		`The name of the Secret containing S3 credentials for PLM storage.`+
-			` The Secret should have "accessKeyId" and "secretAccessKey" data fields.`+
-			` If not provided, anonymous access is used.`,
+		"The name of the Secret containing S3 credentials for PLM storage.",
 	)
 
 	cmd.Flags().StringVar(
-		&plmStorageTLSCACertPath,
-		plmStorageTLSCACertFlag,
+		&plmStorageTLSCACertSecret,
+		plmStorageTLSCACertSecretFlag,
 		"",
-		"Path to CA certificate file for TLS verification when communicating with PLM storage service.",
+		"The name of the Secret for TLS verification when communicating with PLM storage service.",
 	)
 
 	cmd.Flags().StringVar(
-		&plmStorageTLSClientCertPath,
-		plmStorageTLSClientCertFlag,
+		&plmStorageTLSClientSSLSecret,
+		plmStorageTLSClientSSLSecretFlag,
 		"",
-		"Path to client certificate file for mutual TLS with PLM storage service.",
-	)
-
-	cmd.Flags().StringVar(
-		&plmStorageTLSClientKeyPath,
-		plmStorageTLSClientKeyFlag,
-		"",
-		"Path to client key file for mutual TLS with PLM storage service.",
+		"The name of the Secret for mutual TLS with PLM storage service.",
 	)
 
 	cmd.Flags().BoolVar(

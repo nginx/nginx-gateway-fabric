@@ -951,29 +951,23 @@
           "properties": {
             "credentialsSecretName": {
               "default": "",
-              "description": "The name of the Secret containing S3 credentials for PLM storage.\nThe Secret should have \"accessKeyId\" and \"secretAccessKey\" data fields.\nMust exist in the same namespace as the helm release.\nIf not provided, anonymous access is used.",
+              "description": "The name of the Secret containing S3 credentials for PLM storage.\nIf the secret is in a different namespace, should be in form \"ns/name\", otherwise same namespace as NGF will be assumed.",
               "title": "credentialsSecretName",
               "type": "string"
             },
             "tls": {
               "description": "TLS configuration for PLM storage connections.",
               "properties": {
-                "caCertPath": {
+                "caCertSecretName": {
                   "default": "",
-                  "description": "Path to the CA certificate file for TLS verification.",
-                  "title": "caCertPath",
+                  "description": "Name of the secret for the CA certificate file for TLS verification.",
+                  "title": "caCertSecretName",
                   "type": "string"
                 },
-                "clientCertPath": {
+                "clientSSLSecretName": {
                   "default": "",
-                  "description": "Path to the client certificate file for mutual TLS.",
-                  "title": "clientCertPath",
-                  "type": "string"
-                },
-                "clientKeyPath": {
-                  "default": "",
-                  "description": "Path to the client key file for mutual TLS.",
-                  "title": "clientKeyPath",
+                  "description": "Name of the secret for the client for mutual TLS.",
+                  "title": "clientSSLSecretName",
                   "type": "string"
                 },
                 "insecureSkipVerify": {

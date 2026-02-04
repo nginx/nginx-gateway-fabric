@@ -121,14 +121,11 @@ spec:
         {{- if .Values.nginxGateway.plmStorage.credentialsSecretName }}
         - --plm-storage-credentials-secret={{ .Values.nginxGateway.plmStorage.credentialsSecretName }}
         {{- end }}
-        {{- if .Values.nginxGateway.plmStorage.tls.caCertPath }}
-        - --plm-storage-tls-ca-cert={{ .Values.nginxGateway.plmStorage.tls.caCertPath }}
+        {{- if .Values.nginxGateway.plmStorage.tls.caCertSecretName }}
+        - --plm-storage-tls-ca-cert={{ .Values.nginxGateway.plmStorage.tls.caCertSecretName }}
         {{- end }}
         {{- if .Values.nginxGateway.plmStorage.tls.clientCertPath }}
-        - --plm-storage-tls-client-cert={{ .Values.nginxGateway.plmStorage.tls.clientCertPath }}
-        {{- end }}
-        {{- if .Values.nginxGateway.plmStorage.tls.clientKeyPath }}
-        - --plm-storage-tls-client-key={{ .Values.nginxGateway.plmStorage.tls.clientKeyPath }}
+        - --plm-storage-tls-client-ssl={{ .Values.nginxGateway.plmStorage.tls.clientSSLSecretName }}
         {{- end }}
         {{- if .Values.nginxGateway.plmStorage.tls.insecureSkipVerify }}
         - --plm-storage-tls-insecure-skip-verify

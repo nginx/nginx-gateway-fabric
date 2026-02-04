@@ -252,21 +252,16 @@ nginxGateway:
     url: ""
 
     # -- The name of the Secret containing S3 credentials for PLM storage.
-    # The Secret should have "accessKeyId" and "secretAccessKey" data fields.
-    # Must exist in the same namespace as the helm release.
-    # If not provided, anonymous access is used.
+    # If the secret is in a different namespace, should be in form "ns/name", otherwise same namespace as NGF will be assumed.
     credentialsSecretName: ""
 
     # -- TLS configuration for PLM storage connections.
     tls:
-      # -- Path to the CA certificate file for TLS verification.
-      caCertPath: ""
+      # -- Name of the secret for the CA certificate file for TLS verification.
+      caCertSecretName: ""
 
-      # -- Path to the client certificate file for mutual TLS.
-      clientCertPath: ""
-
-      # -- Path to the client key file for mutual TLS.
-      clientKeyPath: ""
+      # -- Name of the secret for the client for mutual TLS.
+      clientSSLSecretName: ""
 
       # -- Skip TLS certificate verification. Use only for testing.
       insecureSkipVerify: false
