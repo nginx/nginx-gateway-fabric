@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
@@ -12,7 +13,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 //go:generate go tool counterfeiter -generate
@@ -46,12 +50,12 @@ type Endpoint struct {
 
 // ServiceResolverImpl implements ServiceResolver.
 type ServiceResolverImpl struct {
-	client client.Client
+	reader client.Reader
 }
 
 // NewServiceResolverImpl creates a new instance of a ServiceResolverImpl.
-func NewServiceResolverImpl(c client.Client) *ServiceResolverImpl {
-	return &ServiceResolverImpl{client: c}
+func NewServiceResolverImpl(c client.Reader) *ServiceResolverImpl {
+	return &ServiceResolverImpl{reader: c}
 }
 
 // Resolve resolves a Service's NamespacedName and ServicePort to a list of Endpoints.
@@ -71,7 +75,7 @@ func (e *ServiceResolverImpl) Resolve(
 	// We list EndpointSlices using the Service Name Index Field we added as an index to the EndpointSlice cache.
 	// This allows us to perform a quick lookup of all EndpointSlices for a Service.
 	var endpointSliceList discoveryV1.EndpointSliceList
-	err := e.client.List(
+	err := e.reader.List(
 		ctx,
 		&endpointSliceList,
 		client.MatchingFields{index.KubernetesServiceNameIndexField: svcNsName.Name},
@@ -236,4 +240,152 @@ func findPort(ports []discoveryV1.EndpointPort, svcPort v1.ServicePort) int32 {
 	}
 
 	return 0
+}
+
+//go:generate go tool counterfeiter -generate
+
+//counterfeiter:generate . Resolver
+
+// Resolver defines an interface for resolving resources that are referenced by other resources.
+type Resolver interface {
+	Resolve(ResourceType, types.NamespacedName) error
+	GetSecrets() map[types.NamespacedName]*secrets.Secret
+	GetConfigMaps() map[types.NamespacedName]*configmaps.CaCertConfigMap
+}
+
+// ResourceType represents the type of resource to be resolved.
+type ResourceType string
+
+const (
+	// ResourceTypeSecret represents a Secret resource.
+	ResourceTypeSecret ResourceType = kinds.Secret
+	// ResourceTypeConfigMap represents a ConfigMap resource.
+	ResourceTypeConfigMap ResourceType = kinds.ConfigMap
+)
+
+// ResourceKey is a unique identifier for a resource in the resolver map.
+type ResourceKey struct {
+	// NamespacedName is the namespaced name of the resource.
+	NamespacedName types.NamespacedName
+	// ResourceType is the type of the resource.
+	ResourceType ResourceType
+}
+
+type resourceEntry interface {
+	validate(client.Object)
+	setError(error)
+	error() error
+}
+
+// ResourceResolver implements the Resolver interface.
+type ResourceResolver struct {
+	clusterResources  map[ResourceKey]client.Object
+	resolvedResources map[ResourceKey]resourceEntry
+	lock              sync.RWMutex
+}
+
+// NewResourceResolver creates a new instance of a ResourceResolver.
+func NewResourceResolver(resources map[ResourceKey]client.Object) Resolver {
+	return &ResourceResolver{
+		clusterResources:  resources,
+		resolvedResources: make(map[ResourceKey]resourceEntry),
+	}
+}
+
+// Resolve resolves the resource of the given type and namespaced name. A resource is resolved if
+// it exists in the cluster. If there is a validation error, the resource is still included
+// in the map of resolved resources, but with an error defined.
+func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.NamespacedName) error {
+	key := ResourceKey{
+		NamespacedName: nsname,
+		ResourceType:   resType,
+	}
+
+	r.lock.RLock()
+	if res, resolved := r.resolvedResources[key]; resolved {
+		r.lock.RUnlock()
+		return res.error()
+	}
+	r.lock.RUnlock()
+
+	var resource resourceEntry
+	var obj client.Object
+
+	switch resType {
+	case ResourceTypeSecret:
+		resource = &secretEntry{}
+	case ResourceTypeConfigMap:
+		resource = &configMapEntry{}
+	default:
+		panic(fmt.Sprintf("unsupported resource type: %s", resType))
+	}
+
+	obj, exist := r.clusterResources[key]
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	if !exist {
+		resource.setError(fmt.Errorf("%s %s does not exist", resType, nsname.String()))
+		r.resolvedResources[key] = resource
+
+		return resource.error()
+	}
+
+	resource.validate(obj)
+	r.resolvedResources[key] = resource
+	return resource.error()
+}
+
+// GetSecrets returns a map of resolved Secrets. It could contain invalid secrets.
+func (r *ResourceResolver) GetSecrets() map[types.NamespacedName]*secrets.Secret {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	secretsMap := make(map[types.NamespacedName]*secrets.Secret)
+
+	for key, res := range r.resolvedResources {
+		if key.ResourceType != ResourceTypeSecret {
+			continue
+		}
+
+		secretRes, ok := res.(*secretEntry)
+		if !ok {
+			panic(fmt.Sprintf("expected secretEntry, got %T", res))
+		}
+
+		secretsMap[key.NamespacedName] = &secretRes.Secret
+	}
+
+	if len(secretsMap) == 0 {
+		return nil
+	}
+
+	return secretsMap
+}
+
+// GetConfigMaps returns a map of resolved ConfigMaps. It could contain invalid configmaps.
+func (r *ResourceResolver) GetConfigMaps() map[types.NamespacedName]*configmaps.CaCertConfigMap {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	configMaps := make(map[types.NamespacedName]*configmaps.CaCertConfigMap)
+
+	for key, res := range r.resolvedResources {
+		if key.ResourceType != ResourceTypeConfigMap {
+			continue
+		}
+
+		cmRes, ok := res.(*configMapEntry)
+		if !ok {
+			panic(fmt.Sprintf("expected configMapEntry, got %T", res))
+		}
+
+		configMaps[key.NamespacedName] = &cmRes.caCertConfigMap
+	}
+
+	if len(configMaps) == 0 {
+		return nil
+	}
+
+	return configMaps
 }

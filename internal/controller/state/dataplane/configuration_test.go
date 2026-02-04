@@ -25,6 +25,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver/resolverfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -79,7 +81,7 @@ var (
 
 	// secrets.
 	secret2NsName = types.NamespacedName{Namespace: "test", Name: "secret-2"}
-	secret2       = &graph.Secret{
+	secret2       = &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secret2NsName.Name,
@@ -90,17 +92,17 @@ var (
 				apiv1.TLSPrivateKeyKey: []byte("privateKey-2"),
 			},
 		},
-		CertBundle: graph.NewCertificateBundle(
+		CertBundle: secrets.NewCertificateBundle(
 			secret2NsName,
 			"Secret",
-			&graph.Certificate{
+			&secrets.Certificate{
 				TLSCert:       []byte("cert-2"),
 				TLSPrivateKey: []byte("privateKey-2"),
 			},
 		),
 	}
 	secret1NsName = types.NamespacedName{Namespace: "test", Name: "secret-1"}
-	secret1       = &graph.Secret{
+	secret1       = &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secret1NsName.Name,
@@ -111,10 +113,10 @@ var (
 				apiv1.TLSPrivateKeyKey: []byte("privateKey-1"),
 			},
 		},
-		CertBundle: graph.NewCertificateBundle(
+		CertBundle: secrets.NewCertificateBundle(
 			secret1NsName,
 			"Secret",
-			&graph.Certificate{
+			&secrets.Certificate{
 				TLSCert:       []byte("cert-1"),
 				TLSPrivateKey: []byte("privateKey-1"),
 			},
@@ -229,8 +231,8 @@ func getNormalGraph() *graph.Graph {
 			},
 		},
 		Routes:                     map[graph.RouteKey]*graph.L7Route{},
-		ReferencedSecrets:          map[types.NamespacedName]*graph.Secret{},
-		ReferencedCaCertConfigMaps: map[types.NamespacedName]*graph.CaCertConfigMap{},
+		ReferencedSecrets:          map[types.NamespacedName]*secrets.Secret{},
+		ReferencedCaCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{},
 		ReferencedServices:         map[types.NamespacedName]*graph.ReferencedService{},
 	}
 }
@@ -523,7 +525,7 @@ func TestBuildConfiguration(t *testing.T) {
 	}
 
 	authBasicSecretNsName := types.NamespacedName{Namespace: "test", Name: "auth-basic-secret"}
-	authBasicSecret := &graph.Secret{
+	authBasicSecret := &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      authBasicSecretNsName.Name,
@@ -1028,7 +1030,7 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	}
 
-	referencedConfigMaps := map[types.NamespacedName]*graph.CaCertConfigMap{
+	referencedConfigMaps := map[types.NamespacedName]*configmaps.CaCertConfigMap{
 		{Namespace: "test", Name: "configmap-1"}: {
 			Source: &apiv1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1036,13 +1038,13 @@ func TestBuildConfiguration(t *testing.T) {
 					Namespace: "test",
 				},
 				Data: map[string]string{
-					"ca.crt": "cert-1",
+					secrets.CAKey: "cert-1",
 				},
 			},
-			CertBundle: graph.NewCertificateBundle(
+			CertBundle: secrets.NewCertificateBundle(
 				types.NamespacedName{Namespace: "test", Name: "configmap-1"},
 				"ConfigMap",
-				&graph.Certificate{
+				&secrets.Certificate{
 					CACert: []byte("cert-1"),
 				},
 			),
@@ -1054,13 +1056,13 @@ func TestBuildConfiguration(t *testing.T) {
 					Namespace: "test",
 				},
 				BinaryData: map[string][]byte{
-					"ca.crt": []byte("cert-2"),
+					secrets.CAKey: []byte("cert-2"),
 				},
 			},
-			CertBundle: graph.NewCertificateBundle(
+			CertBundle: secrets.NewCertificateBundle(
 				types.NamespacedName{Namespace: "test", Name: "configmap-2"},
 				"ConfigMap",
-				&graph.Certificate{
+				&secrets.Certificate{
 					CACert: []byte("cert-2"),
 				},
 			),
@@ -1204,7 +1206,7 @@ func TestBuildConfiguration(t *testing.T) {
 					graph.CreateRouteKey(hr2):      httpsRouteHR2,
 					graph.CreateRouteKey(httpsHR5): httpsRouteHR5,
 				}
-				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
 					secret2NsName: secret2,
 				}
@@ -1318,7 +1320,7 @@ func TestBuildConfiguration(t *testing.T) {
 					graph.CreateRouteKey(httpsHR3): httpsRouteHR3,
 					graph.CreateRouteKey(httpsHR4): httpsRouteHR4,
 				}
-				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
 				}
 				return g
@@ -1478,7 +1480,7 @@ func TestBuildConfiguration(t *testing.T) {
 					graph.CreateRouteKey(httpsHR3): httpsRouteHR3,
 					graph.CreateRouteKey(httpsHR7): httpsRouteHR7,
 				}
-				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
 				}
 				return g
@@ -1658,7 +1660,7 @@ func TestBuildConfiguration(t *testing.T) {
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(hr5): routeHR5,
 				}
-				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					authBasicSecretNsName: authBasicSecret,
 				}
 				return g
@@ -1773,7 +1775,7 @@ func TestBuildConfiguration(t *testing.T) {
 					TR1Key: &tlsTR1,
 					TR2Key: &invalidBackendRefTR2,
 				}
-				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
 				}
 				return g
@@ -1944,7 +1946,7 @@ func TestBuildConfiguration(t *testing.T) {
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(httpsHR5): httpsRouteHR5,
 				}
-				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
 					secret2NsName: secret2,
 				}
@@ -2013,7 +2015,7 @@ func TestBuildConfiguration(t *testing.T) {
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(httpsHR8): httpsRouteHR8,
 				}
-				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
 				}
 				g.ReferencedCaCertConfigMaps = referencedConfigMaps
@@ -2074,7 +2076,7 @@ func TestBuildConfiguration(t *testing.T) {
 				g.Routes = map[graph.RouteKey]*graph.L7Route{
 					graph.CreateRouteKey(httpsHR9): httpsRouteHR9,
 				}
-				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
 				}
 				g.ReferencedCaCertConfigMaps = referencedConfigMaps
@@ -2201,7 +2203,7 @@ func TestBuildConfiguration(t *testing.T) {
 					graph.CreateRouteKey(hrWithPolicy):      l7RouteWithPolicy,
 					graph.CreateRouteKey(httpsHRWithPolicy): l7HTTPSRouteWithPolicy,
 				}
-				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
 				}
 				return g
@@ -5843,7 +5845,7 @@ func TestBuildSnippetForContext(t *testing.T) {
 func TestBuildAuxiliarySecrets(t *testing.T) {
 	t.Parallel()
 
-	secrets := map[types.NamespacedName][]graph.PlusSecretFile{
+	secretsMap := map[types.NamespacedName][]graph.PlusSecretFile{
 		{Name: "license", Namespace: "ngf"}: {
 			{
 				Type:    graph.PlusReportJWTToken,
@@ -5876,7 +5878,7 @@ func TestBuildAuxiliarySecrets(t *testing.T) {
 
 	g := NewWithT(t)
 
-	g.Expect(buildAuxiliarySecrets(secrets)).To(Equal(expSecrets))
+	g.Expect(buildAuxiliarySecrets(secretsMap)).To(Equal(expSecrets))
 }
 
 func TestBuildNginxPlus(t *testing.T) {
@@ -6244,7 +6246,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 	fakeResolver.ResolveReturns(fooEndpoints, nil)
 
 	secret1NsName := types.NamespacedName{Namespace: "test", Name: "secret-1"}
-	secret1 := &graph.Secret{
+	secret1 := &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secret1NsName.Name,
@@ -6255,10 +6257,10 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				apiv1.TLSPrivateKeyKey: []byte("privateKey-1"),
 			},
 		},
-		CertBundle: graph.NewCertificateBundle(
+		CertBundle: secrets.NewCertificateBundle(
 			secret1NsName,
 			"Secret",
-			&graph.Certificate{
+			&secrets.Certificate{
 				TLSCert:       []byte("cert-1"),
 				TLSPrivateKey: []byte("privateKey-1"),
 			},
@@ -6416,7 +6418,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 						ResolvedSecret: &secret2NsName,
 					},
 				}...)
-				g.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+				g.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 					secret1NsName: secret1,
 					secret2NsName: secret2,
 				}
@@ -6926,24 +6928,24 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 	secretNsName := types.NamespacedName{Namespace: "test", Name: "secret"}
 	gatewaySecretNsName := types.NamespacedName{Namespace: "test", Name: "gateway-secret"}
 
-	validSecret := &graph.Secret{
+	validSecret := &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secretNsName.Name,
 				Namespace: secretNsName.Namespace,
 			},
 		},
-		CertBundle: graph.NewCertificateBundle(
+		CertBundle: secrets.NewCertificateBundle(
 			secretNsName,
 			"Secret",
-			&graph.Certificate{
+			&secrets.Certificate{
 				TLSCert:       []byte("cert-data"),
 				TLSPrivateKey: []byte("key-data"),
 			},
 		),
 	}
 
-	nilCertBundleSecret := &graph.Secret{
+	nilCertBundleSecret := &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "nil-cert",
@@ -6954,14 +6956,14 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 	}
 
 	tests := []struct {
-		secrets  map[types.NamespacedName]*graph.Secret
+		secrets  map[types.NamespacedName]*secrets.Secret
 		gateway  *graph.Gateway
 		expected map[SSLKeyPairID]SSLKeyPair
 		name     string
 	}{
 		{
 			name: "valid listener with valid TLS secret",
-			secrets: map[types.NamespacedName]*graph.Secret{
+			secrets: map[types.NamespacedName]*secrets.Secret{
 				secretNsName: validSecret,
 			},
 			gateway: &graph.Gateway{
@@ -6981,7 +6983,7 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 		},
 		{
 			name: "listener with nil CertBundle secret",
-			secrets: map[types.NamespacedName]*graph.Secret{
+			secrets: map[types.NamespacedName]*secrets.Secret{
 				secretNsName: nilCertBundleSecret,
 			},
 			gateway: &graph.Gateway{
@@ -6996,7 +6998,7 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 		},
 		{
 			name: "gateway backend TLS with nil CertBundle",
-			secrets: map[types.NamespacedName]*graph.Secret{
+			secrets: map[types.NamespacedName]*secrets.Secret{
 				gatewaySecretNsName: nilCertBundleSecret,
 			},
 			gateway: &graph.Gateway{
@@ -7007,7 +7009,7 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 		},
 		{
 			name: "invalid listener should not generate key pair",
-			secrets: map[types.NamespacedName]*graph.Secret{
+			secrets: map[types.NamespacedName]*secrets.Secret{
 				secretNsName: validSecret,
 			},
 			gateway: &graph.Gateway{
@@ -7022,7 +7024,7 @@ func TestBuildSSLKeyPairs(t *testing.T) {
 		},
 		{
 			name: "listener with nil resolved secret",
-			secrets: map[types.NamespacedName]*graph.Secret{
+			secrets: map[types.NamespacedName]*secrets.Secret{
 				secretNsName: validSecret,
 			},
 			gateway: &graph.Gateway{
@@ -7056,20 +7058,20 @@ func TestBuildAuthSecrets(t *testing.T) {
 	tlsSecretNsName := types.NamespacedName{Namespace: "test", Name: "tls-secret"}
 	nilSourceSecretNsName := types.NamespacedName{Namespace: "test", Name: "nil-source"}
 
-	htpasswdSecret := &graph.Secret{
+	htpasswdSecret := &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      htpasswdSecretNsName.Name,
 				Namespace: htpasswdSecretNsName.Namespace,
 			},
-			Type: apiv1.SecretType(graph.SecretTypeHtpasswd),
+			Type: apiv1.SecretType(secrets.SecretTypeHtpasswd),
 			Data: map[string][]byte{
-				graph.AuthKey: []byte("user:password"),
+				secrets.AuthKey: []byte("user:password"),
 			},
 		},
 	}
 
-	tlsSecret := &graph.Secret{
+	tlsSecret := &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      tlsSecretNsName.Name,
@@ -7081,27 +7083,27 @@ func TestBuildAuthSecrets(t *testing.T) {
 				apiv1.TLSPrivateKeyKey: []byte("key"),
 			},
 		},
-		CertBundle: graph.NewCertificateBundle(
+		CertBundle: secrets.NewCertificateBundle(
 			tlsSecretNsName,
 			"Secret",
-			&graph.Certificate{
+			&secrets.Certificate{
 				TLSCert:       []byte("cert"),
 				TLSPrivateKey: []byte("key"),
 			},
 		),
 	}
 
-	nilSourceSecret := &graph.Secret{
+	nilSourceSecret := &secrets.Secret{
 		Source: nil,
 	}
 
-	invalidKeySecret := &graph.Secret{
+	invalidKeySecret := &secrets.Secret{
 		Source: &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "invalid-key-secret",
 				Namespace: "test",
 			},
-			Type: apiv1.SecretType(graph.SecretTypeHtpasswd),
+			Type: apiv1.SecretType(secrets.SecretTypeHtpasswd),
 			Data: map[string][]byte{
 				"wrong-key": []byte("data"),
 			},
@@ -7109,13 +7111,13 @@ func TestBuildAuthSecrets(t *testing.T) {
 	}
 
 	tests := []struct {
-		secrets  map[types.NamespacedName]*graph.Secret
+		secrets  map[types.NamespacedName]*secrets.Secret
 		expected map[AuthFileID]AuthFileData
 		name     string
 	}{
 		{
 			name: "htpasswd secret",
-			secrets: map[types.NamespacedName]*graph.Secret{
+			secrets: map[types.NamespacedName]*secrets.Secret{
 				htpasswdSecretNsName: htpasswdSecret,
 			},
 			expected: map[AuthFileID]AuthFileData{
@@ -7124,28 +7126,28 @@ func TestBuildAuthSecrets(t *testing.T) {
 		},
 		{
 			name: "TLS secret should be ignored",
-			secrets: map[types.NamespacedName]*graph.Secret{
+			secrets: map[types.NamespacedName]*secrets.Secret{
 				tlsSecretNsName: tlsSecret,
 			},
 			expected: map[AuthFileID]AuthFileData{},
 		},
 		{
 			name: "nil source secret should not panic",
-			secrets: map[types.NamespacedName]*graph.Secret{
+			secrets: map[types.NamespacedName]*secrets.Secret{
 				nilSourceSecretNsName: nilSourceSecret,
 			},
 			expected: map[AuthFileID]AuthFileData{},
 		},
 		{
 			name: "invalid key in htpasswd secret",
-			secrets: map[types.NamespacedName]*graph.Secret{
+			secrets: map[types.NamespacedName]*secrets.Secret{
 				{Namespace: "test", Name: "invalid-key-secret"}: invalidKeySecret,
 			},
 			expected: map[AuthFileID]AuthFileData{},
 		},
 		{
 			name: "mixed secrets",
-			secrets: map[types.NamespacedName]*graph.Secret{
+			secrets: map[types.NamespacedName]*secrets.Secret{
 				htpasswdSecretNsName:  htpasswdSecret,
 				tlsSecretNsName:       tlsSecret,
 				nilSourceSecretNsName: nilSourceSecret,

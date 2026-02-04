@@ -192,7 +192,7 @@ func (p *NginxProvisioner) Enable(ctx context.Context) {
 
 	p.lock.RLock()
 	for _, gatewayNSName := range p.resourcesToDeleteOnStartup {
-		if err := p.deprovisionNginx(ctx, gatewayNSName); err != nil {
+		if err := p.deprovisionNginxForInvalidGateway(ctx, gatewayNSName); err != nil {
 			p.cfg.Logger.Error(err, "error deprovisioning nginx resources on startup")
 		}
 	}
@@ -413,7 +413,10 @@ func (p *NginxProvisioner) reprovisionNginx(
 	return nil
 }
 
-func (p *NginxProvisioner) deprovisionNginx(ctx context.Context, gatewayNSName types.NamespacedName) error {
+func (p *NginxProvisioner) deprovisionNginxForInvalidGateway(
+	ctx context.Context,
+	gatewayNSName types.NamespacedName,
+) error {
 	deploymentNSName := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(gatewayNSName.Name, p.cfg.GCName),
 		Namespace: gatewayNSName.Namespace,
@@ -426,7 +429,7 @@ func (p *NginxProvisioner) deprovisionNginx(ctx context.Context, gatewayNSName t
 			"namespace", gatewayNSName.Namespace,
 		)
 
-		objects := p.buildNginxResourceObjectsForDeletion(deploymentNSName)
+		objects := p.buildResourcesForInvalidGatewayCleanup(deploymentNSName)
 
 		deleteCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
@@ -555,7 +558,7 @@ func (p *NginxProvisioner) RegisterGateway(
 			return fmt.Errorf("error provisioning nginx resources: %w", err)
 		}
 	} else {
-		if err := p.deprovisionNginx(ctx, gatewayNSName); err != nil {
+		if err := p.deprovisionNginxForInvalidGateway(ctx, gatewayNSName); err != nil {
 			return fmt.Errorf("error deprovisioning nginx resources: %w", err)
 		}
 	}

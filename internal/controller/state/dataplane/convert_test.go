@@ -11,6 +11,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -629,7 +630,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 
 	tests := []struct {
 		filter            *graph.AuthenticationFilter
-		referencedSecrets map[types.NamespacedName]*graph.Secret
+		referencedSecrets map[types.NamespacedName]*secrets.Secret
 		expected          *AuthenticationFilter
 		name              string
 	}{
@@ -666,12 +667,12 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 				Valid:      true,
 				Referenced: true,
 			},
-			referencedSecrets: map[types.NamespacedName]*graph.Secret{
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
 				{Namespace: "test", Name: "auth-basic"}: {
 					Source: &apiv1.Secret{
 						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "auth-basic"},
 						Data: map[string][]byte{
-							graph.AuthKey: []byte("user:$apr1$cred"),
+							secrets.AuthKey: []byte("user:$apr1$cred"),
 						},
 					},
 				},
@@ -703,12 +704,12 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 				Valid:      true,
 				Referenced: false,
 			},
-			referencedSecrets: map[types.NamespacedName]*graph.Secret{
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
 				{Namespace: "test", Name: "non-auth-secret"}: {
 					Source: &apiv1.Secret{
 						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "non-auth-secret"},
 						Data: map[string][]byte{
-							graph.AuthKey: []byte("user:$apr1$cred"),
+							secrets.AuthKey: []byte("user:$apr1$cred"),
 						},
 					},
 				},
@@ -733,7 +734,7 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 				Valid:      true,
 				Referenced: true,
 			},
-			referencedSecrets: map[types.NamespacedName]*graph.Secret{
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
 				{Namespace: "test", Name: "auth-basic"}: {
 					Source: nil,
 				},

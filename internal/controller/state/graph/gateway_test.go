@@ -18,6 +18,7 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -929,7 +930,8 @@ func TestBuildGateway(t *testing.T) {
 							Routes:      map[RouteKey]*L7Route{},
 							L4Routes:    map[L4RouteKey]*L4Route{},
 							Conditions: conditions.NewListenerInvalidCertificateRef(
-								`tls.certificateRefs[0]: Invalid value: {"Namespace":"test","Name":"does-not-exist"}: secret does not exist`,
+								"tls.certificateRefs[0]: Invalid value: {\"Namespace\":\"test\",\"Name\":\"does-not-exist\"}: " +
+									"Secret test/does-not-exist does not exist",
 							),
 							SupportedKinds: supportedKindsForListeners,
 						},
@@ -1654,10 +1656,16 @@ func TestBuildGateway(t *testing.T) {
 		},
 	}
 
-	secretResolver := newSecretResolver(
-		map[types.NamespacedName]*apiv1.Secret{
-			client.ObjectKeyFromObject(secretSameNs):        secretSameNs,
-			client.ObjectKeyFromObject(secretDiffNamespace): secretDiffNamespace,
+	resourceResolver := resolver.NewResourceResolver(
+		map[resolver.ResourceKey]client.Object{
+			{
+				ResourceType:   resolver.ResourceTypeSecret,
+				NamespacedName: client.ObjectKeyFromObject(secretSameNs),
+			}: secretSameNs,
+			{
+				ResourceType:   resolver.ResourceTypeSecret,
+				NamespacedName: client.ObjectKeyFromObject(secretDiffNamespace),
+			}: secretDiffNamespace,
 		})
 
 	nginxProxies := map[types.NamespacedName]*NginxProxy{
@@ -1674,7 +1682,7 @@ func TestBuildGateway(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			resolver := newReferenceGrantResolver(test.refGrants)
-			result := buildGateways(test.gateway, secretResolver, test.gatewayClass, resolver, nginxProxies, false)
+			result := buildGateways(test.gateway, resourceResolver, test.gatewayClass, resolver, nginxProxies, false)
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}
@@ -2312,10 +2320,18 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 	secretSameNsKey := client.ObjectKeyFromObject(secretSameNs)
 	secretDiffNsKey := client.ObjectKeyFromObject(secretDiffNamespace)
 
-	secrets := map[types.NamespacedName]*apiv1.Secret{
-		secretSameNsKey: secretSameNs,
-		secretDiffNsKey: secretDiffNamespace,
-	}
+	resourceResolver := resolver.NewResourceResolver(
+		map[resolver.ResourceKey]client.Object{
+			{
+				ResourceType:   resolver.ResourceTypeSecret,
+				NamespacedName: secretSameNsKey,
+			}: secretSameNs,
+			{
+				ResourceType:   resolver.ResourceTypeSecret,
+				NamespacedName: secretDiffNsKey,
+			}: secretDiffNamespace,
+		},
+	)
 
 	gcName := "nginx"
 	deploymentName := types.NamespacedName{
@@ -2401,12 +2417,11 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 	}
 
 	tests := []struct {
-		gw             map[types.NamespacedName]*v1.Gateway
-		refGrants      map[types.NamespacedName]*v1beta1.ReferenceGrant
-		secretResolver *secretResolver
-		expected       map[types.NamespacedName]*Gateway
-		name           string
-		experimental   bool
+		gw           map[types.NamespacedName]*v1.Gateway
+		refGrants    map[types.NamespacedName]*v1beta1.ReferenceGrant
+		expected     map[types.NamespacedName]*Gateway
+		name         string
+		experimental bool
 	}{
 		{
 			name: "gateway with experimental enabled and tls.backend is not specified",
@@ -2437,8 +2452,7 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 					Valid:          true,
 				},
 			},
-			experimental:   false,
-			secretResolver: newSecretResolver(secrets),
+			experimental: false,
 		},
 		{
 			name: "gateway with experimental disabled and tls.backend is specified",
@@ -2451,8 +2465,7 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 				false,
 				false,
 			),
-			experimental:   false,
-			secretResolver: newSecretResolver(secrets),
+			experimental: false,
 		},
 		{
 			name: "gateway with experimental enabled, tls.backend is specified but secret reference is invalid",
@@ -2461,13 +2474,13 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 				invalidSecretNsKey,
 				[]conditions.Condition{conditions.NewGatewaySecretRefInvalid(
 					"backend.clientCertificateRef: " +
-						"Invalid value: {\"Namespace\":\"test\",\"Name\":\"invalid-secret\"}: secret does not exist",
+						"Invalid value: {\"Namespace\":\"test\",\"Name\":\"invalid-secret\"}: " +
+						"Secret test/invalid-secret does not exist",
 				)},
 				false,
 				true,
 			),
-			experimental:   true,
-			secretResolver: newSecretResolver(secrets),
+			experimental: true,
 		},
 		{
 			name: "gateway with experimental enabled, tls.backend is specified but secret is not permitted by reference grant",
@@ -2482,8 +2495,7 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 				false,
 				true,
 			),
-			experimental:   true,
-			secretResolver: newSecretResolver(secrets),
+			experimental: true,
 		},
 		{
 			name: "gateway with experimental enabled, tls.backend is specified secret in" +
@@ -2519,8 +2531,7 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 					},
 				},
 			},
-			experimental:   true,
-			secretResolver: newSecretResolver(secrets),
+			experimental: true,
 		},
 	}
 
@@ -2531,8 +2542,9 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 			validGC := &GatewayClass{
 				Valid: true,
 			}
-			resolver := newReferenceGrantResolver(test.refGrants)
-			gateways := buildGateways(test.gw, test.secretResolver, validGC, resolver, nil, test.experimental)
+
+			refGrantResolver := newReferenceGrantResolver(test.refGrants)
+			gateways := buildGateways(test.gw, resourceResolver, validGC, refGrantResolver, nil, test.experimental)
 			g.Expect(helpers.Diff(test.expected, gateways)).To(BeEmpty())
 		})
 	}

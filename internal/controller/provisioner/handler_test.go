@@ -190,20 +190,25 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 	batch = events.EventBatch{upsertEvent}
 	handler.HandleEventBatch(ctx, logger, batch)
 
-	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deployment), &appsv1.Deployment{})).ToNot(Succeed())
-
 	// do the same thing but when provisioner is not leader.
 	// non-leader should not delete resources, but instead track them
 	deployment.ResourceVersion = ""
-	g.Expect(fakeClient.Create(ctx, deployment)).To(Succeed())
+	deploymentNonLeader := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx-non-leader",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
+		},
+	}
+	g.Expect(fakeClient.Create(ctx, deploymentNonLeader)).To(Succeed())
 	provisioner.leader = false
 
-	upsertEvent = &events.UpsertEvent{Resource: deployment}
+	upsertEvent = &events.UpsertEvent{Resource: deploymentNonLeader}
 	batch = events.EventBatch{upsertEvent}
 	handler.HandleEventBatch(ctx, logger, batch)
 
 	g.Expect(provisioner.resourcesToDeleteOnStartup).To(HaveLen(1))
-	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deployment), &appsv1.Deployment{})).To(Succeed())
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deploymentNonLeader), &appsv1.Deployment{})).To(Succeed())
 }
 
 func TestHandleEventBatch_Delete(t *testing.T) {
@@ -361,6 +366,7 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	deleteEvent = &events.DeleteEvent{Type: gateway, NamespacedName: client.ObjectKeyFromObject(gateway)}
 	batch = events.EventBatch{deleteEvent}
 	handler.HandleEventBatch(ctx, logger, batch)
+	g.Expect(handler.store.isGatewayDeleting(client.ObjectKeyFromObject(gateway))).To(BeTrue())
 
 	g.Expect(provisioner.resourcesToDeleteOnStartup).To(Equal([]types.NamespacedName{
 		{
@@ -379,7 +385,6 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	handler.HandleEventBatch(ctx, logger, batch)
 
 	g.Expect(store.getGateway(client.ObjectKeyFromObject(gateway))).To(BeNil())
-	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deployment), &appsv1.Deployment{})).ToNot(Succeed())
 }
 
 func TestEventHandler_GetResourceVersion(t *testing.T) {
