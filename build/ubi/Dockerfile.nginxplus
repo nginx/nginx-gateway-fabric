@@ -6,9 +6,9 @@ ADD --link --chown=101:1001 https://cs.nginx.com/static/files/plus-9.repo nginx-
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:2ffc9bc521deb28ae11b336c298572b26fd523ccfb9c8812c6da63f651936610 AS ubi9-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi9@sha256:901482f9064b6bc427d617972180726fed0b2197701aaee227445f9b39cb03f5 AS ubi9-packages
 
-FROM redhat/ubi9-minimal:9.7-1769056855 AS ubi-nginx-plus
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7 AS ubi-nginx-plus
 
 RUN microdnf -y update glib2 && microdnf clean all
 
