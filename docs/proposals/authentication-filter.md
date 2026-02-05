@@ -701,6 +701,7 @@ When using the `Remote` mode, the `auth_jwt_key_request` directive is used in pl
 To improve the overall performance of remote requests, `auth_jwt_key_cache` can be specified to locally cache the JWKS received from the IdP. This prevents repeated calls to the IdP for a period of time.
 
 Here is an example of what the NGINX configuration would look like:
+
 ```nginx
 http {
     upstream backend_default {
@@ -750,6 +751,7 @@ Currently, the `NginxProxy` resource is the only way to define resolvers.
 This will set the resolvers at the `http` context, which will affect all configurations that require a resolver to function.
 
 Here is an example of an `NginxProxy` with an IPAddress resolver defined:
+
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha2
 kind: NginxProxy
@@ -770,6 +772,7 @@ We will need to document this aspect of the JWT Remote use case.
 JWT key caching will be `disabled` by default.
 This is to ensure that, by default, users don't encounter scenarios where stale keys are served.
 To enable caching, users can set `keyCache` with the duration they wish the JWKS to be cached form:
+
 ```yaml
 kind: AuthenticationFilter
 metadata:
@@ -796,6 +799,7 @@ This section will discuss JWT claims, as well as a proposed specification for co
 JWT claims are fields/attributes contained within a JSON Web Token. These handle authorization (AuthZ).
 
 Here is an example of a JWT payload containing the standard registered claims outlined in [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519#page-9):
+
 ```json
 {
   "iss": "https://issuer.example.com",
@@ -817,6 +821,7 @@ The JWT ID (`jti`) claim is a unique identifier for the token.
 NOTE: Both the Audience (`aud`) and Issuer (`iss`) claims in a JWT payload can be either a single string or an array. They will only ever be an array if it contains more than one value.
 
 Users may also choose to set custom claims. Common ones are `email` and `name`.
+
 ```json
 {
   // User defined claims
@@ -842,6 +847,7 @@ For example, the `user` claim will be `$jwt_claim_used` with the value of `john 
 
 It's possible that JWT payloads can contain nested claims. This is there certain, non-standard claims, like `roles` or `user`, are nested under other top-level claims.
 Here is an example where the `roles`, claims is nested under the new `realm_access` claim, and the `user` claim now contains the `tenant` claim as a nested claim:
+
 ```json
 {
   "realm_access": {
@@ -878,6 +884,7 @@ Let's say a user wants to enforce a token to contain one of two issuers, `https:
 For NGINX to manage this, a map must be defined to check the values stored in `$jwt_claim_iss`, and `$jwt_claim_aud`, returning a 1 if there is a match, or a 0.
 
 This map would look like this:
+
 ```nginx
 http{
     map $jwt_claim_iss $valid_jwt_iss {
@@ -894,6 +901,7 @@ http{
 ```
 
 We would then set `$valid_jwt_iss` and `$valid_jwt_aud` as required claims within the location:
+
 ```nginx
 http {
     map $jwt_claim_iss $valid_jwt_iss {
@@ -1031,7 +1039,7 @@ Since the email contains a dot, this needs to be processed the same way.
 The table below summarizes the capabilities enabled by the current JWT Authentication proposal.
 
 | Capability | API fields | NGINX directive | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Enable JWT authentication and set realm | `spec.type = "JWT"`; `spec.jwt.realm` | `auth_jwt "<realm>"` | Currently does not expose defining `token` |
 | Provide JWT keys from local JWKS (Secret) | `spec.jwt.mode = "File"`; `spec.jwt.file.secretRef.name`; Secret type `nginx.org/jwt`; data key `auth` | `auth_jwt_key_file /etc/nginx/secrets/jwt_auth_<namespace>_<secret-name>` | Secret must exist in same namespace and must be of type `nginx.org/jwt` |
 | Secret handling/validation for local JWKS | Secret type `nginx.org/jwt`; data key `auth`; `LocalObjectReference` | Validates presence/type/key; NGF loads JWKS into key file | Cross-namespace secrets not supported initially; future work may add `ReferenceGrant`-based access |
