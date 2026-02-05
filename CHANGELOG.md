@@ -6,49 +6,33 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.4.1
 
-n
-%%DATE%%
-
-FEATURES:
-
--
+_February 5, 2026_
 
 BUG FIXES:
 
--
-
-DOCUMENTATION:
-
--
+- Fix CVE-2026-1642 affecting NGINX OSS and NGINX Plus images.
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.4.1
--
-
-UPGRADE:
-
--
-
-KNOWN ISSUES:
-
--
+- Fix and update Helm json validation for `dnsResolver.addresses.value` type back to string.
 
 COMPATIBILITY:
 
-- Gateway API version: ``
-- Gateway API Inference Extension version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- NGINX Agent version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.4.1`
+- Gateway API Inference Extension version: `1.1.0`
+- NGINX version: `1.29.5`
+- NGINX Plus version: `R36`
+- NGINX Agent version: `v3.7.0`
+- Kubernetes version: `1.25+`
 
 CONTAINER IMAGES:
 
 - Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.4.1`
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.1`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.4.1`
-- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:2.4.1`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.2.1`
+
 ## Release 2.4.0
 
 _January 28, 2026_
