@@ -52,18 +52,30 @@ type ChangeProcessor interface {
 
 // ChangeProcessorConfig holds configuration parameters for ChangeProcessorImpl.
 type ChangeProcessorConfig struct {
-	Validators            validation.Validators
-	EventRecorder         events.EventRecorder
-	WAFFetcher            fetch.Fetcher
-	MustExtractGVK        kinds.MustExtractGVK
-	PlusSecrets           map[types.NamespacedName][]graph.PlusSecretFile
-	PLMSecrets            map[types.NamespacedName]*graph.PLMSecretConfig
-	Logger                logr.Logger
-	GatewayCtlrName       string
-	GatewayClassName      string
-	FeatureFlags          graph.FeatureFlags
+	// Validators validate resources according to data-plane specific rules.
+	Validators validation.Validators
+	// EventRecorder records events for Kubernetes resources.
+	EventRecorder events.EventRecorder
+	// WAFFetcher is an S3-compatible fetcher for WAF policy bundles from PLM storage.
+	WAFFetcher fetch.Fetcher
+	// MustExtractGVK is a function that extracts schema.GroupVersionKind from a client.Object.
+	MustExtractGVK kinds.MustExtractGVK
+	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
+	PlusSecrets map[types.NamespacedName][]graph.PlusSecretFile
+	// PLMSecrets holds metadata about PLM-related secrets for watching and re-creating the WAF fetcher.
+	PLMSecrets map[types.NamespacedName]*graph.PLMSecretConfig
+	// Logger is the logger for this Change Processor.
+	Logger logr.Logger
+	// GatewayCtlrName is the name of the Gateway controller.
+	GatewayCtlrName string
+	// GatewayClassName is the name of the GatewayClass resource.
+	GatewayClassName string
+	// FeatureFlags holds the feature flags for building the Graph.
+	FeatureFlags graph.FeatureFlags
+	// PLMInsecureSkipVerify skips TLS certificate verification for PLM storage connections.
 	PLMInsecureSkipVerify bool
-	Snippets              bool
+	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
+	Snippets bool
 }
 
 // ChangeProcessorImpl is an implementation of ChangeProcessor.

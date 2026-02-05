@@ -951,7 +951,7 @@
           "properties": {
             "credentialsSecretName": {
               "default": "",
-              "description": "The name of the Secret containing S3 credentials for PLM storage.\nIf the secret is in a different namespace, should be in form \"ns/name\", otherwise same namespace as NGF will be assumed.",
+              "description": "The name of the Secret containing S3 credentials for PLM storage.\nIf the secret is in a different namespace, should be in form \"ns/name\",\notherwise the control plane namespace (where the NGF Deployment runs) will be assumed.",
               "title": "credentialsSecretName",
               "type": "string"
             },

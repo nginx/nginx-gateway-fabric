@@ -8,12 +8,15 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
+// BundleState represents the state of a compiled bundle in PLM.
+type BundleState string
+
 // BundleStatus contains the bundle information from APPolicy/APLogConf status.
 // Based on the actual PLM CRD status structure: status.bundle.*.
 type BundleStatus struct {
 	// State is the current bundle state (pending, processing, ready, invalid).
-	State string
-	// Location is the path/URL where the compiled bundle is stored; only set when State == "ready".
+	State BundleState
+	// Location is the path/URL where the compiled bundle is stored; only set when State == StateReady.
 	Location string
 	// Sha256 is the SHA256 hash of the bundle file.
 	Sha256 string
@@ -55,13 +58,13 @@ type APLogConfStatus struct {
 // PLM Bundle State constants.
 const (
 	// StatePending indicates the bundle is pending compilation.
-	StatePending = "pending"
+	StatePending BundleState = "pending"
 	// StateProcessing indicates the bundle is being processed/compiled.
-	StateProcessing = "processing"
+	StateProcessing BundleState = "processing"
 	// StateReady indicates the bundle is compiled and ready for use.
-	StateReady = "ready"
+	StateReady BundleState = "ready"
 	// StateInvalid indicates the bundle failed validation or compilation.
-	StateInvalid = "invalid"
+	StateInvalid BundleState = "invalid"
 )
 
 // ExtractAPPolicyStatus extracts the relevant status fields from an unstructured APPolicy.
@@ -126,7 +129,7 @@ func extractBundleStatus(status map[string]any) BundleStatus {
 	}
 
 	if state, found, err := unstructured.NestedString(bundleMap, "state"); err == nil && found {
-		bundle.State = state
+		bundle.State = BundleState(state)
 	}
 
 	if location, found, err := unstructured.NestedString(bundleMap, "location"); err == nil && found {

@@ -252,7 +252,8 @@ nginxGateway:
     url: ""
 
     # -- The name of the Secret containing S3 credentials for PLM storage.
-    # If the secret is in a different namespace, should be in form "ns/name", otherwise same namespace as NGF will be assumed.
+    # If the secret is in a different namespace, should be in form "ns/name",
+    # otherwise the control plane namespace (where the NGF Deployment runs) will be assumed.
     credentialsSecretName: ""
 
     # -- TLS configuration for PLM storage connections.
