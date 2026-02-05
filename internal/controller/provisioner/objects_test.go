@@ -21,6 +21,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -149,16 +150,16 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, nginxIncludesConfigMapNameSuffix)))
 	validateLabelsAndAnnotations(cm)
-	g.Expect(cm.Data).To(HaveKey("main.conf"))
-	g.Expect(cm.Data["main.conf"]).To(ContainSubstring("info"))
+	g.Expect(cm.Data).To(HaveKey(configmaps.MainConfKey))
+	g.Expect(cm.Data[configmaps.MainConfKey]).To(ContainSubstring("info"))
 
 	cmObj = objects[2]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.GetName()).To(Equal(controller.CreateNginxResourceName(resourceName, nginxAgentConfigMapNameSuffix)))
 	validateLabelsAndAnnotations(cm)
-	g.Expect(cm.Data).To(HaveKey("nginx-agent.conf"))
-	g.Expect(cm.Data["nginx-agent.conf"]).To(ContainSubstring("command:"))
+	g.Expect(cm.Data).To(HaveKey(configmaps.AgentConfKey))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("command:"))
 
 	svcAcctObj := objects[3]
 	svcAcct, ok := svcAcctObj.(*corev1.ServiceAccount)
@@ -340,14 +341,14 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	cmObj := objects[1]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(cm.Data).To(HaveKey("main.conf"))
-	g.Expect(cm.Data["main.conf"]).To(ContainSubstring("debug"))
+	g.Expect(cm.Data).To(HaveKey(configmaps.MainConfKey))
+	g.Expect(cm.Data[configmaps.MainConfKey]).To(ContainSubstring("debug"))
 
 	cmObj = objects[2]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(cm.Data["nginx-agent.conf"]).To(ContainSubstring("level: debug"))
-	g.Expect(cm.Data["nginx-agent.conf"]).To(ContainSubstring("port: 8080"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("level: debug"))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("port: 8080"))
 
 	svcObj := objects[4]
 	svc, ok := svcObj.(*corev1.Service)
@@ -815,19 +816,19 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	cmObj := objects[4]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(cm.Data).To(HaveKey("mgmt.conf"))
-	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("usage_report endpoint=test.com;"))
-	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("ssl_verify off;"))
-	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("ssl_trusted_certificate"))
-	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("ssl_certificate"))
-	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("ssl_certificate_key"))
-	g.Expect(cm.Data["mgmt.conf"]).To(ContainSubstring("enforce_initial_report off"))
+	g.Expect(cm.Data).To(HaveKey(configmaps.MgmtConfKey))
+	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("usage_report endpoint=test.com;"))
+	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("ssl_verify off;"))
+	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("ssl_trusted_certificate"))
+	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("ssl_certificate"))
+	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("ssl_certificate_key"))
+	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("enforce_initial_report off"))
 
 	cmObj = objects[5]
 	cm, ok = cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(cm.Data).To(HaveKey("nginx-agent.conf"))
-	g.Expect(cm.Data["nginx-agent.conf"]).To(ContainSubstring("api-action"))
+	g.Expect(cm.Data).To(HaveKey(configmaps.AgentConfKey))
+	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("api-action"))
 
 	depObj := objects[8]
 	dep, ok := depObj.(*appsv1.Deployment)
@@ -1533,7 +1534,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 
 	bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data["events.conf"]).To(ContainSubstring("worker_connections 1024;"))
+	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 1024;"))
 
 	// Test with default worker connections (empty NginxProxy config)
 	nProxyCfgEmpty := &graph.EffectiveNginxProxy{}
@@ -1548,7 +1549,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 
 	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data["events.conf"]).To(ContainSubstring("worker_connections 1024;"))
+	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 1024;"))
 
 	// Test with custom worker connections
 	nProxyCfg := &graph.EffectiveNginxProxy{
@@ -1566,7 +1567,7 @@ func TestBuildNginxConfigMaps_WorkerConnections(t *testing.T) {
 
 	bootstrapCM, ok = configMaps[0].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(bootstrapCM.Data["events.conf"]).To(ContainSubstring("worker_connections 2048;"))
+	g.Expect(bootstrapCM.Data[configmaps.EventsConfKey]).To(ContainSubstring("worker_connections 2048;"))
 }
 
 func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
@@ -1617,7 +1618,7 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 
 	agentCM, ok := configMaps[1].(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	data := agentCM.Data["nginx-agent.conf"]
+	data := agentCM.Data[configmaps.AgentConfKey]
 
 	g.Expect(data).To(ContainSubstring("key1: val1"))
 	g.Expect(data).To(ContainSubstring("key2: val2"))

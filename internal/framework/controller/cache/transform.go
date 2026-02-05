@@ -5,7 +5,28 @@ import (
 	"k8s.io/client-go/tools/cache"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+)
+
+var (
+	secretKeys = []string{
+		secrets.AuthKey,
+		secrets.LicenseJWTKey,
+		secrets.CAKey,
+		secrets.TLSCertKey,
+		secrets.TLSKeyKey,
+		corev1.DockerConfigJsonKey,
+		corev1.DockerConfigKey,
+	}
+
+	configMapKeys = []string{
+		secrets.CAKey,
+		configmaps.AgentConfKey,
+		configmaps.MainConfKey,
+		configmaps.EventsConfKey,
+		configmaps.MgmtConfKey,
+	}
 )
 
 // TransformGatewayClass filters GatewayClass objects to only include those
@@ -36,18 +57,9 @@ func TransformSecret() cache.TransformFunc {
 			return nil, nil
 		}
 
-		keys := []string{
-			secrets.AuthKey,
-			secrets.LicenseJWTKey,
-			secrets.CAKey,
-			secrets.TLSCertKey,
-			secrets.TLSKeyKey,
-			corev1.DockerConfigJsonKey,
-			corev1.DockerConfigKey,
-		}
 		newData := make(map[string][]byte)
 		found := false
-		for _, k := range keys {
+		for _, k := range secretKeys {
 			if v, ok := secret.Data[k]; ok {
 				newData[k] = v
 				found = true
@@ -74,18 +86,35 @@ func TransformConfigMap() cache.TransformFunc {
 			return nil, nil
 		}
 
-		vStr, foundStr := cm.Data[secrets.CAKey]
-		vBin, foundBin := cm.BinaryData[secrets.CAKey]
+		newData := make(map[string]string)
+		newBinaryData := make(map[string][]byte)
+		var dataFound, binaryDataFound bool
 
-		switch {
-		case foundStr:
-			cm.Data = map[string]string{secrets.CAKey: vStr}
-			cm.BinaryData = nil
-		case foundBin:
-			cm.Data = nil
-			cm.BinaryData = map[string][]byte{secrets.CAKey: vBin}
-		default:
+		for _, k := range configMapKeys {
+			if v, ok := cm.Data[k]; ok {
+				newData[k] = v
+				dataFound = true
+			}
+			if v, ok := cm.BinaryData[k]; ok {
+				newBinaryData[k] = v
+				binaryDataFound = true
+			}
+		}
+
+		if !dataFound && !binaryDataFound {
 			return nil, nil
+		}
+
+		if dataFound {
+			cm.Data = newData
+		} else {
+			cm.Data = nil
+		}
+
+		if binaryDataFound {
+			cm.BinaryData = newBinaryData
+		} else {
+			cm.BinaryData = nil
 		}
 
 		cm.SetManagedFields(nil)
