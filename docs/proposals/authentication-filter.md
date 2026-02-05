@@ -322,7 +322,7 @@ type RemoteTLSConfig struct {
   //
   // +optional
   // +kubebuilder:default=true
-  SNI *bool `json:"sni,omitempty"` 
+  SNI *bool `json:"sni,omitempty"`
 
   // SNIName sets a custom SNI.
   // By default, NGINX uses the host from proxy_pass.
@@ -330,7 +330,7 @@ type RemoteTLSConfig struct {
   // https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name
   //
   // +optional
-  SNIName *string `json:"sniName,omitempty"` 
+  SNIName *string `json:"sniName,omitempty"`
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
@@ -555,9 +555,9 @@ spec:
 ```
 
 Optionally, users can also toggle and configure SNI capabilities through `remote.tls.sni` and `remote.tls.sniName`.
-SNI will be enabled by default using the (proxy_ssl_server_name)[https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_server_name] directive.
+SNI will be enabled by default using the [proxy_ssl_server_name](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_server_name) directive.
 By default, NGINX will use the server name defined in the `proxy_pass` when `proxy_ssl_server_name` is on.
-Users can optionally set a specific host using `remote.tls.sniName`, which will configure the (proxy_ssl_name)[https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name] directive
+Users can optionally set a specific host using `remote.tls.sniName`, which will configure the [proxy_ssl_name](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name) directive
 
 ### Secret creation and reference for JWT Auth
 
@@ -838,7 +838,7 @@ Here is an example of a JWT payload containing the standard registered claims ou
 The Subject (`sub`) claim typically contains details on the user such as their username.
 The Audience (`aud`) claim identifies what access the claim is intended for. For example, this JWT is claiming to have API and CLI access.
 The Issuer (`iss`) claim identifies who issued this token.
-The Expiration Time (`exp`), Not Before (`nbf`) and Issued At (`iat`) claims help with the lifecycle of a token. They ensure requests using tokens outside these time constrains are rejected. The (auth_jwt_leeway)[https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway] directive interacts with the `exp` and `nbf` claims. When these two claims are verified, this directive will set a maximum allowable leeway to compensate for (clock skew)[https://en.wikipedia.org/wiki/Clock_skew].
+The Expiration Time (`exp`), Not Before (`nbf`) and Issued At (`iat`) claims help with the lifecycle of a token. They ensure requests using tokens outside these time constrains are rejected. The [auth_jwt_leeway](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway) directive interacts with the `exp` and `nbf` claims. When these two claims are verified, this directive will set a maximum allowable leeway to compensate for [clock skew](https://en.wikipedia.org/wiki/Clock_skew).
 The JWT ID (`jti`) claim is a unique identifier for the token.
 
 NOTE: Both the Audience (`aud`) and Issuer (`iss`) claims in a JWT payload can be either a single string or an array. They will only ever be an array if it contains more than one value.
@@ -893,12 +893,12 @@ When NGINX successfully validates a token, the `iss`, `aud` and `sub` claims are
 
 There are two ways to enforce claims.
 
-1. The presence of the claim.
+- The presence of the claim.
 
 This is the simplest, and least recommended approach. By declaring `auth_jwt_require $jwt_claim_iss`, NGINX will check for the presence or absence of this claim.
 If the claim is absent, NGINX throws an error. It will not validate the value of the claim.
 
-2. Validate claim values.
+- Validate claim values.
 
 This approach is provides a more secure and robust experience.
 
@@ -984,6 +984,7 @@ spec:
 ```
 
 This spec is configured to process a JWT payload with these claims:
+
 ```json
 {
   // Standard registered claims
@@ -1003,6 +1004,7 @@ The main difference will be how NGINX expected them to be defined and processed.
 
 Let's start with the JWT payload this time.
 These are the claims we will process. This time `roles` is nested under `realm_access`:
+
 ```json
 {
   // Standard registered claims
