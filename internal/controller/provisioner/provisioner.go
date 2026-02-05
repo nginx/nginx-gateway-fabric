@@ -258,14 +258,24 @@ func (p *NginxProvisioner) provisionNginx(
 			func(ctx context.Context) (bool, error) {
 				res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, obj, objectSpecSetter(obj))
 				if upsertErr != nil {
-					if apierrors.IsInvalid(upsertErr) { // log this error at the error level
+					switch {
+					case apierrors.IsAlreadyExists(upsertErr):
+						p.cfg.Logger.V(1).Info(
+							"NGINX resource already exists",
+							"namespace", gateway.GetNamespace(),
+							"name", resourceName,
+							"error", upsertErr.Error(),
+						)
+
+						return true, nil
+					case apierrors.IsInvalid(upsertErr): // log this error at the error level
 						p.cfg.Logger.Error(
 							upsertErr,
 							"Retrying CreateOrUpdate for nginx resource after error",
 							"namespace", gateway.GetNamespace(),
 							"name", resourceName,
 						)
-					} else {
+					default:
 						p.cfg.Logger.V(1).Info(
 							"Retrying CreateOrUpdate for nginx resource after error",
 							"namespace", gateway.GetNamespace(),
@@ -273,8 +283,10 @@ func (p *NginxProvisioner) provisionNginx(
 							"error", upsertErr.Error(),
 						)
 					}
+
 					return false, nil
 				}
+
 				return true, nil
 			},
 		); err != nil {
