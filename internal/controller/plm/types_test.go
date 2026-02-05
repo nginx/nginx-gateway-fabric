@@ -37,7 +37,7 @@ func TestExtractAPPolicyStatus(t *testing.T) {
 			},
 			expected: &APPolicyStatus{
 				Bundle: BundleStatus{
-					State:    "ready",
+					State:    StateReady,
 					Location: "s3://default/bundles/policy.tgz",
 					Sha256:   "abc123",
 				},
@@ -77,7 +77,7 @@ func TestExtractAPPolicyStatus(t *testing.T) {
 			},
 			expected: &APPolicyStatus{
 				Bundle: BundleStatus{
-					State: "pending",
+					State: StatePending,
 				},
 			},
 		},
@@ -99,7 +99,7 @@ func TestExtractAPPolicyStatus(t *testing.T) {
 			},
 			expected: &APPolicyStatus{
 				Bundle: BundleStatus{
-					State: "invalid",
+					State: StateInvalid,
 				},
 				Processing: ProcessingStatus{
 					Datetime:   "2026-02-04T21:13:54Z",
@@ -150,7 +150,7 @@ func TestExtractAPLogConfStatus(t *testing.T) {
 			},
 			expected: &APLogConfStatus{
 				Bundle: BundleStatus{
-					State:    "ready",
+					State:    StateReady,
 					Location: "s3://default/bundles/logconf.tgz",
 					Sha256:   "def456",
 				},

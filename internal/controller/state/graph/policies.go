@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -92,6 +93,9 @@ const (
 	// WAFBundleTypeLogProfile indicates an ApLogConf bundle.
 	WAFBundleTypeLogProfile WAFBundleType = "logprofile"
 )
+
+// fetchBundleTimeout is the timeout for fetching WAF bundles from PLM storage.
+const fetchBundleTimeout = 30 * time.Second
 
 const (
 	gatewayGroupKind = v1.GroupName + "/" + kinds.Gateway
@@ -859,16 +863,16 @@ func processApPolicyReference(
 	}
 
 	if bundleData != nil {
-		bundleKey := wafBundleKeyForApPolicy(apPolicyNsName)
+		bundleKey := wafBundleKey(apPolicyNsName)
 		output.Bundles[bundleKey] = bundleData
 	}
 
 	return true
 }
 
-// wafBundleKeyForApPolicy generates a file-safe bundle key for an ApPolicy.
+// wafBundleKey generates a file-safe bundle key for a namespaced resource.
 // Format: "namespace_name" (uses underscore to be file-path safe).
-func wafBundleKeyForApPolicy(nsName types.NamespacedName) WAFBundleKey {
+func wafBundleKey(nsName types.NamespacedName) WAFBundleKey {
 	return WAFBundleKey(fmt.Sprintf("%s_%s", nsName.Namespace, nsName.Name))
 }
 
@@ -924,16 +928,10 @@ func processSecurityLogs(
 		if bundleData != nil {
 			// Use ApLogConf nsname as bundle key - this ensures the same ApLogConf
 			// referenced by multiple WGBPolicies or SecurityLogs is only stored once.
-			bundleKey := wafBundleKeyForApLogConf(apLogConfNsName)
+			bundleKey := wafBundleKey(apLogConfNsName)
 			output.Bundles[bundleKey] = bundleData
 		}
 	}
-}
-
-// wafBundleKeyForApLogConf generates a file-safe bundle key for an ApLogConf.
-// Format: "namespace_name" (uses underscore to be file-path safe).
-func wafBundleKeyForApLogConf(nsName types.NamespacedName) WAFBundleKey {
-	return WAFBundleKey(fmt.Sprintf("%s_%s", nsName.Namespace, nsName.Name))
 }
 
 // resolveApPolicyReference resolves the namespace for an ApPolicy reference.
@@ -954,6 +952,28 @@ func resolveApLogConfReference(ref *ngfAPIv1alpha1.ApLogConfReference, defaultNs
 	return types.NamespacedName{Namespace: ns, Name: ref.Name}
 }
 
+// bundleConditionFuncs holds resource-specific condition constructors for bundle fetching.
+type bundleConditionFuncs struct {
+	notCompiled  func(name string) conditions.Condition
+	invalid      func(errMsg string) conditions.Condition
+	noLocation   func(name string) conditions.Condition
+	unknownState func(state string) conditions.Condition
+}
+
+var apPolicyCondFuncs = bundleConditionFuncs{
+	notCompiled:  conditions.NewPolicyRefsNotResolvedApPolicyNotCompiled,
+	invalid:      conditions.NewPolicyRefsNotResolvedApPolicyInvalid,
+	noLocation:   conditions.NewPolicyRefsNotResolvedApPolicyNoLocation,
+	unknownState: conditions.NewPolicyRefsNotResolvedApPolicyUnknownState,
+}
+
+var apLogConfCondFuncs = bundleConditionFuncs{
+	notCompiled:  conditions.NewPolicyRefsNotResolvedApLogConfNotCompiled,
+	invalid:      conditions.NewPolicyRefsNotResolvedApLogConfInvalid,
+	noLocation:   conditions.NewPolicyRefsNotResolvedApLogConfNoLocation,
+	unknownState: conditions.NewPolicyRefsNotResolvedApLogConfUnknownState,
+}
+
 // fetchApPolicyBundle fetches the compiled bundle for an ApPolicy.
 // Returns nil bundle if the policy is not yet compiled (pending state).
 // Returns a condition if there's an error that should invalidate the policy.
@@ -962,64 +982,7 @@ func fetchApPolicyBundle(
 	status *plm.APPolicyStatus,
 	fetcher fetch.Fetcher,
 ) (*WAFBundleData, *conditions.Condition) {
-	switch status.Bundle.State {
-	case "", plm.StatePending, plm.StateProcessing:
-		// Not yet compiled - this is not an error, just pending.
-		// Empty state means PLM has not yet set the status on this resource.
-		cond := conditions.NewPolicyRefsNotResolvedApPolicyNotCompiled(nsName.String())
-		return nil, &cond
-	case plm.StateInvalid:
-		// Compilation failed
-		errMsg := "ApPolicy compilation failed"
-		if len(status.Processing.Errors) > 0 {
-			errMsg = strings.Join(status.Processing.Errors, "; ")
-		}
-		cond := conditions.NewPolicyRefsNotResolvedApPolicyInvalid(errMsg)
-		return nil, &cond
-	case plm.StateReady:
-		// Ready to fetch
-		if status.Bundle.Location == "" {
-			cond := conditions.NewPolicyRefsNotResolvedApPolicyNoLocation(nsName.String())
-			return nil, &cond
-		}
-	default:
-		// Unknown state
-		cond := conditions.NewPolicyRefsNotResolvedApPolicyUnknownState(status.Bundle.State)
-		return nil, &cond
-	}
-
-	// Fetch the bundle from PLM storage
-	if fetcher == nil {
-		// No fetcher configured - skip fetching but allow policy to be valid
-		// This allows testing without actual PLM storage
-		return &WAFBundleData{
-			Location:   status.Bundle.Location,
-			Checksum:   status.Bundle.Sha256,
-			BundleType: WAFBundleTypePolicy,
-		}, nil
-	}
-
-	bucket, key := parseBundleLocation(status.Bundle.Location)
-	data, err := fetcher.GetObject(context.Background(), bucket, key)
-	if err != nil {
-		cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
-		return nil, &cond
-	}
-
-	// Verify checksum if provided
-	if status.Bundle.Sha256 != "" {
-		if err := verifyChecksum(data, status.Bundle.Sha256); err != nil {
-			cond := conditions.NewPolicyNotProgrammedIntegrityError(err.Error())
-			return nil, &cond
-		}
-	}
-
-	return &WAFBundleData{
-		Data:       data,
-		Location:   status.Bundle.Location,
-		Checksum:   status.Bundle.Sha256,
-		BundleType: WAFBundleTypePolicy,
-	}, nil
+	return fetchBundle(nsName, status.Bundle, status.Processing, fetcher, WAFBundleTypePolicy, apPolicyCondFuncs)
 }
 
 // fetchApLogConfBundle fetches the compiled bundle for an ApLogConf.
@@ -1028,46 +991,67 @@ func fetchApLogConfBundle(
 	status *plm.APLogConfStatus,
 	fetcher fetch.Fetcher,
 ) (*WAFBundleData, *conditions.Condition) {
-	switch status.Bundle.State {
+	return fetchBundle(nsName, status.Bundle, status.Processing, fetcher, WAFBundleTypeLogProfile, apLogConfCondFuncs)
+}
+
+// fetchBundle is the shared implementation for fetching compiled bundles from PLM storage.
+// It validates the bundle state, fetches the data, and verifies checksums.
+func fetchBundle(
+	nsName types.NamespacedName,
+	bundle plm.BundleStatus,
+	processing plm.ProcessingStatus,
+	fetcher fetch.Fetcher,
+	bundleType WAFBundleType,
+	condFuncs bundleConditionFuncs,
+) (*WAFBundleData, *conditions.Condition) {
+	switch bundle.State {
 	case "", plm.StatePending, plm.StateProcessing:
+		// Not yet compiled - this is not an error, just pending.
 		// Empty state means PLM has not yet set the status on this resource.
-		cond := conditions.NewPolicyRefsNotResolvedApLogConfNotCompiled(nsName.String())
+		cond := condFuncs.notCompiled(nsName.String())
 		return nil, &cond
 	case plm.StateInvalid:
-		errMsg := "ApLogConf compilation failed"
-		if len(status.Processing.Errors) > 0 {
-			errMsg = strings.Join(status.Processing.Errors, "; ")
+		// Compilation failed
+		errMsg := "compilation failed"
+		if len(processing.Errors) > 0 {
+			errMsg = strings.Join(processing.Errors, "; ")
 		}
-		cond := conditions.NewPolicyRefsNotResolvedApLogConfInvalid(errMsg)
+		cond := condFuncs.invalid(errMsg)
 		return nil, &cond
 	case plm.StateReady:
-		if status.Bundle.Location == "" {
-			cond := conditions.NewPolicyRefsNotResolvedApLogConfNoLocation(nsName.String())
+		if bundle.Location == "" {
+			cond := condFuncs.noLocation(nsName.String())
 			return nil, &cond
 		}
 	default:
-		cond := conditions.NewPolicyRefsNotResolvedApLogConfUnknownState(status.Bundle.State)
+		cond := condFuncs.unknownState(string(bundle.State))
 		return nil, &cond
 	}
 
+	// No fetcher configured - skip fetching but allow policy to be valid.
+	// This allows testing without actual PLM storage.
 	if fetcher == nil {
 		return &WAFBundleData{
-			Location:   status.Bundle.Location,
-			Checksum:   status.Bundle.Sha256,
-			BundleType: WAFBundleTypeLogProfile,
+			Location:   bundle.Location,
+			Checksum:   bundle.Sha256,
+			BundleType: bundleType,
 		}, nil
 	}
 
-	bucket, key := parseBundleLocation(status.Bundle.Location)
-	data, err := fetcher.GetObject(context.Background(), bucket, key)
+	bucket, key := parseBundleLocation(bundle.Location)
+
+	ctx, cancel := context.WithTimeout(context.Background(), fetchBundleTimeout)
+	defer cancel()
+
+	data, err := fetcher.GetObject(ctx, bucket, key)
 	if err != nil {
 		cond := conditions.NewPolicyNotProgrammedBundleFetchError(err.Error())
 		return nil, &cond
 	}
 
 	// Verify checksum if provided
-	if status.Bundle.Sha256 != "" {
-		if err := verifyChecksum(data, status.Bundle.Sha256); err != nil {
+	if bundle.Sha256 != "" {
+		if err := verifyChecksum(data, bundle.Sha256); err != nil {
 			cond := conditions.NewPolicyNotProgrammedIntegrityError(err.Error())
 			return nil, &cond
 		}
@@ -1075,9 +1059,9 @@ func fetchApLogConfBundle(
 
 	return &WAFBundleData{
 		Data:       data,
-		Location:   status.Bundle.Location,
-		Checksum:   status.Bundle.Sha256,
-		BundleType: WAFBundleTypeLogProfile,
+		Location:   bundle.Location,
+		Checksum:   bundle.Sha256,
+		BundleType: bundleType,
 	}, nil
 }
 

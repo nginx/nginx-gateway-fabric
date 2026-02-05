@@ -379,7 +379,7 @@ func createPolicyManager(
 		},
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFGatewayBindingPolicy{}),
-			Validator: waf.NewValidator(validator),
+			Validator: waf.NewValidator(),
 		},
 	}
 
@@ -985,6 +985,20 @@ const (
 	plmSecretAccessKeyField = "seaweedfs_admin_secret"
 )
 
+// parseSecretNsName parses a secret name that may include a namespace prefix (namespace/name format).
+// If no namespace prefix is present, the provided defaultNamespace is used.
+func parseSecretNsName(secretName, defaultNamespace string) types.NamespacedName {
+	nsName := types.NamespacedName{
+		Namespace: defaultNamespace,
+		Name:      secretName,
+	}
+	if parts := strings.SplitN(secretName, "/", 2); len(parts) == 2 {
+		nsName.Namespace = parts[0]
+		nsName.Name = parts[1]
+	}
+	return nsName
+}
+
 // createPLMSecretMetadata creates the PLM secrets metadata for watching and TLS configuration.
 // This registers the secrets so they will be watched and their content can be used to update
 // the fetcher's TLS configuration when they change.
@@ -999,22 +1013,9 @@ func createPLMSecretMetadata(
 		return plmSecrets
 	}
 
-	// Helper to parse secret name which may include namespace (namespace/name format)
-	parseSecretName := func(secretName string) types.NamespacedName {
-		nsName := types.NamespacedName{
-			Namespace: namespace,
-			Name:      secretName,
-		}
-		if parts := strings.SplitN(secretName, "/", 2); len(parts) == 2 {
-			nsName.Namespace = parts[0]
-			nsName.Name = parts[1]
-		}
-		return nsName
-	}
-
 	// Register credentials secret if provided
 	if plmCfg.CredentialsSecretName != "" {
-		nsName := parseSecretName(plmCfg.CredentialsSecretName)
+		nsName := parseSecretNsName(plmCfg.CredentialsSecretName, namespace)
 		plmSecrets[nsName] = &graph.PLMSecretConfig{
 			Type: graph.PLMSecretTypeCredentials,
 		}
@@ -1022,7 +1023,7 @@ func createPLMSecretMetadata(
 
 	// Register TLS CA certificate secret if provided
 	if plmCfg.TLSCACertSecretName != "" {
-		nsName := parseSecretName(plmCfg.TLSCACertSecretName)
+		nsName := parseSecretNsName(plmCfg.TLSCACertSecretName, namespace)
 		plmSecrets[nsName] = &graph.PLMSecretConfig{
 			Type: graph.PLMSecretTypeTLSCA,
 		}
@@ -1030,7 +1031,7 @@ func createPLMSecretMetadata(
 
 	// Register TLS client certificate secret if provided
 	if plmCfg.TLSClientSSLSecretName != "" {
-		nsName := parseSecretName(plmCfg.TLSClientSSLSecretName)
+		nsName := parseSecretNsName(plmCfg.TLSClientSSLSecretName, namespace)
 		plmSecrets[nsName] = &graph.PLMSecretConfig{
 			Type: graph.PLMSecretTypeTLSClient,
 		}
@@ -1055,14 +1056,7 @@ func createWAFFetcher(
 
 	// Configure credentials if secret name is provided
 	if plmCfg.CredentialsSecretName != "" {
-		secretNsName := types.NamespacedName{
-			Namespace: namespace,
-			Name:      plmCfg.CredentialsSecretName,
-		}
-		if parts := strings.SplitN(plmCfg.CredentialsSecretName, "/", 2); len(parts) == 2 {
-			secretNsName.Namespace = parts[0]
-			secretNsName.Name = parts[1]
-		}
+		secretNsName := parseSecretNsName(plmCfg.CredentialsSecretName, namespace)
 
 		secret, err := getValidatedSecret(reader, secretNsName, plmSecretAccessKeyField)
 		if err != nil {

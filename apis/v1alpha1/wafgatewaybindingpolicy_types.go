@@ -35,10 +35,6 @@ type WAFGatewayBindingPolicyList struct {
 }
 
 // WAFGatewayBindingPolicySpec defines the desired state of a WAFGatewayBindingPolicy.
-//
-// +kubebuilder:validation:XValidation:message="apPolicySource is required when securityLogs are specified",rule="!has(self.securityLogs) || has(self.apPolicySource)"
-//
-//nolint:lll
 type WAFGatewayBindingPolicySpec struct {
 	// TargetRefs identifies API object(s) to apply the policy to.
 	// Objects must be in the same namespace as the policy.
@@ -57,9 +53,7 @@ type WAFGatewayBindingPolicySpec struct {
 	// ApPolicySource references the ApPolicy CRD managed by PLM.
 	// The ApPolicy contains the WAF policy definition which PLM compiles and stores.
 	// NGF watches the ApPolicy status for the compiled bundle location.
-	//
-	// +optional
-	ApPolicySource *ApPolicyReference `json:"apPolicySource,omitempty"`
+	ApPolicySource *ApPolicyReference `json:"apPolicySource"`
 
 	// SecurityLogs defines security logging configurations.
 	// Each entry references an ApLogConf CRD managed by PLM for log profile compilation.
@@ -73,14 +67,16 @@ type WAFGatewayBindingPolicySpec struct {
 // The ApPolicy CRD is managed by PLM and contains WAF policy definitions.
 type ApPolicyReference struct {
 	Namespace *string `json:"namespace,omitempty"`
-	Name      string  `json:"name"`
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 }
 
 // ApLogConfReference references an ApLogConf CRD by name and namespace.
 // The ApLogConf CRD is managed by PLM and contains logging profile definitions.
 type ApLogConfReference struct {
 	Namespace *string `json:"namespace,omitempty"`
-	Name      string  `json:"name"`
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 }
 
 // WAFSecurityLog defines security logging configuration for app_protect_security_log directives.

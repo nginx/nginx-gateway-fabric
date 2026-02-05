@@ -128,15 +128,20 @@ const (
 	WAFProgrammedConditionType v1.PolicyConditionType = "Programmed"
 
 	// PolicyReasonResolvedRefs is used when all references are resolved.
+	// NOTE: Not defined in upstream Gateway API (which only provides Accepted-related reasons).
+	// This is an NGF-specific reason for WAF policy reference resolution.
 	PolicyReasonResolvedRefs v1.PolicyConditionReason = "ResolvedRefs"
 
 	// PolicyReasonProgrammed is used when the policy is deployed to the data plane.
+	// NOTE: Not defined in upstream Gateway API. NGF-specific reason for WAF data plane deployment.
 	PolicyReasonProgrammed v1.PolicyConditionReason = "Programmed"
 
 	// PolicyReasonInvalidRef is used when a referenced resource does not exist or is not valid.
+	// NOTE: Not defined in upstream Gateway API. NGF-specific reason for WAF reference errors.
 	PolicyReasonInvalidRef v1.PolicyConditionReason = "InvalidRef"
 
 	// PolicyReasonRefNotPermitted is used when a cross-namespace reference is not allowed.
+	// NOTE: Not defined in upstream Gateway API. NGF-specific reason for WAF cross-namespace issues.
 	PolicyReasonRefNotPermitted v1.PolicyConditionReason = "RefNotPermitted"
 
 	// PolicyReasonFetchError is used when a bundle cannot be fetched from PLM storage.

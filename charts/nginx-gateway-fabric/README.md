@@ -276,7 +276,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.name` | The name of the NGINX Gateway Fabric deployment - if not present, then by default uses release name given during installation. | string | `""` |
 | `nginxGateway.nodeSelector` | The nodeSelector of the NGINX Gateway Fabric control plane pod. | object | `{}` |
 | `nginxGateway.plmStorage` | PLM (Policy Lifecycle Manager) storage configuration for WAF bundles. Used when WAF is enabled to fetch APPolicy and APLogConf bundles from S3-compatible storage. | object | `{"credentialsSecretName":"","tls":{"caCertSecretName":"","clientSSLSecretName":"","insecureSkipVerify":false},"url":""}` |
-| `nginxGateway.plmStorage.credentialsSecretName` | The name of the Secret containing S3 credentials for PLM storage. If the secret is in a different namespace, should be in form "ns/name", otherwise same namespace as NGF will be assumed. | string | `""` |
+| `nginxGateway.plmStorage.credentialsSecretName` | The name of the Secret containing S3 credentials for PLM storage. If the secret is in a different namespace, should be in form "ns/name", otherwise the control plane namespace (where the NGF Deployment runs) will be assumed. | string | `""` |
 | `nginxGateway.plmStorage.tls` | TLS configuration for PLM storage connections. | object | `{"caCertSecretName":"","clientSSLSecretName":"","insecureSkipVerify":false}` |
 | `nginxGateway.plmStorage.tls.caCertSecretName` | Name of the secret for the CA certificate file for TLS verification. | string | `""` |
 | `nginxGateway.plmStorage.tls.clientSSLSecretName` | Name of the secret for the client for mutual TLS. | string | `""` |

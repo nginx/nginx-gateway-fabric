@@ -21,6 +21,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/plm"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch/fetchfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -2747,34 +2748,46 @@ func TestParseBundleLocation(t *testing.T) {
 func TestVerifyChecksum(t *testing.T) {
 	t.Parallel()
 
-	data := []byte("test bundle data")
+	tests := []struct {
+		name      string
+		checksum  string
+		errSubstr string
+		data      []byte
+		expectErr bool
+	}{
+		{
+			name:     "matching checksum",
+			data:     []byte("test bundle data"),
+			checksum: "6f95d18247f958c7253d542229a427db008152f02856bd52f3023cb610ecdf21",
+		},
+		{
+			name:      "mismatching checksum",
+			data:      []byte("test bundle data"),
+			checksum:  "0000000000000000000000000000000000000000000000000000000000000000",
+			expectErr: true,
+			errSubstr: "checksum mismatch",
+		},
+		{
+			name:     "empty data with correct checksum",
+			data:     []byte{},
+			checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		},
+	}
 
-	t.Run("matching checksum", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-		// SHA256 of "test bundle data"
-		err := verifyChecksum(data, "6f95d18247f958c7253d542229a427db008152f02856bd52f3023cb610ecdf21")
-		g.Expect(err).ToNot(HaveOccurred())
-	})
-
-	t.Run("mismatching checksum", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		err := verifyChecksum(data, "0000000000000000000000000000000000000000000000000000000000000000")
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("checksum mismatch"))
-	})
-
-	t.Run("empty data with correct checksum", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		// SHA256 of empty data
-		err := verifyChecksum([]byte{}, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
-		g.Expect(err).ToNot(HaveOccurred())
-	})
+			err := verifyChecksum(tc.data, tc.checksum)
+			if tc.expectErr {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tc.errSubstr))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+		})
+	}
 }
 
 func TestResolveApPolicyReference(t *testing.T) {
@@ -2862,251 +2875,232 @@ func TestFetchApPolicyBundle(t *testing.T) {
 
 	nsName := types.NamespacedName{Namespace: "test", Name: "my-policy"}
 
-	t.Run("empty state returns not compiled condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{State: ""},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, nil)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-		g.Expect(cond.Message).To(ContainSubstring("pending compilation"))
-	})
-
-	t.Run("pending state returns not compiled condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{State: plm.StatePending},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, nil)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-		g.Expect(cond.Message).To(ContainSubstring("pending compilation"))
-	})
-
-	t.Run("processing state returns not compiled condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{State: plm.StateProcessing},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, nil)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-	})
-
-	t.Run("invalid state with errors returns invalid condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{State: plm.StateInvalid},
-			Processing: plm.ProcessingStatus{
-				Errors: []string{"syntax error in policy", "invalid directive"},
+	tests := []struct {
+		fetcher  fetch.Fetcher
+		status   *plm.APPolicyStatus
+		validate func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition)
+		name     string
+	}{
+		{
+			name: "empty state returns not compiled condition",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{State: plm.BundleState("")},
 			},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, nil)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-		g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonInvalidRef)))
-		g.Expect(cond.Message).To(ContainSubstring("syntax error in policy"))
-		g.Expect(cond.Message).To(ContainSubstring("invalid directive"))
-	})
-
-	t.Run("invalid state without errors returns generic message", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{State: plm.StateInvalid},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, nil)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Message).To(ContainSubstring("compilation failed"))
-	})
-
-	t.Run("ready state with no location returns no location condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{State: plm.StateReady, Location: ""},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, nil)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-		g.Expect(cond.Message).To(ContainSubstring("no bundle location"))
-	})
-
-	t.Run("unknown state returns unknown state condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{State: "some-unknown-state"},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, nil)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-		g.Expect(cond.Message).To(ContainSubstring("unknown state"))
-		g.Expect(cond.Message).To(ContainSubstring("some-unknown-state"))
-	})
-
-	t.Run("ready state with nil fetcher returns bundle data without fetching", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{
-				State:    plm.StateReady,
-				Location: "s3://default/bundles/policy.tgz",
-				Sha256:   "abc123",
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
+				g.Expect(cond.Message).To(ContainSubstring("pending compilation"))
 			},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, nil)
-		g.Expect(cond).To(BeNil())
-		g.Expect(bundle).ToNot(BeNil())
-		g.Expect(bundle.Location).To(Equal("s3://default/bundles/policy.tgz"))
-		g.Expect(bundle.Checksum).To(Equal("abc123"))
-		g.Expect(bundle.BundleType).To(Equal(WAFBundleTypePolicy))
-		g.Expect(bundle.Data).To(BeNil())
-	})
-
-	t.Run("ready state with fetcher returns fetched bundle data", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		bundleData := []byte("bundle-content")
-		fakeFetcher := &fetchfakes.FakeFetcher{}
-		fakeFetcher.GetObjectReturns(bundleData, nil)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{
-				State:    plm.StateReady,
-				Location: "s3://default/bundles/policy.tgz",
+		},
+		{
+			name: "pending state returns not compiled condition",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{State: plm.StatePending},
 			},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, fakeFetcher)
-		g.Expect(cond).To(BeNil())
-		g.Expect(bundle).ToNot(BeNil())
-		g.Expect(bundle.Data).To(Equal(bundleData))
-		g.Expect(bundle.BundleType).To(Equal(WAFBundleTypePolicy))
-
-		g.Expect(fakeFetcher.GetObjectCallCount()).To(Equal(1))
-		_, bucket, key := fakeFetcher.GetObjectArgsForCall(0)
-		g.Expect(bucket).To(Equal("default"))
-		g.Expect(key).To(Equal("bundles/policy.tgz"))
-	})
-
-	t.Run("fetch error returns programmed condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		fakeFetcher := &fetchfakes.FakeFetcher{}
-		fakeFetcher.GetObjectReturns(nil, errors.New("connection refused"))
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{
-				State:    plm.StateReady,
-				Location: "s3://default/bundles/policy.tgz",
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
+				g.Expect(cond.Message).To(ContainSubstring("pending compilation"))
 			},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, fakeFetcher)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
-		g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonFetchError)))
-		g.Expect(cond.Message).To(ContainSubstring("connection refused"))
-	})
-
-	t.Run("checksum match succeeds", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		bundleData := []byte("test bundle data")
-		fakeFetcher := &fetchfakes.FakeFetcher{}
-		fakeFetcher.GetObjectReturns(bundleData, nil)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{
-				State:    plm.StateReady,
-				Location: "s3://default/bundles/policy.tgz",
-				Sha256:   "6f95d18247f958c7253d542229a427db008152f02856bd52f3023cb610ecdf21",
+		},
+		{
+			name: "processing state returns not compiled condition",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{State: plm.StateProcessing},
 			},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, fakeFetcher)
-		g.Expect(cond).To(BeNil())
-		g.Expect(bundle).ToNot(BeNil())
-		g.Expect(bundle.Data).To(Equal(bundleData))
-	})
-
-	t.Run("checksum mismatch returns integrity error", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		fakeFetcher := &fetchfakes.FakeFetcher{}
-		fakeFetcher.GetObjectReturns([]byte("some data"), nil)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{
-				State:    plm.StateReady,
-				Location: "s3://default/bundles/policy.tgz",
-				Sha256:   "wrong-checksum",
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
 			},
-		}
-
-		bundle, cond := fetchApPolicyBundle(nsName, status, fakeFetcher)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
-		g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonIntegrityError)))
-		g.Expect(cond.Message).To(ContainSubstring("checksum mismatch"))
-	})
-
-	t.Run("empty checksum skips verification", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		bundleData := []byte("bundle-content")
-		fakeFetcher := &fetchfakes.FakeFetcher{}
-		fakeFetcher.GetObjectReturns(bundleData, nil)
-
-		status := &plm.APPolicyStatus{
-			Bundle: plm.BundleStatus{
-				State:    plm.StateReady,
-				Location: "s3://default/bundles/policy.tgz",
-				Sha256:   "",
+		},
+		{
+			name: "invalid state with errors returns invalid condition",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{State: plm.StateInvalid},
+				Processing: plm.ProcessingStatus{
+					Errors: []string{"syntax error in policy", "invalid directive"},
+				},
 			},
-		}
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
+				g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonInvalidRef)))
+				g.Expect(cond.Message).To(ContainSubstring("syntax error in policy"))
+				g.Expect(cond.Message).To(ContainSubstring("invalid directive"))
+			},
+		},
+		{
+			name: "invalid state without errors returns generic message",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{State: plm.StateInvalid},
+			},
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Message).To(ContainSubstring("compilation failed"))
+			},
+		},
+		{
+			name: "ready state with no location returns no location condition",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{State: plm.StateReady, Location: ""},
+			},
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
+				g.Expect(cond.Message).To(ContainSubstring("no bundle location"))
+			},
+		},
+		{
+			name: "unknown state returns unknown state condition",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{State: plm.BundleState("some-unknown-state")},
+			},
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
+				g.Expect(cond.Message).To(ContainSubstring("unknown state"))
+				g.Expect(cond.Message).To(ContainSubstring("some-unknown-state"))
+			},
+		},
+		{
+			name: "ready state with nil fetcher returns bundle data without fetching",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{
+					State:    plm.StateReady,
+					Location: "s3://default/bundles/policy.tgz",
+					Sha256:   "abc123",
+				},
+			},
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(cond).To(BeNil())
+				g.Expect(bundle).ToNot(BeNil())
+				g.Expect(bundle.Location).To(Equal("s3://default/bundles/policy.tgz"))
+				g.Expect(bundle.Checksum).To(Equal("abc123"))
+				g.Expect(bundle.BundleType).To(Equal(WAFBundleTypePolicy))
+				g.Expect(bundle.Data).To(BeNil())
+			},
+		},
+		{
+			name: "ready state with fetcher returns fetched bundle data",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{
+					State:    plm.StateReady,
+					Location: "s3://default/bundles/policy.tgz",
+				},
+			},
+			fetcher: func() fetch.Fetcher {
+				f := &fetchfakes.FakeFetcher{}
+				f.GetObjectReturns([]byte("bundle-content"), nil)
+				return f
+			}(),
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(cond).To(BeNil())
+				g.Expect(bundle).ToNot(BeNil())
+				g.Expect(bundle.Data).To(Equal([]byte("bundle-content")))
+				g.Expect(bundle.BundleType).To(Equal(WAFBundleTypePolicy))
+			},
+		},
+		{
+			name: "fetch error returns programmed condition",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{
+					State:    plm.StateReady,
+					Location: "s3://default/bundles/policy.tgz",
+				},
+			},
+			fetcher: func() fetch.Fetcher {
+				f := &fetchfakes.FakeFetcher{}
+				f.GetObjectReturns(nil, errors.New("connection refused"))
+				return f
+			}(),
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
+				g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonFetchError)))
+				g.Expect(cond.Message).To(ContainSubstring("connection refused"))
+			},
+		},
+		{
+			name: "checksum match succeeds",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{
+					State:    plm.StateReady,
+					Location: "s3://default/bundles/policy.tgz",
+					Sha256:   "6f95d18247f958c7253d542229a427db008152f02856bd52f3023cb610ecdf21",
+				},
+			},
+			fetcher: func() fetch.Fetcher {
+				f := &fetchfakes.FakeFetcher{}
+				f.GetObjectReturns([]byte("test bundle data"), nil)
+				return f
+			}(),
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(cond).To(BeNil())
+				g.Expect(bundle).ToNot(BeNil())
+				g.Expect(bundle.Data).To(Equal([]byte("test bundle data")))
+			},
+		},
+		{
+			name: "checksum mismatch returns integrity error",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{
+					State:    plm.StateReady,
+					Location: "s3://default/bundles/policy.tgz",
+					Sha256:   "wrong-checksum",
+				},
+			},
+			fetcher: func() fetch.Fetcher {
+				f := &fetchfakes.FakeFetcher{}
+				f.GetObjectReturns([]byte("some data"), nil)
+				return f
+			}(),
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
+				g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonIntegrityError)))
+				g.Expect(cond.Message).To(ContainSubstring("checksum mismatch"))
+			},
+		},
+		{
+			name: "empty checksum skips verification",
+			status: &plm.APPolicyStatus{
+				Bundle: plm.BundleStatus{
+					State:    plm.StateReady,
+					Location: "s3://default/bundles/policy.tgz",
+					Sha256:   "",
+				},
+			},
+			fetcher: func() fetch.Fetcher {
+				f := &fetchfakes.FakeFetcher{}
+				f.GetObjectReturns([]byte("bundle-content"), nil)
+				return f
+			}(),
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(cond).To(BeNil())
+				g.Expect(bundle).ToNot(BeNil())
+				g.Expect(bundle.Data).To(Equal([]byte("bundle-content")))
+			},
+		},
+	}
 
-		bundle, cond := fetchApPolicyBundle(nsName, status, fakeFetcher)
-		g.Expect(cond).To(BeNil())
-		g.Expect(bundle).ToNot(BeNil())
-		g.Expect(bundle.Data).To(Equal(bundleData))
-	})
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			bundle, cond := fetchApPolicyBundle(nsName, test.status, test.fetcher)
+			test.validate(g, bundle, cond)
+		})
+	}
 }
 
 func TestFetchApLogConfBundle(t *testing.T) {
@@ -3114,123 +3108,128 @@ func TestFetchApLogConfBundle(t *testing.T) {
 
 	nsName := types.NamespacedName{Namespace: "test", Name: "my-logconf"}
 
-	t.Run("pending state returns not compiled condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APLogConfStatus{
-			Bundle: plm.BundleStatus{State: plm.StatePending},
-		}
-
-		bundle, cond := fetchApLogConfBundle(nsName, status, nil)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-		g.Expect(cond.Message).To(ContainSubstring("pending compilation"))
-	})
-
-	t.Run("invalid state returns invalid condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APLogConfStatus{
-			Bundle: plm.BundleStatus{State: plm.StateInvalid},
-			Processing: plm.ProcessingStatus{
-				Errors: []string{"bad log format"},
+	tests := []struct {
+		fetcher  fetch.Fetcher
+		status   *plm.APLogConfStatus
+		validate func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition)
+		name     string
+	}{
+		{
+			name: "pending state returns not compiled condition",
+			status: &plm.APLogConfStatus{
+				Bundle: plm.BundleStatus{State: plm.StatePending},
 			},
-		}
-
-		bundle, cond := fetchApLogConfBundle(nsName, status, nil)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-		g.Expect(cond.Message).To(ContainSubstring("bad log format"))
-	})
-
-	t.Run("ready state with nil fetcher returns bundle metadata", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		status := &plm.APLogConfStatus{
-			Bundle: plm.BundleStatus{
-				State:    plm.StateReady,
-				Location: "s3://default/bundles/logconf.tgz",
-				Sha256:   "def456",
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
+				g.Expect(cond.Message).To(ContainSubstring("pending compilation"))
 			},
-		}
-
-		bundle, cond := fetchApLogConfBundle(nsName, status, nil)
-		g.Expect(cond).To(BeNil())
-		g.Expect(bundle).ToNot(BeNil())
-		g.Expect(bundle.BundleType).To(Equal(WAFBundleTypeLogProfile))
-		g.Expect(bundle.Location).To(Equal("s3://default/bundles/logconf.tgz"))
-		g.Expect(bundle.Data).To(BeNil())
-	})
-
-	t.Run("ready state with fetcher returns fetched data", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		bundleData := []byte("logconf-content")
-		fakeFetcher := &fetchfakes.FakeFetcher{}
-		fakeFetcher.GetObjectReturns(bundleData, nil)
-
-		status := &plm.APLogConfStatus{
-			Bundle: plm.BundleStatus{
-				State:    plm.StateReady,
-				Location: "s3://default/bundles/logconf.tgz",
+		},
+		{
+			name: "invalid state returns invalid condition",
+			status: &plm.APLogConfStatus{
+				Bundle: plm.BundleStatus{State: plm.StateInvalid},
+				Processing: plm.ProcessingStatus{
+					Errors: []string{"bad log format"},
+				},
 			},
-		}
-
-		bundle, cond := fetchApLogConfBundle(nsName, status, fakeFetcher)
-		g.Expect(cond).To(BeNil())
-		g.Expect(bundle).ToNot(BeNil())
-		g.Expect(bundle.Data).To(Equal(bundleData))
-		g.Expect(bundle.BundleType).To(Equal(WAFBundleTypeLogProfile))
-	})
-
-	t.Run("fetch error returns programmed condition", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		fakeFetcher := &fetchfakes.FakeFetcher{}
-		fakeFetcher.GetObjectReturns(nil, errors.New("timeout"))
-
-		status := &plm.APLogConfStatus{
-			Bundle: plm.BundleStatus{
-				State:    plm.StateReady,
-				Location: "s3://default/bundles/logconf.tgz",
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
+				g.Expect(cond.Message).To(ContainSubstring("bad log format"))
 			},
-		}
-
-		bundle, cond := fetchApLogConfBundle(nsName, status, fakeFetcher)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
-		g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonFetchError)))
-	})
-
-	t.Run("checksum mismatch returns integrity error", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		fakeFetcher := &fetchfakes.FakeFetcher{}
-		fakeFetcher.GetObjectReturns([]byte("data"), nil)
-
-		status := &plm.APLogConfStatus{
-			Bundle: plm.BundleStatus{
-				State:    plm.StateReady,
-				Location: "s3://default/bundles/logconf.tgz",
-				Sha256:   "wrong-checksum",
+		},
+		{
+			name: "ready state with nil fetcher returns bundle metadata",
+			status: &plm.APLogConfStatus{
+				Bundle: plm.BundleStatus{
+					State:    plm.StateReady,
+					Location: "s3://default/bundles/logconf.tgz",
+					Sha256:   "def456",
+				},
 			},
-		}
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(cond).To(BeNil())
+				g.Expect(bundle).ToNot(BeNil())
+				g.Expect(bundle.BundleType).To(Equal(WAFBundleTypeLogProfile))
+				g.Expect(bundle.Location).To(Equal("s3://default/bundles/logconf.tgz"))
+				g.Expect(bundle.Data).To(BeNil())
+			},
+		},
+		{
+			name: "ready state with fetcher returns fetched data",
+			status: &plm.APLogConfStatus{
+				Bundle: plm.BundleStatus{
+					State:    plm.StateReady,
+					Location: "s3://default/bundles/logconf.tgz",
+				},
+			},
+			fetcher: func() fetch.Fetcher {
+				f := &fetchfakes.FakeFetcher{}
+				f.GetObjectReturns([]byte("logconf-content"), nil)
+				return f
+			}(),
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(cond).To(BeNil())
+				g.Expect(bundle).ToNot(BeNil())
+				g.Expect(bundle.Data).To(Equal([]byte("logconf-content")))
+				g.Expect(bundle.BundleType).To(Equal(WAFBundleTypeLogProfile))
+			},
+		},
+		{
+			name: "fetch error returns programmed condition",
+			status: &plm.APLogConfStatus{
+				Bundle: plm.BundleStatus{
+					State:    plm.StateReady,
+					Location: "s3://default/bundles/logconf.tgz",
+				},
+			},
+			fetcher: func() fetch.Fetcher {
+				f := &fetchfakes.FakeFetcher{}
+				f.GetObjectReturns(nil, errors.New("timeout"))
+				return f
+			}(),
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
+				g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonFetchError)))
+			},
+		},
+		{
+			name: "checksum mismatch returns integrity error",
+			status: &plm.APLogConfStatus{
+				Bundle: plm.BundleStatus{
+					State:    plm.StateReady,
+					Location: "s3://default/bundles/logconf.tgz",
+					Sha256:   "wrong-checksum",
+				},
+			},
+			fetcher: func() fetch.Fetcher {
+				f := &fetchfakes.FakeFetcher{}
+				f.GetObjectReturns([]byte("data"), nil)
+				return f
+			}(),
+			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
+				g.Expect(bundle).To(BeNil())
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
+				g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonIntegrityError)))
+			},
+		},
+	}
 
-		bundle, cond := fetchApLogConfBundle(nsName, status, fakeFetcher)
-		g.Expect(bundle).To(BeNil())
-		g.Expect(cond).ToNot(BeNil())
-		g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
-		g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonIntegrityError)))
-	})
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			bundle, cond := fetchApLogConfBundle(nsName, test.status, test.fetcher)
+			test.validate(g, bundle, cond)
+		})
+	}
 }
 
 func TestProcessApPolicyReference(t *testing.T) {
@@ -3358,7 +3357,7 @@ func TestProcessApPolicyReference(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		apPolicy := createApPolicy("test", "my-policy", plm.StateReady, "s3://default/bundle.tgz", "abc123")
+		apPolicy := createApPolicy("test", "my-policy", string(plm.StateReady), "s3://default/bundle.tgz", "abc123")
 		wafPolicy := createWAFPolicy("test", "waf1", "my-policy", nil)
 		policy := &Policy{Valid: true}
 		wafInput := &WAFProcessingInput{
@@ -3384,7 +3383,7 @@ func TestProcessApPolicyReference(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		apPolicy := createApPolicy("test", "my-policy", plm.StatePending, "", "")
+		apPolicy := createApPolicy("test", "my-policy", string(plm.StatePending), "", "")
 		wafPolicy := createWAFPolicy("test", "waf1", "my-policy", nil)
 		policy := &Policy{Valid: true}
 		wafInput := &WAFProcessingInput{
@@ -3480,7 +3479,7 @@ func TestProcessSecurityLogs(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		logConf := createApLogConf("test", "my-logconf", plm.StateReady, "s3://default/logconf.tgz")
+		logConf := createApLogConf("test", "my-logconf", string(plm.StateReady), "s3://default/logconf.tgz")
 		wafPolicy := &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
 			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
@@ -3516,7 +3515,7 @@ func TestProcessSecurityLogs(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		logConf1 := createApLogConf("test", "logconf-1", plm.StateReady, "s3://default/lc1.tgz")
+		logConf1 := createApLogConf("test", "logconf-1", string(plm.StateReady), "s3://default/lc1.tgz")
 		wafPolicy := &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
 			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
@@ -3674,7 +3673,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		apPolicy := createApPolicy("test", "my-policy", plm.StateReady, "s3://default/bundle.tgz")
+		apPolicy := createApPolicy("test", "my-policy", string(plm.StateReady), "s3://default/bundle.tgz")
 
 		key := PolicyKey{
 			NsName: types.NamespacedName{Namespace: "test", Name: "waf1"},

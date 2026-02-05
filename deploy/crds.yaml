@@ -12377,6 +12377,7 @@ spec:
                   NGF watches the ApPolicy status for the compiled bundle location.
                 properties:
                   name:
+                    minLength: 1
                     type: string
                   namespace:
                     type: string
@@ -12398,6 +12399,7 @@ spec:
                         PLM compiles the ApLogConf and NGF fetches the compiled bundle from PLM storage.
                       properties:
                         name:
+                          minLength: 1
                           type: string
                         namespace:
                           type: string
@@ -12522,11 +12524,9 @@ spec:
                 - message: TargetRef Name must be unique
                   rule: self.all(t1, self.exists_one(t2, t1.name == t2.name))
             required:
+            - apPolicySource
             - targetRefs
             type: object
-            x-kubernetes-validations:
-            - message: apPolicySource is required when securityLogs are specified
-              rule: '!has(self.securityLogs) || has(self.apPolicySource)'
           status:
             description: Status defines the state of the WAFGatewayBindingPolicy.
             properties:
