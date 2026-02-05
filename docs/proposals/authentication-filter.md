@@ -515,7 +515,7 @@ spec:
 
 This mode will access the public JSON Web Key Set (JWKS) from a remote server.
 This could be a self-hosted server or a hosted identity provider (IdP).
-To ensure a secure connection can be established to the remote JWKS URI,
+To ensure a secure connection can be established to the remote JWKS URI, the `remote.tls` will allow users to define a secret of type `kubernetes.io/tls` with the TLS cert and key of their IdP.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -534,7 +534,14 @@ spec:
         secretRef:
           name: cafe-secret
         verify: true # Defaults to true
+        sni: true # Defaults to true
+        sniName: foo.bar.com # Defaults to server name in proxy_pass
 ```
+
+Optionally, users can also toggle and configure SNI capabilities through `remote.tls.sni` and `remote.tls.sniName`.
+SNI will be enabled by default using the (proxy_ssl_server_name)[https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_server_name] directive.
+By default, NGINX will use the server name defined in the `proxy_pass` when `proxy_ssl_server_name` is on.
+Users can optionally set a specific host using `remote.tls.sniName`, which will configure the (proxy_ssl_name)[https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name] directive
 
 ### Secret creation and reference for JWT Auth
 
@@ -1043,7 +1050,7 @@ The table below summarizes the capabilities enabled by the current JWT Authentic
 | Enable JWT authentication and set realm | `spec.type = "JWT"`; `spec.jwt.realm` | `auth_jwt "<realm>"` | Currently does not expose defining `token` |
 | Provide JWT keys from local JWKS (Secret) | `spec.jwt.mode = "File"`; `spec.jwt.file.secretRef.name`; Secret type `nginx.org/jwt`; data key `auth` | `auth_jwt_key_file /etc/nginx/secrets/jwt_auth_<namespace>_<secret-name>` | Secret must exist in same namespace and must be of type `nginx.org/jwt` |
 | Secret handling/validation for local JWKS | Secret type `nginx.org/jwt`; data key `auth`; `LocalObjectReference` | Validates presence/type/key; NGF loads JWKS into key file | Cross-namespace secrets not supported initially; future work may add `ReferenceGrant`-based access |
-| Provide JWT keys from remote JWKS | `spec.jwt.mode = "Remote"`; `spec.jwt.remote.uri`; `spec.jwt.remote.tls.secretRef` (type `kubernetes.io/tls`); `spec.jwt.remote.tls.verify` (default `true`) | `auth_jwt_key_request /_ngf-internal-<namespace>_<filter-name>_jwks_uri`; internal location `proxy_pass` to remote JWKS; optional client TLS. | Requires DNS resolver via `NginxProxy.spec.dnsResolver`; `verify` controls server cert verification; key caching optional |
+| Provide JWT keys from remote JWKS | `spec.jwt.mode = "Remote"`; `spec.jwt.remote.uri`; `spec.jwt.remote.tls.secretRef` (type `kubernetes.io/tls`); `spec.jwt.remote.tls.verify` (default `true`); `spec.jwt.remote.tls.sni` (default `true`); `spec.jwt.remote.tls.sniName` (optional; default to server name in `proxy_pass`) | `auth_jwt_key_request /_ngf-internal-<namespace>_<filter-name>_jwks_uri`; internal location `proxy_pass` to remote JWKS; optional client TLS. | Requires DNS resolver via `NginxProxy.spec.dnsResolver`; `verify` controls server cert verification; key caching optional |
 | Configure DNS resolver for remote JWKS | `NginxProxy.spec.dnsResolver.addresses` (separate resource) | `resolver` set at `http` context for name resolution used by `auth_jwt_key_request` | Required for remote JWKS URIs; managed outside the filter |
 | Configure JWT key cache duration | `spec.jwt.keyCache` (Duration) | `auth_jwt_key_cache <duration>` | Disabled by default to avoid stale keys |
 | Configure acceptable clock skew for `exp`/`nbf` | `spec.jwt.leeway` (Duration) | `auth_jwt_leeway <duration>` | Applies only if `exp`/`nbf` claims are present; default `0s` |
