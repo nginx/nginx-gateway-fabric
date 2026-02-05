@@ -142,6 +142,9 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
+	// Create PLM secrets metadata for watching and TLS config
+	plmSecrets := createPLMSecretMetadata(cfg.PLMStorageConfig, cfg.GatewayPodConfig.Namespace)
+
 	// Create WAF fetcher for PLM storage (returns nil if not configured)
 	wafFetcher, err := createWAFFetcher(
 		cfg.PLMStorageConfig,
@@ -162,10 +165,12 @@ func StartManager(cfg config.Config) error {
 			GenericValidator:    genericValidator,
 			PolicyValidator:     policyManager,
 		},
-		EventRecorder:  recorder,
-		MustExtractGVK: mustExtractGVK,
-		PlusSecrets:    plusSecrets,
-		WAFFetcher:     wafFetcher,
+		EventRecorder:         recorder,
+		MustExtractGVK:        mustExtractGVK,
+		PlusSecrets:           plusSecrets,
+		PLMSecrets:            plmSecrets,
+		WAFFetcher:            wafFetcher,
+		PLMInsecureSkipVerify: cfg.PLMStorageConfig.TLSInsecureSkipVerify,
 		FeatureFlags: graph.FeatureFlags{
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
@@ -980,6 +985,60 @@ const (
 	plmSecretAccessKeyField = "seaweedfs_admin_secret"
 )
 
+// createPLMSecretMetadata creates the PLM secrets metadata for watching and TLS configuration.
+// This registers the secrets so they will be watched and their content can be used to update
+// the fetcher's TLS configuration when they change.
+func createPLMSecretMetadata(
+	plmCfg config.PLMStorageConfig,
+	namespace string,
+) map[types.NamespacedName]*graph.PLMSecretConfig {
+	plmSecrets := make(map[types.NamespacedName]*graph.PLMSecretConfig)
+
+	// Only create metadata if PLM storage is configured
+	if plmCfg.URL == "" {
+		return plmSecrets
+	}
+
+	// Helper to parse secret name which may include namespace (namespace/name format)
+	parseSecretName := func(secretName string) types.NamespacedName {
+		nsName := types.NamespacedName{
+			Namespace: namespace,
+			Name:      secretName,
+		}
+		if parts := strings.SplitN(secretName, "/", 2); len(parts) == 2 {
+			nsName.Namespace = parts[0]
+			nsName.Name = parts[1]
+		}
+		return nsName
+	}
+
+	// Register credentials secret if provided
+	if plmCfg.CredentialsSecretName != "" {
+		nsName := parseSecretName(plmCfg.CredentialsSecretName)
+		plmSecrets[nsName] = &graph.PLMSecretConfig{
+			Type: graph.PLMSecretTypeCredentials,
+		}
+	}
+
+	// Register TLS CA certificate secret if provided
+	if plmCfg.TLSCACertSecretName != "" {
+		nsName := parseSecretName(plmCfg.TLSCACertSecretName)
+		plmSecrets[nsName] = &graph.PLMSecretConfig{
+			Type: graph.PLMSecretTypeTLSCA,
+		}
+	}
+
+	// Register TLS client certificate secret if provided
+	if plmCfg.TLSClientSSLSecretName != "" {
+		nsName := parseSecretName(plmCfg.TLSClientSSLSecretName)
+		plmSecrets[nsName] = &graph.PLMSecretConfig{
+			Type: graph.PLMSecretTypeTLSClient,
+		}
+	}
+
+	return plmSecrets
+}
+
 // createWAFFetcher creates an S3-compatible fetcher for WAF policy bundles from PLM storage.
 func createWAFFetcher(
 	plmCfg config.PLMStorageConfig,
@@ -1014,22 +1073,6 @@ func createWAFFetcher(
 			plmAccessKeyID,
 			string(secret.Data[plmSecretAccessKeyField]),
 		))
-	}
-
-	// TODO(ciarams87): update tls to use secrets when supported
-	// // Configure TLS if any TLS settings are provided
-	if plmCfg.TLSCACertSecretName != "" || plmCfg.TLSClientSSLSecretName != "" {
-		// TODO(ciarams87): get certs from secrets
-		tlsConfig, err := fetch.TLSConfigFromFiles(
-			"",
-			"",
-			"",
-			plmCfg.TLSInsecureSkipVerify,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create TLS config: %w", err)
-		}
-		opts = append(opts, fetch.WithTLSConfig(tlsConfig))
 	}
 
 	fetcher, err := fetch.NewS3Fetcher(plmCfg.URL, opts...)

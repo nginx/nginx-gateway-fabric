@@ -52,26 +52,18 @@ type ChangeProcessor interface {
 
 // ChangeProcessorConfig holds configuration parameters for ChangeProcessorImpl.
 type ChangeProcessorConfig struct {
-	// Validators validate resources according to data-plane specific rules.
-	Validators validation.Validators
-	// EventRecorder records events for Kubernetes resources.
-	EventRecorder events.EventRecorder
-	// MustExtractGVK is a function that extracts schema.GroupVersionKind from a client.Object.
-	MustExtractGVK kinds.MustExtractGVK
-	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
-	PlusSecrets map[types.NamespacedName][]graph.PlusSecretFile
-	// WAFFetcher is the S3-compatible fetcher for WAF policy bundles from PLM storage (nil if WAF not enabled).
-	WAFFetcher fetch.Fetcher
-	// Logger is the logger for this Change Processor.
-	Logger logr.Logger
-	// GatewayCtlrName is the name of the Gateway controller.
-	GatewayCtlrName string
-	// GatewayClassName is the name of the GatewayClass resource.
-	GatewayClassName string
-	// Snippets indicates if Snippets are enabled. This will enable both SnippetsFilter and SnippetsPolicy APIs.
-	Snippets bool
-	// FeaturesFlags holds the feature flags for building the Graph.
-	FeatureFlags graph.FeatureFlags
+	Validators            validation.Validators
+	EventRecorder         events.EventRecorder
+	WAFFetcher            fetch.Fetcher
+	MustExtractGVK        kinds.MustExtractGVK
+	PlusSecrets           map[types.NamespacedName][]graph.PlusSecretFile
+	PLMSecrets            map[types.NamespacedName]*graph.PLMSecretConfig
+	Logger                logr.Logger
+	GatewayCtlrName       string
+	GatewayClassName      string
+	FeatureFlags          graph.FeatureFlags
+	PLMInsecureSkipVerify bool
+	Snippets              bool
 }
 
 // ChangeProcessorImpl is an implementation of ChangeProcessor.
@@ -332,12 +324,21 @@ func (c *ChangeProcessorImpl) Process() *graph.Graph {
 		return nil
 	}
 
+	var plmConfig *graph.PLMConfig
+	if c.cfg.WAFFetcher != nil || len(c.cfg.PLMSecrets) > 0 {
+		plmConfig = &graph.PLMConfig{
+			Fetcher:            c.cfg.WAFFetcher,
+			Secrets:            c.cfg.PLMSecrets,
+			InsecureSkipVerify: c.cfg.PLMInsecureSkipVerify,
+		}
+	}
+
 	c.latestGraph = graph.BuildGraph(
 		c.clusterState,
 		c.cfg.GatewayCtlrName,
 		c.cfg.GatewayClassName,
 		c.cfg.PlusSecrets,
-		c.cfg.WAFFetcher,
+		plmConfig,
 		c.cfg.Validators,
 		c.cfg.Logger,
 		c.cfg.FeatureFlags,

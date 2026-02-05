@@ -43,6 +43,9 @@ const (
 
 	// LicenseJWTKey is the key for the NGINX Plus license JWT.
 	LicenseJWTKey = "license.jwt"
+
+	// PLMCredentialsKey is the key for PLM storage credentials (S3 secret access key).
+	PLMCredentialsKey = "seaweedfs_admin_secret"
 )
 
 // CertificateBundle is used to submit certificate data to nginx that is kubernetes aware.
