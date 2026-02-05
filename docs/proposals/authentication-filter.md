@@ -1071,14 +1071,34 @@ This example shows a single HTTPRoute, with a single `filter` defined in a `rule
 
 #### Referencing multiple AuthenticationFilter resources in a single rule
 
-Only one `AuthenticationFilter` may be referenced in a single rule.
+NGINX allows multiple authentication methods such as `auth_basic` and `auth_jwt` to be defined together.
+In a scenario where a user provides a JWT token for authentication, NGINX will first validate this against the `auth_basic` module.
+If that authentication method fails, NGINX will then validate the request against the `auth_jwt` module.
 
-In a scenario where a route rule references multiple `AuthenticationFilter` resources, that route rule will set to `Invalid`.
+NGINX does allow multiple of the same auth module defined.
+However, NGINX will only resolve **one** of them.
+
+In the example NGINX code below, where multiple `auth_basic` directives are defined, NGINX will only resolve the last one.
+In this case, `auth_basic "Restricted Area 2";` will be used.
+
+```nginx
+location /path1 {
+    # These directives are ignored
+    auth_basic "Restricted Area 1";
+    auth_basic_user_file /etc/nginx/.htpasswd1;
+
+    # These directives are used
+    auth_basic "Restricted Area 2";
+    auth_basic_user_file /etc/nginx/.htpasswd2;
+}
+```
+
+To ensure we avoid this scenario, only one `AuthenticationFilter` of the same `Type` may be referenced in a single rule.
+
+In a scenario where a route rule references multiple `AuthenticationFilter` resources of the same `Type`, that route rule will set to `Invalid`.
 The route resource will display the `UnresolvedRefs` message to inform the user that the rule has been `Rejected`.
 
-This behavior falls in line with the expected behavior of filters in the Gateway API, which generally allows only one type of specific filter (authentication, rewriting, etc.) within a rule.
-
-Here is an example of an HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule.
+Here is an example of an HTTPRoute that references multiple `AuthenticationFilter` resources of the same `Type` in a single rule.
 In this scenario, the route rule for `/api` will be marked as `Invalid`.
 
 ```yaml
@@ -1099,11 +1119,48 @@ spec:
     filters:
     - type: ExtensionRef
       extensionRef:
+        # Type: Basic
+        group: gateway.nginx.org
+        kind: AuthenticationFilter
+        name: basic-auth-1
+    - type: ExtensionRef
+      extensionRef:
+         # Type: Basic
+        group: gateway.nginx.org
+        kind: AuthenticationFilter
+        name: basic-auth-2
+    backendRefs:
+    - name: backend
+      port: 80
+```
+
+Below is an example of a valid HTTPRoute that references multiple `AuthenticationFilter` resources of a different `Type` in a single rule.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: invalid-httproute
+spec:
+  parentRefs:
+  - name: gateway
+  hostnames:
+  - api.example.com
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    filters:
+    - type: ExtensionRef
+      extensionRef:
+        # Type: Basic
         group: gateway.nginx.org
         kind: AuthenticationFilter
         name: basic-auth
     - type: ExtensionRef
       extensionRef:
+        # Type: JWT
         group: gateway.nginx.org
         kind: AuthenticationFilter
         name: jwt-auth
@@ -1178,6 +1235,12 @@ A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `A
   Requests to any path in the invalid route rule will return a 200 response with the JSON web key set (JWKS) to validate the original JWT signature from the authentication request.
   This behavior is documented in the [auth_jwt_key_request](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_request) directive documentation.
 
+A route rule referencing multiple `AuthenticationFilters` where each `AuthenticationFilters` is of a unique `Type`. (e.g. one with `Type: Basic` and one with `Type: JWT`)
+- Expected outcomes:
+  The route rule referencing multiple `AuthenticationFilters` where each `AuthenticationFilters` is of a unique `Type` is marked as valid.
+  Requests to any path in the valid route rule return a 200 response when correctly authenticated.
+  Requests to any path in the valid route rule return a 401 response when incorrectly authenticated.
+
 ### Invalid scenarios
 
 This section covers deployment scenarios that are considered invalid
@@ -1221,9 +1284,9 @@ Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute wh
   Requests to any path in the valid route rule will return a 401 response when incorrectly authenticated.
 
 
-Two or more `AuthenticationFilters` referenced in a route rule.
+Two or more `AuthenticationFilters` of the same `Type` referenced in a route rule.
 - Expected outcomes:
-  The route rule referencing multiple `AuthenticationFilters` is marked as invalid.
+  The route rule referencing multiple `AuthenticationFilters` of the same `Type` is marked as invalid.
   Requests to any path in the invalid route rule will return a 500 error.
 
 A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter` set to `type: JWT` and `mode: Remote` where the value of `remote.url` is an unresolvable URL.
