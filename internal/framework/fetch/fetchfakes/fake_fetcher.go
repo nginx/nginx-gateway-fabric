@@ -25,6 +25,18 @@ type FakeFetcher struct {
 		result1 []byte
 		result2 error
 	}
+	UpdateCredentialsStub        func(string, string) error
+	updateCredentialsMutex       sync.RWMutex
+	updateCredentialsArgsForCall []struct {
+		arg1 string
+		arg2 string
+	}
+	updateCredentialsReturns struct {
+		result1 error
+	}
+	updateCredentialsReturnsOnCall map[int]struct {
+		result1 error
+	}
 	UpdateTLSConfigStub        func(*tls.Config) error
 	updateTLSConfigMutex       sync.RWMutex
 	updateTLSConfigArgsForCall []struct {
@@ -104,6 +116,68 @@ func (fake *FakeFetcher) GetObjectReturnsOnCall(i int, result1 []byte, result2 e
 		result1 []byte
 		result2 error
 	}{result1, result2}
+}
+
+func (fake *FakeFetcher) UpdateCredentials(arg1 string, arg2 string) error {
+	fake.updateCredentialsMutex.Lock()
+	ret, specificReturn := fake.updateCredentialsReturnsOnCall[len(fake.updateCredentialsArgsForCall)]
+	fake.updateCredentialsArgsForCall = append(fake.updateCredentialsArgsForCall, struct {
+		arg1 string
+		arg2 string
+	}{arg1, arg2})
+	stub := fake.UpdateCredentialsStub
+	fakeReturns := fake.updateCredentialsReturns
+	fake.recordInvocation("UpdateCredentials", []interface{}{arg1, arg2})
+	fake.updateCredentialsMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeFetcher) UpdateCredentialsCallCount() int {
+	fake.updateCredentialsMutex.RLock()
+	defer fake.updateCredentialsMutex.RUnlock()
+	return len(fake.updateCredentialsArgsForCall)
+}
+
+func (fake *FakeFetcher) UpdateCredentialsCalls(stub func(string, string) error) {
+	fake.updateCredentialsMutex.Lock()
+	defer fake.updateCredentialsMutex.Unlock()
+	fake.UpdateCredentialsStub = stub
+}
+
+func (fake *FakeFetcher) UpdateCredentialsArgsForCall(i int) (string, string) {
+	fake.updateCredentialsMutex.RLock()
+	defer fake.updateCredentialsMutex.RUnlock()
+	argsForCall := fake.updateCredentialsArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *FakeFetcher) UpdateCredentialsReturns(result1 error) {
+	fake.updateCredentialsMutex.Lock()
+	defer fake.updateCredentialsMutex.Unlock()
+	fake.UpdateCredentialsStub = nil
+	fake.updateCredentialsReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeFetcher) UpdateCredentialsReturnsOnCall(i int, result1 error) {
+	fake.updateCredentialsMutex.Lock()
+	defer fake.updateCredentialsMutex.Unlock()
+	fake.UpdateCredentialsStub = nil
+	if fake.updateCredentialsReturnsOnCall == nil {
+		fake.updateCredentialsReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.updateCredentialsReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
 }
 
 func (fake *FakeFetcher) UpdateTLSConfig(arg1 *tls.Config) error {

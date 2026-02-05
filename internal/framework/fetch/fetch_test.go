@@ -320,3 +320,21 @@ func TestUpdateTLSConfig(t *testing.T) {
 	g.Expect(fetcher.tlsConfig).To(Equal(newTLSConfig))
 	g.Expect(fetcher.client).ToNot(BeNil()) // Client should be recreated
 }
+
+func TestUpdateCredentials(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// Create fetcher without credentials
+	fetcher, err := NewS3Fetcher("http://localhost:9000")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(fetcher.accessKeyID).To(BeEmpty())
+	g.Expect(fetcher.secretAccessKey).To(BeEmpty())
+
+	// Update with new credentials
+	err = fetcher.UpdateCredentials("admin", "my-secret-key")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(fetcher.accessKeyID).To(Equal("admin"))
+	g.Expect(fetcher.secretAccessKey).To(Equal("my-secret-key"))
+	g.Expect(fetcher.client).ToNot(BeNil()) // Client should be recreated
+}

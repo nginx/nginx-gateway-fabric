@@ -2610,7 +2610,7 @@ func TestSetPLMSecretContent(t *testing.T) {
 	}
 }
 
-func TestUpdatePLMFetcherTLS(t *testing.T) {
+func TestUpdatePLMFetcher(t *testing.T) {
 	t.Parallel()
 
 	// Valid CA certificate for testing
@@ -2638,7 +2638,7 @@ yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
 	t.Run("nil config does nothing", func(t *testing.T) {
 		t.Parallel()
 		// Should not panic
-		updatePLMFetcherTLS(nil, logr.Discard())
+		updatePLMFetcher(nil, logr.Discard())
 	})
 
 	t.Run("nil fetcher does nothing", func(t *testing.T) {
@@ -2648,10 +2648,26 @@ yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
 			Secrets: map[types.NamespacedName]*PLMSecretConfig{},
 		}
 		// Should not panic
-		updatePLMFetcherTLS(plmConfig, logr.Discard())
+		updatePLMFetcher(plmConfig, logr.Discard())
 	})
 
-	t.Run("no TLS secrets does nothing", func(t *testing.T) {
+	t.Run("no secrets does nothing", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		fakeFetcher := &fetchfakes.FakeFetcher{}
+		plmConfig := &PLMConfig{
+			Fetcher: fakeFetcher,
+			Secrets: map[types.NamespacedName]*PLMSecretConfig{},
+		}
+
+		updatePLMFetcher(plmConfig, logr.Discard())
+		// Should not call UpdateTLSConfig or UpdateCredentials since there's no data
+		g.Expect(fakeFetcher.UpdateTLSConfigCallCount()).To(Equal(0))
+		g.Expect(fakeFetcher.UpdateCredentialsCallCount()).To(Equal(0))
+	})
+
+	t.Run("updates credentials from secret", func(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
@@ -2660,13 +2676,20 @@ yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
 			Fetcher: fakeFetcher,
 			Secrets: map[types.NamespacedName]*PLMSecretConfig{
 				{Name: "creds"}: {
-					Type:    PLMSecretTypeCredentials,
-					Content: map[string][]byte{"key": []byte("value")},
+					Type: PLMSecretTypeCredentials,
+					Content: map[string][]byte{
+						"seaweedfs_admin_secret": []byte("my-secret-key"),
+					},
 				},
 			},
 		}
 
-		updatePLMFetcherTLS(plmConfig, logr.Discard())
+		updatePLMFetcher(plmConfig, logr.Discard())
+		g.Expect(fakeFetcher.UpdateCredentialsCallCount()).To(Equal(1))
+
+		accessKeyID, secretAccessKey := fakeFetcher.UpdateCredentialsArgsForCall(0)
+		g.Expect(accessKeyID).To(Equal("admin"))
+		g.Expect(secretAccessKey).To(Equal("my-secret-key"))
 		// Should not call UpdateTLSConfig since there's no TLS data
 		g.Expect(fakeFetcher.UpdateTLSConfigCallCount()).To(Equal(0))
 	})
@@ -2689,7 +2712,7 @@ yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
 			},
 		}
 
-		updatePLMFetcherTLS(plmConfig, logr.Discard())
+		updatePLMFetcher(plmConfig, logr.Discard())
 		g.Expect(fakeFetcher.UpdateTLSConfigCallCount()).To(Equal(1))
 
 		tlsConfig := fakeFetcher.UpdateTLSConfigArgsForCall(0)
@@ -2716,7 +2739,7 @@ yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
 		}
 
 		// Should not panic, just log error
-		updatePLMFetcherTLS(plmConfig, logr.Discard())
+		updatePLMFetcher(plmConfig, logr.Discard())
 		// UpdateTLSConfig should not be called due to error
 		g.Expect(fakeFetcher.UpdateTLSConfigCallCount()).To(Equal(0))
 	})
