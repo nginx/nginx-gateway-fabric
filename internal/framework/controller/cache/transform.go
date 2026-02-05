@@ -48,8 +48,9 @@ func TransformGatewayClass(controllerName string) cache.TransformFunc {
 	}
 }
 
-// TransformSecret filters Secret objects to only include specific keys
-// and removes managed fields to reduce memory usage.
+// TransformSecret filters Secret objects to only include specific keys.
+// If the keys are not present, the Secret is ignored.
+// All other keys are dropped, and managed fields are removed to reduce memory usage.
 func TransformSecret() cache.TransformFunc {
 	return func(obj any) (any, error) {
 		secret, ok := obj.(*corev1.Secret)
@@ -76,8 +77,8 @@ func TransformSecret() cache.TransformFunc {
 	}
 }
 
-// TransformConfigMap filters ConfigMap objects to only include the CAKey.
-// If the CAKey is not present, the ConfigMap is ignored.
+// TransformConfigMap filters ConfigMap objects to only include specific keys.
+// If the keys are not present, the ConfigMap is ignored.
 // All other keys are dropped, and managed fields are removed to reduce memory usage.
 func TransformConfigMap() cache.TransformFunc {
 	return func(obj any) (any, error) {
