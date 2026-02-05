@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -56,6 +55,9 @@ type Fetcher interface {
 	// GetObject fetches an object from S3-compatible storage.
 	// The location should be in the format "bucket/key" or just "key" if bucket is configured.
 	GetObject(ctx context.Context, bucket, key string) ([]byte, error)
+	// UpdateTLSConfig updates the TLS configuration and recreates the underlying client.
+	// This is used to refresh TLS certificates when secrets change.
+	UpdateTLSConfig(tlsConfig *tls.Config) error
 }
 
 // S3Fetcher fetches files from S3-compatible storage.
@@ -118,6 +120,18 @@ func (f *S3Fetcher) GetObject(ctx context.Context, bucket, key string) ([]byte, 
 	return data, nil
 }
 
+// UpdateTLSConfig updates the TLS configuration and recreates the S3 client.
+// This allows updating TLS certificates when secrets change without recreating the fetcher.
+func (f *S3Fetcher) UpdateTLSConfig(tlsConfig *tls.Config) error {
+	f.tlsConfig = tlsConfig
+	client, err := f.createS3Client()
+	if err != nil {
+		return fmt.Errorf("failed to recreate S3 client with new TLS config: %w", err)
+	}
+	f.client = client
+	return nil
+}
+
 // createS3Client creates an S3 client with the configured options.
 func (f *S3Fetcher) createS3Client() (*s3.Client, error) {
 	// Create HTTP client with TLS configuration
@@ -164,10 +178,11 @@ func (f *S3Fetcher) createS3Client() (*s3.Client, error) {
 	return client, nil
 }
 
-// TODO(ciarams87): Update to use secrets when supported
-// TLSConfigFromFiles creates a TLS configuration from certificate files.
-func TLSConfigFromFiles(
-	caCertPath, clientCertPath, clientKeyPath string,
+// TLSConfigFromSecret creates a TLS configuration from secret data.
+// caCert is the CA certificate PEM data for server verification.
+// clientCert and clientKey are the client certificate and key PEM data for mutual TLS.
+func TLSConfigFromSecret(
+	caCert, clientCert, clientKey []byte,
 	insecureSkipVerify bool,
 ) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
@@ -176,12 +191,7 @@ func TLSConfigFromFiles(
 	}
 
 	// Load CA certificate if provided
-	if caCertPath != "" {
-		caCert, err := os.ReadFile(caCertPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read CA certificate: %w", err)
-		}
-
+	if len(caCert) > 0 {
 		caCertPool := x509.NewCertPool()
 		if !caCertPool.AppendCertsFromPEM(caCert) {
 			return nil, fmt.Errorf("failed to parse CA certificate")
@@ -190,8 +200,8 @@ func TLSConfigFromFiles(
 	}
 
 	// Load client certificate and key if provided (for mutual TLS)
-	if clientCertPath != "" && clientKeyPath != "" {
-		cert, err := tls.LoadX509KeyPair(clientCertPath, clientKeyPath)
+	if len(clientCert) > 0 && len(clientKey) > 0 {
+		cert, err := tls.X509KeyPair(clientCert, clientKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load client certificate: %w", err)
 		}

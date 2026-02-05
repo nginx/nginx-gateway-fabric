@@ -979,3 +979,124 @@ func createTypedObject(gvk *schema.GroupVersionKind) ngftypes.ObjectType {
 	obj.SetGroupVersionKind(*gvk)
 	return obj
 }
+
+func TestCreatePLMSecretMetadata(t *testing.T) {
+	t.Parallel()
+
+	const defaultNamespace = "nginx-gateway"
+
+	tests := []struct {
+		expSecrets map[types.NamespacedName]*graph.PLMSecretConfig
+		name       string
+		plmCfg     config.PLMStorageConfig
+	}{
+		{
+			name:       "PLM not configured (empty URL)",
+			plmCfg:     config.PLMStorageConfig{},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{},
+		},
+		{
+			name: "only credentials secret specified",
+			plmCfg: config.PLMStorageConfig{
+				URL:                   "http://plm-storage:8333",
+				CredentialsSecretName: "plm-creds",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+			},
+		},
+		{
+			name: "credentials and CA secrets specified",
+			plmCfg: config.PLMStorageConfig{
+				URL:                   "http://plm-storage:8333",
+				CredentialsSecretName: "plm-creds",
+				TLSCACertSecretName:   "plm-ca",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+		},
+		{
+			name: "all secrets specified",
+			plmCfg: config.PLMStorageConfig{
+				URL:                    "https://plm-storage:8333",
+				CredentialsSecretName:  "plm-creds",
+				TLSCACertSecretName:    "plm-ca",
+				TLSClientSSLSecretName: "plm-client",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+				{Namespace: defaultNamespace, Name: "plm-client"}: {
+					Type: graph.PLMSecretTypeTLSClient,
+				},
+			},
+		},
+		{
+			name: "secrets with namespace prefix",
+			plmCfg: config.PLMStorageConfig{
+				URL:                    "https://plm-storage:8333",
+				CredentialsSecretName:  "other-ns/plm-creds",
+				TLSCACertSecretName:    "ca-ns/plm-ca",
+				TLSClientSSLSecretName: "tls-ns/plm-client",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: "other-ns", Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+				{Namespace: "ca-ns", Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+				{Namespace: "tls-ns", Name: "plm-client"}: {
+					Type: graph.PLMSecretTypeTLSClient,
+				},
+			},
+		},
+		{
+			name: "only TLS CA secret specified",
+			plmCfg: config.PLMStorageConfig{
+				URL:                 "https://plm-storage:8333",
+				TLSCACertSecretName: "plm-ca",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+		},
+		{
+			name: "only TLS client secret specified",
+			plmCfg: config.PLMStorageConfig{
+				URL:                    "https://plm-storage:8333",
+				TLSClientSSLSecretName: "plm-client",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-client"}: {
+					Type: graph.PLMSecretTypeTLSClient,
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			plmSecrets := createPLMSecretMetadata(test.plmCfg, defaultNamespace)
+
+			g.Expect(plmSecrets).To(Equal(test.expSecrets))
+		})
+	}
+}

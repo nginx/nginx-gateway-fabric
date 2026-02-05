@@ -3,6 +3,7 @@ package fetchfakes
 
 import (
 	"context"
+	"crypto/tls"
 	"sync"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
@@ -23,6 +24,17 @@ type FakeFetcher struct {
 	getObjectReturnsOnCall map[int]struct {
 		result1 []byte
 		result2 error
+	}
+	UpdateTLSConfigStub        func(*tls.Config) error
+	updateTLSConfigMutex       sync.RWMutex
+	updateTLSConfigArgsForCall []struct {
+		arg1 *tls.Config
+	}
+	updateTLSConfigReturns struct {
+		result1 error
+	}
+	updateTLSConfigReturnsOnCall map[int]struct {
+		result1 error
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
@@ -92,6 +104,67 @@ func (fake *FakeFetcher) GetObjectReturnsOnCall(i int, result1 []byte, result2 e
 		result1 []byte
 		result2 error
 	}{result1, result2}
+}
+
+func (fake *FakeFetcher) UpdateTLSConfig(arg1 *tls.Config) error {
+	fake.updateTLSConfigMutex.Lock()
+	ret, specificReturn := fake.updateTLSConfigReturnsOnCall[len(fake.updateTLSConfigArgsForCall)]
+	fake.updateTLSConfigArgsForCall = append(fake.updateTLSConfigArgsForCall, struct {
+		arg1 *tls.Config
+	}{arg1})
+	stub := fake.UpdateTLSConfigStub
+	fakeReturns := fake.updateTLSConfigReturns
+	fake.recordInvocation("UpdateTLSConfig", []interface{}{arg1})
+	fake.updateTLSConfigMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeFetcher) UpdateTLSConfigCallCount() int {
+	fake.updateTLSConfigMutex.RLock()
+	defer fake.updateTLSConfigMutex.RUnlock()
+	return len(fake.updateTLSConfigArgsForCall)
+}
+
+func (fake *FakeFetcher) UpdateTLSConfigCalls(stub func(*tls.Config) error) {
+	fake.updateTLSConfigMutex.Lock()
+	defer fake.updateTLSConfigMutex.Unlock()
+	fake.UpdateTLSConfigStub = stub
+}
+
+func (fake *FakeFetcher) UpdateTLSConfigArgsForCall(i int) *tls.Config {
+	fake.updateTLSConfigMutex.RLock()
+	defer fake.updateTLSConfigMutex.RUnlock()
+	argsForCall := fake.updateTLSConfigArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeFetcher) UpdateTLSConfigReturns(result1 error) {
+	fake.updateTLSConfigMutex.Lock()
+	defer fake.updateTLSConfigMutex.Unlock()
+	fake.UpdateTLSConfigStub = nil
+	fake.updateTLSConfigReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeFetcher) UpdateTLSConfigReturnsOnCall(i int, result1 error) {
+	fake.updateTLSConfigMutex.Lock()
+	defer fake.updateTLSConfigMutex.Unlock()
+	fake.UpdateTLSConfigStub = nil
+	if fake.updateTLSConfigReturnsOnCall == nil {
+		fake.updateTLSConfigReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.updateTLSConfigReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
 }
 
 func (fake *FakeFetcher) Invocations() map[string][][]interface{} {
