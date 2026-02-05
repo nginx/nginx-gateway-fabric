@@ -2,6 +2,7 @@ package graph
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
@@ -354,7 +355,7 @@ func BuildGraph(
 		// Set PLM secret content from cluster secrets and update fetcher TLS if needed
 		if len(plmSecrets) > 0 {
 			setPLMSecretContent(state.Secrets, plmSecrets)
-			updatePLMFetcherTLS(plmConfig, logger)
+			updatePLMFetcher(plmConfig, logger)
 		}
 
 		if len(state.ApPolicies) > 0 || len(state.ApLogConfs) > 0 {
@@ -522,54 +523,78 @@ func setPLMSecretContent(
 	for name, plmSecretCfg := range plmSecrets {
 		if secret, ok := clusterSecrets[name]; ok {
 			plmSecretCfg.Content = make(map[string][]byte)
-			for key, value := range secret.Data {
-				plmSecretCfg.Content[key] = value
-			}
+			maps.Copy(plmSecretCfg.Content, secret.Data)
 		}
 	}
 }
 
-// updatePLMFetcherTLS updates the TLS configuration on the PLM fetcher based on secrets.
-// This is called during graph building to refresh TLS certificates when secrets change.
-func updatePLMFetcherTLS(plmConfig *PLMConfig, logger logr.Logger) {
-	if plmConfig == nil || plmConfig.Fetcher == nil {
-		return
-	}
+// plmSecretData holds extracted secret data for PLM configuration.
+type plmSecretData struct {
+	secretAccessKey string
+	caCert          []byte
+	clientCert      []byte
+	clientKey       []byte
+}
 
-	var caCert, clientCert, clientKey []byte
+// extractPLMSecrets extracts credentials and TLS data from PLM secret configurations.
+func extractPLMSecrets(secretConfigs map[types.NamespacedName]*PLMSecretConfig) plmSecretData {
+	var data plmSecretData
 
-	for _, secretCfg := range plmConfig.Secrets {
-		if secretCfg.Content == nil {
+	for _, secretCfg := range secretConfigs {
+		if secretCfg == nil || secretCfg.Content == nil {
 			continue
 		}
 
 		switch secretCfg.Type {
+		case PLMSecretTypeCredentials:
+			if v, ok := secretCfg.Content[secrets.PLMCredentialsKey]; ok {
+				data.secretAccessKey = string(v)
+			}
 		case PLMSecretTypeTLSCA:
-			if data, ok := secretCfg.Content[secrets.CAKey]; ok {
-				caCert = data
+			if v, ok := secretCfg.Content[secrets.CAKey]; ok {
+				data.caCert = v
 			}
 		case PLMSecretTypeTLSClient:
-			if data, ok := secretCfg.Content[secrets.TLSCertKey]; ok {
-				clientCert = data
+			if v, ok := secretCfg.Content[secrets.TLSCertKey]; ok {
+				data.clientCert = v
 			}
-			if data, ok := secretCfg.Content[secrets.TLSKeyKey]; ok {
-				clientKey = data
+			if v, ok := secretCfg.Content[secrets.TLSKeyKey]; ok {
+				data.clientKey = v
 			}
 		}
 	}
 
-	// Only update if we have TLS data
-	if len(caCert) == 0 && len(clientCert) == 0 {
+	return data
+}
+
+// updatePLMFetcher updates the PLM fetcher's TLS configuration and credentials based on secrets.
+// This is called during graph building to refresh certificates and credentials when secrets change.
+func updatePLMFetcher(plmConfig *PLMConfig, logger logr.Logger) {
+	if plmConfig == nil || plmConfig.Fetcher == nil {
 		return
 	}
 
-	tlsConfig, err := fetch.TLSConfigFromSecret(caCert, clientCert, clientKey, plmConfig.InsecureSkipVerify)
-	if err != nil {
-		logger.Error(err, "Failed to create TLS config from PLM secrets")
-		return
+	data := extractPLMSecrets(plmConfig.Secrets)
+
+	// Update credentials if we have them (access key ID is "admin" for SeaweedFS)
+	if data.secretAccessKey != "" {
+		if err := plmConfig.Fetcher.UpdateCredentials("admin", data.secretAccessKey); err != nil {
+			logger.Error(err, "Failed to update PLM fetcher credentials")
+		}
 	}
 
-	if err := plmConfig.Fetcher.UpdateTLSConfig(tlsConfig); err != nil {
-		logger.Error(err, "Failed to update PLM fetcher TLS config")
+	// Update TLS config if we have TLS data
+	if len(data.caCert) > 0 || len(data.clientCert) > 0 {
+		tlsConfig, err := fetch.TLSConfigFromSecret(
+			data.caCert, data.clientCert, data.clientKey, plmConfig.InsecureSkipVerify,
+		)
+		if err != nil {
+			logger.Error(err, "Failed to create TLS config from PLM secrets")
+			return
+		}
+
+		if err := plmConfig.Fetcher.UpdateTLSConfig(tlsConfig); err != nil {
+			logger.Error(err, "Failed to update PLM fetcher TLS config")
+		}
 	}
 }

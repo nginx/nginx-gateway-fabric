@@ -58,6 +58,9 @@ type Fetcher interface {
 	// UpdateTLSConfig updates the TLS configuration and recreates the underlying client.
 	// This is used to refresh TLS certificates when secrets change.
 	UpdateTLSConfig(tlsConfig *tls.Config) error
+	// UpdateCredentials updates the S3 credentials and recreates the underlying client.
+	// This is used to refresh credentials when secrets change.
+	UpdateCredentials(accessKeyID, secretAccessKey string) error
 }
 
 // S3Fetcher fetches files from S3-compatible storage.
@@ -127,6 +130,19 @@ func (f *S3Fetcher) UpdateTLSConfig(tlsConfig *tls.Config) error {
 	client, err := f.createS3Client()
 	if err != nil {
 		return fmt.Errorf("failed to recreate S3 client with new TLS config: %w", err)
+	}
+	f.client = client
+	return nil
+}
+
+// UpdateCredentials updates the S3 credentials and recreates the S3 client.
+// This allows updating credentials when secrets change without recreating the fetcher.
+func (f *S3Fetcher) UpdateCredentials(accessKeyID, secretAccessKey string) error {
+	f.accessKeyID = accessKeyID
+	f.secretAccessKey = secretAccessKey
+	client, err := f.createS3Client()
+	if err != nil {
+		return fmt.Errorf("failed to recreate S3 client with new credentials: %w", err)
 	}
 	f.client = client
 	return nil
