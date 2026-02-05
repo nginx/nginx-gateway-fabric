@@ -315,6 +315,22 @@ type RemoteTLSConfig struct {
   // +optional
   // +kubebuilder:default=true
   Verify *bool `json:"verify,omitempty"`
+
+  // SNI controls server name indication.
+  // Configures `proxy_ssl_server_name` directive.
+  // https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_server_name
+  //
+  // +optional
+  // +kubebuilder:default=true
+  SNI *bool `json:"sni,omitempty"` 
+
+  // SNIName sets a custom SNI.
+  // By default, NGINX uses the host from proxy_pass.
+  // Configures `proxy_ssl_name` directive.
+  // https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name
+  //
+  // +optional
+  SNIName *string `json:"sniName,omitempty"` 
 }
 
 // AuthenticationFilterStatus defines the state of AuthenticationFilter.
