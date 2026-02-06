@@ -1,6 +1,6 @@
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of the operator.
-VERSION ?= 1.2.0
+VERSION ?= 1.2.1
 
 # renovate: datasource=github-tags depName=operator-framework/operator-sdk
 OPERATOR_SDK_VERSION ?= v1.42.0
