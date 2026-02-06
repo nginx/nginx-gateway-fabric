@@ -19,6 +19,15 @@
       "groupName": "NGINX Agent"
     },
     {
+      "matchPackageNames": [
+        "registry.access.redhat.com/ubi9/**"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "enabled": false
+    },
+    {
       "groupName": "Docker digests",
       "matchDatasources": [
         "docker"

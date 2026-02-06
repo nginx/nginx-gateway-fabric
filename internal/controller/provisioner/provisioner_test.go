@@ -64,11 +64,11 @@ func expectResourcesToExist(t *testing.T, g *WithT, k8sClient client.Client, nsN
 
 	g.Expect(k8sClient.Get(t.Context(), nsName, &corev1.ServiceAccount{})).To(Succeed())
 
-	boostrapCM := types.NamespacedName{
+	bootstrapCM := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(nsName.Name, nginxIncludesConfigMapNameSuffix),
 		Namespace: nsName.Namespace,
 	}
-	g.Expect(k8sClient.Get(t.Context(), boostrapCM, &corev1.ConfigMap{})).To(Succeed())
+	g.Expect(k8sClient.Get(t.Context(), bootstrapCM, &corev1.ConfigMap{})).To(Succeed())
 
 	agentCM := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(nsName.Name, nginxAgentConfigMapNameSuffix),
@@ -119,11 +119,11 @@ func expectResourcesToNotExist(t *testing.T, g *WithT, k8sClient client.Client, 
 
 	g.Expect(k8sClient.Get(t.Context(), nsName, &corev1.ServiceAccount{})).ToNot(Succeed())
 
-	boostrapCM := types.NamespacedName{
+	bootstrapCM := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(nsName.Name, nginxIncludesConfigMapNameSuffix),
 		Namespace: nsName.Namespace,
 	}
-	g.Expect(k8sClient.Get(t.Context(), boostrapCM, &corev1.ConfigMap{})).ToNot(Succeed())
+	g.Expect(k8sClient.Get(t.Context(), bootstrapCM, &corev1.ConfigMap{})).ToNot(Succeed())
 
 	agentCM := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(nsName.Name, nginxAgentConfigMapNameSuffix),
