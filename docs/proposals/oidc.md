@@ -15,7 +15,8 @@ Enable NGINX Gateway Fabric to support centralized authentication enforcement us
 ## Non-Goals
 
 - Define implementation details for OIDC authorization.
-- Provide role-based access control (RBAC) authorization mechanisms.
+- Support OIDC authorization for TCP and UDP routes.
+- This design will not determine or enforce what actions a user is allowed to perform.
 - Support authentication mechanisms outside of OIDC.
 
 ## Useful Links
