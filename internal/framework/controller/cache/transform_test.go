@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 )
 
@@ -109,10 +110,30 @@ func TestTransformConfigMap(t *testing.T) {
 
 	tr := TransformConfigMap()
 
-	// ConfigMap with CAKey in Data
+	// All relevant keys
+	keys := []string{
+		secrets.CAKey,
+		configmaps.AgentConfKey,
+		configmaps.MainConfKey,
+		configmaps.EventsConfKey,
+	}
+
+	// ConfigMap with all relevant keys in Data and BinaryData, plus irrelevant keys
 	cm := &corev1.ConfigMap{
-		Data:       map[string]string{secrets.CAKey: "ca-data", "other": "x"},
-		BinaryData: map[string][]byte{"foo": []byte("bar")},
+		Data: map[string]string{
+			secrets.CAKey:            "ca-data",
+			configmaps.AgentConfKey:  "agent-data",
+			configmaps.MainConfKey:   "main-data",
+			configmaps.EventsConfKey: "events-data",
+			"irrelevant":             "nope",
+		},
+		BinaryData: map[string][]byte{
+			secrets.CAKey:            []byte("ca-bin"),
+			configmaps.AgentConfKey:  []byte("agent-bin"),
+			configmaps.MainConfKey:   []byte("main-bin"),
+			configmaps.EventsConfKey: []byte("events-bin"),
+			"irrelevant":             []byte("nope"),
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "foo"}},
 		},
@@ -122,27 +143,46 @@ func TestTransformConfigMap(t *testing.T) {
 	g.Expect(res).ToNot(BeNil())
 	resCM, ok := res.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(resCM.Data).To(Equal(map[string]string{secrets.CAKey: "ca-data"}))
-	g.Expect(resCM.BinaryData).To(BeNil())
+
+	// Only relevant keys remain
+	for _, k := range keys {
+		g.Expect(resCM.Data).To(HaveKey(k))
+		g.Expect(resCM.BinaryData).To(HaveKey(k))
+	}
+	g.Expect(resCM.Data).ToNot(HaveKey("irrelevant"))
+	g.Expect(resCM.BinaryData).ToNot(HaveKey("irrelevant"))
 	g.Expect(resCM.ManagedFields).To(BeNil())
 
-	// ConfigMap with CAKey in BinaryData
+	// ConfigMap with only one relevant key in Data
 	cm2 := &corev1.ConfigMap{
-		BinaryData: map[string][]byte{secrets.CAKey: []byte("bin-ca")},
+		Data: map[string]string{configmaps.MainConfKey: "main-data"},
 	}
 	res, err = tr(cm2)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(res).ToNot(BeNil())
 	resCM, ok = res.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(resCM.Data).To(BeNil())
-	g.Expect(resCM.BinaryData).To(Equal(map[string][]byte{secrets.CAKey: []byte("bin-ca")}))
+	g.Expect(resCM.Data).To(Equal(map[string]string{"main.conf": "main-data"}))
+	g.Expect(resCM.BinaryData).To(BeNil())
 
-	// ConfigMap with no CAKey
+	// ConfigMap with only one relevant key in BinaryData
 	cm3 := &corev1.ConfigMap{
-		Data: map[string]string{"foo": "bar"},
+		BinaryData: map[string][]byte{configmaps.EventsConfKey: []byte("ev-bin")},
 	}
 	res, err = tr(cm3)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(res).ToNot(BeNil())
+	resCM, ok = res.(*corev1.ConfigMap)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(resCM.Data).To(BeNil())
+	g.Expect(resCM.BinaryData).To(Equal(map[string][]byte{"events.conf": []byte("ev-bin")}))
+
+	// ConfigMap with no relevant keys
+	cm4 := &corev1.ConfigMap{
+		Data:       map[string]string{"foo": "bar"},
+		BinaryData: map[string][]byte{"baz": []byte("qux")},
+	}
+	res, err = tr(cm4)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(res).To(BeNil())
 
