@@ -13,3 +13,14 @@ type CaCertConfigMap struct {
 	// CertBundle holds the certificate bundle from the ConfigMap data.
 	CertBundle *secrets.CertificateBundle
 }
+
+const (
+	// EventsConfKey is the key in the bootstrap ConfigMap data for events configuration.
+	EventsConfKey = "events.conf"
+	// MainConfKey is the key in the bootstrap ConfigMap data for main configuration.
+	MainConfKey = "main.conf"
+	// MgmtConfKey is the key in the bootstrap ConfigMap data for mgmt configuration.
+	MgmtConfKey = "mgmt.conf"
+	// AgentConfKey is the key in the agent ConfigMap data for agent configuration.
+	AgentConfKey = "nginx-agent.conf"
+)

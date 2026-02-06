@@ -28,6 +28,7 @@ import (
 	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -101,7 +102,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		errs = append(errs, secretsErr)
 	}
 
-	configmaps, configMapErrs := p.buildNginxConfigMaps(
+	configmapsList, configMapErrs := p.buildNginxConfigMaps(
 		objectMeta,
 		nProxyCfg,
 		resourceNames,
@@ -181,9 +182,9 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// deployment/daemonset
 	// hpa
 
-	objects := make([]client.Object, 0, len(configmaps)+len(secretsList)+len(openshiftObjs)+3)
+	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+3)
 	objects = append(objects, secretsList...)
-	objects = append(objects, configmaps...)
+	objects = append(objects, configmapsList...)
 	objects = append(objects, serviceAccount)
 	if p.isOpenshift {
 		objects = append(objects, openshiftObjs...)
@@ -493,8 +494,8 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 			Annotations: objectMeta.Annotations,
 		},
 		Data: map[string]string{
-			"main.conf":   string(helpers.MustExecuteTemplate(mainTemplate, mainFields)),
-			"events.conf": string(helpers.MustExecuteTemplate(eventsTemplate, eventsFields)),
+			configmaps.MainConfKey:   string(helpers.MustExecuteTemplate(mainTemplate, mainFields)),
+			configmaps.EventsConfKey: string(helpers.MustExecuteTemplate(eventsTemplate, eventsFields)),
 		},
 	}
 
@@ -505,7 +506,7 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 			"UsageCASecret":        caSecret,
 			"UsageClientSSLSecret": clientSSLSecret,
 		}
-		cm.Data["mgmt.conf"] = string(helpers.MustExecuteTemplate(mgmtTemplate, mgmtFields))
+		cm.Data[configmaps.MgmtConfKey] = string(helpers.MustExecuteTemplate(mgmtTemplate, mgmtFields))
 	}
 
 	return cm
@@ -558,7 +559,7 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 			Annotations: objectMeta.Annotations,
 		},
 		Data: map[string]string{
-			"nginx-agent.conf": string(helpers.MustExecuteTemplate(agentTemplate, agentFields)),
+			configmaps.AgentConfKey: string(helpers.MustExecuteTemplate(agentTemplate, agentFields)),
 		},
 	}
 }
