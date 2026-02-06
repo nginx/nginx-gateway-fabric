@@ -122,7 +122,7 @@ spec:
       {{ toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      automountServiceAccountToken: true
+      automountServiceAccountToken: {{ .Values.certGenerator.automountServiceAccountToken }}
       containers:
       - args:
         - generate-certs
@@ -151,6 +151,14 @@ spec:
           readOnlyRootFilesystem: true
           runAsUser: 101
           runAsGroup: 1001
+        {{- if .Values.certGenerator.extraVolumeMounts }}
+        volumeMounts:
+        {{- toYaml .Values.certGenerator.extraVolumeMounts | nindent 8 }}
+        {{- end }}
+      {{- if .Values.certGenerator.extraVolumes }}
+      volumes:
+      {{- toYaml .Values.certGenerator.extraVolumes | nindent 6 }}
+      {{- end }}
       restartPolicy: Never
       serviceAccountName: {{ include "nginx-gateway.fullname" . }}-cert-generator
       securityContext:
