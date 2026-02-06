@@ -171,25 +171,25 @@ type LocalObjectReference struct {
   Name string `json:"name"`
 }
 
-// JWTKeyMode selects where JWT keys come from.
+// JWTKeySource selects where JWT keys come from.
 // +kubebuilder:validation:Enum=File;Remote
-type JWTKeyMode string
+type JWTKeySource string
 
 const (
-  // JWTKeyModeFile configures JWT to fetch JWKS from a local secret.
-  JWTKeyModeFile   JWTKeyMode = "File"
-  // JWTKeyModeRemote configures JWT to fetch JWKS from a remote source.
-  JWTKeyModeRemote JWTKeyMode = "Remote"
+  // JWTKeySourceFile configures JWT to fetch JWKS from a local secret.
+  JWTKeySourceFile   JWTKeySource = "File"
+  // JWTKeySourceRemote configures JWT to fetch JWKS from a remote source.
+  JWTKeySourceRemote JWTKeySource = "Remote"
 )
 
 // JWTAuth configures JWT-based authentication (NGINX Plus).
-// +kubebuilder:validation:XValidation:message="mode File requires spec.file to be set.",rule="self.mode != 'File' || has(self.file)"
-// +kubebuilder:validation:XValidation:message="mode Remote requires spec.remote to be set.",rule="self.mode != 'Remote' || has(self.remote)"
+// +kubebuilder:validation:XValidation:message="source File requires spec.file to be set.",rule="self.source != 'File' || has(self.file)"
+// +kubebuilder:validation:XValidation:message="source Remote requires spec.remote to be set.",rule="self.source != 'Remote' || has(self.remote)"
 //
 //nolint:lll
 type JWTAuth struct {
   // File specifies local JWKS configuration.
-  // Required when Mode == File.
+  // Required when Source == File.
   //
   // +optional
   File *JWTFileKeySource `json:"file,omitempty"`
@@ -203,7 +203,7 @@ type JWTAuth struct {
   KeyCache *Duration `json:"keyCache,omitempty"`
 
   // Remote specifies remote JWKS configuration.
-  // Required when Mode == Remote.
+  // Required when Source == Remote.
   //
   // +optional
   Remote *RemoteKeySource `json:"remote,omitempty"`
@@ -244,8 +244,8 @@ type JWTAuth struct {
   // Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
   Realm string `json:"realm"`
 
-  // Mode selects how JWT keys are provided: local file or remote JWKS.
-  Mode JWTKeyMode `json:"mode"`
+  // Source selects how JWT keys are provided: local file or remote JWKS.
+  Source JWTKeyMode `json:"source"`
 }
 
 // JWTFileKeySource specifies local JWKS key configuration.
@@ -509,7 +509,7 @@ For JWT Auth, there are two options.
 
 #### Spec for local JWKS
 
-This mode will access the public JSON Web Key (JWK) from a Kubernetes secret.
+This configuration will access the public JSON Web Key (JWK) from a Kubernetes secret.
 
 ```yaml
 apiVersion: gateway.nginx.org/v1alpha1
@@ -520,8 +520,8 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    # Key verification mode. Local file or Remote JWKS
-    mode: File
+    # JWK source. Local file or Remote JWKS
+    source: File
     file:
       secretRef:
         name: jwt-keys-securey
@@ -529,7 +529,7 @@ spec:
 
 #### Spec for remote JWKS
 
-This mode will access the public JSON Web Key Set (JWKS) from a remote server.
+This configuration will access the public JSON Web Key Set (JWKS) from a remote server.
 This could be a self-hosted server or a hosted identity provider (IdP).
 To ensure a secure connection can be established to the remote JWKS URI, the `remote.tls` will allow users to define a secret of type `kubernetes.io/tls` with the TLS cert and key of their IdP.
 
@@ -542,8 +542,8 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    # Key verification mode. Local file or Remote JWKS
-    mode: Remote
+    # JWK source. Local file or Remote JWKS
+    source: Remote
     remote:
       uri: https://issuer.example.com/.well-known/jwks.json
       tls:
@@ -672,9 +672,9 @@ spec:
 
 ### Generated NGINX configuration
 
-Below are `two` potential NGINX configurations based on the mode used.
+Below are `two` potential NGINX configurations based on the source defined.
 
-1. NGINX Config when using `Mode: File` (i.e. locally referenced JWKS key)
+1. NGINX Config when using `source: File` (i.e. locally referenced JWKS key)
 
 For JWT Auth, NGF will store the file used by `auth_jwt_key_file` in `/etc/nginx/secrets/`.
 The full path to the file will be `/etc/nginx/secrets/jwt_auth_<secret-namespace>_<secret-name>`.
@@ -718,9 +718,9 @@ http {
 }
 ```
 
-1. NGINX Config when using `Mode: Remote`
+1. NGINX Config when using `source: Remote`
 
-When using the `Remote` mode, the `auth_jwt_key_request` directive is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal-<namespace>_<name>_jwks_uri` to redirect the request to the external auth provider (e.g. Keycloak), In this example, the name will be `/_ngf-internal-default_api-jwt_jwks_uri`.
+When using the `Remote` source, the `auth_jwt_key_request` directive is used in place of `auth_jwt_key_file`. This will call the `internal` NGINX location `/_ngf-internal-<namespace>_<name>_jwks_uri` to redirect the request to the external auth provider (e.g. Keycloak), In this example, the name will be `/_ngf-internal-default_api-jwt_jwks_uri`.
 To improve the overall performance of remote requests, `auth_jwt_key_cache` can be specified to locally cache the JWKS received from the IdP. This prevents repeated calls to the IdP for a period of time.
 
 Here is an example of what the NGINX configuration would look like:
@@ -804,7 +804,7 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    mode: Remote
+    source: Remote
     remote:
       uri: https://issuer.example.com/.well-known/jwks.json
     keyCache: 10m
@@ -964,7 +964,7 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    mode: Remote
+    source: Remote
       remote:
         uri: https://issuer.example.com/.well-known/jwks.json
       require:
@@ -1028,7 +1028,7 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-    mode: Remote
+    source: Remote
       remote:
         uri: https://issuer.example.com/.well-known/jwks.json
       require:
@@ -1066,9 +1066,9 @@ The table below summarizes the capabilities enabled by the current JWT Authentic
 | Capability | API fields | NGINX directive | Notes |
 | --- | --- | --- | --- |
 | Enable JWT authentication and set realm | `spec.type = "JWT"`; `spec.jwt.realm` | `auth_jwt "<realm>"` | Currently does not expose defining `token` |
-| Provide JWT keys from local JWKS (Secret) | `spec.jwt.mode = "File"`; `spec.jwt.file.secretRef.name`; Secret type `nginx.org/jwt`; data key `auth` | `auth_jwt_key_file /etc/nginx/secrets/jwt_auth_<namespace>_<secret-name>` | Secret must exist in same namespace and must be of type `nginx.org/jwt` |
+| Provide JWT keys from local JWKS (Secret) | `spec.jwt.source = "File"`; `spec.jwt.file.secretRef.name`; Secret type `nginx.org/jwt`; data key `auth` | `auth_jwt_key_file /etc/nginx/secrets/jwt_auth_<namespace>_<secret-name>` | Secret must exist in same namespace and must be of type `nginx.org/jwt` |
 | Secret handling/validation for local JWKS | Secret type `nginx.org/jwt`; data key `auth`; `LocalObjectReference` | Validates presence/type/key; NGF loads JWKS into key file | Cross-namespace secrets not supported initially; future work may add `ReferenceGrant`-based access |
-| Provide JWT keys from remote JWKS | `spec.jwt.mode = "Remote"`; `spec.jwt.remote.uri`; `spec.jwt.remote.tls.secretRef` (type `kubernetes.io/tls`); `spec.jwt.remote.tls.verify` (default `true`); `spec.jwt.remote.tls.sni` (default `true`); `spec.jwt.remote.tls.sniName` (optional; default to server name in `proxy_pass`) | `auth_jwt_key_request /_ngf-internal-<namespace>_<filter-name>_jwks_uri`; internal location `proxy_pass` to remote JWKS; optional client TLS. | Requires DNS resolver via `NginxProxy.spec.dnsResolver`; `verify` controls server cert verification; key caching optional |
+| Provide JWT keys from remote JWKS | `spec.jwt.source = "Remote"`; `spec.jwt.remote.uri`; `spec.jwt.remote.tls.secretRef` (type `kubernetes.io/tls`); `spec.jwt.remote.tls.verify` (default `true`); `spec.jwt.remote.tls.sni` (default `true`); `spec.jwt.remote.tls.sniName` (optional; default to server name in `proxy_pass`) | `auth_jwt_key_request /_ngf-internal-<namespace>_<filter-name>_jwks_uri`; internal location `proxy_pass` to remote JWKS; optional client TLS. | Requires DNS resolver via `NginxProxy.spec.dnsResolver`; `verify` controls server cert verification; key caching optional |
 | Configure DNS resolver for remote JWKS | `NginxProxy.spec.dnsResolver.addresses` (separate resource) | `resolver` set at `http` context for name resolution used by `auth_jwt_key_request` | Required for remote JWKS URIs; managed outside the filter |
 | Configure JWT key cache duration | `spec.jwt.keyCache` (Duration) | `auth_jwt_key_cache <duration>` | Disabled by default to avoid stale keys |
 | Configure acceptable clock skew for `exp`/`nbf` | `spec.jwt.leeway` (Duration) | `auth_jwt_leeway <duration>` | Applies only if `exp`/`nbf` claims are present; default `0s` |
@@ -1216,7 +1216,7 @@ This can use the status `RouteConditionPartiallyInvalid` defined in the Gateway 
 
 This section covers configuration deployment scenarios for an `AuthenticationFilter` resource that would be considered invalid.
 These typically occur when the secret referenced by the `AuthenticationFilter` is misconfigured.
-These invalid scenarios can occur for both `type: Basic` and `type: JWT`. For JWT, mode should be `File` in these scenarios.
+These invalid scenarios can occur for both `type: Basic` and `type: JWT`. For JWT, source should be `File` in these scenarios.
 
 When an `AuthenticationFilter` is described as invalid, it could be for these reasons:
 
@@ -1254,7 +1254,7 @@ Two or more route rules each with two or more paths in an HTTPRoute/GRPCRoute re
   Requests to any path in the valid route rule return a 200 response when correctly authenticated.
   Requests to any path in the valid route rule return a 401 response when incorrectly authenticated.
 
-A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter` set to `type: JWT` and `mode: Remote` where the value of `remote.url` is a resolvable URL.
+A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter` set to `type: JWT` and `source: Remote` where the value of `remote.url` is a resolvable URL.
 - Expected outcomes:
   The route rule referencing the `AuthenticationFilter` is marked as valid.
   Requests to any path in the invalid route rule will return a 200 response with the JSON web key set (JWKS) to validate the original JWT signature from the authentication request.
@@ -1314,7 +1314,7 @@ Two or more `AuthenticationFilters` of the same `Type` referenced in a route rul
   The route rule referencing multiple `AuthenticationFilters` of the same `Type` is marked as invalid.
   Requests to any path in the invalid route rule will return a 500 error.
 
-A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter` set to `type: JWT` and `mode: Remote` where the value of `remote.url` is an unresolvable URL.
+A route rule with a single path in an HTTPRoute/GRPCRoute referencing a valid `AuthenticationFilter` set to `type: JWT` and `source: Remote` where the value of `remote.url` is an unresolvable URL.
 - Expected outcomes:
   The route rule referencing the `AuthenticationFilter` is marked as valid.
   Requests to any path in the invalid route rule will return a 500 error.
@@ -1531,7 +1531,7 @@ spec:
   type: JWT
   jwt:
     realm: "Restricted"
-      mode: Remote
+      source: Remote
       remote:
         uri: https://issuer.example.com/.well-known/jwks.json
 
@@ -1630,12 +1630,12 @@ const (
 
 // JWTTokenSource specifies where tokens may be read from and the name when required.
 type TokenSource struct {
-  // Mode selects the token source.
+  // Source selects the token source.
   // +kubebuilder:default=Header
-  Type TokenSourceType `json:"mode"`
+  Type TokenSourceType `json:"source"`
 
-  // TokenName is the cookie or query parameter name when Mode=Cookie or Mode=QueryArg.
-  // Ignored when Mode=Header.
+  // TokenName is the cookie or query parameter name when Source=Cookie or Source=QueryArg.
+  // Ignored when Source=Header.
   //
   // +optional
   // +kubebuilder:default=access_token
