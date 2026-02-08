@@ -5087,3 +5087,90 @@ func TestCreateBaseProxySetHeadersWithExternalName(t *testing.T) {
 		})
 	}
 }
+
+// TestCreatePath_PrefixShouldNotUseCaretTilde verifies that prefix paths use implicit prefix (no ^~ modifier).
+// ^~ tells NGINX to skip all regex evaluation when the prefix matches, which blocks regex locations.
+// Reproduces https://github.com/nginx/nginx-gateway-fabric/issues/4734
+func TestCreatePath_PrefixShouldNotUseCaretTilde(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	rule := dataplane.PathRule{
+		Path:     "/",
+		PathType: dataplane.PathTypePrefix,
+	}
+
+	result := createPath(rule)
+
+	// Prefix paths should use implicit prefix (just the path), not ^~ which blocks regex evaluation.
+	g.Expect(result).To(Equal("/"), "prefix path should not use ^~ modifier")
+}
+
+// TestCreatePath_RegexShouldBeAnchored verifies that regex paths are anchored with ^ to match from URI start.
+// Without anchoring, ~ /api/.* matches /something/api/foo because NGINX regex matches anywhere in the URI.
+// Reproduces https://github.com/nginx/nginx-gateway-fabric/issues/4761
+func TestCreatePath_RegexShouldBeAnchored(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	rule := dataplane.PathRule{
+		Path:     "/api/.*",
+		PathType: dataplane.PathTypeRegularExpression,
+	}
+
+	result := createPath(rule)
+
+	// Regex paths should be anchored with ^ so they only match from the start of the URI.
+	g.Expect(result).To(Equal("~ ^/api/.*"), "regex path should be anchored with ^")
+}
+
+// TestCreateLocations_RegexCatchAllShouldSuppressDefault404 verifies that a regex catch-all pattern
+// like /.* that covers / at runtime should suppress the auto-generated = / { return 404; } location.
+// Reproduces https://github.com/nginx/nginx-gateway-fabric/issues/4761
+func TestCreateLocations_RegexCatchAllShouldSuppressDefault404(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
+
+	fooGroup := dataplane.BackendGroup{
+		Source:  hrNsName,
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{
+				UpstreamName: "test_foo_80",
+				Valid:        true,
+				Weight:       1,
+			},
+		},
+	}
+
+	pathRules := []dataplane.PathRule{
+		{
+			Path:     "/.*",
+			PathType: dataplane.PathTypeRegularExpression,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+	}
+
+	locs, _, _ := createLocations(
+		&dataplane.VirtualServer{
+			PathRules: pathRules,
+			Port:      80,
+		},
+		"1",
+		&policiesfakes.FakeGenerator{},
+		alwaysFalseKeepAliveChecker,
+	)
+
+	// The regex catch-all /.* matches / at runtime, so the default = / { return 404; } should not be generated.
+	for _, loc := range locs {
+		hasDefault404 := loc.Path == "= /" && loc.Return != nil && loc.Return.Code == http.StatusNotFound
+		g.Expect(hasDefault404).To(BeFalse(), "default 404 root location should be suppressed when a regex catch-all covers /")
+	}
+}
