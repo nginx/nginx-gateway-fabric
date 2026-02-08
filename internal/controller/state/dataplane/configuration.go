@@ -805,8 +805,6 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 			s.PathRules = append(s.PathRules, r)
 		}
 
-		// We sort the path rules by descending path length so the order is preserved after reconfiguration
-		// and so that longer (more specific) regex patterns appear first in the generated NGINX config.
 		sortPathRules(s.PathRules)
 
 		for pathRuleIdx := range s.PathRules {
