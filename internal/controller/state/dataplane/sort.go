@@ -18,6 +18,7 @@ func sortPathRules(pathRules []PathRule) {
 		if pathRules[i].Path != pathRules[j].Path {
 			return pathRules[i].Path < pathRules[j].Path
 		}
+		// PathType string values sort in desired order: exact < prefix < regularExpression
 		return pathRules[i].PathType < pathRules[j].PathType
 	})
 }

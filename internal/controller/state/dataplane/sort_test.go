@@ -20,6 +20,16 @@ func TestSortPathRules(t *testing.T) {
 		expected []PathRule
 	}{
 		{
+			name:     "empty slice",
+			input:    []PathRule{},
+			expected: []PathRule{},
+		},
+		{
+			name:     "single element",
+			input:    []PathRule{{Path: "/api", PathType: PathTypePrefix}},
+			expected: []PathRule{{Path: "/api", PathType: PathTypePrefix}},
+		},
+		{
 			name: "regex paths sorted by descending length",
 			input: []PathRule{
 				{Path: "/.*", PathType: PathTypeRegularExpression},

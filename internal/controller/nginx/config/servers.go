@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	gotemplate "text/template"
 
+	"github.com/dlclark/regexp2"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
@@ -425,11 +425,16 @@ func createLocations(
 	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
 	for pathRuleIdx, rule := range server.PathRules {
-		if rule.Path == rootPath {
-			rootPathExists = true
-		} else if rule.PathType == dataplane.PathTypeRegularExpression {
-			if re, err := regexp.Compile(rule.Path); err == nil && re.MatchString("/") {
+		if !rootPathExists {
+			if rule.Path == rootPath {
 				rootPathExists = true
+			} else if rule.PathType == dataplane.PathTypeRegularExpression {
+				// Uses regexp2 with RE2 flag to match the engine used by the validation layer.
+				if re, err := regexp2.Compile(rule.Path, regexp2.RE2); err == nil {
+					if matched, _ := re.MatchString("/"); matched {
+						rootPathExists = true
+					}
+				}
 			}
 		}
 

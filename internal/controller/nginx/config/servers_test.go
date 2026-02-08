@@ -5166,6 +5166,60 @@ func TestCreateLocations_RegexCatchAllShouldSuppressDefault404(t *testing.T) {
 
 	for _, loc := range locs {
 		hasDefault404 := loc.Path == "= /" && loc.Return != nil && loc.Return.Code == http.StatusNotFound
-		g.Expect(hasDefault404).To(BeFalse(), "default 404 root location should be suppressed when a regex catch-all covers /")
+		g.Expect(hasDefault404).To(BeFalse(), "default 404 should be suppressed when regex catch-all covers /")
 	}
+}
+
+// TestCreateLocations_RegexNonRootShouldNotSuppressDefault404 verifies that a regex pattern
+// that does not cover / at runtime should NOT suppress the auto-generated = / { return 404; } location.
+// Reproduces https://github.com/nginx/nginx-gateway-fabric/issues/4761
+func TestCreateLocations_RegexNonRootShouldNotSuppressDefault404(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
+
+	fooGroup := dataplane.BackendGroup{
+		Source:  hrNsName,
+		RuleIdx: 0,
+		Backends: []dataplane.Backend{
+			{
+				UpstreamName: "test_foo_80",
+				Valid:        true,
+				Weight:       1,
+			},
+		},
+	}
+
+	pathRules := []dataplane.PathRule{
+		{
+			Path:     "/api/.*",
+			PathType: dataplane.PathTypeRegularExpression,
+			MatchRules: []dataplane.MatchRule{
+				{
+					Match:        dataplane.Match{},
+					BackendGroup: fooGroup,
+				},
+			},
+		},
+	}
+
+	locs, _, _ := createLocations(
+		&dataplane.VirtualServer{
+			PathRules: pathRules,
+			Port:      80,
+		},
+		"1",
+		&policiesfakes.FakeGenerator{},
+		alwaysFalseKeepAliveChecker,
+	)
+
+	var hasDefault404 bool
+	for _, loc := range locs {
+		if loc.Path == "= /" && loc.Return != nil && loc.Return.Code == http.StatusNotFound {
+			hasDefault404 = true
+			break
+		}
+	}
+	g.Expect(hasDefault404).To(BeTrue(), "default 404 root location should be present when regex does not cover /")
 }
