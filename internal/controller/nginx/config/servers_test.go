@@ -1498,7 +1498,7 @@ func TestCreateServers(t *testing.T) {
 
 		return []http.Location{
 			{
-				Path:         "^~ /",
+				Path:         "/",
 				HTTPMatchKey: ssl + "1_0",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
@@ -1525,7 +1525,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        internalIncludes,
 			},
 			{
-				Path:         "^~ /test/",
+				Path:         "/test/",
 				HTTPMatchKey: ssl + "1_1",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
@@ -1538,7 +1538,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        internalIncludes,
 			},
 			{
-				Path:            "^~ /path-only/",
+				Path:            "/path-only/",
 				ProxyPass:       "http://invalid-backend-ref$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
 				Type:            http.ExternalLocationType,
@@ -1552,7 +1552,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        externalIncludes,
 			},
 			{
-				Path:            "^~ /backend-tls-policy/",
+				Path:            "/backend-tls-policy/",
 				ProxyPass:       "https://test_btp_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
 				ProxySSLVerify: &http.ProxySSLVerify{
@@ -1574,7 +1574,7 @@ func TestCreateServers(t *testing.T) {
 				Includes: externalIncludes,
 			},
 			{
-				Path: "^~ /redirect-implicit-port/",
+				Path: "/redirect-implicit-port/",
 				Return: &http.Return{
 					Code: 302,
 					Body: fmt.Sprintf("$scheme://foo.example.com:%d$request_uri", port),
@@ -1592,7 +1592,7 @@ func TestCreateServers(t *testing.T) {
 				Includes: externalIncludes,
 			},
 			{
-				Path: "^~ /redirect-explicit-port/",
+				Path: "/redirect-explicit-port/",
 				Return: &http.Return{
 					Code: 302,
 					Body: "$scheme://bar.example.com:8080$request_uri",
@@ -1610,7 +1610,7 @@ func TestCreateServers(t *testing.T) {
 				Includes: externalIncludes,
 			},
 			{
-				Path:         "^~ /redirect-with-headers/",
+				Path:         "/redirect-with-headers/",
 				HTTPMatchKey: ssl + "1_6",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
@@ -1631,7 +1631,7 @@ func TestCreateServers(t *testing.T) {
 				Includes: internalIncludes,
 			},
 			{
-				Path:            "^~ /rewrite/",
+				Path:            "/rewrite/",
 				Rewrites:        []string{"^ /replacement break"},
 				ProxyPass:       "http://test_foo_80",
 				ProxySetHeaders: rewriteProxySetHeaders,
@@ -1647,7 +1647,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        externalIncludes,
 			},
 			{
-				Path:         "^~ /rewrite-with-headers/",
+				Path:         "/rewrite-with-headers/",
 				HTTPMatchKey: ssl + "1_8",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
@@ -1667,7 +1667,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        internalIncludes,
 			},
 			{
-				Path:            "^~ /mirror/",
+				Path:            "/mirror/",
 				ProxyPass:       "http://test_foo_80$request_uri",
 				ProxySetHeaders: httpBaseHeaders,
 				MirrorPaths:     []string{"/_ngf-internal-mirror-my-backend-test/route1-0"},
@@ -1771,7 +1771,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        externalIncludes,
 			},
 			{
-				Path: "^~ /invalid-filter/",
+				Path: "/invalid-filter/",
 				Return: &http.Return{
 					Code: http.StatusInternalServerError,
 				},
@@ -1787,7 +1787,7 @@ func TestCreateServers(t *testing.T) {
 				Includes: externalIncludes,
 			},
 			{
-				Path:         "^~ /invalid-filter-with-headers/",
+				Path:         "/invalid-filter-with-headers/",
 				HTTPMatchKey: ssl + "1_22",
 				Type:         http.RedirectLocationType,
 				Includes:     externalIncludes,
@@ -1827,7 +1827,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        internalIncludes,
 			},
 			{
-				Path:      "^~ /proxy-set-headers/",
+				Path:      "/proxy-set-headers/",
 				ProxyPass: "http://test_foo_80$request_uri",
 				ProxySetHeaders: append([]http.Header{
 					{
@@ -1918,7 +1918,7 @@ func TestCreateServers(t *testing.T) {
 				Includes:        externalIncludes,
 			},
 			{
-				Path: "^~ /redirect-with-path/",
+				Path: "/redirect-with-path/",
 				Type: http.ExternalLocationType,
 				Return: &http.Return{
 					Code: 301,
@@ -2081,7 +2081,7 @@ func TestCreateServersConflicts(t *testing.T) {
 			},
 			expLocs: []http.Location{
 				{
-					Path:            "^~ /coffee/",
+					Path:            "/coffee/",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
@@ -2127,7 +2127,7 @@ func TestCreateServersConflicts(t *testing.T) {
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path:            "^~ /coffee/",
+					Path:            "/coffee/",
 					ProxyPass:       "http://test_bar_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
@@ -2171,7 +2171,7 @@ func TestCreateServersConflicts(t *testing.T) {
 			},
 			expLocs: []http.Location{
 				{
-					Path:            "^~ /coffee/",
+					Path:            "/coffee/",
 					ProxyPass:       "http://test_bar_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
@@ -2482,7 +2482,7 @@ func TestCreateLocations_Includes(t *testing.T) {
 			},
 		},
 		{
-			Path: "^~ /snippets-prefix-path/",
+			Path: "/snippets-prefix-path/",
 			Includes: []shared.Include{
 				{
 					Name:    includesFolder + "/prefix-path-location-snippet.conf",
@@ -3288,7 +3288,9 @@ func TestCreateLocationsPath(t *testing.T) {
 			},
 		},
 		{
-			Path:     "^/regular-expression-path/(.*)$",
+			// NGF validation requires regex paths to start with "/", so ^ is not a valid first character.
+			// createPath() prepends ^ for anchoring, producing "~ ^/regular-expression-path/(.*)$".
+			Path:     "/regular-expression-path/(.*)$",
 			PathType: dataplane.PathTypeRegularExpression,
 			MatchRules: []dataplane.MatchRule{
 				{
@@ -3316,13 +3318,13 @@ func TestCreateLocationsPath(t *testing.T) {
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path:            "^~ /prefix-path-with-trailing-slash/",
+					Path:            "/prefix-path-with-trailing-slash/",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
 				},
 				{
-					Path:            "^~ /prefix-path-without-trailing-slash/",
+					Path:            "/prefix-path-without-trailing-slash/",
 					ProxyPass:       "http://test_foo_80$request_uri",
 					ProxySetHeaders: httpBaseHeaders,
 					Type:            http.ExternalLocationType,
