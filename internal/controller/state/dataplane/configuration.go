@@ -805,14 +805,9 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 			s.PathRules = append(s.PathRules, r)
 		}
 
-		// We sort the path rules so the order is preserved after reconfiguration.
-		sort.Slice(s.PathRules, func(i, j int) bool {
-			if s.PathRules[i].Path != s.PathRules[j].Path {
-				return s.PathRules[i].Path < s.PathRules[j].Path
-			}
-
-			return s.PathRules[i].PathType < s.PathRules[j].PathType
-		})
+		// We sort the path rules by descending path length so the order is preserved after reconfiguration
+		// and so that longer (more specific) regex patterns appear first in the generated NGINX config.
+		sortPathRules(s.PathRules)
 
 		for pathRuleIdx := range s.PathRules {
 			for matchRuleIdx := range s.PathRules[pathRuleIdx].MatchRules {

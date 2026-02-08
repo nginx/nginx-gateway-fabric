@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -426,6 +427,10 @@ func createLocations(
 	for pathRuleIdx, rule := range server.PathRules {
 		if rule.Path == rootPath {
 			rootPathExists = true
+		} else if rule.PathType == dataplane.PathTypeRegularExpression {
+			if re, err := regexp.Compile(rule.Path); err == nil && re.MatchString("/") {
+				rootPathExists = true
+			}
 		}
 
 		if rule.GRPC {
@@ -1628,9 +1633,9 @@ func createPath(rule dataplane.PathRule) string {
 	case dataplane.PathTypeExact:
 		return exactPath(rule.Path)
 	case dataplane.PathTypePrefix:
-		return fmt.Sprintf("^~ %s", rule.Path)
+		return rule.Path
 	case dataplane.PathTypeRegularExpression:
-		return fmt.Sprintf("~ %s", rule.Path)
+		return fmt.Sprintf("~ ^%s", rule.Path)
 	default:
 		panic(fmt.Errorf("unknown path type %q for path %q", rule.PathType, rule.Path))
 	}
