@@ -5,7 +5,7 @@ go 1.25.0
 replace github.com/nginx/nginx-gateway-fabric/v2 => ../
 
 require (
-	github.com/nginx/nginx-gateway-fabric/v2 v2.3.0
+	github.com/nginx/nginx-gateway-fabric/v2 v2.4.1
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
 	github.com/prometheus/client_golang v1.23.2
