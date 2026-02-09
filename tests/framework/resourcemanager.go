@@ -1078,6 +1078,22 @@ func (rm *ResourceManager) GetReadyNginxPodNames(
 				return false, fmt.Errorf("error getting list of NGINX Pods: %w", err)
 			}
 
+			// Get all pods in namespace for debugging
+			var allPodList core.PodList
+			if err := rm.List(
+				ctx,
+				&allPodList,
+				client.InNamespace(namespace),
+			); err != nil {
+				GinkgoWriter.Printf("Warning: error getting all pods in namespace %q: %v\n", namespace, err)
+			} else {
+				var allPodNames []string
+				for _, pod := range allPodList.Items {
+					allPodNames = append(allPodNames, pod.Name)
+				}
+				GinkgoWriter.Printf("All pods in namespace %q: %v\n", namespace, allPodNames)
+			}
+
 			nginxPodNames = getReadyPodNames(podList, opts...)
 			return len(nginxPodNames) > 0, nil
 		},

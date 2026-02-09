@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -144,6 +145,7 @@ func (h *eventHandler) handleDeleteEvent(ctx context.Context, e *events.DeleteEv
 			Namespace: e.NamespacedName.Namespace,
 		}
 		h.provisioner.cfg.DeploymentStore.Remove(deploymentNSName)
+		fmt.Println("We have deleted the gateway and marked for deletion: " + time.Now().String())
 	case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.Service, *corev1.ServiceAccount,
 		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
 

@@ -160,15 +160,21 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 	}()
 
 	for _, event := range batch {
+		logger.V(1).Info("Processing event from batch", "event", fmt.Sprintf("%T", event))
 		h.parseAndCaptureEvent(ctx, logger, event)
 	}
+	logger.V(1).Info("Finished capturing events for batch, processing changes in graph")
 
 	gr := h.cfg.processor.Process()
+	logger.V(1).Info("Finished processing changes in graph")
 
 	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
 	if !h.cfg.graphBuiltHealthChecker.ready {
 		h.cfg.graphBuiltHealthChecker.setAsReady()
+		logger.V(1).Info("Marked the Pod as ready after building the first graph")
 	}
+
+	logger.V(1).Info("sending nginx config with gr ", "graph", fmt.Sprintf("%T", gr))
 
 	h.sendNginxConfig(ctx, logger, gr)
 }
@@ -185,6 +191,7 @@ func (h *eventHandlerImpl) enable(ctx context.Context) {
 
 func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logger, gr *graph.Graph) {
 	if gr == nil {
+		logger.V(1).Info("Graph is nil, skipping sending nginx config")
 		return
 	}
 
@@ -194,6 +201,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			UpdateType: status.UpdateAll,
 		}
 		h.cfg.statusQueue.Enqueue(obj)
+		logger.V(1).Info("No Gateways found in graph, skipping sending nginx config but enqueued status update")
 		return
 	}
 
@@ -202,6 +210,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 
 	for _, gw := range gr.Gateways {
 		go func() {
+			logger.V(1).Info("Registering gateway with provisioner", "gateway", fmt.Sprintf("%T", gw))
 			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
 				logger.Error(err, "error from provisioner")
 			}
@@ -216,6 +225,8 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 				UpdateType: status.UpdateAll,
 			}
 			h.cfg.statusQueue.Enqueue(obj)
+			logger.V(1).Info("Gateway is invalid, skipping sending nginx config but enqueued status update",
+				"gateway", fmt.Sprintf("%T", gw))
 			return
 		}
 
@@ -240,6 +251,8 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		cfg.DeploymentContext = depCtx
 
 		h.setLatestConfiguration(gw, &cfg)
+		logger.V(1).Info("Built configuration for gateway", "gateway", fmt.Sprintf("%T", gw),
+			"configuration", fmt.Sprintf("%+v", cfg))
 
 		vm := []v1.VolumeMount{}
 		if gw.EffectiveNginxProxy != nil &&
@@ -254,8 +267,10 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		}
 
 		deployment.FileLock.Lock()
+		logger.V(1).Info("Updating NGINX configuration for gateway", "gateway", fmt.Sprintf("%T", gw))
 		h.updateNginxConf(deployment, cfg, vm)
 		deployment.FileLock.Unlock()
+		logger.V(1).Info("Finished updating NGINX configuration for gateway", "gateway", fmt.Sprintf("%T", gw))
 
 		configErr := deployment.GetLatestConfigError()
 		upstreamErr := deployment.GetLatestUpstreamError()
@@ -270,7 +285,10 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			},
 		}
 		h.cfg.statusQueue.Enqueue(obj)
+		logger.V(1).Info("Enqueued status update after sending nginx config", "gateway",
+			fmt.Sprintf("%T", gw), "error", fmt.Sprintf("%v", err))
 	}
+	logger.V(1).Info("Finished sending nginx config for all gateways in graph")
 }
 
 func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
@@ -279,8 +297,13 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 		if item == nil {
 			return
 		}
-
+		if item.Deployment.GatewayName != "" {
+			fmt.Println("We are processing a status update for " +
+				"deployment " + item.Deployment.GatewayName + " at time " + time.Now().String())
+		}
 		gr := h.cfg.processor.GetLatestGraph()
+
+		fmt.Println("We finished getting the graph at time " + time.Now().String())
 		if gr == nil {
 			continue
 		}
@@ -305,6 +328,9 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 		}
 		if gw != nil {
 			gw.LatestReloadResult = nginxReloadRes
+			fmt.Println("This is our gw! " + time.Now().String() + " " + gw.Source.GetName())
+		} else {
+			fmt.Println("We have a nil gateway! " + time.Now().String())
 		}
 
 		switch item.UpdateType {
@@ -334,6 +360,9 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 					msg+": %s",
 					err.Error(),
 				)
+				if gwAddresses == nil {
+					fmt.Println("We have a nil gwAddresses in wait for status updates for" + time.Now().String())
+				}
 				continue
 			}
 
@@ -361,6 +390,8 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		return
 	}
 
+	fmt.Println("I am updating the statuses now! " + time.Now().String())
+
 	gwAddresses, err := getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 	if err != nil {
 		msg := "error getting Gateway Service IP address"
@@ -374,6 +405,10 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 			msg+": %s",
 			err.Error(),
 		)
+	}
+
+	if gwAddresses == nil {
+		fmt.Println("We have a nil gwAddresses in update Statuses" + time.Now().String())
 	}
 
 	routeReqs := status.PrepareRouteRequests(
@@ -463,6 +498,8 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 		h.cfg.processor.CaptureUpsertChange(e.Resource)
 	case *events.DeleteEvent:
 		delFilterKey := objectFilterKey(e.Type, e.NamespacedName)
+		fmt.Println("We are deleting an object at time " + time.Now().String() + " " +
+			fmt.Sprintf("%T / %s", e.Type, e.NamespacedName.Name))
 
 		if filter, ok := h.objectFilters[delFilterKey]; ok {
 			filter.delete(ctx, logger, e.NamespacedName)
@@ -560,6 +597,7 @@ func getGatewayAddresses(
 			true, /* poll immediately */
 			func(ctx context.Context) (bool, error) {
 				if err := k8sClient.Get(ctx, key, &gwSvc); err != nil {
+					fmt.Println("Waiting for Service", svcName, "to be created... "+time.Now().String())
 					return false, nil //nolint:nilerr // need to retry without returning error
 				}
 

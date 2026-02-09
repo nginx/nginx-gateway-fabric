@@ -1,6 +1,7 @@
 package state
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -308,6 +309,7 @@ func (c *ChangeProcessorImpl) Process() *graph.Graph {
 	defer c.lock.Unlock()
 
 	if !c.getAndResetClusterStateChanged() {
+		fmt.Println("skipping graph rebuild since cluster state didn't change")
 		return nil
 	}
 
@@ -320,6 +322,8 @@ func (c *ChangeProcessorImpl) Process() *graph.Graph {
 		c.cfg.Logger,
 		c.cfg.FeatureFlags,
 	)
+
+	fmt.Println("The graph was rebuilt and should be new:", c.latestGraph)
 
 	return c.latestGraph
 }

@@ -114,10 +114,14 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 		return
 	}
 
+	fmt.Println("Updating upstream servers for deployment", deployment.gatewayName, "with config", conf)
+
 	broadcaster := deployment.GetBroadcaster()
 
 	// reset the latest error to nil now that we're applying new config
 	deployment.SetLatestUpstreamError(nil)
+
+	fmt.Println("Finished resetting latest upstream error for deployment", deployment.gatewayName)
 
 	var errs []error
 	var applied bool
@@ -137,6 +141,9 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 		actions = append(actions, action)
 	}
 
+	fmt.Println("Finished building HTTP upstream server actions for deployment",
+		deployment.gatewayName, "actions:", actions)
+
 	// Stream Upstreams (TLS, TCP, UDP)
 	for _, upstream := range conf.StreamUpstreams {
 		// Skip upstreams that have resolve servers to avoid "UpstreamServerImmutable" errors
@@ -150,8 +157,12 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 		}
 		actions = append(actions, action)
 	}
+	fmt.Println("Finished building Stream upstream server actions for deployment",
+		deployment.gatewayName, "actions:", actions)
 
 	if actionsEqual(deployment.GetNGINXPlusActions(), actions) {
+		fmt.Println("No changes to upstream servers, not sending API request for deployment",
+			deployment.gatewayName)
 		return
 	}
 
@@ -161,7 +172,11 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 			NGINXPlusAction: action,
 		}
 
+		fmt.Println("Sending API request to update upstream servers for deployment",
+			deployment.gatewayName, "with action:", action)
 		requestApplied, err := n.sendRequest(broadcaster, msg, deployment)
+		fmt.Println("Finished sending API request to update upstream servers for deployment",
+			deployment.gatewayName, "applied:", requestApplied, "error:", err)
 		if err != nil {
 			errs = append(errs, fmt.Errorf(
 				"couldn't update upstream via the API: %w", deployment.GetConfigurationStatus()))
@@ -244,7 +259,8 @@ func (n *NginxUpdaterImpl) sendRequest(
 		func(_ context.Context) (bool, error) {
 			applied = broadcaster.Send(msg)
 			if statusErr := deployment.GetConfigurationStatus(); statusErr != nil {
-				return false, nil //nolint:nilerr // will get error once done polling
+				fmt.Println("Configuration status error for deployment", deployment.gatewayName, ":", statusErr)
+				return false, nil
 			}
 
 			return true, nil

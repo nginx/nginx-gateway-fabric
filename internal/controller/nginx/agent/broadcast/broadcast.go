@@ -2,6 +2,7 @@ package broadcast
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
@@ -87,8 +88,11 @@ func (b *DeploymentBroadcaster) Subscribe() SubscriberChannels {
 // Send the message to all listeners. Wait for all listeners to respond.
 // Returns true if there were listeners that received the message.
 func (b *DeploymentBroadcaster) Send(message NginxAgentMessage) bool {
+	fmt.Println("Broadcasting message to subscribers:", message)
 	b.publishCh <- message
+	fmt.Println("Waiting for subscribers to respond to message:", message)
 	<-b.doneCh
+	fmt.Println("Finished broadcasting message to subscribers:", message)
 
 	return len(b.listeners) > 0
 }

@@ -93,7 +93,9 @@ func (d *Deployment) SetImageVersion(imageVersion string) {
 
 // SetLatestConfigError sets the latest config apply error for the deployment.
 func (d *Deployment) SetLatestConfigError(err error) {
+	fmt.Println("We are setting latest config error for deployment BEFORE THE LOCK", d.gatewayName, "to", err)
 	d.errLock.Lock()
+	fmt.Println("We are setting latest config error for deployment AFTER THE LOCK", d.gatewayName, "to", err)
 	defer d.errLock.Unlock()
 
 	d.latestConfigError = err
@@ -101,7 +103,9 @@ func (d *Deployment) SetLatestConfigError(err error) {
 
 // SetLatestUpstreamError sets the latest upstream update error for the deployment.
 func (d *Deployment) SetLatestUpstreamError(err error) {
+	fmt.Println("We are setting latest upstream error for deployment BEFORE THE LOCK", d.gatewayName, "to", err)
 	d.errLock.Lock()
+	fmt.Println("We are setting latest upstream error for deployment AFTER THE LOCK", d.gatewayName, "to", err)
 	defer d.errLock.Unlock()
 
 	d.latestUpstreamError = err
@@ -142,7 +146,9 @@ func (d *Deployment) RemovePodStatus(podName string) {
 // GetConfigurationStatus returns the current config status for this Deployment. It combines
 // the most recent errors (if they exist) for all Pods in the Deployment into a single error.
 func (d *Deployment) GetConfigurationStatus() error {
+	fmt.Println("Getting configuration status for deployment BEFORE THE LOCK", d.gatewayName)
 	d.errLock.RLock()
+	fmt.Println("Getting configuration status for deployment AFTER THE LOCK", d.gatewayName)
 	defer d.errLock.RUnlock()
 
 	errs := make([]error, 0, len(d.podStatuses))
@@ -174,6 +180,7 @@ func (d *Deployment) GetFileOverviews() ([]*pb.File, string) {
 // GetNGINXPlusActions returns the current NGINX Plus API Actions for the deployment.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) GetNGINXPlusActions() []*pb.NGINXPlusAction {
+	fmt.Println("Getting NGINX Plus Actions for deployment", d.gatewayName, "actions:", d.nginxPlusActions)
 	return d.nginxPlusActions
 }
 
@@ -251,6 +258,7 @@ func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broa
 // Used by a Subscriber when it first connects.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) SetNGINXPlusActions(actions []*pb.NGINXPlusAction) {
+	fmt.Println("Setting NGINX Plus Actions for deployment", d.gatewayName, "actions:", actions)
 	d.nginxPlusActions = actions
 }
 
