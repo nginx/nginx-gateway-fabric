@@ -245,7 +245,7 @@ type JWTAuth struct {
   Realm string `json:"realm"`
 
   // Source selects how JWT keys are provided: local file or remote JWKS.
-  Source JWTKeyMode `json:"source"`
+  Source JWTKeySource `json:"source"`
 }
 
 // JWTFileKeySource specifies local JWKS key configuration.

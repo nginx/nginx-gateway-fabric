@@ -73,6 +73,144 @@ spec:
                 - realm
                 - secretRef
                 type: object
+              jwt:
+                description: JWT configures JSON Web Token authentication (NGINX Plus).
+                properties:
+                  file:
+                    description: |-
+                      File specifies local JWKS configuration.
+                      Required when Source == File.
+                    properties:
+                      secretRef:
+                        description: SecretRef references a Secret containing the
+                          JWKS.
+                        properties:
+                          name:
+                            description: Name is the referenced object.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - secretRef
+                    type: object
+                  keyCache:
+                    description: |-
+                      KeyCache is the cache duration for keys.
+                      Configures `auth_jwt_key_cache` directive.
+                      https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
+                      Example: "auth_jwt_key_cache 10m;".
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  leeway:
+                    description: |-
+                      Leeway is the acceptable clock skew for exp & nbf claims.
+                      If exp & nbf claims are not defined, this directive takes no affect.
+                      Configures `auth_jwt_leeway` directive.
+                      https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
+                      Example: "auth_jwt_leeway 60s".
+                      Default: 0s.
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  realm:
+                    description: |-
+                      Realm used by NGINX `auth_jwt` directive
+                      https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
+                      Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
+                    type: string
+                  remote:
+                    description: |-
+                      Remote specifies remote JWKS configuration.
+                      Required when Source == Remote.
+                    properties:
+                      tls:
+                        description: RemoteTLSConfig defines TLS settings for remote
+                          JWKS retrieval.
+                        properties:
+                          secretRef:
+                            description: |-
+                              SecretRef references a Secret containing client TLS cert and key.
+                              Expects secret type kubernetes.io/tls.
+                            properties:
+                              group:
+                                default: ""
+                                description: |-
+                                  Group is the group of the referent. For example, "gateway.networking.k8s.io".
+                                  When unspecified or empty string, core API group is inferred.
+                                maxLength: 253
+                                pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                type: string
+                              kind:
+                                default: Secret
+                                description: Kind is kind of the referent. For example
+                                  "Secret".
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                                type: string
+                              name:
+                                description: Name is the name of the referent.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                              namespace:
+                                description: |-
+                                  Namespace is the namespace of the referenced object. When unspecified, the local
+                                  namespace is inferred.
+
+                                  Note that when a namespace different than the local namespace is specified,
+                                  a ReferenceGrant object is required in the referent namespace to allow that
+                                  namespace's owner to accept the reference. See the ReferenceGrant
+                                  documentation for details.
+
+                                  Support: Core
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          sni:
+                            default: true
+                            description: |-
+                              SNI controls server name indication.
+                              Configures `proxy_ssl_server_name` directive.
+                              https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_server_name
+                            type: boolean
+                          sniName:
+                            description: |-
+                              SNIName sets a custom SNI.
+                              By default, NGINX uses the host from proxy_pass.
+                              Configures `proxy_ssl_name` directive.
+                              https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name
+                            type: string
+                          verify:
+                            default: true
+                            description: Verify controls server certificate verification.
+                            type: boolean
+                        type: object
+                      url:
+                        type: string
+                    required:
+                    - url
+                    type: object
+                  source:
+                    description: 'Source selects how JWT keys are provided: local
+                      file or remote JWKS.'
+                    enum:
+                    - File
+                    - Remote
+                    type: string
+                required:
+                - realm
+                - source
+                type: object
+                x-kubernetes-validations:
+                - message: source File requires spec.file to be set.
+                  rule: self.source != 'File' || has(self.file)
+                - message: source Remote requires spec.remote to be set.
+                  rule: self.source != 'Remote' || has(self.remote)
               type:
                 description: Type selects the authentication mechanism.
                 enum:
@@ -82,8 +220,10 @@ spec:
             - type
             type: object
             x-kubernetes-validations:
-            - message: for type=Basic, spec.basic must be set
-              rule: '!(!has(self.basic) && self.type == ''Basic'')'
+            - message: type Basic requires spec.basic to be set.
+              rule: self.type != 'Basic' || has(self.basic)
+            - message: type JWT requires spec.jwt to be set.
+              rule: self.type != 'JWT' || has(self.jwt)
           status:
             description: Status defines the state of the AuthenticationFilter.
             properties:
