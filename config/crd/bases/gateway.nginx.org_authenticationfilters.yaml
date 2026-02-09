@@ -124,8 +124,8 @@ spec:
                       Required when Source == Remote.
                     properties:
                       tls:
-                        description: RemoteTLSConfig defines TLS settings for remote
-                          JWKS retrieval.
+                        description: TLS defines HTTPS client parameters for retrieving
+                          JWKS.
                         properties:
                           secretRef:
                             description: |-
@@ -190,10 +190,11 @@ spec:
                             description: Verify controls server certificate verification.
                             type: boolean
                         type: object
-                      url:
+                      uri:
+                        description: URI is the JWKS endpoint.
                         type: string
                     required:
-                    - url
+                    - uri
                     type: object
                   source:
                     description: 'Source selects how JWT keys are provided: local

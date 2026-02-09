@@ -147,8 +147,13 @@ type JWTFileKeySource struct {
 
 // RemoteKeySource specifies remote JWKS configuration.
 type RemoteKeySource struct {
+	// TLS defines HTTPS client parameters for retrieving JWKS.
+	//
+	// +optional
 	TLS *RemoteTLSConfig `json:"tls,omitempty"`
-	URI string           `json:"url"`
+
+	// URI is the JWKS endpoint.
+	URI string `json:"uri"`
 }
 
 // RemoteTLSConfig defines TLS settings for remote JWKS retrieval.
