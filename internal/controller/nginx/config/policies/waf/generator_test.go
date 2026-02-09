@@ -22,14 +22,14 @@ func TestGenerate(t *testing.T) {
 		expStrings []string
 	}{
 		{
-			name: "basic case with ApPolicy reference",
+			name: "basic case with APPolicy reference",
 			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-name",
 					Namespace: "my-namespace",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					ApPolicySource: &ngfAPIv1alpha1.ApPolicyReference{
+					APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
 						Name: "production-policy",
 					},
 				},
@@ -40,14 +40,14 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
-			name: "cross-namespace ApPolicy reference",
+			name: "cross-namespace APPolicy reference",
 			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-policy",
 					Namespace: "app-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					ApPolicySource: &ngfAPIv1alpha1.ApPolicyReference{
+					APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
 						Name:      "shared-policy",
 						Namespace: func() *string { s := "security-ns"; return &s }(),
 					},
@@ -59,19 +59,19 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
-			name: "security log with ApLogConf reference and stderr destination",
+			name: "security log with APLogConf reference and stderr destination",
 			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-with-log",
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					ApPolicySource: &ngfAPIv1alpha1.ApPolicyReference{
+					APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
 						Name: "base-policy",
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							ApLogConfSource: ngfAPIv1alpha1.ApLogConfReference{
+							APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
 								Name: "default-log",
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -96,12 +96,12 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					ApPolicySource: &ngfAPIv1alpha1.ApPolicyReference{
+					APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
 						Name: "base-policy",
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							ApLogConfSource: ngfAPIv1alpha1.ApLogConfReference{
+							APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
 								Name: "custom-log",
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -129,7 +129,7 @@ func TestGenerate(t *testing.T) {
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							ApLogConfSource: ngfAPIv1alpha1.ApLogConfReference{
+							APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
 								Name: "blocked-log",
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -149,19 +149,19 @@ func TestGenerate(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple security logs with cross-namespace ApLogConf references",
+			name: "multiple security logs with cross-namespace APLogConf references",
 			policy: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "waf-multi-log",
 					Namespace: "app-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					ApPolicySource: &ngfAPIv1alpha1.ApPolicyReference{
+					APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
 						Name: "policy",
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							ApLogConfSource: ngfAPIv1alpha1.ApLogConfReference{
+							APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
 								Name: "log-all",
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -169,7 +169,7 @@ func TestGenerate(t *testing.T) {
 							},
 						},
 						{
-							ApLogConfSource: ngfAPIv1alpha1.ApLogConfReference{
+							APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
 								Name:      "log-blocked",
 								Namespace: func() *string { s := "security-ns"; return &s }(),
 							},

@@ -13,7 +13,7 @@ import (
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
 
 // WAFGatewayBindingPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
-// with Policy Lifecycle Management (PLM) for Gateways and Routes by referencing PLM-managed ApPolicy resources.
+// with Policy Lifecycle Management (PLM) for Gateways and Routes by referencing PLM-managed APPolicy resources.
 type WAFGatewayBindingPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -50,37 +50,37 @@ type WAFGatewayBindingPolicySpec struct {
 	//nolint:lll
 	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 
-	// ApPolicySource references the ApPolicy CRD managed by PLM.
-	// The ApPolicy contains the WAF policy definition which PLM compiles and stores.
-	// NGF watches the ApPolicy status for the compiled bundle location.
-	ApPolicySource *ApPolicyReference `json:"apPolicySource"`
+	// APPolicySource references the APPolicy CRD managed by PLM.
+	// The APPolicy contains the WAF policy definition which PLM compiles and stores.
+	// NGF watches the APPolicy status for the compiled bundle location.
+	APPolicySource *APPolicyReference `json:"apPolicySource"`
 
 	// SecurityLogs defines security logging configurations.
-	// Each entry references an ApLogConf CRD managed by PLM for log profile compilation.
+	// Each entry references an APLogConf CRD managed by PLM for log profile compilation.
 	//
 	// +optional
 	// +kubebuilder:validation:MaxItems=32
 	SecurityLogs []WAFSecurityLog `json:"securityLogs,omitempty"`
 }
 
-// ApPolicyReference references an ApPolicy CRD by name and namespace.
-// The ApPolicy CRD is managed by PLM and contains WAF policy definitions.
-type ApPolicyReference struct {
+// APPolicyReference references an APPolicy CRD by name and namespace.
+// The APPolicy CRD is managed by PLM and contains WAF policy definitions.
+type APPolicyReference struct {
 	Namespace *string `json:"namespace,omitempty"`
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 }
 
-// ApLogConfReference references an ApLogConf CRD by name and namespace.
-// The ApLogConf CRD is managed by PLM and contains logging profile definitions.
-type ApLogConfReference struct {
+// APLogConfReference references an APLogConf CRD by name and namespace.
+// The APLogConf CRD is managed by PLM and contains logging profile definitions.
+type APLogConfReference struct {
 	Namespace *string `json:"namespace,omitempty"`
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 }
 
 // WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
-// Each entry references a PLM-managed ApLogConf CRD for the compiled log profile bundle.
+// Each entry references a PLM-managed APLogConf CRD for the compiled log profile bundle.
 type WAFSecurityLog struct {
 	// Name is the name of this security log configuration.
 	//
@@ -90,9 +90,9 @@ type WAFSecurityLog struct {
 	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$`
 	Name *string `json:"name,omitempty"`
 
-	// ApLogConfSource references the ApLogConf CRD for this log configuration.
-	// PLM compiles the ApLogConf and NGF fetches the compiled bundle from PLM storage.
-	ApLogConfSource ApLogConfReference `json:"apLogConfSource"`
+	// APLogConfSource references the APLogConf CRD for this log configuration.
+	// PLM compiles the APLogConf and NGF fetches the compiled bundle from PLM storage.
+	APLogConfSource APLogConfReference `json:"apLogConfSource"`
 
 	// Destination defines where security logs should be sent.
 	Destination SecurityLogDestination `json:"destination"`

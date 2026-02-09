@@ -2261,7 +2261,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 				wafPolicyKey("unresolved-waf"): getWAFPolicy(policyCfg{
 					Name: "unresolved-waf",
 					Conditions: []conditions.Condition{
-						conditions.NewPolicyRefsNotResolvedApPolicyNotFound("test/my-policy"),
+						conditions.NewPolicyRefsNotResolvedAPPolicyNotFound("test/my-policy"),
 					},
 					Ancestors: []graph.PolicyAncestor{
 						{
@@ -2289,7 +2289,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(conditions.PolicyReasonInvalidRef),
-									Message: "The referenced ApPolicy \"test/my-policy\"" +
+									Message: "The referenced APPolicy \"test/my-policy\"" +
 										" was not found",
 								},
 							},
@@ -2388,7 +2388,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 				wafPolicyKey("multi-err-waf"): getWAFPolicy(policyCfg{
 					Name: "multi-err-waf",
 					Conditions: []conditions.Condition{
-						conditions.NewPolicyRefsNotResolvedApLogConfNotFound("test/my-logconf"),
+						conditions.NewPolicyRefsNotResolvedAPLogConfNotFound("test/my-logconf"),
 						conditions.NewPolicyNotProgrammedBundleFetchError("timeout"),
 					},
 					Ancestors: []graph.PolicyAncestor{
@@ -2416,7 +2416,7 @@ func TestBuildWAFGatewayBindingPolicyStatuses(t *testing.T) {
 									ObservedGeneration: 1,
 									LastTransitionTime: transitionTime,
 									Reason:             string(conditions.PolicyReasonInvalidRef),
-									Message: "The referenced ApLogConf \"test/my-logconf\"" +
+									Message: "The referenced APLogConf \"test/my-logconf\"" +
 										" was not found",
 								},
 								{

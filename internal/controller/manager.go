@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"slices"
 	"strings"
@@ -147,8 +148,9 @@ func StartManager(cfg config.Config) error {
 
 	// Create WAF fetcher for PLM storage (returns nil if not configured)
 	wafFetcher, err := createWAFFetcher(
-		cfg.PLMStorageConfig,
-		cfg.GatewayPodConfig.Namespace,
+		plmSecrets,
+		cfg.PLMStorageConfig.URL,
+		cfg.PLMStorageConfig.TLSInsecureSkipVerify,
 		mgr.GetAPIReader(),
 		cfg.Logger,
 	)
@@ -1042,41 +1044,90 @@ func createPLMSecretMetadata(
 
 // createWAFFetcher creates an S3-compatible fetcher for WAF policy bundles from PLM storage.
 func createWAFFetcher(
-	plmCfg config.PLMStorageConfig,
-	namespace string,
+	plmSecrets map[types.NamespacedName]*graph.PLMSecretConfig,
+	plmStorageURL string,
+	tlsInsecureSkipVerify bool,
 	reader client.Reader,
 	logger logr.Logger,
 ) (fetch.Fetcher, error) {
 	// Return nil if PLM storage is not configured
-	if plmCfg.URL == "" {
+	if plmStorageURL == "" {
 		return nil, nil //nolint:nilnil // nil fetcher with no error is intentional when PLM is not configured
 	}
 
 	var opts []fetch.Option
 
-	// Configure credentials if secret name is provided
-	if plmCfg.CredentialsSecretName != "" {
-		secretNsName := parseSecretNsName(plmCfg.CredentialsSecretName, namespace)
+	// Configure credentials if secret is registered in plmSecrets
+	for nsName, secretCfg := range plmSecrets {
+		if secretCfg.Type == graph.PLMSecretTypeCredentials {
+			secret, err := getValidatedSecret(reader, nsName, plmSecretAccessKeyField)
+			if err != nil {
+				return nil, err
+			}
 
-		secret, err := getValidatedSecret(reader, secretNsName, plmSecretAccessKeyField)
-		if err != nil {
-			return nil, err
+			opts = append(opts, fetch.WithCredentials(
+				plmAccessKeyID,
+				string(secret.Data[plmSecretAccessKeyField]),
+			))
+			break
 		}
-
-		opts = append(opts, fetch.WithCredentials(
-			plmAccessKeyID,
-			string(secret.Data[plmSecretAccessKeyField]),
-		))
 	}
 
-	fetcher, err := fetch.NewS3Fetcher(plmCfg.URL, opts...)
+	// Configure TLS if TLS secrets are registered in plmSecrets
+	tlsConfig, err := buildTLSConfig(plmSecrets, tlsInsecureSkipVerify, reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %w", err)
+	}
+	if tlsConfig != nil {
+		opts = append(opts, fetch.WithTLSConfig(tlsConfig))
+	}
+
+	fetcher, err := fetch.NewS3Fetcher(plmStorageURL, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create S3 fetcher: %w", err)
 	}
 
-	logger.Info("Created WAF fetcher for PLM storage", "url", plmCfg.URL)
+	logger.Info("Created WAF fetcher for PLM storage", "url", plmStorageURL)
 
 	return fetcher, nil
+}
+
+// buildTLSConfig constructs a TLS configuration from PLM secrets (CA cert and/or client cert/key).
+func buildTLSConfig(
+	plmSecrets map[types.NamespacedName]*graph.PLMSecretConfig,
+	insecureSkipVerify bool,
+	reader client.Reader,
+) (*tls.Config, error) {
+	var caCert, clientCert, clientKey []byte
+
+	// Extract TLS certificate data from secrets
+	for nsName, secretCfg := range plmSecrets {
+		switch secretCfg.Type {
+		case graph.PLMSecretTypeTLSCA:
+			// Load CA certificate for server verification
+			secret, err := getValidatedSecret(reader, nsName, secrets.CAKey)
+			if err != nil {
+				return nil, err
+			}
+			caCert = secret.Data[secrets.CAKey]
+
+		case graph.PLMSecretTypeTLSClient:
+			// Load client certificate and key for mutual TLS
+			secret, err := getValidatedSecret(reader, nsName, secrets.TLSCertKey, secrets.TLSKeyKey)
+			if err != nil {
+				return nil, err
+			}
+			clientCert = secret.Data[secrets.TLSCertKey]
+			clientKey = secret.Data[secrets.TLSKeyKey]
+		}
+	}
+
+	// Return nil if no TLS configuration was provided
+	if len(caCert) == 0 && len(clientCert) == 0 && len(clientKey) == 0 {
+		return nil, nil //nolint:nilnil // nil config with no error is intentional when no TLS secrets are configured
+	}
+
+	return fetch.TLSConfigFromSecret(caCert, clientCert, clientKey, insecureSkipVerify)
 }
 
 // getValidatedSecret retrieves a secret and validates it has the required fields.

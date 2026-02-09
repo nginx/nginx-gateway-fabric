@@ -121,14 +121,14 @@ spec:
         {{- if .Values.nginxGateway.plmStorage.credentialsSecretName }}
         - --plm-storage-credentials-secret={{ .Values.nginxGateway.plmStorage.credentialsSecretName }}
         {{- end }}
-        {{- if .Values.nginxGateway.plmStorage.tls.caCertSecretName }}
-        - --plm-storage-tls-ca-cert={{ .Values.nginxGateway.plmStorage.tls.caCertSecretName }}
+        {{- if .Values.nginxGateway.plmStorage.tls.caSecretName }}
+        - --plm-storage-ca-secret={{ .Values.nginxGateway.plmStorage.tls.caSecretName }}
         {{- end }}
         {{- if .Values.nginxGateway.plmStorage.tls.clientCertPath }}
-        - --plm-storage-tls-client-ssl={{ .Values.nginxGateway.plmStorage.tls.clientSSLSecretName }}
+        - --plm-storage-client-ssl-secret={{ .Values.nginxGateway.plmStorage.tls.clientSSLSecretName }}
         {{- end }}
         {{- if .Values.nginxGateway.plmStorage.tls.insecureSkipVerify }}
-        - --plm-storage-tls-insecure-skip-verify
+        - --plm-storage-skip-verify
         {{- end }}
         {{- end }}
         {{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}

@@ -958,10 +958,10 @@
             "tls": {
               "description": "TLS configuration for PLM storage connections.",
               "properties": {
-                "caCertSecretName": {
+                "caSecretName": {
                   "default": "",
                   "description": "Name of the secret for the CA certificate file for TLS verification.",
-                  "title": "caCertSecretName",
+                  "title": "caSecretName",
                   "type": "string"
                 },
                 "clientSSLSecretName": {

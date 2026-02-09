@@ -58,13 +58,13 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 
 		fields := map[string]any{}
 
-		if wp.Spec.ApPolicySource != nil {
-			// Generate bundle path from ApPolicy reference
+		if wp.Spec.APPolicySource != nil {
+			// Generate bundle path from APPolicy reference
 			namespace := wp.Namespace
-			if wp.Spec.ApPolicySource.Namespace != nil {
-				namespace = *wp.Spec.ApPolicySource.Namespace
+			if wp.Spec.APPolicySource.Namespace != nil {
+				namespace = *wp.Spec.APPolicySource.Namespace
 			}
-			bundleName := fmt.Sprintf("%s_%s", namespace, wp.Spec.ApPolicySource.Name)
+			bundleName := fmt.Sprintf("%s_%s", namespace, wp.Spec.APPolicySource.Name)
 			bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 			fields["BundlePath"] = bundlePath
 		}
@@ -75,12 +75,12 @@ func generate(pols []policies.Policy) policies.GenerateResultFiles {
 			for _, secLog := range wp.Spec.SecurityLogs {
 				logEntry := map[string]string{}
 
-				// Generate log profile bundle path from ApLogConf reference
+				// Generate log profile bundle path from APLogConf reference
 				namespace := wp.Namespace
-				if secLog.ApLogConfSource.Namespace != nil {
-					namespace = *secLog.ApLogConfSource.Namespace
+				if secLog.APLogConfSource.Namespace != nil {
+					namespace = *secLog.APLogConfSource.Namespace
 				}
-				bundleName := fmt.Sprintf("%s_%s", namespace, secLog.ApLogConfSource.Name)
+				bundleName := fmt.Sprintf("%s_%s", namespace, secLog.APLogConfSource.Name)
 				bundlePath := fmt.Sprintf("%s/%s.tgz", appProtectBundleFolder, bundleName)
 				logEntry["LogProfileBundlePath"] = bundlePath
 

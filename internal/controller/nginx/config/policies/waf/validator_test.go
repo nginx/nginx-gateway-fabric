@@ -27,7 +27,7 @@ func createValidPolicy() *ngfAPI.WAFGatewayBindingPolicy {
 					Name:  "gateway",
 				},
 			},
-			ApPolicySource: &ngfAPI.ApPolicyReference{
+			APPolicySource: &ngfAPI.APPolicyReference{
 				Name: "production-policy",
 			},
 		},
@@ -58,7 +58,7 @@ func TestValidator_Validate(t *testing.T) {
 							Name:  "gateway",
 						},
 					},
-					ApPolicySource: &ngfAPI.ApPolicyReference{
+					APPolicySource: &ngfAPI.APPolicyReference{
 						Name: "policy",
 					},
 				},

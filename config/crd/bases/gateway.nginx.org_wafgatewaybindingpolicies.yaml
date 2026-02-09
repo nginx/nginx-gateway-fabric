@@ -29,7 +29,7 @@ spec:
       openAPIV3Schema:
         description: |-
           WAFGatewayBindingPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
-          with Policy Lifecycle Management (PLM) for Gateways and Routes by referencing PLM-managed ApPolicy resources.
+          with Policy Lifecycle Management (PLM) for Gateways and Routes by referencing PLM-managed APPolicy resources.
         properties:
           apiVersion:
             description: |-
@@ -53,9 +53,9 @@ spec:
             properties:
               apPolicySource:
                 description: |-
-                  ApPolicySource references the ApPolicy CRD managed by PLM.
-                  The ApPolicy contains the WAF policy definition which PLM compiles and stores.
-                  NGF watches the ApPolicy status for the compiled bundle location.
+                  APPolicySource references the APPolicy CRD managed by PLM.
+                  The APPolicy contains the WAF policy definition which PLM compiles and stores.
+                  NGF watches the APPolicy status for the compiled bundle location.
                 properties:
                   name:
                     minLength: 1
@@ -68,16 +68,16 @@ spec:
               securityLogs:
                 description: |-
                   SecurityLogs defines security logging configurations.
-                  Each entry references an ApLogConf CRD managed by PLM for log profile compilation.
+                  Each entry references an APLogConf CRD managed by PLM for log profile compilation.
                 items:
                   description: |-
                     WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
-                    Each entry references a PLM-managed ApLogConf CRD for the compiled log profile bundle.
+                    Each entry references a PLM-managed APLogConf CRD for the compiled log profile bundle.
                   properties:
                     apLogConfSource:
                       description: |-
-                        ApLogConfSource references the ApLogConf CRD for this log configuration.
-                        PLM compiles the ApLogConf and NGF fetches the compiled bundle from PLM storage.
+                        APLogConfSource references the APLogConf CRD for this log configuration.
+                        PLM compiles the APLogConf and NGF fetches the compiled bundle from PLM storage.
                       properties:
                         name:
                           minLength: 1

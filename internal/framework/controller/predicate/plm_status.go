@@ -7,7 +7,7 @@ import (
 )
 
 // PLMStatusChangedPredicate implements a predicate that only triggers on status changes.
-// This is used for watching ApPolicy and ApLogConf resources where we only care about
+// This is used for watching APPolicy and APLogConf resources where we only care about
 // status updates (e.g., when PLM compiles a policy and updates the status with bundle location).
 //
 // This predicate filters out spec-only changes since NGF doesn't own the spec of PLM resources.

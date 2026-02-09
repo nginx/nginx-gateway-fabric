@@ -259,7 +259,7 @@ nginxGateway:
     # -- TLS configuration for PLM storage connections.
     tls:
       # -- Name of the secret for the CA certificate file for TLS verification.
-      caCertSecretName: ""
+      caSecretName: ""
 
       # -- Name of the secret for the client for mutual TLS.
       clientSSLSecretName: ""

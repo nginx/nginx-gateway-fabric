@@ -100,9 +100,9 @@ func createControllerCommand() *cobra.Command {
 		watchNamespacesFlag                 = "watch-namespaces"
 		plmStorageURLFlag                   = "plm-storage-url"
 		plmStorageCredentialsSecretFlag     = "plm-storage-credentials-secret" //nolint:gosec // not credentials
-		plmStorageTLSCACertSecretFlag       = "plm-storage-tls-ca-cert"        //nolint:gosec // not credentials
-		plmStorageTLSClientSSLSecretFlag    = "plm-storage-tls-client-ssl"     //nolint:gosec // not credentials
-		plmStorageTLSInsecureSkipVerifyFlag = "plm-storage-tls-insecure-skip-verify"
+		plmStorageCASecretFlag              = "plm-storage-ca-secret"          //nolint:gosec // not credentials
+		plmStorageClientSSLSecretFlag       = "plm-storage-client-ssl-secret"  //nolint:gosec // not credentials
+		plmStorageSkipVerifyFlag            = "plm-storage-skip-verify"
 	)
 
 	// flag values
@@ -581,21 +581,21 @@ func createControllerCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(
 		&plmStorageTLSCACertSecret,
-		plmStorageTLSCACertSecretFlag,
+		plmStorageCASecretFlag,
 		"",
 		"The name of the Secret for TLS verification when communicating with PLM storage service.",
 	)
 
 	cmd.Flags().StringVar(
 		&plmStorageTLSClientSSLSecret,
-		plmStorageTLSClientSSLSecretFlag,
+		plmStorageClientSSLSecretFlag,
 		"",
 		"The name of the Secret for mutual TLS with PLM storage service.",
 	)
 
 	cmd.Flags().BoolVar(
 		&plmStorageTLSInsecureSkipVerify,
-		plmStorageTLSInsecureSkipVerifyFlag,
+		plmStorageSkipVerifyFlag,
 		false,
 		"Skip TLS certificate verification when communicating with PLM storage service. "+
 			"Not recommended for production.",

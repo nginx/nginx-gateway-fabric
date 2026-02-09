@@ -51,10 +51,10 @@ type ClusterState struct {
 	SnippetsFilters       map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
 	AuthenticationFilters map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter
 	InferencePools        map[types.NamespacedName]*inference.InferencePool
-	// ApPolicies holds PLM-managed ApPolicy resources (unstructured since CRD is external).
+	// ApPolicies holds PLM-managed APPolicy resources (unstructured since CRD is external).
 	ApPolicies map[types.NamespacedName]*unstructured.Unstructured
-	// ApLogConfs holds PLM-managed ApLogConf resources (unstructured since CRD is external).
-	ApLogConfs map[types.NamespacedName]*unstructured.Unstructured
+	// APLogConfs holds PLM-managed APLogConf resources (unstructured since CRD is external).
+	APLogConfs map[types.NamespacedName]*unstructured.Unstructured
 }
 
 // Graph is a Graph-like representation of Gateway API resources.
@@ -93,10 +93,10 @@ type Graph struct {
 	NGFPolicies map[PolicyKey]*Policy
 	// ReferencedWAFBundles includes the WAFPolicy Bundles that have been referenced by any Gateways or Routes.
 	ReferencedWAFBundles map[WAFBundleKey]*WAFBundleData
-	// ReferencedApPolicies includes ApPolicy resources referenced by WAFGatewayBindingPolicy resources.
+	// ReferencedApPolicies includes APPolicy resources referenced by WAFGatewayBindingPolicy resources.
 	ReferencedApPolicies map[types.NamespacedName]*unstructured.Unstructured
-	// ReferencedApLogConfs includes ApLogConf resources referenced by WAFGatewayBindingPolicy resources.
-	ReferencedApLogConfs map[types.NamespacedName]*unstructured.Unstructured
+	// ReferencedAPLogConfs includes APLogConf resources referenced by WAFGatewayBindingPolicy resources.
+	ReferencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// AuthenticationFilters holds all the AuthenticationFilters.
@@ -172,7 +172,7 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 	case *ngfAPIv1alpha2.NginxProxy:
 		_, exists := g.ReferencedNginxProxies[nsname]
 		return exists
-	// ApPolicy and ApLogConf are unstructured types; check by GVK.
+	// APPolicy and APLogConf are unstructured types; check by GVK.
 	case *unstructured.Unstructured:
 		gvk := obj.GroupVersionKind()
 		switch gvk {
@@ -180,7 +180,7 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 			_, exists := g.ReferencedApPolicies[nsname]
 			return exists
 		case kinds.APLogConfGVK:
-			_, exists := g.ReferencedApLogConfs[nsname]
+			_, exists := g.ReferencedAPLogConfs[nsname]
 			return exists
 		}
 		return false
@@ -358,10 +358,10 @@ func BuildGraph(
 			updatePLMFetcher(plmConfig, logger)
 		}
 
-		if len(state.ApPolicies) > 0 || len(state.ApLogConfs) > 0 {
+		if len(state.ApPolicies) > 0 || len(state.APLogConfs) > 0 {
 			wafInput = &WAFProcessingInput{
 				ApPolicies:       state.ApPolicies,
-				ApLogConfs:       state.ApLogConfs,
+				APLogConfs:       state.APLogConfs,
 				Fetcher:          plmConfig.Fetcher,
 				RefGrantResolver: refGrantResolver,
 			}
@@ -386,11 +386,11 @@ func BuildGraph(
 	// Extract WAF data from wafOutput
 	var referencedWAFBundles map[WAFBundleKey]*WAFBundleData
 	var referencedApPolicies map[types.NamespacedName]*unstructured.Unstructured
-	var referencedApLogConfs map[types.NamespacedName]*unstructured.Unstructured
+	var referencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	if wafOutput != nil {
 		referencedWAFBundles = wafOutput.Bundles
 		referencedApPolicies = wafOutput.ReferencedApPolicies
-		referencedApLogConfs = wafOutput.ReferencedApLogConfs
+		referencedAPLogConfs = wafOutput.ReferencedAPLogConfs
 	}
 
 	g := &Graph{
@@ -413,7 +413,7 @@ func BuildGraph(
 		PLMSecrets:                 plmSecrets,
 		ReferencedWAFBundles:       referencedWAFBundles,
 		ReferencedApPolicies:       referencedApPolicies,
-		ReferencedApLogConfs:       referencedApLogConfs,
+		ReferencedAPLogConfs:       referencedAPLogConfs,
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)
