@@ -56,7 +56,7 @@ type AuthenticationFilterSpec struct {
 
 // AuthType defines the authentication mechanism.
 //
-// +kubebuilder:validation:Enum=Basic;
+// +kubebuilder:validation:Enum=Basic;JWT;
 type AuthType string
 
 const (

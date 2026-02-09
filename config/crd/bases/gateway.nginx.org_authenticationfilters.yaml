@@ -215,6 +215,7 @@ spec:
                 description: Type selects the authentication mechanism.
                 enum:
                 - Basic
+                - JWT
                 type: string
             required:
             - type
