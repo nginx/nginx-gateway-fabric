@@ -151,7 +151,7 @@ jobs:
         with:
           file: tests/conformance/Dockerfile
           tags: conformance-test-runner:${{ github.sha }}
-          context: "tests"
+          context: "."
           load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max

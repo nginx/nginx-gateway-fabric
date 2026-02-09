@@ -85,7 +85,7 @@ repos:
         args: [-w, -s, -i, "4"]
 
   - repo: https://github.com/dadav/helm-schema
-    rev: 0.20.2
+    rev: 0.21.1
     hooks:
       - id: helm-schema
         args:
