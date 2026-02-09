@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
@@ -1100,3 +1101,292 @@ func TestCreatePLMSecretMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateWAFFetcher(t *testing.T) {
+	t.Parallel()
+
+	const (
+		defaultNamespace = "nginx-gateway"
+		plmStorageURL    = "https://plm-storage:8333"
+	)
+
+	credsSecret := &apiv1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: defaultNamespace,
+			Name:      "plm-creds",
+		},
+		Data: map[string][]byte{
+			secrets.PLMCredentialsKey: []byte("secret-access-key"),
+		},
+	}
+
+	caSecret := &apiv1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: defaultNamespace,
+			Name:      "plm-ca",
+		},
+		Data: map[string][]byte{
+			secrets.CAKey: []byte(validCACert),
+		},
+	}
+
+	tests := []struct {
+		plmSecrets            map[types.NamespacedName]*graph.PLMSecretConfig
+		name                  string
+		plmStorageURL         string
+		k8sObjects            []runtime.Object
+		tlsInsecureSkipVerify bool
+		expErr                bool
+		expFetcherNil         bool
+	}{
+		{
+			name:          "PLM not configured (empty URL)",
+			plmSecrets:    map[types.NamespacedName]*graph.PLMSecretConfig{},
+			plmStorageURL: "",
+			expFetcherNil: true,
+			expErr:        false,
+		},
+		{
+			name: "credentials only",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+			},
+			plmStorageURL: plmStorageURL,
+			k8sObjects:    []runtime.Object{credsSecret},
+			expErr:        false,
+			expFetcherNil: false,
+		},
+		{
+			name: "credentials and CA cert",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+			plmStorageURL: plmStorageURL,
+			k8sObjects:    []runtime.Object{credsSecret, caSecret},
+			expErr:        false,
+			expFetcherNil: false,
+		},
+		{
+			name: "TLS insecure skip verify enabled",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+			},
+			plmStorageURL:         plmStorageURL,
+			tlsInsecureSkipVerify: true,
+			k8sObjects:            []runtime.Object{credsSecret},
+			expErr:                false,
+			expFetcherNil:         false,
+		},
+		{
+			name: "missing credentials secret",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+			},
+			plmStorageURL: plmStorageURL,
+			k8sObjects:    []runtime.Object{}, // secret not created
+			expErr:        true,
+			expFetcherNil: false,
+		},
+		{
+			name: "missing CA secret",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+			plmStorageURL: plmStorageURL,
+			k8sObjects:    []runtime.Object{}, // secret not created
+			expErr:        true,
+			expFetcherNil: false,
+		},
+		{
+			name:          "no secrets configured (just URL)",
+			plmSecrets:    map[types.NamespacedName]*graph.PLMSecretConfig{},
+			plmStorageURL: plmStorageURL,
+			k8sObjects:    []runtime.Object{},
+			expErr:        false,
+			expFetcherNil: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			scheme := runtime.NewScheme()
+			g.Expect(apiv1.AddToScheme(scheme)).To(Succeed())
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(test.k8sObjects...).
+				Build()
+
+			fetcher, err := createWAFFetcher(
+				test.plmSecrets,
+				test.plmStorageURL,
+				test.tlsInsecureSkipVerify,
+				fakeClient,
+				logr.Discard(),
+			)
+
+			if test.expErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			if test.expFetcherNil {
+				g.Expect(fetcher).To(BeNil())
+			} else if !test.expErr {
+				g.Expect(fetcher).ToNot(BeNil())
+			}
+		})
+	}
+}
+
+func TestBuildTLSConfig(t *testing.T) {
+	t.Parallel()
+
+	const defaultNamespace = "nginx-gateway"
+
+	caSecret := &apiv1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: defaultNamespace,
+			Name:      "plm-ca",
+		},
+		Data: map[string][]byte{
+			secrets.CAKey: []byte(validCACert),
+		},
+	}
+
+	tests := []struct {
+		plmSecrets            map[types.NamespacedName]*graph.PLMSecretConfig
+		name                  string
+		k8sObjects            []runtime.Object
+		tlsInsecureSkipVerify bool
+		expErr                bool
+		expConfigNil          bool
+	}{
+		{
+			name:         "no TLS secrets",
+			plmSecrets:   map[types.NamespacedName]*graph.PLMSecretConfig{},
+			k8sObjects:   []runtime.Object{},
+			expErr:       false,
+			expConfigNil: true,
+		},
+		{
+			name: "CA cert only",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+			k8sObjects:   []runtime.Object{caSecret},
+			expErr:       false,
+			expConfigNil: false,
+		},
+		{
+			name: "insecure skip verify enabled",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+			tlsInsecureSkipVerify: true,
+			k8sObjects:            []runtime.Object{caSecret},
+			expErr:                false,
+			expConfigNil:          false,
+		},
+		{
+			name: "missing CA secret",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+			k8sObjects:   []runtime.Object{}, // secret not created
+			expErr:       true,
+			expConfigNil: false,
+		},
+		{
+			name: "missing client secret",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-client"}: {
+					Type: graph.PLMSecretTypeTLSClient,
+				},
+			},
+			k8sObjects:   []runtime.Object{}, // secret not created
+			expErr:       true,
+			expConfigNil: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			scheme := runtime.NewScheme()
+			g.Expect(apiv1.AddToScheme(scheme)).To(Succeed())
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(test.k8sObjects...).
+				Build()
+
+			tlsConfig, err := buildTLSConfig(
+				test.plmSecrets,
+				test.tlsInsecureSkipVerify,
+				fakeClient,
+			)
+
+			if test.expErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			if test.expConfigNil {
+				g.Expect(tlsConfig).To(BeNil())
+			} else if !test.expErr {
+				g.Expect(tlsConfig).ToNot(BeNil())
+			}
+		})
+	}
+}
+
+const (
+	// Valid CA certificate for testing (from existing test files).
+	validCACert = `-----BEGIN CERTIFICATE-----
+MIIDSDCCAjACCQDKWvrpwiIyCDANBgkqhkiG9w0BAQsFADBmMQswCQYDVQQGEwJV
+UzELMAkGA1UECAwCQ0ExFjAUBgNVBAcMDVNhbiBGcmFuc2lzY28xDjAMBgNVBAoM
+BU5HSU5YMQwwCgYDVQQLDANLSUMxFDASBgNVBAMMC2V4YW1wbGUuY29tMB4XDTIw
+MTExMjIxMjg0MloXDTMwMTExMDIxMjg0MlowZjELMAkGA1UEBhMCVVMxCzAJBgNV
+BAgMAkNBMRYwFAYDVQQHDA1TYW4gRnJhbnNpc2NvMQ4wDAYDVQQKDAVOR0lOWDEM
+MAoGA1UECwwDS0lDMRQwEgYDVQQDDAtleGFtcGxlLmNvbTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAMrlKMqrHfMR4mgaL2zZG2DYYfKCFVmINjlYuOeC
+FDTcRgQKtu2YcCxZYBADwHZxEf6NIKtVsMWLhSNS/Nc0BmtiQM/IExhlCiDC6Sl8
+ONrI3w7qJzN6IUERB6tVlQt07rgM0V26UTYu0Ikv1Y8trfLYPZckzBkorQjpcium
+qoP2BJf4yyc9LqpxtlWKxelkunVL5ijMEzpj9gEE26TEHbsdEbhoR8g0OeHZqH7e
+mXCnSIBR0A/o/s6noGNX+F19lY7Tgw77jOuQQ5Ysi+7nhN2lKvcC819RX7oMpgvt
+V5B3nI0mF6BaznjeTs4yQcr1Sm3UTVBwX9ZuvL7RbIXkUm8CAwEAATANBgkqhkiG
+9w0BAQsFAAOCAQEAgm04w6OIWGj6tka9ccccnblF0oZzeEAIywjvR5sDcPdvLIeM
+eesJy6rFH4DBmMygpcIxJGrSOzZlF3LMvw7zK4stqNtm1HiprF8bzxfTffVYncg6
+hVKErHtZ2FZRj/2TMJ01aRDZSuVbL6UJiokpU6xxT7yy0dFZkKrjUR349gKxRqJw
+Am2as0bhi51EqK1GEx3m4c0un2vNh5qP2hv6e/Qze6P96vefNaSk9QMFfuB1kSAk
+fGpkiL7bjmjnhKwAmf8jDWDZltB6S56Qy2QjPR8JoOusbYxar4c6EcIwVHv6mdgP
+yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
+-----END CERTIFICATE-----`
+)

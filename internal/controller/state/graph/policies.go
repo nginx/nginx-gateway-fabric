@@ -72,8 +72,8 @@ type PolicyKey struct {
 	GVK schema.GroupVersionKind
 }
 
-// WAFBundleKey uniquely identifies a WAF bundle (ApPolicy or ApLogConf).
-// Format: "<namespace>/<name>" for ApPolicy bundles, or "<namespace>/<name>/log/<logname>" for ApLogConf bundles.
+// WAFBundleKey uniquely identifies a WAF bundle (APPolicy or APLogConf).
+// Format: "<namespace>/<name>" for APPolicy bundles, or "<namespace>/<name>/log/<logname>" for APLogConf bundles.
 type WAFBundleKey string
 
 // WAFBundleData contains the fetched WAF bundle and its metadata.
@@ -88,9 +88,9 @@ type WAFBundleData struct {
 type WAFBundleType string
 
 const (
-	// WAFBundleTypePolicy indicates an ApPolicy bundle.
+	// WAFBundleTypePolicy indicates an APPolicy bundle.
 	WAFBundleTypePolicy WAFBundleType = "policy"
-	// WAFBundleTypeLogProfile indicates an ApLogConf bundle.
+	// WAFBundleTypeLogProfile indicates an APLogConf bundle.
 	WAFBundleTypeLogProfile WAFBundleType = "logprofile"
 )
 
@@ -434,10 +434,10 @@ func propagateSnippetsPolicyToRoutes(
 
 // WAFProcessingInput contains the input needed for WAF policy processing.
 type WAFProcessingInput struct {
-	// ApPolicies contains the ApPolicy resources from the cluster.
+	// ApPolicies contains the APPolicy resources from the cluster.
 	ApPolicies map[types.NamespacedName]*unstructured.Unstructured
-	// ApLogConfs contains the ApLogConf resources from the cluster.
-	ApLogConfs map[types.NamespacedName]*unstructured.Unstructured
+	// APLogConfs contains the APLogConf resources from the cluster.
+	APLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	// Fetcher is the S3-compatible fetcher for PLM storage (nil if WAF not enabled).
 	Fetcher fetch.Fetcher
 	// RefGrantResolver validates cross-namespace references.
@@ -448,10 +448,10 @@ type WAFProcessingInput struct {
 type WAFProcessingOutput struct {
 	// Bundles contains the fetched WAF bundles keyed by bundle key.
 	Bundles map[WAFBundleKey]*WAFBundleData
-	// ReferencedApPolicies contains ApPolicy resources referenced by WAFGatewayBindingPolicies.
+	// ReferencedApPolicies contains APPolicy resources referenced by WAFGatewayBindingPolicies.
 	ReferencedApPolicies map[types.NamespacedName]*unstructured.Unstructured
-	// ReferencedApLogConfs contains ApLogConf resources referenced by WAFGatewayBindingPolicies.
-	ReferencedApLogConfs map[types.NamespacedName]*unstructured.Unstructured
+	// ReferencedAPLogConfs contains APLogConf resources referenced by WAFGatewayBindingPolicies.
+	ReferencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
 }
 
 func processPolicies(
@@ -766,7 +766,7 @@ func addStatusToTargetRefs(policyKind string, conditionsList *[]conditions.Condi
 }
 
 // processWAFPolicies processes WAFGatewayBindingPolicy resources and fetches their bundles.
-// It extracts ApPolicy/ApLogConf references and fetches compiled bundles from PLM storage.
+// It extracts APPolicy/APLogConf references and fetches compiled bundles from PLM storage.
 func processWAFPolicies(
 	processedPolicies map[PolicyKey]*Policy,
 	wafInput *WAFProcessingInput,
@@ -778,7 +778,7 @@ func processWAFPolicies(
 	output := &WAFProcessingOutput{
 		Bundles:              make(map[WAFBundleKey]*WAFBundleData),
 		ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
-		ReferencedApLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
+		ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 	}
 
 	for key, policy := range processedPolicies {
@@ -797,31 +797,31 @@ func processWAFPolicies(
 			continue
 		}
 
-		// Process ApPolicy reference
-		if !processApPolicyReference(wafPolicy, policy, wafInput, output) {
+		// Process APPolicy reference
+		if !processAPPolicyReference(wafPolicy, policy, wafInput, output) {
 			continue
 		}
 
-		// Process SecurityLogs (ApLogConf references)
+		// Process SecurityLogs (APLogConf references)
 		processSecurityLogs(wafPolicy, policy, wafInput, output)
 	}
 
 	return output
 }
 
-// processApPolicyReference processes the ApPolicy reference for a WAFGatewayBindingPolicy.
+// processAPPolicyReference processes the APPolicy reference for a WAFGatewayBindingPolicy.
 // Returns false if the policy should be skipped (invalid or error occurred).
-func processApPolicyReference(
+func processAPPolicyReference(
 	wafPolicy *ngfAPIv1alpha1.WAFGatewayBindingPolicy,
 	policy *Policy,
 	wafInput *WAFProcessingInput,
 	output *WAFProcessingOutput,
 ) bool {
-	if wafPolicy.Spec.ApPolicySource == nil {
+	if wafPolicy.Spec.APPolicySource == nil {
 		return true
 	}
 
-	apPolicyNsName := resolveApPolicyReference(wafPolicy.Spec.ApPolicySource, wafPolicy.Namespace)
+	apPolicyNsName := resolveAPPolicyReference(wafPolicy.Spec.APPolicySource, wafPolicy.Namespace)
 
 	// Check ReferenceGrant for cross-namespace references
 	if apPolicyNsName.Namespace != wafPolicy.Namespace {
@@ -831,7 +831,7 @@ func processApPolicyReference(
 				fromWAFGatewayBindingPolicy(wafPolicy.Namespace),
 			) {
 			policy.Conditions = append(policy.Conditions,
-				conditions.NewPolicyRefsNotResolvedApPolicyRefNotPermitted(apPolicyNsName.String()))
+				conditions.NewPolicyRefsNotResolvedAPPolicyRefNotPermitted(apPolicyNsName.String()))
 			policy.Valid = false
 			return false
 		}
@@ -840,7 +840,7 @@ func processApPolicyReference(
 	apPolicy, exists := wafInput.ApPolicies[apPolicyNsName]
 	if !exists {
 		policy.Conditions = append(policy.Conditions,
-			conditions.NewPolicyRefsNotResolvedApPolicyNotFound(apPolicyNsName.String()))
+			conditions.NewPolicyRefsNotResolvedAPPolicyNotFound(apPolicyNsName.String()))
 		policy.Valid = false
 		return false
 	}
@@ -850,12 +850,12 @@ func processApPolicyReference(
 	apStatus, err := plm.ExtractAPPolicyStatus(apPolicy)
 	if err != nil {
 		policy.Conditions = append(policy.Conditions,
-			conditions.NewPolicyRefsNotResolvedApPolicyStatusError(err.Error()))
+			conditions.NewPolicyRefsNotResolvedAPPolicyStatusError(err.Error()))
 		policy.Valid = false
 		return false
 	}
 
-	bundleData, cond := fetchApPolicyBundle(apPolicyNsName, apStatus, wafInput.Fetcher)
+	bundleData, cond := fetchAPPolicyBundle(apPolicyNsName, apStatus, wafInput.Fetcher)
 	if cond != nil {
 		policy.Conditions = append(policy.Conditions, *cond)
 		policy.Valid = false
@@ -884,7 +884,7 @@ func processSecurityLogs(
 	output *WAFProcessingOutput,
 ) {
 	for _, secLog := range wafPolicy.Spec.SecurityLogs {
-		apLogConfNsName := resolveApLogConfReference(&secLog.ApLogConfSource, wafPolicy.Namespace)
+		apLogConfNsName := resolveAPLogConfReference(&secLog.APLogConfSource, wafPolicy.Namespace)
 
 		// Check ReferenceGrant for cross-namespace references
 		if apLogConfNsName.Namespace != wafPolicy.Namespace {
@@ -894,31 +894,31 @@ func processSecurityLogs(
 					fromWAFGatewayBindingPolicy(wafPolicy.Namespace),
 				) {
 				policy.Conditions = append(policy.Conditions,
-					conditions.NewPolicyRefsNotResolvedApLogConfRefNotPermitted(apLogConfNsName.String()))
+					conditions.NewPolicyRefsNotResolvedAPLogConfRefNotPermitted(apLogConfNsName.String()))
 				policy.Valid = false
 				continue
 			}
 		}
 
-		apLogConf, exists := wafInput.ApLogConfs[apLogConfNsName]
+		apLogConf, exists := wafInput.APLogConfs[apLogConfNsName]
 		if !exists {
 			policy.Conditions = append(policy.Conditions,
-				conditions.NewPolicyRefsNotResolvedApLogConfNotFound(apLogConfNsName.String()))
+				conditions.NewPolicyRefsNotResolvedAPLogConfNotFound(apLogConfNsName.String()))
 			policy.Valid = false
 			continue
 		}
 
-		output.ReferencedApLogConfs[apLogConfNsName] = apLogConf
+		output.ReferencedAPLogConfs[apLogConfNsName] = apLogConf
 
 		apLogStatus, err := plm.ExtractAPLogConfStatus(apLogConf)
 		if err != nil {
 			policy.Conditions = append(policy.Conditions,
-				conditions.NewPolicyRefsNotResolvedApLogConfStatusError(err.Error()))
+				conditions.NewPolicyRefsNotResolvedAPLogConfStatusError(err.Error()))
 			policy.Valid = false
 			continue
 		}
 
-		bundleData, cond := fetchApLogConfBundle(apLogConfNsName, apLogStatus, wafInput.Fetcher)
+		bundleData, cond := fetchAPLogConfBundle(apLogConfNsName, apLogStatus, wafInput.Fetcher)
 		if cond != nil {
 			policy.Conditions = append(policy.Conditions, *cond)
 			policy.Valid = false
@@ -926,7 +926,7 @@ func processSecurityLogs(
 		}
 
 		if bundleData != nil {
-			// Use ApLogConf nsname as bundle key - this ensures the same ApLogConf
+			// Use APLogConf nsname as bundle key - this ensures the same APLogConf
 			// referenced by multiple WGBPolicies or SecurityLogs is only stored once.
 			bundleKey := wafBundleKey(apLogConfNsName)
 			output.Bundles[bundleKey] = bundleData
@@ -934,8 +934,8 @@ func processSecurityLogs(
 	}
 }
 
-// resolveApPolicyReference resolves the namespace for an ApPolicy reference.
-func resolveApPolicyReference(ref *ngfAPIv1alpha1.ApPolicyReference, defaultNs string) types.NamespacedName {
+// resolveAPPolicyReference resolves the namespace for an APPolicy reference.
+func resolveAPPolicyReference(ref *ngfAPIv1alpha1.APPolicyReference, defaultNs string) types.NamespacedName {
 	ns := defaultNs
 	if ref.Namespace != nil && *ref.Namespace != "" {
 		ns = *ref.Namespace
@@ -943,8 +943,8 @@ func resolveApPolicyReference(ref *ngfAPIv1alpha1.ApPolicyReference, defaultNs s
 	return types.NamespacedName{Namespace: ns, Name: ref.Name}
 }
 
-// resolveApLogConfReference resolves the namespace for an ApLogConf reference.
-func resolveApLogConfReference(ref *ngfAPIv1alpha1.ApLogConfReference, defaultNs string) types.NamespacedName {
+// resolveAPLogConfReference resolves the namespace for an APLogConf reference.
+func resolveAPLogConfReference(ref *ngfAPIv1alpha1.APLogConfReference, defaultNs string) types.NamespacedName {
 	ns := defaultNs
 	if ref.Namespace != nil && *ref.Namespace != "" {
 		ns = *ref.Namespace
@@ -961,23 +961,23 @@ type bundleConditionFuncs struct {
 }
 
 var apPolicyCondFuncs = bundleConditionFuncs{
-	notCompiled:  conditions.NewPolicyRefsNotResolvedApPolicyNotCompiled,
-	invalid:      conditions.NewPolicyRefsNotResolvedApPolicyInvalid,
-	noLocation:   conditions.NewPolicyRefsNotResolvedApPolicyNoLocation,
-	unknownState: conditions.NewPolicyRefsNotResolvedApPolicyUnknownState,
+	notCompiled:  conditions.NewPolicyRefsNotResolvedAPPolicyNotCompiled,
+	invalid:      conditions.NewPolicyRefsNotResolvedAPPolicyInvalid,
+	noLocation:   conditions.NewPolicyRefsNotResolvedAPPolicyNoLocation,
+	unknownState: conditions.NewPolicyRefsNotResolvedAPPolicyUnknownState,
 }
 
 var apLogConfCondFuncs = bundleConditionFuncs{
-	notCompiled:  conditions.NewPolicyRefsNotResolvedApLogConfNotCompiled,
-	invalid:      conditions.NewPolicyRefsNotResolvedApLogConfInvalid,
-	noLocation:   conditions.NewPolicyRefsNotResolvedApLogConfNoLocation,
-	unknownState: conditions.NewPolicyRefsNotResolvedApLogConfUnknownState,
+	notCompiled:  conditions.NewPolicyRefsNotResolvedAPLogConfNotCompiled,
+	invalid:      conditions.NewPolicyRefsNotResolvedAPLogConfInvalid,
+	noLocation:   conditions.NewPolicyRefsNotResolvedAPLogConfNoLocation,
+	unknownState: conditions.NewPolicyRefsNotResolvedAPLogConfUnknownState,
 }
 
-// fetchApPolicyBundle fetches the compiled bundle for an ApPolicy.
+// fetchAPPolicyBundle fetches the compiled bundle for an APPolicy.
 // Returns nil bundle if the policy is not yet compiled (pending state).
 // Returns a condition if there's an error that should invalidate the policy.
-func fetchApPolicyBundle(
+func fetchAPPolicyBundle(
 	nsName types.NamespacedName,
 	status *plm.APPolicyStatus,
 	fetcher fetch.Fetcher,
@@ -985,8 +985,8 @@ func fetchApPolicyBundle(
 	return fetchBundle(nsName, status.Bundle, status.Processing, fetcher, WAFBundleTypePolicy, apPolicyCondFuncs)
 }
 
-// fetchApLogConfBundle fetches the compiled bundle for an ApLogConf.
-func fetchApLogConfBundle(
+// fetchAPLogConfBundle fetches the compiled bundle for an APLogConf.
+func fetchAPLogConfBundle(
 	nsName types.NamespacedName,
 	status *plm.APLogConfStatus,
 	fetcher fetch.Fetcher,

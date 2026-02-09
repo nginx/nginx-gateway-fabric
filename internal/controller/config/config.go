@@ -69,7 +69,7 @@ type PLMStorageConfig struct {
 	// URL is the PLM storage service URL (HTTP or HTTPS).
 	URL string
 	// CredentialsSecretName is the name of the Secret containing S3 credentials.
-	// The Secret should have "accessKeyId" and "secretAccessKey" data fields.
+	// The Secret should have the "seaweedfs_admin_secret" data field.
 	CredentialsSecretName string
 	// TLSCACertSecretName is the is the name of the Secret containing the CA certificate file for TLS verification.
 	TLSCACertSecretName string
