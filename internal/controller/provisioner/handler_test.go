@@ -387,7 +387,7 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	g.Expect(store.getGateway(client.ObjectKeyFromObject(gateway))).To(BeNil())
 }
 
-func TestEventHandler_GetResourceVersion(t *testing.T) {
+func TestEventHandler_HasResourceVersionChanged(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -395,7 +395,7 @@ func TestEventHandler_GetResourceVersion(t *testing.T) {
 		name                 string
 		storeResourceVersion string
 		k8sResourceVersion   string
-		expectedResult       string
+		expectedResult       bool
 		deepCopySucceeds     bool
 	}{
 		{
@@ -403,14 +403,14 @@ func TestEventHandler_GetResourceVersion(t *testing.T) {
 			storeResourceVersion: "42",
 			k8sResourceVersion:   "100", // should be ignored
 			deepCopySucceeds:     true,
-			expectedResult:       "42",
+			expectedResult:       true,
 		},
 		{
 			name:                 "resource version not in store, found via k8s client",
 			storeResourceVersion: "",
 			k8sResourceVersion:   "100",
 			deepCopySucceeds:     true,
-			expectedResult:       "100",
+			expectedResult:       false,
 		},
 		{
 			name:                 "resource version not in store, k8s client fails",
@@ -418,14 +418,14 @@ func TestEventHandler_GetResourceVersion(t *testing.T) {
 			k8sResourceVersion:   "100", // should be ignored due to error
 			k8sGetError:          errors.New("not found"),
 			deepCopySucceeds:     true,
-			expectedResult:       "",
+			expectedResult:       true,
 		},
 		{
 			name:                 "resource version not in store, deepCopy fails",
 			storeResourceVersion: "",
 			k8sResourceVersion:   "100", // should be ignored due to deepCopy failure
 			deepCopySucceeds:     false,
-			expectedResult:       "",
+			expectedResult:       true,
 		},
 	}
 
@@ -480,8 +480,9 @@ func TestEventHandler_GetResourceVersion(t *testing.T) {
 				// Create a mock object that fails deepCopy type assertion
 				testObj = &mockObject{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-deployment",
-						Namespace: "default",
+						Name:            "test-deployment",
+						Namespace:       "default",
+						ResourceVersion: test.k8sResourceVersion,
 					},
 				}
 			}
@@ -492,7 +493,7 @@ func TestEventHandler_GetResourceVersion(t *testing.T) {
 			handler, err := newEventHandler(store, provisioner, fakeClient, labelSelector, "nginx")
 			g.Expect(err).ToNot(HaveOccurred())
 
-			result := handler.getResourceVersion(t.Context(), provisioner.cfg.Logger, gatewayNSName, testObj)
+			result := handler.hasResourceVersionChanged(t.Context(), provisioner.cfg.Logger, gatewayNSName, testObj)
 			g.Expect(result).To(Equal(test.expectedResult))
 		})
 	}
