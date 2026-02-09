@@ -264,12 +264,14 @@ func (p *NginxProvisioner) provisionNginx(
 							"Retrying CreateOrUpdate for nginx resource after error",
 							"namespace", gateway.GetNamespace(),
 							"name", resourceName,
+							"type", reflect.TypeOf(obj).Elem().Name(),
 						)
 					} else {
 						p.cfg.Logger.V(1).Info(
 							"Retrying CreateOrUpdate for nginx resource after error",
 							"namespace", gateway.GetNamespace(),
 							"name", resourceName,
+							"type", reflect.TypeOf(obj).Elem().Name(),
 							"error", upsertErr.Error(),
 						)
 					}

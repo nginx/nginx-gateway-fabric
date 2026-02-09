@@ -135,6 +135,7 @@ func (h *eventHandler) handleDeleteEvent(ctx context.Context, e *events.DeleteEv
 			h.provisioner.setResourceToDelete(e.NamespacedName)
 		}
 		h.store.deleteGateway(e.NamespacedName)
+		h.store.deleteResourcesForGateway(e.NamespacedName)
 		deploymentNSName := types.NamespacedName{
 			Name:      controller.CreateNginxResourceName(e.NamespacedName.Name, h.gcName),
 			Namespace: e.NamespacedName.Namespace,
