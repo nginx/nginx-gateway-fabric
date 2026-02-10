@@ -1,7 +1,7 @@
 # Enhancement Proposal-3716: Gateway API Inference Extension
 
 - Issue: https://github.com/nginx/nginx-gateway-fabric/issues/3716
-- Status: Implementable
+- Status: Completed
 
 ## Summary
 

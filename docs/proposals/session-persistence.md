@@ -1,7 +1,7 @@
 # Enhancement Proposal-4051: Session Persistence for NGINX Plus and OSS
 
 - Issue: https://github.com/nginx/nginx-gateway-fabric/issues/4051
-- Status: Implementable
+- Status: Completed
 
 ## Summary
 

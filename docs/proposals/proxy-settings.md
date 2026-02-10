@@ -2,7 +2,7 @@
 # Enhancement Proposal-4067: Proxy Settings Policy
 
 - Issue: https://github.com/nginx/nginx-gateway-fabric/issues/4067
-- Status: Implementable
+- Status: Completed
 
 ## Summary
 
