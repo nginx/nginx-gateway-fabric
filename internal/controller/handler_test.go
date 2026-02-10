@@ -261,6 +261,12 @@ var _ = Describe("eventHandler", func() {
 					Gateways: map[types.NamespacedName]*graph.Gateway{
 						{Namespace: "test", Name: "gateway"}: {
 							Valid: false,
+							Source: &gatewayv1.Gateway{
+								ObjectMeta: metav1.ObjectMeta{
+									Name:      "gateway",
+									Namespace: "test",
+								},
+							},
 						},
 					},
 				})
@@ -455,9 +461,12 @@ var _ = Describe("eventHandler", func() {
 	It("should update status when receiving a queue event", func() {
 		obj := &status.QueueObject{
 			UpdateType: status.UpdateAll,
-			Deployment: types.NamespacedName{
-				Namespace: "test",
-				Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+			Deployment: status.Deployment{
+				NamespacedName: types.NamespacedName{
+					Namespace: "test",
+					Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+				},
+				GatewayName: "gateway",
 			},
 			Error: errors.New("status error"),
 		}
@@ -476,9 +485,12 @@ var _ = Describe("eventHandler", func() {
 	It("should update Gateway status when receiving a queue event", func() {
 		obj := &status.QueueObject{
 			UpdateType: status.UpdateGateway,
-			Deployment: types.NamespacedName{
-				Namespace: "test",
-				Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+			Deployment: status.Deployment{
+				NamespacedName: types.NamespacedName{
+					Namespace: "test",
+					Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+				},
+				GatewayName: "gateway",
 			},
 			GatewayService: &v1.Service{},
 		}

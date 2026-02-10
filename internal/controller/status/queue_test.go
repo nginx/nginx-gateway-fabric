@@ -24,8 +24,11 @@ func TestEnqueue(t *testing.T) {
 
 	q := NewQueue()
 	item := &QueueObject{
-		Error:      nil,
-		Deployment: types.NamespacedName{Namespace: "default", Name: "test-object"},
+		Error: nil,
+		Deployment: Deployment{
+			NamespacedName: types.NamespacedName{Namespace: "default", Name: "test-object"},
+			GatewayName:    "gateway",
+		},
 		UpdateType: UpdateAll,
 	}
 	q.Enqueue(item)
@@ -40,8 +43,11 @@ func TestDequeue(t *testing.T) {
 
 	q := NewQueue()
 	item := &QueueObject{
-		Error:      nil,
-		Deployment: types.NamespacedName{Namespace: "default", Name: "test-object"},
+		Error: nil,
+		Deployment: Deployment{
+			NamespacedName: types.NamespacedName{Namespace: "default", Name: "test-object"},
+			GatewayName:    "gateway",
+		},
 		UpdateType: UpdateAll,
 	}
 	q.Enqueue(item)
@@ -73,13 +79,19 @@ func TestDequeueWithMultipleItems(t *testing.T) {
 
 	q := NewQueue()
 	item1 := &QueueObject{
-		Error:      nil,
-		Deployment: types.NamespacedName{Namespace: "default", Name: "test-object-1"},
+		Error: nil,
+		Deployment: Deployment{
+			NamespacedName: types.NamespacedName{Namespace: "default", Name: "test-object-1"},
+			GatewayName:    "gateway",
+		},
 		UpdateType: UpdateAll,
 	}
 	item2 := &QueueObject{
-		Error:      nil,
-		Deployment: types.NamespacedName{Namespace: "default", Name: "test-object-2"},
+		Error: nil,
+		Deployment: Deployment{
+			NamespacedName: types.NamespacedName{Namespace: "default", Name: "test-object-2"},
+			GatewayName:    "gateway",
+		},
 		UpdateType: UpdateAll,
 	}
 	q.Enqueue(item1)

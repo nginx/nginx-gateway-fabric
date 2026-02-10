@@ -91,7 +91,10 @@ func (h *eventHandler) handleUpsertEvent(ctx context.Context, e *events.UpsertEv
 				return fmt.Errorf("error handling resource update: %w", err)
 			}
 			h.provisioner.cfg.StatusQueue.Enqueue(&status.QueueObject{
-				Deployment:     client.ObjectKeyFromObject(obj),
+				Deployment: status.Deployment{
+					NamespacedName: client.ObjectKeyFromObject(obj),
+					GatewayName:    gatewayNSName.Name,
+				},
 				UpdateType:     status.UpdateGateway,
 				GatewayService: obj,
 			})
