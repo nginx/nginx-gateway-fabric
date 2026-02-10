@@ -30,6 +30,7 @@ import (
 type eventHandler struct {
 	store         *store
 	provisioner   *NginxProvisioner
+	k8sClient     client.Reader
 	labelSelector labels.Selector
 	// gcName is the GatewayClass name for this control plane.
 	gcName string
@@ -38,6 +39,7 @@ type eventHandler struct {
 func newEventHandler(
 	store *store,
 	provisioner *NginxProvisioner,
+	k8sClient client.Reader,
 	selector metav1.LabelSelector,
 	gcName string,
 ) (*eventHandler, error) {
@@ -49,6 +51,7 @@ func newEventHandler(
 	return &eventHandler{
 		store:         store,
 		provisioner:   provisioner,
+		k8sClient:     k8sClient,
 		labelSelector: labelSelector,
 		gcName:        gcName,
 	}, nil
@@ -132,6 +135,7 @@ func (h *eventHandler) handleDeleteEvent(ctx context.Context, e *events.DeleteEv
 			h.provisioner.setResourceToDelete(e.NamespacedName)
 		}
 		h.store.deleteGateway(e.NamespacedName)
+		h.store.deleteResourcesForGateway(e.NamespacedName)
 		deploymentNSName := types.NamespacedName{
 			Name:      controller.CreateNginxResourceName(e.NamespacedName.Name, h.gcName),
 			Namespace: e.NamespacedName.Namespace,
@@ -179,7 +183,7 @@ func (h *eventHandler) updateOrDeleteResources(
 		return nil
 	}
 
-	if h.store.getResourceVersionForObject(gatewayNSName, obj) == obj.GetResourceVersion() {
+	if !h.hasResourceVersionChanged(ctx, logger, gatewayNSName, obj) {
 		return nil
 	}
 
@@ -189,6 +193,32 @@ func (h *eventHandler) updateOrDeleteResources(
 	}
 
 	return nil
+}
+
+// hasResourceVersionChanged checks if the resource version for the object has changed.
+// If the resource version is not found in the store, it uses the k8s client to get the current
+// resource version.
+func (h *eventHandler) hasResourceVersionChanged(
+	ctx context.Context,
+	logger logr.Logger,
+	gatewayNSName types.NamespacedName,
+	obj client.Object,
+) bool {
+	objectResourceVersion := obj.GetResourceVersion()
+	storeResourceVersion := h.store.getResourceVersionForObject(gatewayNSName, obj)
+	if storeResourceVersion == "" {
+		storeObject, ok := obj.DeepCopyObject().(client.Object)
+		if ok {
+			getError := h.k8sClient.Get(ctx, client.ObjectKeyFromObject(storeObject), storeObject)
+			if getError == nil {
+				storeResourceVersion = storeObject.GetResourceVersion()
+			} else {
+				logger.Error(getError, "error finding already provisioned resource")
+			}
+		}
+	}
+
+	return storeResourceVersion != objectResourceVersion
 }
 
 func (h *eventHandler) provisionResource(
