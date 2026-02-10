@@ -11,6 +11,91 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
+func TestSortPathRules(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    []PathRule
+		expected []PathRule
+	}{
+		{
+			name:     "empty slice",
+			input:    []PathRule{},
+			expected: []PathRule{},
+		},
+		{
+			name:     "single element",
+			input:    []PathRule{{Path: "/api", PathType: PathTypePrefix}},
+			expected: []PathRule{{Path: "/api", PathType: PathTypePrefix}},
+		},
+		{
+			name: "regex paths sorted by descending length",
+			input: []PathRule{
+				{Path: "/.*", PathType: PathTypeRegularExpression},
+				{Path: "/api/.*", PathType: PathTypeRegularExpression},
+				{Path: "/api/v1/users/[0-9]+", PathType: PathTypeRegularExpression},
+			},
+			expected: []PathRule{
+				{Path: "/api/v1/users/[0-9]+", PathType: PathTypeRegularExpression},
+				{Path: "/api/.*", PathType: PathTypeRegularExpression},
+				{Path: "/.*", PathType: PathTypeRegularExpression},
+			},
+		},
+		{
+			name: "mixed path types sorted by descending length",
+			input: []PathRule{
+				{Path: "/", PathType: PathTypePrefix},
+				{Path: "/.*", PathType: PathTypeRegularExpression},
+				{Path: "/api", PathType: PathTypePrefix},
+				{Path: "/api/v[0-9]+/.*", PathType: PathTypeRegularExpression},
+				{Path: "/health", PathType: PathTypeExact},
+			},
+			expected: []PathRule{
+				{Path: "/api/v[0-9]+/.*", PathType: PathTypeRegularExpression},
+				{Path: "/health", PathType: PathTypeExact},
+				{Path: "/api", PathType: PathTypePrefix},
+				{Path: "/.*", PathType: PathTypeRegularExpression},
+				{Path: "/", PathType: PathTypePrefix},
+			},
+		},
+		{
+			name: "same length paths use alphabetical tiebreak",
+			input: []PathRule{
+				{Path: "/bbb", PathType: PathTypePrefix},
+				{Path: "/aaa", PathType: PathTypePrefix},
+			},
+			expected: []PathRule{
+				{Path: "/aaa", PathType: PathTypePrefix},
+				{Path: "/bbb", PathType: PathTypePrefix},
+			},
+		},
+		{
+			name: "same path uses type tiebreak: exact < prefix < regex",
+			input: []PathRule{
+				{Path: "/api", PathType: PathTypeRegularExpression},
+				{Path: "/api", PathType: PathTypePrefix},
+				{Path: "/api", PathType: PathTypeExact},
+			},
+			expected: []PathRule{
+				{Path: "/api", PathType: PathTypeExact},
+				{Path: "/api", PathType: PathTypePrefix},
+				{Path: "/api", PathType: PathTypeRegularExpression},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			sortPathRules(test.input)
+			g.Expect(test.input).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestSort(t *testing.T) {
 	t.Parallel()
 	// timestamps
