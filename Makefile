@@ -117,6 +117,16 @@ build-nginx-plus-image-with-nap-waf: check-for-docker ## Build the custom nginx 
 	fi
 	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) -f $(SELF_DIR)build/Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
+.PHONY: build-nginx-plus-image-with-nap-waf-dev
+build-nginx-plus-image-with-nap-waf-dev: check-for-docker check-nap-waf-repo-url ## Build the custom nginx plus image with NAP WAF from dev repo. Requires NAP_WAF_REPO_URL env var.
+	NGINX_PLUS_PREFIX=$(NGINX_PLUS_PREFIX) TAG=$(TAG) GOARCH=amd64 NJS_DIR=$(NJS_DIR) NGINX_CONF_DIR=$(NGINX_CONF_DIR) BUILD_AGENT=$(BUILD_AGENT) $(SELF_DIR)scripts/build-nap-dev-image.sh
+
+.PHONY: check-nap-waf-repo-url
+check-nap-waf-repo-url:
+ifndef NAP_WAF_REPO_URL
+	$(error NAP_WAF_REPO_URL must be set. Example: export NAP_WAF_REPO_URL=https://your.artifactory.server/path/to/repo)
+endif
+
 .PHONY: check-for-docker
 check-for-docker: ## Check if Docker is installed
 	@docker -v || (code=$$?; printf "\033[0;31mError\033[0m: there was a problem with Docker\n"; exit $$code)

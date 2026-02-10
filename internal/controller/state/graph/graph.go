@@ -576,9 +576,9 @@ func updatePLMFetcher(plmConfig *PLMConfig, logger logr.Logger) {
 
 	data := extractPLMSecrets(plmConfig.Secrets)
 
-	// Update credentials if we have them (access key ID is "admin" for SeaweedFS)
+	// Update credentials if we have them
 	if data.secretAccessKey != "" {
-		if err := plmConfig.Fetcher.UpdateCredentials("admin", data.secretAccessKey); err != nil {
+		if err := plmConfig.Fetcher.UpdateCredentials(secrets.PLMAccessKeyID, data.secretAccessKey); err != nil {
 			logger.Error(err, "Failed to update PLM fetcher credentials")
 		}
 	}

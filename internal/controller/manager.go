@@ -982,12 +982,6 @@ func validateSecret(reader client.Reader, nsName types.NamespacedName, fields ..
 	return nil
 }
 
-// S3 credential details.
-const (
-	plmAccessKeyID          = "adminKey"
-	plmSecretAccessKeyField = "seaweedfs_admin_secret"
-)
-
 // parseSecretNsName parses a secret name that may include a namespace prefix (namespace/name format).
 // If no namespace prefix is present, the provided defaultNamespace is used.
 func parseSecretNsName(secretName, defaultNamespace string) types.NamespacedName {
@@ -1061,14 +1055,14 @@ func createWAFFetcher(
 	// Configure credentials if secret is registered in plmSecrets
 	for nsName, secretCfg := range plmSecrets {
 		if secretCfg.Type == graph.PLMSecretTypeCredentials {
-			secret, err := getValidatedSecret(reader, nsName, plmSecretAccessKeyField)
+			secret, err := getValidatedSecret(reader, nsName, secrets.PLMCredentialsKey)
 			if err != nil {
 				return nil, err
 			}
 
 			opts = append(opts, fetch.WithCredentials(
-				plmAccessKeyID,
-				string(secret.Data[plmSecretAccessKeyField]),
+				secrets.PLMAccessKeyID,
+				string(secret.Data[secrets.PLMCredentialsKey]),
 			))
 			break
 		}
