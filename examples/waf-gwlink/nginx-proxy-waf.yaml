@@ -1,0 +1,47 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: waf-enabled-proxy
+spec:
+  waf: "enabled"
+  kubernetes:
+    # # Use ClusterIP since BIG-IP handles external traffic routing
+    # # Use NodePort if CIS is deployed with --pool-member-type=nodeport
+    service:
+      type: ClusterIP
+      externalTrafficPolicy: Cluster
+    deployment:
+      container:
+        # Configure readiness probe
+        readinessProbe:
+          path: "/nginx-ready"  # ← Compatibility with CIS/BIG-IP
+          port: 8081
+          expose: true
+      wafContainers:
+        enforcer:
+          image:
+            repository: WAF_ENFORCER_IMAGE
+            tag: WAF_IMAGE_TAG
+        configManager:
+          image:
+            repository: WAF_CONFIG_MGR_IMAGE
+            tag: WAF_IMAGE_TAG
+  # GatewayLink configuration with manual IP address
+  gatewayLink:
+    # Add any further IngressLink fields as required
+    enabled: true
+    # Static IP address configured on BIG-IP
+    virtualServerAddress: "10.8.3.102"
+    # # If IPAM integration is enabled, F5 IPAM Controller will allocate
+    # # an IP from the pool associated with this label
+    # ipamLabel: "production"
+    # Define IRules (must use full path format: /partition/irule_name)
+    iRules:
+      - "/Common/Proxy_Protocol_iRule"
+
+  # Configure Proxy Protocol to preserve client IPs from BIG-IP
+  rewriteClientIP:
+    mode: ProxyProtocol
+    trustedAddresses:
+      - type: CIDR
+        value: 10.8.0.0/14
