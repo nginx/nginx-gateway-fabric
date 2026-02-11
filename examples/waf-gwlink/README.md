@@ -14,6 +14,7 @@
     BUILD_AND_PUSH_NAP_IMAGES=false # Set to push the NAP images to a different registry if artifactory unavailable to the cluster
     NGF_NAP_REGISTRY= # Required if BUILD_AND_PUSH_NAP_IMAGES=true, must be accessible to the cluster
     NEED_CIS_CRD=false # Set to true if not testing full e2e with CIS
+- Download required NGINX Plus licence JWT, cert, and key, and save them into `license.jwt`, `nginx-repo.crt` and `nginx-repo.key` respectively. Reach out if you need instructions on how to get these, general instructions are available in the [docs](https://docs.nginx.com/nginx-gateway-fabric/install/nginx-plus/#download-the-jwt-from-myf5).
 - Update the `nginx-proxy-waf.yaml` file:
   - Update the `wafContainers` section with the images specified in the `deploy-plm-and-ngf.sh` script:
 
