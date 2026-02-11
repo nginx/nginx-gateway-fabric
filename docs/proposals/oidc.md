@@ -96,8 +96,6 @@ The initial design will support the following directives from [`ngx_http_oidc_mo
 
 - [`ssl_trusted_certificate`](https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate) - Specifies a PEM-formatted file containing trusted CA certificates used to verify OpenID Provider endpoint certificates. The default is system CA.
 
-- [`userinfo`](https://nginx.org/en/docs/http/ngx_http_oidc_module.html#userinfo) - Enables retrieval of UserInfo data from the OpenID Provider and makes UserInfo claims available via `$oidc_claim_name` variables.
-
 ## API, Customer Driven Interfaces, and User Experience
 
 ### Extended AuthenticationFilter CRD for OIDC
@@ -155,9 +153,9 @@ type OIDCAuth struct {
 	//
 	// This is an Opaque secret. The client secret should be stored in the key
 	// "client-secret".
-	ClientSecret v1.LocalObjectReference `json:"clientSecret"`
+	ClientSecret LocalObjectReference `json:"clientSecret"`
 
-	// TrustedCACertificateRefs references a secret containing trusted CA certificates
+	// CACertificateRefs references a secret containing trusted CA certificates
 	// in PEM format used to verify the certificates of the OpenID Provider endpoints.
     // The CA certificates must be stored in a key named `ca.crt`.
 	// If not specified, the system CA bundle is used.
@@ -167,7 +165,7 @@ type OIDCAuth struct {
 	//
 	// +optional
     // +kubebuilder:validation:MaxItems=8
-	TrustedCACertificateRefs []v1.LocalObjectReference `json:"trustedCACertificateRefs,omitempty"`
+	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 
     // CertificateRevocationList references a Secret containing a certificate
     // revocation list in PEM format. The CRL must be stored in a key
@@ -175,7 +173,7 @@ type OIDCAuth struct {
     // by the OpenID Provider endpoints have not been revoked.
 	//
 	// +optional
-	CertificateRevocationList *v1.LocalObjectReference `json:"certificateRevocationList,omitempty"`
+	CertificateRevocationList *LocalObjectReference `json:"certificateRevocationList,omitempty"`
 
 	// ConfigURL sets a custom URL to retrieve the OpenID Provider metadata.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#config_url
@@ -192,14 +190,6 @@ type OIDCAuth struct {
 	//
 	// +optional
 	Scopes []string `json:"scopes,omitempty"`
-
-	// UserInfo enables downloading of the user information metadata.
-	// When enabled, UserInfo claims are available via $oidc_claim_<name> variables.
-    // NGINX Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#userinfo
-	// NGINX Default: false
-	//
-	// +optional
-	UserInfo *bool `json:"userInfo,omitempty"`
 
 	// PKCE enables Proof Key for Code Exchange (PKCE) for the authentication flow.
     // If nil, NGINX automatically enables PKCE when the OpenID Provider requires it.
@@ -282,7 +272,7 @@ type OIDCLogoutConfig struct {
 
 For simplicity, only one OIDC provider can be configured at this time. To set up authentication with an OpenID Provider, you must specify the provider name, issuer URL, client ID, and client secret. The AuthenticationFilter must be attached to a route that uses a TLS listener in terminate mode, with the appropriate certificates provided as a listener secret. This is required because the `redirect_uri` must use HTTPS. When the OpenID Provider redirects users back to NGINX after authentication, the request is made over HTTPS, requiring NGINX to have TLS configured.
 
-TLS is required for secure communication between the data plane and the OpenID Provider. To verify TLS connections, specify a CA bundle with the appropriate CN/SAN using the `trustedCACertificateRefs` field of the AuthenticationFilter CRD; if omitted, the system CA will be used by default. Additionally, the server certificate and key for authenticating to the OpenID Provider must be configured via the `certificateRef` field on the Gateway's TLS listener, which should be attached to the Route containing the OIDC filter.
+TLS is required for secure communication between the data plane and the OpenID Provider. To verify TLS connections, specify a CA bundle with the appropriate CN/SAN using the `caCertificateRefs` field of the AuthenticationFilter CRD; if omitted, the system CA will be used by default. Additionally, the server certificate and key for authenticating to the OpenID Provider must be configured via the `certificateRef` field on the Gateway's TLS listener, which should be attached to the Route containing the OIDC filter.
 
 An authenticationFilter with complete OIDC configuration would look like:
 
@@ -301,7 +291,7 @@ spec:
       name: oidc-client-secret
       namespace: default
 
-    trustedCACertificateRefs:
+    caCertificateRefs:
       name: oidc-ca-cert
     certificateRevocationList:
       name: oidc-crl
@@ -315,7 +305,6 @@ spec:
       - profile
       - email
 
-    userInfo: true
     pkce: true
 
     extraAuthArgs:
@@ -436,7 +425,6 @@ http {
         config_url https://keycloak.example.com/realms/my-realm/.well-known/openid-configuration;
 
         scope openid profile email;
-        userinfo on;
         pkce on;
         extra_auth_args "display=page&prompt=login&audience=my-api";
 
@@ -475,13 +463,13 @@ http {
 
 ### Understanding Certificate Revocation List
 
-A Certificate Revocation List (CRL) is a list of certificate serial numbers that a Certificate Authority (CA) has revoked before their expiration. When NGINX connects to the OpenID Provider over TLS, it checks the provider's certificate serial number against the CRL — if found, the connection is rejected. The CRL must be stored in a Secret with the key ca.crl in PEM format. Unlike CA certificates which rarely change, CRLs are updated frequently as certificates get revoked, which is why `certificateRevocationList` is a separate field from `trustedCACertificateRefs` which allows users to update the CRL independently. Users are responsible for keeping the CRL Secret current. Stale CRLs may fail to detect recently revoked certificates. An alternative approach is OCSP (Online Certificate Status Protocol) stapling, which verifies revocation status in real-time rather than relying on periodically updated lists. This is noted as future work.
+A Certificate Revocation List (CRL) is a list of certificate serial numbers that a Certificate Authority (CA) has revoked before their expiration. When NGINX connects to the OpenID Provider over TLS, it checks the provider's certificate serial number against the CRL — if found, the connection is rejected. The CRL must be stored in a Secret with the key ca.crl in PEM format. Unlike CA certificates which rarely change, CRLs are updated frequently as certificates get revoked, which is why `certificateRevocationList` is a separate field from `caCertificateRefs` which allows users to update the CRL independently. Users are responsible for keeping the CRL Secret current. Stale CRLs may fail to detect recently revoked certificates. An alternative approach is OCSP (Online Certificate Status Protocol) stapling, which verifies revocation status in real-time rather than relying on periodically updated lists. This is noted as future work.
 
 
 ### Error Handling
 
 1. The OpenID Provider is down - When the OpenID provider is unreachable during initial authentication, NGINX returns a 302 redirect to the OpenID provider's authorization endpoint. The connection failure occurs client-side when the browser attempts to reach the OpenID provider, resulting in a "connection refused" error. NGINX does not validate OpenID providers availability before issuing the redirect.
-2. If the referenced `clientSecret` or `trustedCACertificateRefs` resources don't exist, the AuthenticationFilter should not report an error condition and the route should not be programmed.
+2. If the referenced `clientSecret` or `caCertificateRefs` resources don't exist, the AuthenticationFilter should not report an error condition and the route should not be programmed.
 3. If the `client-secret` is incorrect for OpenID provider, the redirect to the provider succeeds but the redirect back to NGINX fails and the error is reflected in logs as `token error: unauthorized_client: Invalid client or Invalid client credentials while sending to client`
 4. If the OIDC authentication filter is attached to a Route with a non-HTTPS listener, it should not be `Accepted`.
 
@@ -489,7 +477,7 @@ A Certificate Revocation List (CRL) is a list of certificate serial numbers that
 
 - Defining OIDC once in AuthenticationFilter provides centralized authentication which can be reused across multiple HTTPRoutes, allowing backends to receive pre-authenticated requests without implementing OAuth flows.
 - Authenticating users once through the OIDC provider enables single sign-on across all protected routes, with session management handled via `oidc.session` and unified logout through `oidc.logout`.
-- Enterprise environments with internal Certificate Authorities can use `trustedCACertificateRefs` to trust their CA bundle, enabling secure connections to internally-hosted identity providers.
+- Enterprise environments with internal Certificate Authorities can use `caCertificateRefs` to trust their CA bundle, enabling secure connections to internally-hosted identity providers.
 
 ## Testing
 
