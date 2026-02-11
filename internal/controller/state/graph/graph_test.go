@@ -2688,7 +2688,7 @@ yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
 		g.Expect(fakeFetcher.UpdateCredentialsCallCount()).To(Equal(1))
 
 		accessKeyID, secretAccessKey := fakeFetcher.UpdateCredentialsArgsForCall(0)
-		g.Expect(accessKeyID).To(Equal("admin"))
+		g.Expect(accessKeyID).To(Equal("adminKey"))
 		g.Expect(secretAccessKey).To(Equal("my-secret-key"))
 		// Should not call UpdateTLSConfig since there's no TLS data
 		g.Expect(fakeFetcher.UpdateTLSConfigCallCount()).To(Equal(0))

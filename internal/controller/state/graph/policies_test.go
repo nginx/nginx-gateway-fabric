@@ -3271,11 +3271,11 @@ func TestProcessAPPolicyReference(t *testing.T) {
 		}
 		policy := &Policy{Valid: true}
 		wafInput := &WAFProcessingInput{
-			ApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			APPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3291,11 +3291,11 @@ func TestProcessAPPolicyReference(t *testing.T) {
 		wafPolicy := createWAFPolicy("test", "waf1", "missing-policy", nil)
 		policy := &Policy{Valid: true}
 		wafInput := &WAFProcessingInput{
-			ApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			APPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3315,12 +3315,12 @@ func TestProcessAPPolicyReference(t *testing.T) {
 		wafPolicy := createWAFPolicy("test", "waf1", "my-policy", &otherNs)
 		policy := &Policy{Valid: true}
 		wafInput := &WAFProcessingInput{
-			ApPolicies:       make(map[types.NamespacedName]*unstructured.Unstructured),
+			APPolicies:       make(map[types.NamespacedName]*unstructured.Unstructured),
 			RefGrantResolver: &referenceGrantResolver{allowed: make(map[allowedReference]struct{})},
 		}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3339,12 +3339,12 @@ func TestProcessAPPolicyReference(t *testing.T) {
 		wafPolicy := createWAFPolicy("test", "waf1", "my-policy", &otherNs)
 		policy := &Policy{Valid: true}
 		wafInput := &WAFProcessingInput{
-			ApPolicies:       make(map[types.NamespacedName]*unstructured.Unstructured),
+			APPolicies:       make(map[types.NamespacedName]*unstructured.Unstructured),
 			RefGrantResolver: nil,
 		}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3361,13 +3361,13 @@ func TestProcessAPPolicyReference(t *testing.T) {
 		wafPolicy := createWAFPolicy("test", "waf1", "my-policy", nil)
 		policy := &Policy{Valid: true}
 		wafInput := &WAFProcessingInput{
-			ApPolicies: map[types.NamespacedName]*unstructured.Unstructured{
+			APPolicies: map[types.NamespacedName]*unstructured.Unstructured{
 				{Namespace: "test", Name: "my-policy"}: apPolicy,
 			},
 		}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3375,7 +3375,7 @@ func TestProcessAPPolicyReference(t *testing.T) {
 		g.Expect(result).To(BeTrue())
 		g.Expect(policy.Valid).To(BeTrue())
 		g.Expect(policy.Conditions).To(BeEmpty())
-		g.Expect(output.ReferencedApPolicies).To(HaveKey(types.NamespacedName{Namespace: "test", Name: "my-policy"}))
+		g.Expect(output.ReferencedAPPolicies).To(HaveKey(types.NamespacedName{Namespace: "test", Name: "my-policy"}))
 		g.Expect(output.Bundles).To(HaveLen(1))
 	})
 
@@ -3387,13 +3387,13 @@ func TestProcessAPPolicyReference(t *testing.T) {
 		wafPolicy := createWAFPolicy("test", "waf1", "my-policy", nil)
 		policy := &Policy{Valid: true}
 		wafInput := &WAFProcessingInput{
-			ApPolicies: map[types.NamespacedName]*unstructured.Unstructured{
+			APPolicies: map[types.NamespacedName]*unstructured.Unstructured{
 				{Namespace: "test", Name: "my-policy"}: apPolicy,
 			},
 		}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3432,7 +3432,7 @@ func TestProcessSecurityLogs(t *testing.T) {
 		wafInput := &WAFProcessingInput{}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3464,7 +3464,7 @@ func TestProcessSecurityLogs(t *testing.T) {
 		}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3501,7 +3501,7 @@ func TestProcessSecurityLogs(t *testing.T) {
 		}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3543,7 +3543,7 @@ func TestProcessSecurityLogs(t *testing.T) {
 		}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3583,7 +3583,7 @@ func TestProcessSecurityLogs(t *testing.T) {
 		}
 		output := &WAFProcessingOutput{
 			Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-			ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 			ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
@@ -3639,7 +3639,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 		}
 
 		output := processWAFPolicies(policies, &WAFProcessingInput{
-			ApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			APPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 		})
 		g.Expect(output).ToNot(BeNil())
 		g.Expect(output.Bundles).To(BeEmpty())
@@ -3664,7 +3664,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 		}
 
 		output := processWAFPolicies(policies, &WAFProcessingInput{
-			ApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			APPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 		})
 		g.Expect(output.Bundles).To(BeEmpty())
 	})
@@ -3693,7 +3693,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 		}
 
 		wafInput := &WAFProcessingInput{
-			ApPolicies: map[types.NamespacedName]*unstructured.Unstructured{
+			APPolicies: map[types.NamespacedName]*unstructured.Unstructured{
 				{Namespace: "test", Name: "my-policy"}: apPolicy,
 			},
 			APLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
@@ -3701,7 +3701,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 
 		output := processWAFPolicies(policies, wafInput)
 		g.Expect(output.Bundles).To(HaveLen(1))
-		g.Expect(output.ReferencedApPolicies).To(HaveLen(1))
+		g.Expect(output.ReferencedAPPolicies).To(HaveLen(1))
 	})
 
 	t.Run("APPolicy not found skips to next policy", func(t *testing.T) {
@@ -3726,7 +3726,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 		}
 
 		wafInput := &WAFProcessingInput{
-			ApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+			APPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 		}
 
 		output := processWAFPolicies(policies, wafInput)

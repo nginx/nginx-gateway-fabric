@@ -51,8 +51,8 @@ type ClusterState struct {
 	SnippetsFilters       map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
 	AuthenticationFilters map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter
 	InferencePools        map[types.NamespacedName]*inference.InferencePool
-	// ApPolicies holds PLM-managed APPolicy resources (unstructured since CRD is external).
-	ApPolicies map[types.NamespacedName]*unstructured.Unstructured
+	// APPolicies holds PLM-managed APPolicy resources (unstructured since CRD is external).
+	APPolicies map[types.NamespacedName]*unstructured.Unstructured
 	// APLogConfs holds PLM-managed APLogConf resources (unstructured since CRD is external).
 	APLogConfs map[types.NamespacedName]*unstructured.Unstructured
 }
@@ -93,8 +93,8 @@ type Graph struct {
 	NGFPolicies map[PolicyKey]*Policy
 	// ReferencedWAFBundles includes the WAFPolicy Bundles that have been referenced by any Gateways or Routes.
 	ReferencedWAFBundles map[WAFBundleKey]*WAFBundleData
-	// ReferencedApPolicies includes APPolicy resources referenced by WAFGatewayBindingPolicy resources.
-	ReferencedApPolicies map[types.NamespacedName]*unstructured.Unstructured
+	// ReferencedAPPolicies includes APPolicy resources referenced by WAFGatewayBindingPolicy resources.
+	ReferencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
 	// ReferencedAPLogConfs includes APLogConf resources referenced by WAFGatewayBindingPolicy resources.
 	ReferencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	// SnippetsFilters holds all the SnippetsFilters.
@@ -177,7 +177,7 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 		gvk := obj.GroupVersionKind()
 		switch gvk {
 		case kinds.APPolicyGVK:
-			_, exists := g.ReferencedApPolicies[nsname]
+			_, exists := g.ReferencedAPPolicies[nsname]
 			return exists
 		case kinds.APLogConfGVK:
 			_, exists := g.ReferencedAPLogConfs[nsname]
@@ -358,9 +358,9 @@ func BuildGraph(
 			updatePLMFetcher(plmConfig, logger)
 		}
 
-		if len(state.ApPolicies) > 0 || len(state.APLogConfs) > 0 {
+		if len(state.APPolicies) > 0 || len(state.APLogConfs) > 0 {
 			wafInput = &WAFProcessingInput{
-				ApPolicies:       state.ApPolicies,
+				APPolicies:       state.APPolicies,
 				APLogConfs:       state.APLogConfs,
 				Fetcher:          plmConfig.Fetcher,
 				RefGrantResolver: refGrantResolver,
@@ -385,11 +385,11 @@ func BuildGraph(
 
 	// Extract WAF data from wafOutput
 	var referencedWAFBundles map[WAFBundleKey]*WAFBundleData
-	var referencedApPolicies map[types.NamespacedName]*unstructured.Unstructured
+	var referencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
 	var referencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	if wafOutput != nil {
 		referencedWAFBundles = wafOutput.Bundles
-		referencedApPolicies = wafOutput.ReferencedApPolicies
+		referencedAPPolicies = wafOutput.ReferencedAPPolicies
 		referencedAPLogConfs = wafOutput.ReferencedAPLogConfs
 	}
 
@@ -412,7 +412,7 @@ func BuildGraph(
 		PlusSecrets:                plusSecrets,
 		PLMSecrets:                 plmSecrets,
 		ReferencedWAFBundles:       referencedWAFBundles,
-		ReferencedApPolicies:       referencedApPolicies,
+		ReferencedAPPolicies:       referencedAPPolicies,
 		ReferencedAPLogConfs:       referencedAPLogConfs,
 	}
 
@@ -576,9 +576,9 @@ func updatePLMFetcher(plmConfig *PLMConfig, logger logr.Logger) {
 
 	data := extractPLMSecrets(plmConfig.Secrets)
 
-	// Update credentials if we have them (access key ID is "admin" for SeaweedFS)
+	// Update credentials if we have them
 	if data.secretAccessKey != "" {
-		if err := plmConfig.Fetcher.UpdateCredentials("admin", data.secretAccessKey); err != nil {
+		if err := plmConfig.Fetcher.UpdateCredentials(secrets.PLMAccessKeyID, data.secretAccessKey); err != nil {
 			logger.Error(err, "Failed to update PLM fetcher credentials")
 		}
 	}

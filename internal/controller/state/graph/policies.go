@@ -434,8 +434,8 @@ func propagateSnippetsPolicyToRoutes(
 
 // WAFProcessingInput contains the input needed for WAF policy processing.
 type WAFProcessingInput struct {
-	// ApPolicies contains the APPolicy resources from the cluster.
-	ApPolicies map[types.NamespacedName]*unstructured.Unstructured
+	// APPolicies contains the APPolicy resources from the cluster.
+	APPolicies map[types.NamespacedName]*unstructured.Unstructured
 	// APLogConfs contains the APLogConf resources from the cluster.
 	APLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	// Fetcher is the S3-compatible fetcher for PLM storage (nil if WAF not enabled).
@@ -448,8 +448,8 @@ type WAFProcessingInput struct {
 type WAFProcessingOutput struct {
 	// Bundles contains the fetched WAF bundles keyed by bundle key.
 	Bundles map[WAFBundleKey]*WAFBundleData
-	// ReferencedApPolicies contains APPolicy resources referenced by WAFGatewayBindingPolicies.
-	ReferencedApPolicies map[types.NamespacedName]*unstructured.Unstructured
+	// ReferencedAPPolicies contains APPolicy resources referenced by WAFGatewayBindingPolicies.
+	ReferencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
 	// ReferencedAPLogConfs contains APLogConf resources referenced by WAFGatewayBindingPolicies.
 	ReferencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
 }
@@ -777,7 +777,7 @@ func processWAFPolicies(
 
 	output := &WAFProcessingOutput{
 		Bundles:              make(map[WAFBundleKey]*WAFBundleData),
-		ReferencedApPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
+		ReferencedAPPolicies: make(map[types.NamespacedName]*unstructured.Unstructured),
 		ReferencedAPLogConfs: make(map[types.NamespacedName]*unstructured.Unstructured),
 	}
 
@@ -837,7 +837,7 @@ func processAPPolicyReference(
 		}
 	}
 
-	apPolicy, exists := wafInput.ApPolicies[apPolicyNsName]
+	apPolicy, exists := wafInput.APPolicies[apPolicyNsName]
 	if !exists {
 		policy.Conditions = append(policy.Conditions,
 			conditions.NewPolicyRefsNotResolvedAPPolicyNotFound(apPolicyNsName.String()))
@@ -845,7 +845,7 @@ func processAPPolicyReference(
 		return false
 	}
 
-	output.ReferencedApPolicies[apPolicyNsName] = apPolicy
+	output.ReferencedAPPolicies[apPolicyNsName] = apPolicy
 
 	apStatus, err := plm.ExtractAPPolicyStatus(apPolicy)
 	if err != nil {

@@ -115,7 +115,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
 		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter),
 		InferencePools:        make(map[types.NamespacedName]*inference.InferencePool),
-		ApPolicies:            make(map[types.NamespacedName]*unstructured.Unstructured),
+		APPolicies:            make(map[types.NamespacedName]*unstructured.Unstructured),
 		APLogConfs:            make(map[types.NamespacedName]*unstructured.Unstructured),
 	}
 
@@ -270,7 +270,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		},
 		{
 			gvk:       kinds.APPolicyGVK,
-			store:     newObjectStoreMapAdapter(clusterStore.ApPolicies),
+			store:     newObjectStoreMapAdapter(clusterStore.APPolicies),
 			predicate: funcPredicate{stateChanged: isReferenced},
 		},
 		{
