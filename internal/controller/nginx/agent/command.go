@@ -423,7 +423,10 @@ func (cs *commandService) logAndSendErrorStatus(
 	deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 
 	queueObj := &status.QueueObject{
-		Deployment: conn.ParentName,
+		Deployment: status.Deployment{
+			NamespacedName: conn.ParentName,
+			GatewayName:    deployment.gatewayName,
+		},
 		Error:      deployment.GetConfigurationStatus(),
 		UpdateType: status.UpdateAll,
 	}

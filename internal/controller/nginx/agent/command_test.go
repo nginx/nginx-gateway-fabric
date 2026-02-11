@@ -343,7 +343,7 @@ func TestSubscribe(t *testing.T) {
 	broadcaster.SubscribeReturns(subChannels)
 
 	// set the initial files and actions to be applied by the Subscription
-	deployment := store.StoreWithBroadcaster(conn.ParentName, broadcaster)
+	deployment := store.StoreWithBroadcaster(conn.ParentName, broadcaster, "gateway")
 	files := []File{
 		{
 			Meta: &pb.FileMeta{
@@ -413,7 +413,7 @@ func TestSubscribe(t *testing.T) {
 	// Wait for status queue to be updated after initial config completes
 	g.Eventually(func() string {
 		obj := cs.statusQueue.Dequeue(ctx)
-		return obj.Deployment.Name
+		return obj.Deployment.NamespacedName.Name
 	}).Should(Equal("nginx-deployment"))
 
 	// PHASE 2: Now send broadcast operations to the event loop
@@ -489,7 +489,7 @@ func TestSubscribe_Reset(t *testing.T) {
 	broadcaster.SubscribeReturns(subChannels)
 
 	// set the initial files to be applied by the Subscription
-	deployment := store.StoreWithBroadcaster(conn.ParentName, broadcaster)
+	deployment := store.StoreWithBroadcaster(conn.ParentName, broadcaster, "gateway")
 	files := []File{
 		{
 			Meta: &pb.FileMeta{
@@ -717,7 +717,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				ParentType: nginxTypes.DeploymentType,
 			}
 
-			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{})
+			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gateway")
 			deployment.SetImageVersion("nginx:v1.0.0")
 
 			if test.setup != nil {

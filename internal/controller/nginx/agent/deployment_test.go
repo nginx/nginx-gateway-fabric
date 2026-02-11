@@ -18,7 +18,7 @@ func TestNewDeployment(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{})
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gateway")
 	g.Expect(deployment).ToNot(BeNil())
 
 	g.Expect(deployment.GetBroadcaster()).ToNot(BeNil())
@@ -26,13 +26,14 @@ func TestNewDeployment(t *testing.T) {
 	g.Expect(deployment.GetNGINXPlusActions()).To(BeEmpty())
 	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 	g.Expect(deployment.GetLatestUpstreamError()).ToNot(HaveOccurred())
+	g.Expect(deployment.gatewayName).To(Equal("gateway"))
 }
 
 func TestSetAndGetFiles(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{})
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
 
 	files := []File{
 		{
@@ -72,7 +73,7 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{})
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
 
 	// Set up latestFileNames that will match with volume mount paths
 	deployment.latestFileNames = []string{
@@ -154,7 +155,7 @@ func TestSetNGINXPlusActions(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{})
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
 
 	actions := []*pb.NGINXPlusAction{
 		{
@@ -173,7 +174,7 @@ func TestSetPodErrorStatus(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{})
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
 
 	err := errors.New("test error")
 	err2 := errors.New("test error 2")
@@ -191,7 +192,7 @@ func TestSetLatestConfigError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{})
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
 
 	err := errors.New("test error")
 	deployment.SetLatestConfigError(err)
@@ -202,7 +203,7 @@ func TestSetLatestUpstreamError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{})
+	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
 
 	err := errors.New("test error")
 	deployment.SetLatestUpstreamError(err)
@@ -217,13 +218,13 @@ func TestDeploymentStore(t *testing.T) {
 
 	nsName := types.NamespacedName{Namespace: "default", Name: "test-deployment"}
 
-	deployment := store.GetOrStore(t.Context(), nsName, nil)
+	deployment := store.GetOrStore(t.Context(), nsName, "gateway", nil)
 	g.Expect(deployment).ToNot(BeNil())
 
 	fetchedDeployment := store.Get(nsName)
 	g.Expect(fetchedDeployment).To(Equal(deployment))
 
-	deployment = store.GetOrStore(t.Context(), nsName, nil)
+	deployment = store.GetOrStore(t.Context(), nsName, "gateway", nil)
 	g.Expect(fetchedDeployment).To(Equal(deployment))
 
 	store.Remove(nsName)

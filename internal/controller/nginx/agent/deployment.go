@@ -42,6 +42,9 @@ type Deployment struct {
 
 	broadcaster broadcast.Broadcaster
 
+	// gatewayName is the name of the Gateway associated with this Deployment.
+	gatewayName string
+
 	imageVersion string
 
 	configVersion string
@@ -67,10 +70,11 @@ type Deployment struct {
 }
 
 // newDeployment returns a new Deployment object.
-func newDeployment(broadcaster broadcast.Broadcaster) *Deployment {
+func newDeployment(broadcaster broadcast.Broadcaster, gatewayName string) *Deployment {
 	return &Deployment{
 		broadcaster: broadcaster,
 		podStatuses: make(map[string]error),
+		gatewayName: gatewayName,
 	}
 }
 
@@ -255,7 +259,7 @@ func (d *Deployment) SetNGINXPlusActions(actions []*pb.NGINXPlusAction) {
 // DeploymentStorer is an interface to store Deployments.
 type DeploymentStorer interface {
 	Get(types.NamespacedName) *Deployment
-	GetOrStore(context.Context, types.NamespacedName, chan struct{}) *Deployment
+	GetOrStore(context.Context, types.NamespacedName, string, chan struct{}) *Deployment
 	Remove(types.NamespacedName)
 }
 
@@ -292,13 +296,14 @@ func (d *DeploymentStore) Get(nsName types.NamespacedName) *Deployment {
 func (d *DeploymentStore) GetOrStore(
 	ctx context.Context,
 	nsName types.NamespacedName,
+	gatewayName string,
 	stopCh chan struct{},
 ) *Deployment {
 	if deployment := d.Get(nsName); deployment != nil {
 		return deployment
 	}
 
-	deployment := newDeployment(broadcast.NewDeploymentBroadcaster(ctx, stopCh))
+	deployment := newDeployment(broadcast.NewDeploymentBroadcaster(ctx, stopCh), gatewayName)
 	d.deployments.Store(nsName, deployment)
 
 	return deployment
@@ -309,8 +314,9 @@ func (d *DeploymentStore) GetOrStore(
 func (d *DeploymentStore) StoreWithBroadcaster(
 	nsName types.NamespacedName,
 	broadcaster broadcast.Broadcaster,
+	gatewayName string,
 ) *Deployment {
-	deployment := newDeployment(broadcaster)
+	deployment := newDeployment(broadcaster, gatewayName)
 	d.deployments.Store(nsName, deployment)
 
 	return deployment

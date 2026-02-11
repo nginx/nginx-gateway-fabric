@@ -188,7 +188,7 @@ make install-ngf-local-no-build-with-plus
 ### Step 2 - Build conformance test runner image
 
 > Note: If you want to run the latest conformance tests from the Gateway API `main` branch, run the following
-> make command to update the Go modules to `main`:
+> make command to update the Go modules to `main` in both the root and tests modules:
 
 ```makefile
 make update-go-modules
