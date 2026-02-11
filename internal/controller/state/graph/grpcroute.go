@@ -233,9 +233,9 @@ func processGRPCRouteRule(
 
 	// rule.BackendRefs are validated separately because of their special requirements
 	for _, b := range specRule.BackendRefs {
-		var interfaceFilters []interface{}
+		var interfaceFilters []any
 		if len(b.Filters) > 0 {
-			interfaceFilters = make([]interface{}, 0, len(b.Filters))
+			interfaceFilters = make([]any, 0, len(b.Filters))
 			for i, v := range b.Filters {
 				interfaceFilters[i] = v
 			}

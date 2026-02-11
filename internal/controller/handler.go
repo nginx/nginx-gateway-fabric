@@ -443,7 +443,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gwReqs...)
 }
 
-func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr.Logger, event interface{}) {
+func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr.Logger, event any) {
 	switch e := event.(type) {
 	case *events.UpsertEvent:
 		upFilterKey := objectFilterKey(e.Resource, client.ObjectKeyFromObject(e.Resource))

@@ -86,7 +86,7 @@ func Register(
 	objectType ngftypes.ObjectType,
 	name string,
 	mgr manager.Manager,
-	eventCh chan<- interface{},
+	eventCh chan<- any,
 	options ...Option,
 ) error {
 	cfg := defaultConfig()

@@ -117,7 +117,7 @@ func StartManager(cfg config.Config) error {
 
 	ctx := ctlr.SetupSignalHandler()
 
-	eventCh := make(chan interface{})
+	eventCh := make(chan any)
 	controlConfigNSName := types.NamespacedName{
 		Namespace: cfg.GatewayPodConfig.Namespace,
 		Name:      cfg.ConfigName,
@@ -547,7 +547,7 @@ func registerControllers(
 	mgr manager.Manager,
 	recorder k8sEvents.EventRecorder,
 	logLevelSetter logLevelSetter,
-	eventCh chan interface{},
+	eventCh chan any,
 	controlConfigNSName types.NamespacedName,
 ) (map[string]bool, error) {
 	crdWithGVK := apiext.CustomResourceDefinition{}

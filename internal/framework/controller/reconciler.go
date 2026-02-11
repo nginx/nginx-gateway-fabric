@@ -27,7 +27,7 @@ type ReconcilerConfig struct {
 	// ObjectType is the type of the resource that the reconciler will reconcile.
 	ObjectType ngftypes.ObjectType
 	// EventCh is the channel where the reconciler will send events.
-	EventCh chan<- interface{}
+	EventCh chan<- any
 	// NamespacedNameFilter filters resources the controller will process. Can be nil.
 	NamespacedNameFilter NamespacedNameFilterFunc
 	// OnlyMetadata indicates that this controller for this resource is only caching metadata for the resource.
@@ -98,7 +98,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		obj = nil
 	}
 
-	var e interface{}
+	var e any
 	var op string
 
 	if obj == nil {
