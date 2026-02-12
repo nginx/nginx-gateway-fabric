@@ -272,7 +272,7 @@ type OIDCLogoutConfig struct {
 
 For simplicity, only one OIDC provider can be configured at this time. To set up authentication with an OpenID Provider, you must specify the provider name, issuer URL, client ID, and client secret. The AuthenticationFilter must be attached to a route that uses a TLS listener in terminate mode, with the appropriate certificates provided as a listener secret. This is required because the `redirect_uri` must use HTTPS. When the OpenID Provider redirects users back to NGINX after authentication, the request is made over HTTPS, requiring NGINX to have TLS configured.
 
-TLS is required for secure communication between the data plane and the OpenID Provider. To verify TLS connections, specify a CA bundle with the appropriate CN/SAN using the `caCertificateRefs` field of the AuthenticationFilter CRD; if omitted, the system CA will be used by default. Additionally, the server certificate and key for authenticating to the OpenID Provider must be configured via the `certificateRef` field on the Gateway's TLS listener, which should be attached to the Route containing the OIDC filter.
+TLS is required for secure communication between the data plane and the OpenID Provider. To verify TLS connections, specify a CA bundle with the appropriate CN/SAN using the `caCertificateRefs` field of the AuthenticationFilter CRD; if omitted, the system CA will be used by default. Additionally, the AuthenticationFilter must be attached to a route using an HTTPS listener so that the redirect_uri callback from the IdP can be served over HTTPS. The Gateway listener's certificateRef provides the TLS certificate for this incoming connection.
 
 An authenticationFilter with complete OIDC configuration would look like:
 
@@ -292,7 +292,7 @@ spec:
       namespace: default
 
     caCertificateRefs:
-      name: oidc-ca-cert
+      - name: oidc-ca-cert
     certificateRevocationList:
       name: oidc-crl
       namespace: default
@@ -359,9 +359,7 @@ stringData:
     -----END X509 CRL-----
 ```
 
-Generating the appropriate configuration requires a TLS listener configured with a certificate and key for verification.
-
-An example would be a Gateway that defines an HTTPS listener and references a Secret for authenticating to the OpenID provider.
+OIDC Authentication Filters can only be attached to HTTPS Listeners. 
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
