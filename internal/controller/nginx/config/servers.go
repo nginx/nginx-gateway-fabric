@@ -9,6 +9,7 @@ import (
 	"strings"
 	gotemplate "text/template"
 
+	"github.com/dlclark/regexp2"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
@@ -424,8 +425,17 @@ func createLocations(
 	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
 	for pathRuleIdx, rule := range server.PathRules {
-		if rule.Path == rootPath {
-			rootPathExists = true
+		if !rootPathExists {
+			if rule.Path == rootPath {
+				rootPathExists = true
+			} else if rule.PathType == dataplane.PathTypeRegularExpression {
+				// Uses regexp2 with RE2 flag to match the engine used by the validation layer.
+				if re, err := regexp2.Compile(rule.Path, regexp2.RE2); err == nil {
+					if matched, _ := re.MatchString("/"); matched {
+						rootPathExists = true
+					}
+				}
+			}
 		}
 
 		if rule.GRPC {
@@ -1628,9 +1638,9 @@ func createPath(rule dataplane.PathRule) string {
 	case dataplane.PathTypeExact:
 		return exactPath(rule.Path)
 	case dataplane.PathTypePrefix:
-		return fmt.Sprintf("^~ %s", rule.Path)
+		return rule.Path
 	case dataplane.PathTypeRegularExpression:
-		return fmt.Sprintf("~ %s", rule.Path)
+		return fmt.Sprintf("~ ^%s", rule.Path)
 	default:
 		panic(fmt.Errorf("unknown path type %q for path %q", rule.PathType, rule.Path))
 	}

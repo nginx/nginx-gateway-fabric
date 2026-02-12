@@ -477,12 +477,12 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		workerConnections = *nProxyCfg.WorkerConnections
 	}
 
-	mainFields := map[string]interface{}{
+	mainFields := map[string]any{
 		"ErrorLevel":        logLevel,
 		"WorkerConnections": workerConnections,
 	}
 
-	eventsFields := map[string]interface{}{
+	eventsFields := map[string]any{
 		"WorkerConnections": workerConnections,
 	}
 
@@ -500,7 +500,7 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 	}
 
 	if p.cfg.Plus {
-		mgmtFields := map[string]interface{}{
+		mgmtFields := map[string]any{
 			"UsageEndpoint":        p.cfg.PlusUsageConfig.Endpoint,
 			"SkipVerify":           p.cfg.PlusUsageConfig.SkipVerify,
 			"UsageCASecret":        caSecret,
@@ -531,7 +531,7 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 	p.cfg.AgentLabels[nginxTypes.AgentOwnerNameLabel] = fmt.Sprintf("%s_%s", objectMeta.Namespace, objectMeta.Name)
 	p.cfg.AgentLabels[nginxTypes.AgentOwnerTypeLabel] = depType
 
-	agentFields := map[string]interface{}{
+	agentFields := map[string]any{
 		"Plus":          p.cfg.Plus,
 		"ServiceName":   p.cfg.GatewayPodConfig.ServiceName,
 		"Namespace":     p.cfg.GatewayPodConfig.Namespace,

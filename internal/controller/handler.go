@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -210,7 +209,10 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 
 		if !gw.Valid {
 			obj := &status.QueueObject{
-				Deployment: gw.DeploymentName,
+				Deployment: status.Deployment{
+					NamespacedName: gw.DeploymentName,
+					GatewayName:    gw.Source.GetName(),
+				},
 				UpdateType: status.UpdateAll,
 			}
 			h.cfg.statusQueue.Enqueue(obj)
@@ -218,7 +220,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		}
 
 		stopCh := make(chan struct{})
-		deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, stopCh)
+		deployment := h.cfg.nginxDeployments.GetOrStore(ctx, gw.DeploymentName, gw.Source.GetName(), stopCh)
 		if deployment == nil {
 			panic("expected deployment, got nil")
 		}
@@ -262,7 +264,10 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 		obj := &status.QueueObject{
 			UpdateType: status.UpdateAll,
 			Error:      err,
-			Deployment: gw.DeploymentName,
+			Deployment: status.Deployment{
+				NamespacedName: gw.DeploymentName,
+				GatewayName:    gw.Source.GetName(),
+			},
 		}
 		h.cfg.statusQueue.Enqueue(obj)
 	}
@@ -282,10 +287,10 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 
 		var nginxReloadRes graph.NginxReloadResult
 		var gw *graph.Gateway
-		if item.Deployment.Name != "" {
+		if item.Deployment.NamespacedName.Name != "" {
 			gwNSName := types.NamespacedName{
-				Namespace: item.Deployment.Namespace,
-				Name:      strings.TrimSuffix(item.Deployment.Name, fmt.Sprintf("-%s", h.cfg.gatewayClassName)),
+				Namespace: item.Deployment.NamespacedName.Namespace,
+				Name:      item.Deployment.GatewayName,
 			}
 
 			gw = gr.Gateways[gwNSName]
@@ -443,7 +448,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	h.cfg.statusUpdater.UpdateGroup(ctx, groupGateways, gwReqs...)
 }
 
-func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr.Logger, event interface{}) {
+func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr.Logger, event any) {
 	switch e := event.(type) {
 	case *events.UpsertEvent:
 		upFilterKey := objectFilterKey(e.Resource, client.ObjectKeyFromObject(e.Resource))

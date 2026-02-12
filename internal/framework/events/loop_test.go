@@ -16,7 +16,7 @@ import (
 var _ = Describe("EventLoop", func() {
 	var (
 		fakeHandler  *eventsfakes.FakeEventHandler
-		eventCh      chan interface{}
+		eventCh      chan any
 		fakePreparer *eventsfakes.FakeFirstEventBatchPreparer
 		eventLoop    *events.EventLoop
 		errorCh      chan error
@@ -24,7 +24,7 @@ var _ = Describe("EventLoop", func() {
 
 	BeforeEach(func() {
 		fakeHandler = &eventsfakes.FakeEventHandler{}
-		eventCh = make(chan interface{})
+		eventCh = make(chan any)
 		fakePreparer = &eventsfakes.FakeFirstEventBatchPreparer{}
 
 		eventLoop = events.NewEventLoop(eventCh, logr.Discard(), fakeHandler, fakePreparer)
@@ -55,7 +55,7 @@ var _ = Describe("EventLoop", func() {
 			Eventually(fakeHandler.HandleEventBatchCallCount).Should(Equal(1))
 			_, _, batch = fakeHandler.HandleEventBatchArgsForCall(0)
 
-			var expectedBatch events.EventBatch = []interface{}{"event0"}
+			var expectedBatch events.EventBatch = []any{"event0"}
 			Expect(batch).Should(Equal(expectedBatch))
 		})
 
@@ -70,7 +70,7 @@ var _ = Describe("EventLoop", func() {
 			Eventually(fakeHandler.HandleEventBatchCallCount).Should(Equal(2))
 			_, _, batch := fakeHandler.HandleEventBatchArgsForCall(1)
 
-			var expectedBatch events.EventBatch = []interface{}{e}
+			var expectedBatch events.EventBatch = []any{e}
 			Expect(batch).Should(Equal(expectedBatch))
 		})
 
@@ -106,14 +106,14 @@ var _ = Describe("EventLoop", func() {
 			Eventually(fakeHandler.HandleEventBatchCallCount).Should(Equal(3))
 			_, _, batch := fakeHandler.HandleEventBatchArgsForCall(1)
 
-			var expectedBatch events.EventBatch = []interface{}{e1}
+			var expectedBatch events.EventBatch = []any{e1}
 
 			// the first HandleEventBatch() call must have handled a batch with e1
 			Expect(batch).Should(Equal(expectedBatch))
 
 			_, _, batch = fakeHandler.HandleEventBatchArgsForCall(2)
 
-			expectedBatch = []interface{}{e2, e3}
+			expectedBatch = []any{e2, e3}
 			// the second HandleEventBatch() call must have handled a batch with e2 and e3
 			Expect(batch).Should(Equal(expectedBatch))
 		})

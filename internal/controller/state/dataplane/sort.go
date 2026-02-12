@@ -6,6 +6,23 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 )
 
+// sortPathRules sorts path rules by descending path length so that longer (more specific) paths appear first
+// in the generated NGINX config. This is critical for regex locations where NGINX uses config-file order
+// (first match wins). For exact and prefix locations, NGINX resolves matches by its own algorithm regardless
+// of config order, so reordering them has no behavioral impact.
+func sortPathRules(pathRules []PathRule) {
+	sort.SliceStable(pathRules, func(i, j int) bool {
+		if len(pathRules[i].Path) != len(pathRules[j].Path) {
+			return len(pathRules[i].Path) > len(pathRules[j].Path)
+		}
+		if pathRules[i].Path != pathRules[j].Path {
+			return pathRules[i].Path < pathRules[j].Path
+		}
+		// PathType string values sort in desired order: exact < prefix < regularExpression
+		return pathRules[i].PathType < pathRules[j].PathType
+	})
+}
+
 func sortMatchRules(matchRules []MatchRule) {
 	// stable sort is used so that the order of matches (as defined in each Route rule) is preserved
 	// this is important, because the winning match is the first match to win.

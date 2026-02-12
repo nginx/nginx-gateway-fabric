@@ -38,6 +38,7 @@ endif
 
 .PHONY: update-go-modules
 update-go-modules: ## Update the gateway-api go modules to latest main version
+	cd .. && go get -u sigs.k8s.io/gateway-api@main && go mod tidy
 	go get -u sigs.k8s.io/gateway-api@main
 	go mod tidy
 
@@ -122,7 +123,7 @@ cleanup-conformance-tests: ## Clean up conformance tests fixtures
 
 .PHONY: reset-go-modules
 reset-go-modules: ## Reset the go modules changes
-	git checkout -- ../go.mod ../go.sum
+	git checkout -- ../go.mod ../go.sum go.mod go.sum
 
 -include ../Makefile
 

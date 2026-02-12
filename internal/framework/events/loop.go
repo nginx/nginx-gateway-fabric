@@ -25,7 +25,7 @@ import (
 type EventLoop struct {
 	handler  EventHandler
 	preparer FirstEventBatchPreparer
-	eventCh  <-chan interface{}
+	eventCh  <-chan any
 	logger   logr.Logger
 
 	// The EventLoop uses double buffering to handle event batch processing.
@@ -41,7 +41,7 @@ type EventLoop struct {
 
 // NewEventLoop creates a new EventLoop.
 func NewEventLoop(
-	eventCh <-chan interface{},
+	eventCh <-chan any,
 	logger logr.Logger,
 	handler EventHandler,
 	preparer FirstEventBatchPreparer,
