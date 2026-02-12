@@ -96,6 +96,8 @@ The initial design will support the following directives from [`ngx_http_oidc_mo
 
 - [`ssl_trusted_certificate`](https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate) - Specifies a PEM-formatted file containing trusted CA certificates used to verify OpenID Provider endpoint certificates. The default is system CA.
 
+- [`ssl_crl`](https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_crl) - Specifies a PEM-formatted file containing a certificate revocation list (CRL) used to verify that the OpenID Provider's certificate has not been revoked.
+
 ## API, Customer Driven Interfaces, and User Experience
 
 ### Extended AuthenticationFilter CRD for OIDC
@@ -272,7 +274,7 @@ type OIDCLogoutConfig struct {
 
 For simplicity, only one OIDC provider can be configured at this time. To set up authentication with an OpenID Provider, you must specify the provider name, issuer URL, client ID, and client secret. The AuthenticationFilter must be attached to a route that uses a TLS listener in terminate mode, with the appropriate certificates provided as a listener secret. This is required because the `redirect_uri` must use HTTPS. When the OpenID Provider redirects users back to NGINX after authentication, the request is made over HTTPS, requiring NGINX to have TLS configured.
 
-TLS is required for secure communication between the data plane and the OpenID Provider. To verify TLS connections, specify a CA bundle with the appropriate CN/SAN using the `caCertificateRefs` field of the AuthenticationFilter CRD; if omitted, the system CA will be used by default. Additionally, the AuthenticationFilter must be attached to a route using an HTTPS listener so that the redirect_uri callback from the IdP can be served over HTTPS. The Gateway listener's certificateRef provides the TLS certificate for this incoming connection.
+TLS is required for secure communication between the data plane and the OpenID Provider. To verify TLS connections, specify a CA bundle with the appropriate CN/SAN using the `caCertificateRefs` field of the AuthenticationFilter CRD; if omitted, the system CA will be used by default. Additionally, the AuthenticationFilter must be attached to a route using an HTTPS listener so that the redirect_uri callback from the IdP can be served over HTTPS. The Gateway listener's `tls.certificateRefs` provides the TLS certificate for this incoming connection.
 
 An authenticationFilter with complete OIDC configuration would look like:
 
@@ -289,13 +291,11 @@ spec:
     clientID: nginx-gateway
     clientSecret:
       name: oidc-client-secret
-      namespace: default
 
     caCertificateRefs:
       - name: oidc-ca-cert
     certificateRevocationList:
       name: oidc-crl
-      namespace: default
 
     # provider metadata (optional override)
     configURL: "https://keycloak.example.com/realms/my-realm/.well-known/openid-configuration"
@@ -359,7 +359,7 @@ stringData:
     -----END X509 CRL-----
 ```
 
-OIDC Authentication Filters can only be attached to HTTPS Listeners. 
+OIDC Authentication Filters can only be attached to HTTPS Listeners.
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
