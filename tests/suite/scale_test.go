@@ -340,10 +340,10 @@ The logs are attached only if there are errors.
 		)
 		Expect(err).ToNot(HaveOccurred())
 
-		memCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "memory", *plusEnabled))
+		memCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "memory-ngf", *plusEnabled))
 		Expect(framework.WritePrometheusMatrixToCSVFile(memCSV, result)).To(Succeed())
 
-		memPNG := framework.CreateResultsFilename("png", "memory", *plusEnabled)
+		memPNG := framework.CreateResultsFilename("png", "memory-ngf", *plusEnabled)
 		Expect(
 			framework.GenerateMemoryPNG(testResultsDir, memCSV, memPNG),
 		).To(Succeed())
@@ -360,10 +360,10 @@ The logs are attached only if there are errors.
 		)
 		Expect(err).ToNot(HaveOccurred())
 
-		cpuCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "cpu", *plusEnabled))
+		cpuCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "cpu-ngf", *plusEnabled))
 		Expect(framework.WritePrometheusMatrixToCSVFile(cpuCSV, result)).To(Succeed())
 
-		cpuPNG := framework.CreateResultsFilename("png", "cpu", *plusEnabled)
+		cpuPNG := framework.CreateResultsFilename("png", "cpu-ngf", *plusEnabled)
 		Expect(
 			framework.GenerateCPUPNG(testResultsDir, cpuCSV, cpuPNG),
 		).To(Succeed())
@@ -388,10 +388,10 @@ The logs are attached only if there are errors.
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			memDPCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "memory-dataplane", *plusEnabled))
+			memDPCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "memory-nginx", *plusEnabled))
 			Expect(framework.WritePrometheusMatrixToCSVFile(memDPCSV, result)).To(Succeed())
 
-			memDPPNG := framework.CreateResultsFilename("png", "memory-dataplane", *plusEnabled)
+			memDPPNG := framework.CreateResultsFilename("png", "memory-nginx", *plusEnabled)
 			Expect(
 				framework.GenerateMemoryPNG(testResultsDir, memDPCSV, memDPPNG),
 			).To(Succeed())
@@ -409,10 +409,10 @@ The logs are attached only if there are errors.
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			cpuDPCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "cpu-dataplane", *plusEnabled))
+			cpuDPCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "cpu-nginx", *plusEnabled))
 			Expect(framework.WritePrometheusMatrixToCSVFile(cpuDPCSV, result)).To(Succeed())
 
-			cpuDPPNG := framework.CreateResultsFilename("png", "cpu-dataplane", *plusEnabled)
+			cpuDPPNG := framework.CreateResultsFilename("png", "cpu-nginx", *plusEnabled)
 			Expect(
 				framework.GenerateCPUPNG(testResultsDir, cpuDPCSV, cpuDPPNG),
 			).To(Succeed())
