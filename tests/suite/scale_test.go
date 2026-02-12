@@ -312,7 +312,7 @@ The logs are attached only if there are errors.
 		if nginxDataPlanePodName != "" {
 			nginxQueries := []string{
 				fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx"}`, nginxDataPlanePodName),
-				fmt.Sprintf(`rate(container_cpu_usage_seconds_total{pod="%s",container="nginx"}[2m])`, nginxDataPlanePodName),
+				fmt.Sprintf(`container_cpu_usage_seconds_total{pod="%s",container="nginx"}`, nginxDataPlanePodName),
 			}
 
 			for _, query := range nginxQueries {
@@ -663,7 +663,7 @@ The logs are attached only if there are errors.
 		}
 	}
 
-	It(fmt.Sprintf("scales HTTP listeners to %d", httpListenerCount), func() {
+	It(fmt.Sprintf("scales HTTP listeners to %d", httpListenerCount), Label("http-listeners"), func() {
 		const testName = "TestScale_Listeners"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
@@ -687,7 +687,7 @@ The logs are attached only if there are errors.
 		)
 	})
 
-	It(fmt.Sprintf("scales HTTPS listeners to %d", httpsListenerCount), func() {
+	It(fmt.Sprintf("scales HTTPS listeners to %d", httpsListenerCount), Label("https-listeners"), func() {
 		const testName = "TestScale_HTTPSListeners"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
@@ -711,7 +711,7 @@ The logs are attached only if there are errors.
 		)
 	})
 
-	It(fmt.Sprintf("scales HTTP routes to %d", httpRouteCount), func() {
+	It(fmt.Sprintf("scales HTTP routes to %d", httpRouteCount), Label("http-routes"), func() {
 		const testName = "TestScale_HTTPRoutes"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
@@ -738,7 +738,7 @@ The logs are attached only if there are errors.
 	It(fmt.Sprintf("scales upstream servers to %d for OSS and %d for Plus",
 		ossUpstreamServerCount,
 		plusUpstreamServerCount,
-	), func() {
+	), Label("upstream-servers"), func() {
 		const testName = "TestScale_UpstreamServers"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
@@ -753,7 +753,7 @@ The logs are attached only if there are errors.
 		)
 	})
 
-	It("scales HTTP matches", func() {
+	It("scales HTTP matches", Label("http-matches"), func() {
 		const testName = "TestScale_HTTPMatches"
 
 		Expect(resourceManager.ApplyFromFiles(matchesManifests, namespace)).To(Succeed())
@@ -1064,7 +1064,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
 			})
 
-			It("scales up gradually without downtime", func() {
+			It("scales up gradually without downtime", Label("gradual-up"), func() {
 				_, err := fmt.Fprint(outFile, "\n### Scale Up Gradually\n")
 				Expect(err).ToNot(HaveOccurred())
 
@@ -1115,7 +1115,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				}
 			})
 
-			It("scales down gradually without downtime", func() {
+			It("scales down gradually without downtime", Label("gradual-down"), func() {
 				_, err := fmt.Fprint(outFile, "\n### Scale Down Gradually\n")
 				Expect(err).ToNot(HaveOccurred())
 
@@ -1196,7 +1196,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 					Should(Succeed())
 			}
 
-			It("scales up abruptly without downtime", func() {
+			It("scales up abruptly without downtime", Label("abrupt-up"), func() {
 				_, err := fmt.Fprint(outFile, "\n### Scale Up Abruptly\n")
 				Expect(err).ToNot(HaveOccurred())
 
@@ -1228,7 +1228,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				}
 			})
 
-			It("scales down abruptly without downtime", func() {
+			It("scales down abruptly without downtime", Label("abrupt-down"), func() {
 				_, err := fmt.Fprint(outFile, "\n### Scale Down Abruptly\n")
 				Expect(err).ToNot(HaveOccurred())
 
