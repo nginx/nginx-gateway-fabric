@@ -18,13 +18,18 @@ const (
 	UpdateGateway
 )
 
+type Deployment struct {
+	NamespacedName types.NamespacedName
+	GatewayName    string
+}
+
 // QueueObject is the object to be passed to the queue for status updates.
 type QueueObject struct {
 	// GatewayService is the Gateway Service that was updated. When set, UpdateType should be UpdateGateway.
 	// Set by the provisioner
 	GatewayService *corev1.Service
 	Error          error
-	Deployment     types.NamespacedName
+	Deployment     Deployment
 	UpdateType     UpdateType
 }
 

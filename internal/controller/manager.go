@@ -61,11 +61,13 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	ctlrCache "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/cache"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/filter"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/predicate"
@@ -80,11 +82,7 @@ const (
 	// clusterTimeout is a timeout for connections to the Kubernetes API.
 	clusterTimeout = 10 * time.Second
 	// the following are the names of data fields within NGINX Plus related Secrets.
-	plusLicenseField    = "license.jwt"
-	plusCAField         = "ca.crt"
-	plusClientCertField = "tls.crt"
-	plusClientKeyField  = "tls.key"
-	grpcServerPort      = 8443
+	grpcServerPort = 8443
 )
 
 var scheme = runtime.NewScheme()
@@ -119,7 +117,7 @@ func StartManager(cfg config.Config) error {
 
 	ctx := ctlr.SetupSignalHandler()
 
-	eventCh := make(chan interface{})
+	eventCh := make(chan any)
 	controlConfigNSName := types.NamespacedName{
 		Namespace: cfg.GatewayPodConfig.Namespace,
 		Name:      cfg.ConfigName,
@@ -260,7 +258,6 @@ func StartManager(cfg config.Config) error {
 			cfg.Logger.WithName("generator"),
 		),
 		k8sClient:               mgr.GetClient(),
-		k8sReader:               mgr.GetAPIReader(),
 		logger:                  cfg.Logger.WithName("eventHandler"),
 		logLevelSetter:          logLevelSetter,
 		eventRecorder:           recorder,
@@ -391,6 +388,7 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 			// All of our controllers still need to work in case of non-leader pods
 			NeedLeaderElection: helpers.GetPointer(false),
 		},
+		Cache: buildManagerCache(cfg),
 	}
 
 	if cfg.HealthConfig.Enabled {
@@ -399,17 +397,6 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 
 	clusterCfg := ctlr.GetConfigOrDie()
 	clusterCfg.Timeout = clusterTimeout
-
-	if len(cfg.WatchNamespaces) > 0 {
-		if !slices.Contains(cfg.WatchNamespaces, cfg.GatewayPodConfig.Namespace) {
-			cfg.WatchNamespaces = append(cfg.WatchNamespaces, cfg.GatewayPodConfig.Namespace)
-		}
-		namespaces := make(map[string]cache.Config)
-		for _, ns := range cfg.WatchNamespaces {
-			namespaces[ns] = cache.Config{}
-		}
-		options.Cache.DefaultNamespaces = namespaces
-	}
 
 	mgr, err := manager.New(clusterCfg, options)
 	if err != nil {
@@ -436,6 +423,39 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 	}
 
 	return mgr, nil
+}
+
+// buildManagerCache builds the cache options for the manager.
+// It ensures that we only cache things that we care about. It strips ManagedFields
+// from all resources (we don't use them) and adds additional transforms for specific resources
+// (GatewayClass, Secret, ConfigMap).
+func buildManagerCache(cfg config.Config) cache.Options {
+	var cacheOpts cache.Options
+	if len(cfg.WatchNamespaces) > 0 {
+		if !slices.Contains(cfg.WatchNamespaces, cfg.GatewayPodConfig.Namespace) {
+			cfg.WatchNamespaces = append(cfg.WatchNamespaces, cfg.GatewayPodConfig.Namespace)
+		}
+		namespaces := make(map[string]cache.Config)
+		for _, ns := range cfg.WatchNamespaces {
+			namespaces[ns] = cache.Config{}
+		}
+		cacheOpts.DefaultNamespaces = namespaces
+	}
+
+	cacheOpts.DefaultTransform = cache.TransformStripManagedFields()
+	cacheOpts.ByObject = map[client.Object]cache.ByObject{
+		&gatewayv1.GatewayClass{}: {
+			Transform: ctlrCache.TransformGatewayClass(cfg.GatewayCtlrName),
+		},
+		&apiv1.Secret{}: {
+			Transform: ctlrCache.TransformSecret(),
+		},
+		&apiv1.ConfigMap{}: {
+			Transform: ctlrCache.TransformConfigMap(),
+		},
+	}
+
+	return cacheOpts
 }
 
 // ctlrCfg contains the configuration for a controller.
@@ -527,7 +547,7 @@ func registerControllers(
 	mgr manager.Manager,
 	recorder k8sEvents.EventRecorder,
 	logLevelSetter logLevelSetter,
-	eventCh chan interface{},
+	eventCh chan any,
 	controlConfigNSName types.NamespacedName,
 ) (map[string]bool, error) {
 	crdWithGVK := apiext.CustomResourceDefinition{}
@@ -565,8 +585,6 @@ func registerControllers(
 			},
 		},
 		{
-			// FIXME(ciarams87): If possible, use only metadata predicate
-			// https://github.com/nginx/nginx-gateway-fabric/issues/1545
 			objectType: &apiv1.ConfigMap{},
 		},
 		{
@@ -825,12 +843,12 @@ func createPlusSecretMetadata(
 			Name:      cfg.UsageReportConfig.SecretName,
 		}
 
-		if err := validateSecret(reader, jwtSecretName, plusLicenseField); err != nil {
+		if err := validateSecret(reader, jwtSecretName, secrets.LicenseJWTKey); err != nil {
 			return nil, err
 		}
 
 		jwtSecretCfg := graph.PlusSecretFile{
-			FieldName: plusLicenseField,
+			FieldName: secrets.LicenseJWTKey,
 			Type:      graph.PlusReportJWTToken,
 		}
 
@@ -842,12 +860,12 @@ func createPlusSecretMetadata(
 				Name:      cfg.UsageReportConfig.CASecretName,
 			}
 
-			if err := validateSecret(reader, caSecretName, plusCAField); err != nil {
+			if err := validateSecret(reader, caSecretName, secrets.CAKey); err != nil {
 				return nil, err
 			}
 
 			caSecretCfg := graph.PlusSecretFile{
-				FieldName: plusCAField,
+				FieldName: secrets.CAKey,
 				Type:      graph.PlusReportCACertificate,
 			}
 
@@ -860,17 +878,22 @@ func createPlusSecretMetadata(
 				Name:      cfg.UsageReportConfig.ClientSSLSecretName,
 			}
 
-			if err := validateSecret(reader, clientSSLSecretName, plusClientCertField, plusClientKeyField); err != nil {
+			if err := validateSecret(
+				reader,
+				clientSSLSecretName,
+				secrets.TLSCertKey,
+				secrets.TLSKeyKey,
+			); err != nil {
 				return nil, err
 			}
 
 			clientSSLCertCfg := graph.PlusSecretFile{
-				FieldName: plusClientCertField,
+				FieldName: secrets.TLSCertKey,
 				Type:      graph.PlusReportClientSSLCertificate,
 			}
 
 			clientSSLKeyCfg := graph.PlusSecretFile{
-				FieldName: plusClientKeyField,
+				FieldName: secrets.TLSKeyKey,
 				Type:      graph.PlusReportClientSSLKey,
 			}
 

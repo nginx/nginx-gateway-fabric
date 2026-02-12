@@ -8,7 +8,7 @@ import (
 )
 
 // EventBatch is a batch of events to be handled at once.
-type EventBatch []interface{}
+type EventBatch []any
 
 // UpsertEvent represents upserting a resource.
 type UpsertEvent struct {

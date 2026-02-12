@@ -30,6 +30,7 @@ import (
 type eventHandler struct {
 	store         *store
 	provisioner   *NginxProvisioner
+	k8sClient     client.Reader
 	labelSelector labels.Selector
 	// gcName is the GatewayClass name for this control plane.
 	gcName string
@@ -38,6 +39,7 @@ type eventHandler struct {
 func newEventHandler(
 	store *store,
 	provisioner *NginxProvisioner,
+	k8sClient client.Reader,
 	selector metav1.LabelSelector,
 	gcName string,
 ) (*eventHandler, error) {
@@ -49,102 +51,120 @@ func newEventHandler(
 	return &eventHandler{
 		store:         store,
 		provisioner:   provisioner,
+		k8sClient:     k8sClient,
 		labelSelector: labelSelector,
 		gcName:        gcName,
 	}, nil
 }
 
-//nolint:gocyclo // will refactor at some point
 func (h *eventHandler) HandleEventBatch(ctx context.Context, logger logr.Logger, batch events.EventBatch) {
 	for _, event := range batch {
 		switch e := event.(type) {
 		case *events.UpsertEvent:
-			switch obj := e.Resource.(type) {
-			case *gatewayv1.Gateway:
-				h.store.updateGateway(obj)
-			case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.ServiceAccount,
-				*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
-				objLabels := labels.Set(obj.GetLabels())
-				if h.labelSelector.Matches(objLabels) {
-					gatewayName := objLabels.Get(controller.GatewayLabel)
-					if gatewayName == "" {
-						gatewayName = obj.GetAnnotations()[controller.GatewayLabel]
-					}
-					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
-					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
-						logger.Error(err, "error handling resource update")
-					}
-				}
-			case *corev1.Service:
-				objLabels := labels.Set(obj.GetLabels())
-				if h.labelSelector.Matches(objLabels) {
-					gatewayName := objLabels.Get(controller.GatewayLabel)
-					if gatewayName == "" {
-						gatewayName = obj.GetAnnotations()[controller.GatewayLabel]
-					}
-					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
-					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
-						logger.Error(err, "error handling resource update")
-					}
-					statusUpdate := &status.QueueObject{
-						Deployment:     client.ObjectKeyFromObject(obj),
-						UpdateType:     status.UpdateGateway,
-						GatewayService: obj,
-					}
-					h.provisioner.cfg.StatusQueue.Enqueue(statusUpdate)
-				}
-			case *corev1.Secret:
-				objLabels := labels.Set(obj.GetLabels())
-				if h.labelSelector.Matches(objLabels) {
-					gatewayName := objLabels.Get(controller.GatewayLabel)
-					if gatewayName == "" {
-						gatewayName = obj.GetAnnotations()[controller.GatewayLabel]
-					}
-					gatewayNSName := types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}
-					if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
-						logger.Error(err, "error handling resource update")
-					}
-				} else if h.provisioner.isUserSecret(obj.GetName()) {
-					if err := h.provisionResourceForAllGateways(ctx, logger, obj); err != nil {
-						logger.Error(err, "error updating resource")
-					}
-				}
-			default:
-				panic(fmt.Errorf("unknown resource type %T", e.Resource))
+			if err := h.handleUpsertEvent(ctx, e, logger); err != nil {
+				logger.Error(err, "error handling upsert event")
 			}
 		case *events.DeleteEvent:
-			switch e.Type.(type) {
-			case *gatewayv1.Gateway:
-				if !h.provisioner.isLeader() {
-					h.provisioner.setResourceToDelete(e.NamespacedName)
-				}
-
-				if err := h.provisioner.deprovisionNginx(ctx, e.NamespacedName); err != nil {
-					logger.Error(err, "error deprovisioning nginx resources")
-				}
-				h.store.deleteGateway(e.NamespacedName)
-			case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.Service, *corev1.ServiceAccount,
-				*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
-				if err := h.reprovisionResources(ctx, e); err != nil {
-					logger.Error(err, "error re-provisioning nginx resources")
-				}
-			case *corev1.Secret:
-				if h.provisioner.isUserSecret(e.NamespacedName.Name) {
-					if err := h.deprovisionSecretsForAllGateways(ctx, e.NamespacedName.Name); err != nil {
-						logger.Error(err, "error removing secrets")
-					}
-				} else {
-					if err := h.reprovisionResources(ctx, e); err != nil {
-						logger.Error(err, "error re-provisioning nginx resources")
-					}
-				}
-			default:
-				panic(fmt.Errorf("unknown resource type %T", e.Type))
+			if err := h.handleDeleteEvent(ctx, e); err != nil {
+				logger.Error(err, "error handling delete event")
 			}
 		default:
 			panic(fmt.Errorf("unknown event type %T", e))
 		}
 	}
+}
+
+func (h *eventHandler) handleUpsertEvent(ctx context.Context, e *events.UpsertEvent, logger logr.Logger) error {
+	switch obj := e.Resource.(type) {
+	case *gatewayv1.Gateway:
+		h.store.updateGateway(obj)
+	case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.ServiceAccount,
+		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
+		if gatewayNSName, ok := h.getGatewayForManagedResource(obj); ok {
+			if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
+				return fmt.Errorf("error handling resource update: %w", err)
+			}
+		}
+	case *corev1.Service:
+		if gatewayNSName, ok := h.getGatewayForManagedResource(obj); ok {
+			if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
+				return fmt.Errorf("error handling resource update: %w", err)
+			}
+			h.provisioner.cfg.StatusQueue.Enqueue(&status.QueueObject{
+				Deployment: status.Deployment{
+					NamespacedName: client.ObjectKeyFromObject(obj),
+					GatewayName:    gatewayNSName.Name,
+				},
+				UpdateType:     status.UpdateGateway,
+				GatewayService: obj,
+			})
+		}
+	case *corev1.Secret:
+		if gatewayNSName, ok := h.getGatewayForManagedResource(obj); ok {
+			if err := h.updateOrDeleteResources(ctx, logger, obj, gatewayNSName); err != nil {
+				return fmt.Errorf("error handling resource update: %w", err)
+			}
+		} else if h.provisioner.isUserSecret(obj.GetName()) {
+			if err := h.provisionResourceForAllGateways(ctx, logger, obj); err != nil {
+				return fmt.Errorf("error provisioning resource for all gateways: %w", err)
+			}
+		}
+	default:
+		panic(fmt.Errorf("unknown resource type %T", e.Resource))
+	}
+	return nil
+}
+
+// getGatewayForManagedResource checks if the object is managed by us and returns the
+// associated Gateway's NamespacedName. Returns false if the object doesn't match our label selector.
+func (h *eventHandler) getGatewayForManagedResource(obj client.Object) (types.NamespacedName, bool) {
+	objLabels := labels.Set(obj.GetLabels())
+	if !h.labelSelector.Matches(objLabels) {
+		return types.NamespacedName{}, false
+	}
+	gatewayName := objLabels.Get(controller.GatewayLabel)
+	if gatewayName == "" {
+		gatewayName = obj.GetAnnotations()[controller.GatewayLabel]
+	}
+	return types.NamespacedName{Namespace: obj.GetNamespace(), Name: gatewayName}, true
+}
+
+func (h *eventHandler) handleDeleteEvent(ctx context.Context, e *events.DeleteEvent) error {
+	switch e.Type.(type) {
+	case *gatewayv1.Gateway:
+		h.store.markGatewayDeleting(e.NamespacedName)
+
+		if !h.provisioner.isLeader() {
+			h.provisioner.setResourceToDelete(e.NamespacedName)
+		}
+		h.store.deleteGateway(e.NamespacedName)
+		h.store.deleteResourcesForGateway(e.NamespacedName)
+		deploymentNSName := types.NamespacedName{
+			Name:      controller.CreateNginxResourceName(e.NamespacedName.Name, h.gcName),
+			Namespace: e.NamespacedName.Namespace,
+		}
+		h.provisioner.cfg.DeploymentStore.Remove(deploymentNSName)
+	case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.Service, *corev1.ServiceAccount,
+		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
+
+		if err := h.reprovisionResources(ctx, e); err != nil {
+			return fmt.Errorf("error re-provisioning nginx resources: %w", err)
+		}
+	case *corev1.Secret:
+		if h.provisioner.isUserSecret(e.NamespacedName.Name) {
+			if err := h.deprovisionSecretsForAllGateways(ctx, e.NamespacedName.Name); err != nil {
+				return fmt.Errorf("error removing secrets: %w", err)
+			}
+		} else {
+			if err := h.reprovisionResources(ctx, e); err != nil {
+				return fmt.Errorf("error re-provisioning nginx resources: %w", err)
+			}
+		}
+	default:
+		panic(fmt.Errorf("unknown resource type %T", e.Type))
+	}
+
+	return nil
 }
 
 // updateOrDeleteResources ensures that nginx resources are either:
@@ -159,17 +179,14 @@ func (h *eventHandler) updateOrDeleteResources(
 	if gw := h.store.getGateway(gatewayNSName); gw == nil {
 		if !h.provisioner.isLeader() {
 			h.provisioner.setResourceToDelete(gatewayNSName)
-
 			return nil
 		}
-
-		if err := h.provisioner.deprovisionNginx(ctx, gatewayNSName); err != nil {
-			return fmt.Errorf("error deprovisioning nginx resources: %w", err)
-		}
+		logger.Info("Gateway not found, associated resources will be garbage collected",
+			"resource", obj.GetName(), "gateway", gatewayNSName)
 		return nil
 	}
 
-	if h.store.getResourceVersionForObject(gatewayNSName, obj) == obj.GetResourceVersion() {
+	if !h.hasResourceVersionChanged(ctx, logger, gatewayNSName, obj) {
 		return nil
 	}
 
@@ -179,6 +196,32 @@ func (h *eventHandler) updateOrDeleteResources(
 	}
 
 	return nil
+}
+
+// hasResourceVersionChanged checks if the resource version for the object has changed.
+// If the resource version is not found in the store, it uses the k8s client to get the current
+// resource version.
+func (h *eventHandler) hasResourceVersionChanged(
+	ctx context.Context,
+	logger logr.Logger,
+	gatewayNSName types.NamespacedName,
+	obj client.Object,
+) bool {
+	objectResourceVersion := obj.GetResourceVersion()
+	storeResourceVersion := h.store.getResourceVersionForObject(gatewayNSName, obj)
+	if storeResourceVersion == "" {
+		storeObject, ok := obj.DeepCopyObject().(client.Object)
+		if ok {
+			getError := h.k8sClient.Get(ctx, client.ObjectKeyFromObject(storeObject), storeObject)
+			if getError == nil {
+				storeResourceVersion = storeObject.GetResourceVersion()
+			} else {
+				logger.Error(getError, "error finding already provisioned resource")
+			}
+		}
+	}
+
+	return storeResourceVersion != objectResourceVersion
 }
 
 func (h *eventHandler) provisionResource(
@@ -228,17 +271,27 @@ func (h *eventHandler) provisionResource(
 
 // reprovisionResources redeploys nginx resources that have been deleted but should not have been.
 func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.DeleteEvent) error {
-	if gateway := h.store.gatewayExistsForResource(event.Type, event.NamespacedName); gateway != nil && gateway.Valid {
-		resourceName := controller.CreateNginxResourceName(gateway.Source.GetName(), h.gcName)
-		if err := h.provisioner.reprovisionNginx(
-			ctx,
-			resourceName,
-			gateway.Source,
-			gateway.EffectiveNginxProxy,
-		); err != nil {
-			return err
+	gateway := h.store.gatewayExistsForResource(event.Type, event.NamespacedName)
+
+	if gateway != nil {
+		gatewayNsName := types.NamespacedName{
+			Namespace: gateway.Source.Namespace,
+			Name:      gateway.Source.Name,
+		}
+
+		if gateway.Valid && !h.store.isGatewayDeleting(gatewayNsName) {
+			resourceName := controller.CreateNginxResourceName(gateway.Source.GetName(), h.gcName)
+			if err := h.provisioner.reprovisionNginx(
+				ctx,
+				resourceName,
+				gateway.Source,
+				gateway.EffectiveNginxProxy,
+			); err != nil {
+				return err
+			}
 		}
 	}
+
 	return nil
 }
 
@@ -266,8 +319,8 @@ func (h *eventHandler) provisionResourceForAllGateways(
 //nolint:gocyclo // will refactor at some point
 func (h *eventHandler) deprovisionSecretsForAllGateways(ctx context.Context, secret string) error {
 	var allErrs []error
-
 	gateways := h.store.getGateways()
+
 	for gateway := range gateways {
 		resources := h.store.getNginxResourcesForGateway(gateway)
 		if resources == nil {

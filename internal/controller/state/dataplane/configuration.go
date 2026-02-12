@@ -19,6 +19,8 @@ import (
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -351,7 +353,7 @@ func buildStreamUpstreams(
 // buildSSLKeyPairs builds the SSLKeyPairs from the Secrets. It will only include Secrets that are referenced by
 // valid gateway and its listeners, so that we don't include unused Secrets in the configuration of the data plane.
 func buildSSLKeyPairs(
-	secrets map[types.NamespacedName]*graph.Secret,
+	secretsMap map[types.NamespacedName]*secrets.Secret,
 	gateway *graph.Gateway,
 ) map[SSLKeyPairID]SSLKeyPair {
 	keyPairs := make(map[SSLKeyPairID]SSLKeyPair)
@@ -359,7 +361,7 @@ func buildSSLKeyPairs(
 	for _, l := range gateway.Listeners {
 		if l.Valid && l.ResolvedSecret != nil {
 			id := generateSSLKeyPairID(*l.ResolvedSecret)
-			secret := secrets[*l.ResolvedSecret]
+			secret := secretsMap[*l.ResolvedSecret]
 			if secret != nil && secret.CertBundle != nil {
 				keyPairs[id] = SSLKeyPair{
 					Cert: secret.CertBundle.Cert.TLSCert,
@@ -371,7 +373,7 @@ func buildSSLKeyPairs(
 
 	if gateway.Valid && gateway.SecretRef != nil {
 		id := generateSSLKeyPairID(*gateway.SecretRef)
-		secret := secrets[*gateway.SecretRef]
+		secret := secretsMap[*gateway.SecretRef]
 		if secret != nil && secret.CertBundle != nil {
 			keyPairs[id] = SSLKeyPair{
 				Cert: secret.CertBundle.Cert.TLSCert,
@@ -384,12 +386,12 @@ func buildSSLKeyPairs(
 }
 
 func buildRefCertificateBundles(
-	secrets map[types.NamespacedName]*graph.Secret,
-	configMaps map[types.NamespacedName]*graph.CaCertConfigMap,
-) []graph.CertificateBundle {
-	bundles := []graph.CertificateBundle{}
+	secretsMap map[types.NamespacedName]*secrets.Secret,
+	configMaps map[types.NamespacedName]*configmaps.CaCertConfigMap,
+) []secrets.CertificateBundle {
+	bundles := []secrets.CertificateBundle{}
 
-	for _, secret := range secrets {
+	for _, secret := range secretsMap {
 		if secret.CertBundle != nil {
 			bundles = append(bundles, *secret.CertBundle)
 		}
@@ -405,7 +407,7 @@ func buildRefCertificateBundles(
 }
 
 func buildCertBundles(
-	refCertBundles []graph.CertificateBundle,
+	refCertBundles []secrets.CertificateBundle,
 	backendGroups []BackendGroup,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle)
@@ -443,12 +445,13 @@ func buildCertBundles(
 	return bundles
 }
 
-func buildAuthSecrets(secrets map[types.NamespacedName]*graph.Secret) map[AuthFileID]AuthFileData {
-	authBasics := make(map[AuthFileID]AuthFileData, len(secrets))
+func buildAuthSecrets(secretsMap map[types.NamespacedName]*secrets.Secret) map[AuthFileID]AuthFileData {
+	authBasics := make(map[AuthFileID]AuthFileData, len(secretsMap))
 
-	for nsname, secret := range secrets {
-		if secret != nil && secret.Source != nil && secret.Source.Type == coreV1.SecretType(graph.SecretTypeHtpasswd) {
-			if data, exists := secret.Source.Data[graph.AuthKey]; exists {
+	for nsname, secret := range secretsMap {
+		if secret != nil && secret.Source != nil &&
+			secret.Source.Type == coreV1.SecretType(secrets.SecretTypeHtpasswd) {
+			if data, exists := secret.Source.Data[secrets.AuthKey]; exists {
 				id := AuthFileID(fmt.Sprintf("%s_%s", nsname.Namespace, nsname.Name))
 				authBasics[id] = data
 			}
@@ -573,7 +576,7 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 func buildServers(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
-	referencedSecrets map[types.NamespacedName]*graph.Secret,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 ) (http, ssl []VirtualServer) {
 	rulesForProtocol := map[v1.ProtocolType]portPathRules{
 		v1.HTTPProtocolType:  make(portPathRules),
@@ -658,7 +661,7 @@ func (hpr *hostPathRules) upsertListener(
 	l *graph.Listener,
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
-	referencedSecrets map[types.NamespacedName]*graph.Secret,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 ) {
 	hpr.listenersExist = true
 	hpr.port = l.Source.Port
@@ -681,7 +684,7 @@ func (hpr *hostPathRules) upsertRoute(
 	listener *graph.Listener,
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
-	referencedSecrets map[types.NamespacedName]*graph.Secret,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 ) {
 	var hostnames []string
 	GRPC := route.RouteType == graph.RouteTypeGRPC
@@ -802,14 +805,7 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 			s.PathRules = append(s.PathRules, r)
 		}
 
-		// We sort the path rules so the order is preserved after reconfiguration.
-		sort.Slice(s.PathRules, func(i, j int) bool {
-			if s.PathRules[i].Path != s.PathRules[j].Path {
-				return s.PathRules[i].Path < s.PathRules[j].Path
-			}
-
-			return s.PathRules[i].PathType < s.PathRules[j].PathType
-		})
+		sortPathRules(s.PathRules)
 
 		for pathRuleIdx := range s.PathRules {
 			for matchRuleIdx := range s.PathRules[pathRuleIdx].MatchRules {
@@ -1053,7 +1049,7 @@ func createHTTPFilters(
 	filters []graph.Filter,
 	ruleIdx int,
 	routeNsName types.NamespacedName,
-	referencedSecrets map[types.NamespacedName]*graph.Secret,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 ) HTTPFilters {
 	var result HTTPFilters
 
@@ -1545,11 +1541,11 @@ func buildWorkerConnections(gateway *graph.Gateway) int32 {
 }
 
 func buildAuxiliarySecrets(
-	secrets map[types.NamespacedName][]graph.PlusSecretFile,
+	secretsMap map[types.NamespacedName][]graph.PlusSecretFile,
 ) map[graph.SecretFileType][]byte {
 	auxSecrets := make(map[graph.SecretFileType][]byte)
 
-	for _, secretFiles := range secrets {
+	for _, secretFiles := range secretsMap {
 		for _, file := range secretFiles {
 			auxSecrets[file.Type] = file.Content
 		}

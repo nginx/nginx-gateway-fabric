@@ -1,11 +1,8 @@
 # syntax=docker/dockerfile:1.21
-FROM golang:1.25
+FROM golang:1.26
 
 WORKDIR /go/src/github.com/nginx/nginx-gateway-fabric/tests/conformance
 
-COPY ../. /go/src/github.com/nginx/nginx-gateway-fabric/
-COPY --link go.mod /go/src/github.com/nginx/nginx-gateway-fabric/tests/
-COPY --link go.sum /go/src/github.com/nginx/nginx-gateway-fabric/tests/
-RUN go mod download
+COPY . /go/src/github.com/nginx/nginx-gateway-fabric/
 
-COPY --link conformance /go/src/github.com/nginx/nginx-gateway-fabric/tests/conformance
+RUN go mod download

@@ -25,6 +25,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
@@ -434,7 +435,7 @@ var _ = Describe("ChangeProcessor", func() {
 			var (
 				gcUpdated                                                  *v1.GatewayClass
 				diffNsTLSSecret, sameNsTLSSecret                           *apiv1.Secret
-				diffNsTLSCert, sameNsTLSCert                               *graph.CertificateBundle
+				diffNsTLSCert, sameNsTLSCert                               *secrets.CertificateBundle
 				hr1, hr1Updated, hr2                                       *v1.HTTPRoute
 				gr1, gr1Updated, gr2                                       *v1.GRPCRoute
 				tr1, tr1Updated, tr2                                       *v1alpha2.TLSRoute
@@ -607,10 +608,10 @@ var _ = Describe("ChangeProcessor", func() {
 						apiv1.TLSPrivateKeyKey: key,
 					},
 				}
-				sameNsTLSCert = graph.NewCertificateBundle(
+				sameNsTLSCert = secrets.NewCertificateBundle(
 					types.NamespacedName{Namespace: sameNsTLSSecret.Namespace, Name: sameNsTLSSecret.Name},
 					"Secret",
-					&graph.Certificate{
+					&secrets.Certificate{
 						TLSCert:       cert,
 						TLSPrivateKey: key,
 					},
@@ -631,10 +632,10 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 				}
 
-				diffNsTLSCert = graph.NewCertificateBundle(
+				diffNsTLSCert = secrets.NewCertificateBundle(
 					types.NamespacedName{Namespace: diffNsTLSSecret.Namespace, Name: diffNsTLSSecret.Name},
 					"Secret",
-					&graph.Certificate{
+					&secrets.Certificate{
 						TLSCert:       cert,
 						TLSPrivateKey: key,
 					},
@@ -1083,7 +1084,7 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					L4Routes:          map[graph.L4RouteKey]*graph.L4Route{trKey1: expRouteTR1},
 					Routes:            map[graph.RouteKey]*graph.L7Route{httpRouteKey1: expRouteHR1, grpcRouteKey1: expRouteGR1},
-					ReferencedSecrets: map[types.NamespacedName]*graph.Secret{},
+					ReferencedSecrets: map[types.NamespacedName]*secrets.Secret{},
 					ReferencedServices: map[types.NamespacedName]*graph.ReferencedService{
 						refSvc: {
 							GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: "test", Name: "gateway-1"}: {}},
@@ -1204,7 +1205,7 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					L4Routes: map[graph.L4RouteKey]*graph.L4Route{trKey1: expRouteTR1},
 					Routes:   map[graph.RouteKey]*graph.L7Route{httpRouteKey1: expRouteHR1, grpcRouteKey1: expRouteGR1},
-					ReferencedSecrets: map[types.NamespacedName]*graph.Secret{
+					ReferencedSecrets: map[types.NamespacedName]*secrets.Secret{
 						client.ObjectKeyFromObject(sameNsTLSSecret): {
 							Source:     sameNsTLSSecret,
 							CertBundle: sameNsTLSCert,
@@ -1450,12 +1451,12 @@ var _ = Describe("ChangeProcessor", func() {
 						),
 					}
 
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source: diffNsTLSSecret,
-						CertBundle: graph.NewCertificateBundle(
+						CertBundle: secrets.NewCertificateBundle(
 							types.NamespacedName{Namespace: diffNsTLSSecret.Namespace, Name: diffNsTLSSecret.Name},
 							"Secret",
-							&graph.Certificate{
+							&secrets.Certificate{
 								TLSCert:       cert,
 								TLSPrivateKey: key,
 							},
@@ -1494,12 +1495,12 @@ var _ = Describe("ChangeProcessor", func() {
 					delete(expGraph.ReferencedServices, refTLSSvc)
 					expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
 
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source: diffNsTLSSecret,
-						CertBundle: graph.NewCertificateBundle(
+						CertBundle: secrets.NewCertificateBundle(
 							types.NamespacedName{Namespace: diffNsTLSSecret.Namespace, Name: diffNsTLSSecret.Name},
 							"Secret",
-							&graph.Certificate{
+							&secrets.Certificate{
 								TLSCert:       cert,
 								TLSPrivateKey: key,
 							},
@@ -1523,12 +1524,12 @@ var _ = Describe("ChangeProcessor", func() {
 					delete(expGraph.ReferencedServices, types.NamespacedName{Namespace: "tls-service-ns", Name: "tls-service"})
 					expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
 
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source: diffNsTLSSecret,
-						CertBundle: graph.NewCertificateBundle(
+						CertBundle: secrets.NewCertificateBundle(
 							types.NamespacedName{Namespace: diffNsTLSSecret.Namespace, Name: diffNsTLSSecret.Name},
 							"Secret",
-							&graph.Certificate{
+							&secrets.Certificate{
 								TLSCert:       cert,
 								TLSPrivateKey: key,
 							},
@@ -1542,7 +1543,7 @@ var _ = Describe("ChangeProcessor", func() {
 				It("returns updated graph", func() {
 					processor.CaptureUpsertChange(trServiceRefGrant)
 
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1554,7 +1555,7 @@ var _ = Describe("ChangeProcessor", func() {
 				It("returns updated graph", func() {
 					processor.CaptureUpsertChange(gatewayAPICRDUpdated)
 
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1573,7 +1574,7 @@ var _ = Describe("ChangeProcessor", func() {
 
 					processor.CaptureUpsertChange(gatewayAPICRDSameVersion)
 
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1593,7 +1594,7 @@ var _ = Describe("ChangeProcessor", func() {
 					// change back to supported version
 					processor.CaptureUpsertChange(gatewayAPICRD)
 
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1615,7 +1616,7 @@ var _ = Describe("ChangeProcessor", func() {
 
 					listener80 := getListenerByName(gw, httpListenerName)
 					listener80.Routes[httpRouteKey1].Source.SetGeneration(hr1Updated.Generation)
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1634,7 +1635,7 @@ var _ = Describe("ChangeProcessor", func() {
 
 					listener80 := getListenerByName(gw, httpListenerName)
 					listener80.Routes[grpcRouteKey1].Source.SetGeneration(gr1Updated.Generation)
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1650,7 +1651,7 @@ var _ = Describe("ChangeProcessor", func() {
 					tlsListener := getListenerByName(gw, tlsListenerName)
 					tlsListener.L4Routes[trKey1].Source.SetGeneration(tr1Updated.Generation)
 
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1664,7 +1665,7 @@ var _ = Describe("ChangeProcessor", func() {
 
 					gw := expGraph.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway-1"}]
 					gw.Source.Generation = gw1Updated.Generation
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1677,7 +1678,7 @@ var _ = Describe("ChangeProcessor", func() {
 					processor.CaptureUpsertChange(gcUpdated)
 
 					expGraph.GatewayClass.Source.Generation = gcUpdated.Generation
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1689,7 +1690,7 @@ var _ = Describe("ChangeProcessor", func() {
 				It("returns populated graph", func() {
 					processor.CaptureUpsertChange(diffNsTLSSecret)
 
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1699,7 +1700,7 @@ var _ = Describe("ChangeProcessor", func() {
 			})
 			When("no changes are captured", func() {
 				It("returns nil graph", func() {
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1713,7 +1714,7 @@ var _ = Describe("ChangeProcessor", func() {
 				It("returns nil graph", func() {
 					processor.CaptureUpsertChange(sameNsTLSSecret)
 
-					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1734,7 +1735,7 @@ var _ = Describe("ChangeProcessor", func() {
 				It("returns populated graph", func() {
 					processor.CaptureUpsertChange(hr2)
 
-					expGraph2.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &graph.Secret{
+					expGraph2.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source:     diffNsTLSSecret,
 						CertBundle: diffNsTLSCert,
 					}
@@ -1943,7 +1944,7 @@ var _ = Describe("ChangeProcessor", func() {
 							},
 						},
 					}
-					expGraph2.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+					expGraph2.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 						client.ObjectKeyFromObject(sameNsTLSSecret): {
 							Source:     sameNsTLSSecret,
 							CertBundle: sameNsTLSCert,
@@ -2050,7 +2051,7 @@ var _ = Describe("ChangeProcessor", func() {
 							},
 						},
 					}
-					expGraph2.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+					expGraph2.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 						client.ObjectKeyFromObject(sameNsTLSSecret): {
 							Source:     sameNsTLSSecret,
 							CertBundle: sameNsTLSCert,
@@ -2145,7 +2146,7 @@ var _ = Describe("ChangeProcessor", func() {
 							},
 						},
 					}
-					expGraph2.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+					expGraph2.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 						client.ObjectKeyFromObject(sameNsTLSSecret): {
 							Source:     sameNsTLSSecret,
 							CertBundle: sameNsTLSCert,
@@ -2229,7 +2230,7 @@ var _ = Describe("ChangeProcessor", func() {
 					expGraph2.L4Routes = map[graph.L4RouteKey]*graph.L4Route{}
 
 					expGraph2.ReferencedServices = nil
-					expGraph2.ReferencedSecrets = map[types.NamespacedName]*graph.Secret{
+					expGraph2.ReferencedSecrets = map[types.NamespacedName]*secrets.Secret{
 						client.ObjectKeyFromObject(sameNsTLSSecret): {
 							Source:     sameNsTLSSecret,
 							CertBundle: sameNsTLSCert,
@@ -3629,19 +3630,18 @@ var _ = Describe("ChangeProcessor", func() {
 					Namespace: cmNsName.Namespace,
 				},
 				Data: map[string]string{
-					"ca.crt": "value",
+					secrets.CAKey: "value",
 				},
 			}
 			cmUpdated = cm.DeepCopy()
-			cmUpdated.Data["ca.crt"] = "updated-value"
-
+			cmUpdated.Data[secrets.CAKey] = "updated-value"
 			unrelatedCM = &apiv1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "unrelated-cm",
 					Namespace: "unrelated-ns",
 				},
 				Data: map[string]string{
-					"ca.crt": "value",
+					secrets.CAKey: "value",
 				},
 			}
 

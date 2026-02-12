@@ -1,0 +1,137 @@
+name: Start Longevity Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version of NGF under test
+        required: true
+        default: edge
+      image_tag:
+        description: Tag of the NGF and NGINX Docker images
+        required: true
+        default: edge
+      type:
+        description: Type of NGINX image to test
+        required: true
+        default: both
+        type: choice
+        options: [oss, plus, both]
+      zone:
+        description: GKE cluster zone
+        required: true
+        default: us-west1-b
+      region:
+        description: GKE cluster region
+        required: true
+        default: us-west1
+
+env:
+  PLUS_USAGE_ENDPOINT: ${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}
+
+permissions:
+  contents: read
+
+jobs:
+  vars:
+    name: Set up vars
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ inputs.version || 'edge' }}
+      image_tag: ${{ inputs.image_tag || 'edge' }}
+      types: ${{ steps.var.outputs.types }}
+    steps:
+      - name: Set vars
+        id: var
+        run: |
+          if ${{ inputs.type == 'both' }}; then
+          echo 'types=["oss","plus"]' >> $GITHUB_OUTPUT
+          else
+          echo 'types=["${{ inputs.type }}"]' >> $GITHUB_OUTPUT
+          fi
+
+  setup-and-run-tests:
+    name: Setup and Start Longevity Tests
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # needed for authenticating to GCP
+    needs: vars
+    strategy:
+      fail-fast: false
+      matrix:
+        type: ${{ fromJson(needs.vars.outputs.types) }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: access_token
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Login to GAR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: us-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: kubectl
+
+      - name: Setup dotenv file
+        working-directory: ./tests/scripts
+        run: |
+          echo "RESOURCE_NAME=longevity-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
+          echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
+          echo "PREFIX=ghcr.io/nginx/nginx-gateway-fabric" >> vars.env
+          echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
+          echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus" >> vars.env
+          echo "GKE_CLUSTER_NAME=longevity-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
+          echo "GKE_CLUSTER_ZONE=${{ inputs.zone }}" >> vars.env
+          echo "GKE_CLUSTER_REGION=${{ inputs.region }}" >> vars.env
+          echo "GKE_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> vars.env
+          echo "GKE_SVC_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}" >> vars.env
+          echo "GKE_NODES_SERVICE_ACCOUNT=${{ secrets.GKE_NODES_SERVICE_ACCOUNT }}" >> vars.env
+          echo "NETWORK_TAGS=longevity-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
+          echo "NGF_BRANCH=${{ github.ref_name }}" >> vars.env
+          echo "SOURCE_IP_RANGE=$(curl -sS -4 icanhazip.com)/32" >> vars.env
+          echo "ADD_VM_IP_AUTH_NETWORKS=true" >> vars.env
+          echo "PLUS_ENABLED=${{ matrix.type == 'plus' }}" >> vars.env
+          echo "NGF_VERSION=${{ needs.vars.outputs.version }}" >> vars.env
+          echo "GKE_MACHINE_TYPE=n2d-standard-16" >> vars.env
+          echo "PLUS_USAGE_ENDPOINT=${{ secrets.JWT_PLUS_REPORTING_ENDPOINT }}" >> vars.env
+
+      - name: Setup license file for plus
+        if: matrix.type == 'plus'
+        env:
+          PLUS_LICENSE: ${{ secrets.JWT_PLUS_REPORTING }}
+        run: echo "${PLUS_LICENSE}" > license.jwt
+
+      - name: Create GKE cluster
+        working-directory: ./tests
+        run: make create-gke-cluster CI=true
+
+      - name: Create and setup VM
+        working-directory: ./tests
+        run: make create-and-setup-vm
+
+      - name: Create and setup Router
+        working-directory: ./tests
+        run: make create-gke-router || true
+
+      - name: Output Run ID
+        run: |
+          echo "Longevity Test Run ID: ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Start Longevity Tests
+        continue-on-error: true
+        working-directory: ./tests
+        run: make start-longevity-test

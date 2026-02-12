@@ -9,6 +9,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver/resolverfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -1052,11 +1053,10 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 			g := NewWithT(t)
 
 			// Create mock resolvers
-			secretResolver := newSecretResolver(nil)
 			refGrantResolver := newReferenceGrantResolver(nil)
 
 			// Build listeners
-			listeners := buildListeners(test.gateway, secretResolver, refGrantResolver, protectedPorts)
+			listeners := buildListeners(test.gateway, &resolverfakes.FakeResolver{}, refGrantResolver, protectedPorts)
 
 			if test.expectedCondition {
 				// Check that the expected listeners have the OverlappingTLSConfig condition

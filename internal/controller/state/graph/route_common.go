@@ -1412,10 +1412,7 @@ func longestCommonPathPrefix(paths []string) string {
 	for _, p := range paths[1:] {
 		segs := strings.Split(p, "/")
 		i := 0
-		limit := len(commonSegs)
-		if len(segs) < limit {
-			limit = len(segs)
-		}
+		limit := min(len(segs), len(commonSegs))
 		for i < limit && commonSegs[i] == segs[i] {
 			i++
 		}

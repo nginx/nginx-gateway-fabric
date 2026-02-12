@@ -502,6 +502,38 @@ The logs are attached only if there are errors.
 	}
 
 	runScaleResources := func(objects framework.ScaleObjects, testResultsDir string, protocol string) {
+		// Create 500 Secrets and 500 ConfigMaps with random data.
+		// This is to ensure we don't use too much memory on data
+		// we don't care about.
+		numSecrets := 500
+		numConfigMaps := 500
+		secrets := make([]client.Object, numSecrets)
+		configMaps := make([]client.Object, numConfigMaps)
+		for i := range numSecrets {
+			secrets[i] = &core.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("test-secret-%d", i),
+					Namespace: namespace,
+				},
+				Data: map[string][]byte{
+					"testdata": []byte(strings.Repeat("a", 5120)),
+				},
+			}
+		}
+		for i := range numConfigMaps {
+			configMaps[i] = &core.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("test-configmap-%d", i),
+					Namespace: namespace,
+				},
+				Data: map[string]string{
+					"testdata": strings.Repeat("a", 5120),
+				},
+			}
+		}
+		Expect(resourceManager.Apply(secrets)).To(Succeed())
+		Expect(resourceManager.Apply(configMaps)).To(Succeed())
+
 		ttrCsvFileName := framework.CreateResultsFilename("csv", "ttr", *plusEnabled)
 		ttrCsvFile, writer, err := framework.NewCSVResultsWriter(testResultsDir, ttrCsvFileName)
 		Expect(err).ToNot(HaveOccurred())

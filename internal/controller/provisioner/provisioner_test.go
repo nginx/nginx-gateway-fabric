@@ -3,16 +3,20 @@ package provisioner
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/rest"
 	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,6 +29,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/openshift/openshiftfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/controllerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -51,6 +56,10 @@ func createScheme() *runtime.Scheme {
 	return scheme
 }
 
+func createFakeClientWithScheme(objects ...client.Object) client.Client {
+	return fake.NewClientBuilder().WithScheme(createScheme()).WithObjects(objects...).Build()
+}
+
 func expectResourcesToExist(t *testing.T, g *WithT, k8sClient client.Client, nsName types.NamespacedName, plus bool) {
 	t.Helper()
 	g.Expect(k8sClient.Get(t.Context(), nsName, &appsv1.Deployment{})).To(Succeed())
@@ -59,11 +68,11 @@ func expectResourcesToExist(t *testing.T, g *WithT, k8sClient client.Client, nsN
 
 	g.Expect(k8sClient.Get(t.Context(), nsName, &corev1.ServiceAccount{})).To(Succeed())
 
-	boostrapCM := types.NamespacedName{
+	bootstrapCM := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(nsName.Name, nginxIncludesConfigMapNameSuffix),
 		Namespace: nsName.Namespace,
 	}
-	g.Expect(k8sClient.Get(t.Context(), boostrapCM, &corev1.ConfigMap{})).To(Succeed())
+	g.Expect(k8sClient.Get(t.Context(), bootstrapCM, &corev1.ConfigMap{})).To(Succeed())
 
 	agentCM := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(nsName.Name, nginxAgentConfigMapNameSuffix),
@@ -114,11 +123,11 @@ func expectResourcesToNotExist(t *testing.T, g *WithT, k8sClient client.Client, 
 
 	g.Expect(k8sClient.Get(t.Context(), nsName, &corev1.ServiceAccount{})).ToNot(Succeed())
 
-	boostrapCM := types.NamespacedName{
+	bootstrapCM := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(nsName.Name, nginxIncludesConfigMapNameSuffix),
 		Namespace: nsName.Namespace,
 	}
-	g.Expect(k8sClient.Get(t.Context(), boostrapCM, &corev1.ConfigMap{})).ToNot(Succeed())
+	g.Expect(k8sClient.Get(t.Context(), bootstrapCM, &corev1.ConfigMap{})).ToNot(Succeed())
 
 	agentCM := types.NamespacedName{
 		Name:      controller.CreateNginxResourceName(nsName.Name, nginxAgentConfigMapNameSuffix),
@@ -215,6 +224,46 @@ func (f *fakeLabelCollector) Collect(_ context.Context) (map[string]string, erro
 	return map[string]string{"product-type": "fake"}, nil
 }
 
+// failingClient wraps a fake client and can be configured to fail on specific operations.
+type failingClient struct {
+	client.Client
+	failOnCreate bool
+	failOnUpdate bool
+}
+
+func (f *failingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if f.failOnCreate {
+		// Return an IsInvalid error to trigger the specific error logging at line 260
+		return apierrors.NewInvalid(schema.GroupKind{Group: "apps", Kind: "Deployment"}, obj.GetName(), field.ErrorList{
+			field.Invalid(field.NewPath("spec"), obj, "test invalid error"),
+		})
+	}
+	return f.Client.Create(ctx, obj, opts...)
+}
+
+func (f *failingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if f.failOnUpdate {
+		return apierrors.NewInvalid(schema.GroupKind{Group: "apps", Kind: "Deployment"}, obj.GetName(), field.ErrorList{
+			field.Invalid(field.NewPath("spec"), obj, "test invalid error"),
+		})
+	}
+	return f.Client.Update(ctx, obj, opts...)
+}
+
+func (f *failingClient) Patch(
+	ctx context.Context,
+	obj client.Object,
+	patch client.Patch,
+	opts ...client.PatchOption,
+) error {
+	if f.failOnUpdate {
+		return apierrors.NewInvalid(schema.GroupKind{Group: "apps", Kind: "Deployment"}, obj.GetName(), field.ErrorList{
+			field.Invalid(field.NewPath("spec"), obj, "test invalid error"),
+		})
+	}
+	return f.Client.Patch(ctx, obj, patch, opts...)
+}
+
 func TestNewNginxProvisioner(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -270,6 +319,7 @@ func TestEnable(t *testing.T) {
 
 	provisioner.Enable(t.Context())
 	g.Expect(provisioner.isLeader()).To(BeTrue())
+
 	g.Expect(provisioner.resourcesToDeleteOnStartup).To(BeEmpty())
 	expectResourcesToNotExist(t, g, fakeClient, types.NamespacedName{Name: "gw-nginx", Namespace: "default"})
 }
@@ -348,6 +398,73 @@ func TestRegisterGateway(t *testing.T) {
 	g.Expect(resources).To(BeNil())
 
 	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
+}
+
+func TestRegisterGateway_CreateOrUpdateError(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gateway := &graph.Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "default",
+			},
+		},
+		Valid: true,
+	}
+
+	objects := []client.Object{
+		gateway.Source,
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      agentTLSTestSecretName,
+				Namespace: ngfNamespace,
+			},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      jwtTestSecretName,
+				Namespace: ngfNamespace,
+			},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      caTestSecretName,
+				Namespace: ngfNamespace,
+			},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clientTestSecretName,
+				Namespace: ngfNamespace,
+			},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dockerTestSecretName,
+				Namespace: ngfNamespace,
+			},
+		},
+	}
+
+	provisioner, _, _ := defaultNginxProvisioner(objects...)
+
+	// Replace the fakeClient with one that returns errors on Create operations
+	provisioner.k8sClient = &failingClient{
+		Client:       createFakeClientWithScheme(objects...),
+		failOnCreate: true,
+	}
+
+	// Create a context with a short timeout to avoid hanging in the test
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	// This should trigger the error handling code at line 260 in provisioner.go
+	// The function should return an error after the timeout
+	err := provisioner.RegisterGateway(ctx, gateway, "gw-nginx")
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("error provisioning nginx resources"))
 }
 
 func TestRegisterGateway_CleansUpOldDeploymentOrDaemonSet(t *testing.T) {
@@ -489,7 +606,7 @@ func TestNonLeaderProvisioner(t *testing.T) {
 	g.Expect(provisioner.reprovisionNginx(t.Context(), "gw-nginx", nil, nil)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 
-	g.Expect(provisioner.deprovisionNginx(t.Context(), nsName)).To(Succeed())
+	g.Expect(provisioner.deprovisionNginxForInvalidGateway(t.Context(), nsName)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
 	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
 }
@@ -519,7 +636,7 @@ func TestProvisionerRestartsDeployment(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, agentTLSSecret)
 	provisioner.cfg.Plus = false
@@ -582,7 +699,7 @@ func TestProvisionerRestartsDaemonSet(t *testing.T) {
 			Name:      agentTLSTestSecretName,
 			Namespace: ngfNamespace,
 		},
-		Data: map[string][]byte{"tls.crt": []byte("tls")},
+		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
 	}
 	provisioner, fakeClient, _ := defaultNginxProvisioner(gateway.Source, agentTLSSecret)
 	provisioner.cfg.Plus = false

@@ -125,7 +125,7 @@ TELEMETRY_ENDPOINT=otel-collector-opentelemetry-collector.collector.svc.cluster.
 
 If running tests on GKE, you will need to tag and push your images to a registry that is accessible from GKE. When building images to run on GKE, you'll need to specify `GOARCH=amd64` in the build command if your local system doesn't default to that architecture.
 
-If running the longevity tests for a release, you should use the `-rc` images that were pushed as part of the release branch pipeline instead. For example, in your `vars.env` file
+If running the longevity tests manually for a release (not using pipeline), you should use the `-rc` images that were pushed as part of the release branch pipeline instead. For example, in your `vars.env` file
 
 ```text
 TAG=release-2.3-rc
@@ -188,7 +188,7 @@ make install-ngf-local-no-build-with-plus
 ### Step 2 - Build conformance test runner image
 
 > Note: If you want to run the latest conformance tests from the Gateway API `main` branch, run the following
-> make command to update the Go modules to `main`:
+> make command to update the Go modules to `main` in both the root and tests modules:
 
 ```makefile
 make update-go-modules
@@ -297,6 +297,8 @@ make test TAG=$(whoami) GINKGO_LABEL=telemetry
 
 #### Run the NFR tests on a GKE cluster from a GCP VM
 
+> Note: if you want to run the longevity tests from the pipeline, skip to the [Longevity section](#longevity-testing).
+
 Before running the below `make` commands, copy the `scripts/vars.env-example` file to `scripts/vars.env` and populate the
 required env vars. `GKE_SVC_ACCOUNT` needs to be the name of a service account that has Kubernetes admin permissions.
 
@@ -343,34 +345,33 @@ make nfr-test
 
 ##### Longevity testing
 
-This test is run on its own (and also not in a pipeline) due to its long-running nature. It will run for 4 days before
+This test is run on its own due to its long-running nature. It will run for 4 days (as defined in `suite/scripts/longevity-wrk.sh`) before
 the tester must collect the results and complete the test.
 
-To start the longevity test, set up your VM (`create-and-setup-vm`), router (`create-gke-router`), and run
+To run in the pipeline, [run the workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/longevity-start.yml) to start the tests. Once the workflow completes, the job ID will be included in the summary. This must be used as input when stopping the longevity tests.
+
+After 4 days (96h), visit the [GCP Monitoring Dashboards](https://console.cloud.google.com/monitoring/dashboards) page and select the `NGF Longevity Test` dashboard. Update the `cluster_name` filter to the names of the longevity clusters. Take PNG screenshots of each chart for the time period in which your test ran, and save those to be added to the results file. Then you can [stop the longevity tests](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/longevity-stop.yml). If done too early, the traffic will still be flowing and results may not be collected properly, so be sure to wait the full time period.
+
+The final workflow will tear down the test and open a PR with the results. The PNGs you took should be added, and any summaries as well. Combine any results files if necessary. If you don't want to open a PR, you can toggle it off in the input when running the workflow.
+
+
+For running manually instead of using the pipeline, you can start the tests with
 
 ```makefile
 make start-longevity-test
 ```
 
-<!--  -->
-
-> Note: If you want to change the time period for which the test runs, update the `wrk` commands in `suite/scripts/longevity-wrk.sh` to the time period you want, and run `make sync-files-to-vm`.
-
-<!--  -->
-
-> Note: If you want to re-run the longevity test, you need to clear out the `cafe.example.com` entry from the `/etc/hosts` file on your VM.
-
-You can verify the test is working by checking nginx logs to see traffic flow, and check that the cronjob is running and redeploying apps.
-
-After 4 days (96h), you can complete the longevity tests and collect results. To ensure that the traffic has stopped flowing, you can ssh to the VM using `gcloud compute ssh` and run `ps aux | grep wrk` to verify the `wrk` commands are no longer running. Then, visit the [GCP Monitoring Dashboards](https://console.cloud.google.com/monitoring/dashboards) page and select the `NGF Longevity Test` dashboard. Take PNG screenshots of each chart for the time period in which your test ran, and save those to be added to the results file.
-
-Finally, run
+and stop them with
 
 ```makefile
 make stop-longevity-test
 ```
 
-This will tear down the test and collect results into a file, where you can add the PNGs of the dashboard. The results collection creates multiple files that you will need to manually combine as needed (logs file, traffic output file).
+<!--  -->
+> Note if running from your machine instead of the pipeline: If you want to change the time period for which the test runs, update the `wrk` commands in `suite/scripts/longevity-wrk.sh` to the time period you want, and run `make sync-files-to-vm`.
+<!--  -->
+
+> Note if running from your machine instead of the pipeline: If you want to re-run the longevity test, you need to clear out the `cafe.example.com` entry from the `/etc/hosts` file on your VM.
 
 ### Common test amendments
 

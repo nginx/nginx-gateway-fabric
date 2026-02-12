@@ -1,7 +1,7 @@
 # Enhancement Proposal-2035: Advanced NGINX Extensions
 
 - Issue: https://github.com/nginx/nginx-gateway-fabric/issues/2035
-- Status: Implementable
+- Status: Completed
 
 ## Summary
 

@@ -19,6 +19,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctlrZap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 )
 
 const (
@@ -180,9 +182,9 @@ func createSecrets(
 		},
 		Type: corev1.SecretTypeTLS,
 		Data: map[string][]byte{
-			"ca.crt":  certConfig.caCertificate,
-			"tls.crt": certConfig.serverCertificate,
-			"tls.key": certConfig.serverKey,
+			secrets.CAKey:      certConfig.caCertificate,
+			secrets.TLSCertKey: certConfig.serverCertificate,
+			secrets.TLSKeyKey:  certConfig.serverKey,
 		},
 	}
 
@@ -193,9 +195,9 @@ func createSecrets(
 		},
 		Type: corev1.SecretTypeTLS,
 		Data: map[string][]byte{
-			"ca.crt":  certConfig.caCertificate,
-			"tls.crt": certConfig.clientCertificate,
-			"tls.key": certConfig.clientKey,
+			secrets.CAKey:      certConfig.caCertificate,
+			secrets.TLSCertKey: certConfig.clientCertificate,
+			secrets.TLSKeyKey:  certConfig.clientKey,
 		},
 	}
 

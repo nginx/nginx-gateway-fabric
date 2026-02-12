@@ -1,7 +1,7 @@
 # Enhancement Proposal-4059: Rate Limit Policy
 
 - Issue: https://github.com/nginx/nginx-gateway-fabric/issues/4059
-- Status: Implementable
+- Status: Completed
 
 ## Summary
 

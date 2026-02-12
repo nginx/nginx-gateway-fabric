@@ -61,26 +61,6 @@ jobs:
         run: |
           make bundle-release VERSION=${{ inputs.operator-version }}
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: Generate operator bundle for v${{ inputs.operator-version }}
-          title: Operator Bundle v${{ inputs.operator-version }}
-          draft: true
-          delete-branch: true
-          branch: operator/bundle-${{ inputs.operator-version }}
-          author: nginx-bot <integrations@nginx.com>
-          committer: nginx-bot <integrations@nginx.com>
-          body: |
-            This automated PR generates the operator bundle for v${{ inputs.operator-version }}.
-
-            ## What's Changed
-            - Updated NGF image versions in sample manifests using image digests
-            - Generated bundle manifests and metadata
-            - Updated ClusterServiceVersion with proper annotations and descriptors
-            - Added OpenShift compatibility annotations
-
       - name: Checkout certified-operators repo
         if: ${{ inputs.submit-to-redhat }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -126,3 +106,26 @@ jobs:
           gh pr create --title "operator nginx-gateway-fabric-operator (v${{ inputs.operator-version }})" --body "Update nginx-gateway-fabric-operator to v${{ inputs.operator-version }}" --head nginx-bot:update-nginx-gateway-fabric-operator-to-v${{ inputs.operator-version }} --base main --repo redhat-openshift-ecosystem/certified-operators
         env:
           GITHUB_TOKEN: ${{ secrets.NGINX_PAT }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        with:
+          token: ${{ secrets.NGINX_PAT }}
+          commit-message: Generate operator bundle for v${{ inputs.operator-version }}
+          title: Operator Bundle v${{ inputs.operator-version }}
+          draft: true
+          delete-branch: true
+          branch: operator/bundle-${{ inputs.operator-version }}
+          author: nginx-bot <integrations@nginx.com>
+          base: main
+          committer: nginx-bot <integrations@nginx.com>
+          labels: needs cherry pick
+          add-paths: operators/**
+          body: |
+            This automated PR generates the operator bundle for v${{ inputs.operator-version }}.
+
+            ## What's Changed
+            - Updated NGF image versions in sample manifests using image digests
+            - Generated bundle manifests and metadata
+            - Updated ClusterServiceVersion with proper annotations and descriptors
+            - Added OpenShift compatibility annotations
