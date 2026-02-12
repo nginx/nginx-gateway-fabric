@@ -272,9 +272,12 @@ type OIDCLogoutConfig struct {
 }
 ```
 
-For simplicity, only one OIDC provider can be configured at this time. To set up authentication with an OpenID Provider, you must specify the provider name, issuer URL, client ID, and client secret. The AuthenticationFilter must be attached to a route that uses a TLS listener in terminate mode, with the appropriate certificates provided as a listener secret. This is required because the `redirect_uri` must use HTTPS. When the OpenID Provider redirects users back to NGINX after authentication, the request is made over HTTPS, requiring NGINX to have TLS configured.
+For simplicity, only one OIDC provider can be configured at this time. To set up authentication with an OpenID Provider, you must specify the issuer URL, client ID, and client secret.
 
-TLS is required for secure communication between the data plane and the OpenID Provider. To verify TLS connections, specify a CA bundle with the appropriate CN/SAN using the `caCertificateRefs` field of the AuthenticationFilter CRD; if omitted, the system CA will be used by default. Additionally, the AuthenticationFilter must be attached to a route using an HTTPS listener so that the redirect_uri callback from the IdP can be served over HTTPS. The Gateway listener's `tls.certificateRefs` provides the TLS certificate for this incoming connection.
+TLS is required in two places:
+
+- Incoming connections from the browser after the OpenID Provider redirects the user back to NGINX: The AuthenticationFilter must be attached to a route using an HTTPS listener, as the `redirect_uri` callback from the IdP must be served over HTTPS. The Gateway listener's `tls.certificateRefs` provides the TLS certificate for this incoming connection.
+- Outgoing connections from NGINX to the OpenID Provider for token exchange: NGINX connects to the OpenID Provider over TLS for token requests. To verify the IdP's certificate, specify a CA bundle using the `caCertificateRefs` field; if omitted, the system CA bundle is used by default.
 
 An authenticationFilter with complete OIDC configuration would look like:
 
