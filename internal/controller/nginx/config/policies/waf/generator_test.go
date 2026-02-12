@@ -29,7 +29,7 @@ func TestGenerate(t *testing.T) {
 					Namespace: "my-namespace",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
+					APPolicySource: &ngfAPIv1alpha1.APResourceReference{
 						Name: "production-policy",
 					},
 				},
@@ -47,7 +47,7 @@ func TestGenerate(t *testing.T) {
 					Namespace: "app-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
+					APPolicySource: &ngfAPIv1alpha1.APResourceReference{
 						Name:      "shared-policy",
 						Namespace: func() *string { s := "security-ns"; return &s }(),
 					},
@@ -66,12 +66,12 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
+					APPolicySource: &ngfAPIv1alpha1.APResourceReference{
 						Name: "base-policy",
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
+							APLogConfSource: ngfAPIv1alpha1.APResourceReference{
 								Name: "default-log",
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -96,12 +96,12 @@ func TestGenerate(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
+					APPolicySource: &ngfAPIv1alpha1.APResourceReference{
 						Name: "base-policy",
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
+							APLogConfSource: ngfAPIv1alpha1.APResourceReference{
 								Name: "custom-log",
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -129,7 +129,7 @@ func TestGenerate(t *testing.T) {
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
+							APLogConfSource: ngfAPIv1alpha1.APResourceReference{
 								Name: "blocked-log",
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -156,12 +156,12 @@ func TestGenerate(t *testing.T) {
 					Namespace: "app-ns",
 				},
 				Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-					APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
+					APPolicySource: &ngfAPIv1alpha1.APResourceReference{
 						Name: "policy",
 					},
 					SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 						{
-							APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
+							APLogConfSource: ngfAPIv1alpha1.APResourceReference{
 								Name: "log-all",
 							},
 							Destination: ngfAPIv1alpha1.SecurityLogDestination{
@@ -169,7 +169,7 @@ func TestGenerate(t *testing.T) {
 							},
 						},
 						{
-							APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
+							APLogConfSource: ngfAPIv1alpha1.APResourceReference{
 								Name:      "log-blocked",
 								Namespace: func() *string { s := "security-ns"; return &s }(),
 							},

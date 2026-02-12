@@ -1403,8 +1403,6 @@ func NewPolicyProgrammed() Condition {
 	}
 }
 
-// ResolvedRefs conditions - APPolicy reference issues.
-
 // NewPolicyRefsNotResolvedAPPolicyNotFound returns a Condition that indicates the referenced APPolicy was not found.
 func NewPolicyRefsNotResolvedAPPolicyNotFound(apPolicyName string) Condition {
 	return Condition{
@@ -1475,8 +1473,6 @@ func NewPolicyRefsNotResolvedAPPolicyRefNotPermitted(apPolicyName string) Condit
 		Message: fmt.Sprintf("Cross-namespace reference to APPolicy %q is not permitted by any ReferenceGrant", apPolicyName),
 	}
 }
-
-// ResolvedRefs conditions - APLogConf reference issues.
 
 // NewPolicyRefsNotResolvedAPLogConfNotFound returns a Condition that indicates the referenced APLogConf was not found.
 func NewPolicyRefsNotResolvedAPLogConfNotFound(apLogConfName string) Condition {
@@ -1551,8 +1547,6 @@ func NewPolicyRefsNotResolvedAPLogConfRefNotPermitted(apLogConfName string) Cond
 		),
 	}
 }
-
-// Programmed conditions - data plane deployment issues.
 
 // NewPolicyNotProgrammedBundleFetchError returns a Condition that indicates a bundle fetch error.
 func NewPolicyNotProgrammedBundleFetchError(errMsg string) Condition {

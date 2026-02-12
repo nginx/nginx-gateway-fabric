@@ -3205,7 +3205,6 @@ var _ = Describe("ChangeProcessor", func() {
 				}
 
 				wafUpdated = waf.DeepCopy()
-				// wafUpdated.Spec.APPolicySource = "ns/name"
 
 				wafKey = graph.PolicyKey{
 					NsName: types.NamespacedName{Name: "waf", Namespace: "test"},

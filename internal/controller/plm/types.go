@@ -33,25 +33,14 @@ type ProcessingStatus struct {
 	IsCompiled bool
 }
 
-// APPolicyStatus contains the relevant status fields extracted from an APPolicy CRD.
-// NGF watches APPolicy status to determine when compiled bundles are available.
-type APPolicyStatus struct {
+// APResourceStatus contains the relevant status fields extracted from APPolicy or APLogConf CRDs.
+// NGF watches these resources to determine when compiled bundles are available.
+type APResourceStatus struct {
 	// Bundle holds the "ready/pending/invalid" bundle info.
 	Bundle BundleStatus
 	// Processing holds the compiler/validation metadata.
 	Processing ProcessingStatus
-	// ObservedGeneration is the generation of the APPolicy that was last processed.
-	ObservedGeneration int64
-}
-
-// APLogConfStatus contains the relevant status fields extracted from an APLogConf CRD.
-// NGF watches APLogConf status to determine when compiled log profile bundles are available.
-type APLogConfStatus struct {
-	// Bundle holds the "ready/pending/invalid" bundle info.
-	Bundle BundleStatus
-	// Processing holds the compiler/validation metadata.
-	Processing ProcessingStatus
-	// ObservedGeneration is the generation of the APLogConf that was last processed.
+	// ObservedGeneration is the generation of the resource that was last processed.
 	ObservedGeneration int64
 }
 
@@ -67,17 +56,33 @@ const (
 	StateInvalid BundleState = "invalid"
 )
 
-// ExtractAPPolicyStatus extracts the relevant status fields from an unstructured APPolicy.
-func ExtractAPPolicyStatus(obj *unstructured.Unstructured) (*APPolicyStatus, error) {
-	status, found, err := unstructured.NestedMap(obj.Object, "status")
+// Field names for extracting data from unstructured APPolicy/APLogConf resources.
+const (
+	fieldStatus             = "status"
+	fieldObservedGeneration = "observedGeneration"
+	fieldBundle             = "bundle"
+	fieldState              = "state"
+	fieldLocation           = "location"
+	fieldSha256             = "sha256"
+	fieldProcessing         = "processing"
+	fieldDatetime           = "datetime"
+	fieldErrors             = "errors"
+	fieldIsCompiled         = "isCompiled"
+	suffixList              = "List"
+)
+
+// ExtractAPResourceStatus is the shared implementation for extracting status fields
+// from both APPolicy and APLogConf unstructured resources.
+func ExtractAPResourceStatus(obj *unstructured.Unstructured) (*APResourceStatus, error) {
+	status, found, err := unstructured.NestedMap(obj.Object, fieldStatus)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		return &APPolicyStatus{}, nil
+		return &APResourceStatus{}, nil
 	}
 
-	result := &APPolicyStatus{}
+	result := &APResourceStatus{}
 
 	// Extract bundle info from status.bundle
 	result.Bundle = extractBundleStatus(status)
@@ -86,33 +91,7 @@ func ExtractAPPolicyStatus(obj *unstructured.Unstructured) (*APPolicyStatus, err
 	result.Processing = extractProcessingStatus(status)
 
 	// Extract observedGeneration from status.observedGeneration
-	if og, found, err := unstructured.NestedInt64(status, "observedGeneration"); err == nil && found {
-		result.ObservedGeneration = og
-	}
-
-	return result, nil
-}
-
-// ExtractAPLogConfStatus extracts the relevant status fields from an unstructured APLogConf.
-func ExtractAPLogConfStatus(obj *unstructured.Unstructured) (*APLogConfStatus, error) {
-	status, found, err := unstructured.NestedMap(obj.Object, "status")
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return &APLogConfStatus{}, nil
-	}
-
-	result := &APLogConfStatus{}
-
-	// Extract bundle info from status.bundle
-	result.Bundle = extractBundleStatus(status)
-
-	// Extract processing info from status.processing
-	result.Processing = extractProcessingStatus(status)
-
-	// Extract observedGeneration from status.observedGeneration
-	if og, found, err := unstructured.NestedInt64(status, "observedGeneration"); err == nil && found {
+	if og, found, err := unstructured.NestedInt64(status, fieldObservedGeneration); err == nil && found {
 		result.ObservedGeneration = og
 	}
 
@@ -123,20 +102,20 @@ func ExtractAPLogConfStatus(obj *unstructured.Unstructured) (*APLogConfStatus, e
 func extractBundleStatus(status map[string]any) BundleStatus {
 	bundle := BundleStatus{}
 
-	bundleMap, found, err := unstructured.NestedMap(status, "bundle")
+	bundleMap, found, err := unstructured.NestedMap(status, fieldBundle)
 	if err != nil || !found {
 		return bundle
 	}
 
-	if state, found, err := unstructured.NestedString(bundleMap, "state"); err == nil && found {
+	if state, found, err := unstructured.NestedString(bundleMap, fieldState); err == nil && found {
 		bundle.State = BundleState(state)
 	}
 
-	if location, found, err := unstructured.NestedString(bundleMap, "location"); err == nil && found {
+	if location, found, err := unstructured.NestedString(bundleMap, fieldLocation); err == nil && found {
 		bundle.Location = location
 	}
 
-	if sha256, found, err := unstructured.NestedString(bundleMap, "sha256"); err == nil && found {
+	if sha256, found, err := unstructured.NestedString(bundleMap, fieldSha256); err == nil && found {
 		bundle.Sha256 = sha256
 	}
 
@@ -147,20 +126,20 @@ func extractBundleStatus(status map[string]any) BundleStatus {
 func extractProcessingStatus(status map[string]any) ProcessingStatus {
 	processing := ProcessingStatus{}
 
-	processingMap, found, err := unstructured.NestedMap(status, "processing")
+	processingMap, found, err := unstructured.NestedMap(status, fieldProcessing)
 	if err != nil || !found {
 		return processing
 	}
 
-	if datetime, found, err := unstructured.NestedString(processingMap, "datetime"); err == nil && found {
+	if datetime, found, err := unstructured.NestedString(processingMap, fieldDatetime); err == nil && found {
 		processing.Datetime = datetime
 	}
 
-	if errors, found, err := unstructured.NestedStringSlice(processingMap, "errors"); err == nil && found {
+	if errors, found, err := unstructured.NestedStringSlice(processingMap, fieldErrors); err == nil && found {
 		processing.Errors = errors
 	}
 
-	if isCompiled, found, err := unstructured.NestedBool(processingMap, "isCompiled"); err == nil && found {
+	if isCompiled, found, err := unstructured.NestedBool(processingMap, fieldIsCompiled); err == nil && found {
 		processing.IsCompiled = isCompiled
 	}
 
@@ -185,7 +164,7 @@ func NewAPLogConfUnstructured() *unstructured.Unstructured {
 func NewAPPolicyListUnstructured() *unstructured.UnstructuredList {
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(kinds.APPolicyGVK)
-	list.SetKind(kinds.APPolicy + "List")
+	list.SetKind(kinds.APPolicy + suffixList)
 	return list
 }
 
@@ -193,6 +172,6 @@ func NewAPPolicyListUnstructured() *unstructured.UnstructuredList {
 func NewAPLogConfListUnstructured() *unstructured.UnstructuredList {
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(kinds.APLogConfGVK)
-	list.SetKind(kinds.APLogConf + "List")
+	list.SetKind(kinds.APLogConf + suffixList)
 	return list
 }

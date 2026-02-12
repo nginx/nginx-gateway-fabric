@@ -800,7 +800,7 @@ func TestConvertWAFBundles(t *testing.T) {
 				"bundle3.tgz": {
 					Data:       []byte("third bundle"),
 					Location:   "bucket/path/bundle3.tgz",
-					BundleType: graph.WAFBundleTypeLogProfile,
+					BundleType: graph.WAFBundleTypeLogConf,
 				},
 			},
 			expected: map[WAFBundleID]WAFBundle{

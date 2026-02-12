@@ -53,7 +53,7 @@ type WAFGatewayBindingPolicySpec struct {
 	// APPolicySource references the APPolicy CRD managed by PLM.
 	// The APPolicy contains the WAF policy definition which PLM compiles and stores.
 	// NGF watches the APPolicy status for the compiled bundle location.
-	APPolicySource *APPolicyReference `json:"apPolicySource"`
+	APPolicySource *APResourceReference `json:"apPolicySource"`
 
 	// SecurityLogs defines security logging configurations.
 	// Each entry references an APLogConf CRD managed by PLM for log profile compilation.
@@ -63,17 +63,10 @@ type WAFGatewayBindingPolicySpec struct {
 	SecurityLogs []WAFSecurityLog `json:"securityLogs,omitempty"`
 }
 
-// APPolicyReference references an APPolicy CRD by name and namespace.
-// The APPolicy CRD is managed by PLM and contains WAF policy definitions.
-type APPolicyReference struct {
-	Namespace *string `json:"namespace,omitempty"`
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-}
-
-// APLogConfReference references an APLogConf CRD by name and namespace.
-// The APLogConf CRD is managed by PLM and contains logging profile definitions.
-type APLogConfReference struct {
+// APResourceReference references an APPolicy or APLogConf CRD by name and namespace.
+// The APPolicy and APLogConf CRDs are managed by PLM and contains WAF policy and
+// logging profile definitions.
+type APResourceReference struct {
 	Namespace *string `json:"namespace,omitempty"`
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
@@ -92,7 +85,7 @@ type WAFSecurityLog struct {
 
 	// APLogConfSource references the APLogConf CRD for this log configuration.
 	// PLM compiles the APLogConf and NGF fetches the compiled bundle from PLM storage.
-	APLogConfSource APLogConfReference `json:"apLogConfSource"`
+	APLogConfSource APResourceReference `json:"apLogConfSource"`
 
 	// Destination defines where security logs should be sent.
 	Destination SecurityLogDestination `json:"destination"`

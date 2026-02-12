@@ -9,16 +9,16 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-func TestExtractAPPolicyStatus(t *testing.T) {
+func TestExtractAPResourceStatus(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		obj      *unstructured.Unstructured
-		expected *APPolicyStatus
+		expected *APResourceStatus
 		name     string
 	}{
 		{
-			name: "full status with all fields",
+			name: "full status with all fields (APPolicy example)",
 			obj: &unstructured.Unstructured{
 				Object: map[string]any{
 					"status": map[string]any{
@@ -35,7 +35,7 @@ func TestExtractAPPolicyStatus(t *testing.T) {
 					},
 				},
 			},
-			expected: &APPolicyStatus{
+			expected: &APResourceStatus{
 				Bundle: BundleStatus{
 					State:    StateReady,
 					Location: "s3://default/bundles/policy.tgz",
@@ -49,11 +49,42 @@ func TestExtractAPPolicyStatus(t *testing.T) {
 			},
 		},
 		{
+			name: "full status (APLogConf example)",
+			obj: &unstructured.Unstructured{
+				Object: map[string]any{
+					"status": map[string]any{
+						"bundle": map[string]any{
+							"state":    "ready",
+							"location": "s3://default/bundles/logconf.tgz",
+							"sha256":   "def456",
+						},
+						"processing": map[string]any{
+							"datetime":   "2026-02-04T22:00:00Z",
+							"isCompiled": true,
+						},
+						"observedGeneration": int64(3),
+					},
+				},
+			},
+			expected: &APResourceStatus{
+				Bundle: BundleStatus{
+					State:    StateReady,
+					Location: "s3://default/bundles/logconf.tgz",
+					Sha256:   "def456",
+				},
+				Processing: ProcessingStatus{
+					Datetime:   "2026-02-04T22:00:00Z",
+					IsCompiled: true,
+				},
+				ObservedGeneration: 3,
+			},
+		},
+		{
 			name: "no status field",
 			obj: &unstructured.Unstructured{
 				Object: map[string]any{},
 			},
-			expected: &APPolicyStatus{},
+			expected: &APResourceStatus{},
 		},
 		{
 			name: "empty status",
@@ -62,7 +93,7 @@ func TestExtractAPPolicyStatus(t *testing.T) {
 					"status": map[string]any{},
 				},
 			},
-			expected: &APPolicyStatus{},
+			expected: &APResourceStatus{},
 		},
 		{
 			name: "status with only bundle",
@@ -75,7 +106,7 @@ func TestExtractAPPolicyStatus(t *testing.T) {
 					},
 				},
 			},
-			expected: &APPolicyStatus{
+			expected: &APResourceStatus{
 				Bundle: BundleStatus{
 					State: StatePending,
 				},
@@ -97,7 +128,7 @@ func TestExtractAPPolicyStatus(t *testing.T) {
 					},
 				},
 			},
-			expected: &APPolicyStatus{
+			expected: &APResourceStatus{
 				Bundle: BundleStatus{
 					State: StateInvalid,
 				},
@@ -115,67 +146,7 @@ func TestExtractAPPolicyStatus(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result, err := ExtractAPPolicyStatus(tc.obj)
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(result).To(Equal(tc.expected))
-		})
-	}
-}
-
-func TestExtractAPLogConfStatus(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		obj      *unstructured.Unstructured
-		expected *APLogConfStatus
-		name     string
-	}{
-		{
-			name: "full status",
-			obj: &unstructured.Unstructured{
-				Object: map[string]any{
-					"status": map[string]any{
-						"bundle": map[string]any{
-							"state":    "ready",
-							"location": "s3://default/bundles/logconf.tgz",
-							"sha256":   "def456",
-						},
-						"processing": map[string]any{
-							"datetime":   "2026-02-04T22:00:00Z",
-							"isCompiled": true,
-						},
-						"observedGeneration": int64(3),
-					},
-				},
-			},
-			expected: &APLogConfStatus{
-				Bundle: BundleStatus{
-					State:    StateReady,
-					Location: "s3://default/bundles/logconf.tgz",
-					Sha256:   "def456",
-				},
-				Processing: ProcessingStatus{
-					Datetime:   "2026-02-04T22:00:00Z",
-					IsCompiled: true,
-				},
-				ObservedGeneration: 3,
-			},
-		},
-		{
-			name: "no status field",
-			obj: &unstructured.Unstructured{
-				Object: map[string]any{},
-			},
-			expected: &APLogConfStatus{},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			result, err := ExtractAPLogConfStatus(tc.obj)
+			result, err := ExtractAPResourceStatus(tc.obj)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(result).To(Equal(tc.expected))
 		})

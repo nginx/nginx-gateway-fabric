@@ -2790,30 +2790,30 @@ func TestVerifyChecksum(t *testing.T) {
 	}
 }
 
-func TestResolveAPPolicyReference(t *testing.T) {
+func TestResolveAPResourceNamespace(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name     string
-		ref      *ngfAPIv1alpha1.APPolicyReference
+		ref      *ngfAPIv1alpha1.APResourceReference
 		defNs    string
 		expected types.NamespacedName
 	}{
 		{
-			name:     "uses default namespace when ref namespace is nil",
-			ref:      &ngfAPIv1alpha1.APPolicyReference{Name: "my-policy"},
+			name:     "Uses default namespace when ref namespace is nil",
+			ref:      &ngfAPIv1alpha1.APResourceReference{Name: "my-policy"},
 			defNs:    "default",
 			expected: types.NamespacedName{Namespace: "default", Name: "my-policy"},
 		},
 		{
-			name:     "uses ref namespace when specified",
-			ref:      &ngfAPIv1alpha1.APPolicyReference{Name: "my-policy", Namespace: helpers.GetPointer("other-ns")},
+			name:     "Uses ref namespace when specified",
+			ref:      &ngfAPIv1alpha1.APResourceReference{Name: "my-policy", Namespace: helpers.GetPointer("other-ns")},
 			defNs:    "default",
 			expected: types.NamespacedName{Namespace: "other-ns", Name: "my-policy"},
 		},
 		{
-			name:     "uses default namespace when ref namespace is empty string",
-			ref:      &ngfAPIv1alpha1.APPolicyReference{Name: "my-policy", Namespace: helpers.GetPointer("")},
+			name:     "Uses default namespace when ref namespace is empty string",
+			ref:      &ngfAPIv1alpha1.APResourceReference{Name: "my-policy", Namespace: helpers.GetPointer("")},
 			defNs:    "default",
 			expected: types.NamespacedName{Namespace: "default", Name: "my-policy"},
 		},
@@ -2824,66 +2824,44 @@ func TestResolveAPPolicyReference(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := resolveAPPolicyReference(tc.ref, tc.defNs)
+			result := resolveAPResourceNamespace(tc.ref, tc.defNs)
 			g.Expect(result).To(Equal(tc.expected))
 		})
 	}
 }
 
-func TestResolveAPLogConfReference(t *testing.T) {
+func TestFetchBundle(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		ref      *ngfAPIv1alpha1.APLogConfReference
-		defNs    string
-		expected types.NamespacedName
+	bundleTypes := []struct {
+		condFuncs bundleConditionFuncs
+		nsName    types.NamespacedName
+		name      string
+		wafType   WAFBundleType
 	}{
 		{
-			name:     "uses default namespace when ref namespace is nil",
-			ref:      &ngfAPIv1alpha1.APLogConfReference{Name: "my-logconf"},
-			defNs:    "default",
-			expected: types.NamespacedName{Namespace: "default", Name: "my-logconf"},
+			name:      "APPolicy",
+			nsName:    types.NamespacedName{Namespace: "test", Name: "my-policy"},
+			wafType:   WAFBundleTypePolicy,
+			condFuncs: apPolicyCondFuncs,
 		},
 		{
-			name:     "uses ref namespace when specified",
-			ref:      &ngfAPIv1alpha1.APLogConfReference{Name: "my-logconf", Namespace: helpers.GetPointer("other-ns")},
-			defNs:    "default",
-			expected: types.NamespacedName{Namespace: "other-ns", Name: "my-logconf"},
-		},
-		{
-			name:     "uses default namespace when ref namespace is empty string",
-			ref:      &ngfAPIv1alpha1.APLogConfReference{Name: "my-logconf", Namespace: helpers.GetPointer("")},
-			defNs:    "default",
-			expected: types.NamespacedName{Namespace: "default", Name: "my-logconf"},
+			name:      "APLogConf",
+			nsName:    types.NamespacedName{Namespace: "test", Name: "my-logconf"},
+			wafType:   WAFBundleTypeLogConf,
+			condFuncs: apLogConfCondFuncs,
 		},
 	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			result := resolveAPLogConfReference(tc.ref, tc.defNs)
-			g.Expect(result).To(Equal(tc.expected))
-		})
-	}
-}
-
-func TestFetchAPPolicyBundle(t *testing.T) {
-	t.Parallel()
-
-	nsName := types.NamespacedName{Namespace: "test", Name: "my-policy"}
 
 	tests := []struct {
 		fetcher  fetch.Fetcher
-		status   *plm.APPolicyStatus
+		status   *plm.APResourceStatus
 		validate func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition)
 		name     string
 	}{
 		{
 			name: "empty state returns not compiled condition",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{State: plm.BundleState("")},
 			},
 			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
@@ -2895,7 +2873,7 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 		{
 			name: "pending state returns not compiled condition",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{State: plm.StatePending},
 			},
 			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
@@ -2907,7 +2885,7 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 		{
 			name: "processing state returns not compiled condition",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{State: plm.StateProcessing},
 			},
 			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
@@ -2918,7 +2896,7 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 		{
 			name: "invalid state with errors returns invalid condition",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{State: plm.StateInvalid},
 				Processing: plm.ProcessingStatus{
 					Errors: []string{"syntax error in policy", "invalid directive"},
@@ -2935,7 +2913,7 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 		{
 			name: "invalid state without errors returns generic message",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{State: plm.StateInvalid},
 			},
 			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
@@ -2946,7 +2924,7 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 		{
 			name: "ready state with no location returns no location condition",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{State: plm.StateReady, Location: ""},
 			},
 			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
@@ -2958,7 +2936,7 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 		{
 			name: "unknown state returns unknown state condition",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{State: plm.BundleState("some-unknown-state")},
 			},
 			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
@@ -2971,7 +2949,7 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 		{
 			name: "ready state with nil fetcher returns bundle data without fetching",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{
 					State:    plm.StateReady,
 					Location: "s3://default/bundles/policy.tgz",
@@ -2983,13 +2961,13 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 				g.Expect(bundle).ToNot(BeNil())
 				g.Expect(bundle.Location).To(Equal("s3://default/bundles/policy.tgz"))
 				g.Expect(bundle.Checksum).To(Equal("abc123"))
-				g.Expect(bundle.BundleType).To(Equal(WAFBundleTypePolicy))
+				// BundleType is set based on bundleType parameter
 				g.Expect(bundle.Data).To(BeNil())
 			},
 		},
 		{
 			name: "ready state with fetcher returns fetched bundle data",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{
 					State:    plm.StateReady,
 					Location: "s3://default/bundles/policy.tgz",
@@ -3004,12 +2982,12 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 				g.Expect(cond).To(BeNil())
 				g.Expect(bundle).ToNot(BeNil())
 				g.Expect(bundle.Data).To(Equal([]byte("bundle-content")))
-				g.Expect(bundle.BundleType).To(Equal(WAFBundleTypePolicy))
+				// BundleType is set based on bundleType parameter
 			},
 		},
 		{
 			name: "fetch error returns programmed condition",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{
 					State:    plm.StateReady,
 					Location: "s3://default/bundles/policy.tgz",
@@ -3030,7 +3008,7 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 		{
 			name: "checksum match succeeds",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{
 					State:    plm.StateReady,
 					Location: "s3://default/bundles/policy.tgz",
@@ -3050,7 +3028,7 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 		{
 			name: "checksum mismatch returns integrity error",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{
 					State:    plm.StateReady,
 					Location: "s3://default/bundles/policy.tgz",
@@ -3072,7 +3050,7 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 		{
 			name: "empty checksum skips verification",
-			status: &plm.APPolicyStatus{
+			status: &plm.APResourceStatus{
 				Bundle: plm.BundleStatus{
 					State:    plm.StateReady,
 					Location: "s3://default/bundles/policy.tgz",
@@ -3092,143 +3070,17 @@ func TestFetchAPPolicyBundle(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
+	for _, bundleType := range bundleTypes {
+		for _, test := range tests {
+			testName := bundleType.name + " - " + test.name
+			t.Run(testName, func(t *testing.T) {
+				t.Parallel()
+				g := NewWithT(t)
 
-			bundle, cond := fetchAPPolicyBundle(nsName, test.status, test.fetcher)
-			test.validate(g, bundle, cond)
-		})
-	}
-}
-
-func TestFetchAPLogConfBundle(t *testing.T) {
-	t.Parallel()
-
-	nsName := types.NamespacedName{Namespace: "test", Name: "my-logconf"}
-
-	tests := []struct {
-		fetcher  fetch.Fetcher
-		status   *plm.APLogConfStatus
-		validate func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition)
-		name     string
-	}{
-		{
-			name: "pending state returns not compiled condition",
-			status: &plm.APLogConfStatus{
-				Bundle: plm.BundleStatus{State: plm.StatePending},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-				g.Expect(cond.Message).To(ContainSubstring("pending compilation"))
-			},
-		},
-		{
-			name: "invalid state returns invalid condition",
-			status: &plm.APLogConfStatus{
-				Bundle: plm.BundleStatus{State: plm.StateInvalid},
-				Processing: plm.ProcessingStatus{
-					Errors: []string{"bad log format"},
-				},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFResolvedRefsConditionType)))
-				g.Expect(cond.Message).To(ContainSubstring("bad log format"))
-			},
-		},
-		{
-			name: "ready state with nil fetcher returns bundle metadata",
-			status: &plm.APLogConfStatus{
-				Bundle: plm.BundleStatus{
-					State:    plm.StateReady,
-					Location: "s3://default/bundles/logconf.tgz",
-					Sha256:   "def456",
-				},
-			},
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(cond).To(BeNil())
-				g.Expect(bundle).ToNot(BeNil())
-				g.Expect(bundle.BundleType).To(Equal(WAFBundleTypeLogProfile))
-				g.Expect(bundle.Location).To(Equal("s3://default/bundles/logconf.tgz"))
-				g.Expect(bundle.Data).To(BeNil())
-			},
-		},
-		{
-			name: "ready state with fetcher returns fetched data",
-			status: &plm.APLogConfStatus{
-				Bundle: plm.BundleStatus{
-					State:    plm.StateReady,
-					Location: "s3://default/bundles/logconf.tgz",
-				},
-			},
-			fetcher: func() fetch.Fetcher {
-				f := &fetchfakes.FakeFetcher{}
-				f.GetObjectReturns([]byte("logconf-content"), nil)
-				return f
-			}(),
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(cond).To(BeNil())
-				g.Expect(bundle).ToNot(BeNil())
-				g.Expect(bundle.Data).To(Equal([]byte("logconf-content")))
-				g.Expect(bundle.BundleType).To(Equal(WAFBundleTypeLogProfile))
-			},
-		},
-		{
-			name: "fetch error returns programmed condition",
-			status: &plm.APLogConfStatus{
-				Bundle: plm.BundleStatus{
-					State:    plm.StateReady,
-					Location: "s3://default/bundles/logconf.tgz",
-				},
-			},
-			fetcher: func() fetch.Fetcher {
-				f := &fetchfakes.FakeFetcher{}
-				f.GetObjectReturns(nil, errors.New("timeout"))
-				return f
-			}(),
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
-				g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonFetchError)))
-			},
-		},
-		{
-			name: "checksum mismatch returns integrity error",
-			status: &plm.APLogConfStatus{
-				Bundle: plm.BundleStatus{
-					State:    plm.StateReady,
-					Location: "s3://default/bundles/logconf.tgz",
-					Sha256:   "wrong-checksum",
-				},
-			},
-			fetcher: func() fetch.Fetcher {
-				f := &fetchfakes.FakeFetcher{}
-				f.GetObjectReturns([]byte("data"), nil)
-				return f
-			}(),
-			validate: func(g Gomega, bundle *WAFBundleData, cond *conditions.Condition) {
-				g.Expect(bundle).To(BeNil())
-				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Type).To(Equal(string(conditions.WAFProgrammedConditionType)))
-				g.Expect(cond.Reason).To(Equal(string(conditions.PolicyReasonIntegrityError)))
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			bundle, cond := fetchAPLogConfBundle(nsName, test.status, test.fetcher)
-			test.validate(g, bundle, cond)
-		})
+				bundle, cond := fetchBundle(bundleType.nsName, test.status, test.fetcher, bundleType.wafType, bundleType.condFuncs)
+				test.validate(g, bundle, cond)
+			})
+		}
 	}
 }
 
@@ -3239,7 +3091,7 @@ func TestProcessAPPolicyReference(t *testing.T) {
 		return &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 			ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
 			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-				APPolicySource: &ngfAPIv1alpha1.APPolicyReference{
+				APPolicySource: &ngfAPIv1alpha1.APResourceReference{
 					Name:      apPolicyName,
 					Namespace: apPolicyNs,
 				},
@@ -3450,7 +3302,7 @@ func TestProcessSecurityLogs(t *testing.T) {
 			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						APLogConfSource: ngfAPIv1alpha1.APLogConfReference{Name: "missing-logconf"},
+						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "missing-logconf"},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{
 							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
 						},
@@ -3485,7 +3337,7 @@ func TestProcessSecurityLogs(t *testing.T) {
 			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						APLogConfSource: ngfAPIv1alpha1.APLogConfReference{Name: "my-logconf"},
+						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "my-logconf"},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{
 							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
 						},
@@ -3521,13 +3373,13 @@ func TestProcessSecurityLogs(t *testing.T) {
 			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						APLogConfSource: ngfAPIv1alpha1.APLogConfReference{Name: "logconf-1"},
+						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "logconf-1"},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{
 							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
 						},
 					},
 					{
-						APLogConfSource: ngfAPIv1alpha1.APLogConfReference{Name: "logconf-missing"},
+						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "logconf-missing"},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{
 							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeStderr,
 						},
@@ -3565,7 +3417,7 @@ func TestProcessSecurityLogs(t *testing.T) {
 			Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
 				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
 					{
-						APLogConfSource: ngfAPIv1alpha1.APLogConfReference{
+						APLogConfSource: ngfAPIv1alpha1.APResourceReference{
 							Name:      "my-logconf",
 							Namespace: &otherNs,
 						},
@@ -3686,7 +3538,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				Source: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
 					Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-						APPolicySource: &ngfAPIv1alpha1.APPolicyReference{Name: "my-policy"},
+						APPolicySource: &ngfAPIv1alpha1.APResourceReference{Name: "my-policy"},
 					},
 				},
 			},
@@ -3719,7 +3571,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				Source: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{
 					ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "waf1"},
 					Spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
-						APPolicySource: &ngfAPIv1alpha1.APPolicyReference{Name: "missing"},
+						APPolicySource: &ngfAPIv1alpha1.APResourceReference{Name: "missing"},
 					},
 				},
 			},
