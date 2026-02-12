@@ -64,7 +64,7 @@ jobs:
             type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.tag == '' }}
 
       - name: Build NGF Docker Image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           file: build/Dockerfile
           tags: ${{ steps.ngf-meta.outputs.tags }}
@@ -75,7 +75,7 @@ jobs:
           pull: true
 
       - name: Build NGINX Docker Image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || ''}}
           tags: ${{ steps.nginx-meta.outputs.tags }}
