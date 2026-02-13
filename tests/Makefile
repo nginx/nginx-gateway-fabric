@@ -38,12 +38,13 @@ endif
 
 .PHONY: update-go-modules
 update-go-modules: ## Update the gateway-api go modules to latest main version
+	cd .. && go get -u sigs.k8s.io/gateway-api@main && go mod tidy
 	go get -u sigs.k8s.io/gateway-api@main
 	go mod tidy
 
 .PHONY: build-test-runner-image
 build-test-runner-image: ## Build conformance test runner image
-	docker build --platform $(GOOS)/$(GOARCH) -t $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) -f conformance/Dockerfile .
+	docker build --platform $(GOOS)/$(GOARCH) -t $(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) -f conformance/Dockerfile ./..
 
 .PHONY: build-crossplane-image
 build-crossplane-image: ## Build the crossplane image
@@ -122,7 +123,7 @@ cleanup-conformance-tests: ## Clean up conformance tests fixtures
 
 .PHONY: reset-go-modules
 reset-go-modules: ## Reset the go modules changes
-	git checkout -- ../go.mod ../go.sum
+	git checkout -- ../go.mod ../go.sum go.mod go.sum
 
 -include ../Makefile
 
@@ -159,7 +160,7 @@ nfr-test: check-for-plus-usage-endpoint build-crossplane-image  ## Run the NFR t
 
 .PHONY: start-longevity-test
 start-longevity-test: export START_LONGEVITY=true
-start-longevity-test: nfr-test ## Start the longevity test to run for 4 days in GKE
+start-longevity-test: nfr-test ## Start the longevity test to run for 3 days in GKE
 
 .PHONY: stop-longevity-test
 stop-longevity-test: export STOP_LONGEVITY=true

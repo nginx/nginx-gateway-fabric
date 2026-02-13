@@ -2,6 +2,7 @@ package graph
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/go-logr/logr"
@@ -373,13 +374,7 @@ func propagateSnippetsPolicyToRoutes(
 			if parentRef.Gateway != nil && parentRef.Gateway.NamespacedName == gwNsName {
 				// Avoid duplicate attachment if logic runs multiple times (though graph build is single pass)
 				// or if policy targets both.
-				alreadyAttached := false
-				for _, p := range route.Policies {
-					if p == policy {
-						alreadyAttached = true
-						break
-					}
-				}
+				alreadyAttached := slices.Contains(route.Policies, policy)
 				if !alreadyAttached {
 					route.Policies = append(route.Policies, policy)
 				}

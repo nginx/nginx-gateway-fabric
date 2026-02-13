@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -66,17 +67,16 @@ type Config struct {
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.
 type NginxProvisioner struct {
-	store     *store
-	k8sClient client.Client
+	k8sClient         client.Client
+	store             *store
+	baseLabelSelector metav1.LabelSelector
 	// resourcesToDeleteOnStartup contains a list of Gateway names that no longer exist
 	// but have nginx resources tied to them that need to be deleted.
 	resourcesToDeleteOnStartup []types.NamespacedName
-	baseLabelSelector          metav1.LabelSelector
 	cfg                        Config
+	lock                       sync.RWMutex
 	leader                     bool
 	isOpenshift                bool
-
-	lock sync.RWMutex
 }
 
 var apiChecker openshift.APIChecker = &openshift.APICheckerImpl{}
@@ -159,7 +159,7 @@ func NewNginxProvisioner(
 		isOpenshift:                isOpenshift,
 	}
 
-	handler, err := newEventHandler(store, provisioner, selector, cfg.GCName)
+	handler, err := newEventHandler(store, provisioner, mgr.GetClient(), selector, cfg.GCName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error initializing eventHandler: %w", err)
 	}
@@ -233,7 +233,7 @@ func (p *NginxProvisioner) provisionNginx(
 
 	objNames := make([]string, 0, len(objects))
 	for _, obj := range objects {
-		objNames = append(objNames, obj.GetName())
+		objNames = append(objNames, fmt.Sprintf("%s (%s)", obj.GetName(), reflect.TypeOf(obj).Elem().Name()))
 	}
 
 	p.cfg.Logger.Info(
@@ -263,13 +263,13 @@ func (p *NginxProvisioner) provisionNginx(
 							upsertErr,
 							"Retrying CreateOrUpdate for nginx resource after error",
 							"namespace", gateway.GetNamespace(),
-							"name", resourceName,
+							"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
 						)
 					} else {
 						p.cfg.Logger.V(1).Info(
 							"Retrying CreateOrUpdate for nginx resource after error",
 							"namespace", gateway.GetNamespace(),
-							"name", resourceName,
+							"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
 							"error", upsertErr.Error(),
 						)
 					}

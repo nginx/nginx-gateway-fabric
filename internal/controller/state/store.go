@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -112,13 +113,7 @@ func (m *objectStoreMapAdapter[T]) delete(_ ngftypes.ObjectType, nsname types.Na
 type gvkList []schema.GroupVersionKind
 
 func (list gvkList) contains(gvk schema.GroupVersionKind) bool {
-	for _, g := range list {
-		if gvk == g {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(list, gvk)
 }
 
 type multiObjectStore struct {

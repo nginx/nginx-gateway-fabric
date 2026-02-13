@@ -110,10 +110,10 @@ func TestRegister(t *testing.T) {
 
 	fieldIndexes := index.CreateEndpointSliceFieldIndices()
 
-	eventCh := make(chan<- interface{})
+	eventCh := make(chan<- any)
 
-	beSameFunctionPointer := func(expected interface{}) gtypes.GomegaMatcher {
-		return gcustom.MakeMatcher(func(f interface{}) (bool, error) {
+	beSameFunctionPointer := func(expected any) gtypes.GomegaMatcher {
+		return gcustom.MakeMatcher(func(f any) (bool, error) {
 			// comparing functions is not allowed in Go, so we're comparing the pointers
 			return reflect.ValueOf(expected).Pointer() == reflect.ValueOf(f).Pointer(), nil
 		})

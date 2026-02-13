@@ -557,10 +557,7 @@ func generateEndpointSliceList(n int) discoveryV1.EndpointSliceList {
 	ready := true
 
 	for i := 0; n > 0; i++ {
-		c := maxEndpointsPerSlice
-		if n < maxEndpointsPerSlice {
-			c = n
-		}
+		c := min(n, maxEndpointsPerSlice)
 		n -= maxEndpointsPerSlice
 
 		slice := discoveryV1.EndpointSlice{

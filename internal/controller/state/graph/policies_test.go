@@ -2339,7 +2339,7 @@ func (s *testNGFLogSink) Enabled(_ int) bool {
 	return true
 }
 
-func (s *testNGFLogSink) Info(_ int, msg string, keysAndValues ...interface{}) {
+func (s *testNGFLogSink) Info(_ int, msg string, keysAndValues ...any) {
 	s.buffer.WriteString(msg)
 	for i := 0; i < len(keysAndValues); i += 2 {
 		if i+1 < len(keysAndValues) {
@@ -2356,7 +2356,7 @@ func (s *testNGFLogSink) Info(_ int, msg string, keysAndValues ...interface{}) {
 	s.buffer.WriteString("\n")
 }
 
-func (s *testNGFLogSink) Error(err error, msg string, _ ...interface{}) {
+func (s *testNGFLogSink) Error(err error, msg string, _ ...any) {
 	s.buffer.WriteString("ERROR: ")
 	s.buffer.WriteString(msg)
 	s.buffer.WriteString(" error=")
@@ -2364,7 +2364,7 @@ func (s *testNGFLogSink) Error(err error, msg string, _ ...interface{}) {
 	s.buffer.WriteString("\n")
 }
 
-func (s *testNGFLogSink) WithValues(_ ...interface{}) logr.LogSink {
+func (s *testNGFLogSink) WithValues(_ ...any) logr.LogSink {
 	return s
 }
 

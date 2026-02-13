@@ -30,7 +30,7 @@ var _ = Describe("Reconciler", func() {
 	var (
 		rec        *controller.Reconciler
 		fakeGetter *controllerfakes.FakeGetter
-		eventCh    chan interface{}
+		eventCh    chan any
 
 		hr1NsName = types.NamespacedName{
 			Namespace: "test",
@@ -111,7 +111,7 @@ var _ = Describe("Reconciler", func() {
 
 	BeforeEach(func() {
 		fakeGetter = &controllerfakes.FakeGetter{}
-		eventCh = make(chan interface{})
+		eventCh = make(chan any)
 	})
 
 	Describe("Normal cases", func() {

@@ -88,7 +88,7 @@ func (g Generator) GenerateForLocation(pols []policies.Policy, location http.Loc
 				continue
 			}
 
-			fields := map[string]interface{}{
+			fields := map[string]any{
 				"Tracing":  obs.Spec.Tracing,
 				"Strategy": getStrategy(obs),
 			}
@@ -123,7 +123,7 @@ func (g Generator) GenerateForInternalLocation(pols []policies.Policy) policies.
 			continue
 		}
 
-		fields := map[string]interface{}{
+		fields := map[string]any{
 			"Tracing":              obs.Spec.Tracing,
 			"GlobalSpanAttributes": g.telemetryConf.SpanAttributes,
 		}

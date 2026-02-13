@@ -21,7 +21,18 @@ import (
 	"os"
 	"testing"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	. "github.com/onsi/gomega"
+	apps "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	coordination "k8s.io/api/coordination/v1"
+	core "k8s.io/api/core/v1"
+	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	k8sRuntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	ctlr "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference_conformance "sigs.k8s.io/gateway-api-inference-extension/conformance"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -31,16 +42,26 @@ import (
 	"sigs.k8s.io/gateway-api/conformance/utils/flags"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/yaml"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
 const (
 	// unusableGatewayIPAddress 198.51.100.0 is a publicly reserved IP address specifically for documentation.
 	// This is needed to give the conformance tests an example valid ip unusable address.
 	unusableGatewayIPAddress = "198.51.100.0"
+
+	// Default NGF namespace and release name for log collection
+	ngfNamespace   = "nginx-gateway"
+	ngfReleaseName = "nginx-gateway-fabric"
+	infraNamespace = "gateway-conformance-infra"
 )
 
 func TestConformance(t *testing.T) {
 	g := NewWithT(t)
+
+	// Set up log collection on test failure
+	defer collectNGFLogsOnFailure(t, g)
 
 	t.Logf(`Running conformance tests with %s GatewayClass\n cleanup: %t\n`+
 		`debug: %t\n enable all features: %t \n supported extended features: [%v]\n exempt features: [%v]\n`+
@@ -91,6 +112,11 @@ func TestConformance(t *testing.T) {
 }
 
 func TestInferenceExtensionConformance(t *testing.T) {
+	g := NewWithT(t)
+
+	// Set up log collection on test failure
+	defer collectNGFLogsOnFailure(t, g)
+
 	t.Logf(`Running inference conformance tests with %s GatewayClass\n cleanup: %t\n`+
 		`debug: %t\n enable all features: %t \n supported extended features: [%v]\n exempt features: [%v]\n`+
 		`skip tests: [%v]`,
@@ -112,4 +138,68 @@ func TestInferenceExtensionConformance(t *testing.T) {
 
 	opts.ConformanceProfiles.Insert(inference_conformance.GatewayLayerProfileName)
 	inference_conformance.RunConformanceWithOptions(t, opts)
+}
+
+// collectNGFLogsOnFailure collects NGF pod logs when tests fail
+func collectNGFLogsOnFailure(t *testing.T, g Gomega) {
+	if t.Failed() {
+		t.Logf("Tests failed, collecting logs...")
+
+		// Create a resource manager to access cluster resources
+		k8sConfig := ctlr.GetConfigOrDie()
+		scheme := k8sRuntime.NewScheme()
+		g.Expect(core.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(apps.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(apiext.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(coordination.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(v1.Install(scheme)).To(Not(HaveOccurred()))
+		g.Expect(batchv1.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(ngfAPIv1alpha1.AddToScheme(scheme)).To(Not(HaveOccurred()))
+		g.Expect(ngfAPIv1alpha2.AddToScheme(scheme)).To(Not(HaveOccurred()))
+
+		options := client.Options{
+			Scheme: scheme,
+		}
+		k8sClient, err := client.New(k8sConfig, options)
+		g.Expect(err).To(Not(HaveOccurred()))
+
+		clientGoClient, err := kubernetes.NewForConfig(k8sConfig)
+		g.Expect(err).To(Not(HaveOccurred()))
+
+		timeoutConfig := framework.DefaultTimeoutConfig()
+		rm := framework.ResourceManager{
+			K8sClient:      k8sClient,
+			ClientGoClient: clientGoClient,
+			K8sConfig:      k8sConfig,
+			TimeoutConfig:  timeoutConfig,
+		}
+
+		// Get NGF container logs
+		collectLogs(t, g, rm, ngfNamespace, "nginx-gateway")
+
+		// Get NGINX container logs
+		collectLogs(t, g, rm, infraNamespace, "nginx")
+	}
+}
+
+func collectLogs(t*testing.T,  g Gomega, rm framework.ResourceManager, namespace, containerName string) {
+	t.Helper()
+
+	pods, err := rm.GetPods(namespace, nil)
+	g.Expect(err).To(Not(HaveOccurred()))
+
+	for _, pod := range pods {
+		for _, container := range pod.Spec.Containers {
+			if container.Name == containerName {
+				containerLogs, err := rm.GetPodLogs(pod.Namespace, pod.Name, &core.PodLogOptions{
+					Container: container.Name,
+				})
+				if err != nil {
+					t.Logf("Failed to get %s container logs from pod %s: %v", container.Name, pod.Name, err)
+				} else {
+					t.Logf("Container %s logs for pod %s:\n%s", container.Name, pod.Name, containerLogs)
+				}
+			}
+		}
+	}
 }

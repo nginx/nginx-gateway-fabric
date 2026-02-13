@@ -79,7 +79,7 @@ func EqualPointers[T comparable](p1, p2 *T) bool {
 }
 
 // MustExecuteTemplate executes the template with the given data.
-func MustExecuteTemplate(templ *template.Template, data interface{}) []byte {
+func MustExecuteTemplate(templ *template.Template, data any) []byte {
 	var buf bytes.Buffer
 
 	if err := templ.Execute(&buf, data); err != nil {

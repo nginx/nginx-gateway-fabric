@@ -805,14 +805,7 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 			s.PathRules = append(s.PathRules, r)
 		}
 
-		// We sort the path rules so the order is preserved after reconfiguration.
-		sort.Slice(s.PathRules, func(i, j int) bool {
-			if s.PathRules[i].Path != s.PathRules[j].Path {
-				return s.PathRules[i].Path < s.PathRules[j].Path
-			}
-
-			return s.PathRules[i].PathType < s.PathRules[j].PathType
-		})
+		sortPathRules(s.PathRules)
 
 		for pathRuleIdx := range s.PathRules {
 			for matchRuleIdx := range s.PathRules[pathRuleIdx].MatchRules {

@@ -72,7 +72,7 @@ func (p *FirstEventBatchPreparerImpl) Prepare(ctx context.Context) (EventBatch, 
 
 	// If some of p.objects don't exist, they will not be added to the batch. In that case, the capacity will be greater
 	// than the length, but it is OK, because len(p.objects) is small.
-	batch := make([]interface{}, 0, total+len(p.objects))
+	batch := make([]any, 0, total+len(p.objects))
 
 	for _, obj := range p.objects {
 		key := types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}
