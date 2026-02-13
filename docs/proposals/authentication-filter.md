@@ -1097,7 +1097,7 @@ This example shows a single HTTPRoute, with a single `filter` defined in a `rule
 
 #### Referencing multiple AuthenticationFilter resources in a single rule
 
-Only one `AuthenticationFilter` may be specified per route rule, ensuring each route rule defines only one authentication method,
+Only one `AuthenticationFilter` may be specified per route rule, ensuring each route rule defines only one authentication method.
 
 In a scenario where a route rule references multiple `AuthenticationFilter` resources, that route rule will set to `Invalid`.
 The route resource will display the `UnresolvedRefs` message to inform the user that the rule has been `Rejected`.
