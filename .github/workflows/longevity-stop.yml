@@ -117,7 +117,6 @@ jobs:
         run: make update-firewall-with-local-ip
 
       - name: Stop Longevity Tests
-        continue-on-error: true
         working-directory: ./tests
         run: make stop-longevity-test
 
@@ -125,7 +124,7 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: results-${{ matrix.type }}
-          path: tests/results/longevity/*-${{ matrix.type }}.*
+          path: tests/results/longevity/**/*-${{ matrix.type }}.*
 
       - name: Cleanup
         working-directory: ./tests

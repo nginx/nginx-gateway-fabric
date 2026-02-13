@@ -3,7 +3,6 @@ ignore:
   - charts/nginx-gateway-fabric/templates
   - config/crd/bases/
   - deploy
-  - site/static
 
 rules:
   braces: enable
@@ -32,6 +31,7 @@ rules:
       .github/workflows/redhat-certification.yml
       examples/proxy-settings-policy/app.yaml
       tests/suite/manifests/proxy-settings-policy/app.yaml
+      tests/suite/manifests/longevity
   key-duplicates: enable
   key-ordering: disable
   line-length:

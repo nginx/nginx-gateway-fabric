@@ -380,12 +380,12 @@ make nfr-test
 
 ##### Longevity testing
 
-This test is run on its own due to its long-running nature. It will run for 4 days (as defined in `suite/scripts/longevity-wrk.sh`) before
+This test is run on its own due to its long-running nature. It will run for 3 days (as defined in `suite/scripts/longevity-wrk.sh`) before
 the tester must collect the results and complete the test.
 
 To run in the pipeline, [run the workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/longevity-start.yml) to start the tests. Once the workflow completes, the job ID will be included in the summary. This must be used as input when stopping the longevity tests.
 
-After 4 days (96h), visit the [GCP Monitoring Dashboards](https://console.cloud.google.com/monitoring/dashboards) page and select the `NGF Longevity Test` dashboard. Update the `cluster_name` filter to the names of the longevity clusters. Take PNG screenshots of each chart for the time period in which your test ran, and save those to be added to the results file. Then you can [stop the longevity tests](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/longevity-stop.yml). If done too early, the traffic will still be flowing and results may not be collected properly, so be sure to wait the full time period.
+After 3 days (72h) from the time that the startup workflow **finished**, visit the [GCP Monitoring Dashboards](https://console.cloud.google.com/monitoring/dashboards) page and select the `NGF Longevity Test` dashboard. Update the `cluster_name` filter to the names of the longevity clusters. Take PNG screenshots of each chart for the time period in which your test ran, and save those to be added to the results file. Then you can [stop the longevity tests](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/longevity-stop.yml). If done too early, the traffic will still be flowing and results may not be collected properly, so be sure to wait the full time period.
 
 The final workflow will tear down the test and open a PR with the results. The PNGs you took should be added, and any summaries as well. Combine any results files if necessary. If you don't want to open a PR, you can toggle it off in the input when running the workflow.
 

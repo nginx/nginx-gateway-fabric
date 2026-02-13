@@ -132,6 +132,5 @@ jobs:
           echo "Longevity Test Run ID: ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
 
       - name: Start Longevity Tests
-        continue-on-error: true
         working-directory: ./tests
         run: make start-longevity-test

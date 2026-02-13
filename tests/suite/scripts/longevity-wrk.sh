@@ -44,5 +44,5 @@ if ((ELAPSED >= MAX_WAIT)); then
     exit 1
 fi
 
-nohup wrk -t2 -c100 -d96h http://cafe.example.com/coffee &>~/coffee.txt &
-nohup wrk -t2 -c100 -d96h https://cafe.example.com/tea &>~/tea.txt &
+nohup wrk -t2 -c100 -d72h http://cafe.example.com/coffee &>~/coffee.txt &
+nohup wrk -t2 -c100 -d72h https://cafe.example.com/tea &>~/tea.txt &
