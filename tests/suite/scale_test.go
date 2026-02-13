@@ -221,25 +221,6 @@ The logs are attached only if there are errors.
 		return len(errors)
 	}
 
-	checkMetricsExist := func(
-		promInstance framework.PrometheusInstance,
-		queries []string,
-		getTime func() time.Time,
-		modifyTime func(),
-		timeout, polling time.Duration,
-	) {
-		for _, query := range queries {
-			Eventually(
-				framework.CreateMetricExistChecker(
-					promInstance,
-					query,
-					getTime,
-					modifyTime,
-				),
-			).WithTimeout(timeout).WithPolling(polling).Should(Succeed())
-		}
-	}
-
 	runTestWithMetricsAndLogs := func(testName, testResultsDir string, test func()) {
 		var (
 			metricExistTimeout = 2 * time.Minute
@@ -268,12 +249,11 @@ The logs are attached only if there are errors.
 				fmt.Sprintf(`container_cpu_usage_seconds_total{pod="%s",container="nginx"}`, nginxDataPlanePodName),
 			)
 		}
-
 		checkMetricsExist(promInstance, initialQueries, getStartTime, modifyStartTime, metricExistTimeout, metricExistPolling)
 
 		test()
 
-		// We sleep for 2 scrape intervals to ensure that Prometheus scrapes the metrics after the test() finishes
+		// We sleep for 2 scrape intervalss to ensure Prometheus scrapes the metrics after the test() finishes
 		// before endTime, so that we don't lose any metric values like reloads.
 		GinkgoWriter.Printf(
 			"Sleeping for %v to ensure Prometheus scrapes the metrics after the test finishes\n",
@@ -306,7 +286,6 @@ The logs are attached only if there are errors.
 			// We don't need to check all nginx_gateway_fabric_* metrics, as they are collected at the same time
 			fmt.Sprintf(`nginx_gateway_fabric_event_batch_processing_milliseconds_sum{pod="%s"}`, ngfPodName),
 		}
-
 		checkMetricsExist(promInstance, ngfQueries, getEndTime, noOpModifier, metricExistTimeout, metricExistPolling)
 
 		// Ensure NGINX data plane metrics exist at endTime (data plane pod is created during the test).
@@ -315,101 +294,91 @@ The logs are attached only if there are errors.
 				fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx"}`, nginxDataPlanePodName),
 				fmt.Sprintf(`container_cpu_usage_seconds_total{pod="%s",container="nginx"}`, nginxDataPlanePodName),
 			}
-
 			checkMetricsExist(promInstance, nginxQueries, getEndTime, noOpModifier, metricExistTimeout, metricExistPolling)
 		}
 
 		// Collect metric values
-		// For some metrics, generate PNGs
-
-		result, err := promInstance.QueryRange(
-			fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx-gateway"}`, ngfPodName),
-			promv1.Range{
-				Start: startTime,
-				End:   endTime,
-				Step:  queryRangeStep,
-			},
+		// For some metrics, generate PNGs for NGF and NGINX.
+		var (
+			memoryMetricConfig = metricConfig{
+				queryTemplate: `container_memory_usage_bytes{pod="%s",container="%s"}`,
+				generatePNG:   framework.GenerateMemoryPNG,
+			}
+			cpuMetricConfig = metricConfig{
+				queryTemplate: `rate(container_cpu_usage_seconds_total{pod="%s",container="%s"}[2m])`,
+				generatePNG:   framework.GenerateCPUPNG,
+			}
 		)
-		Expect(err).ToNot(HaveOccurred())
 
-		memCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "memory-ngf", *plusEnabled))
-		Expect(framework.WritePrometheusMatrixToCSVFile(memCSV, result)).To(Succeed())
+		ngfPromRange := promv1.Range{
+			Start: startTime,
+			End:   endTime,
+			Step:  queryRangeStep,
+		}
 
-		memPNG := framework.CreateResultsFilename("png", "memory-ngf", *plusEnabled)
-		Expect(
-			framework.GenerateMemoryPNG(testResultsDir, memCSV, memPNG),
-		).To(Succeed())
+		ngfContainerName := "nginx-gateway"
 
-		Expect(os.Remove(memCSV)).To(Succeed())
-
-		result, err = promInstance.QueryRange(
-			fmt.Sprintf(`rate(container_cpu_usage_seconds_total{pod="%s",container="nginx-gateway"}[2m])`, ngfPodName),
-			promv1.Range{
-				Start: startTime,
-				End:   endTime,
-				Step:  queryRangeStep,
-			},
+		// Collect and visualize Memory metrics.
+		collectAndVisualizeMetric(
+			promInstance,
+			memoryMetricConfig,
+			ngfPodName,
+			ngfContainerName,
+			"nfg-memory",
+			ngfPromRange,
+			testResultsDir,
+			*plusEnabled,
 		)
-		Expect(err).ToNot(HaveOccurred())
 
-		cpuCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "cpu-ngf", *plusEnabled))
-		Expect(framework.WritePrometheusMatrixToCSVFile(cpuCSV, result)).To(Succeed())
-
-		cpuPNG := framework.CreateResultsFilename("png", "cpu-ngf", *plusEnabled)
-		Expect(
-			framework.GenerateCPUPNG(testResultsDir, cpuCSV, cpuPNG),
-		).To(Succeed())
-
-		Expect(os.Remove(cpuCSV)).To(Succeed())
+		// Collect and visualize CPU metrics.
+		collectAndVisualizeMetric(
+			promInstance,
+			cpuMetricConfig,
+			ngfPodName,
+			ngfContainerName,
+			"nfg-cpu",
+			ngfPromRange,
+			testResultsDir,
+			*plusEnabled,
+		)
 
 		// Collect NGINX data plane CPU/Memory metrics and generate PNGs (if the pod name is known).
 		if nginxDataPlanePodName != "" {
+			nginxContainerName := "nginx"
 			// Use the later of test startTime and the moment the data plane pod was detected
 			dpStart := startTime
 			if !nginxMetricsStartTime.IsZero() && nginxMetricsStartTime.After(dpStart) {
 				dpStart = nginxMetricsStartTime
 			}
-			// Memory (data plane)
-			result, err = promInstance.QueryRange(
-				fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx"}`, nginxDataPlanePodName),
-				promv1.Range{
-					Start: dpStart,
-					End:   endTime,
-					Step:  queryRangeStep,
-				},
+			nginxPromRange := promv1.Range{
+				Start: dpStart,
+				End:   endTime,
+				Step:  queryRangeStep,
+			}
+
+			// Collect and visualize Memory metrics.
+			collectAndVisualizeMetric(
+				promInstance,
+				memoryMetricConfig,
+				nginxDataPlanePodName,
+				nginxContainerName,
+				"nginx-memory",
+				nginxPromRange,
+				testResultsDir,
+				*plusEnabled,
 			)
-			Expect(err).ToNot(HaveOccurred())
 
-			memDPCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "memory-nginx", *plusEnabled))
-			Expect(framework.WritePrometheusMatrixToCSVFile(memDPCSV, result)).To(Succeed())
-
-			memDPPNG := framework.CreateResultsFilename("png", "memory-nginx", *plusEnabled)
-			Expect(
-				framework.GenerateMemoryPNG(testResultsDir, memDPCSV, memDPPNG),
-			).To(Succeed())
-
-			Expect(os.Remove(memDPCSV)).To(Succeed())
-
-			// CPU (data plane)
-			result, err = promInstance.QueryRange(
-				fmt.Sprintf(`rate(container_cpu_usage_seconds_total{pod="%s",container="nginx"}[2m])`, nginxDataPlanePodName),
-				promv1.Range{
-					Start: dpStart,
-					End:   endTime,
-					Step:  queryRangeStep,
-				},
+			// Collect and visualize CPU metrics.
+			collectAndVisualizeMetric(
+				promInstance,
+				cpuMetricConfig,
+				nginxDataPlanePodName,
+				nginxContainerName,
+				"nginx-cpu",
+				nginxPromRange,
+				testResultsDir,
+				*plusEnabled,
 			)
-			Expect(err).ToNot(HaveOccurred())
-
-			cpuDPCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "cpu-nginx", *plusEnabled))
-			Expect(framework.WritePrometheusMatrixToCSVFile(cpuDPCSV, result)).To(Succeed())
-
-			cpuDPPNG := framework.CreateResultsFilename("png", "cpu-nginx", *plusEnabled)
-			Expect(
-				framework.GenerateCPUPNG(testResultsDir, cpuDPCSV, cpuDPPNG),
-			).To(Succeed())
-
-			Expect(os.Remove(cpuDPCSV)).To(Succeed())
 		}
 
 		eventsCount, err := framework.GetEventsCountWithStartTime(promInstance, ngfPodName, startTime)
@@ -1286,3 +1255,49 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 		})
 	}
 })
+
+type metricConfig struct {
+	generatePNG   func(dir, csvPath, pngName string) error
+	queryTemplate string
+}
+
+// collectAndVisualizeMetric queries Prometheus, writes CSV, generates PNG, and cleans up.
+func collectAndVisualizeMetric(
+	promInstance framework.PrometheusInstance,
+	cfg metricConfig,
+	podName, containerName, filePrefix string,
+	timeRange promv1.Range,
+	testResultsDir string,
+	plusEnabled bool,
+) {
+	query := fmt.Sprintf(cfg.queryTemplate, podName, containerName)
+	result, err := promInstance.QueryRange(query, timeRange)
+	Expect(err).ToNot(HaveOccurred())
+
+	csvPath := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", filePrefix, plusEnabled))
+	Expect(framework.WritePrometheusMatrixToCSVFile(csvPath, result)).To(Succeed())
+
+	pngName := framework.CreateResultsFilename("png", filePrefix, plusEnabled)
+	Expect(cfg.generatePNG(testResultsDir, csvPath, pngName)).To(Succeed())
+
+	Expect(os.Remove(csvPath)).To(Succeed())
+}
+
+func checkMetricsExist(
+	promInstance framework.PrometheusInstance,
+	queries []string,
+	getTime func() time.Time,
+	modifyTime func(),
+	timeout, polling time.Duration,
+) {
+	for _, query := range queries {
+		Eventually(
+			framework.CreateMetricExistChecker(
+				promInstance,
+				query,
+				getTime,
+				modifyTime,
+			),
+		).WithTimeout(timeout).WithPolling(polling).Should(Succeed())
+	}
+}
