@@ -98,6 +98,11 @@ func createControllerCommand() *cobra.Command {
 		snippetsFlag                        = "snippets"
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
+		plmStorageURLFlag                   = "plm-storage-url"
+		plmStorageCredentialsSecretFlag     = "plm-storage-credentials-secret" //nolint:gosec // not credentials
+		plmStorageCASecretFlag              = "plm-storage-ca-secret"          //nolint:gosec // not credentials
+		plmStorageClientSSLSecretFlag       = "plm-storage-client-ssl-secret"  //nolint:gosec // not credentials
+		plmStorageSkipVerifyFlag            = "plm-storage-skip-verify"
 	)
 
 	// flag values
@@ -172,6 +177,14 @@ func createControllerCommand() *cobra.Command {
 		watchNamespaces = stringSliceValidatingValue{
 			validator: validateResourceName,
 		}
+
+		plmStorageURL = stringValidatingValue{
+			validator: validateEndpointOptionalPort,
+		}
+		plmStorageCredentialsSecret     string
+		plmStorageTLSCACertSecret       string
+		plmStorageTLSClientSSLSecret    string
+		plmStorageTLSInsecureSkipVerify bool
 	)
 
 	usageReportParams := usageReportParams{
@@ -302,6 +315,13 @@ func createControllerCommand() *cobra.Command {
 				EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 				EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 				WatchNamespaces:             watchNamespaces.values,
+				PLMStorageConfig: config.PLMStorageConfig{
+					URL:                    plmStorageURL.value,
+					CredentialsSecretName:  plmStorageCredentialsSecret,
+					TLSCACertSecretName:    plmStorageTLSCACertSecret,
+					TLSClientSSLSecretName: plmStorageTLSClientSSLSecret,
+					TLSInsecureSkipVerify:  plmStorageTLSInsecureSkipVerify,
+				},
 			}
 
 			if err := controller.StartManager(conf); err != nil {
@@ -544,6 +564,41 @@ func createControllerCommand() *cobra.Command {
 		watchNamespacesFlag,
 		`Comma-separated list of namespaces to watch for resources. If not set, all namespaces are watched. `+
 			`The controller's own namespace is always watched.`,
+	)
+
+	cmd.Flags().Var(
+		&plmStorageURL,
+		plmStorageURLFlag,
+		"The URL of the PLM storage service. Required when WAF is enabled.",
+	)
+
+	cmd.Flags().StringVar(
+		&plmStorageCredentialsSecret,
+		plmStorageCredentialsSecretFlag,
+		"",
+		"The name of the Secret containing S3 credentials for PLM storage.",
+	)
+
+	cmd.Flags().StringVar(
+		&plmStorageTLSCACertSecret,
+		plmStorageCASecretFlag,
+		"",
+		"The name of the Secret for TLS verification when communicating with PLM storage service.",
+	)
+
+	cmd.Flags().StringVar(
+		&plmStorageTLSClientSSLSecret,
+		plmStorageClientSSLSecretFlag,
+		"",
+		"The name of the Secret for mutual TLS with PLM storage service.",
+	)
+
+	cmd.Flags().BoolVar(
+		&plmStorageTLSInsecureSkipVerify,
+		plmStorageSkipVerifyFlag,
+		false,
+		"Skip TLS certificate verification when communicating with PLM storage service. "+
+			"Not recommended for production.",
 	)
 
 	return cmd

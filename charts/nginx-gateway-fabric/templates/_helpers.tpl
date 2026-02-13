@@ -231,6 +231,7 @@ Create namespaced RBAC rules.
   - authenticationfilters
   - proxysettingspolicies
   - ratelimitpolicies
+  - wafgatewaybindingpolicies
   {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters
   {{- end }}
@@ -250,6 +251,7 @@ Create namespaced RBAC rules.
   - authenticationfilters/status
   - proxysettingspolicies/status
   - ratelimitpolicies/status
+  - wafgatewaybindingpolicies/status
   {{- if or .Values.nginxGateway.snippetsFilters.enable .Values.nginxGateway.snippets.enable }}
   - snippetsfilters/status
   {{- end }}
@@ -273,6 +275,17 @@ Create namespaced RBAC rules.
   - inferencepools/status
   verbs:
   - update
+  {{- end }}
+  {{- if .Values.nginxGateway.plmStorage.url }}
+- apiGroups:
+  - appprotect.f5.com
+  resources:
+  - appolicies
+  - aplogconfs
+  verbs:
+  - get
+  - list
+  - watch
   {{- end }}
   {{- if .Values.nginxGateway.leaderElection.enable }}
 - apiGroups:

@@ -271,6 +271,50 @@ func TestFromTLSRoute(t *testing.T) {
 	g.Expect(ref).To(Equal(exp))
 }
 
+func TestToAPPolicy(t *testing.T) {
+	t.Parallel()
+	ref := toAPPolicy(types.NamespacedName{Namespace: "ns", Name: "my-policy"})
+
+	exp := toResource{
+		group:     kinds.APPolicyGVK.Group,
+		kind:      kinds.APPolicyGVK.Kind,
+		namespace: "ns",
+		name:      "my-policy",
+	}
+
+	g := NewWithT(t)
+	g.Expect(ref).To(Equal(exp))
+}
+
+func TestToAPLogConf(t *testing.T) {
+	t.Parallel()
+	ref := toAPLogConf(types.NamespacedName{Namespace: "ns", Name: "my-logconf"})
+
+	exp := toResource{
+		group:     kinds.APLogConfGVK.Group,
+		kind:      kinds.APLogConfGVK.Kind,
+		namespace: "ns",
+		name:      "my-logconf",
+	}
+
+	g := NewWithT(t)
+	g.Expect(ref).To(Equal(exp))
+}
+
+func TestFromWAFGatewayBindingPolicy(t *testing.T) {
+	t.Parallel()
+	ref := fromWAFGatewayBindingPolicy("ns")
+
+	exp := fromResource{
+		group:     "gateway.nginx.org",
+		kind:      kinds.WAFGatewayBindingPolicy,
+		namespace: "ns",
+	}
+
+	g := NewWithT(t)
+	g.Expect(ref).To(Equal(exp))
+}
+
 func TestRefAllowedFrom(t *testing.T) {
 	t.Parallel()
 
@@ -298,6 +342,12 @@ func TestRefAllowedFrom(t *testing.T) {
 
 	allowedGatewayNs := "gw-allowed-ns"
 	allowedGatewayNsName := types.NamespacedName{Namespace: allowedGatewayNs, Name: "all-allowed-in-ns"}
+
+	wafPolicyNs := "waf-ns"
+	allowedAPPolicyNs := "appolicy-allowed-ns"
+	allowedAPPolicyNsName := types.NamespacedName{Namespace: allowedAPPolicyNs, Name: "my-policy"}
+	allowedAPLogConfNs := "aplogconf-allowed-ns"
+	allowedAPLogConfNsName := types.NamespacedName{Namespace: allowedAPLogConfNs, Name: "my-logconf"}
 
 	notAllowedNsName := types.NamespacedName{Namespace: "not-allowed-ns", Name: "not-allowed-in-ns"}
 
@@ -415,6 +465,40 @@ func TestRefAllowedFrom(t *testing.T) {
 				},
 			},
 		},
+		{Namespace: allowedAPPolicyNs, Name: "waf-2-appolicy"}: {
+			Spec: v1beta1.ReferenceGrantSpec{
+				From: []v1beta1.ReferenceGrantFrom{
+					{
+						Group:     "gateway.nginx.org",
+						Kind:      kinds.WAFGatewayBindingPolicy,
+						Namespace: v1beta1.Namespace(wafPolicyNs),
+					},
+				},
+				To: []v1beta1.ReferenceGrantTo{
+					{
+						Group: v1beta1.Group(kinds.APPolicyGVK.Group),
+						Kind:  v1beta1.Kind(kinds.APPolicyGVK.Kind),
+					},
+				},
+			},
+		},
+		{Namespace: allowedAPLogConfNs, Name: "waf-2-aplogconf"}: {
+			Spec: v1beta1.ReferenceGrantSpec{
+				From: []v1beta1.ReferenceGrantFrom{
+					{
+						Group:     "gateway.nginx.org",
+						Kind:      kinds.WAFGatewayBindingPolicy,
+						Namespace: v1beta1.Namespace(wafPolicyNs),
+					},
+				},
+				To: []v1beta1.ReferenceGrantTo{
+					{
+						Group: v1beta1.Group(kinds.APLogConfGVK.Group),
+						Kind:  v1beta1.Kind(kinds.APLogConfGVK.Kind),
+					},
+				},
+			},
+		},
 	}
 
 	tests := []struct {
@@ -505,6 +589,30 @@ func TestRefAllowedFrom(t *testing.T) {
 			name:           "ref not allowed from udproute to service",
 			refAllowedFrom: fromUDPRoute(urNs),
 			toResource:     toService(notAllowedNsName),
+			expAllowed:     false,
+		},
+		{
+			name:           "ref allowed from wafgatewaybindingpolicy to appolicy",
+			refAllowedFrom: fromWAFGatewayBindingPolicy(wafPolicyNs),
+			toResource:     toAPPolicy(allowedAPPolicyNsName),
+			expAllowed:     true,
+		},
+		{
+			name:           "ref not allowed from wafgatewaybindingpolicy to appolicy",
+			refAllowedFrom: fromWAFGatewayBindingPolicy(wafPolicyNs),
+			toResource:     toAPPolicy(notAllowedNsName),
+			expAllowed:     false,
+		},
+		{
+			name:           "ref allowed from wafgatewaybindingpolicy to aplogconf",
+			refAllowedFrom: fromWAFGatewayBindingPolicy(wafPolicyNs),
+			toResource:     toAPLogConf(allowedAPLogConfNsName),
+			expAllowed:     true,
+		},
+		{
+			name:           "ref not allowed from wafgatewaybindingpolicy to aplogconf",
+			refAllowedFrom: fromWAFGatewayBindingPolicy(wafPolicyNs),
+			toResource:     toAPLogConf(notAllowedNsName),
 			expAllowed:     false,
 		},
 	}
