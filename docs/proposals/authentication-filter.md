@@ -19,6 +19,7 @@ This filter should eventually expose all forms of authentication available throu
 ## Non-Goals
 
 - Design for OIDC Auth
+- Allow multiple authentication mechanisms per route rule
 - An Auth filter for TCP and UDP routes
 - Ensure response codes are configurable
 - Design for integration with [ExternalAuth in the Gateway API](https://gateway-api.sigs.k8s.io/geps/gep-1494/)
@@ -1096,34 +1097,12 @@ This example shows a single HTTPRoute, with a single `filter` defined in a `rule
 
 #### Referencing multiple AuthenticationFilter resources in a single rule
 
-NGINX allows multiple authentication methods such as `auth_basic` and `auth_jwt` to be defined together.
-In a scenario where a user provides a JWT token for authentication, NGINX will first validate this against the `auth_basic` module.
-If that authentication method fails, NGINX will then validate the request against the `auth_jwt` module.
+Only one `AuthenticationFilter` may be specified per route rule, ensuring each route rule defines only one authentication method,
 
-NGINX does allow multiple of the same auth module defined.
-However, NGINX will only resolve **one** of them.
-
-In the example NGINX code below, where multiple `auth_basic` directives are defined, NGINX will only resolve the last one.
-In this case, `auth_basic "Restricted Area 2";` will be used.
-
-```nginx
-location /path1 {
-    # These directives are ignored
-    auth_basic "Restricted Area 1";
-    auth_basic_user_file /etc/nginx/.htpasswd1;
-
-    # These directives are used
-    auth_basic "Restricted Area 2";
-    auth_basic_user_file /etc/nginx/.htpasswd2;
-}
-```
-
-To ensure we avoid this scenario, only one `AuthenticationFilter` of the same `Type` may be referenced in a single rule.
-
-In a scenario where a route rule references multiple `AuthenticationFilter` resources of the same `Type`, that route rule will set to `Invalid`.
+In a scenario where a route rule references multiple `AuthenticationFilter` resources, that route rule will set to `Invalid`.
 The route resource will display the `UnresolvedRefs` message to inform the user that the rule has been `Rejected`.
 
-Here is an example of an HTTPRoute that references multiple `AuthenticationFilter` resources of the same `Type` in a single rule.
+Here is an example of an HTTPRoute that references multiple `AuthenticationFilter` resources in a single rule.
 In this scenario, the route rule for `/api` will be marked as `Invalid`.
 
 ```yaml
@@ -1154,41 +1133,6 @@ spec:
         group: gateway.nginx.org
         kind: AuthenticationFilter
         name: basic-auth-2
-    backendRefs:
-    - name: backend
-      port: 80
-```
-
-Below is an example of a valid HTTPRoute that references multiple `AuthenticationFilter` resources of a different `Type` in a single rule.
-
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: invalid-httproute
-spec:
-  parentRefs:
-  - name: gateway
-  hostnames:
-  - api.example.com
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /api
-    filters:
-    - type: ExtensionRef
-      extensionRef:
-        # Type: Basic
-        group: gateway.nginx.org
-        kind: AuthenticationFilter
-        name: basic-auth
-    - type: ExtensionRef
-      extensionRef:
-        # Type: JWT
-        group: gateway.nginx.org
-        kind: AuthenticationFilter
-        name: jwt-auth
     backendRefs:
     - name: backend
       port: 80
@@ -1401,7 +1345,43 @@ If implementations choose a strict interpretation of filter ordering, they MUST 
 document that behavior.
 ```
 
-## Future Updates
+## Future updates
+
+### Multiple authentication methods
+
+NGINX allows multiple authentication methods such as `auth_basic` and `auth_jwt` to be defined together.
+By default, NGINX requires `all` specified authentication methods to be satisfied for a request to be considered authenticated.
+This behavior is defined by the [satisfy](https://nginx.org/en/docs/http/ngx_http_core_module.html#satisfy) directive, which defaults to `all`.
+
+Although NGINX allows this, it is not a goal of this proposal to enable multiple authentication mechanisms per route rule.
+
+If we were to update the API to support this use case, the following changes would need to happen:
+
+1. Allow each authentication method (i.e. `basic`, `jwt` and `oidc`) to be specified in a single `AuthenticationFilter` resource.
+2. Removal of the `Type` field.
+3. Ability to configure the [satisfy](https://nginx.org/en/docs/http/ngx_http_core_module.html#satisfy) directive.
+
+Below is an example of what this new API would look like:
+
+```yaml
+apiVersion: gateway.nginx.org/v1alpha2
+kind: AuthenticationFilter
+metadata:
+  name: basic-and-jwt-auth
+spec:
+  satisfy: any # all | any. Defaults to all.
+  basic: # No need to specify Type
+    secretRef:
+      name: basic-auth-users
+    realm: "Basic Restricted"
+  jwt: # JWT defined alongside basic
+    source: File # Might argue not keeping this either...
+    file:
+      realm: "JWT Restricted"
+      file:
+        secretRef:
+          name: jwt-auth
+```
 
 ### Custom Authentication Failure Response
 
