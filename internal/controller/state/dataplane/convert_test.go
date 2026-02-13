@@ -753,3 +753,116 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertHTTPCORSFilter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		filter   *v1.HTTPCORSFilter
+		expected *HTTPCORSFilter
+		name     string
+	}{
+		{
+			name:     "nil filter",
+			filter:   nil,
+			expected: nil,
+		},
+		{
+			name:   "empty filter",
+			filter: &v1.HTTPCORSFilter{},
+			expected: &HTTPCORSFilter{
+				AllowCredentials: false,
+				MaxAge:           0,
+			},
+		},
+		{
+			name: "filter with all fields",
+			filter: &v1.HTTPCORSFilter{
+				AllowOrigins:     []v1.CORSOrigin{"https://example.com", "*.test.com"},
+				AllowMethods:     []v1.HTTPMethodWithWildcard{"GET", "POST", "PUT"},
+				AllowHeaders:     []v1.HTTPHeaderName{"Content-Type", "Authorization"},
+				ExposeHeaders:    []v1.HTTPHeaderName{"X-Custom-Header", "X-Request-ID"},
+				AllowCredentials: helpers.GetPointer(true),
+				MaxAge:           int32(86400),
+			},
+			expected: &HTTPCORSFilter{
+				AllowOrigins:     []string{"https://example.com", "*.test.com"},
+				AllowMethods:     []string{"GET", "POST", "PUT"},
+				AllowHeaders:     []string{"Content-Type", "Authorization"},
+				ExposeHeaders:    []string{"X-Custom-Header", "X-Request-ID"},
+				AllowCredentials: true,
+				MaxAge:           int32(86400),
+			},
+		},
+		{
+			name: "filter with credentials false",
+			filter: &v1.HTTPCORSFilter{
+				AllowOrigins:     []v1.CORSOrigin{"*"},
+				AllowCredentials: helpers.GetPointer(false),
+				MaxAge:           int32(3600),
+			},
+			expected: &HTTPCORSFilter{
+				AllowOrigins:     []string{"*"},
+				AllowCredentials: false,
+				MaxAge:           int32(3600),
+			},
+		},
+		{
+			name: "filter with only origins",
+			filter: &v1.HTTPCORSFilter{
+				AllowOrigins: []v1.CORSOrigin{"https://example.com", "https://test.com"},
+			},
+			expected: &HTTPCORSFilter{
+				AllowOrigins:     []string{"https://example.com", "https://test.com"},
+				AllowCredentials: false,
+				MaxAge:           0,
+			},
+		},
+		{
+			name: "filter with only methods",
+			filter: &v1.HTTPCORSFilter{
+				AllowMethods: []v1.HTTPMethodWithWildcard{"GET", "POST"},
+			},
+			expected: &HTTPCORSFilter{
+				AllowMethods:     []string{"GET", "POST"},
+				AllowCredentials: false,
+				MaxAge:           0,
+			},
+		},
+		{
+			name: "filter with only headers",
+			filter: &v1.HTTPCORSFilter{
+				AllowHeaders:  []v1.HTTPHeaderName{"Content-Type"},
+				ExposeHeaders: []v1.HTTPHeaderName{"X-Total-Count"},
+			},
+			expected: &HTTPCORSFilter{
+				AllowHeaders:     []string{"Content-Type"},
+				ExposeHeaders:    []string{"X-Total-Count"},
+				AllowCredentials: false,
+				MaxAge:           0,
+			},
+		},
+		{
+			name: "filter with nil credentials (defaults to false)",
+			filter: &v1.HTTPCORSFilter{
+				AllowOrigins:     []v1.CORSOrigin{"https://example.com"},
+				AllowCredentials: nil, // Should default to false
+			},
+			expected: &HTTPCORSFilter{
+				AllowOrigins:     []string{"https://example.com"},
+				AllowCredentials: false,
+				MaxAge:           0,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := convertHTTPCORSFilter(test.filter)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}

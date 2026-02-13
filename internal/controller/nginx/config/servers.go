@@ -1063,6 +1063,7 @@ func updateLocation(
 	location = updateLocationMirrorRoute(location, pathRule.Path, grpc)
 	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
 	location = updateLocationAuthenticationFilter(location, filters.AuthenticationFilter)
+	location = updateLocationCORSFilter(location, filters.CORSFilter, listenerPort, pathRule)
 
 	if filters.RequestRedirect != nil {
 		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
@@ -1091,6 +1092,23 @@ func updateLocationAuthenticationFilter(
 			}
 		}
 	}
+	return location
+}
+
+func updateLocationCORSFilter(
+	location http.Location,
+	corsFilter *dataplane.HTTPCORSFilter,
+	listenerPort int32,
+	pathRule dataplane.PathRule,
+) http.Location {
+	if corsFilter != nil {
+		corsHeaders := generateCORSHeaders(corsFilter, listenerPort, pathRule)
+
+		if len(corsHeaders) > 0 {
+			location.CORSHeaders = corsHeaders
+		}
+	}
+
 	return location
 }
 
@@ -1741,4 +1759,51 @@ func deduplicateStrings(content []string) []string {
 	}
 
 	return result
+}
+
+func generateCORSHeaders(
+	corsFilter *dataplane.HTTPCORSFilter,
+	listenerPort int32,
+	pathRule dataplane.PathRule,
+) map[string]string {
+	if corsFilter == nil {
+		return nil
+	}
+
+	headers := make(map[string]string)
+
+	// Access-Control-Allow-Origin
+	if len(corsFilter.AllowOrigins) > 0 {
+		nginxVar := "$cors_allowed_origin_" + fmt.Sprint(listenerPort) + "_" + convertPathToNginxVariable(pathRule.Path)
+		headers["Access-Control-Allow-Origin"] = nginxVar
+	}
+
+	// Access-Control-Allow-Methods
+	if len(corsFilter.AllowMethods) > 0 {
+		methods := strings.Join(corsFilter.AllowMethods, ", ")
+		headers["Access-Control-Allow-Methods"] = methods
+	}
+
+	// Access-Control-Allow-Headers
+	if len(corsFilter.AllowHeaders) > 0 {
+		allowHeaders := strings.Join(corsFilter.AllowHeaders, ", ")
+		headers["Access-Control-Allow-Headers"] = allowHeaders
+	}
+
+	// Access-Control-Expose-Headers
+	if len(corsFilter.ExposeHeaders) > 0 {
+		exposeHeaders := strings.Join(corsFilter.ExposeHeaders, ", ")
+		headers["Access-Control-Expose-Headers"] = exposeHeaders
+	}
+
+	// Access-Control-Allow-Credentials
+	if corsFilter.AllowCredentials {
+		nginxVar := "$cors_allow_credentials_" + fmt.Sprint(listenerPort) + "_" + convertPathToNginxVariable(pathRule.Path)
+		headers["Access-Control-Allow-Credentials"] = nginxVar
+	}
+
+	// Access-Control-Max-Age
+	headers["Access-Control-Max-Age"] = fmt.Sprintf("%d", corsFilter.MaxAge)
+
+	return headers
 }

@@ -48,40 +48,24 @@ const (
 
 // Location holds all configuration for an HTTP location.
 type Location struct {
-	// Return specifies a return directive (e.g., HTTP status or redirect) for this location block.
-	Return *Return
-	// ProxySSLVerify controls SSL verification for upstreams when proxying requests.
-	ProxySSLVerify *ProxySSLVerify
-	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
-	ProxyPass string
-	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
-	HTTPMatchKey string
-	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
+	Return                         *Return
+	ProxySSLVerify                 *ProxySSLVerify
+	CORSHeaders                    map[string]string
+	AuthBasic                      *AuthBasic
+	Path                           string
+	ProxyPass                      string
+	EPPHost                        string
+	Type                           LocationType
 	MirrorSplitClientsVariableName string
-	// EPPInternalPath is the internal path for the inference NJS module to redirect to.
-	EPPInternalPath string
-	// EPPHost is the host for the EndpointPicker, used for inference routing.
-	EPPHost string
-	// Type indicates the type of location (external, internal, redirect, etc).
-	Type LocationType
-	// Path is the NGINX location path.
-	Path string
-	// AuthBasic contains the configuration for basic authentication.
-	AuthBasic *AuthBasic
-	// ResponseHeaders are custom response headers to be sent.
-	ResponseHeaders ResponseHeaders
-	// ProxySetHeaders are headers to set when proxying requests upstream.
-	ProxySetHeaders []Header
-	// Rewrites are rewrite rules for modifying request paths.
-	Rewrites []string
-	// MirrorPaths are paths to which requests are mirrored.
-	MirrorPaths []string
-	// Includes are additional NGINX config snippets or policies to include in this location.
-	Includes []shared.Include
-	// EPPPort is the port for the EndpointPicker, used for inference routing.
-	EPPPort int
-	// GRPC indicates if this location proxies gRPC traffic.
-	GRPC bool
+	HTTPMatchKey                   string
+	EPPInternalPath                string
+	ResponseHeaders                ResponseHeaders
+	ProxySetHeaders                []Header
+	MirrorPaths                    []string
+	Includes                       []shared.Include
+	Rewrites                       []string
+	EPPPort                        int
+	GRPC                           bool
 }
 
 // Header defines an HTTP header to be passed to the proxied server.

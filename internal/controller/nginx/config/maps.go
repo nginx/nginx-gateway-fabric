@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	gotemplate "text/template"
@@ -13,7 +14,14 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-var mapsTemplate = gotemplate.Must(gotemplate.New("maps").Parse(mapsTemplateText))
+var (
+	// nginxVariableNamePattern matches characters that are NOT valid in NGINX variable names
+	// NGINX variable names can only contain: letters (a-z, A-Z), numbers (0-9), and underscores (_).
+	nginxVariableNamePattern = regexp.MustCompile(`[^a-zA-Z0-9_]`)
+	// regexMetacharPattern matches regex metacharacters that need escaping (except * which we handle specially).
+	regexMetacharPattern = regexp.MustCompile(`[.+?^$|\\()[\]{}]`)
+	mapsTemplate         = gotemplate.Must(gotemplate.New("maps").Parse(mapsTemplateText))
+)
 
 const (
 	// emptyStringSocket is used when the stream server has an invalid upstream. In this case, we pass the connection
@@ -31,6 +39,7 @@ const (
 func executeMaps(conf dataplane.Configuration) []executeResult {
 	maps := buildAddHeaderMaps(append(conf.HTTPServers, conf.SSLServers...))
 	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
+	maps = append(maps, buildCorsMaps(conf.HTTPServers)...)
 
 	result := executeResult{
 		dest: httpConfigFile,
@@ -38,6 +47,85 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	}
 
 	return []executeResult{result}
+}
+
+func buildCorsMaps(virtualServer []dataplane.VirtualServer) []shared.Map {
+	originMaps := make([]shared.Map, 0)
+
+	for _, s := range virtualServer {
+		for _, pr := range s.PathRules {
+			for _, mr := range pr.MatchRules {
+				if mr.Filters.CORSFilter != nil {
+					corsFilter := mr.Filters.CORSFilter
+					if corsFilter.AllowOrigins != nil {
+						nginxVar := fmt.Sprintf("$cors_allowed_origin_%d_%s", s.Port, convertPathToNginxVariable(pr.Path))
+						originMaps = append(originMaps, shared.Map{
+							Source:     "$http_origin",
+							Variable:   nginxVar,
+							Parameters: buildCORSOriginMapParameters(corsFilter.AllowOrigins),
+						})
+					}
+					if corsFilter.AllowCredentials {
+						nginxVar := fmt.Sprintf("$cors_allow_credentials_%d_%s", s.Port, convertPathToNginxVariable(pr.Path))
+						originMaps = append(originMaps, shared.Map{
+							Source:     "$http_origin",
+							Variable:   nginxVar,
+							Parameters: buildCORSAllowCredientialsMapParameters(corsFilter.AllowOrigins),
+						})
+					}
+				}
+			}
+		}
+	}
+
+	return originMaps
+}
+
+func convertPathToNginxVariable(path string) string {
+	// NGINX variable names can only contain letters (a-z, A-Z), numbers (0-9), and underscores (_)
+	// Replace any character that is not alphanumeric or underscore with underscore
+	return nginxVariableNamePattern.ReplaceAllString(path, "_")
+}
+
+func convertToNginxRegex(input string) string {
+	// First escape all regex metacharacters except * (which we want to convert to .*)
+	// This handles: . + ? ^ $ | \ ( ) [ ] { }
+	// Use double backslashes for proper escaping in Go templates
+	escaped := regexMetacharPattern.ReplaceAllStringFunc(input, func(match string) string {
+		return "\\\\" + match
+	})
+
+	// Then convert * wildcards to .* regex pattern
+	// This must be done after escaping to avoid interfering with other metacharacters
+	escaped = strings.ReplaceAll(escaped, "*", ".*")
+
+	return "~^" + escaped + "$"
+}
+
+func buildCORSAllowCredientialsMapParameters(s []string) []shared.MapParameter {
+	params := make([]shared.MapParameter, 0, len(s))
+
+	for _, origin := range s {
+		params = append(params, shared.MapParameter{
+			Value:  convertToNginxRegex(origin),
+			Result: "true",
+		})
+	}
+
+	return params
+}
+
+func buildCORSOriginMapParameters(s []string) []shared.MapParameter {
+	params := make([]shared.MapParameter, 0, len(s))
+
+	for _, origin := range s {
+		params = append(params, shared.MapParameter{
+			Value:  convertToNginxRegex(origin),
+			Result: "$http_origin",
+		})
+	}
+
+	return params
 }
 
 func executeStreamMaps(conf dataplane.Configuration) []executeResult {

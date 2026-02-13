@@ -208,24 +208,15 @@ type InvalidHTTPFilter struct{}
 
 // HTTPFilters hold the filters for a MatchRule.
 type HTTPFilters struct {
-	// InvalidFilter is a special filter that indicates whether the filters are invalid. If this is the case,
-	// the data plane must return 500 error, and all other filters are nil.
-	InvalidFilter *InvalidHTTPFilter
-	// RequestRedirect holds the HTTPRequestRedirectFilter.
-	RequestRedirect *HTTPRequestRedirectFilter
-	// RequestURLRewrite holds the HTTPURLRewriteFilter.
-	RequestURLRewrite *HTTPURLRewriteFilter
-	// RequestHeaderModifiers holds the HTTPHeaderFilter.
-	RequestHeaderModifiers *HTTPHeaderFilter
-	// ResponseHeaderModifiers holds the HTTPHeaderFilter.
+	InvalidFilter           *InvalidHTTPFilter
+	RequestRedirect         *HTTPRequestRedirectFilter
+	RequestURLRewrite       *HTTPURLRewriteFilter
+	RequestHeaderModifiers  *HTTPHeaderFilter
 	ResponseHeaderModifiers *HTTPHeaderFilter
-	// AuthenticationFilter holds the AuthenticationFilter for the MatchRule.
-	AuthenticationFilter *AuthenticationFilter
-	// RequestMirrors holds the HTTPRequestMirrorFilters. There could be more than one specified.
-	RequestMirrors []*HTTPRequestMirrorFilter
-	// SnippetsFilters holds all the SnippetsFilters for the MatchRule.
-	// Unlike the core and extended filters, there can be more than one SnippetsFilters defined on a routing rule.
-	SnippetsFilters []SnippetsFilter
+	AuthenticationFilter    *AuthenticationFilter
+	CORSFilter              *HTTPCORSFilter
+	RequestMirrors          []*HTTPRequestMirrorFilter
+	SnippetsFilters         []SnippetsFilter
 }
 
 // SnippetsFilter holds the location and server snippets in a SnippetsFilter.
@@ -243,6 +234,22 @@ type Snippet struct {
 	Name string
 	// Contents is the content of the snippet.
 	Contents string
+}
+
+// HTTPCORSFilter represents HTTP CORS configuration.
+type HTTPCORSFilter struct {
+	// AllowOrigins specifies allowed origins.
+	AllowOrigins []string
+	// AllowMethods specifies allowed HTTP methods.
+	AllowMethods []string
+	// AllowHeaders specifies allowed headers.
+	AllowHeaders []string
+	// ExposeHeaders specifies headers to expose.
+	ExposeHeaders []string
+	// AllowCredentials specifies whether credentials are allowed.
+	AllowCredentials bool
+	// MaxAge specifies preflight request cache duration.
+	MaxAge int32
 }
 
 // AuthenticationFilter holds the top level spec for each kind of authentication (e.g. Basic, JWT, etc...).

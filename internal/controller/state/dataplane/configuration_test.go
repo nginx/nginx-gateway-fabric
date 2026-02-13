@@ -3089,6 +3089,35 @@ func TestCreateFilters(t *testing.T) {
 		},
 	}
 
+	corsFilter1 := graph.Filter{
+		FilterType: graph.FilterCORS,
+		CORS: &v1.HTTPCORSFilter{
+			AllowOrigins:     []v1.CORSOrigin{"https://example.com", "*.test.com"},
+			AllowMethods:     []v1.HTTPMethodWithWildcard{"GET", "POST"},
+			AllowHeaders:     []v1.HTTPHeaderName{"Content-Type", "Authorization"},
+			ExposeHeaders:    []v1.HTTPHeaderName{"X-Custom-Header"},
+			AllowCredentials: helpers.GetPointer(true),
+			MaxAge:           int32(3600),
+		},
+	}
+
+	corsFilter2 := graph.Filter{
+		FilterType: graph.FilterCORS,
+		CORS: &v1.HTTPCORSFilter{
+			AllowOrigins: []v1.CORSOrigin{"https://another.com"},
+			MaxAge:       int32(7200),
+		},
+	}
+
+	expectedCORS1 := HTTPCORSFilter{
+		AllowOrigins:     []string{"https://example.com", "*.test.com"},
+		AllowMethods:     []string{"GET", "POST"},
+		AllowHeaders:     []string{"Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"X-Custom-Header"},
+		AllowCredentials: true,
+		MaxAge:           int32(3600),
+	}
+
 	snippetsFilter2 := graph.Filter{
 		FilterType: graph.FilterExtensionRef,
 		ExtensionRef: &v1.LocalObjectReference{
@@ -3138,6 +3167,15 @@ func TestCreateFilters(t *testing.T) {
 		},
 		{
 			filters: []graph.Filter{
+				corsFilter1,
+			},
+			expected: HTTPFilters{
+				CORSFilter: &expectedCORS1,
+			},
+			msg: "one CORS filter",
+		},
+		{
+			filters: []graph.Filter{
 				redirect1,
 				redirect2,
 				rewrite1,
@@ -3150,6 +3188,8 @@ func TestCreateFilters(t *testing.T) {
 				responseHeaderModifiers2,
 				snippetsFilter1,
 				snippetsFilter2,
+				corsFilter1,
+				corsFilter2,
 			},
 			expected: HTTPFilters{
 				RequestRedirect:   &expectedRedirect1,
@@ -3194,6 +3234,7 @@ func TestCreateFilters(t *testing.T) {
 						},
 					},
 				},
+				CORSFilter: &expectedCORS1,
 			},
 			msg: "two of each filter, first value for each standard filter wins, all mirror and ext ref filters added",
 		},

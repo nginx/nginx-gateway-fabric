@@ -133,6 +133,24 @@ server {
         return {{ $l.Return.Code }} "{{ $l.Return.Body }}";
         {{- end }}
 
+        {{- if $l.CORSHeaders }}
+            {{- range $name, $value := $l.CORSHeaders }}
+                {{- if eq $name "Access-Control-Allow-Headers" }}
+                    {{- if eq $value "*" }}
+        add_header {{ $name }} $http_access_control_request_headers always;
+                    {{- else }}
+        add_header {{ $name }} "{{ $value }}" always;
+                    {{- end }}
+                {{- else }}
+        add_header {{ $name }} "{{ $value }}" always;
+                {{- end }}
+            {{- end }}
+
+        if ($request_method = OPTIONS) {
+            return 200;
+        }
+        {{- end }}
+
         {{- if eq $l.Type "redirect" -}}
         set $match_key {{ $l.HTTPMatchKey }};
         js_content httpmatches.redirect;

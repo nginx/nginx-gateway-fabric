@@ -22,6 +22,10 @@ type RouteRuleFilters struct {
 
 // Filter is a filter in a Route. The Filter can belong to a GRPCRoute or an HTTPRoute.
 type Filter struct {
+	// CORS holds an HTTP CORS filter.
+	// Will be non-nil if FilterType is FilterCORS.
+	// Can be set on HTTPRoutes only.
+	CORS *v1.HTTPCORSFilter
 	// RequestHeaderModifier holds an HTTP Request Header Modifier filter.
 	// Will be non-nil if FilterType is FilterRequestHeaderModifier.
 	// Can be set on GRPCRoutes and HTTPRoutes.
@@ -61,6 +65,7 @@ type FilterType string
 
 // The following FilterTypes are supported by GRPCRoutes and HTTPRoutes.
 const (
+	FilterCORS                   = FilterType(v1.HTTPRouteFilterCORS)
 	FilterRequestHeaderModifier  = FilterType(v1.HTTPRouteFilterRequestHeaderModifier)
 	FilterResponseHeaderModifier = FilterType(v1.HTTPRouteFilterResponseHeaderModifier)
 	FilterExtensionRef           = FilterType(v1.HTTPRouteFilterExtensionRef)
@@ -86,6 +91,7 @@ func convertHTTPRouteFilters(filters []v1.HTTPRouteFilter) []Filter {
 			URLRewrite:             filter.URLRewrite,
 			RequestMirror:          filter.RequestMirror,
 			ExtensionRef:           filter.ExtensionRef,
+			CORS:                   filter.CORS,
 		})
 	}
 
@@ -190,6 +196,7 @@ var supportedHTTPFilterTypes = []FilterType{
 	FilterRequestRedirect,
 	FilterURLRewrite,
 	FilterRequestMirror,
+	FilterCORS,
 }
 
 func validateFilterType(filter Filter, filterPath *field.Path) *field.Error {
@@ -237,6 +244,8 @@ func validateFilter(
 		)
 	case FilterExtensionRef:
 		return validateExtensionRefFilter(filter.ExtensionRef, filterPath)
+	case FilterCORS:
+		return validateFilterCORS(filter.CORS, filterPath)
 	default:
 		panic(fmt.Sprintf("unexpected filter type %v", filter.FilterType))
 	}
@@ -444,4 +453,17 @@ func validateRequestHeaderStringCaseInsensitiveUnique(headers []string, path *fi
 	}
 
 	return allErrs
+}
+
+func validateFilterCORS(
+	corsFilter *v1.HTTPCORSFilter,
+	filterPath *field.Path,
+) field.ErrorList {
+	if corsFilter == nil {
+		return field.ErrorList{
+			field.Required(filterPath.Child(string(FilterCORS)), "CORS filter cannot be nil"),
+		}
+	}
+
+	return nil
 }
