@@ -475,6 +475,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 						},
 					},
 				},
+				nil, // plmConfig
 				validation.Validators{
 					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
@@ -993,6 +994,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 						},
 					},
 				},
+				nil, // plmConfig
 				validation.Validators{
 					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
 					GenericValidator:    &validationfakes.FakeGenericValidator{},

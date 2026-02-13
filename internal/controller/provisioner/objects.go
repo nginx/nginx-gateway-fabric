@@ -51,7 +51,8 @@ const (
 	defaultWAFEnforcerImagePath  = "private-registry.nginx.com/nap/waf-enforcer"
 	defaultWAFConfigMgrImagePath = "private-registry.nginx.com/nap/waf-config-mgr"
 	// FIXME(ciarams87): Figure out best way to handle WAF image tags.
-	defaultWAFImageTag = "5.7.0"
+	defaultWAFEnforcerImageTag  = "5.9.0"
+	defaultWAFConfigMgrImageTag = "5.9.0"
 
 	// WAF shared volume names.
 	appProtectBundlesVolumeName  = "app-protect-bundles"
@@ -1125,7 +1126,7 @@ func (p *NginxProvisioner) buildNginxContainer(
 }
 
 // buildBaseVolumes builds the base volumes needed for NGINX.
-func (p *NginxProvisioner) buildBaseVolumes(names resourceNames,) []corev1.Volume {
+func (p *NginxProvisioner) buildBaseVolumes(names resourceNames) []corev1.Volume {
 	tokenAudience := fmt.Sprintf("%s.%s.svc", p.cfg.GatewayPodConfig.ServiceName, p.cfg.GatewayPodConfig.Namespace)
 
 	return []corev1.Volume{
@@ -1641,7 +1642,7 @@ func (p *NginxProvisioner) buildWAFEnforcerContainer(
 ) corev1.Container {
 	image := p.buildWAFImage(
 		defaultWAFEnforcerImagePath,
-		defaultWAFImageTag,
+		defaultWAFEnforcerImageTag,
 		wafContainersCfg,
 		"enforcer",
 	)
@@ -1690,7 +1691,7 @@ func (p *NginxProvisioner) buildWAFConfigManagerContainer(
 ) corev1.Container {
 	image := p.buildWAFImage(
 		defaultWAFConfigMgrImagePath,
-		defaultWAFImageTag,
+		defaultWAFConfigMgrImageTag,
 		wafContainersCfg,
 		"configManager",
 	)

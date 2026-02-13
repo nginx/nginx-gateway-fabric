@@ -4,6 +4,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -73,6 +74,24 @@ func toInferencePool(nsname types.NamespacedName) toResource {
 	}
 }
 
+func toAPPolicy(nsname types.NamespacedName) toResource {
+	return toResource{
+		group:     kinds.APPolicyGVK.Group,
+		kind:      kinds.APPolicyGVK.Kind,
+		name:      nsname.Name,
+		namespace: nsname.Namespace,
+	}
+}
+
+func toAPLogConf(nsname types.NamespacedName) toResource {
+	return toResource{
+		group:     kinds.APLogConfGVK.Group,
+		kind:      kinds.APLogConfGVK.Kind,
+		name:      nsname.Name,
+		namespace: nsname.Namespace,
+	}
+}
+
 func fromGateway(namespace string) fromResource {
 	return fromResource{
 		group:     v1.GroupName,
@@ -125,6 +144,14 @@ func fromListenerSet(namespace string) fromResource {
 	return fromResource{
 		group:     v1.GroupName,
 		kind:      kinds.ListenerSet,
+		namespace: namespace,
+	}
+}
+
+func fromWAFGatewayBindingPolicy(namespace string) fromResource {
+	return fromResource{
+		group:     ngfAPIv1alpha1.GroupName,
+		kind:      kinds.WAFGatewayBindingPolicy,
 		namespace: namespace,
 	}
 }
