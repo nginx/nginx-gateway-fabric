@@ -29,6 +29,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch/fetchfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -1920,6 +1921,7 @@ func TestBuildGraph(t *testing.T) {
 						},
 					},
 				},
+				nil, // plmConfig
 				validation.Validators{
 					HTTPFieldsValidator: createAllValidValidator(),
 					GenericValidator:    &validationfakes.FakeGenericValidator{},
@@ -2527,4 +2529,218 @@ func TestGatewayExists(t *testing.T) {
 			g.Expect(gatewayExists(test.gwNsName, test.gateways)).To(Equal(test.expectedResult))
 		})
 	}
+}
+
+func TestSetPLMSecretContent(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	secretNsName := types.NamespacedName{Namespace: "test-ns", Name: "plm-secret"}
+
+	tests := []struct {
+		clusterSecrets map[types.NamespacedName]*v1.Secret
+		plmSecrets     map[types.NamespacedName]*PLMSecretConfig
+		expectedData   map[string][]byte
+		name           string
+	}{
+		{
+			name: "populates content from cluster secret",
+			clusterSecrets: map[types.NamespacedName]*v1.Secret{
+				secretNsName: {
+					Data: map[string][]byte{
+						"ca.crt":  []byte("ca-cert-data"),
+						"tls.crt": []byte("tls-cert-data"),
+						"tls.key": []byte("tls-key-data"),
+					},
+				},
+			},
+			plmSecrets: map[types.NamespacedName]*PLMSecretConfig{
+				secretNsName: {
+					Type: PLMSecretTypeTLSClient,
+				},
+			},
+			expectedData: map[string][]byte{
+				"ca.crt":  []byte("ca-cert-data"),
+				"tls.crt": []byte("tls-cert-data"),
+				"tls.key": []byte("tls-key-data"),
+			},
+		},
+		{
+			name:           "no-op when cluster secret not found",
+			clusterSecrets: map[types.NamespacedName]*v1.Secret{},
+			plmSecrets: map[types.NamespacedName]*PLMSecretConfig{
+				secretNsName: {
+					Type: PLMSecretTypeTLSCA,
+				},
+			},
+			expectedData: nil,
+		},
+		{
+			name: "handles credentials secret",
+			clusterSecrets: map[types.NamespacedName]*v1.Secret{
+				secretNsName: {
+					Data: map[string][]byte{
+						"seaweedfs_admin_secret": []byte("my-secret-key"),
+					},
+				},
+			},
+			plmSecrets: map[types.NamespacedName]*PLMSecretConfig{
+				secretNsName: {
+					Type: PLMSecretTypeCredentials,
+				},
+			},
+			expectedData: map[string][]byte{
+				"seaweedfs_admin_secret": []byte("my-secret-key"),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			setPLMSecretContent(tc.clusterSecrets, tc.plmSecrets)
+
+			if tc.expectedData == nil {
+				g.Expect(tc.plmSecrets[secretNsName].Content).To(BeNil())
+			} else {
+				g.Expect(tc.plmSecrets[secretNsName].Content).To(Equal(tc.expectedData))
+			}
+		})
+	}
+}
+
+func TestUpdatePLMFetcher(t *testing.T) {
+	t.Parallel()
+
+	// Valid CA certificate for testing
+	validCACert := []byte(`-----BEGIN CERTIFICATE-----
+MIIDSDCCAjACCQDKWvrpwiIyCDANBgkqhkiG9w0BAQsFADBmMQswCQYDVQQGEwJV
+UzELMAkGA1UECAwCQ0ExFjAUBgNVBAcMDVNhbiBGcmFuc2lzY28xDjAMBgNVBAoM
+BU5HSU5YMQwwCgYDVQQLDANLSUMxFDASBgNVBAMMC2V4YW1wbGUuY29tMB4XDTIw
+MTExMjIxMjg0MloXDTMwMTExMDIxMjg0MlowZjELMAkGA1UEBhMCVVMxCzAJBgNV
+BAgMAkNBMRYwFAYDVQQHDA1TYW4gRnJhbnNpc2NvMQ4wDAYDVQQKDAVOR0lOWDEM
+MAoGA1UECwwDS0lDMRQwEgYDVQQDDAtleGFtcGxlLmNvbTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAMrlKMqrHfMR4mgaL2zZG2DYYfKCFVmINjlYuOeC
+FDTcRgQKtu2YcCxZYBADwHZxEf6NIKtVsMWLhSNS/Nc0BmtiQM/IExhlCiDC6Sl8
+ONrI3w7qJzN6IUERB6tVlQt07rgM0V26UTYu0Ikv1Y8trfLYPZckzBkorQjpcium
+qoP2BJf4yyc9LqpxtlWKxelkunVL5ijMEzpj9gEE26TEHbsdEbhoR8g0OeHZqH7e
+mXCnSIBR0A/o/s6noGNX+F19lY7Tgw77jOuQQ5Ysi+7nhN2lKvcC819RX7oMpgvt
+V5B3nI0mF6BaznjeTs4yQcr1Sm3UTVBwX9ZuvL7RbIXkUm8CAwEAATANBgkqhkiG
+9w0BAQsFAAOCAQEAgm04w6OIWGj6tka9ccccnblF0oZzeEAIywjvR5sDcPdvLIeM
+eesJy6rFH4DBmMygpcIxJGrSOzZlF3LMvw7zK4stqNtm1HiprF8bzxfTffVYncg6
+hVKErHtZ2FZRj/2TMJ01aRDZSuVbL6UJiokpU6xxT7yy0dFZkKrjUR349gKxRqJw
+Am2as0bhi51EqK1GEx3m4c0un2vNh5qP2hv6e/Qze6P96vefNaSk9QMFfuB1kSAk
+fGpkiL7bjmjnhKwAmf8jDWDZltB6S56Qy2QjPR8JoOusbYxar4c6EcIwVHv6mdgP
+yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
+-----END CERTIFICATE-----`)
+
+	t.Run("nil config does nothing", func(t *testing.T) {
+		t.Parallel()
+		// Should not panic
+		updatePLMFetcher(nil, logr.Discard())
+	})
+
+	t.Run("nil fetcher does nothing", func(t *testing.T) {
+		t.Parallel()
+		plmConfig := &PLMConfig{
+			Fetcher: nil,
+			Secrets: map[types.NamespacedName]*PLMSecretConfig{},
+		}
+		// Should not panic
+		updatePLMFetcher(plmConfig, logr.Discard())
+	})
+
+	t.Run("no secrets does nothing", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		fakeFetcher := &fetchfakes.FakeFetcher{}
+		plmConfig := &PLMConfig{
+			Fetcher: fakeFetcher,
+			Secrets: map[types.NamespacedName]*PLMSecretConfig{},
+		}
+
+		updatePLMFetcher(plmConfig, logr.Discard())
+		// Should not call UpdateTLSConfig or UpdateCredentials since there's no data
+		g.Expect(fakeFetcher.UpdateTLSConfigCallCount()).To(Equal(0))
+		g.Expect(fakeFetcher.UpdateCredentialsCallCount()).To(Equal(0))
+	})
+
+	t.Run("updates credentials from secret", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		fakeFetcher := &fetchfakes.FakeFetcher{}
+		plmConfig := &PLMConfig{
+			Fetcher: fakeFetcher,
+			Secrets: map[types.NamespacedName]*PLMSecretConfig{
+				{Name: "creds"}: {
+					Type: PLMSecretTypeCredentials,
+					Content: map[string][]byte{
+						"seaweedfs_admin_secret": []byte("my-secret-key"),
+					},
+				},
+			},
+		}
+
+		updatePLMFetcher(plmConfig, logr.Discard())
+		g.Expect(fakeFetcher.UpdateCredentialsCallCount()).To(Equal(1))
+
+		accessKeyID, secretAccessKey := fakeFetcher.UpdateCredentialsArgsForCall(0)
+		g.Expect(accessKeyID).To(Equal("adminKey"))
+		g.Expect(secretAccessKey).To(Equal("my-secret-key"))
+		// Should not call UpdateTLSConfig since there's no TLS data
+		g.Expect(fakeFetcher.UpdateTLSConfigCallCount()).To(Equal(0))
+	})
+
+	t.Run("updates TLS config with CA cert", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		fakeFetcher := &fetchfakes.FakeFetcher{}
+		plmConfig := &PLMConfig{
+			Fetcher:            fakeFetcher,
+			InsecureSkipVerify: false,
+			Secrets: map[types.NamespacedName]*PLMSecretConfig{
+				{Name: "ca-secret"}: {
+					Type: PLMSecretTypeTLSCA,
+					Content: map[string][]byte{
+						"ca.crt": validCACert,
+					},
+				},
+			},
+		}
+
+		updatePLMFetcher(plmConfig, logr.Discard())
+		g.Expect(fakeFetcher.UpdateTLSConfigCallCount()).To(Equal(1))
+
+		tlsConfig := fakeFetcher.UpdateTLSConfigArgsForCall(0)
+		g.Expect(tlsConfig).ToNot(BeNil())
+		g.Expect(tlsConfig.RootCAs).ToNot(BeNil())
+		g.Expect(tlsConfig.InsecureSkipVerify).To(BeFalse())
+	})
+
+	t.Run("handles invalid CA cert gracefully", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		fakeFetcher := &fetchfakes.FakeFetcher{}
+		plmConfig := &PLMConfig{
+			Fetcher: fakeFetcher,
+			Secrets: map[types.NamespacedName]*PLMSecretConfig{
+				{Name: "ca-secret"}: {
+					Type: PLMSecretTypeTLSCA,
+					Content: map[string][]byte{
+						"ca.crt": []byte("invalid-cert"),
+					},
+				},
+			},
+		}
+
+		// Should not panic, just log error
+		updatePLMFetcher(plmConfig, logr.Discard())
+		// UpdateTLSConfig should not be called due to error
+		g.Expect(fakeFetcher.UpdateTLSConfigCallCount()).To(Equal(0))
+	})
 }

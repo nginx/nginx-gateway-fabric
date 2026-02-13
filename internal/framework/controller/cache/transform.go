@@ -16,6 +16,7 @@ var (
 		secrets.CAKey,
 		secrets.TLSCertKey,
 		secrets.TLSKeyKey,
+		secrets.PLMCredentialsKey,
 		corev1.DockerConfigJsonKey,
 		corev1.DockerConfigKey,
 	}

@@ -2,8 +2,10 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -59,6 +61,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/waf"
 	ngxvalidation "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/plm"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
@@ -73,6 +76,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/predicate"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/runnables"
@@ -139,6 +143,21 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
+	// Create PLM secrets metadata for watching and TLS config
+	plmSecrets := createPLMSecretMetadata(cfg.PLMStorageConfig, cfg.GatewayPodConfig.Namespace)
+
+	// Create WAF fetcher for PLM storage (returns nil if not configured)
+	wafFetcher, err := createWAFFetcher(
+		plmSecrets,
+		cfg.PLMStorageConfig.URL,
+		cfg.PLMStorageConfig.TLSInsecureSkipVerify,
+		mgr.GetAPIReader(),
+		cfg.Logger,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create WAF fetcher: %w", err)
+	}
+
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 		GatewayCtlrName:  cfg.GatewayCtlrName,
 		GatewayClassName: cfg.GatewayClassName,
@@ -148,9 +167,12 @@ func StartManager(cfg config.Config) error {
 			GenericValidator:    genericValidator,
 			PolicyValidator:     policyManager,
 		},
-		EventRecorder:  recorder,
-		MustExtractGVK: mustExtractGVK,
-		PlusSecrets:    plusSecrets,
+		EventRecorder:         recorder,
+		MustExtractGVK:        mustExtractGVK,
+		PlusSecrets:           plusSecrets,
+		PLMSecrets:            plmSecrets,
+		WAFFetcher:            wafFetcher,
+		PLMInsecureSkipVerify: cfg.PLMStorageConfig.TLSInsecureSkipVerify,
 		FeatureFlags: graph.FeatureFlags{
 			Plus:         cfg.Plus,
 			Experimental: cfg.ExperimentalFeatures,
@@ -358,8 +380,8 @@ func createPolicyManager(
 			Validator: ratelimit.NewValidator(validator),
 		},
 		{
-			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
-			Validator: waf.NewValidator(validator),
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFGatewayBindingPolicy{}),
+			Validator: waf.NewValidator(),
 		},
 	}
 
@@ -682,11 +704,37 @@ func registerControllers(
 			},
 		},
 		{
-			objectType: &ngfAPIv1alpha1.WAFPolicy{},
+			objectType: &ngfAPIv1alpha1.WAFGatewayBindingPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 			},
 		},
+	}
+
+	// PLM resources (APPolicy, APLogConf) - only register if PLM storage is configured
+	// These are managed by the Policy Lifecycle Manager and we only watch status changes
+	if cfg.PLMStorageConfig.URL != "" {
+		plmResources := []ctlrCfg{
+			{
+				objectType: plm.NewAPPolicyUnstructured(),
+				name:       "appolicy",
+				options: []controller.Option{
+					controller.WithK8sPredicate(predicate.PLMStatusChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK:          &kinds.APPolicyGVK,
+			},
+			{
+				objectType: plm.NewAPLogConfUnstructured(),
+				name:       "aplogconf",
+				options: []controller.Option{
+					controller.WithK8sPredicate(predicate.PLMStatusChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK:          &kinds.APLogConfGVK,
+			},
+		}
+		controllerRegCfgs = append(controllerRegCfgs, plmResources...)
 	}
 
 	// BackendTLSPolicy v1 - conditionally register if CRD exists
@@ -933,6 +981,168 @@ func validateSecret(reader client.Reader, nsName types.NamespacedName, fields ..
 	return nil
 }
 
+// parseSecretNsName parses a secret name that may include a namespace prefix (namespace/name format).
+// If no namespace prefix is present, the provided defaultNamespace is used.
+func parseSecretNsName(secretName, defaultNamespace string) types.NamespacedName {
+	nsName := types.NamespacedName{
+		Namespace: defaultNamespace,
+		Name:      secretName,
+	}
+	if parts := strings.SplitN(secretName, "/", 2); len(parts) == 2 {
+		nsName.Namespace = parts[0]
+		nsName.Name = parts[1]
+	}
+	return nsName
+}
+
+// createPLMSecretMetadata creates the PLM secrets metadata for watching and TLS configuration.
+// This registers the secrets so they will be watched and their content can be used to update
+// the fetcher's TLS configuration when they change.
+func createPLMSecretMetadata(
+	plmCfg config.PLMStorageConfig,
+	namespace string,
+) map[types.NamespacedName]*graph.PLMSecretConfig {
+	plmSecrets := make(map[types.NamespacedName]*graph.PLMSecretConfig)
+
+	// Only create metadata if PLM storage is configured
+	if plmCfg.URL == "" {
+		return plmSecrets
+	}
+
+	// Register credentials secret if provided
+	if plmCfg.CredentialsSecretName != "" {
+		nsName := parseSecretNsName(plmCfg.CredentialsSecretName, namespace)
+		plmSecrets[nsName] = &graph.PLMSecretConfig{
+			Type: graph.PLMSecretTypeCredentials,
+		}
+	}
+
+	// Register TLS CA certificate secret if provided
+	if plmCfg.TLSCACertSecretName != "" {
+		nsName := parseSecretNsName(plmCfg.TLSCACertSecretName, namespace)
+		plmSecrets[nsName] = &graph.PLMSecretConfig{
+			Type: graph.PLMSecretTypeTLSCA,
+		}
+	}
+
+	// Register TLS client certificate secret if provided
+	if plmCfg.TLSClientSSLSecretName != "" {
+		nsName := parseSecretNsName(plmCfg.TLSClientSSLSecretName, namespace)
+		plmSecrets[nsName] = &graph.PLMSecretConfig{
+			Type: graph.PLMSecretTypeTLSClient,
+		}
+	}
+
+	return plmSecrets
+}
+
+// createWAFFetcher creates an S3-compatible fetcher for WAF policy bundles from PLM storage.
+func createWAFFetcher(
+	plmSecrets map[types.NamespacedName]*graph.PLMSecretConfig,
+	plmStorageURL string,
+	tlsInsecureSkipVerify bool,
+	reader client.Reader,
+	logger logr.Logger,
+) (fetch.Fetcher, error) {
+	// Return nil if PLM storage is not configured
+	if plmStorageURL == "" {
+		return nil, nil //nolint:nilnil // nil fetcher with no error is intentional when PLM is not configured
+	}
+
+	var opts []fetch.Option
+
+	// Configure credentials if secret is registered in plmSecrets
+	for nsName, secretCfg := range plmSecrets {
+		if secretCfg.Type == graph.PLMSecretTypeCredentials {
+			secret, err := getValidatedSecret(reader, nsName, secrets.PLMCredentialsKey)
+			if err != nil {
+				return nil, err
+			}
+
+			opts = append(opts, fetch.WithCredentials(
+				secrets.PLMAccessKeyID,
+				string(secret.Data[secrets.PLMCredentialsKey]),
+			))
+			break
+		}
+	}
+
+	// Configure TLS if TLS secrets are registered in plmSecrets
+	tlsConfig, err := buildTLSConfig(plmSecrets, tlsInsecureSkipVerify, reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %w", err)
+	}
+	if tlsConfig != nil {
+		opts = append(opts, fetch.WithTLSConfig(tlsConfig))
+	}
+
+	fetcher, err := fetch.NewS3Fetcher(plmStorageURL, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create S3 fetcher: %w", err)
+	}
+
+	logger.Info("Created WAF fetcher for PLM storage", "url", plmStorageURL)
+
+	return fetcher, nil
+}
+
+// buildTLSConfig constructs a TLS configuration from PLM secrets (CA cert and/or client cert/key).
+func buildTLSConfig(
+	plmSecrets map[types.NamespacedName]*graph.PLMSecretConfig,
+	insecureSkipVerify bool,
+	reader client.Reader,
+) (*tls.Config, error) {
+	var caCert, clientCert, clientKey []byte
+
+	// Extract TLS certificate data from secrets
+	for nsName, secretCfg := range plmSecrets {
+		switch secretCfg.Type {
+		case graph.PLMSecretTypeTLSCA:
+			// Load CA certificate for server verification
+			secret, err := getValidatedSecret(reader, nsName, secrets.CAKey)
+			if err != nil {
+				return nil, err
+			}
+			caCert = secret.Data[secrets.CAKey]
+
+		case graph.PLMSecretTypeTLSClient:
+			// Load client certificate and key for mutual TLS
+			secret, err := getValidatedSecret(reader, nsName, secrets.TLSCertKey, secrets.TLSKeyKey)
+			if err != nil {
+				return nil, err
+			}
+			clientCert = secret.Data[secrets.TLSCertKey]
+			clientKey = secret.Data[secrets.TLSKeyKey]
+		}
+	}
+
+	// Return nil if no TLS configuration was provided
+	if len(caCert) == 0 && len(clientCert) == 0 && len(clientKey) == 0 {
+		return nil, nil //nolint:nilnil // nil config with no error is intentional when no TLS secrets are configured
+	}
+
+	return fetch.TLSConfigFromSecret(caCert, clientCert, clientKey, insecureSkipVerify)
+}
+
+// getValidatedSecret retrieves a secret and validates it has the required fields.
+func getValidatedSecret(reader client.Reader, nsName types.NamespacedName, fields ...string) (*apiv1.Secret, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var secret apiv1.Secret
+	if err := reader.Get(ctx, nsName, &secret); err != nil {
+		return nil, fmt.Errorf("error getting %q Secret: %w", nsName.Name, err)
+	}
+
+	for _, field := range fields {
+		if _, ok := secret.Data[field]; !ok {
+			return nil, fmt.Errorf("secret %q does not have expected field %q", nsName.Name, field)
+		}
+	}
+
+	return &secret, nil
+}
+
 // 10 min jitter is enough per telemetry destination recommendation
 // For the default period of 24 hours, jitter will be 10min /(24*60)min  = 0.0069.
 const telemetryJitterFactor = 10.0 / (24 * 60) // added jitter is bound by jitterFactor * period
@@ -1017,7 +1227,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
 		&ngfAPIv1alpha1.RateLimitPolicyList{},
-		&ngfAPIv1alpha1.WAFPolicyList{},
+		&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 		partialObjectMetadataList,
 	}
 

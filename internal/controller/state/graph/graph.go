@@ -2,11 +2,13 @@ package graph
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,6 +25,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
@@ -48,6 +51,10 @@ type ClusterState struct {
 	SnippetsFilters       map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
 	AuthenticationFilters map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter
 	InferencePools        map[types.NamespacedName]*inference.InferencePool
+	// APPolicies holds PLM-managed APPolicy resources (unstructured since CRD is external).
+	APPolicies map[types.NamespacedName]*unstructured.Unstructured
+	// APLogConfs holds PLM-managed APLogConf resources (unstructured since CRD is external).
+	APLogConfs map[types.NamespacedName]*unstructured.Unstructured
 }
 
 // Graph is a Graph-like representation of Gateway API resources.
@@ -86,12 +93,18 @@ type Graph struct {
 	NGFPolicies map[PolicyKey]*Policy
 	// ReferencedWAFBundles includes the WAFPolicy Bundles that have been referenced by any Gateways or Routes.
 	ReferencedWAFBundles map[WAFBundleKey]*WAFBundleData
+	// ReferencedAPPolicies includes APPolicy resources referenced by WAFGatewayBindingPolicy resources.
+	ReferencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
+	// ReferencedAPLogConfs includes APLogConf resources referenced by WAFGatewayBindingPolicy resources.
+	ReferencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
 	// SnippetsFilters holds all the SnippetsFilters.
 	SnippetsFilters map[types.NamespacedName]*SnippetsFilter
 	// AuthenticationFilters holds all the AuthenticationFilters.
 	AuthenticationFilters map[types.NamespacedName]*AuthenticationFilter
 	// PlusSecrets holds the secrets related to NGINX Plus licensing.
 	PlusSecrets map[types.NamespacedName][]PlusSecretFile
+	// PLMSecrets holds the secrets related to PLM storage (credentials and TLS).
+	PLMSecrets map[types.NamespacedName]*PLMSecretConfig
 }
 
 // NginxReloadResult describes the result of an NGINX reload.
@@ -115,10 +128,12 @@ type FeatureFlags struct {
 func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.NamespacedName) bool {
 	switch obj := resourceType.(type) {
 	case *v1.Secret:
-		// Check if secret is a Gateway-referenced Secret, or if it's a Secret used for NGINX Plus reporting.
+		// Check if secret is a Gateway-referenced Secret, or if it's a Secret used for
+		// NGINX Plus reporting or PLM storage.
 		_, exists := g.ReferencedSecrets[nsname]
 		_, plusSecretExists := g.PlusSecrets[nsname]
-		return exists || plusSecretExists
+		_, plmSecretExists := g.PLMSecrets[nsname]
+		return exists || plusSecretExists || plmSecretExists
 	case *v1.ConfigMap:
 		_, exists := g.ReferencedCaCertConfigMaps[nsname]
 		return exists
@@ -157,6 +172,18 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 	case *ngfAPIv1alpha2.NginxProxy:
 		_, exists := g.ReferencedNginxProxies[nsname]
 		return exists
+	// APPolicy and APLogConf are unstructured types; check by GVK.
+	case *unstructured.Unstructured:
+		gvk := obj.GroupVersionKind()
+		switch gvk {
+		case kinds.APPolicyGVK:
+			_, exists := g.ReferencedAPPolicies[nsname]
+			return exists
+		case kinds.APLogConfGVK:
+			_, exists := g.ReferencedAPLogConfs[nsname]
+			return exists
+		}
+		return false
 	default:
 		return false
 	}
@@ -219,12 +246,23 @@ func (g *Graph) gatewayAPIResourceExist(ref gatewayv1.LocalPolicyTargetReference
 	}
 }
 
+// PLMConfig holds PLM storage configuration for graph building.
+type PLMConfig struct {
+	// Fetcher is the S3-compatible fetcher for WAF policy bundles.
+	Fetcher fetch.Fetcher
+	// Secrets holds the PLM secrets configuration (credentials and TLS).
+	Secrets map[types.NamespacedName]*PLMSecretConfig
+	// InsecureSkipVerify indicates whether to skip TLS verification.
+	InsecureSkipVerify bool
+}
+
 // BuildGraph builds a Graph from a state.
 func BuildGraph(
 	state ClusterState,
 	controllerName string,
 	gcName string,
 	plusSecrets map[types.NamespacedName][]PlusSecretFile,
+	plmConfig *PLMConfig,
 	validators validation.Validators,
 	logger logr.Logger,
 	featureFlags FeatureFlags,
@@ -309,19 +347,51 @@ func BuildGraph(
 
 	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
+	// Build WAF processing input from cluster state
+	var wafInput *WAFProcessingInput
+	var plmSecrets map[types.NamespacedName]*PLMSecretConfig
+	if plmConfig != nil {
+		plmSecrets = plmConfig.Secrets
+		// Set PLM secret content from cluster secrets and update fetcher TLS if needed
+		if len(plmSecrets) > 0 {
+			setPLMSecretContent(state.Secrets, plmSecrets)
+			updatePLMFetcher(plmConfig, logger)
+		}
+
+		if len(state.APPolicies) > 0 || len(state.APLogConfs) > 0 {
+			wafInput = &WAFProcessingInput{
+				APPolicies:       state.APPolicies,
+				APLogConfs:       state.APLogConfs,
+				Fetcher:          plmConfig.Fetcher,
+				RefGrantResolver: refGrantResolver,
+			}
+		}
+	}
+
 	// policies must be processed last because they rely on the state of the other resources in the graph
-	processedPolicies, referencedWAFBundles := processPolicies(
+	processedPolicies, wafOutput := processPolicies(
 		state.NGFPolicies,
 		validators.PolicyValidator,
 		routes,
 		referencedServices,
 		gws,
+		wafInput,
 	)
 
 	// add status conditions to each targetRef based on the policies that affect them.
 	addPolicyAffectedStatusToTargetRefs(processedPolicies, routes, gws)
 
 	setPlusSecretContent(state.Secrets, plusSecrets)
+
+	// Extract WAF data from wafOutput
+	var referencedWAFBundles map[WAFBundleKey]*WAFBundleData
+	var referencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
+	var referencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
+	if wafOutput != nil {
+		referencedWAFBundles = wafOutput.Bundles
+		referencedAPPolicies = wafOutput.ReferencedAPPolicies
+		referencedAPLogConfs = wafOutput.ReferencedAPLogConfs
+	}
 
 	g := &Graph{
 		GatewayClass:               gc,
@@ -340,7 +410,10 @@ func BuildGraph(
 		SnippetsFilters:            processedSnippetsFilters,
 		AuthenticationFilters:      processedAuthenticationFilters,
 		PlusSecrets:                plusSecrets,
+		PLMSecrets:                 plmSecrets,
 		ReferencedWAFBundles:       referencedWAFBundles,
+		ReferencedAPPolicies:       referencedAPPolicies,
+		ReferencedAPLogConfs:       referencedAPLogConfs,
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)
@@ -403,6 +476,25 @@ type PlusSecretFile struct {
 	Type SecretFileType
 }
 
+// PLMSecretType identifies the type of PLM secret.
+type PLMSecretType int
+
+const (
+	// PLMSecretTypeCredentials is the secret containing S3 credentials.
+	PLMSecretTypeCredentials PLMSecretType = iota
+	// PLMSecretTypeTLSCA is the secret containing the CA certificate for TLS verification.
+	PLMSecretTypeTLSCA
+	// PLMSecretTypeTLSClient is the secret containing the client certificate/key for mutual TLS.
+	PLMSecretTypeTLSClient
+)
+
+// PLMSecretConfig specifies the configuration for a PLM storage secret.
+// The secret names are provided via CLI flags at startup.
+type PLMSecretConfig struct {
+	Content map[string][]byte
+	Type    PLMSecretType
+}
+
 // setPlusSecretContent finds the k8s Secret object associated with a PlusSecretFile object, and sets its contents.
 func setPlusSecretContent(
 	clusterSecrets map[types.NamespacedName]*v1.Secret,
@@ -419,6 +511,90 @@ func setPlusSecretContent(
 				file.Content = content
 				plusSecrets[name][idx] = file
 			}
+		}
+	}
+}
+
+// setPLMSecretContent finds the k8s Secret object associated with a PLMSecretConfig object, and sets its contents.
+func setPLMSecretContent(
+	clusterSecrets map[types.NamespacedName]*v1.Secret,
+	plmSecrets map[types.NamespacedName]*PLMSecretConfig,
+) {
+	for name, plmSecretCfg := range plmSecrets {
+		if secret, ok := clusterSecrets[name]; ok {
+			plmSecretCfg.Content = make(map[string][]byte)
+			maps.Copy(plmSecretCfg.Content, secret.Data)
+		}
+	}
+}
+
+// plmSecretData holds extracted secret data for PLM configuration.
+type plmSecretData struct {
+	secretAccessKey string
+	caCert          []byte
+	clientCert      []byte
+	clientKey       []byte
+}
+
+// extractPLMSecrets extracts credentials and TLS data from PLM secret configurations.
+func extractPLMSecrets(secretConfigs map[types.NamespacedName]*PLMSecretConfig) plmSecretData {
+	var data plmSecretData
+
+	for _, secretCfg := range secretConfigs {
+		if secretCfg == nil || secretCfg.Content == nil {
+			continue
+		}
+
+		switch secretCfg.Type {
+		case PLMSecretTypeCredentials:
+			if v, ok := secretCfg.Content[secrets.PLMCredentialsKey]; ok {
+				data.secretAccessKey = string(v)
+			}
+		case PLMSecretTypeTLSCA:
+			if v, ok := secretCfg.Content[secrets.CAKey]; ok {
+				data.caCert = v
+			}
+		case PLMSecretTypeTLSClient:
+			if v, ok := secretCfg.Content[secrets.TLSCertKey]; ok {
+				data.clientCert = v
+			}
+			if v, ok := secretCfg.Content[secrets.TLSKeyKey]; ok {
+				data.clientKey = v
+			}
+		}
+	}
+
+	return data
+}
+
+// updatePLMFetcher updates the PLM fetcher's TLS configuration and credentials based on secrets.
+// This is called during graph building to refresh certificates and credentials when secrets change.
+func updatePLMFetcher(plmConfig *PLMConfig, logger logr.Logger) {
+	if plmConfig == nil || plmConfig.Fetcher == nil {
+		return
+	}
+
+	data := extractPLMSecrets(plmConfig.Secrets)
+
+	// Update credentials if we have them
+	if data.secretAccessKey != "" {
+		if err := plmConfig.Fetcher.UpdateCredentials(secrets.PLMAccessKeyID, data.secretAccessKey); err != nil {
+			logger.Error(err, "Failed to update PLM fetcher credentials")
+		}
+	}
+
+	// Update TLS config if we have TLS data
+	if len(data.caCert) > 0 || len(data.clientCert) > 0 {
+		tlsConfig, err := fetch.TLSConfigFromSecret(
+			data.caCert, data.clientCert, data.clientKey, plmConfig.InsecureSkipVerify,
+		)
+		if err != nil {
+			logger.Error(err, "Failed to create TLS config from PLM secrets")
+			return
+		}
+
+		if err := plmConfig.Fetcher.UpdateTLSConfig(tlsConfig); err != nil {
+			logger.Error(err, "Failed to update PLM fetcher TLS config")
 		}
 	}
 }

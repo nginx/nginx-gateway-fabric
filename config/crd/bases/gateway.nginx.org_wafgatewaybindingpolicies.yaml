@@ -6,16 +6,18 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.20.0
   labels:
     gateway.networking.k8s.io/policy: inherited
-  name: wafpolicies.gateway.nginx.org
+  name: wafgatewaybindingpolicies.gateway.nginx.org
 spec:
   group: gateway.nginx.org
   names:
     categories:
     - nginx-gateway-fabric
-    kind: WAFPolicy
-    listKind: WAFPolicyList
-    plural: wafpolicies
-    singular: wafpolicy
+    kind: WAFGatewayBindingPolicy
+    listKind: WAFGatewayBindingPolicyList
+    plural: wafgatewaybindingpolicies
+    shortNames:
+    - wafbinding
+    singular: wafgatewaybindingpolicy
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -26,8 +28,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          WAFPolicy is an Inherited Attached Policy. It provides a way to configure NGINX App Protect Web Application Firewall
-          for Gateways and Routes.
+          WAFGatewayBindingPolicy is an Inherited Attached Policy. It provides a way to configure F5 WAF for NGINX
+          with Policy Lifecycle Management (PLM) for Gateways and Routes by referencing PLM-managed APPolicy resources.
         properties:
           apiVersion:
             description: |-
@@ -47,121 +49,46 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the desired state of the WAFPolicy.
+            description: Spec defines the desired state of the WAFGatewayBindingPolicy.
             properties:
-              policySource:
-                description: PolicySource defines the source location and configuration
-                  for the compiled WAF policy bundle.
+              apPolicySource:
+                description: |-
+                  APPolicySource references the APPolicy CRD managed by PLM.
+                  The APPolicy contains the WAF policy definition which PLM compiles and stores.
+                  NGF watches the APPolicy status for the compiled bundle location.
                 properties:
-                  authSecret:
-                    description: AuthSecret is the Secret containing authentication
-                      credentials for the WAF policy source.
-                    properties:
-                      name:
-                        description: Name is the name of the Secret containing authentication
-                          credentials for the WAF policy source.
-                        maxLength: 253
-                        minLength: 1
-                        pattern: ^[a-zA-Z0-9_-]+$
-                        type: string
-                    required:
-                    - name
-                    type: object
-                  fileLocation:
-                    description: FileLocation defines the location of the WAF policy
-                      file.
-                    maxLength: 256
+                  name:
                     minLength: 1
                     type: string
-                  polling:
-                    description: Polling defines the polling configuration for automatic
-                      WAF policy change detection.
-                    properties:
-                      checksumLocation:
-                        description: |-
-                          ChecksumLocation specifies the location of the checksum file for the policy bundle.
-                          If not specified, defaults to <fileLocation>.sha256
-                        maxLength: 2048
-                        type: string
-                      enabled:
-                        default: false
-                        description: |-
-                          Enabled indicates whether polling is enabled for automatic WAF policy change detection.
-                          When enabled, NGINX Gateway Fabric will periodically check for policy changes using checksum validation.
-                        type: boolean
-                      interval:
-                        default: 5m
-                        description: |-
-                          Interval is the polling interval to check for WAF policy changes.
-                          Must be a valid duration string (e.g., "5m", "30s", "1h").
-                          Defaults to "5m" if polling is enabled.
-                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
-                        type: string
-                    type: object
-                  retry:
-                    description: Retry defines the retry configuration for WAF policy
-                      fetch failures.
-                    properties:
-                      attempts:
-                        default: 3
-                        description: |-
-                          Attempts is the number of retry attempts for fetching the WAF policy.
-                          Set to 0 to disable retries.
-                        format: int32
-                        minimum: 0
-                        type: integer
-                      backoff:
-                        default: exponential
-                        description: |-
-                          Backoff defines the backoff strategy for retry attempts.
-                          Supported values: "exponential", "linear"
-                        enum:
-                        - exponential
-                        - linear
-                        type: string
-                      maxDelay:
-                        default: 5m
-                        description: |-
-                          MaxDelay is the maximum delay between retry attempts.
-                          Must be a valid duration string (e.g., "5m", "30s").
-                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
-                        type: string
-                    type: object
-                  timeout:
-                    description: Timeout for policy downloads.
-                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                  namespace:
                     type: string
-                  validation:
-                    description: Validation defines the validation methods for policy
-                      integrity verification.
-                    properties:
-                      methods:
-                        description: |-
-                          Methods specifies the validation methods to use for policy integrity verification.
-                          Currently supported: ["checksum"]
-                        items:
-                          description: WAFPolicyValidationMethod defines the supported
-                            validation methods.
-                          enum:
-                          - checksum
-                          type: string
-                        type: array
-                        x-kubernetes-list-type: set
-                    type: object
                 required:
-                - fileLocation
+                - name
                 type: object
               securityLogs:
                 description: |-
-                  SecurityLogs defines the security logging configuration for app_protect_security_log directives.
-                  Multiple logging configurations can be specified to send logs to different destinations.
+                  SecurityLogs defines security logging configurations.
+                  Each entry references an APLogConf CRD managed by PLM for log profile compilation.
                 items:
                   description: |-
-                    WAFSecurityLog defines the security logging configuration for app_protect_security_log directives.
-                    LogProfile and LogProfileBundle are mutually exclusive per security log entry.
+                    WAFSecurityLog defines security logging configuration for app_protect_security_log directives.
+                    Each entry references a PLM-managed APLogConf CRD for the compiled log profile bundle.
                   properties:
+                    apLogConfSource:
+                      description: |-
+                        APLogConfSource references the APLogConf CRD for this log configuration.
+                        PLM compiles the APLogConf and NGF fetches the compiled bundle from PLM storage.
+                      properties:
+                        name:
+                          minLength: 1
+                          type: string
+                        namespace:
+                          type: string
+                      required:
+                      - name
+                      type: object
                     destination:
-                      description: Destination defines where the security logs should
+                      description: Destination defines where security logs should
                         be sent.
                       properties:
                         file:
@@ -217,178 +144,72 @@ spec:
                         rule: '!(has(self.syslog) && self.type != ''syslog'')'
                       - message: destination.syslog must be specified for syslog destination.type
                         rule: '!(!has(self.syslog) && self.type == ''syslog'')'
-                    logProfile:
-                      description: LogProfile defines the built-in logging profile
-                        to use.
-                      enum:
-                      - log_default
-                      - log_all
-                      - log_illegal
-                      - log_blocked
-                      - log_grpc_all
-                      - log_grpc_blocked
-                      - log_grpc_illegal
-                      type: string
-                    logProfileBundle:
-                      description: LogProfileBundle defines a custom logging profile
-                        bundle, similar to policy bundle.
-                      properties:
-                        authSecret:
-                          description: AuthSecret is the Secret containing authentication
-                            credentials for the WAF policy source.
-                          properties:
-                            name:
-                              description: Name is the name of the Secret containing
-                                authentication credentials for the WAF policy source.
-                              maxLength: 253
-                              minLength: 1
-                              pattern: ^[a-zA-Z0-9_-]+$
-                              type: string
-                          required:
-                          - name
-                          type: object
-                        fileLocation:
-                          description: FileLocation defines the location of the WAF
-                            policy file.
-                          maxLength: 256
-                          minLength: 1
-                          type: string
-                        polling:
-                          description: Polling defines the polling configuration for
-                            automatic WAF policy change detection.
-                          properties:
-                            checksumLocation:
-                              description: |-
-                                ChecksumLocation specifies the location of the checksum file for the policy bundle.
-                                If not specified, defaults to <fileLocation>.sha256
-                              maxLength: 2048
-                              type: string
-                            enabled:
-                              default: false
-                              description: |-
-                                Enabled indicates whether polling is enabled for automatic WAF policy change detection.
-                                When enabled, NGINX Gateway Fabric will periodically check for policy changes using checksum validation.
-                              type: boolean
-                            interval:
-                              default: 5m
-                              description: |-
-                                Interval is the polling interval to check for WAF policy changes.
-                                Must be a valid duration string (e.g., "5m", "30s", "1h").
-                                Defaults to "5m" if polling is enabled.
-                              pattern: ^[0-9]{1,4}(ms|s|m|h)?$
-                              type: string
-                          type: object
-                        retry:
-                          description: Retry defines the retry configuration for WAF
-                            policy fetch failures.
-                          properties:
-                            attempts:
-                              default: 3
-                              description: |-
-                                Attempts is the number of retry attempts for fetching the WAF policy.
-                                Set to 0 to disable retries.
-                              format: int32
-                              minimum: 0
-                              type: integer
-                            backoff:
-                              default: exponential
-                              description: |-
-                                Backoff defines the backoff strategy for retry attempts.
-                                Supported values: "exponential", "linear"
-                              enum:
-                              - exponential
-                              - linear
-                              type: string
-                            maxDelay:
-                              default: 5m
-                              description: |-
-                                MaxDelay is the maximum delay between retry attempts.
-                                Must be a valid duration string (e.g., "5m", "30s").
-                              pattern: ^[0-9]{1,4}(ms|s|m|h)?$
-                              type: string
-                          type: object
-                        timeout:
-                          description: Timeout for policy downloads.
-                          pattern: ^[0-9]{1,4}(ms|s|m|h)?$
-                          type: string
-                        validation:
-                          description: Validation defines the validation methods for
-                            policy integrity verification.
-                          properties:
-                            methods:
-                              description: |-
-                                Methods specifies the validation methods to use for policy integrity verification.
-                                Currently supported: ["checksum"]
-                              items:
-                                description: WAFPolicyValidationMethod defines the
-                                  supported validation methods.
-                                enum:
-                                - checksum
-                                type: string
-                              type: array
-                              x-kubernetes-list-type: set
-                          type: object
-                      required:
-                      - fileLocation
-                      type: object
                     name:
-                      description: Name is the name of the security log configuration.
+                      description: Name is the name of this security log configuration.
                       maxLength: 63
                       minLength: 1
                       pattern: ^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$
                       type: string
                   required:
+                  - apLogConfSource
                   - destination
                   type: object
-                  x-kubernetes-validations:
-                  - message: only one of logProfile or logProfileBundle may be set
-                    rule: '!(has(self.logProfile) && has(self.logProfileBundle))'
-                  - message: at least one of logProfile or logProfileBundle must be
-                      set
-                    rule: has(self.logProfile) || has(self.logProfileBundle)
                 maxItems: 32
                 type: array
-              targetRef:
+              targetRefs:
                 description: |-
-                  TargetRef identifies an API object to apply the policy to.
-                  Object must be in the same namespace as the policy.
+                  TargetRefs identifies API object(s) to apply the policy to.
+                  Objects must be in the same namespace as the policy.
+                  All targets must be of the same Kind (all Gateways OR all HTTPRoutes OR all GRPCRoutes).
                   Support: Gateway, HTTPRoute, GRPCRoute.
-                properties:
-                  group:
-                    description: Group is the group of the target resource.
-                    maxLength: 253
-                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
-                    type: string
-                  kind:
-                    description: Kind is kind of the target resource.
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
-                    type: string
-                  name:
-                    description: Name is the name of the target resource.
-                    maxLength: 253
-                    minLength: 1
-                    type: string
-                required:
-                - group
-                - kind
-                - name
-                type: object
+                items:
+                  description: |-
+                    LocalPolicyTargetReference identifies an API object to apply a direct or
+                    inherited policy to. This should be used as part of Policy resources
+                    that can target Gateway API resources. For more information on how this
+                    policy attachment model works, and a sample Policy resource, refer to
+                    the policy attachment documentation for Gateway API.
+                  properties:
+                    group:
+                      description: Group is the group of the target resource.
+                      maxLength: 253
+                      pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                      type: string
+                    kind:
+                      description: Kind is kind of the target resource.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                      type: string
+                    name:
+                      description: Name is the name of the target resource.
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                  required:
+                  - group
+                  - kind
+                  - name
+                  type: object
+                maxItems: 16
+                minItems: 1
+                type: array
                 x-kubernetes-validations:
+                - message: All TargetRefs must be the same Kind
+                  rule: self.all(t1, self.all(t2, t1.kind == t2.kind))
                 - message: 'TargetRef Kind must be one of: Gateway, HTTPRoute, or
                     GRPCRoute'
-                  rule: (self.kind=='Gateway' || self.kind=='HTTPRoute' || self.kind=='GRPCRoute')
-                - message: TargetRef Group must be gateway.networking.k8s.io.
-                  rule: (self.group=='gateway.networking.k8s.io')
+                  rule: self.all(t, t.kind=='Gateway' || t.kind=='HTTPRoute' || t.kind=='GRPCRoute')
+                - message: TargetRef Group must be gateway.networking.k8s.io
+                  rule: self.all(t, t.group=='gateway.networking.k8s.io')
+                - message: TargetRef Name must be unique
+                  rule: self.all(t1, self.exists_one(t2, t1.name == t2.name))
             required:
-            - targetRef
+            - apPolicySource
+            - targetRefs
             type: object
-            x-kubernetes-validations:
-            - message: policySource is required when securityLogs are specified
-              rule: '!has(self.securityLogs) || has(self.policySource)'
           status:
-            description: Status defines the state of the WAFPolicy.
+            description: Status defines the state of the WAFGatewayBindingPolicy.
             properties:
               ancestors:
                 description: |-

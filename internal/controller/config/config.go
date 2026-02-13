@@ -14,6 +14,8 @@ type Config struct {
 	AtomicLevel zap.AtomicLevel
 	// GatewayPodConfig contains information about this Pod.
 	GatewayPodConfig GatewayPodConfig
+	// PLMStorageConfig contains information about the PLM storage component.
+	PLMStorageConfig PLMStorageConfig
 	// Logger is the Zap Logger used by all components.
 	Logger logr.Logger
 	// NGINXSCCName is the name of the SecurityContextConstraints for the NGINX Pods. Only applicable in OpenShift.
@@ -60,6 +62,21 @@ type Config struct {
 	EndpointPickerDisableTLS bool
 	// EndpointPickerTLSSkipVerify indicates if secure verification is skipped for EndpointPicker communication.
 	EndpointPickerTLSSkipVerify bool
+}
+
+// PLMStorageConfig contains the configuration for PLM storage service communication.
+type PLMStorageConfig struct {
+	// URL is the PLM storage service URL (HTTP or HTTPS).
+	URL string
+	// CredentialsSecretName is the name of the Secret containing S3 credentials.
+	// The Secret should have the "seaweedfs_admin_secret" data field.
+	CredentialsSecretName string
+	// TLSCACertSecretName is the is the name of the Secret containing the CA certificate file for TLS verification.
+	TLSCACertSecretName string
+	// TLSClientSSLSecretName is the path to the client certificate file for mutual TLS.
+	TLSClientSSLSecretName string
+	// TLSInsecureSkipVerify skips TLS certificate verification (not recommended for production).
+	TLSInsecureSkipVerify bool
 }
 
 // GatewayPodConfig contains information about this Pod.

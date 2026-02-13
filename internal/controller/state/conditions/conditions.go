@@ -121,17 +121,34 @@ const (
 	// has an overlapping hostname:port/path combination with another Route.
 	PolicyReasonTargetConflict v1.PolicyConditionReason = "TargetConflict"
 
-	// WAFPolicyFetchError is used with the "WAFPolicyFetchError" condition when a
-	// WAFPolicy or LogProfileBundle cannot be fetched from the specified file location.
-	WAFPolicyFetchError v1.PolicyConditionReason = "FetchError"
+	// WAFResolvedRefsConditionType is the condition type for WAF reference resolution.
+	WAFResolvedRefsConditionType v1.PolicyConditionType = "ResolvedRefs"
 
-	// WAFPolicyMessageSourceInvalid is a message used with the "PolicyInvalid" condition
-	// when the WAF policy source is invalid or incomplete.
-	WAFPolicyMessageSourceInvalid = "The WAF policy source is invalid or incomplete."
+	// WAFProgrammedConditionType is the condition type for WAF data plane deployment.
+	WAFProgrammedConditionType v1.PolicyConditionType = "Programmed"
 
-	// WAFSecurityLogMessageSourceInvalid is a message used with the "PolicyInvalid" condition
-	// when the WAFSecurityLog source is invalid or incomplete.
-	WAFSecurityLogMessageSourceInvalid = "The WAFSecurityLog source is invalid or incomplete."
+	// PolicyReasonResolvedRefs is used when all references are resolved.
+	// NOTE: Not defined in upstream Gateway API (which only provides Accepted-related reasons).
+	// This is an NGF-specific reason for WAF policy reference resolution.
+	PolicyReasonResolvedRefs v1.PolicyConditionReason = "ResolvedRefs"
+
+	// PolicyReasonProgrammed is used when the policy is deployed to the data plane.
+	// NOTE: Not defined in upstream Gateway API. NGF-specific reason for WAF data plane deployment.
+	PolicyReasonProgrammed v1.PolicyConditionReason = "Programmed"
+
+	// PolicyReasonInvalidRef is used when a referenced resource does not exist or is not valid.
+	// NOTE: Not defined in upstream Gateway API. NGF-specific reason for WAF reference errors.
+	PolicyReasonInvalidRef v1.PolicyConditionReason = "InvalidRef"
+
+	// PolicyReasonRefNotPermitted is used when a cross-namespace reference is not allowed.
+	// NOTE: Not defined in upstream Gateway API. NGF-specific reason for WAF cross-namespace issues.
+	PolicyReasonRefNotPermitted v1.PolicyConditionReason = "RefNotPermitted"
+
+	// PolicyReasonFetchError is used when a bundle cannot be fetched from PLM storage.
+	PolicyReasonFetchError v1.PolicyConditionReason = "FetchError"
+
+	// PolicyReasonIntegrityError is used when a bundle checksum verification fails.
+	PolicyReasonIntegrityError v1.PolicyConditionReason = "IntegrityError"
 
 	// ClientSettingsPolicyAffected is used with the "PolicyAffected" condition when a
 	// ClientSettingsPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
@@ -203,9 +220,13 @@ const (
 	// CACertificateRefs are invalid.
 	BackendTLSPolicyReasonNoValidCACertificate v1.PolicyConditionReason = "NoValidCACertificate"
 
-	// WAFPolicyAffected is used with the "PolicyAffected" condition when an
-	// WAFPolicyAffected is applied to a Gateway, HTTPRoute, or GRPCRoute.
-	WAFPolicyAffected v1.PolicyConditionType = "WAFPolicyAffected"
+	// WAFGatewayBindingPolicyAffected is used with the "PolicyAffected" condition when a
+	// WAFGatewayBindingPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	WAFGatewayBindingPolicyAffected v1.PolicyConditionType = "gateway.nginx.org/WAFGatewayBindingPolicyAffected"
+
+	// PolicyReasonPending is used with the "PolicyAccepted" condition when a Policy is pending
+	// external processing (e.g., PLM compilation for WAF policies).
+	PolicyReasonPending v1.PolicyConditionReason = "Pending"
 )
 
 // Condition defines a condition to be reported in the status of resources.
@@ -1351,23 +1372,198 @@ func NewInferencePoolInvalidExtensionref(msg string) Condition {
 	}
 }
 
-// NewWAFPolicyAffected returns a Condition that indicates that a WAFPolicy
+// NewWAFGatewayBindingPolicyAffected returns a Condition that indicates that a WAFGatewayBindingPolicy
 // is applied to the resource.
-func NewWAFPolicyAffected() Condition {
+func NewWAFGatewayBindingPolicyAffected() Condition {
 	return Condition{
-		Type:    string(WAFPolicyAffected),
+		Type:    string(WAFGatewayBindingPolicyAffected),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
-		Message: "WAFPolicy is applied to the resource",
+		Message: "WAFGatewayBindingPolicy is applied to the resource",
 	}
 }
 
-// NewWAFPolicyFetchError returns a Condition that indicates that there was an error fetching the WAF policy bundle.
-func NewWAFPolicyFetchError(msg string) Condition {
+// NewPolicyResolvedRefs returns the default happy-path Condition for WAF reference resolution.
+func NewPolicyResolvedRefs() Condition {
 	return Condition{
-		Type:    string(WAFPolicyFetchError),
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyReasonResolvedRefs),
+		Message: "All references are resolved",
+	}
+}
+
+// NewPolicyProgrammed returns the default happy-path Condition for WAF data plane deployment.
+func NewPolicyProgrammed() Condition {
+	return Condition{
+		Type:    string(WAFProgrammedConditionType),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyReasonProgrammed),
+		Message: "Policy is programmed in the data plane",
+	}
+}
+
+// NewPolicyRefsNotResolvedAPPolicyNotFound returns a Condition that indicates the referenced APPolicy was not found.
+func NewPolicyRefsNotResolvedAPPolicyNotFound(apPolicyName string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(WAFPolicyFetchError),
-		Message: "Failed to fetch the policy bundle due to: " + msg,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("The referenced APPolicy %q was not found", apPolicyName),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPPolicyStatusError returns a Condition that indicates an error extracting APPolicy status.
+func NewPolicyRefsNotResolvedAPPolicyStatusError(errMsg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("Failed to extract APPolicy status: %s", errMsg),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPPolicyNotCompiled returns a Condition that indicates the APPolicy is not yet compiled.
+func NewPolicyRefsNotResolvedAPPolicyNotCompiled(apPolicyName string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("The APPolicy %q is pending compilation by PLM", apPolicyName),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPPolicyInvalid returns a Condition that indicates the APPolicy compilation failed.
+func NewPolicyRefsNotResolvedAPPolicyInvalid(errMsg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("The APPolicy is invalid: %s", errMsg),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPPolicyNoLocation returns a Condition that indicates the APPolicy has no bundle location.
+func NewPolicyRefsNotResolvedAPPolicyNoLocation(apPolicyName string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("The APPolicy %q is ready but has no bundle location", apPolicyName),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPPolicyUnknownState returns a Condition that indicates the APPolicy has an unknown state.
+func NewPolicyRefsNotResolvedAPPolicyUnknownState(state string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("The APPolicy has an unknown state: %q", state),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPPolicyRefNotPermitted returns a Condition that indicates the cross-namespace
+// APPolicy reference is not permitted by a ReferenceGrant.
+func NewPolicyRefsNotResolvedAPPolicyRefNotPermitted(apPolicyName string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonRefNotPermitted),
+		Message: fmt.Sprintf("Cross-namespace reference to APPolicy %q is not permitted by any ReferenceGrant", apPolicyName),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPLogConfNotFound returns a Condition that indicates the referenced APLogConf was not found.
+func NewPolicyRefsNotResolvedAPLogConfNotFound(apLogConfName string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("The referenced APLogConf %q was not found", apLogConfName),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPLogConfStatusError returns a Condition that indicates an error extracting APLogConf status.
+func NewPolicyRefsNotResolvedAPLogConfStatusError(errMsg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("Failed to extract APLogConf status: %s", errMsg),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPLogConfNotCompiled returns a Condition that indicates the APLogConf is not yet compiled.
+func NewPolicyRefsNotResolvedAPLogConfNotCompiled(apLogConfName string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("The APLogConf %q is pending compilation by PLM", apLogConfName),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPLogConfInvalid returns a Condition that indicates the APLogConf compilation failed.
+func NewPolicyRefsNotResolvedAPLogConfInvalid(errMsg string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("The APLogConf is invalid: %s", errMsg),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPLogConfNoLocation returns a Condition that indicates the APLogConf has no bundle location.
+func NewPolicyRefsNotResolvedAPLogConfNoLocation(apLogConfName string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("The APLogConf %q is ready but has no bundle location", apLogConfName),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPLogConfUnknownState returns a Condition that indicates the APLogConf has an unknown state.
+func NewPolicyRefsNotResolvedAPLogConfUnknownState(state string) Condition {
+	return Condition{
+		Type:    string(WAFResolvedRefsConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonInvalidRef),
+		Message: fmt.Sprintf("The APLogConf has an unknown state: %q", state),
+	}
+}
+
+// NewPolicyRefsNotResolvedAPLogConfRefNotPermitted returns a Condition that indicates the cross-namespace
+// APLogConf reference is not permitted by a ReferenceGrant.
+func NewPolicyRefsNotResolvedAPLogConfRefNotPermitted(apLogConfName string) Condition {
+	return Condition{
+		Type:   string(WAFResolvedRefsConditionType),
+		Status: metav1.ConditionFalse,
+		Reason: string(PolicyReasonRefNotPermitted),
+		Message: fmt.Sprintf(
+			"Cross-namespace reference to APLogConf %q is not permitted by any ReferenceGrant",
+			apLogConfName,
+		),
+	}
+}
+
+// NewPolicyNotProgrammedBundleFetchError returns a Condition that indicates a bundle fetch error.
+func NewPolicyNotProgrammedBundleFetchError(errMsg string) Condition {
+	return Condition{
+		Type:    string(WAFProgrammedConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonFetchError),
+		Message: fmt.Sprintf("Failed to fetch bundle from PLM storage: %s", errMsg),
+	}
+}
+
+// NewPolicyNotProgrammedIntegrityError returns a Condition that indicates a bundle checksum verification failure.
+func NewPolicyNotProgrammedIntegrityError(errMsg string) Condition {
+	return Condition{
+		Type:    string(WAFProgrammedConditionType),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonIntegrityError),
+		Message: fmt.Sprintf("Bundle integrity check failed: %s", errMsg),
 	}
 }

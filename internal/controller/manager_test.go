@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
@@ -80,7 +81,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
-				&ngfAPIv1alpha1.WAFPolicyList{},
+				&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 			},
 		},
 		{
@@ -110,9 +111,9 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
-				&ngfAPIv1alpha1.WAFPolicyList{},
 				partialObjectMetadataList,
 				&gatewayv1.GatewayList{},
+				&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 			},
 		},
 		{
@@ -152,7 +153,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
-				&ngfAPIv1alpha1.WAFPolicyList{},
+				&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 			},
 		},
 		{
@@ -188,7 +189,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&inference.InferencePoolList{},
 				&gatewayv1.GatewayList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
-				&ngfAPIv1alpha1.WAFPolicyList{},
+				&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 			},
 		},
 		{
@@ -223,7 +224,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
-				&ngfAPIv1alpha1.WAFPolicyList{},
+				&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 			},
 		},
 		{
@@ -259,7 +260,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
-				&ngfAPIv1alpha1.WAFPolicyList{},
+				&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 			},
 		},
 		{
@@ -304,7 +305,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
-				&ngfAPIv1alpha1.WAFPolicyList{},
+				&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 			},
 		},
 		{
@@ -350,7 +351,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
-				&ngfAPIv1alpha1.WAFPolicyList{},
+				&ngfAPIv1alpha1.WAFGatewayBindingPolicyList{},
 			},
 		},
 	}
@@ -421,83 +422,106 @@ func TestGetMetricsOptions(t *testing.T) {
 func TestCreatePlusSecretMetadata(t *testing.T) {
 	t.Parallel()
 
-	jwtSecret := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "nplus-license",
-		},
-		Data: map[string][]byte{
-			secrets.LicenseJWTKey: []byte("data"),
-		},
+	// Constants for secret metadata
+	const (
+		namespace        = "ngf"
+		jwtSecretName    = "nplus-license"
+		caSecretName     = "ca"
+		clientSecretName = "client"
+	)
+
+	// Helper functions to create fresh secret copies for each test to avoid race conditions
+	newJWTSecret := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      jwtSecretName,
+			},
+			Data: map[string][]byte{
+				secrets.LicenseJWTKey: []byte("data"),
+			},
+		}
 	}
 
-	jwtSecretWrongField := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "nplus-license",
-		},
-		Data: map[string][]byte{
-			"wrong": []byte("data"),
-		},
+	newJWTSecretWrongField := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      jwtSecretName,
+			},
+			Data: map[string][]byte{
+				"wrong": []byte("data"),
+			},
+		}
 	}
 
-	caSecret := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "ca",
-		},
-		Data: map[string][]byte{
-			secrets.CAKey: []byte("data"),
-		},
+	newCASecret := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      caSecretName,
+			},
+			Data: map[string][]byte{
+				secrets.CAKey: []byte("data"),
+			},
+		}
 	}
 
-	caSecretWrongField := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "ca",
-		},
-		Data: map[string][]byte{
-			"wrong": []byte("data"),
-		},
+	newCASecretWrongField := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      caSecretName,
+			},
+			Data: map[string][]byte{
+				"wrong": []byte("data"),
+			},
+		}
 	}
 
-	clientSecret := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "client",
-		},
-		Data: map[string][]byte{
-			secrets.TLSCertKey: []byte("data"),
-			secrets.TLSKeyKey:  []byte("data"),
-		},
+	newClientSecret := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      clientSecretName,
+			},
+			Data: map[string][]byte{
+				secrets.TLSCertKey: []byte("data"),
+				secrets.TLSKeyKey:  []byte("data"),
+			},
+		}
 	}
 
-	clientSecretWrongCert := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "client",
-		},
-		Data: map[string][]byte{
-			"wrong":            []byte("data"),
-			secrets.TLSCertKey: []byte("data"),
-		},
+	newClientSecretWrongCert := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      clientSecretName,
+			},
+			Data: map[string][]byte{
+				"wrong":            []byte("data"),
+				secrets.TLSCertKey: []byte("data"),
+			},
+		}
 	}
 
-	clientSecretWrongKey := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ngf",
-			Name:      "client",
-		},
-		Data: map[string][]byte{
-			secrets.TLSCertKey: []byte("data"),
-			"wrong":            []byte("data"),
-		},
+	newClientSecretWrongKey := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      clientSecretName,
+			},
+			Data: map[string][]byte{
+				secrets.TLSCertKey: []byte("data"),
+				"wrong":            []byte("data"),
+			},
+		}
 	}
 
 	tests := []struct {
 		expSecrets map[types.NamespacedName][]graph.PlusSecretFile
 		name       string
-		secrets    []runtime.Object
+		getSecrets func() []runtime.Object
 		cfg        config.Config
 		expErr     bool
 	}{
@@ -506,20 +530,21 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			cfg: config.Config{
 				Plus: false,
 			},
+			getSecrets: func() []runtime.Object { return nil },
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{},
 		},
 		{
-			name:    "only JWT token specified",
-			secrets: []runtime.Object{jwtSecret},
+			name:       "only JWT token specified",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecret()} },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName: jwtSecret.Name,
+					SecretName: jwtSecretName,
 				},
 			},
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{
-				{Name: jwtSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: jwtSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.LicenseJWTKey,
 						Type:      graph.PlusReportJWTToken,
@@ -528,24 +553,24 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			},
 		},
 		{
-			name:    "JWT and CA specified",
-			secrets: []runtime.Object{jwtSecret, caSecret},
+			name:       "JWT and CA specified",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecret(), newCASecret()} },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:   jwtSecret.Name,
-					CASecretName: caSecret.Name,
+					SecretName:   jwtSecretName,
+					CASecretName: caSecretName,
 				},
 			},
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{
-				{Name: jwtSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: jwtSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.LicenseJWTKey,
 						Type:      graph.PlusReportJWTToken,
 					},
 				},
-				{Name: caSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: caSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.CAKey,
 						Type:      graph.PlusReportCACertificate,
@@ -554,31 +579,33 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			},
 		},
 		{
-			name:    "all Secrets specified",
-			secrets: []runtime.Object{jwtSecret, caSecret, clientSecret},
+			name: "all Secrets specified",
+			getSecrets: func() []runtime.Object {
+				return []runtime.Object{newJWTSecret(), newCASecret(), newClientSecret()}
+			},
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:          jwtSecret.Name,
-					CASecretName:        caSecret.Name,
-					ClientSSLSecretName: clientSecret.Name,
+					SecretName:          jwtSecretName,
+					CASecretName:        caSecretName,
+					ClientSSLSecretName: clientSecretName,
 				},
 			},
 			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{
-				{Name: jwtSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: jwtSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.LicenseJWTKey,
 						Type:      graph.PlusReportJWTToken,
 					},
 				},
-				{Name: caSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: caSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.CAKey,
 						Type:      graph.PlusReportCACertificate,
 					},
 				},
-				{Name: clientSecret.Name, Namespace: jwtSecret.Namespace}: {
+				{Name: clientSecretName, Namespace: namespace}: {
 					{
 						FieldName: secrets.TLSCertKey,
 						Type:      graph.PlusReportClientSSLCertificate,
@@ -591,98 +618,105 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			},
 		},
 		{
-			name: "JWT Secret doesn't exist",
+			name:       "JWT Secret doesn't exist",
+			getSecrets: func() []runtime.Object { return nil },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName: jwtSecret.Name,
+					SecretName: jwtSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "JWT Secret doesn't have correct field",
-			secrets: []runtime.Object{jwtSecretWrongField},
+			name:       "JWT Secret doesn't have correct field",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecretWrongField()} },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName: jwtSecret.Name,
+					SecretName: jwtSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "CA Secret doesn't exist",
-			secrets: []runtime.Object{jwtSecret},
+			name:       "CA Secret doesn't exist",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecret()} },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:   jwtSecret.Name,
-					CASecretName: caSecret.Name,
+					SecretName:   jwtSecretName,
+					CASecretName: caSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "CA Secret doesn't have correct field",
-			secrets: []runtime.Object{jwtSecretWrongField, caSecretWrongField},
+			name: "CA Secret doesn't have correct field",
+			getSecrets: func() []runtime.Object {
+				return []runtime.Object{newJWTSecretWrongField(), newCASecretWrongField()}
+			},
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:   jwtSecret.Name,
-					CASecretName: caSecret.Name,
+					SecretName:   jwtSecretName,
+					CASecretName: caSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "Client Secret doesn't exist",
-			secrets: []runtime.Object{jwtSecret, caSecret},
+			name:       "Client Secret doesn't exist",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecret(), newCASecret()} },
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:          jwtSecret.Name,
-					CASecretName:        caSecret.Name,
-					ClientSSLSecretName: clientSecret.Name,
+					SecretName:          jwtSecretName,
+					CASecretName:        caSecretName,
+					ClientSSLSecretName: clientSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "Client Secret doesn't have correct cert",
-			secrets: []runtime.Object{jwtSecret, caSecret, clientSecretWrongCert},
+			name: "Client Secret doesn't have correct cert",
+			getSecrets: func() []runtime.Object {
+				return []runtime.Object{newJWTSecret(), newCASecret(), newClientSecretWrongCert()}
+			},
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:          jwtSecret.Name,
-					CASecretName:        caSecret.Name,
-					ClientSSLSecretName: clientSecret.Name,
+					SecretName:          jwtSecretName,
+					CASecretName:        caSecretName,
+					ClientSSLSecretName: clientSecretName,
 				},
 			},
 			expSecrets: nil,
 			expErr:     true,
 		},
 		{
-			name:    "Client Secret doesn't have correct key",
-			secrets: []runtime.Object{jwtSecret, caSecret, clientSecretWrongKey},
+			name: "Client Secret doesn't have correct key",
+			getSecrets: func() []runtime.Object {
+				return []runtime.Object{newJWTSecret(), newCASecret(), newClientSecretWrongKey()}
+			},
 			cfg: config.Config{
 				Plus:             true,
-				GatewayPodConfig: config.GatewayPodConfig{Namespace: jwtSecret.Namespace},
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
 				UsageReportConfig: config.UsageReportConfig{
-					SecretName:          jwtSecret.Name,
-					CASecretName:        caSecret.Name,
-					ClientSSLSecretName: clientSecret.Name,
+					SecretName:          jwtSecretName,
+					CASecretName:        caSecretName,
+					ClientSSLSecretName: clientSecretName,
 				},
 			},
 			expSecrets: nil,
@@ -691,11 +725,12 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		fakeClient := fake.NewFakeClient(test.secrets...)
-
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+			test := test // capture range variable
 			g := NewWithT(t)
+
+			fakeClient := fake.NewFakeClient(test.getSecrets()...)
 
 			plusSecrets, err := createPlusSecretMetadata(test.cfg, fakeClient)
 			if test.expErr {
@@ -979,3 +1014,424 @@ func createTypedObject(gvk *schema.GroupVersionKind) ngftypes.ObjectType {
 	obj.SetGroupVersionKind(*gvk)
 	return obj
 }
+
+func TestCreatePLMSecretMetadata(t *testing.T) {
+	t.Parallel()
+
+	const defaultNamespace = "nginx-gateway"
+
+	tests := []struct {
+		expSecrets map[types.NamespacedName]*graph.PLMSecretConfig
+		name       string
+		plmCfg     config.PLMStorageConfig
+	}{
+		{
+			name:       "PLM not configured (empty URL)",
+			plmCfg:     config.PLMStorageConfig{},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{},
+		},
+		{
+			name: "only credentials secret specified",
+			plmCfg: config.PLMStorageConfig{
+				URL:                   "http://plm-storage:8333",
+				CredentialsSecretName: "plm-creds",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+			},
+		},
+		{
+			name: "credentials and CA secrets specified",
+			plmCfg: config.PLMStorageConfig{
+				URL:                   "http://plm-storage:8333",
+				CredentialsSecretName: "plm-creds",
+				TLSCACertSecretName:   "plm-ca",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+		},
+		{
+			name: "all secrets specified",
+			plmCfg: config.PLMStorageConfig{
+				URL:                    "https://plm-storage:8333",
+				CredentialsSecretName:  "plm-creds",
+				TLSCACertSecretName:    "plm-ca",
+				TLSClientSSLSecretName: "plm-client",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+				{Namespace: defaultNamespace, Name: "plm-client"}: {
+					Type: graph.PLMSecretTypeTLSClient,
+				},
+			},
+		},
+		{
+			name: "secrets with namespace prefix",
+			plmCfg: config.PLMStorageConfig{
+				URL:                    "https://plm-storage:8333",
+				CredentialsSecretName:  "other-ns/plm-creds",
+				TLSCACertSecretName:    "ca-ns/plm-ca",
+				TLSClientSSLSecretName: "tls-ns/plm-client",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: "other-ns", Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+				{Namespace: "ca-ns", Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+				{Namespace: "tls-ns", Name: "plm-client"}: {
+					Type: graph.PLMSecretTypeTLSClient,
+				},
+			},
+		},
+		{
+			name: "only TLS CA secret specified",
+			plmCfg: config.PLMStorageConfig{
+				URL:                 "https://plm-storage:8333",
+				TLSCACertSecretName: "plm-ca",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+		},
+		{
+			name: "only TLS client secret specified",
+			plmCfg: config.PLMStorageConfig{
+				URL:                    "https://plm-storage:8333",
+				TLSClientSSLSecretName: "plm-client",
+			},
+			expSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-client"}: {
+					Type: graph.PLMSecretTypeTLSClient,
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			plmSecrets := createPLMSecretMetadata(test.plmCfg, defaultNamespace)
+
+			g.Expect(plmSecrets).To(Equal(test.expSecrets))
+		})
+	}
+}
+
+func TestCreateWAFFetcher(t *testing.T) {
+	t.Parallel()
+
+	const (
+		defaultNamespace = "nginx-gateway"
+		plmStorageURL    = "https://plm-storage:8333"
+	)
+
+	// Helper functions to create fresh secret copies for each test to avoid race conditions
+	newCredsSecret := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: defaultNamespace,
+				Name:      "plm-creds",
+			},
+			Data: map[string][]byte{
+				secrets.PLMCredentialsKey: []byte("secret-access-key"),
+			},
+		}
+	}
+
+	newCASecret := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: defaultNamespace,
+				Name:      "plm-ca",
+			},
+			Data: map[string][]byte{
+				secrets.CAKey: []byte(validCACert),
+			},
+		}
+	}
+
+	tests := []struct {
+		plmSecrets            map[types.NamespacedName]*graph.PLMSecretConfig
+		getK8sObjects         func() []runtime.Object
+		name                  string
+		plmStorageURL         string
+		tlsInsecureSkipVerify bool
+		expErr                bool
+		expFetcherNil         bool
+	}{
+		{
+			name:          "PLM not configured (empty URL)",
+			plmSecrets:    map[types.NamespacedName]*graph.PLMSecretConfig{},
+			plmStorageURL: "",
+			getK8sObjects: func() []runtime.Object { return nil },
+			expFetcherNil: true,
+			expErr:        false,
+		},
+		{
+			name: "credentials only",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+			},
+			plmStorageURL: plmStorageURL,
+			getK8sObjects: func() []runtime.Object { return []runtime.Object{newCredsSecret()} },
+			expErr:        false,
+			expFetcherNil: false,
+		},
+		{
+			name: "credentials and CA cert",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+			plmStorageURL: plmStorageURL,
+			getK8sObjects: func() []runtime.Object { return []runtime.Object{newCredsSecret(), newCASecret()} },
+			expErr:        false,
+			expFetcherNil: false,
+		},
+		{
+			name: "TLS insecure skip verify enabled",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+			},
+			plmStorageURL:         plmStorageURL,
+			tlsInsecureSkipVerify: true,
+			getK8sObjects:         func() []runtime.Object { return []runtime.Object{newCredsSecret()} },
+			expErr:                false,
+			expFetcherNil:         false,
+		},
+		{
+			name: "missing credentials secret",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-creds"}: {
+					Type: graph.PLMSecretTypeCredentials,
+				},
+			},
+			plmStorageURL: plmStorageURL,
+			getK8sObjects: func() []runtime.Object { return nil }, // secret not created
+			expErr:        true,
+			expFetcherNil: false,
+		},
+		{
+			name: "missing CA secret",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+			plmStorageURL: plmStorageURL,
+			getK8sObjects: func() []runtime.Object { return nil }, // secret not created
+			expErr:        true,
+			expFetcherNil: false,
+		},
+		{
+			name:          "no secrets configured (just URL)",
+			plmSecrets:    map[types.NamespacedName]*graph.PLMSecretConfig{},
+			plmStorageURL: plmStorageURL,
+			getK8sObjects: func() []runtime.Object { return nil },
+			expErr:        false,
+			expFetcherNil: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test := test // capture range variable
+			g := NewWithT(t)
+
+			scheme := runtime.NewScheme()
+			g.Expect(apiv1.AddToScheme(scheme)).To(Succeed())
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(test.getK8sObjects()...).
+				Build()
+
+			fetcher, err := createWAFFetcher(
+				test.plmSecrets,
+				test.plmStorageURL,
+				test.tlsInsecureSkipVerify,
+				fakeClient,
+				logr.Discard(),
+			)
+
+			if test.expErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			if test.expFetcherNil {
+				g.Expect(fetcher).To(BeNil())
+			} else if !test.expErr {
+				g.Expect(fetcher).ToNot(BeNil())
+			}
+		})
+	}
+}
+
+func TestBuildTLSConfig(t *testing.T) {
+	t.Parallel()
+
+	const defaultNamespace = "nginx-gateway"
+
+	// Helper function to create fresh CA secret copies for each test to avoid race conditions
+	newCASecret := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: defaultNamespace,
+				Name:      "plm-ca",
+			},
+			Data: map[string][]byte{
+				secrets.CAKey: []byte(validCACert),
+			},
+		}
+	}
+
+	tests := []struct {
+		plmSecrets            map[types.NamespacedName]*graph.PLMSecretConfig
+		getK8sObjects         func() []runtime.Object
+		name                  string
+		tlsInsecureSkipVerify bool
+		expErr                bool
+		expConfigNil          bool
+	}{
+		{
+			name:          "no TLS secrets",
+			plmSecrets:    map[types.NamespacedName]*graph.PLMSecretConfig{},
+			getK8sObjects: func() []runtime.Object { return nil },
+			expErr:        false,
+			expConfigNil:  true,
+		},
+		{
+			name: "CA cert only",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+			getK8sObjects: func() []runtime.Object { return []runtime.Object{newCASecret()} },
+			expErr:        false,
+			expConfigNil:  false,
+		},
+		{
+			name: "insecure skip verify enabled",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+			tlsInsecureSkipVerify: true,
+			getK8sObjects:         func() []runtime.Object { return []runtime.Object{newCASecret()} },
+			expErr:                false,
+			expConfigNil:          false,
+		},
+		{
+			name: "missing CA secret",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-ca"}: {
+					Type: graph.PLMSecretTypeTLSCA,
+				},
+			},
+			getK8sObjects: func() []runtime.Object { return nil }, // secret not created
+			expErr:        true,
+			expConfigNil:  false,
+		},
+		{
+			name: "missing client secret",
+			plmSecrets: map[types.NamespacedName]*graph.PLMSecretConfig{
+				{Namespace: defaultNamespace, Name: "plm-client"}: {
+					Type: graph.PLMSecretTypeTLSClient,
+				},
+			},
+			getK8sObjects: func() []runtime.Object { return nil }, // secret not created
+			expErr:        true,
+			expConfigNil:  false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test := test // capture range variable
+			g := NewWithT(t)
+
+			scheme := runtime.NewScheme()
+			g.Expect(apiv1.AddToScheme(scheme)).To(Succeed())
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(test.getK8sObjects()...).
+				Build()
+
+			tlsConfig, err := buildTLSConfig(
+				test.plmSecrets,
+				test.tlsInsecureSkipVerify,
+				fakeClient,
+			)
+
+			if test.expErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			if test.expConfigNil {
+				g.Expect(tlsConfig).To(BeNil())
+			} else if !test.expErr {
+				g.Expect(tlsConfig).ToNot(BeNil())
+			}
+		})
+	}
+}
+
+const (
+	// Valid CA certificate for testing (from existing test files).
+	validCACert = `-----BEGIN CERTIFICATE-----
+MIIDSDCCAjACCQDKWvrpwiIyCDANBgkqhkiG9w0BAQsFADBmMQswCQYDVQQGEwJV
+UzELMAkGA1UECAwCQ0ExFjAUBgNVBAcMDVNhbiBGcmFuc2lzY28xDjAMBgNVBAoM
+BU5HSU5YMQwwCgYDVQQLDANLSUMxFDASBgNVBAMMC2V4YW1wbGUuY29tMB4XDTIw
+MTExMjIxMjg0MloXDTMwMTExMDIxMjg0MlowZjELMAkGA1UEBhMCVVMxCzAJBgNV
+BAgMAkNBMRYwFAYDVQQHDA1TYW4gRnJhbnNpc2NvMQ4wDAYDVQQKDAVOR0lOWDEM
+MAoGA1UECwwDS0lDMRQwEgYDVQQDDAtleGFtcGxlLmNvbTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAMrlKMqrHfMR4mgaL2zZG2DYYfKCFVmINjlYuOeC
+FDTcRgQKtu2YcCxZYBADwHZxEf6NIKtVsMWLhSNS/Nc0BmtiQM/IExhlCiDC6Sl8
+ONrI3w7qJzN6IUERB6tVlQt07rgM0V26UTYu0Ikv1Y8trfLYPZckzBkorQjpcium
+qoP2BJf4yyc9LqpxtlWKxelkunVL5ijMEzpj9gEE26TEHbsdEbhoR8g0OeHZqH7e
+mXCnSIBR0A/o/s6noGNX+F19lY7Tgw77jOuQQ5Ysi+7nhN2lKvcC819RX7oMpgvt
+V5B3nI0mF6BaznjeTs4yQcr1Sm3UTVBwX9ZuvL7RbIXkUm8CAwEAATANBgkqhkiG
+9w0BAQsFAAOCAQEAgm04w6OIWGj6tka9ccccnblF0oZzeEAIywjvR5sDcPdvLIeM
+eesJy6rFH4DBmMygpcIxJGrSOzZlF3LMvw7zK4stqNtm1HiprF8bzxfTffVYncg6
+hVKErHtZ2FZRj/2TMJ01aRDZSuVbL6UJiokpU6xxT7yy0dFZkKrjUR349gKxRqJw
+Am2as0bhi51EqK1GEx3m4c0un2vNh5qP2hv6e/Qze6P96vefNaSk9QMFfuB1kSAk
+fGpkiL7bjmjnhKwAmf8jDWDZltB6S56Qy2QjPR8JoOusbYxar4c6EcIwVHv6mdgP
+yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
+-----END CERTIFICATE-----`
+)

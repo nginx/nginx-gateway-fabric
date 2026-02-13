@@ -2,6 +2,7 @@ internal/controller/state/change_processor_test.go:private-key:357
 internal/controller/state/graph/graph_test.go:private-key:57
 internal/controller/state/resolver/secrets_test.go:private-key:39
 internal/controller/state/resolver/secrets_test.go:private-key:69
+internal/framework/fetch/fetch_test.go:private-key:178
 examples/basic-authentication/basic-auth.yaml:generic-api-key:8
 examples/basic-authentication/basic-auth.yaml:generic-api-key:31
 examples/secure-traffic/gateway.yaml:kubernetes-secret-yaml:1

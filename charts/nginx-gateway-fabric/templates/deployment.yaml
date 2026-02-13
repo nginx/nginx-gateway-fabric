@@ -116,6 +116,21 @@ spec:
         {{- if .Values.nginxGateway.snippets.enable }}
         - --snippets
         {{- end }}
+        {{- if .Values.nginxGateway.plmStorage.url }}
+        - --plm-storage-url={{ .Values.nginxGateway.plmStorage.url }}
+        {{- if .Values.nginxGateway.plmStorage.credentialsSecretName }}
+        - --plm-storage-credentials-secret={{ .Values.nginxGateway.plmStorage.credentialsSecretName }}
+        {{- end }}
+        {{- if .Values.nginxGateway.plmStorage.tls.caSecretName }}
+        - --plm-storage-ca-secret={{ .Values.nginxGateway.plmStorage.tls.caSecretName }}
+        {{- end }}
+        {{- if .Values.nginxGateway.plmStorage.tls.clientCertPath }}
+        - --plm-storage-client-ssl-secret={{ .Values.nginxGateway.plmStorage.tls.clientSSLSecretName }}
+        {{- end }}
+        {{- if .Values.nginxGateway.plmStorage.tls.insecureSkipVerify }}
+        - --plm-storage-skip-verify
+        {{- end }}
+        {{- end }}
         {{- if .Capabilities.APIVersions.Has "security.openshift.io/v1/SecurityContextConstraints" }}
         - --nginx-scc={{ include "nginx-gateway.scc-name" . }}-nginx
         {{- end}}
