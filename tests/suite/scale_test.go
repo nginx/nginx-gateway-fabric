@@ -221,6 +221,25 @@ The logs are attached only if there are errors.
 		return len(errors)
 	}
 
+	checkMetricsExist := func(
+		promInstance framework.PrometheusInstance,
+		queries []string,
+		getTime func() time.Time,
+		modifyTime func(),
+		timeout, polling time.Duration,
+	) {
+		for _, query := range queries {
+			Eventually(
+				framework.CreateMetricExistChecker(
+					promInstance,
+					query,
+					getTime,
+					modifyTime,
+				),
+			).WithTimeout(timeout).WithPolling(polling).Should(Succeed())
+		}
+	}
+
 	runTestWithMetricsAndLogs := func(testName, testResultsDir string, test func()) {
 		var (
 			metricExistTimeout = 2 * time.Minute
@@ -250,16 +269,7 @@ The logs are attached only if there are errors.
 			)
 		}
 
-		for _, query := range initialQueries {
-			Eventually(
-				framework.CreateMetricExistChecker(
-					promInstance,
-					query,
-					getStartTime,
-					modifyStartTime,
-				),
-			).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
-		}
+		checkMetricsExist(promInstance, initialQueries, getStartTime, modifyStartTime, metricExistTimeout, metricExistPolling)
 
 		test()
 
@@ -297,16 +307,7 @@ The logs are attached only if there are errors.
 			fmt.Sprintf(`nginx_gateway_fabric_event_batch_processing_milliseconds_sum{pod="%s"}`, ngfPodName),
 		}
 
-		for _, query := range ngfQueries {
-			Eventually(
-				framework.CreateMetricExistChecker(
-					promInstance,
-					query,
-					getEndTime,
-					noOpModifier,
-				),
-			).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
-		}
+		checkMetricsExist(promInstance, ngfQueries, getEndTime, noOpModifier, metricExistTimeout, metricExistPolling)
 
 		// Ensure NGINX data plane metrics exist at endTime (data plane pod is created during the test).
 		if nginxDataPlanePodName != "" {
@@ -315,16 +316,7 @@ The logs are attached only if there are errors.
 				fmt.Sprintf(`container_cpu_usage_seconds_total{pod="%s",container="nginx"}`, nginxDataPlanePodName),
 			}
 
-			for _, query := range nginxQueries {
-				Eventually(
-					framework.CreateMetricExistChecker(
-						promInstance,
-						query,
-						getEndTime,
-						noOpModifier,
-					),
-				).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
-			}
+			checkMetricsExist(promInstance, nginxQueries, getEndTime, noOpModifier, metricExistTimeout, metricExistPolling)
 		}
 
 		// Collect metric values
