@@ -160,7 +160,7 @@ rules:
   - snippetsfilters
   - authenticationfilters
   - snippetspolicies
-  - wafpolicies
+  - wafgatewaybindingpolicies
   verbs:
   - create
   - delete
@@ -180,7 +180,7 @@ rules:
   - snippetsfilters/status
   - authenticationfilters/status
   - snippetspolicies/status
-  - wafpolicies/status
+  - wafgatewaybindingpolicies/status
   verbs:
   - update
 - apiGroups:
@@ -216,6 +216,15 @@ rules:
   - patch
   - update
   - use
+  - watch
+- apiGroups:
+  - appprotect.f5.com
+  resources:
+  - aplogconfs
+  - appolicies
+  verbs:
+  - get
+  - list
   - watch
 
 # +kubebuilder:scaffold:rules

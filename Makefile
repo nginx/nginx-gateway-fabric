@@ -5,9 +5,8 @@ CHART_DIR = $(SELF_DIR)charts/nginx-gateway-fabric
 NGINX_CONF_DIR = internal/controller/nginx/conf
 NJS_DIR = internal/controller/nginx/modules/src
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
-NAP_WAF_ALPINE_VERSION = 3.19
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
-NGINX_DOCKER_BUILD_NAP_WAF_ARGS = --build-arg ALPINE_VERSION=$(NAP_WAF_ALPINE_VERSION) --build-arg INCLUDE_NAP_WAF=true
+NGINX_DOCKER_BUILD_NAP_WAF_ARGS = --build-arg INCLUDE_NAP_WAF=true
 BUILD_AGENT = local
 
 PROD_TELEMETRY_ENDPOINT = oss.edge.df.f5.com:443
@@ -57,6 +56,8 @@ GOOS ?= linux## The OS of the image and/or binary. For example: linux or darwin
 PLUS_ENABLED ?= false
 PLUS_LICENSE_FILE ?= $(SELF_DIR)license.jwt
 PLUS_USAGE_ENDPOINT ?=## The N+ usage endpoint. For development, please set to the N1 staging endpoint.
+HELM_PARAMETERS ?=## Optional extra parameters for the Helm install
+HELM_WAF_PARAMETERS = --set nginxGateway.plmStorage.url=nginx-app-protect-seaweed-filer.ngf-nginx-app-protect.svc.cluster.local:8333 --set nginxGateway.plmStorage.credentialsSecretName=ngf-nginx-app-protect/nginx-app-protect-seaweedfs-auth
 
 override NGINX_DOCKER_BUILD_OPTIONS += --build-arg NJS_DIR=$(NJS_DIR) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) --build-arg BUILD_AGENT=$(BUILD_AGENT)
 
@@ -114,6 +115,16 @@ build-nginx-plus-image-with-nap-waf: check-for-docker ## Build the custom nginx 
 		echo "\033[0;31mIMPORTANT:\033[0m The nginx-plus-waf image cannot be built for arm64 architecture and will be built for amd64."; \
 	fi
 	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) -f $(SELF_DIR)build/Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+
+.PHONY: build-nginx-plus-image-with-nap-waf-dev
+build-nginx-plus-image-with-nap-waf-dev: check-for-docker check-nap-waf-repo-url ## Build the custom nginx plus image with NAP WAF from dev repo. Requires NAP_WAF_REPO_URL env var.
+	NGINX_PLUS_PREFIX=$(NGINX_PLUS_PREFIX) TAG=$(TAG) GOARCH=amd64 NJS_DIR=$(NJS_DIR) NGINX_CONF_DIR=$(NGINX_CONF_DIR) BUILD_AGENT=$(BUILD_AGENT) $(SELF_DIR)scripts/build-nap-dev-image.sh
+
+.PHONY: check-nap-waf-repo-url
+check-nap-waf-repo-url:
+ifndef NAP_WAF_REPO_URL
+	$(error NAP_WAF_REPO_URL must be set. Example: export NAP_WAF_REPO_URL=https://your.artifactory.server/path/to/repo)
+endif
 
 .PHONY: check-for-docker
 check-for-docker: ## Check if Docker is installed
@@ -253,6 +264,9 @@ install-ngf-local-build: build-images load-images helm-install-local ## Install 
 .PHONY: install-ngf-local-build-with-plus
 install-ngf-local-build-with-plus: check-for-plus-usage-endpoint build-images-with-plus load-images-with-plus helm-install-local-with-plus ## Install NGF with NGINX Plus from local build on configured kind cluster.
 
+.PHONY: install-ngf-local-build-with-waf
+install-ngf-local-build-with-waf: check-for-plus-usage-endpoint build-images-with-nap-waf load-images-with-plus helm-install-local-with-plus ## Install NGF with NGINX Plus from local build on configured kind cluster.
+
 .PHONY: helm-install-local
 helm-install-local: install-gateway-crds ## Helm install NGF on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build.
 	@if [ "$(ENABLE_INFERENCE_EXTENSION)" = "true" ]; then \
@@ -268,6 +282,15 @@ helm-install-local-with-plus: check-for-plus-usage-endpoint install-gateway-crds
 	kubectl create namespace nginx-gateway || true
 	kubectl -n nginx-gateway create secret generic nplus-license --from-file $(PLUS_LICENSE_FILE) || true
 	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_PARAMETERS)
+
+.PHONY: helm-install-local-with-waf
+helm-install-local-with-waf: check-for-plus-usage-endpoint install-gateway-crds ## Helm install NGF with NGINX Plus on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build-with-plus.
+	@if [ "$(ENABLE_INFERENCE_EXTENSION)" = "true" ]; then \
+		$(MAKE) install-inference-crds; \
+	fi
+	kubectl create namespace nginx-gateway || true
+	kubectl -n nginx-gateway create secret generic nplus-license --from-file $(PLUS_LICENSE_FILE) || true
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_WAF_PARAMETERS) $(HELM_PARAMETERS)
 
 .PHONY: check-for-plus-usage-endpoint
 check-for-plus-usage-endpoint: ## Checks that the PLUS_USAGE_ENDPOINT is set in the environment. This env var is required when deploying or testing with N+.

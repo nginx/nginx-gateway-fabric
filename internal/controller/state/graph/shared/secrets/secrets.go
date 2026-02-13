@@ -54,6 +54,12 @@ const (
 
 	// N1CDataplaneKey is the dataplane key for the NGINX One Console.
 	N1CDataplaneKey = "dataplane.key"
+
+	// PLMCredentialsKey is the Secret data key for PLM storage credentials (S3 secret access key).
+	PLMCredentialsKey = "seaweedfs_admin_secret"
+
+	// PLMAccessKeyID is the access key ID used for S3-compatible PLM storage authentication.
+	PLMAccessKeyID = "adminKey"
 )
 
 // CertificateBundle is used to submit certificate data to nginx that is kubernetes aware.
