@@ -239,6 +239,7 @@ func BuildGraph(
 		validators.GenericValidator,
 		processedGwClasses.Winner,
 		processedGws,
+		featureFlags.Plus,
 	)
 
 	gc := buildGatewayClass(

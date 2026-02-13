@@ -201,8 +201,8 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 						File:      "http.conf",
 					},
 					{
-						Directive: "server_tokens",
-						Value:     "on",
+						Directive: "send_lowat",
+						Value:     "1024",
 						File:      fmt.Sprintf("%s%s", httpServerContext, grpcRouteSuffix),
 					},
 					{
