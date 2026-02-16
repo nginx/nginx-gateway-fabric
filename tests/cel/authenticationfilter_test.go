@@ -108,19 +108,6 @@ func TestAuthenticationFilterValidateJWTAccepted(t *testing.T) {
 		wantErrors []string
 	}{
 		{
-			name: "Validate: type=JWT with spec.jwt set is accepted",
-			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
-				Type: ngfAPIv1alpha1.AuthTypeJWT,
-				JWT: &ngfAPIv1alpha1.JWTAuth{
-					Realm:  "Restricted Area",
-					Source: ngfAPIv1alpha1.JWTKeySourceFile,
-					File: &ngfAPIv1alpha1.JWTFileKeySource{
-						SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwt-secret")},
-					},
-				},
-			},
-		},
-		{
 			name: "Validate: type=JWT with source=File and spec.jwt.file set is accepted",
 			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
 				Type: ngfAPIv1alpha1.AuthTypeJWT,
