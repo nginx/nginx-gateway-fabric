@@ -206,7 +206,7 @@ type JWTAuth struct {
   // Required when Source == Remote.
   //
   // +optional
-  Remote *RemoteKeySource `json:"remote,omitempty"`
+  Remote *JWTRemoteKeySource `json:"remote,omitempty"`
 
   // Require defines claims that must match exactly (e.g. iss, aud).
   // These translate into NGINX maps and auth_jwt_require directives.
@@ -254,15 +254,16 @@ type JWTFileKeySource struct {
   SecretRef LocalObjectReference `json:"secretRef"`
 }
 
- // RemoteKeySource specifies remote JWKS configuration.
-type RemoteKeySource struct {
-  // URI is the JWKS endpoint, e.g. "https://issuer.example.com/.well-known/jwks.json".
-  URI string `json:"url"`
-
+ // JWTRemoteKeySource specifies remote JWKS configuration.
+type JWTRemoteKeySource struct {
   // TLS defines HTTPS client parameters for retrieving JWKS.
   //
   // +optional
-  TLS *RemoteTLSConfig `json:"tls,omitempty"`
+  TLS *JWTRemoteTLSConfig `json:"tls,omitempty"`
+
+  // URI is the JWKS endpoint.
+  // +kubebuilder:validation:Pattern=`^(?:http?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?$`
+  URI string `json:"url"`
 }
 
 // JWTRequiredClaims specifies exact-match requirements for JWT claims.
@@ -301,13 +302,13 @@ type JWTCustomClaim struct {
   Values []string `json:"values,omitempty"`
 }
 
-// RemoteTLSConfig defines TLS settings for remote JWKS retrieval.
-type RemoteTLSConfig struct {
+// JWTRemoteTLSConfig defines TLS settings for remote JWKS retrieval.
+type JWTRemoteTLSConfig struct {
   // SecretRef references a Secret containing client TLS cert and key.
   // Expectes secret type kubernetes.io/tls.
   //
   // +optional
-  SecretRef *gatewayv1.SecretObjectReference `json:"secretRef,omitempty"`
+  SecretRef *LocalObjectReference `json:"secretRef,omitempty"`
 
 
   // Verify controls server certificate verification.

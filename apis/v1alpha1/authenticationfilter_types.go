@@ -2,7 +2,6 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // +genclient
@@ -56,7 +55,7 @@ type AuthenticationFilterSpec struct {
 
 // AuthType defines the authentication mechanism.
 //
-// +kubebuilder:validation:Enum=Basic;JWT;
+// +kubebuilder:validation:Enum=Basic;JWT
 type AuthType string
 
 const (
@@ -83,7 +82,7 @@ type LocalObjectReference struct {
 	Name string `json:"name"`
 }
 
-// JWTKeySource selects where JWT keys come from.
+// JWTKeySource specifies the source of the keys used to verify JWT signatures.
 // +kubebuilder:validation:Enum=File;Remote
 type JWTKeySource string
 
@@ -118,17 +117,7 @@ type JWTAuth struct {
 	// Required when Source == Remote.
 	//
 	// +optional
-	Remote *RemoteKeySource `json:"remote,omitempty"`
-
-	// Leeway is the acceptable clock skew for exp & nbf claims.
-	// If exp & nbf claims are not defined, this directive takes no effect.
-	// Configures `auth_jwt_leeway` directive.
-	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
-	// Example: "auth_jwt_leeway 60s".
-	// Default: 0s.
-	//
-	// +optional
-	Leeway *Duration `json:"leeway,omitempty"`
+	Remote *JWTRemoteKeySource `json:"remote,omitempty"`
 
 	// Realm used by NGINX `auth_jwt` directive
 	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
@@ -145,24 +134,27 @@ type JWTFileKeySource struct {
 	SecretRef LocalObjectReference `json:"secretRef"`
 }
 
-// RemoteKeySource specifies remote JWKS configuration.
-type RemoteKeySource struct {
+// JWTRemoteKeySource specifies remote JWKS configuration.
+type JWTRemoteKeySource struct {
 	// TLS defines HTTPS client parameters for retrieving JWKS.
 	//
 	// +optional
-	TLS *RemoteTLSConfig `json:"tls,omitempty"`
+	TLS *JWTRemoteTLSConfig `json:"tls,omitempty"`
 
 	// URI is the JWKS endpoint.
+	//
+	//nolint:lll
+	// +kubebuilder:validation:Pattern=`^(?:http?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?$`
 	URI string `json:"uri"`
 }
 
-// RemoteTLSConfig defines TLS settings for remote JWKS retrieval.
-type RemoteTLSConfig struct {
+// JWTRemoteTLSConfig defines TLS settings for remote JWKS retrieval.
+type JWTRemoteTLSConfig struct {
 	// SecretRef references a Secret containing client TLS cert and key.
 	// Expects secret type kubernetes.io/tls.
 	//
 	// +optional
-	SecretRef *v1.SecretObjectReference `json:"secretRef,omitempty"`
+	SecretRef *LocalObjectReference `json:"secretRef,omitempty"`
 
 	// Verify controls server certificate verification.
 	//

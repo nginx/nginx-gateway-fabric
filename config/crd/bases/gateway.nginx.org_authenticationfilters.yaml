@@ -102,16 +102,6 @@ spec:
                       Example: "auth_jwt_key_cache 10m;".
                     pattern: ^[0-9]{1,4}(ms|s|m|h)?$
                     type: string
-                  leeway:
-                    description: |-
-                      Leeway is the acceptable clock skew for exp & nbf claims.
-                      If exp & nbf claims are not defined, this directive takes no affect.
-                      Configures `auth_jwt_leeway` directive.
-                      https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
-                      Example: "auth_jwt_leeway 60s".
-                      Default: 0s.
-                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
-                    type: string
                   realm:
                     description: |-
                       Realm used by NGINX `auth_jwt` directive
@@ -132,41 +122,8 @@ spec:
                               SecretRef references a Secret containing client TLS cert and key.
                               Expects secret type kubernetes.io/tls.
                             properties:
-                              group:
-                                default: ""
-                                description: |-
-                                  Group is the group of the referent. For example, "gateway.networking.k8s.io".
-                                  When unspecified or empty string, core API group is inferred.
-                                maxLength: 253
-                                pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
-                                type: string
-                              kind:
-                                default: Secret
-                                description: Kind is kind of the referent. For example
-                                  "Secret".
-                                maxLength: 63
-                                minLength: 1
-                                pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
-                                type: string
                               name:
-                                description: Name is the name of the referent.
-                                maxLength: 253
-                                minLength: 1
-                                type: string
-                              namespace:
-                                description: |-
-                                  Namespace is the namespace of the referenced object. When unspecified, the local
-                                  namespace is inferred.
-
-                                  Note that when a namespace different than the local namespace is specified,
-                                  a ReferenceGrant object is required in the referent namespace to allow that
-                                  namespace's owner to accept the reference. See the ReferenceGrant
-                                  documentation for details.
-
-                                  Support: Core
-                                maxLength: 63
-                                minLength: 1
-                                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                                description: Name is the referenced object.
                                 type: string
                             required:
                             - name
@@ -192,6 +149,7 @@ spec:
                         type: object
                       uri:
                         description: URI is the JWKS endpoint.
+                        pattern: ^(?:http?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?$
                         type: string
                     required:
                     - uri

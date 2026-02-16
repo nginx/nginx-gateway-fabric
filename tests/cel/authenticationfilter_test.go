@@ -140,7 +140,7 @@ func TestAuthenticationFilterValidateJWTAccepted(t *testing.T) {
 				JWT: &ngfAPIv1alpha1.JWTAuth{
 					Realm:  "Restricted Area",
 					Source: ngfAPIv1alpha1.JWTKeySourceRemote,
-					Remote: &ngfAPIv1alpha1.RemoteKeySource{
+					Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
 						URI: "https://issuer.example.com/.well-known/jwks.json",
 					},
 				},
@@ -226,7 +226,7 @@ func TestAuthenticationFilterValidateJWTRejected(t *testing.T) {
 				JWT: &ngfAPIv1alpha1.JWTAuth{
 					Realm:  "Restricted Area",
 					Source: ngfAPIv1alpha1.JWTKeySourceFile,
-					Remote: &ngfAPIv1alpha1.RemoteKeySource{
+					Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
 						URI: "https://issuer.example.com/.well-known/jwks.json",
 					},
 				},
