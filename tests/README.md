@@ -343,41 +343,6 @@ To use an existing VM to run the tests, run the following
 make nfr-test
 ```
 
-The NFR tests consist of several test cases, each of which have their own label.
-These labels are:
-
-| Label | Description
-| ---------------------- | ----------------------
-| `nfr` | Default: Runs all NFR tests under `scale` and `zero-downtime-scale`
-| `scale` | Runs all tests in `scale` test case. Includes `http-listeners`, `https-listeners`, `http-routes`, `upstream-servers` and `http-matches`
-| `http-listeners` | Runs `http-listeners` test case only
-| `https-listeners` | Runs `http-listeners` test case only
-| `http-routes` | Runs `http-listeners` test case only
-| `upstream-servers` | Runs `http-listeners` test case only
-| `http-matches` | Runs `http-listeners` test case only
-| `zero-downtime-scale` | Runs all tests in `zero-downtime-scale` test case. Includes `gradual-up`, `gradual-down`, `abrupt-up` and `abrupt-down`
-| `gradual-up` | Runs `gradual-up` test case only
-| `gradual-down` | Runs `gradual-down` test case only
-| `abrupt-up` | Runs `abrupt-up` test case only
-| `upstream-servers` | Runs `http-listeners` test case only
-
-This will run all NFR test cases.
-
-To run a specific test case, update `scripts/vars.env` and add `GINKGO_LABEL=<nfr-test-label>`
-For example, to rune just the HTTP Listeners test, set `GINKGO_LABEL=http-listeners`
-
-If you're running this test in GKE, make sure you sync your files to the VM before running the test.
-
-```makefile
-make sync-files-to-vm
-```
-
-Now, run the nfr test
-
-```makefile
-make nfr-test
-```
-
 ##### Longevity testing
 
 This test is run on its own due to its long-running nature. It will run for 3 days (as defined in `suite/scripts/longevity-wrk.sh`) before
