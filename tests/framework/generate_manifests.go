@@ -165,6 +165,8 @@ func GenerateScaleListenerObjects(numListeners int, tls bool) (ScaleObjects, err
 	secrets := make([]string, 0)
 	routes := make([]route, 0)
 
+	// For numListeners, generate a listener with a unique hostname prefix,
+	// backend and optionally a TLS secret.
 	for i := range numListeners {
 		listenerName := fmt.Sprintf("listener-%d", i)
 		hostnamePrefix := fmt.Sprintf("%d", i)
@@ -193,29 +195,36 @@ func GenerateScaleListenerObjects(numListeners int, tls bool) (ScaleObjects, err
 		backends = append(backends, backendName)
 	}
 
+	// Generate secrets first and add to result.BaseObjects.
 	secretObjects, err := generateSecrets(secrets)
 	if err != nil {
 		return ScaleObjects{}, err
 	}
 	result.BaseObjects = append(result.BaseObjects, secretObjects...)
 
+	// Generate backend services/deployments and add to result.GatewayAndServiceObjects.
 	backendObjects, err := generateBackendAppObjects(backends)
 	if err != nil {
 		return ScaleObjects{}, err
 	}
 	result.GatewayAndServiceObjects = append(result.GatewayAndServiceObjects, backendObjects...)
 
+	// Generate Gateway object with all listeners and add to result.GatewayAndServiceObjects.
 	gatewayObjects, err := generateManifests(listeners, nil)
 	if err != nil {
 		return ScaleObjects{}, err
 	}
 	result.GatewayAndServiceObjects = append(result.GatewayAndServiceObjects, gatewayObjects...)
 
-	routeObjects, err := generateManifests(nil, routes)
-	if err != nil {
-		return ScaleObjects{}, err
+	// Add each HTTPRoute as its own scale iteration group to measure
+	// Time-to-Ready (ttr) for each route.
+	for _, r := range routes {
+		routeObjects, err := generateManifests(nil, []route{r})
+		if err != nil {
+			return ScaleObjects{}, err
+		}
+		result.ScaleIterationGroups = append(result.ScaleIterationGroups, routeObjects)
 	}
-	result.ScaleIterationGroups = append(result.ScaleIterationGroups, routeObjects)
 
 	return result, nil
 }
@@ -245,11 +254,6 @@ func generateSecrets(secrets []string) ([]client.Object, error) {
 func GenerateScaleHTTPRouteObjects(numRoutes int) (ScaleObjects, error) {
 	var result ScaleObjects
 
-	l := listener{
-		Name:           "listener",
-		HostnamePrefix: "*",
-	}
-
 	backendName := "backend"
 
 	// Generate backend objects and add to GatewayAndServiceObjects
@@ -258,6 +262,11 @@ func GenerateScaleHTTPRouteObjects(numRoutes int) (ScaleObjects, error) {
 		return ScaleObjects{}, err
 	}
 	result.GatewayAndServiceObjects = append(result.GatewayAndServiceObjects, backendObjects...)
+
+	l := listener{
+		Name:           "listener",
+		HostnamePrefix: "*",
+	}
 
 	// Generate Gateway object and add to GatewayAndServiceObjects
 	gatewayObjects, err := generateManifests([]listener{l}, nil)
