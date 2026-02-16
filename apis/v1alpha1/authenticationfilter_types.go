@@ -121,7 +121,7 @@ type JWTAuth struct {
 	Remote *RemoteKeySource `json:"remote,omitempty"`
 
 	// Leeway is the acceptable clock skew for exp & nbf claims.
-	// If exp & nbf claims are not defined, this directive takes no affect.
+	// If exp & nbf claims are not defined, this directive takes no effect.
 	// Configures `auth_jwt_leeway` directive.
 	// https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_leeway
 	// Example: "auth_jwt_leeway 60s".
