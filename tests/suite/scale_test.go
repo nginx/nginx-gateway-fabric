@@ -253,7 +253,7 @@ The logs are attached only if there are errors.
 
 		test()
 
-		// We sleep for 2 scrape intervalss to ensure Prometheus scrapes the metrics after the test() finishes
+		// We sleep for 2 scrape intervals to ensure Prometheus scrapes the metrics after the test() finishes
 		// before endTime, so that we don't lose any metric values like reloads.
 		GinkgoWriter.Printf(
 			"Sleeping for %v to ensure Prometheus scrapes the metrics after the test finishes\n",
