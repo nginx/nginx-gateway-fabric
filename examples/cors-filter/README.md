@@ -58,29 +58,27 @@ To access the application, we will use `curl` to send requests to the `coffee` a
 To get coffee:
 
 ```shell
-curl --resolve cafe.example.com:$GW_PORT:$GW_IP http://cafe.example.com:$GW_PORT/coffee -v
+curl --resolve cafe.example.com:$GW_PORT:$GW_IP http://cafe.example.com:$GW_PORT/coffee -H "Origin: https://example.com" -H "access-control-request-method: PUT" -X OPTIONS  -v
 ```
 
 ```text
-> GET /coffee HTTP/1.1
+> OPTIONS /coffee HTTP/1.1
 > Host: cafe.example.com:8080
 > User-Agent: curl/8.7.1
 > Accept: */*
+> Origin: https://example.com
+> access-control-request-method: PUT
 >
 * Request completely sent off
 < HTTP/1.1 200 OK
 < Server: nginx
-< Date: Tue, 10 Feb 2026 14:20:10 GMT
-< Content-Type: text/plain
-< Content-Length: 162
+< Date: Fri, 13 Feb 2026 11:11:52 GMT
+< Content-Type: application/octet-stream
+< Content-Length: 0
 < Connection: keep-alive
-< Expires: Tue, 10 Feb 2026 14:20:09 GMT
-< Cache-Control: no-cache
-< Access-Control-Allow-Origin: *
-< Access-Control-Allow-Methods: GET, POST
-< Access-Control-Allow-Headers: Content-Type
-< Access-Control-Allow-Credentials: true
-< Access-Control-Max-Age: 3600
+< Access-Control-Allow-Origin: https://example.com
+< Access-Control-Allow-Methods: PUT
+< Access-Control-Max-Age: 5
 ```
 
 ## Clean up
