@@ -144,7 +144,7 @@ type JWTRemoteKeySource struct {
 	// URI is the JWKS endpoint.
 	//
 	//nolint:lll
-	// +kubebuilder:validation:Pattern=`^(?:http?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?$`
+	// +kubebuilder:validation:Pattern=`^(?:https?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?(?:\/[a-zA-Z0-9._~:\/?#\[\]@!$&'()*+,;=-]*)?$`
 	URI string `json:"uri"`
 }
 

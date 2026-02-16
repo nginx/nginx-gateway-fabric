@@ -134,14 +134,27 @@ func TestAuthenticationFilterValidateJWTAccepted(t *testing.T) {
 			},
 		},
 		{
-			name: "Validate: type=JWT with source=Remote and spec.jwt.remote set is accepted",
+			name: "Validate: type=JWT with source=Remote and spec.jwt.remote set is accepted with HTTP protocol",
 			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
 				Type: ngfAPIv1alpha1.AuthTypeJWT,
 				JWT: &ngfAPIv1alpha1.JWTAuth{
 					Realm:  "Restricted Area",
 					Source: ngfAPIv1alpha1.JWTKeySourceRemote,
 					Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
-						URI: "https://issuer.example.com/.well-known/jwks.json",
+						URI: "http://issuer.example.com/well-known/jwks.json",
+					},
+				},
+			},
+		},
+		{
+			name: "Validate: type=JWT with source=Remote and spec.jwt.remote set is accepted with HTTPS protocol",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeJWT,
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Realm:  "Restricted Area",
+					Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+					Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+						URI: "https://keycloak.keycloak.svc.cluster.local:8080/realms/ngf/.well-known/openid-configuration",
 					},
 				},
 			},
