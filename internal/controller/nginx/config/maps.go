@@ -39,7 +39,7 @@ const (
 func executeMaps(conf dataplane.Configuration) []executeResult {
 	maps := buildAddHeaderMaps(append(conf.HTTPServers, conf.SSLServers...))
 	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
-	maps = append(maps, buildCorsMaps(conf.HTTPServers)...)
+	maps = append(maps, buildCorsMaps(append(conf.HTTPServers, conf.SSLServers...))...)
 
 	result := executeResult{
 		dest: httpConfigFile,
@@ -49,16 +49,16 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	return []executeResult{result}
 }
 
-func buildCorsMaps(virtualServer []dataplane.VirtualServer) []shared.Map {
+func buildCorsMaps(servers []dataplane.VirtualServer) []shared.Map {
 	originMaps := make([]shared.Map, 0)
 
-	for _, s := range virtualServer {
-		for _, pr := range s.PathRules {
-			for _, mr := range pr.MatchRules {
+	for _, s := range servers {
+		for pathRuleIndex, pr := range s.PathRules {
+			for matchRuleIndex, mr := range pr.MatchRules {
 				if mr.Filters.CORSFilter != nil {
 					corsFilter := mr.Filters.CORSFilter
 					if corsFilter.AllowOrigins != nil {
-						nginxVar := fmt.Sprintf("$cors_allowed_origin_%d_%s", s.Port, convertPathToNginxVariable(pr.Path))
+						nginxVar := generateCORSAllowedOriginVariableName(pathRuleIndex, matchRuleIndex)
 						originMaps = append(originMaps, shared.Map{
 							Source:     "$http_origin",
 							Variable:   nginxVar,
@@ -66,11 +66,11 @@ func buildCorsMaps(virtualServer []dataplane.VirtualServer) []shared.Map {
 						})
 					}
 					if corsFilter.AllowCredentials {
-						nginxVar := fmt.Sprintf("$cors_allow_credentials_%d_%s", s.Port, convertPathToNginxVariable(pr.Path))
+						nginxVar := generateCORSAllowCredentialsVariableName(pathRuleIndex, matchRuleIndex)
 						originMaps = append(originMaps, shared.Map{
 							Source:     "$http_origin",
 							Variable:   nginxVar,
-							Parameters: buildCORSAllowCredientialsMapParameters(corsFilter.AllowOrigins),
+							Parameters: buildCORSAllowCredentialsMapParameters(corsFilter.AllowOrigins),
 						})
 					}
 				}
@@ -102,7 +102,7 @@ func convertToNginxRegex(input string) string {
 	return "~^" + escaped + "$"
 }
 
-func buildCORSAllowCredientialsMapParameters(s []string) []shared.MapParameter {
+func buildCORSAllowCredentialsMapParameters(s []string) []shared.MapParameter {
 	params := make([]shared.MapParameter, 0, len(s))
 
 	for _, origin := range s {

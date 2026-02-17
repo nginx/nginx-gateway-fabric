@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -18,4 +19,16 @@ func convertStringToSafeVariableName(s string) string {
 // https://github.com/nginx/nginx-gateway-fabric/issues/772
 func generateAddHeaderMapVariableName(name string) string {
 	return strings.ToLower(convertStringToSafeVariableName(name)) + "_header_var"
+}
+
+// generateCORSAllowedOriginVariableName generates the variable name
+// for the CORS allowed origin map for a given path and match rule index.
+func generateCORSAllowedOriginVariableName(pathRuleIndex, matchRuleIndex int) string {
+	return fmt.Sprintf("$cors_allowed_origin_path%d_match%d", pathRuleIndex, matchRuleIndex)
+}
+
+// generateCORSAllowCredentialsVariableName generates the variable name
+// for the CORS allow credentials map for a given path and match rule index.
+func generateCORSAllowCredentialsVariableName(pathRuleIndex, matchRuleIndex int) string {
+	return fmt.Sprintf("$cors_allow_credentials_path%d_match%d", pathRuleIndex, matchRuleIndex)
 }

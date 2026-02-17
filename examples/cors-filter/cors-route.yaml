@@ -19,7 +19,7 @@ spec:
         - "https://foobar*.com"
         - "https://example.com"
         allowMethods:
-        - PUT
+        - GET
         allowCredentials: false
     backendRefs:
     - name: coffee

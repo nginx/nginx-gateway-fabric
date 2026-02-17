@@ -453,6 +453,7 @@ func createLocations(
 		switch {
 		case !needsInternalLocationsForMatches(rule) && !rule.HasInferenceBackends:
 			locs = append(locs, updateExternalLocationsForRule(
+				pathRuleIdx,
 				rule,
 				extLocations,
 				server.Port,
@@ -499,14 +500,17 @@ func createLocations(
 }
 
 func updateExternalLocationsForRule(
+	pathRuleIdx int,
 	rule dataplane.PathRule,
 	extLocations []http.Location,
 	port int32,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
 ) []http.Location {
-	for _, r := range rule.MatchRules {
+	for matchRuleIndex, r := range rule.MatchRules {
 		extLocations = updateLocations(
+			pathRuleIdx,
+			matchRuleIndex,
 			r,
 			rule,
 			extLocations,
@@ -560,7 +564,9 @@ func createInternalLocationsForRule(
 				generator.GenerateForInternalLocation(rule.Policies),
 			)
 			intLocation = updateLocation(
+				matchRuleIdx,
 				r,
+				pathRuleIdx,
 				rule,
 				intLocation,
 				port,
@@ -610,7 +616,9 @@ func createInternalLocationsForRule(
 					},
 				}
 				intProxyPassLocation = updateLocation(
+					matchRuleIdx,
 					tempRule,
+					pathRuleIdx,
 					rule,
 					intProxyPassLocation,
 					port,
@@ -751,7 +759,9 @@ func createInferenceLocationsForRule(
 				},
 			}
 			intProxyPassLocation = updateLocation(
+				matchRuleIdx,
 				tempRule,
+				pathRuleIdx,
 				rule,
 				intProxyPassLocation,
 				port,
@@ -1044,7 +1054,9 @@ func initializeInternalInferenceSplitClientsLocation(pathruleIdx, matchRuleIdx i
 
 // updateLocation updates a location with any relevant configurations, like proxy_pass, filters, tls settings, etc.
 func updateLocation(
+	matchRuleIndex int,
 	matchRule dataplane.MatchRule,
+	pathRuleIndex int,
 	pathRule dataplane.PathRule,
 	location http.Location,
 	listenerPort int32,
@@ -1063,7 +1075,7 @@ func updateLocation(
 	location = updateLocationMirrorRoute(location, pathRule.Path, grpc)
 	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
 	location = updateLocationAuthenticationFilter(location, filters.AuthenticationFilter)
-	location = updateLocationCORSFilter(location, filters.CORSFilter, listenerPort, pathRule)
+	location = updateLocationCORSFilter(location, filters.CORSFilter, pathRuleIndex, matchRuleIndex)
 
 	if filters.RequestRedirect != nil {
 		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
@@ -1098,11 +1110,11 @@ func updateLocationAuthenticationFilter(
 func updateLocationCORSFilter(
 	location http.Location,
 	corsFilter *dataplane.HTTPCORSFilter,
-	listenerPort int32,
-	pathRule dataplane.PathRule,
+	pathRuleIndex int,
+	matchRuleIndex int,
 ) http.Location {
 	if corsFilter != nil {
-		corsHeaders := generateCORSHeaders(corsFilter, listenerPort, pathRule)
+		corsHeaders := generateCORSHeaders(corsFilter, pathRuleIndex, matchRuleIndex)
 
 		if len(corsHeaders) > 0 {
 			location.CORSHeaders = corsHeaders
@@ -1233,6 +1245,8 @@ func updateLocationProxySettings(
 // updateLocations updates the existing locations with any relevant configurations, like proxy_pass,
 // filters, tls settings, etc.
 func updateLocations(
+	pathRuleIdx int,
+	matchRuleIdx int,
 	matchRule dataplane.MatchRule,
 	pathRule dataplane.PathRule,
 	buildLocations []http.Location,
@@ -1244,7 +1258,9 @@ func updateLocations(
 
 	for i, loc := range buildLocations {
 		updatedLocations[i] = updateLocation(
+			matchRuleIdx,
 			matchRule,
+			pathRuleIdx,
 			pathRule,
 			loc,
 			listenerPort,
@@ -1763,47 +1779,65 @@ func deduplicateStrings(content []string) []string {
 
 func generateCORSHeaders(
 	corsFilter *dataplane.HTTPCORSFilter,
-	listenerPort int32,
-	pathRule dataplane.PathRule,
-) map[string]string {
+	pathRuleIndex int,
+	matchRuleIndex int,
+) []http.Header {
 	if corsFilter == nil {
 		return nil
 	}
 
-	headers := make(map[string]string)
+	headers := make([]http.Header, 0)
 
 	// Access-Control-Allow-Origin
 	if len(corsFilter.AllowOrigins) > 0 {
-		nginxVar := "$cors_allowed_origin_" + fmt.Sprint(listenerPort) + "_" + convertPathToNginxVariable(pathRule.Path)
-		headers["Access-Control-Allow-Origin"] = nginxVar
+		nginxVar := generateCORSAllowedOriginVariableName(pathRuleIndex, matchRuleIndex)
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Allow-Origin",
+			Value: nginxVar,
+		})
 	}
 
 	// Access-Control-Allow-Methods
 	if len(corsFilter.AllowMethods) > 0 {
 		methods := strings.Join(corsFilter.AllowMethods, ", ")
-		headers["Access-Control-Allow-Methods"] = methods
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Allow-Methods",
+			Value: methods,
+		})
 	}
 
 	// Access-Control-Allow-Headers
 	if len(corsFilter.AllowHeaders) > 0 {
 		allowHeaders := strings.Join(corsFilter.AllowHeaders, ", ")
-		headers["Access-Control-Allow-Headers"] = allowHeaders
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Allow-Headers",
+			Value: allowHeaders,
+		})
 	}
 
 	// Access-Control-Expose-Headers
 	if len(corsFilter.ExposeHeaders) > 0 {
 		exposeHeaders := strings.Join(corsFilter.ExposeHeaders, ", ")
-		headers["Access-Control-Expose-Headers"] = exposeHeaders
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Expose-Headers",
+			Value: exposeHeaders,
+		})
 	}
 
 	// Access-Control-Allow-Credentials
 	if corsFilter.AllowCredentials {
-		nginxVar := "$cors_allow_credentials_" + fmt.Sprint(listenerPort) + "_" + convertPathToNginxVariable(pathRule.Path)
-		headers["Access-Control-Allow-Credentials"] = nginxVar
+		nginxVar := generateCORSAllowCredentialsVariableName(pathRuleIndex, matchRuleIndex)
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Allow-Credentials",
+			Value: nginxVar,
+		})
 	}
 
 	// Access-Control-Max-Age
-	headers["Access-Control-Max-Age"] = fmt.Sprintf("%d", corsFilter.MaxAge)
+	headers = append(headers, http.Header{
+		Name:  "Access-Control-Max-Age",
+		Value: fmt.Sprintf("%d", corsFilter.MaxAge),
+	})
 
 	return headers
 }

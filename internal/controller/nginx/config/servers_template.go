@@ -134,15 +134,15 @@ server {
         {{- end }}
 
         {{- if $l.CORSHeaders }}
-            {{- range $name, $value := $l.CORSHeaders }}
-                {{- if eq $name "Access-Control-Allow-Headers" }}
-                    {{- if eq $value "*" }}
-        add_header {{ $name }} $http_access_control_request_headers always;
+            {{- range $h := $l.CORSHeaders }}
+                {{- if eq $h.Name "Access-Control-Allow-Headers" }}
+                    {{- if eq $h.Value "*" }}
+        add_header {{ $h.Name }} $http_access_control_request_headers always;
                     {{- else }}
-        add_header {{ $name }} "{{ $value }}" always;
+        add_header {{ $h.Name }} "{{ $h.Value }}" always;
                     {{- end }}
                 {{- else }}
-        add_header {{ $name }} "{{ $value }}" always;
+        add_header {{ $h.Name }} "{{ $h.Value }}" always;
                 {{- end }}
             {{- end }}
 

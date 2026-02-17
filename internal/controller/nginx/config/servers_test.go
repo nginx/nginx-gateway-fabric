@@ -5229,7 +5229,7 @@ func TestGenerateCORSHeaders(t *testing.T) {
 
 	tests := []struct {
 		corsFilter   *dataplane.HTTPCORSFilter
-		expected     map[string]string
+		expected     []http.Header
 		name         string
 		pathRule     dataplane.PathRule
 		listenerPort int32
@@ -5252,8 +5252,11 @@ func TestGenerateCORSHeaders(t *testing.T) {
 				Path:     "/api",
 				PathType: dataplane.PathTypePrefix,
 			},
-			expected: map[string]string{
-				"Access-Control-Max-Age": "0",
+			expected: []http.Header{
+				{
+					Name:  "Access-Control-Max-Age",
+					Value: "0",
+				},
 			},
 		},
 		{
@@ -5266,9 +5269,15 @@ func TestGenerateCORSHeaders(t *testing.T) {
 				Path:     "/api",
 				PathType: dataplane.PathTypePrefix,
 			},
-			expected: map[string]string{
-				"Access-Control-Allow-Origin": "$cors_allowed_origin_80__api",
-				"Access-Control-Max-Age":      "0",
+			expected: []http.Header{
+				{
+					Name:  "Access-Control-Allow-Origin",
+					Value: "$cors_allowed_origin_path0_match1",
+				},
+				{
+					Name:  "Access-Control-Max-Age",
+					Value: "0",
+				},
 			},
 		},
 		{
@@ -5282,10 +5291,19 @@ func TestGenerateCORSHeaders(t *testing.T) {
 				Path:     "/test-path",
 				PathType: dataplane.PathTypeExact,
 			},
-			expected: map[string]string{
-				"Access-Control-Allow-Origin":      "$cors_allowed_origin_443__test_path",
-				"Access-Control-Allow-Credentials": "$cors_allow_credentials_443__test_path",
-				"Access-Control-Max-Age":           "0",
+			expected: []http.Header{
+				{
+					Name:  "Access-Control-Allow-Origin",
+					Value: "$cors_allowed_origin_path0_match1",
+				},
+				{
+					Name:  "Access-Control-Allow-Credentials",
+					Value: "$cors_allow_credentials_path0_match1",
+				},
+				{
+					Name:  "Access-Control-Max-Age",
+					Value: "0",
+				},
 			},
 		},
 		{
@@ -5303,13 +5321,31 @@ func TestGenerateCORSHeaders(t *testing.T) {
 				Path:     "/complex/path-with-hyphens",
 				PathType: dataplane.PathTypePrefix,
 			},
-			expected: map[string]string{
-				"Access-Control-Allow-Origin":      "$cors_allowed_origin_8080__complex_path_with_hyphens",
-				"Access-Control-Allow-Methods":     "GET, POST, PUT",
-				"Access-Control-Allow-Headers":     "Content-Type, Authorization",
-				"Access-Control-Expose-Headers":    "X-Custom-Header",
-				"Access-Control-Allow-Credentials": "$cors_allow_credentials_8080__complex_path_with_hyphens",
-				"Access-Control-Max-Age":           "86400",
+			expected: []http.Header{
+				{
+					Name:  "Access-Control-Allow-Origin",
+					Value: "$cors_allowed_origin_path0_match1",
+				},
+				{
+					Name:  "Access-Control-Allow-Methods",
+					Value: "GET, POST, PUT",
+				},
+				{
+					Name:  "Access-Control-Allow-Headers",
+					Value: "Content-Type, Authorization",
+				},
+				{
+					Name:  "Access-Control-Expose-Headers",
+					Value: "X-Custom-Header",
+				},
+				{
+					Name:  "Access-Control-Allow-Credentials",
+					Value: "$cors_allow_credentials_path0_match1",
+				},
+				{
+					Name:  "Access-Control-Max-Age",
+					Value: "86400",
+				},
 			},
 		},
 		{
@@ -5322,9 +5358,15 @@ func TestGenerateCORSHeaders(t *testing.T) {
 				Path:     "/",
 				PathType: dataplane.PathTypePrefix,
 			},
-			expected: map[string]string{
-				"Access-Control-Allow-Origin": "$cors_allowed_origin_80__",
-				"Access-Control-Max-Age":      "0",
+			expected: []http.Header{
+				{
+					Name:  "Access-Control-Allow-Origin",
+					Value: "$cors_allowed_origin_path0_match1",
+				},
+				{
+					Name:  "Access-Control-Max-Age",
+					Value: "0",
+				},
 			},
 		},
 	}
@@ -5334,7 +5376,7 @@ func TestGenerateCORSHeaders(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := generateCORSHeaders(test.corsFilter, test.listenerPort, test.pathRule)
+			result := generateCORSHeaders(test.corsFilter, 0, 1)
 
 			if test.expected == nil {
 				g.Expect(result).To(BeNil())
@@ -5388,8 +5430,11 @@ func TestUpdateLocationCORSFilter(t *testing.T) {
 			expected: http.Location{
 				Path: "/api",
 				Type: http.ExternalLocationType,
-				CORSHeaders: map[string]string{
-					"Access-Control-Max-Age": "0",
+				CORSHeaders: []http.Header{
+					{
+						Name:  "Access-Control-Max-Age",
+						Value: "0",
+					},
 				},
 			},
 		},
@@ -5412,10 +5457,19 @@ func TestUpdateLocationCORSFilter(t *testing.T) {
 			expected: http.Location{
 				Path: "/test",
 				Type: http.ExternalLocationType,
-				CORSHeaders: map[string]string{
-					"Access-Control-Allow-Origin":      "$cors_allowed_origin_443__test",
-					"Access-Control-Allow-Credentials": "$cors_allow_credentials_443__test",
-					"Access-Control-Max-Age":           "3600",
+				CORSHeaders: []http.Header{
+					{
+						Name:  "Access-Control-Allow-Origin",
+						Value: "$cors_allowed_origin_path0_match1",
+					},
+					{
+						Name:  "Access-Control-Allow-Credentials",
+						Value: "$cors_allow_credentials_path0_match1",
+					},
+					{
+						Name:  "Access-Control-Max-Age",
+						Value: "3600",
+					},
 				},
 			},
 		},
@@ -5441,13 +5495,31 @@ func TestUpdateLocationCORSFilter(t *testing.T) {
 			expected: http.Location{
 				Path: "/complex-path",
 				Type: http.ExternalLocationType,
-				CORSHeaders: map[string]string{
-					"Access-Control-Allow-Origin":      "$cors_allowed_origin_8443__complex_path",
-					"Access-Control-Allow-Methods":     "GET, POST, DELETE",
-					"Access-Control-Allow-Headers":     "Content-Type, X-Custom",
-					"Access-Control-Expose-Headers":    "X-Total-Count",
-					"Access-Control-Allow-Credentials": "$cors_allow_credentials_8443__complex_path",
-					"Access-Control-Max-Age":           "7200",
+				CORSHeaders: []http.Header{
+					{
+						Name:  "Access-Control-Allow-Origin",
+						Value: "$cors_allowed_origin_path0_match1",
+					},
+					{
+						Name:  "Access-Control-Allow-Methods",
+						Value: "GET, POST, DELETE",
+					},
+					{
+						Name:  "Access-Control-Allow-Headers",
+						Value: "Content-Type, X-Custom",
+					},
+					{
+						Name:  "Access-Control-Expose-Headers",
+						Value: "X-Total-Count",
+					},
+					{
+						Name:  "Access-Control-Allow-Credentials",
+						Value: "$cors_allow_credentials_path0_match1",
+					},
+					{
+						Name:  "Access-Control-Max-Age",
+						Value: "7200",
+					},
 				},
 			},
 		},
@@ -5474,9 +5546,15 @@ func TestUpdateLocationCORSFilter(t *testing.T) {
 				ProxyPass:   "http://backend",
 				Rewrites:    []string{"rewrite1"},
 				MirrorPaths: []string{"/mirror"},
-				CORSHeaders: map[string]string{
-					"Access-Control-Allow-Origin": "$cors_allowed_origin_80__api_v1",
-					"Access-Control-Max-Age":      "0",
+				CORSHeaders: []http.Header{
+					{
+						Name:  "Access-Control-Allow-Origin",
+						Value: "$cors_allowed_origin_path0_match1",
+					},
+					{
+						Name:  "Access-Control-Max-Age",
+						Value: "0",
+					},
 				},
 			},
 		},
@@ -5487,7 +5565,7 @@ func TestUpdateLocationCORSFilter(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := updateLocationCORSFilter(test.location, test.corsFilter, test.listenerPort, test.pathRule)
+			result := updateLocationCORSFilter(test.location, test.corsFilter, 0, 1)
 
 			g.Expect(result).To(Equal(test.expected))
 		})

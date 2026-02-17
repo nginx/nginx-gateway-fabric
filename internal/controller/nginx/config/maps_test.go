@@ -771,7 +771,7 @@ func TestBuildCorsMaps(t *testing.T) {
 			expected: []shared.Map{
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allowed_origin_80__api",
+					Variable: "$cors_allowed_origin_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "~^example\\\\.com$",
@@ -810,7 +810,7 @@ func TestBuildCorsMaps(t *testing.T) {
 			expected: []shared.Map{
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allowed_origin_443__test_path",
+					Variable: "$cors_allowed_origin_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "~^.*\\\\.example\\\\.com$",
@@ -820,11 +820,95 @@ func TestBuildCorsMaps(t *testing.T) {
 				},
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allow_credentials_443__test_path",
+					Variable: "$cors_allow_credentials_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "~^.*\\\\.example\\\\.com$",
 							Result: "true",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "virtual server with multiple PathRules and multiple MatchRules",
+			virtualServers: []dataplane.VirtualServer{
+				{
+					Port: 80,
+					PathRules: []dataplane.PathRule{
+						{
+							Path: "/api",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										CORSFilter: &dataplane.HTTPCORSFilter{
+											AllowOrigins: []string{"example.com"},
+										},
+									},
+								},
+								{
+									Filters: dataplane.HTTPFilters{
+										CORSFilter: &dataplane.HTTPCORSFilter{
+											AllowOrigins:     []string{"*.test.com"},
+											AllowCredentials: true,
+										},
+									},
+								},
+							},
+						},
+						{
+							Path: "/docs",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										CORSFilter: &dataplane.HTTPCORSFilter{
+											AllowOrigins: []string{"docs.example.com"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allowed_origin_path0_match0",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "~^example\\\\.com$",
+							Result: "$http_origin",
+						},
+					},
+				},
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allowed_origin_path0_match1",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "~^.*\\\\.test\\\\.com$",
+							Result: "$http_origin",
+						},
+					},
+				},
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allow_credentials_path0_match1",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "~^.*\\\\.test\\\\.com$",
+							Result: "true",
+						},
+					},
+				},
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allowed_origin_path1_match0",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "~^docs\\\\.example\\\\.com$",
+							Result: "$http_origin",
 						},
 					},
 				},
@@ -1108,7 +1192,7 @@ func TestBuildCORSAllowCredentialsMapParameters(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildCORSAllowCredientialsMapParameters(test.origins)
+			result := buildCORSAllowCredentialsMapParameters(test.origins)
 
 			g.Expect(result).To(HaveLen(len(test.expected)))
 			for i, expected := range test.expected {

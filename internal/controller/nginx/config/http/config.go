@@ -55,7 +55,7 @@ type Location struct {
 	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
 	ProxyPass string
 	// CORSHeaders are the CORS headers to be added for this location.
-	CORSHeaders map[string]string
+	CORSHeaders []Header
 	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
 	HTTPMatchKey string
 	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
