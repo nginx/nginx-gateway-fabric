@@ -142,7 +142,7 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 	}
 
 	fmt.Println("Finished building HTTP upstream server actions for deployment",
-		deployment.gatewayName, "actions:", actions)
+		deployment.gatewayName)
 
 	// Stream Upstreams (TLS, TCP, UDP)
 	for _, upstream := range conf.StreamUpstreams {
@@ -158,7 +158,7 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 		actions = append(actions, action)
 	}
 	fmt.Println("Finished building Stream upstream server actions for deployment",
-		deployment.gatewayName, "actions:", actions)
+		deployment.gatewayName)
 
 	if actionsEqual(deployment.GetNGINXPlusActions(), actions) {
 		fmt.Println("No changes to upstream servers, not sending API request for deployment",
@@ -173,7 +173,7 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 		}
 
 		fmt.Println("Sending API request to update upstream servers for deployment",
-			deployment.gatewayName, "with action:", action)
+			deployment.gatewayName)
 		requestApplied, err := n.sendRequest(broadcaster, msg, deployment)
 		fmt.Println("Finished sending API request to update upstream servers for deployment",
 			deployment.gatewayName, "applied:", requestApplied, "error:", err)

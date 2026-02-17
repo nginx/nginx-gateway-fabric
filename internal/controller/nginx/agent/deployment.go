@@ -180,7 +180,7 @@ func (d *Deployment) GetFileOverviews() ([]*pb.File, string) {
 // GetNGINXPlusActions returns the current NGINX Plus API Actions for the deployment.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) GetNGINXPlusActions() []*pb.NGINXPlusAction {
-	fmt.Println("Getting NGINX Plus Actions for deployment", d.gatewayName, "actions:", d.nginxPlusActions)
+	fmt.Println("Getting NGINX Plus Actions for deployment", d.gatewayName)
 	return d.nginxPlusActions
 }
 
@@ -258,7 +258,7 @@ func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broa
 // Used by a Subscriber when it first connects.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) SetNGINXPlusActions(actions []*pb.NGINXPlusAction) {
-	fmt.Println("Setting NGINX Plus Actions for deployment", d.gatewayName, "actions:", actions)
+	fmt.Println("Setting NGINX Plus Actions for deployment", d.gatewayName)
 	d.nginxPlusActions = actions
 }
 
