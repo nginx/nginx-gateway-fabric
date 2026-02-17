@@ -80,7 +80,7 @@ func TestAuthenticationFilterValidateBasicRejected(t *testing.T) {
 			wantErrors: []string{expectedBasicRequiredError},
 		},
 		{
-			name: "Validate: type=Basic with spec.basic andspec.jwt set is rejected",
+			name: "Validate: type=Basic with spec.basic and spec.jwt set is rejected",
 			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
 				Type: ngfAPIv1alpha1.AuthTypeBasic,
 				Basic: &ngfAPIv1alpha1.BasicAuth{
