@@ -637,18 +637,24 @@ func (rm *ResourceManager) GetLBIPAddress(namespace string) (string, error) {
 			if len(lbServices) == 1 {
 				svc := lbServices[0]
 				GinkgoWriter.Printf("Found a LoadBalancer service %q in namespace %q, waiting for it to be ready\n",
-					svc.Name, namespace)
+					svc.Name,
+					namespace,
+				)
 				nsName = types.NamespacedName{Namespace: svc.GetNamespace(), Name: svc.GetName()}
 				return true, nil
-			} else {
-				var serviceNames []string
-				for _, svc := range lbServices {
-					serviceNames = append(serviceNames, svc.Name)
-				}
-				GinkgoWriter.Printf("Found %d LoadBalancer services in namespace %q, expected exactly 1. Services: %v\n",
-					len(lbServices), namespace, serviceNames)
-				return false, nil
 			}
+
+			var serviceNames []string
+			for _, svc := range lbServices {
+				serviceNames = append(serviceNames, svc.Name)
+			}
+			GinkgoWriter.Printf("Found %d LoadBalancer services in namespace %q, expected exactly 1. Services: %v\n",
+				len(lbServices),
+				namespace,
+				serviceNames,
+			)
+
+			return false, nil
 		},
 	); err != nil {
 		return "", fmt.Errorf("nginx LoadBalancer service not found in namespace %q: %w", namespace, err)
@@ -667,15 +673,23 @@ func (rm *ResourceManager) GetLBIPAddress(namespace string) (string, error) {
 	switch {
 	case lbService.Status.LoadBalancer.Ingress[0].IP != "":
 		GinkgoWriter.Printf("LoadBalancer service %q in namespace %q has IP %q\n",
-			nsName.Name, namespace, lbService.Status.LoadBalancer.Ingress[0].IP)
+			nsName.Name,
+			namespace,
+			lbService.Status.LoadBalancer.Ingress[0].IP,
+		)
 		address = lbService.Status.LoadBalancer.Ingress[0].IP
 	case lbService.Status.LoadBalancer.Ingress[0].Hostname != "":
-		GinkgoWriter.Printf("LoadBalancer service %q in namespace %q has Hostname %q\n", nsName.Name,
-			namespace, lbService.Status.LoadBalancer.Ingress[0].Hostname)
+		GinkgoWriter.Printf("LoadBalancer service %q in namespace %q has Hostname %q\n",
+			nsName.Name,
+			namespace,
+			lbService.Status.LoadBalancer.Ingress[0].Hostname,
+		)
 		address = lbService.Status.LoadBalancer.Ingress[0].Hostname
 	default:
 		return "", fmt.Errorf("nginx LoadBalancer service %q in namespace %q has no IP or Hostname in status",
-			nsName.Name, namespace)
+			nsName.Name,
+			namespace,
+		)
 	}
 
 	return address, nil
