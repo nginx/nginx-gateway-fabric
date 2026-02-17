@@ -56,6 +56,11 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 		promPortForwardStopCh = make(chan struct{})
 
 		upstreamServerCount int32
+
+		// NGINX data plane pod name captured during test setup to collect Prometheus metrics.
+		nginxDataPlanePodName string
+		// Timestamp when the NGINX data plane pod became known/ready, to anchor metrics start time.
+		nginxMetricsStartTime time.Time
 	)
 
 	const (
@@ -231,27 +236,24 @@ The logs are attached only if there are errors.
 		getStartTime := func() time.Time { return startTime }
 		modifyStartTime := func() { startTime = startTime.Add(500 * time.Millisecond) }
 
-		queries := []string{
+		initialQueries := []string{
 			fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx-gateway"}`, ngfPodName),
 			fmt.Sprintf(`container_cpu_usage_seconds_total{pod="%s",container="nginx-gateway"}`, ngfPodName),
 			// We don't need to check all nginx_gateway_fabric_* metrics, as they are collected at the same time
 			fmt.Sprintf(`nginx_gateway_fabric_event_batch_processing_milliseconds_sum{pod="%s"}`, ngfPodName),
 		}
 
-		for _, q := range queries {
-			Eventually(
-				framework.CreateMetricExistChecker(
-					promInstance,
-					q,
-					getStartTime,
-					modifyStartTime,
-				),
-			).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
+		if nginxDataPlanePodName != "" {
+			initialQueries = append(initialQueries,
+				fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx"}`, nginxDataPlanePodName),
+				fmt.Sprintf(`container_cpu_usage_seconds_total{pod="%s",container="nginx"}`, nginxDataPlanePodName),
+			)
 		}
+		checkMetricsExist(promInstance, initialQueries, getStartTime, modifyStartTime, metricExistTimeout, metricExistPolling)
 
 		test()
 
-		// We sleep for 2 scrape intervals to ensure that Prometheus scrapes the metrics after the test() finishes
+		// We sleep for 2 scrape intervals to ensure Prometheus scrapes the metrics after the test() finishes
 		// before endTime, so that we don't lose any metric values like reloads.
 		GinkgoWriter.Printf(
 			"Sleeping for %v to ensure Prometheus scrapes the metrics after the test finishes\n",
@@ -279,65 +281,105 @@ The logs are attached only if there are errors.
 		getEndTime := func() time.Time { return endTime }
 		noOpModifier := func() {}
 
-		queries = []string{
+		ngfQueries := []string{
 			fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx-gateway"}`, ngfPodName),
 			// We don't need to check all nginx_gateway_fabric_* metrics, as they are collected at the same time
 			fmt.Sprintf(`nginx_gateway_fabric_event_batch_processing_milliseconds_sum{pod="%s"}`, ngfPodName),
 		}
+		checkMetricsExist(promInstance, ngfQueries, getEndTime, noOpModifier, metricExistTimeout, metricExistPolling)
 
-		for _, q := range queries {
-			Eventually(
-				framework.CreateMetricExistChecker(
-					promInstance,
-					q,
-					getEndTime,
-					noOpModifier,
-				),
-			).WithTimeout(metricExistTimeout).WithPolling(metricExistPolling).Should(Succeed())
+		// Ensure NGINX data plane metrics exist at endTime (data plane pod is created during the test).
+		if nginxDataPlanePodName != "" {
+			nginxQueries := []string{
+				fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx"}`, nginxDataPlanePodName),
+				fmt.Sprintf(`container_cpu_usage_seconds_total{pod="%s",container="nginx"}`, nginxDataPlanePodName),
+			}
+			checkMetricsExist(promInstance, nginxQueries, getEndTime, noOpModifier, metricExistTimeout, metricExistPolling)
 		}
 
 		// Collect metric values
-		// For some metrics, generate PNGs
+		// For some metrics, generate PNGs for NGF and NGINX.
+		var (
+			memoryMetricConfig = metricConfig{
+				queryTemplate: `container_memory_usage_bytes{pod="%s",container="%s"}`,
+				generatePNG:   framework.GenerateMemoryPNG,
+			}
+			cpuMetricConfig = metricConfig{
+				queryTemplate: `rate(container_cpu_usage_seconds_total{pod="%s",container="%s"}[2m])`,
+				generatePNG:   framework.GenerateCPUPNG,
+			}
+		)
 
-		result, err := promInstance.QueryRange(
-			fmt.Sprintf(`container_memory_usage_bytes{pod="%s",container="nginx-gateway"}`, ngfPodName),
-			promv1.Range{
-				Start: startTime,
+		ngfPromRange := promv1.Range{
+			Start: startTime,
+			End:   endTime,
+			Step:  queryRangeStep,
+		}
+
+		ngfContainerName := "nginx-gateway"
+
+		// Collect and visualize Memory metrics.
+		collectAndVisualizeMetric(
+			promInstance,
+			memoryMetricConfig,
+			ngfPodName,
+			ngfContainerName,
+			"nfg-memory",
+			ngfPromRange,
+			testResultsDir,
+			*plusEnabled,
+		)
+
+		// Collect and visualize CPU metrics.
+		collectAndVisualizeMetric(
+			promInstance,
+			cpuMetricConfig,
+			ngfPodName,
+			ngfContainerName,
+			"nfg-cpu",
+			ngfPromRange,
+			testResultsDir,
+			*plusEnabled,
+		)
+
+		// Collect NGINX data plane CPU/Memory metrics and generate PNGs (if the pod name is known).
+		if nginxDataPlanePodName != "" {
+			nginxContainerName := "nginx"
+			// Use the later of test startTime and the moment the data plane pod was detected
+			dpStart := startTime
+			if !nginxMetricsStartTime.IsZero() && nginxMetricsStartTime.After(dpStart) {
+				dpStart = nginxMetricsStartTime
+			}
+			nginxPromRange := promv1.Range{
+				Start: dpStart,
 				End:   endTime,
 				Step:  queryRangeStep,
-			},
-		)
-		Expect(err).ToNot(HaveOccurred())
+			}
 
-		memCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "memory", *plusEnabled))
-		Expect(framework.WritePrometheusMatrixToCSVFile(memCSV, result)).To(Succeed())
+			// Collect and visualize Memory metrics.
+			collectAndVisualizeMetric(
+				promInstance,
+				memoryMetricConfig,
+				nginxDataPlanePodName,
+				nginxContainerName,
+				"nginx-memory",
+				nginxPromRange,
+				testResultsDir,
+				*plusEnabled,
+			)
 
-		memPNG := framework.CreateResultsFilename("png", "memory", *plusEnabled)
-		Expect(
-			framework.GenerateMemoryPNG(testResultsDir, memCSV, memPNG),
-		).To(Succeed())
-
-		Expect(os.Remove(memCSV)).To(Succeed())
-
-		result, err = promInstance.QueryRange(
-			fmt.Sprintf(`rate(container_cpu_usage_seconds_total{pod="%s",container="nginx-gateway"}[2m])`, ngfPodName),
-			promv1.Range{
-				Start: startTime,
-				End:   endTime,
-				Step:  queryRangeStep,
-			},
-		)
-		Expect(err).ToNot(HaveOccurred())
-
-		cpuCSV := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", "cpu", *plusEnabled))
-		Expect(framework.WritePrometheusMatrixToCSVFile(cpuCSV, result)).To(Succeed())
-
-		cpuPNG := framework.CreateResultsFilename("png", "cpu", *plusEnabled)
-		Expect(
-			framework.GenerateCPUPNG(testResultsDir, cpuCSV, cpuPNG),
-		).To(Succeed())
-
-		Expect(os.Remove(cpuCSV)).To(Succeed())
+			// Collect and visualize CPU metrics.
+			collectAndVisualizeMetric(
+				promInstance,
+				cpuMetricConfig,
+				nginxDataPlanePodName,
+				nginxContainerName,
+				"nginx-cpu",
+				nginxPromRange,
+				testResultsDir,
+				*plusEnabled,
+			)
+		}
 
 		eventsCount, err := framework.GetEventsCountWithStartTime(promInstance, ngfPodName, startTime)
 		Expect(err).ToNot(HaveOccurred())
@@ -492,6 +534,10 @@ The logs are attached only if there are errors.
 				Expect(nginxPodName).ToNot(BeEmpty())
 
 				setUpPortForward(nginxPodName, namespace)
+
+				// Record the NGINX data plane pod for Prometheus metric collection.
+				nginxDataPlanePodName = nginxPodName
+				nginxMetricsStartTime = time.Now()
 			}
 
 			var url string
@@ -559,6 +605,10 @@ The logs are attached only if there are errors.
 
 		setUpPortForward(nginxPodName, namespace)
 
+		// Record the NGINX data plane pod for Prometheus metric collection.
+		nginxDataPlanePodName = nginxPodName
+		nginxMetricsStartTime = time.Now()
+
 		var url string
 		if portFwdPort != 0 {
 			url = fmt.Sprintf("http://hello.example.com:%d", portFwdPort)
@@ -606,7 +656,7 @@ The logs are attached only if there are errors.
 		}
 	}
 
-	It(fmt.Sprintf("scales HTTP listeners to %d", httpListenerCount), func() {
+	It(fmt.Sprintf("scales HTTP listeners to %d", httpListenerCount), Label("http-listeners"), func() {
 		const testName = "TestScale_Listeners"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
@@ -630,7 +680,7 @@ The logs are attached only if there are errors.
 		)
 	})
 
-	It(fmt.Sprintf("scales HTTPS listeners to %d", httpsListenerCount), func() {
+	It(fmt.Sprintf("scales HTTPS listeners to %d", httpsListenerCount), Label("https-listeners"), func() {
 		const testName = "TestScale_HTTPSListeners"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
@@ -654,7 +704,7 @@ The logs are attached only if there are errors.
 		)
 	})
 
-	It(fmt.Sprintf("scales HTTP routes to %d", httpRouteCount), func() {
+	It(fmt.Sprintf("scales HTTP routes to %d", httpRouteCount), Label("http-routes"), func() {
 		const testName = "TestScale_HTTPRoutes"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
@@ -681,7 +731,7 @@ The logs are attached only if there are errors.
 	It(fmt.Sprintf("scales upstream servers to %d for OSS and %d for Plus",
 		ossUpstreamServerCount,
 		plusUpstreamServerCount,
-	), func() {
+	), Label("upstream-servers"), func() {
 		const testName = "TestScale_UpstreamServers"
 
 		testResultsDir := filepath.Join(resultsDir, testName)
@@ -696,7 +746,7 @@ The logs are attached only if there are errors.
 		)
 	})
 
-	It("scales HTTP matches", func() {
+	It("scales HTTP matches", Label("http-matches"), func() {
 		const testName = "TestScale_HTTPMatches"
 
 		Expect(resourceManager.ApplyFromFiles(matchesManifests, namespace)).To(Succeed())
@@ -1007,7 +1057,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				Expect(resourceManager.DeleteNamespace(ns.Name)).To(Succeed())
 			})
 
-			It("scales up gradually without downtime", func() {
+			It("scales up gradually without downtime", Label("gradual-up"), func() {
 				_, err := fmt.Fprint(outFile, "\n### Scale Up Gradually\n")
 				Expect(err).ToNot(HaveOccurred())
 
@@ -1058,7 +1108,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				}
 			})
 
-			It("scales down gradually without downtime", func() {
+			It("scales down gradually without downtime", Label("gradual-down"), func() {
 				_, err := fmt.Fprint(outFile, "\n### Scale Down Gradually\n")
 				Expect(err).ToNot(HaveOccurred())
 
@@ -1139,7 +1189,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 					Should(Succeed())
 			}
 
-			It("scales up abruptly without downtime", func() {
+			It("scales up abruptly without downtime", Label("abrupt-up"), func() {
 				_, err := fmt.Fprint(outFile, "\n### Scale Up Abruptly\n")
 				Expect(err).ToNot(HaveOccurred())
 
@@ -1171,7 +1221,7 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 				}
 			})
 
-			It("scales down abruptly without downtime", func() {
+			It("scales down abruptly without downtime", Label("abrupt-down"), func() {
 				_, err := fmt.Fprint(outFile, "\n### Scale Down Abruptly\n")
 				Expect(err).ToNot(HaveOccurred())
 
@@ -1205,3 +1255,49 @@ var _ = Describe("Zero downtime scale test", Ordered, Label("nfr", "zero-downtim
 		})
 	}
 })
+
+type metricConfig struct {
+	generatePNG   func(dir, csvPath, pngName string) error
+	queryTemplate string
+}
+
+// collectAndVisualizeMetric queries Prometheus, writes CSV, generates PNG, and cleans up.
+func collectAndVisualizeMetric(
+	promInstance framework.PrometheusInstance,
+	cfg metricConfig,
+	podName, containerName, filePrefix string,
+	timeRange promv1.Range,
+	testResultsDir string,
+	plusEnabled bool,
+) {
+	query := fmt.Sprintf(cfg.queryTemplate, podName, containerName)
+	result, err := promInstance.QueryRange(query, timeRange)
+	Expect(err).ToNot(HaveOccurred())
+
+	csvPath := filepath.Join(testResultsDir, framework.CreateResultsFilename("csv", filePrefix, plusEnabled))
+	Expect(framework.WritePrometheusMatrixToCSVFile(csvPath, result)).To(Succeed())
+
+	pngName := framework.CreateResultsFilename("png", filePrefix, plusEnabled)
+	Expect(cfg.generatePNG(testResultsDir, csvPath, pngName)).To(Succeed())
+
+	Expect(os.Remove(csvPath)).To(Succeed())
+}
+
+func checkMetricsExist(
+	promInstance framework.PrometheusInstance,
+	queries []string,
+	getTime func() time.Time,
+	modifyTime func(),
+	timeout, polling time.Duration,
+) {
+	for _, query := range queries {
+		Eventually(
+			framework.CreateMetricExistChecker(
+				promInstance,
+				query,
+				getTime,
+				modifyTime,
+			),
+		).WithTimeout(timeout).WithPolling(polling).Should(Succeed())
+	}
+}

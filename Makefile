@@ -32,13 +32,13 @@ HELM_DOCS_VERSION = v1.14.2
 # renovate: datasource=github-tags depName=ahmetb/gen-crd-api-reference-docs
 GEN_CRD_API_REFERENCE_DOCS_VERSION = v0.3.0
 # renovate: datasource=go depName=sigs.k8s.io/controller-tools
-CONTROLLER_TOOLS_VERSION = v0.20.0
+CONTROLLER_TOOLS_VERSION = v0.20.1
 # renovate: datasource=docker depName=node
 NODE_VERSION = 24
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
 CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
-HELM_SCHEMA_VERSION = 0.21.1
+HELM_SCHEMA_VERSION = 0.21.2
 
 # variables that can be overridden by the user
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
