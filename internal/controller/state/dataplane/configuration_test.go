@@ -7203,14 +7203,14 @@ func TestBuildServerTokens(t *testing.T) {
 		{
 			name:                 "default server token is set for empty Gateway",
 			gateway:              &graph.Gateway{},
-			expectedServerTokens: "off",
+			expectedServerTokens: graph.ServerTokenOff,
 		},
 		{
 			name: "default server tokens is set for empty EffectiveNginxProxy",
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
 			},
-			expectedServerTokens: "off",
+			expectedServerTokens: graph.ServerTokenOff,
 		},
 		{
 			name: "keyword server token is set properly when EffectiveNginxProxy is set",

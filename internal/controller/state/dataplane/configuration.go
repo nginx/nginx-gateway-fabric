@@ -41,7 +41,6 @@ const (
 	// the Gateway itself; in this situation we need an additional policy to generate the http context
 	// configuration.
 	InternalRateLimitShadowPolicyAnnotationKey = "nginx.org/internal-annotation-http-context-only"
-	defaultServerTokens                        = "off"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -1664,7 +1663,7 @@ func resolveUpstreamEndpoints(
 
 func buildServerTokens(gateway *graph.Gateway) string {
 	if gateway == nil || gateway.EffectiveNginxProxy == nil || gateway.EffectiveNginxProxy.ServerTokens == nil {
-		return defaultServerTokens
+		return graph.ServerTokenOff
 	}
 
 	serverToken := *gateway.EffectiveNginxProxy.ServerTokens
