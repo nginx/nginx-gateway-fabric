@@ -8,7 +8,7 @@ FROM nginx:1.29.5-alpine-otel
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.7.1
-ARG NGINX_AGENT_BRANCH=ensure-stream-closed
+ARG NGINX_AGENT_BRANCH=refactor-plugin
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
