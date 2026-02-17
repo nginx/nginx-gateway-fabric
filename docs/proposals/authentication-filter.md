@@ -267,7 +267,7 @@ type JWTRemoteKeySource struct {
 
   // URI is the JWKS endpoint.
   // +kubebuilder:validation:Pattern=`^(?:http?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?$`
-  URI string `json:"url"`
+  URI string `json:"uri"`
 }
 
 // JWTRequiredClaims specifies exact-match requirements for JWT claims.
