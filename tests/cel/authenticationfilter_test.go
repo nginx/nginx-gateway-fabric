@@ -79,6 +79,26 @@ func TestAuthenticationFilterValidateBasicRejected(t *testing.T) {
 			},
 			wantErrors: []string{expectedBasicRequiredError},
 		},
+		{
+			name: "Validate: type=Basic with spec.basic andspec.jwt set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeBasic,
+				Basic: &ngfAPIv1alpha1.BasicAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					Realm: "Restricted Area",
+				},
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Source: ngfAPIv1alpha1.JWTKeySourceFile,
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwt-secret")},
+					},
+					Realm: "Restricted Area",
+				},
+			},
+			wantErrors: []string{expectedBasicOnlyError},
+		},
 	}
 
 	for _, tt := range tests {
@@ -196,6 +216,26 @@ func TestAuthenticationFilterValidateJWTRejected(t *testing.T) {
 			wantErrors: []string{expectedJWTRequiredError},
 		},
 		{
+			name: "Validate: type=JWT with spec.jwt and spec.basic set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeJWT,
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Realm:  "Restricted Area",
+					Source: ngfAPIv1alpha1.JWTKeySourceFile,
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwt-secret")},
+					},
+				},
+				Basic: &ngfAPIv1alpha1.BasicAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					Realm: "Restricted Area",
+				},
+			},
+			wantErrors: []string{expectedJWTOnlyError},
+		},
+		{
 			name: "Validate: type=JWT with source=File and spec.jwt.file unset is rejected",
 			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
 				Type: ngfAPIv1alpha1.AuthTypeJWT,
@@ -234,6 +274,23 @@ func TestAuthenticationFilterValidateJWTRejected(t *testing.T) {
 			wantErrors: []string{expectedJWTFileRequiredError},
 		},
 		{
+			name: "Validate: type=JWT with source=File with both spec.jwt.file and spec.jwt.remote set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeJWT,
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Realm:  "Restricted Area",
+					Source: ngfAPIv1alpha1.JWTKeySourceFile,
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwt-secret")},
+					},
+					Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+						URI: "https://issuer.example.com/.well-known/jwks.json",
+					},
+				},
+			},
+			wantErrors: []string{expectedJWTFileOnlyError},
+		},
+		{
 			name: "Validate: type=JWT with source=Remote and spec.jwt.file set is rejected",
 			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
 				Type: ngfAPIv1alpha1.AuthTypeJWT,
@@ -246,6 +303,23 @@ func TestAuthenticationFilterValidateJWTRejected(t *testing.T) {
 				},
 			},
 			wantErrors: []string{expectedJWTRemoteRequiredError},
+		},
+		{
+			name: "Validate: type=JWT with source=Remote with both spec.jwt.remote and spec.jwt.file set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeJWT,
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Realm:  "Restricted Area",
+					Source: ngfAPIv1alpha1.JWTKeySourceRemote,
+					Remote: &ngfAPIv1alpha1.JWTRemoteKeySource{
+						URI: "https://issuer.example.com/.well-known/jwks.json",
+					},
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwt-secret")},
+					},
+				},
+			},
+			wantErrors: []string{expectedJWTRemoteOnlyError},
 		},
 	}
 

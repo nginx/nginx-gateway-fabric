@@ -35,7 +35,9 @@ type AuthenticationFilterList struct {
 
 // AuthenticationFilterSpec defines the desired configuration.
 // +kubebuilder:validation:XValidation:message="type Basic requires spec.basic to be set.",rule="self.type != 'Basic' || has(self.basic)"
+// +kubebuilder:validation:XValidation:message="type Basic must not set spec.jwt.", rule="self.type != 'Basic' || !has(self.jwt)"
 // +kubebuilder:validation:XValidation:message="type JWT requires spec.jwt to be set.",rule="self.type != 'JWT' || has(self.jwt)"
+// +kubebuilder:validation:XValidation:message="type JWT must not set spec.basic.", rule="self.type != 'JWT' || !has(self.basic)"
 //
 //nolint:lll
 type AuthenticationFilterSpec struct {
@@ -95,7 +97,9 @@ const (
 
 // JWTAuth configures JWT-based authentication (NGINX Plus).
 // +kubebuilder:validation:XValidation:message="source File requires spec.file to be set.",rule="self.source != 'File' || has(self.file)"
+// +kubebuilder:validation:XValidation:message="source File must not set spec.remote.", rule="self.source != 'File' || !has(self.remote)"
 // +kubebuilder:validation:XValidation:message="source Remote requires spec.remote to be set.",rule="self.source != 'Remote' || has(self.remote)"
+// +kubebuilder:validation:XValidation:message="source Remote must not set spec.file.", rule="self.source != 'Remote' || !has(self.file)"
 //
 //nolint:lll
 type JWTAuth struct {

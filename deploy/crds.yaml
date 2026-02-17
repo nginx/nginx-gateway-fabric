@@ -167,8 +167,12 @@ spec:
                 x-kubernetes-validations:
                 - message: source File requires spec.file to be set.
                   rule: self.source != 'File' || has(self.file)
+                - message: source File must not set spec.remote.
+                  rule: self.source != 'File' || !has(self.remote)
                 - message: source Remote requires spec.remote to be set.
                   rule: self.source != 'Remote' || has(self.remote)
+                - message: source Remote must not set spec.file.
+                  rule: self.source != 'Remote' || !has(self.file)
               type:
                 description: Type selects the authentication mechanism.
                 enum:
@@ -181,8 +185,12 @@ spec:
             x-kubernetes-validations:
             - message: type Basic requires spec.basic to be set.
               rule: self.type != 'Basic' || has(self.basic)
+            - message: type Basic must not set spec.jwt.
+              rule: self.type != 'Basic' || !has(self.jwt)
             - message: type JWT requires spec.jwt to be set.
               rule: self.type != 'JWT' || has(self.jwt)
+            - message: type JWT must not set spec.basic.
+              rule: self.type != 'JWT' || !has(self.basic)
           status:
             description: Status defines the state of the AuthenticationFilter.
             properties:
