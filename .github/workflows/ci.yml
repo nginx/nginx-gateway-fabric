@@ -248,6 +248,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          ref: ${{ inputs.release_version || github.ref }}
 
       - name: Configure GOPROXY
         id: goproxy
@@ -283,11 +284,12 @@ jobs:
         with:
           minor-label: "enhancement"
           major-label: "change"
+          publish: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) && true || false }}
           collapse-after: 20
           notes-header: |
             *Below is the auto-generated changelog, which includes all PRs that went into the release.
             For a shorter version that highlights only important changes, see [CHANGELOG.md](https://github.com/nginx/nginx-gateway-fabric/blob/{{version}}/CHANGELOG.md).*
-        if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
+        if: ${{ (github.event_name == 'push' && github.ref != 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.is_production_release) }}
 
       - name: Download Syft
         if: ${{ inputs.is_production_release }}
@@ -627,16 +629,3 @@ jobs:
       - name: Run Tests
         run: make test-cel-validation
         working-directory: ./tests
-
-  publish-release:
-    name: Publish Draft Release
-    runs-on: ubuntu-24.04
-    needs: publish-helm
-    if: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
-    permissions:
-      contents: write
-    steps:
-      - name: Publish Release
-        run: gh release edit ${{ inputs.release_version }} --draft=false --repo ${{ github.repository }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
