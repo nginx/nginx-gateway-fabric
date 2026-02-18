@@ -10,6 +10,7 @@ import (
 	"github.com/onsi/gomega/format"
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -28,6 +29,10 @@ var (
 func TestExecuteServers(t *testing.T) {
 	t.Parallel()
 
+	authBasicSecret := v1.SecretObjectReference{
+		Name:      "auth-basic-filter",
+		Namespace: helpers.GetPointer(v1.Namespace("test-ns")),
+	}
 	conf := dataplane.Configuration{
 		HTTPServers: []dataplane.VirtualServer{
 			{
@@ -73,8 +78,8 @@ func TestExecuteServers(t *testing.T) {
 									},
 									AuthenticationFilter: &dataplane.AuthenticationFilter{
 										Basic: &dataplane.AuthBasic{
-											SecretName:      "auth-basic-filter",
-											SecretNamespace: "test-ns",
+											SecretName:      string(authBasicSecret.Name),
+											SecretNamespace: string(*authBasicSecret.Namespace),
 											Realm:           "Restricted",
 											Data:            []byte("user:$apr1$cred"),
 										},
@@ -719,6 +724,7 @@ func TestExecuteForDefaultServers(t *testing.T) {
 	}
 }
 
+//nolint:gosec
 func TestCreateServers(t *testing.T) {
 	t.Parallel()
 	const (
@@ -2014,6 +2020,7 @@ func modifyMatchPairs(matchPairs httpMatchPairs) httpMatchPairs {
 	return modified
 }
 
+//nolint:gosec
 func TestCreateServersConflicts(t *testing.T) {
 	t.Parallel()
 	fooGroup := dataplane.BackendGroup{
@@ -2543,6 +2550,7 @@ func TestCreateLocations_Includes(t *testing.T) {
 	}
 }
 
+//nolint:gosec
 func TestCreateLocations_InferenceBackends(t *testing.T) {
 	t.Parallel()
 
@@ -3049,6 +3057,7 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 	}
 }
 
+//nolint:gosec
 func TestCreateLocationsRootPath(t *testing.T) {
 	t.Parallel()
 	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
@@ -3240,6 +3249,7 @@ func TestCreateLocationsRootPath(t *testing.T) {
 	}
 }
 
+//nolint:gosec
 func TestCreateLocationsPath(t *testing.T) {
 	t.Parallel()
 	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}

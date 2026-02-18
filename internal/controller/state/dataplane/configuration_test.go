@@ -6296,6 +6296,7 @@ func TestBuildDNSResolverConfig(t *testing.T) {
 	}
 }
 
+//nolint:gosec
 func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 	t.Parallel()
 

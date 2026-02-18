@@ -140,6 +140,7 @@ func TestInitialize_Plus(t *testing.T) {
 	}
 }
 
+//nolint:gosec
 func TestCopyFile(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
