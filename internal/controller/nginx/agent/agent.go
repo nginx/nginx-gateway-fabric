@@ -90,17 +90,21 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 	files []File,
 	volumeMounts []v1.VolumeMount,
 ) {
+	fmt.Println("Setting latest config on deployment", deployment.gatewayName)
 	msg := deployment.SetFiles(files, volumeMounts)
 	if msg == nil {
-		n.logger.V(1).Info("No changes to nginx configuration files, not sending to agent")
+		fmt.Println("No changes to nginx configuration files, not sending to agent")
 		return
 	}
 
+	fmt.Println("Sending nginx configuration update message to broadcaster for deployment UPDATECONFIG",
+		deployment.gatewayName)
 	applied := deployment.GetBroadcaster().Send(*msg)
 	if applied {
-		n.logger.Info("Sent nginx configuration to agent")
+		fmt.Println("Sent nginx configuration to agent")
 	}
 
+	fmt.Println("Setting latest config error to nil for deployment", deployment.gatewayName)
 	deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
 }
 
@@ -187,7 +191,7 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 	if len(errs) != 0 {
 		deployment.SetLatestUpstreamError(errors.Join(errs...))
 	} else if applied {
-		n.logger.Info("Updated upstream servers using NGINX Plus API")
+		fmt.Println("Updated upstream servers using NGINX Plus API")
 	}
 
 	// Store the most recent actions on the deployment so any new subscribers can apply them when first connecting.
