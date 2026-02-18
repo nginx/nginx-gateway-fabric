@@ -15,9 +15,6 @@ import (
 )
 
 var (
-	// nginxVariableNamePattern matches characters that are NOT valid in NGINX variable names
-	// NGINX variable names can only contain: letters (a-z, A-Z), numbers (0-9), and underscores (_).
-	nginxVariableNamePattern = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 	// regexMetacharPattern matches regex metacharacters that need escaping (except * which we handle specially).
 	regexMetacharPattern = regexp.MustCompile(`[.+?^$|\\()[\]{}]`)
 	mapsTemplate         = gotemplate.Must(gotemplate.New("maps").Parse(mapsTemplateText))
@@ -37,9 +34,13 @@ const (
 )
 
 func executeMaps(conf dataplane.Configuration) []executeResult {
-	maps := buildAddHeaderMaps(append(conf.HTTPServers, conf.SSLServers...))
+	httpAndSSLServers := make([]dataplane.VirtualServer, 0, len(conf.HTTPServers)+len(conf.SSLServers))
+	httpAndSSLServers = append(httpAndSSLServers, conf.HTTPServers...)
+	httpAndSSLServers = append(httpAndSSLServers, conf.SSLServers...)
+
+	maps := buildAddHeaderMaps(httpAndSSLServers)
 	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
-	maps = append(maps, buildCorsMaps(append(conf.HTTPServers, conf.SSLServers...))...)
+	maps = append(maps, buildCorsMaps(httpAndSSLServers)...)
 
 	result := executeResult{
 		dest: httpConfigFile,
@@ -52,13 +53,18 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 func buildCorsMaps(servers []dataplane.VirtualServer) []shared.Map {
 	originMaps := make([]shared.Map, 0)
 
-	for _, s := range servers {
+	for serverIndex, s := range servers {
+		serverID := fmt.Sprintf("%d", serverIndex)
+		if s.SSL != nil {
+			serverID = fmt.Sprintf("SSL_%d", serverIndex)
+		}
+
 		for pathRuleIndex, pr := range s.PathRules {
 			for matchRuleIndex, mr := range pr.MatchRules {
 				if mr.Filters.CORSFilter != nil {
 					corsFilter := mr.Filters.CORSFilter
 					if corsFilter.AllowOrigins != nil {
-						nginxVar := generateCORSAllowedOriginVariableName(pathRuleIndex, matchRuleIndex)
+						nginxVar := generateCORSAllowedOriginVariableName(serverID, pathRuleIndex, matchRuleIndex)
 						originMaps = append(originMaps, shared.Map{
 							Source:     "$http_origin",
 							Variable:   nginxVar,
@@ -66,7 +72,7 @@ func buildCorsMaps(servers []dataplane.VirtualServer) []shared.Map {
 						})
 					}
 					if corsFilter.AllowCredentials {
-						nginxVar := generateCORSAllowCredentialsVariableName(pathRuleIndex, matchRuleIndex)
+						nginxVar := generateCORSAllowCredentialsVariableName(serverID, pathRuleIndex, matchRuleIndex)
 						originMaps = append(originMaps, shared.Map{
 							Source:     "$http_origin",
 							Variable:   nginxVar,
@@ -79,12 +85,6 @@ func buildCorsMaps(servers []dataplane.VirtualServer) []shared.Map {
 	}
 
 	return originMaps
-}
-
-func convertPathToNginxVariable(path string) string {
-	// NGINX variable names can only contain letters (a-z, A-Z), numbers (0-9), and underscores (_)
-	// Replace any character that is not alphanumeric or underscore with underscore
-	return nginxVariableNamePattern.ReplaceAllString(path, "_")
 }
 
 func convertToNginxRegex(input string) string {

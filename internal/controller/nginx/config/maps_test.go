@@ -771,7 +771,7 @@ func TestBuildCorsMaps(t *testing.T) {
 			expected: []shared.Map{
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allowed_origin_path0_match0",
+					Variable: "$cors_allowed_origin_server0_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "~^example\\\\.com$",
@@ -810,7 +810,7 @@ func TestBuildCorsMaps(t *testing.T) {
 			expected: []shared.Map{
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allowed_origin_path0_match0",
+					Variable: "$cors_allowed_origin_server0_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "~^.*\\\\.example\\\\.com$",
@@ -820,7 +820,7 @@ func TestBuildCorsMaps(t *testing.T) {
 				},
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allow_credentials_path0_match0",
+					Variable: "$cors_allow_credentials_server0_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "~^.*\\\\.example\\\\.com$",
@@ -874,7 +874,7 @@ func TestBuildCorsMaps(t *testing.T) {
 			expected: []shared.Map{
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allowed_origin_path0_match0",
+					Variable: "$cors_allowed_origin_server0_path0_match0",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "~^example\\\\.com$",
@@ -884,7 +884,7 @@ func TestBuildCorsMaps(t *testing.T) {
 				},
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allowed_origin_path0_match1",
+					Variable: "$cors_allowed_origin_server0_path0_match1",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "~^.*\\\\.test\\\\.com$",
@@ -894,7 +894,7 @@ func TestBuildCorsMaps(t *testing.T) {
 				},
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allow_credentials_path0_match1",
+					Variable: "$cors_allow_credentials_server0_path0_match1",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "~^.*\\\\.test\\\\.com$",
@@ -904,7 +904,7 @@ func TestBuildCorsMaps(t *testing.T) {
 				},
 				{
 					Source:   "$http_origin",
-					Variable: "$cors_allowed_origin_path1_match0",
+					Variable: "$cors_allowed_origin_server0_path1_match0",
 					Parameters: []shared.MapParameter{
 						{
 							Value:  "~^docs\\\\.example\\\\.com$",
@@ -933,102 +933,6 @@ func TestBuildCorsMaps(t *testing.T) {
 					g.Expect(result[i].Parameters[j].Result).To(Equal(param.Result))
 				}
 			}
-		})
-	}
-}
-
-func TestConvertPathToNginxVariable(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		path     string
-		expected string
-	}{
-		{
-			name:     "root path",
-			path:     "/",
-			expected: "_",
-		},
-		{
-			name:     "simple path",
-			path:     "/api",
-			expected: "_api",
-		},
-		{
-			name:     "path with hyphens",
-			path:     "/test-path",
-			expected: "_test_path",
-		},
-		{
-			name:     "complex path with slashes and hyphens",
-			path:     "/api/v1/test-endpoint",
-			expected: "_api_v1_test_endpoint",
-		},
-		{
-			name:     "path with multiple consecutive slashes and hyphens",
-			path:     "/api//test--path",
-			expected: "_api__test__path",
-		},
-		{
-			name:     "path with dots (API versioning)",
-			path:     "/api/v1.0/users",
-			expected: "_api_v1_0_users",
-		},
-		{
-			name:     "path with colons (path parameters)",
-			path:     "/users/:id/posts",
-			expected: "_users__id_posts",
-		},
-		{
-			name:     "path with percent encoding",
-			path:     "/search/hello%20world",
-			expected: "_search_hello_20world",
-		},
-		{
-			name:     "path with special characters",
-			path:     "/api/v1@test+path~files",
-			expected: "_api_v1_test_path_files",
-		},
-		{
-			name:     "path with brackets and parentheses",
-			path:     "/api[v1]/test(endpoint)",
-			expected: "_api_v1__test_endpoint_",
-		},
-		{
-			name:     "path with query-like characters",
-			path:     "/search?q=test&limit=10",
-			expected: "_search_q_test_limit_10",
-		},
-		{
-			name:     "path with semicolons and commas",
-			path:     "/api;version=1,format=json",
-			expected: "_api_version_1_format_json",
-		},
-		{
-			name:     "path with mixed valid and invalid characters",
-			path:     "/api_v1/test123-path.json",
-			expected: "_api_v1_test123_path_json",
-		},
-		{
-			name:     "path with underscores (should be preserved)",
-			path:     "/api_v1/test_endpoint",
-			expected: "_api_v1_test_endpoint",
-		},
-		{
-			name:     "path with numbers (should be preserved)",
-			path:     "/api/v2/endpoint123",
-			expected: "_api_v2_endpoint123",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			result := convertPathToNginxVariable(test.path)
-			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }

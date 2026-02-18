@@ -20,7 +20,16 @@ spec:
         - "https://example.com"
         allowMethods:
         - GET
-        allowCredentials: false
+        - POST
+        allowHeaders:
+        - "Keep-Alive"
+        - "Content-Type"
+        - "User-Agent"
+        - "Authorization"
+        exposeHeaders:
+        - "Content-Security-Policy"
+        allowCredentials: true
+        maxAge: 10
     backendRefs:
     - name: coffee
       port: 80
