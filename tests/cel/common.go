@@ -36,6 +36,7 @@ const (
 const (
 	// AuthenticationFilter validation errors.
 	expectedBasicRequiredError = `for type=Basic, spec.basic must be set`
+	expectedOIDCRequiredError  = `for type=OIDC, spec.oidc must be set`
 
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"
