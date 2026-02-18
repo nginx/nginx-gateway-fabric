@@ -2729,6 +2729,7 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
 				conf.NginxPlus = NginxPlus{AllowedAddresses: []string{"127.0.0.3", "25.0.0.3"}}
+				conf.BaseHTTPConfig.ServerTokens = graph.ServerTokenOff
 				return conf
 			}),
 			msg: "NginxProxy with NginxPlus allowed addresses configured",
@@ -6038,6 +6039,15 @@ func TestBuildWorkerConnections(t *testing.T) {
 
 func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 	t.Parallel()
+
+	baseHTTPConfig := BaseHTTPConfig{
+		NginxReadinessProbePort: DefaultNginxReadinessProbePort,
+		NginxReadinessProbePath: DefaultNginxReadinessProbePath,
+		HTTP2:                   true,
+		IPFamily:                Dual,
+		ServerTokens:            graph.ServerTokenOff,
+	}
+
 	test := []struct {
 		gateway  *graph.Gateway
 		msg      string
@@ -6048,7 +6058,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 			gateway: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
 			},
-			expected: defaultBaseHTTPConfig,
+			expected: baseHTTPConfig,
 		},
 		{
 			msg: "kubernetes spec is nil",
@@ -6057,7 +6067,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 					Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{},
 				},
 			},
-			expected: defaultBaseHTTPConfig,
+			expected: baseHTTPConfig,
 		},
 		{
 			msg: "readiness probe spec is nil",
@@ -6072,7 +6082,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 					},
 				},
 			},
-			expected: defaultBaseHTTPConfig,
+			expected: baseHTTPConfig,
 		},
 		{
 			msg: "readiness probe spec is empty",
@@ -6092,6 +6102,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 				IPFamily:                Dual,
 				HTTP2:                   true,
+				ServerTokens:            graph.ServerTokenOff,
 			},
 		},
 		{
@@ -6114,6 +6125,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 				IPFamily:                Dual,
 				HTTP2:                   true,
+				ServerTokens:            graph.ServerTokenOff,
 			},
 		},
 		{
@@ -6136,6 +6148,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 				IPFamily:                Dual,
 				HTTP2:                   true,
+				ServerTokens:            graph.ServerTokenOff,
 			},
 		},
 		{
@@ -6159,6 +6172,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				NginxReadinessProbePath: "/custom/health",
 				IPFamily:                Dual,
 				HTTP2:                   true,
+				ServerTokens:            graph.ServerTokenOff,
 			},
 		},
 		{
@@ -6182,6 +6196,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				NginxReadinessProbePath: "/status",
 				IPFamily:                Dual,
 				HTTP2:                   true,
+				ServerTokens:            graph.ServerTokenOff,
 			},
 		},
 		{
@@ -6204,6 +6219,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				NginxReadinessProbePath: "/healthz",
 				IPFamily:                Dual,
 				HTTP2:                   true,
+				ServerTokens:            graph.ServerTokenOff,
 			},
 		},
 	}
@@ -6771,6 +6787,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					NginxReadinessProbePort:  DefaultNginxReadinessProbePort,
 					NginxReadinessProbePath:  DefaultNginxReadinessProbePath,
 					DisableSNIHostValidation: true,
+					ServerTokens:             graph.ServerTokenOff,
 				}
 				return conf
 			}),
@@ -6801,6 +6818,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					IPFamily:                IPv4,
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
+					ServerTokens:            graph.ServerTokenOff,
 				}
 				return conf
 			}),
@@ -6831,6 +6849,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					IPFamily:                IPv6,
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
+					ServerTokens:            graph.ServerTokenOff,
 				}
 				return conf
 			}),
@@ -6877,6 +6896,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					},
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
+					ServerTokens:            graph.ServerTokenOff,
 				}
 				return conf
 			}),
@@ -6907,6 +6927,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
 				conf.Logging = Logging{ErrorLevel: "debug"}
+				conf.BaseHTTPConfig.ServerTokens = graph.ServerTokenOff
 				return conf
 			}),
 			msg: "GatewayClass has NginxProxy with error log level set to debug",
@@ -6938,6 +6959,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
 				conf.SSLServers = []VirtualServer{}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{}
+				conf.BaseHTTPConfig.ServerTokens = graph.ServerTokenOff
 				return conf
 			}),
 			msg: "NginxProxy with NginxPlus allowed addresses configured but running on nginx oss",
@@ -7207,6 +7229,57 @@ func TestBuildAuthSecrets(t *testing.T) {
 			result := buildAuthSecrets(test.secrets)
 
 			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestBuildServerTokens(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                 string
+		gateway              *graph.Gateway
+		expectedServerTokens string
+	}{
+		{
+			name:                 "default server token is set for empty Gateway",
+			gateway:              &graph.Gateway{},
+			expectedServerTokens: graph.ServerTokenOff,
+		},
+		{
+			name: "default server tokens is set for empty EffectiveNginxProxy",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+			},
+			expectedServerTokens: graph.ServerTokenOff,
+		},
+		{
+			name: "keyword server token is set properly when EffectiveNginxProxy is set",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					ServerTokens: helpers.GetPointer("build"),
+				},
+			},
+			expectedServerTokens: "build",
+		},
+		{
+			name: "custom string value server token is set with quotes when EffectiveNginxProxy is set",
+			gateway: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					ServerTokens: helpers.GetPointer("custom_value"),
+				},
+			},
+			expectedServerTokens: `"custom_value"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildServerTokens(test.gateway)
+			g.Expect(result).To(Equal(test.expectedServerTokens))
 		})
 	}
 }

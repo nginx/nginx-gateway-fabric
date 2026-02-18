@@ -41,22 +41,22 @@ type Configuration struct {
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
-	// BackendGroups holds all unique BackendGroups.
-	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
 	MainSnippets []Snippet
+	// HTTPServers holds all HTTPServers.
+	HTTPServers []VirtualServer
 	// Policies holds the policies attached to the Gateway.
 	Policies []policies.Policy
-	// Upstreams holds all unique http Upstreams.
-	Upstreams []Upstream
+	// BackendGroups holds all unique BackendGroups.
+	BackendGroups []BackendGroup
 	// NginxPlus specifies NGINX Plus additional settings.
 	NginxPlus NginxPlus
 	// StreamUpstreams holds all unique stream Upstreams (TLS, TCP, UDP)
 	StreamUpstreams []Upstream
 	// SSLServers holds all SSLServers.
 	SSLServers []VirtualServer
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
+	// Upstreams holds all unique http Upstreams.
+	Upstreams []Upstream
 	// TCPServers holds all TCPServers
 	TCPServers []Layer4VirtualServer
 	// UDPServers holds all UDPServers
@@ -507,6 +507,8 @@ type BaseHTTPConfig struct {
 	GatewaySecretID SSLKeyPairID
 	// NginxReadinessProbePath is the path on which the health check endpoint for NGINX is exposed.
 	NginxReadinessProbePath string
+	// ServerTokens specifies the value for the server_tokens directive in NGINX configuration.
+	ServerTokens string
 	// Policies holds the policies attached to the Gateway for the http context.
 	Policies []policies.Policy
 	// Snippets contain the snippets that apply to the http context.
@@ -615,4 +617,10 @@ type AccessLog struct {
 	Escape string
 	// Disable specifies whether the access log is disabled.
 	Disable bool
+}
+
+var serverTokensKeywords = map[string]struct{}{
+	graph.ServerTokenBuild: {},
+	graph.ServerTokenOff:   {},
+	graph.ServerTokenOn:    {},
 }

@@ -25,6 +25,7 @@ type httpConfig struct {
 	AccessLog               *AccessLog
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
+	ServerTokens            string
 	Includes                []shared.Include
 	NginxReadinessProbePort int32
 	IPFamily                shared.IPFamily
@@ -52,6 +53,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		DNSResolver:             buildDNSResolver(conf.BaseHTTPConfig.DNSResolver),
 		AccessLog:               buildAccessLog(conf.Logging.AccessLog),
 		GatewaySecretID:         conf.BaseHTTPConfig.GatewaySecretID,
+		ServerTokens:            conf.BaseHTTPConfig.ServerTokens,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
