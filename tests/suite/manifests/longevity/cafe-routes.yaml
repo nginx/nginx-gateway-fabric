@@ -13,6 +13,12 @@ spec:
     - path:
         type: PathPrefix
         value: /coffee
+    filters:
+    - type: ExtensionRef
+      extensionRef:
+        group: gateway.nginx.org
+        kind: SnippetsFilter
+        name: loggable-snippet
     backendRefs:
     - name: coffee
       port: 80
@@ -32,6 +38,27 @@ spec:
     - path:
         type: PathPrefix
         value: /tea
+    filters:
+    - type: ExtensionRef
+      extensionRef:
+        group: gateway.nginx.org
+        kind: SnippetsFilter
+        name: loggable-snippet
     backendRefs:
     - name: tea
       port: 80
+---
+# Only log non-200 responses
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: loggable-snippet
+spec:
+  snippets:
+  - context: http
+    value: |
+      map $status $loggable {
+        ~^[2] 0;
+        default 1;
+      }
+      access_log /dev/stdout combined if=$loggable;

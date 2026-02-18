@@ -609,6 +609,7 @@ func TestProcessNginxProxies(t *testing.T) {
 				test.validator,
 				test.gc,
 				test.gws,
+				false,
 			)
 
 			g.Expect(helpers.Diff(test.expResult, result)).To(BeEmpty())
@@ -814,6 +815,7 @@ func TestValidateNginxProxy(t *testing.T) {
 						},
 						Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
 					},
+					ServerTokens: helpers.GetPointer("on"),
 				},
 			},
 			expectErrCount: 0,
@@ -890,6 +892,17 @@ func TestValidateNginxProxy(t *testing.T) {
 			expErrSubstring: "spec.ipFamily",
 			expectErrCount:  1,
 		},
+		{
+			name:      "invalid serverTokens value",
+			validator: createInvalidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer("custom-string"),
+				},
+			},
+			expErrSubstring: "spec.serverTokens",
+			expectErrCount:  1,
+		},
 	}
 
 	for _, test := range tests {
@@ -897,7 +910,7 @@ func TestValidateNginxProxy(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			allErrs := validateNginxProxy(test.validator, test.np)
+			allErrs := validateNginxProxy(test.validator, test.np, false)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
 			if len(allErrs) > 0 {
 				g.Expect(allErrs.ToAggregate().Error()).To(ContainSubstring(test.expErrSubstring))
@@ -1079,7 +1092,7 @@ func TestValidateDNSResolver(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			allErrs := validateNginxProxy(test.validator, test.np)
+			allErrs := validateNginxProxy(test.validator, test.np, false)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
 			if len(allErrs) > 0 {
 				g.Expect(allErrs.ToAggregate().Error()).To(ContainSubstring(test.errorString))
@@ -1577,5 +1590,65 @@ func TestValidateNginxProxy_NilCase(t *testing.T) {
 	g := NewWithT(t)
 
 	// Just testing the nil case for coverage reasons. The rest of the function is covered by other tests.
-	g.Expect(buildNginxProxy(nil, &validationfakes.FakeGenericValidator{})).To(BeNil())
+	g.Expect(buildNginxProxy(nil, &validationfakes.FakeGenericValidator{}, false)).To(BeNil())
+}
+
+func TestValidateServerTokens(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		np             *ngfAPIv1alpha2.NginxProxy
+		validator      *validationfakes.FakeGenericValidator
+		name           string
+		errorString    string
+		expectErrCount int
+		plus           bool
+	}{
+		{
+			name:      "valid serverTokens with NGINX OSS",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer(ServerTokenBuild),
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name:      "valid serverTokens with NGINX Plus",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer("test-server"),
+				},
+			},
+			expectErrCount: 0,
+			plus:           true,
+		},
+		{
+			name:      "invalid custom serverTokens with NGINX OSS",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer("custom-string"),
+				},
+			},
+			expectErrCount: 1,
+			errorString: "spec.serverTokens: Invalid value: " +
+				"\"custom-string\": custom string values for serverTokens are only allowed with NGINX Plus." +
+				" For NGINX OSS, allowed values are 'off', 'on', and 'build'.",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			allErrs := validateServerTokens(test.np, test.plus)
+			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
+			if len(allErrs) > 0 {
+				g.Expect(allErrs.ToAggregate().Error()).To(Equal(test.errorString))
+			}
+		})
+	}
 }

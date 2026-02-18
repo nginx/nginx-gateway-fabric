@@ -153,7 +153,7 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
 
       - name: Build Docker Image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           file: ${{ inputs.image == 'operator' && 'operators/Dockerfile' || (inputs.build-os != '' && format('build/{0}/Dockerfile{1}', inputs.build-os, inputs.image == 'nginx' && '.nginx' || inputs.image == 'plus' && '.nginxplus' || '') || format('build/Dockerfile{0}', inputs.image == 'nginx' && '.nginx' || inputs.image == 'plus' && '.nginxplus' || '')) }}
           context: "."
@@ -194,7 +194,7 @@ jobs:
           fail-build: false
 
       - name: Upload scan result to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@b20883b0cd1f46c72ae0ba6d1090936928f9fa30 # v4.32.0
+        uses: github/codeql-action/upload-sarif@9e907b5e64f6b83e7804b09294d44122997950d6 # v4.32.3
         if: ${{ !inputs.dry_run }}
         continue-on-error: true
         with:

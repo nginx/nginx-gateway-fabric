@@ -25,6 +25,14 @@ spec:
           preStop:
             exec:
               command: ["/bin/sleep", "15"]
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: nginx-no-access-log
 ---
 apiVersion: v1
 kind: Service
@@ -66,6 +74,14 @@ spec:
           preStop:
             exec:
               command: ["/bin/sleep", "15"]
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: nginx-no-access-log
 ---
 apiVersion: v1
 kind: Service
@@ -79,3 +95,20 @@ spec:
     name: http
   selector:
     app: tea
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-no-access-log
+data:
+  nginx.conf: |
+    events {}
+    http {
+      access_log off;
+      server {
+        listen 8080;
+        location / {
+          return 200;
+        }
+      }
+    }

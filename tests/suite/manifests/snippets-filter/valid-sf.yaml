@@ -24,7 +24,7 @@ spec:
     - context: http
       value: types_hash_bucket_size 64;
     - context: http.server
-      value: server_tokens on;
+      value: send_lowat 1024;
     - context: http.server.location
       value: tcp_nodelay on;
 ---

@@ -160,7 +160,7 @@ nfr-test: check-for-plus-usage-endpoint build-crossplane-image  ## Run the NFR t
 
 .PHONY: start-longevity-test
 start-longevity-test: export START_LONGEVITY=true
-start-longevity-test: nfr-test ## Start the longevity test to run for 4 days in GKE
+start-longevity-test: nfr-test ## Start the longevity test to run for 3 days in GKE
 
 .PHONY: stop-longevity-test
 stop-longevity-test: export STOP_LONGEVITY=true

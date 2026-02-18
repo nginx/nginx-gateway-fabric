@@ -52,7 +52,7 @@ repos:
   # Rules are in .markdownlint-cli2.yaml file
   # See https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md for rule descriptions
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.20.0
+    rev: v0.21.0
     hooks:
       - id: markdownlint-cli2
 
@@ -85,7 +85,7 @@ repos:
         args: [-w, -s, -i, "4"]
 
   - repo: https://github.com/dadav/helm-schema
-    rev: 0.21.1
+    rev: 0.21.2
     hooks:
       - id: helm-schema
         args:

@@ -53,6 +53,11 @@ var _ = Describe("Longevity", Label("longevity-setup", "longevity-teardown"), fu
 			Skip("'longevity-setup' label not specified; skipping...")
 		}
 
+		// scale controller to test leader election
+		ngfDeployment, err := resourceManager.GetNGFDeployment(ngfNamespace, "ngf-longevity")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resourceManager.ScaleDeployment(ngfNamespace, ngfDeployment.GetName(), 2)).To(Succeed())
+
 		Expect(resourceManager.Apply([]client.Object{&ns})).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(files, ns.Name)).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(promFile, ngfNamespace)).To(Succeed())

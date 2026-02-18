@@ -549,6 +549,9 @@ nginx:
   #       disableIPv6:
   #         type: boolean
   #         description: DisableIPv6 disables DisableIPv6 lookups. If not specified, or set to false, IPv6 lookups will be enabled.
+  #   serverTokens:
+  #     type: string
+  #     description: Sets the `server_tokens` directive. Accepts 'off', 'on', or 'build' for NGINX OSS, and any string or variable for NGINX Plus.
   # @schema
   # -- The configuration for the data plane that is contained in the NginxProxy resource. This is applied globally to all Gateways
   # managed by this instance of NGINX Gateway Fabric.

@@ -564,3 +564,47 @@ func TestExecuteBaseHttp_Policies(t *testing.T) {
 	calledPolicies := fakeGen.GenerateForHTTPArgsForCall(0)
 	g.Expect(calledPolicies).To(HaveLen(2))
 }
+
+func TestExecuteBaseHttp_ServerTokens(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		expServerTokens string
+		conf            dataplane.Configuration
+	}{
+		{
+			name: "custom server tokens",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{ServerTokens: "on"},
+			},
+			expServerTokens: "server_tokens on;",
+		},
+		{
+			name: "empty string server tokens",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{ServerTokens: fmt.Sprintf(`"%s"`, "")},
+			},
+			expServerTokens: "server_tokens \"\";",
+		},
+		{
+			name: "custom string server tokens",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{ServerTokens: fmt.Sprintf(`"%s"`, "custom-string")},
+			},
+			expServerTokens: "server_tokens \"custom-string\";",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			g.Expect(res).To(HaveLen(1))
+			g.Expect(res[0].dest).To(Equal(httpConfigFile))
+			g.Expect(string(res[0].data)).To(ContainSubstring(test.expServerTokens))
+		})
+	}
+}
