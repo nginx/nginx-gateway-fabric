@@ -129,50 +129,13 @@ const (
 )
 
 // OIDCAuth configures OpenID Connect Authentication.
+//
+//nolint:lll
 type OIDCAuth struct {
-	// Issuer is the URL of the OpenID Provider.
-	// Must exactly match the "issuer" value from the provider's
-	// .well-known/openid-configuration endpoint.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#issuer
-	// Examples:
-	//   - Keycloak: "https://keycloak.example.com/realms/my-realm"
-	//   - Okta: "https://dev-123456.okta.com/oauth2/default"
-	//   - Auth0: "https://my-tenant.auth0.com/"
-	//
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:Pattern=`^https://`
-	Issuer string `json:"issuer"`
-
-	// ClientID is the client identifier registered with the OpenID Provider.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_id
-	//
-	// +kubebuilder:validation:MinLength=1
-	ClientID string `json:"clientID"`
-
-	// The Kubernetes secret which contains the OIDC client secret to be used in the
-	// [Authentication Request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest).
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
-	//
-	// This is an Opaque secret. The client secret should be stored in the key
-	// "client-secret".
-	ClientSecret LocalObjectReference `json:"clientSecret"`
-
-	// CACertificateRefs references a secret containing trusted CA certificates
-	// in PEM format used to verify the certificates of the OpenID Provider endpoints.
-    // The CA certificates must be stored in a key named `ca.crt`.
-	// If not specified, the system CA bundle is used.
-	//
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
-	// NGINX Default: system CA bundle
-	//
-	// +optional
-    // +kubebuilder:validation:MaxItems=8
-	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
-
-    // CertificateRevocationList references a Secret containing a certificate
-    // revocation list in PEM format. The CRL must be stored in a key
-    // named `ca.crl`. This is used to verify that certificates presented
-    // by the OpenID Provider endpoints have not been revoked.
+	// CertificateRevocationList references a Secret containing a certificate
+	// revocation list in PEM format. The CRL must be stored in a key
+	// named `ca.crl`. This is used to verify that certificates presented
+	// by the OpenID Provider endpoints have not been revoked.
 	//
 	// +optional
 	CertificateRevocationList *LocalObjectReference `json:"certificateRevocationList,omitempty"`
@@ -181,20 +144,13 @@ type OIDCAuth struct {
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#config_url
 	// NGINX Default: <issuer>/.well-known/openid-configuration
 	//
-	// +kubebuilder:validation:Pattern=`^https://`
 	// +optional
+	// +kubebuilder:validation:Pattern=`^(?:https?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?(?:\/[a-zA-Z0-9._~:\/?#\[\]@!$&'()*+,;=-]*)?$`
+
 	ConfigURL *string `json:"configURL,omitempty"`
 
-	// The OIDC scopes to be used in the Authentication Request.
-	// The "openid" scope is always added to the list of scopes if not already
-	// specified.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#scope
-	//
-	// +optional
-	Scopes []string `json:"scopes,omitempty"`
-
 	// PKCE enables Proof Key for Code Exchange (PKCE) for the authentication flow.
-    // If nil, NGINX automatically enables PKCE when the OpenID Provider requires it.
+	// If nil, NGINX automatically enables PKCE when the OpenID Provider requires it.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#pkce
 	//
 	// +optional
@@ -216,6 +172,52 @@ type OIDCAuth struct {
 	//
 	// +optional
 	Logout *OIDCLogoutConfig `json:"logout,omitempty"`
+
+	// Issuer is the URL of the OpenID Provider.
+	// Must exactly match the "issuer" value from the provider's
+	// .well-known/openid-configuration endpoint.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#issuer
+	// Examples:
+	//   - Keycloak: "https://keycloak.example.com/realms/my-realm"
+	//   - Okta: "https://dev-123456.okta.com/oauth2/default"
+	//   - Auth0: "https://my-tenant.auth0.com/"
+	//
+	// +kubebuilder:validation:Pattern=`^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
+	Issuer string `json:"issuer"`
+
+	// ClientID is the client identifier registered with the OpenID Provider.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_id
+	//
+	// +kubebuilder:validation:MinLength=1
+	ClientID string `json:"clientID"`
+
+	// The Kubernetes secret which contains the OIDC client secret to be used in the
+	// [Authentication Request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest).
+	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
+	//
+	// This is an Opaque secret. The client secret should be stored in the key
+	// "client-secret".
+	ClientSecret LocalObjectReference `json:"clientSecret"`
+
+	// CACertificateRefs references a secret containing trusted CA certificates
+	// in PEM format used to verify the certificates of the OpenID Provider endpoints.
+	// The CA certificates must be stored in a key named `ca.crt`.
+	// If not specified, the system CA bundle is used.
+	//
+	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
+	// NGINX Default: system CA bundle
+	//
+	// +optional
+	// +kubebuilder:validation:MaxItems=8
+	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
+
+	// The OIDC scopes to be used in the Authentication Request.
+	// The "openid" scope is always added to the list of scopes if not already
+	// specified.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#scope
+	//
+	// +optional
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 // OIDCSessionConfig configures session management for OIDC authentication.
@@ -236,13 +238,15 @@ type OIDCSessionConfig struct {
 }
 
 // OIDCLogoutConfig defines the logout behavior for OIDC authentication.
+//
+//nolint:lll
 type OIDCLogoutConfig struct {
 	// URI defines the path for initiating session logout.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#logout_uri
 	// Example: /logout
 	//
 	// +optional
-	// +kubebuilder:validation:Pattern=`^(?:http?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?$`
+	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
 	URI *string `json:"uri,omitempty"`
 
 	// PostLogoutURI defines the path to redirect to after logout.
@@ -251,7 +255,7 @@ type OIDCLogoutConfig struct {
 	// Example: /logged_out.html
 	//
 	// +optional
-	// +kubebuilder:validation:Pattern=`^(?:http?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?$`
+	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
 	PostLogoutURI *string `json:"postLogoutURI,omitempty"`
 
 	// FrontChannelLogoutURI defines the path for front-channel logout.
@@ -259,7 +263,7 @@ type OIDCLogoutConfig struct {
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#frontchannel_logout_uri
 	//
 	// +optional
-	// +kubebuilder:validation:Pattern=`^(?:http?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?$`
+	// +kubebuilder:validation:Pattern=`^(https?://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?)?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$`
 	FrontChannelLogoutURI *string `json:"frontChannelLogoutURI,omitempty"`
 
 	// TokenHint adds the id_token_hint argument to the Provider's Logout Endpoint.
@@ -270,6 +274,7 @@ type OIDCLogoutConfig struct {
 	// +optional
 	TokenHint *bool `json:"tokenHint,omitempty"`
 }
+
 ```
 
 For simplicity, only one OIDC provider can be configured at this time. To set up authentication with an OpenID Provider, you must specify the issuer URL, client ID, and client secret.
