@@ -5,7 +5,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -16,72 +16,72 @@ func TestReferenceGrantResolver(t *testing.T) {
 	gwNs := "gw-ns"
 	secretNsName := types.NamespacedName{Namespace: "test", Name: "certificate"}
 
-	refGrants := map[types.NamespacedName]*v1beta1.ReferenceGrant{
+	refGrants := map[types.NamespacedName]*gatewayv1.ReferenceGrant{
 		{Namespace: "test", Name: "valid"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.Gateway,
-						Namespace: v1beta1.Namespace(gwNs),
+						Namespace: gatewayv1.Namespace(gwNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
 						Kind: "Secret",
-						Name: helpers.GetPointer(v1beta1.ObjectName("wrong-name1")),
+						Name: helpers.GetPointer(gatewayv1.ObjectName("wrong-name1")),
 					},
 					{
 						Kind: "Secret",
-						Name: helpers.GetPointer(v1beta1.ObjectName("wrong-name2")),
+						Name: helpers.GetPointer(gatewayv1.ObjectName("wrong-name2")),
 					},
 					{
 						Kind: "Secret",
-						Name: helpers.GetPointer(v1beta1.ObjectName(secretNsName.Name)), // matches
+						Name: helpers.GetPointer(gatewayv1.ObjectName(secretNsName.Name)), // matches
 					},
 				},
 			},
 		},
 		{Namespace: "explicit-core-group", Name: "valid"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.Gateway,
-						Namespace: v1beta1.Namespace(gwNs),
+						Namespace: gatewayv1.Namespace(gwNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
 						Group: "core",
 						Kind:  "Secret",
-						Name:  helpers.GetPointer(v1beta1.ObjectName(secretNsName.Name)),
+						Name:  helpers.GetPointer(gatewayv1.ObjectName(secretNsName.Name)),
 					},
 				},
 			},
 		},
 		{Namespace: "all-in-namespace", Name: "valid"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				To: []v1beta1.ReferenceGrantTo{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
 						Kind: "Secret",
 					},
 				},
-				From: []v1beta1.ReferenceGrantFrom{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.Gateway,
 						Namespace: "wrong-ns1",
 					},
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.Gateway,
 						Namespace: "wrong-ns2",
 					},
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.Gateway,
-						Namespace: v1beta1.Namespace(gwNs),
+						Namespace: gatewayv1.Namespace(gwNs),
 					},
 				},
 			},
@@ -89,7 +89,7 @@ func TestReferenceGrantResolver(t *testing.T) {
 	}
 
 	normalTo := toResource{kind: "Secret", name: secretNsName.Name, namespace: secretNsName.Namespace}
-	normalFrom := fromResource{group: v1beta1.GroupName, kind: kinds.Gateway, namespace: gwNs}
+	normalFrom := fromResource{group: gatewayv1.GroupName, kind: kinds.Gateway, namespace: gwNs}
 
 	tests := []struct {
 		to      toResource
@@ -123,7 +123,7 @@ func TestReferenceGrantResolver(t *testing.T) {
 		{
 			msg:     "wrong 'from' kind",
 			to:      normalTo,
-			from:    fromResource{group: v1beta1.GroupName, kind: "WrongKind", namespace: gwNs},
+			from:    fromResource{group: gatewayv1.GroupName, kind: "WrongKind", namespace: gwNs},
 			allowed: false,
 		},
 		{
@@ -135,7 +135,7 @@ func TestReferenceGrantResolver(t *testing.T) {
 		{
 			msg:     "wrong 'from' namespace",
 			to:      normalTo,
-			from:    fromResource{group: v1beta1.GroupName, kind: kinds.Gateway, namespace: "wrong-ns"},
+			from:    fromResource{group: gatewayv1.GroupName, kind: kinds.Gateway, namespace: "wrong-ns"},
 			allowed: false,
 		},
 		{
@@ -218,7 +218,7 @@ func TestFromGateway(t *testing.T) {
 	ref := fromGateway("ns")
 
 	exp := fromResource{
-		group:     v1beta1.GroupName,
+		group:     gatewayv1.GroupName,
 		kind:      kinds.Gateway,
 		namespace: "ns",
 	}
@@ -232,7 +232,7 @@ func TestFromHTTPRoute(t *testing.T) {
 	ref := fromHTTPRoute("ns")
 
 	exp := fromResource{
-		group:     v1beta1.GroupName,
+		group:     gatewayv1.GroupName,
 		kind:      kinds.HTTPRoute,
 		namespace: "ns",
 	}
@@ -247,7 +247,7 @@ func TestFromGRPCRoute(t *testing.T) {
 	ref := fromGRPCRoute("ns")
 
 	exp := fromResource{
-		group:     v1beta1.GroupName,
+		group:     gatewayv1.GroupName,
 		kind:      kinds.GRPCRoute,
 		namespace: "ns",
 	}
@@ -262,7 +262,7 @@ func TestFromTLSRoute(t *testing.T) {
 	ref := fromTLSRoute("ns")
 
 	exp := fromResource{
-		group:     v1beta1.GroupName,
+		group:     gatewayv1.GroupName,
 		kind:      kinds.TLSRoute,
 		namespace: "ns",
 	}
@@ -301,17 +301,17 @@ func TestRefAllowedFrom(t *testing.T) {
 
 	notAllowedNsName := types.NamespacedName{Namespace: "not-allowed-ns", Name: "not-allowed-in-ns"}
 
-	refGrants := map[types.NamespacedName]*v1beta1.ReferenceGrant{
+	refGrants := map[types.NamespacedName]*gatewayv1.ReferenceGrant{
 		{Namespace: allowedGatewayNs, Name: "gw-2-secret"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.Gateway,
-						Namespace: v1beta1.Namespace(gwNs),
+						Namespace: gatewayv1.Namespace(gwNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
 						Kind: "Secret",
 					},
@@ -319,15 +319,15 @@ func TestRefAllowedFrom(t *testing.T) {
 			},
 		},
 		{Namespace: allowedHTTPRouteNs, Name: "hr-2-svc"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.HTTPRoute,
-						Namespace: v1beta1.Namespace(hrNs),
+						Namespace: gatewayv1.Namespace(hrNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
 						Kind: kinds.Service,
 					},
@@ -335,15 +335,15 @@ func TestRefAllowedFrom(t *testing.T) {
 			},
 		},
 		{Namespace: allowedHTTPRouteNs, Name: "hr-2-ipool"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.HTTPRoute,
-						Namespace: v1beta1.Namespace(hrNs),
+						Namespace: gatewayv1.Namespace(hrNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
 						Group: inferenceAPIGroup,
 						Kind:  kinds.InferencePool,
@@ -352,15 +352,15 @@ func TestRefAllowedFrom(t *testing.T) {
 			},
 		},
 		{Namespace: allowedGRPCRouteNs, Name: "gr-2-svc"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.GRPCRoute,
-						Namespace: v1beta1.Namespace(grNs),
+						Namespace: gatewayv1.Namespace(grNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
 						Kind: kinds.Service,
 					},
@@ -368,15 +368,15 @@ func TestRefAllowedFrom(t *testing.T) {
 			},
 		},
 		{Namespace: allowedTLSRouteNs, Name: "tr-2-svc"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.TLSRoute,
-						Namespace: v1beta1.Namespace(trNs),
+						Namespace: gatewayv1.Namespace(trNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
 						Kind: kinds.Service,
 					},
@@ -384,15 +384,15 @@ func TestRefAllowedFrom(t *testing.T) {
 			},
 		},
 		{Namespace: allowedTCPRouteNs, Name: "tcr-2-svc"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.TCPRoute,
-						Namespace: v1beta1.Namespace(tcrNs),
+						Namespace: gatewayv1.Namespace(tcrNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
 						Kind: kinds.Service,
 					},
@@ -400,15 +400,15 @@ func TestRefAllowedFrom(t *testing.T) {
 			},
 		},
 		{Namespace: allowedUDPRouteNs, Name: "ur-2-svc"}: {
-			Spec: v1beta1.ReferenceGrantSpec{
-				From: []v1beta1.ReferenceGrantFrom{
+			Spec: gatewayv1.ReferenceGrantSpec{
+				From: []gatewayv1.ReferenceGrantFrom{
 					{
-						Group:     v1beta1.GroupName,
+						Group:     gatewayv1.GroupName,
 						Kind:      kinds.UDPRoute,
-						Namespace: v1beta1.Namespace(urNs),
+						Namespace: gatewayv1.Namespace(urNs),
 					},
 				},
-				To: []v1beta1.ReferenceGrantTo{
+				To: []gatewayv1.ReferenceGrantTo{
 					{
 						Kind: kinds.Service,
 					},

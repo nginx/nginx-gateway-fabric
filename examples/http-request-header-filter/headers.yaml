@@ -18,13 +18,21 @@ spec:
         ports:
         - containerPort: 8080
         volumeMounts:
-        - name: config-volume
-          mountPath: /etc/nginx
+        - name: conf-volume
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+          readOnly: true
+        - name: js-volume
+          mountPath: /etc/nginx/headers.js
+          subPath: headers.js
           readOnly: true
       volumes:
-      - name: config-volume
+      - name: conf-volume
         configMap:
           name: headers-config
+      - name: js-volume
+        configMap:
+          name: headers-js-config
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -53,6 +61,13 @@ data:
             return 200 "$headers";
         }
     }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: headers-js-config
+# yamllint disable rule:indentation
+data:
   headers.js: |-
     function getRequestHeaders(r) {
         let s = "Headers:\n";

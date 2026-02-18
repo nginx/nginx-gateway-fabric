@@ -143,7 +143,7 @@ Gateways represent a piece of infrastructure that often needs vendor-specific co
 So far, the infrastructure API has been implemented on the Gateway, and there are only two fields: `annotations` and `labels`:
 
 ```yaml
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: my-gateway
@@ -179,7 +179,7 @@ Possible use cases: minimum TLS version and supported cipher suites.
 Example:
 
 ```yaml
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: my-gateway

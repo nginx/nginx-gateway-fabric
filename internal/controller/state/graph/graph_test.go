@@ -16,7 +16,6 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
-	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -448,13 +447,13 @@ func TestBuildGraph(t *testing.T) {
 		}
 	}
 
-	createRouteTLS := func(name string, gatewayName string) *v1alpha2.TLSRoute {
-		return &v1alpha2.TLSRoute{
+	createRouteTLS := func(name string, gatewayName string) *gatewayv1.TLSRoute {
+		return &gatewayv1.TLSRoute{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: testNs,
 				Name:      name,
 			},
-			Spec: v1alpha2.TLSRouteSpec{
+			Spec: gatewayv1.TLSRouteSpec{
 				CommonRouteSpec: gatewayv1.CommonRouteSpec{
 					ParentRefs: []gatewayv1.ParentReference{
 						{
@@ -466,7 +465,7 @@ func TestBuildGraph(t *testing.T) {
 				Hostnames: []gatewayv1.Hostname{
 					"fizz.example.org",
 				},
-				Rules: []v1alpha2.TLSRouteRule{
+				Rules: []gatewayv1.TLSRouteRule{
 					{
 						BackendRefs: []v1alpha2.BackendRef{
 							commonTLSBackendRef,
@@ -844,20 +843,20 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
-	rgSecret := &v1beta1.ReferenceGrant{
+	rgSecret := &gatewayv1.ReferenceGrant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "rg-secret",
 			Namespace: "certificate",
 		},
-		Spec: v1beta1.ReferenceGrantSpec{
-			From: []v1beta1.ReferenceGrantFrom{
+		Spec: gatewayv1.ReferenceGrantSpec{
+			From: []gatewayv1.ReferenceGrantFrom{
 				{
 					Group:     gatewayv1.GroupName,
 					Kind:      kinds.Gateway,
 					Namespace: gatewayv1.Namespace(testNs),
 				},
 			},
-			To: []v1beta1.ReferenceGrantTo{
+			To: []gatewayv1.ReferenceGrantTo{
 				{
 					Kind: "Secret",
 				},
@@ -865,20 +864,20 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
-	hrToServiceNsRefGrant := &v1beta1.ReferenceGrant{
+	hrToServiceNsRefGrant := &gatewayv1.ReferenceGrant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "hr-to-service",
 			Namespace: "service",
 		},
-		Spec: v1beta1.ReferenceGrantSpec{
-			From: []v1beta1.ReferenceGrantFrom{
+		Spec: gatewayv1.ReferenceGrantSpec{
+			From: []gatewayv1.ReferenceGrantFrom{
 				{
 					Group:     gatewayv1.GroupName,
 					Kind:      kinds.HTTPRoute,
 					Namespace: gatewayv1.Namespace(testNs),
 				},
 			},
-			To: []v1beta1.ReferenceGrantTo{
+			To: []gatewayv1.ReferenceGrantTo{
 				{
 					Kind: "Service",
 				},
@@ -886,20 +885,20 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
-	grToServiceNsRefGrant := &v1beta1.ReferenceGrant{
+	grToServiceNsRefGrant := &gatewayv1.ReferenceGrant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "gr-to-service",
 			Namespace: "service",
 		},
-		Spec: v1beta1.ReferenceGrantSpec{
-			From: []v1beta1.ReferenceGrantFrom{
+		Spec: gatewayv1.ReferenceGrantSpec{
+			From: []gatewayv1.ReferenceGrantFrom{
 				{
 					Group:     gatewayv1.GroupName,
 					Kind:      kinds.GRPCRoute,
 					Namespace: gatewayv1.Namespace(testNs),
 				},
 			},
-			To: []v1beta1.ReferenceGrantTo{
+			To: []gatewayv1.ReferenceGrantTo{
 				{
 					Kind: "Service",
 				},
@@ -1037,7 +1036,7 @@ func TestBuildGraph(t *testing.T) {
 				client.ObjectKeyFromObject(hr3): hr3,
 				client.ObjectKeyFromObject(ir):  ir,
 			},
-			TLSRoutes: map[types.NamespacedName]*v1alpha2.TLSRoute{
+			TLSRoutes: map[types.NamespacedName]*gatewayv1.TLSRoute{
 				client.ObjectKeyFromObject(tr):  tr,
 				client.ObjectKeyFromObject(tr2): tr2,
 			},
@@ -1061,7 +1060,7 @@ func TestBuildGraph(t *testing.T) {
 			Namespaces: map[types.NamespacedName]*v1.Namespace{
 				client.ObjectKeyFromObject(ns): ns,
 			},
-			ReferenceGrants: map[types.NamespacedName]*v1beta1.ReferenceGrant{
+			ReferenceGrants: map[types.NamespacedName]*gatewayv1.ReferenceGrant{
 				client.ObjectKeyFromObject(rgSecret):              rgSecret,
 				client.ObjectKeyFromObject(hrToServiceNsRefGrant): hrToServiceNsRefGrant,
 				client.ObjectKeyFromObject(grToServiceNsRefGrant): grToServiceNsRefGrant,

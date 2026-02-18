@@ -14,7 +14,6 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
-	"sigs.k8s.io/gateway-api/apis/v1beta1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -93,14 +92,14 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		HTTPRoutes:            make(map[types.NamespacedName]*v1.HTTPRoute),
 		Services:              make(map[types.NamespacedName]*apiv1.Service),
 		Namespaces:            make(map[types.NamespacedName]*apiv1.Namespace),
-		ReferenceGrants:       make(map[types.NamespacedName]*v1beta1.ReferenceGrant),
+		ReferenceGrants:       make(map[types.NamespacedName]*v1.ReferenceGrant),
 		Secrets:               make(map[types.NamespacedName]*apiv1.Secret),
 		CRDMetadata:           make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
 		BackendTLSPolicies:    make(map[types.NamespacedName]*v1.BackendTLSPolicy),
 		ConfigMaps:            make(map[types.NamespacedName]*apiv1.ConfigMap),
 		NginxProxies:          make(map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy),
 		GRPCRoutes:            make(map[types.NamespacedName]*v1.GRPCRoute),
-		TLSRoutes:             make(map[types.NamespacedName]*v1alpha2.TLSRoute),
+		TLSRoutes:             make(map[types.NamespacedName]*v1.TLSRoute),
 		TCPRoutes:             make(map[types.NamespacedName]*v1alpha2.TCPRoute),
 		UDPRoutes:             make(map[types.NamespacedName]*v1alpha2.UDPRoute),
 		NGFPolicies:           make(map[graph.PolicyKey]policies.Policy),
@@ -149,7 +148,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: nil,
 		},
 		{
-			gvk:       cfg.MustExtractGVK(&v1beta1.ReferenceGrant{}),
+			gvk:       cfg.MustExtractGVK(&v1.ReferenceGrant{}),
 			store:     newObjectStoreMapAdapter(clusterStore.ReferenceGrants),
 			predicate: nil,
 		},
@@ -224,7 +223,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
 		},
 		{
-			gvk:       cfg.MustExtractGVK(&v1alpha2.TLSRoute{}),
+			gvk:       cfg.MustExtractGVK(&v1.TLSRoute{}),
 			store:     newObjectStoreMapAdapter(clusterStore.TLSRoutes),
 			predicate: nil,
 		},

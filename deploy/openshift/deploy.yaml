@@ -177,6 +177,7 @@ rules:
   - referencegrants
   - grpcroutes
   - backendtlspolicies
+  - tlsroutes
   verbs:
   - list
   - watch
@@ -188,6 +189,7 @@ rules:
   - gatewayclasses/status
   - grpcroutes/status
   - backendtlspolicies/status
+  - tlsroutes/status
   verbs:
   - update
 - apiGroups:
