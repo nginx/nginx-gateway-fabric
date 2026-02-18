@@ -22,7 +22,7 @@ COMPATIBILITY:
 - Gateway API Inference Extension version: `1.1.0`
 - NGINX version: `1.29.5`
 - NGINX Plus version: `R36`
-- NGINX Agent version: `v3.7.0`
+- NGINX Agent version: `v3.7.1`
 - Kubernetes version: `1.25+`
 
 CONTAINER IMAGES:
