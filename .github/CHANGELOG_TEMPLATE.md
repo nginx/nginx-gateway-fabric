@@ -17,7 +17,6 @@ DOCUMENTATION:
 HELM CHART:
 
 - The version of the Helm chart is now %%VERSION%%
--
 
 UPGRADE:
 
@@ -41,4 +40,4 @@ CONTAINER IMAGES:
 - Control plane: `ghcr.io/nginx/nginx-gateway-fabric:%%VERSION%%`
 - Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:%%VERSION%%`
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:%%VERSION%%`
-- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:%%VERSION%%`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:%%OPERATOR_VERSION%%`
