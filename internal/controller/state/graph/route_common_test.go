@@ -1708,13 +1708,13 @@ func TestBindL4RouteToListeners(t *testing.T) {
 		sectionName *gatewayv1.SectionName,
 		port *gatewayv1.PortNumber,
 		ns string,
-	) *v1alpha2.TLSRoute {
-		return &v1alpha2.TLSRoute{
+	) *gatewayv1.TLSRoute {
+		return &gatewayv1.TLSRoute{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: ns,
 				Name:      "hr",
 			},
-			Spec: v1alpha2.TLSRouteSpec{
+			Spec: gatewayv1.TLSRouteSpec{
 				CommonRouteSpec: gatewayv1.CommonRouteSpec{
 					ParentRefs: []gatewayv1.ParentReference{
 						{
@@ -2570,13 +2570,13 @@ func createTestUDPRoute(name string, serviceName string, port gatewayv1.PortNumb
 	}
 }
 
-func createTestTLSRoute(name string, hostname gatewayv1.Hostname) *v1alpha2.TLSRoute {
-	return &v1alpha2.TLSRoute{
+func createTestTLSRoute(name string, hostname gatewayv1.Hostname) *gatewayv1.TLSRoute {
+	return &gatewayv1.TLSRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: testNs,
 			Name:      name,
 		},
-		Spec: v1alpha2.TLSRouteSpec{
+		Spec: gatewayv1.TLSRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
 				ParentRefs: []gatewayv1.ParentReference{
 					{
@@ -2611,10 +2611,10 @@ func TestBuildL4RoutesForGatewaysNoGateways(t *testing.T) {
 
 	nsName := types.NamespacedName{Namespace: testNs, Name: "hi"}
 
-	tlsRoutes := map[types.NamespacedName]*v1alpha2.TLSRoute{
+	tlsRoutes := map[types.NamespacedName]*gatewayv1.TLSRoute{
 		nsName: {
-			Spec: v1alpha2.TLSRouteSpec{
-				Hostnames: []v1alpha2.Hostname{"app.example.com"},
+			Spec: gatewayv1.TLSRouteSpec{
+				Hostnames: []gatewayv1.Hostname{"app.example.com"},
 			},
 		},
 	}
@@ -2646,7 +2646,7 @@ func TestBuildL4RoutesForGatewaysTCPAndUDP(t *testing.T) {
 	serviceNsName := types.NamespacedName{Namespace: testNs, Name: "service"}
 
 	tests := []struct {
-		tlsRoutes     map[types.NamespacedName]*v1alpha2.TLSRoute
+		tlsRoutes     map[types.NamespacedName]*gatewayv1.TLSRoute
 		tcpRoutes     map[types.NamespacedName]*v1alpha2.TCPRoute
 		udpRoutes     map[types.NamespacedName]*v1alpha2.UDPRoute
 		name          string
@@ -2674,7 +2674,7 @@ func TestBuildL4RoutesForGatewaysTCPAndUDP(t *testing.T) {
 				createTestL4Listener("tcp-listener", 8080, gatewayv1.TCPProtocolType, kinds.TCPRoute),
 				createTestL4Listener("udp-listener", 5353, gatewayv1.UDPProtocolType, kinds.UDPRoute),
 			},
-			tlsRoutes: map[types.NamespacedName]*v1alpha2.TLSRoute{
+			tlsRoutes: map[types.NamespacedName]*gatewayv1.TLSRoute{
 				{Namespace: testNs, Name: "tls-route"}: createTestTLSRoute("tls-route", "app.example.com"),
 			},
 			tcpRoutes: map[types.NamespacedName]*v1alpha2.TCPRoute{
@@ -2769,7 +2769,7 @@ func TestTryToAttachL4RouteToListeners_NoAttachableListeners(t *testing.T) {
 
 	route := &L4Route{
 		Spec: L4RouteSpec{
-			Hostnames: []v1alpha2.Hostname{"app.example.com"},
+			Hostnames: []gatewayv1.Hostname{"app.example.com"},
 		},
 		Valid:      true,
 		Attachable: true,
@@ -2930,7 +2930,7 @@ func TestBindToListenerL4TCPUDPConflicts(t *testing.T) {
 			g := NewWithT(t)
 
 			var routeSource client.Object
-			var hostnames []v1alpha2.Hostname
+			var hostnames []gatewayv1.Hostname
 			switch test.routeKind {
 			case "TCPRoute":
 				tcpRoute := createTestTCPRoute(test.currentRouteName, "", 0)
@@ -2944,7 +2944,7 @@ func TestBindToListenerL4TCPUDPConflicts(t *testing.T) {
 				tlsRoute := createTestTLSRoute(test.currentRouteName, "app.example.com")
 				tlsRoute.Spec.ParentRefs = nil // clear parent refs for this test
 				routeSource = tlsRoute
-				hostnames = []v1alpha2.Hostname{"app.example.com"}
+				hostnames = []gatewayv1.Hostname{"app.example.com"}
 			}
 
 			route := &L4Route{
@@ -3044,7 +3044,7 @@ func TestIsolateL4Listeners(t *testing.T) {
 		parentRef []parentRef,
 		ns string,
 		hostnames ...gatewayv1.Hostname,
-	) *v1alpha2.TLSRoute {
+	) *gatewayv1.TLSRoute {
 		var parentRefs []gatewayv1.ParentReference
 		for _, p := range parentRef {
 			parentRefs = append(parentRefs, gatewayv1.ParentReference{
@@ -3052,12 +3052,12 @@ func TestIsolateL4Listeners(t *testing.T) {
 				SectionName: p.sectionName,
 			})
 		}
-		return &v1alpha2.TLSRoute{
+		return &gatewayv1.TLSRoute{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: ns,
 				Name:      name,
 			},
-			Spec: v1alpha2.TLSRouteSpec{
+			Spec: gatewayv1.TLSRouteSpec{
 				CommonRouteSpec: gatewayv1.CommonRouteSpec{
 					ParentRefs: parentRefs,
 				},
@@ -3124,7 +3124,7 @@ func TestIsolateL4Listeners(t *testing.T) {
 	)
 
 	createL4RoutewithAcceptedHostnames := func(
-		source *v1alpha2.TLSRoute,
+		source *gatewayv1.TLSRoute,
 		acceptedHostnames map[string][]string,
 		hostnames []gatewayv1.Hostname,
 		sectionName *gatewayv1.SectionName,
