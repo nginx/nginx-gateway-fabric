@@ -98,7 +98,8 @@ jobs:
           sed -i -e "s/VERSION = edge/VERSION = ${{ inputs.version }}/g" Makefile
           sed -i "6r .github/CHANGELOG_TEMPLATE.md" CHANGELOG.md
           sed -i -e "s/%%VERSION%%/${{ inputs.version }}/g" CHANGELOG.md
-          sed -i "8a ${{ join(fromJson(steps.notes.outputs.release-sections).release-notes, '\n') }}\n" CHANGELOG.md
+          sed -i -e "s/%%OPERATOR_VERSION%%/${{ inputs.operator-version }}/g" CHANGELOG.md
+          sed -i "8a ${{ join(fromJson(steps.notes.outputs.release-sections).release-notes, '\n') }}\n\n" CHANGELOG.md
           make generate-all
 
       - name: Create Pull Request

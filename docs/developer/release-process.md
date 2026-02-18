@@ -72,7 +72,7 @@ To create a new release, follow these steps:
    - Automatically submit UBI images for RedHat certification: The NGF, NGINX, and Operator UBI images are automatically submitted to the RedHat Partner Portal for preflight certification.
 7. Operator Bundle Generation:
    - Before releasing the operator, ensure the [manual steps](../../operators/README.md#manual-items-to-check) have been completed.
-   - You can generate and submit the operator bundle by running the [Operator Bundle PR workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) with the following inputs:
+   - You can generate and submit the operator bundle by running the [Operator Bundle PR workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) on the release branch with the following inputs:
      - Set `operator-version` to the operator version (e.g., `1.0.1`, without the `v` prefix)
      - Set `submit-to-redhat` to `true` if you want to automatically open a PR to the [RedHat certified-operators repository](https://github.com/redhat-openshift-ecosystem/certified-operators)
    - This workflow will:
@@ -81,7 +81,7 @@ To create a new release, follow these steps:
      - If `submit-to-redhat` is enabled, automatically fork and open a PR to the RedHat certified-operators repo
    - Review and merge the internal bundle PR once approved
    - Monitor the RedHat certified-operators PR for review feedback
-8. Prepare and merge a PR into the main branch to update with similar information that you did in the release branch docs and operator bundle PRs. Specifically:
+8. Prepare and merge a PR into the main branch to update with similar information that you did in the release branch docs. Specifically:
     1. [README](/README.md) to include the information about the latest release.
     2. [changelog](/CHANGELOG.md).
     3. Helm chart `version` field.
