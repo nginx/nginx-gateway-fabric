@@ -111,30 +111,35 @@ func (b *DeploymentBroadcaster) run(ctx context.Context, stopCh chan struct{}) {
 	for {
 		select {
 		case <-stopCh:
+			fmt.Println("Received stop signal, stopping broadcaster")
 			return
 		case <-ctx.Done():
+			fmt.Println("Context canceled, stopping broadcaster")
 			return
 		case channels := <-b.subCh:
+			fmt.Println("Adding new subscriber with ID", channels.id)
 			b.listeners[channels.id] = channels
 		case id := <-b.unsubCh:
+			fmt.Println("Canceling subscription for subscriber with ID", id)
 			delete(b.listeners, id)
 		case msg := <-b.publishCh:
 			var wg sync.WaitGroup
-			wg.Add(len(b.listeners))
 
 			for _, channels := range b.listeners {
-				go func() {
-					defer wg.Done()
-
+				fmt.Println("Sending message to subscriber with ID", channels.id, "message:", msg)
+				wg.Go(func() {
 					// send message and wait for it to be read
 					channels.listenCh <- msg
 					// wait for response
 					<-channels.responseCh
-				}()
+				})
 			}
+			fmt.Println("We will wait for", len(b.listeners), "subscribers to respond to message:", msg)
 			wg.Wait()
+			fmt.Println("We are done waiting for subscribers to respond to message:", msg)
 
 			b.doneCh <- struct{}{}
+			fmt.Println("Sent signal that we are done waiting for subscribers to respond to message:", msg)
 		}
 	}
 }
