@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.21
-FROM golang:1.26 AS builder
+FROM golang:1.25 AS builder
 
 WORKDIR /go/src/github.com/nginx/nginx-gateway-fabric
 
@@ -9,7 +9,7 @@ RUN go mod download
 COPY . /go/src/github.com/nginx/nginx-gateway-fabric
 RUN make build
 
-FROM golang:1.26 AS ca-certs-provider
+FROM golang:1.25 AS ca-certs-provider
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7 AS ngf-ubi-minimal
 
