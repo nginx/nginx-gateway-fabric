@@ -17,6 +17,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
+var (
+	ServerTokenOff   = "off"
+	ServerTokenOn    = "on"
+	ServerTokenBuild = "build"
+)
+
 // NginxProxy represents the NginxProxy resource.
 type NginxProxy struct {
 	// Source is the source resource.
@@ -128,6 +134,7 @@ func processNginxProxies(
 	validator validation.GenericValidator,
 	gc *v1.GatewayClass,
 	gws map[types.NamespacedName]*v1.Gateway,
+	plus bool,
 ) map[types.NamespacedName]*NginxProxy {
 	referencedNginxProxies := make(map[types.NamespacedName]*NginxProxy)
 
@@ -141,7 +148,7 @@ func processNginxProxies(
 			}
 
 			if np, ok := nps[refNp]; ok {
-				referencedNginxProxies[refNp] = buildNginxProxy(np, validator)
+				referencedNginxProxies[refNp] = buildNginxProxy(np, validator, plus)
 			}
 		}
 	}
@@ -153,7 +160,7 @@ func processNginxProxies(
 				Namespace: gw.Namespace,
 			}
 			if np, ok := nps[refNp]; ok {
-				referencedNginxProxies[refNp] = buildNginxProxy(np, validator)
+				referencedNginxProxies[refNp] = buildNginxProxy(np, validator, plus)
 			} else {
 				referencedNginxProxies[refNp] = nil
 			}
@@ -171,9 +178,10 @@ func processNginxProxies(
 func buildNginxProxy(
 	np *ngfAPIv1alpha2.NginxProxy,
 	validator validation.GenericValidator,
+	plus bool,
 ) *NginxProxy {
 	if np != nil {
-		errs := validateNginxProxy(validator, np)
+		errs := validateNginxProxy(validator, np, plus)
 
 		return &NginxProxy{
 			Source:  np,
@@ -208,6 +216,7 @@ func gwReferencesAnyNginxProxy(gw *v1.Gateway) bool {
 func validateNginxProxy(
 	validator validation.GenericValidator,
 	npCfg *ngfAPIv1alpha2.NginxProxy,
+	plus bool,
 ) field.ErrorList {
 	var allErrs field.ErrorList
 	spec := field.NewPath("spec")
@@ -277,6 +286,8 @@ func validateNginxProxy(
 	allErrs = append(allErrs, validateRewriteClientIP(npCfg)...)
 
 	allErrs = append(allErrs, validateNginxPlus(npCfg)...)
+
+	allErrs = append(allErrs, validateServerTokens(npCfg, plus)...)
 
 	return allErrs
 }
@@ -500,5 +511,31 @@ func validateNginxPlus(npCfg *ngfAPIv1alpha2.NginxProxy) field.ErrorList {
 		}
 	}
 
+	return allErrs
+}
+
+func validateServerTokens(npCfg *ngfAPIv1alpha2.NginxProxy, plus bool) field.ErrorList {
+	var allErrs field.ErrorList
+	spec := field.NewPath("spec")
+
+	if npCfg.Spec.ServerTokens != nil && !plus {
+		serverTokens := *npCfg.Spec.ServerTokens
+		serverTokensPath := spec.Child("serverTokens")
+
+		switch serverTokens {
+		case ServerTokenOff, ServerTokenOn, ServerTokenBuild:
+			// only keyword server_tokens off|on|build is allowed in OSS
+		default:
+			allErrs = append(
+				allErrs,
+				field.Invalid(
+					serverTokensPath,
+					serverTokens,
+					"custom string values for serverTokens are only allowed with NGINX Plus."+
+						" For NGINX OSS, allowed values are 'off', 'on', and 'build'.",
+				),
+			)
+		}
+	}
 	return allErrs
 }
