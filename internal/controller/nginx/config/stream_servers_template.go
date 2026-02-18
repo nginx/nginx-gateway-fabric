@@ -40,8 +40,8 @@ server {
 	{{- if $s.ProxyPass }}
     proxy_pass {{ $s.ProxyPass }};
 	{{- end }}
-	{{- if $s.Pass }}
-    pass {{ $s.Pass }};
+	{{- if $s.Target }}
+    pass {{ $s.Target }};
 	{{- end }}
 	{{- if $s.SSLPreread }}
     ssl_preread on;
