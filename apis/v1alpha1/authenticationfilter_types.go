@@ -36,6 +36,8 @@ type AuthenticationFilterList struct {
 // AuthenticationFilterSpec defines the desired configuration.
 // +kubebuilder:validation:XValidation:message="for type=Basic, spec.basic must be set",rule="!(!has(self.basic) && self.type == 'Basic')"
 // +kubebuilder:validation:XValidation:message="for type=OIDC, spec.oidc must be set",rule="!(!has(self.oidc) && self.type == 'OIDC')"
+// +kubebuilder:validation:XValidation:message="type Basic must not be set when spec.oidc is set", rule="self.type != 'Basic' || !has(self.oidc)"
+// +kubebuilder:validation:XValidation:message="type OIDC must not be set when spec.basic is set", rule="self.type != 'OIDC' || !has(self.basic)"
 //
 //nolint:lll
 type AuthenticationFilterSpec struct {
@@ -77,16 +79,17 @@ type BasicAuth struct {
 }
 
 // OIDCAuth configures OpenID Connect Authentication.
+// Only available for NGINX Plus users.
 //
 //nolint:lll
 type OIDCAuth struct {
-	// CertificateRevocationList references a Secret containing a certificate
-	// revocation list in PEM format. The CRL must be stored in a key
-	// named `ca.crl`. This is used to verify that certificates presented
-	// by the OpenID Provider endpoints have not been revoked.
+	// CRLSecretRef references a Secret containing a certificate
+	// revocation list in PEM format. This Secret must be of type `nginx.org/oidc`
+	// with the value stored under the key "ca.crl". This is used to verify that
+	// certificates presented by the OpenID Provider endpoints have not been revoked.
 	//
 	// +optional
-	CertificateRevocationList *LocalObjectReference `json:"certificateRevocationList,omitempty"`
+	CRLSecretRef *LocalObjectReference `json:"crlSecretRef,omitempty"`
 
 	// ConfigURL sets a custom URL to retrieve the OpenID Provider metadata.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#config_url
@@ -138,17 +141,15 @@ type OIDCAuth struct {
 	// +kubebuilder:validation:MinLength=1
 	ClientID string `json:"clientID"`
 
-	// The Kubernetes secret which contains the OIDC client secret to be used in the
+	// ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
 	// [Authentication Request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest).
+	// This Secret must be of type `nginx.org/oidc` with the value stored under the key "client-secret".
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
-	//
-	// This is an Opaque secret. The client secret should be stored in the key
-	// "client-secret".
-	ClientSecret LocalObjectReference `json:"clientSecret"`
+	ClientSecretRef LocalObjectReference `json:"clientSecretRef"`
 
-	// CACertificateRefs references a secret containing trusted CA certificates
+	// CACertificateRefs references a list of secrets containing trusted CA certificates
 	// in PEM format used to verify the certificates of the OpenID Provider endpoints.
-	// The CA certificates must be stored in a key named `ca.crt`.
+	// The Secrets must be of type `nginx.org/oidc` and must be stored in a key named `ca.crt`.
 	// If not specified, the system CA bundle is used.
 	//
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
@@ -159,12 +160,12 @@ type OIDCAuth struct {
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 
 	// The OIDC scopes to be used in the Authentication Request.
-	// The "openid" scope is always added to the list of scopes if not already
-	// specified.
+	// By default, the "openid" scope is always added to the list of scopes
+	// if not already specified.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#scope
+	// NGINX Default: openid
 	//
 	// +optional
-	// +kubebuilder:default={"openid"}
 	Scopes []string `json:"scopes,omitempty"`
 }
 
