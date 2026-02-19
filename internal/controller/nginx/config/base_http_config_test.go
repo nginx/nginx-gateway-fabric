@@ -565,7 +565,7 @@ func TestExecuteBaseHttp_Policies(t *testing.T) {
 	g.Expect(calledPolicies).To(HaveLen(2))
 }
 
-//nolint:gosec
+//nolint:gosec // Test data with hardcoded values, no injection risk.
 func TestExecuteBaseHttp_ServerTokens(t *testing.T) {
 	t.Parallel()
 
