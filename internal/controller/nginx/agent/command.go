@@ -175,7 +175,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		// which releases the lock.
 		select {
 		case <-ctx.Done():
-			fmt.Println("subscription context done, stopping subscription loop", "uuid", grpcInfo.UUID, "channelID", channels.ID)
+			fmt.Println("subscription context done, stopping subscription loop", "uuid",
+				grpcInfo.UUID, "channelID", channels.ID, "cause", context.Cause(ctx).Error())
 			select {
 			case channels.ResponseCh <- struct{}{}:
 			default:
