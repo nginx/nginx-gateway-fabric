@@ -73,17 +73,125 @@ spec:
                 - realm
                 - secretRef
                 type: object
+              jwt:
+                description: JWT configures JSON Web Token authentication (NGINX Plus).
+                properties:
+                  file:
+                    description: |-
+                      File specifies local JWKS configuration.
+                      Required when Source == File.
+                    properties:
+                      secretRef:
+                        description: SecretRef references a Secret containing the
+                          JWKS.
+                        properties:
+                          name:
+                            description: Name is the referenced object.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - secretRef
+                    type: object
+                  keyCache:
+                    description: |-
+                      KeyCache is the cache duration for keys.
+                      Configures `auth_jwt_key_cache` directive.
+                      https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt_key_cache
+                      Example: "auth_jwt_key_cache 10m;".
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  realm:
+                    description: |-
+                      Realm used by NGINX `auth_jwt` directive
+                      https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html#auth_jwt
+                      Configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
+                    type: string
+                  remote:
+                    description: |-
+                      Remote specifies remote JWKS configuration.
+                      Required when Source == Remote.
+                    properties:
+                      tls:
+                        description: TLS defines HTTPS client parameters for retrieving
+                          JWKS.
+                        properties:
+                          secretRef:
+                            description: |-
+                              SecretRef references a Secret containing client TLS cert and key.
+                              Expects secret type kubernetes.io/tls.
+                            properties:
+                              name:
+                                description: Name is the referenced object.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          sni:
+                            default: true
+                            description: |-
+                              SNI controls server name indication.
+                              Configures `proxy_ssl_server_name` directive.
+                              https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_server_name
+                            type: boolean
+                          sniName:
+                            description: |-
+                              SNIName sets a custom SNI.
+                              By default, NGINX uses the host from proxy_pass.
+                              Configures `proxy_ssl_name` directive.
+                              https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name
+                            type: string
+                          verify:
+                            default: true
+                            description: Verify controls server certificate verification.
+                            type: boolean
+                        type: object
+                      uri:
+                        description: URI is the JWKS endpoint.
+                        pattern: ^(?:https?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?(?:\/[a-zA-Z0-9._~:\/?#\[\]@!$&'()*+,;=-]*)?$
+                        type: string
+                    required:
+                    - uri
+                    type: object
+                  source:
+                    description: 'Source selects how JWT keys are provided: local
+                      file or remote JWKS.'
+                    enum:
+                    - File
+                    - Remote
+                    type: string
+                required:
+                - realm
+                - source
+                type: object
+                x-kubernetes-validations:
+                - message: source File requires spec.file to be set.
+                  rule: self.source != 'File' || has(self.file)
+                - message: source File must not set spec.remote.
+                  rule: self.source != 'File' || !has(self.remote)
+                - message: source Remote requires spec.remote to be set.
+                  rule: self.source != 'Remote' || has(self.remote)
+                - message: source Remote must not set spec.file.
+                  rule: self.source != 'Remote' || !has(self.file)
               type:
                 description: Type selects the authentication mechanism.
                 enum:
                 - Basic
+                - JWT
                 type: string
             required:
             - type
             type: object
             x-kubernetes-validations:
-            - message: for type=Basic, spec.basic must be set
-              rule: '!(!has(self.basic) && self.type == ''Basic'')'
+            - message: type Basic requires spec.basic to be set.
+              rule: self.type != 'Basic' || has(self.basic)
+            - message: type Basic must not set spec.jwt.
+              rule: self.type != 'Basic' || !has(self.jwt)
+            - message: type JWT requires spec.jwt to be set.
+              rule: self.type != 'JWT' || has(self.jwt)
+            - message: type JWT must not set spec.basic.
+              rule: self.type != 'JWT' || !has(self.basic)
           status:
             description: Status defines the state of the AuthenticationFilter.
             properties:

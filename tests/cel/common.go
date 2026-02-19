@@ -35,7 +35,14 @@ const (
 
 const (
 	// AuthenticationFilter validation errors.
-	expectedBasicRequiredError = `for type=Basic, spec.basic must be set`
+	expectedBasicRequiredError     = "type Basic requires spec.basic to be set."
+	expectedBasicOnlyError         = "type Basic must not set spec.jwt."
+	expectedJWTRequiredError       = "type JWT requires spec.jwt to be set."
+	expectedJWTOnlyError           = "type JWT must not set spec.basic."
+	expectedJWTFileRequiredError   = "source File requires spec.file to be set."
+	expectedJWTFileOnlyError       = "source File must not set spec.remote."
+	expectedJWTRemoteRequiredError = "source Remote requires spec.remote to be set."
+	expectedJWTRemoteOnlyError     = "source Remote must not set spec.file."
 
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"
