@@ -175,19 +175,24 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		// which releases the lock.
 		select {
 		case <-ctx.Done():
+			fmt.Println("subscription context done, stopping subscription loop", "uuid", grpcInfo.UUID)
 			select {
 			case channels.ResponseCh <- struct{}{}:
 			default:
 			}
 			return grpcStatus.Error(codes.Canceled, context.Cause(ctx).Error())
 		case <-cs.resetConnChan:
+			fmt.Println("received reset connection signal, resetting connection", "uuid", grpcInfo.UUID)
 			return grpcStatus.Error(codes.Unavailable, "TLS files updated")
 		case msg := <-channels.ListenCh:
+			fmt.Println("received message from broadcaster, sending to agent", "uuid", grpcInfo.UUID, "messageType", msg.Type)
 			var req *pb.ManagementPlaneRequest
 			switch msg.Type {
 			case broadcast.ConfigApplyRequest:
+				fmt.Println("building config apply request for agent", "uuid", grpcInfo.UUID, "configVersion", msg.ConfigVersion)
 				req = buildRequest(msg.FileOverviews, conn.InstanceID, msg.ConfigVersion)
 			case broadcast.APIRequest:
+				fmt.Println("building API request for agent", "uuid", grpcInfo.UUID, "action", msg.NGINXPlusAction)
 				req = buildPlusAPIRequest(msg.NGINXPlusAction, conn.InstanceID)
 			default:
 				panic(fmt.Sprintf("unknown request type %d", msg.Type))
@@ -206,6 +211,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			// Only broadcast operations should signal ResponseCh for coordination.
 			pendingBroadcastRequest = &msg
 		case err = <-msgr.Errors():
+			fmt.Println("received error from messenger, logging and sending error status to status queue", "uuid",
+				grpcInfo.UUID, "error", err)
 			cs.logger.Error(err, "connection error", conn.ParentType, conn.ParentName, "uuid", grpcInfo.UUID)
 			deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 			select {
@@ -221,8 +228,11 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			}
 			return grpcStatus.Error(codes.Internal, err.Error())
 		case msg := <-msgr.Messages():
+			fmt.Println("received message from messenger, checking response status", "uuid", grpcInfo.UUID, "message", msg)
 			res := msg.GetCommandResponse()
 			if res.GetStatus() != pb.CommandResponse_COMMAND_STATUS_OK {
+				fmt.Println("received error status from agent, logging and sending error status to status queue", "uuid",
+					grpcInfo.UUID, "error", res.GetError())
 				if isRollbackMessage(res.GetMessage()) {
 					// we don't care about these messages, so ignore them
 					continue
@@ -230,12 +240,15 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 				err := fmt.Errorf("msg: %s; error: %s", res.GetMessage(), res.GetError())
 				deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 			} else {
+				fmt.Println("received successful response from agent, setting latest config error to nil for deployment", "uuid")
 				deployment.SetPodErrorStatus(grpcInfo.UUID, nil)
 			}
 
 			// Signal broadcast completion only for tracked broadcast operations.
 			// Initial config responses are ignored to prevent spurious success messages.
 			if pendingBroadcastRequest != nil {
+				fmt.Println("received response for pending broadcast request, sending response signal to broadcaster",
+					"uuid", grpcInfo.UUID)
 				pendingBroadcastRequest = nil
 				channels.ResponseCh <- struct{}{}
 			} else {
