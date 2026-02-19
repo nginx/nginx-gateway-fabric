@@ -467,7 +467,7 @@ func TestBuildGraph(t *testing.T) {
 				},
 				Rules: []gatewayv1.TLSRouteRule{
 					{
-						BackendRefs: []v1alpha2.BackendRef{
+						BackendRefs: []gatewayv1.BackendRef{
 							commonTLSBackendRef,
 						},
 					},

@@ -2614,7 +2614,7 @@ func TestBuildL4RoutesForGatewaysNoGateways(t *testing.T) {
 	tlsRoutes := map[types.NamespacedName]*gatewayv1.TLSRoute{
 		nsName: {
 			Spec: gatewayv1.TLSRouteSpec{
-				Hostnames: []v1alpha2.Hostname{"app.example.com"},
+				Hostnames: []gatewayv1.Hostname{"app.example.com"},
 			},
 		},
 	}
@@ -2769,7 +2769,7 @@ func TestTryToAttachL4RouteToListeners_NoAttachableListeners(t *testing.T) {
 
 	route := &L4Route{
 		Spec: L4RouteSpec{
-			Hostnames: []v1alpha2.Hostname{"app.example.com"},
+			Hostnames: []gatewayv1.Hostname{"app.example.com"},
 		},
 		Valid:      true,
 		Attachable: true,
@@ -2930,7 +2930,7 @@ func TestBindToListenerL4TCPUDPConflicts(t *testing.T) {
 			g := NewWithT(t)
 
 			var routeSource client.Object
-			var hostnames []v1alpha2.Hostname
+			var hostnames []gatewayv1.Hostname
 			switch test.routeKind {
 			case "TCPRoute":
 				tcpRoute := createTestTCPRoute(test.currentRouteName, "", 0)
@@ -2944,7 +2944,7 @@ func TestBindToListenerL4TCPUDPConflicts(t *testing.T) {
 				tlsRoute := createTestTLSRoute(test.currentRouteName, "app.example.com")
 				tlsRoute.Spec.ParentRefs = nil // clear parent refs for this test
 				routeSource = tlsRoute
-				hostnames = []v1alpha2.Hostname{"app.example.com"}
+				hostnames = []gatewayv1.Hostname{"app.example.com"}
 			}
 
 			route := &L4Route{

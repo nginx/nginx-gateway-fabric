@@ -502,7 +502,7 @@ func TestNewTLSRouteStatusSetter(t *testing.T) {
 			name: "TLSRoute has no status",
 			newStatus: gatewayv1.TLSRouteStatus{
 				RouteStatus: v1alpha2.RouteStatus{
-					Parents: []v1alpha2.RouteParentStatus{
+					Parents: []gatewayv1.RouteParentStatus{
 						{
 							ParentRef:      gatewayv1.ParentReference{},
 							ControllerName: gatewayv1.GatewayController(controllerName),
