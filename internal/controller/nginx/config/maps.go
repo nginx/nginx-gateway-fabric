@@ -109,7 +109,7 @@ func buildCORSOriginMapParameters(s []string) []shared.MapParameter {
 }
 
 func convertToNginxRegex(input string) string {
-	return "~^" + strings.ReplaceAll(input, "*", ".*") + "$"
+	return "\"~^" + strings.ReplaceAll(input, "*", ".*") + "$\""
 }
 
 func executeStreamMaps(conf dataplane.Configuration) []executeResult {

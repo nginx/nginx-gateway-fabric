@@ -7,7 +7,7 @@ map {{ $m.Source }} {{ $m.Variable }} {
 	hostnames;
 	{{ end }}
 	{{ range $p := $m.Parameters }}
-	"{{ $p.Value }}" {{ $p.Result }};
+	{{ $p.Value }} {{ $p.Result }};
 	{{ end }}
 }
 {{- end }}
