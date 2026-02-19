@@ -528,8 +528,9 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 		depType = nginxTypes.DaemonSetType
 	}
 
-	p.cfg.AgentLabels[nginxTypes.AgentOwnerNameLabel] = fmt.Sprintf("%s_%s", objectMeta.Namespace, objectMeta.Name)
-	p.cfg.AgentLabels[nginxTypes.AgentOwnerTypeLabel] = depType
+	agentLabels := maps.Clone(p.cfg.AgentLabels)
+	agentLabels[nginxTypes.AgentOwnerNameLabel] = fmt.Sprintf("%s_%s", objectMeta.Namespace, objectMeta.Name)
+	agentLabels[nginxTypes.AgentOwnerTypeLabel] = depType
 
 	agentFields := map[string]any{
 		"Plus":          p.cfg.Plus,
@@ -537,7 +538,7 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 		"Namespace":     p.cfg.GatewayPodConfig.Namespace,
 		"EnableMetrics": enableMetrics,
 		"MetricsPort":   metricsPort,
-		"AgentLabels":   p.cfg.AgentLabels,
+		"AgentLabels":   agentLabels,
 	}
 
 	if nProxyCfg != nil && nProxyCfg.Logging != nil && nProxyCfg.Logging.AgentLevel != nil {

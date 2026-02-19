@@ -99,6 +99,25 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DNSResolver *DNSResolver `json:"dnsResolver,omitempty"`
+	// ServerTokens configures whether NGINX emits its version in the "Server"
+	// response header and on error pages.
+	//
+	// OSS NGINX accepts:
+	//   - "on": Shows nginx and version (e.g. "nginx/1.25.0")
+	//   - "off": Shows nginx only (e.g. "nginx")
+	//   - "build": Shows version and build name (e.g. "nginx/1.25.0 (build-name)")
+	//
+	// NGINX Plus additionally accepts:
+	//   - "": Suppress the "Server" response header entirely
+	//   - <custom string>: Set a custom header value and supports variables
+	//
+	// See: https://nginx.org/en/docs/http/ngx_http_core_module.html#server_tokens
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_core_module.html#server_tokens
+	// Default is "off".
+	//
+	//
+	// +optional
+	ServerTokens *string `json:"serverTokens,omitempty"`
 }
 
 // Telemetry specifies the OpenTelemetry configuration.
@@ -221,7 +240,7 @@ type RewriteClientIP struct {
 	// This field is required if mode is set.
 	//
 	// +optional
-	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:MaxItems=64
 	TrustedAddresses []RewriteClientIPAddress `json:"trustedAddresses,omitempty"`
 }
 

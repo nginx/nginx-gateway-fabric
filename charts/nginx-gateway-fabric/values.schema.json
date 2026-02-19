@@ -310,6 +310,10 @@
               "required": [],
               "type": "object"
             },
+            "serverTokens": {
+              "description": "Sets the `server_tokens` directive. Accepts 'off', 'on', or 'build' for NGINX OSS, and any string or variable for NGINX Plus.",
+              "type": "string"
+            },
             "telemetry": {
               "description": "Telemetry specifies the OpenTelemetry configuration.",
               "properties": {

@@ -1283,6 +1283,8 @@ func buildBaseHTTPConfig(
 
 	baseConfig.DNSResolver = buildDNSResolverConfig(np.DNSResolver)
 
+	baseConfig.ServerTokens = buildServerTokens(gateway)
+
 	return baseConfig
 }
 
@@ -1657,4 +1659,17 @@ func resolveUpstreamEndpoints(
 		br.ServicePort,
 		allowedAddressType,
 	)
+}
+
+func buildServerTokens(gateway *graph.Gateway) string {
+	if gateway == nil || gateway.EffectiveNginxProxy == nil || gateway.EffectiveNginxProxy.ServerTokens == nil {
+		return graph.ServerTokenOff
+	}
+
+	serverToken := *gateway.EffectiveNginxProxy.ServerTokens
+	if _, isKeyword := serverTokensKeywords[serverToken]; isKeyword {
+		return serverToken
+	}
+
+	return fmt.Sprintf(`"%s"`, serverToken)
 }

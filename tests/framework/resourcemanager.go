@@ -253,6 +253,8 @@ func (rm *ResourceManager) DeleteNamespace(name string, opts ...Option) error {
 		func(ctx context.Context) (bool, error) {
 			if err := rm.Get(ctx, types.NamespacedName{Name: name}, ns, opts...); err != nil {
 				if apierrors.IsNotFound(err) {
+					GinkgoWriter.Printf("Namespace %q deleted\n", name)
+
 					return true, nil
 				}
 
@@ -608,39 +610,89 @@ func (rm *ResourceManager) GetLBIPAddress(namespace string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), rm.TimeoutConfig.CreateTimeout)
 	defer cancel()
 
-	var serviceList core.ServiceList
-	var address string
-	if err := rm.List(
-		ctx, &serviceList,
-		client.InNamespace(namespace),
-	); err != nil {
-		return "", err
-	}
 	var nsName types.NamespacedName
+	var address string
 
-	for _, svc := range serviceList.Items {
-		if svc.Spec.Type == core.ServiceTypeLoadBalancer {
-			nsName = types.NamespacedName{Namespace: svc.GetNamespace(), Name: svc.GetName()}
-			if err := rm.waitForLBStatusToBeReady(ctx, nsName); err != nil {
-				return "", fmt.Errorf("error getting status from LoadBalancer service: %w", err)
+	// First wait for the NGINX LoadBalancer service to exist, there should only be one in the namespace
+	if err := wait.PollUntilContextCancel(
+		ctx,
+		500*time.Millisecond,
+		true, /* poll immediately */
+		func(ctx context.Context) (bool, error) {
+			var serviceList core.ServiceList
+			if err := rm.List(
+				ctx, &serviceList,
+				client.InNamespace(namespace),
+			); err != nil {
+				return false, err
 			}
-		}
+
+			var lbServices []core.Service
+			for _, svc := range serviceList.Items {
+				if svc.Spec.Type == core.ServiceTypeLoadBalancer {
+					lbServices = append(lbServices, svc)
+				}
+			}
+
+			if len(lbServices) == 1 {
+				svc := lbServices[0]
+				GinkgoWriter.Printf("Found a LoadBalancer service %q in namespace %q, waiting for it to be ready\n",
+					svc.Name,
+					namespace,
+				)
+				nsName = types.NamespacedName{Namespace: svc.GetNamespace(), Name: svc.GetName()}
+				return true, nil
+			}
+
+			var serviceNames []string
+			for _, svc := range lbServices {
+				serviceNames = append(serviceNames, svc.Name)
+			}
+			GinkgoWriter.Printf("Found %d LoadBalancer services in namespace %q, expected exactly 1. Services: %v\n",
+				len(lbServices),
+				namespace,
+				serviceNames,
+			)
+
+			return false, nil
+		},
+	); err != nil {
+		return "", fmt.Errorf("nginx LoadBalancer service not found in namespace %q: %w", namespace, err)
 	}
 
-	if nsName.Name != "" {
-		var lbService core.Service
-
-		if err := rm.Get(ctx, nsName, &lbService); err != nil {
-			return "", fmt.Errorf("error getting LoadBalancer service: %w", err)
-		}
-		if lbService.Status.LoadBalancer.Ingress[0].IP != "" {
-			address = lbService.Status.LoadBalancer.Ingress[0].IP
-		} else if lbService.Status.LoadBalancer.Ingress[0].Hostname != "" {
-			address = lbService.Status.LoadBalancer.Ingress[0].Hostname
-		}
-		return address, nil
+	// Now wait for the LoadBalancer service status to be ready
+	if err := rm.waitForLBStatusToBeReady(ctx, nsName); err != nil {
+		return "", fmt.Errorf("error getting status from LoadBalancer service: %w", err)
 	}
-	return "", nil
+
+	var lbService core.Service
+	if err := rm.Get(ctx, nsName, &lbService); err != nil {
+		return "", fmt.Errorf("error getting LoadBalancer service: %w", err)
+	}
+
+	switch {
+	case lbService.Status.LoadBalancer.Ingress[0].IP != "":
+		GinkgoWriter.Printf("LoadBalancer service %q in namespace %q has IP %q\n",
+			nsName.Name,
+			namespace,
+			lbService.Status.LoadBalancer.Ingress[0].IP,
+		)
+		address = lbService.Status.LoadBalancer.Ingress[0].IP
+	case lbService.Status.LoadBalancer.Ingress[0].Hostname != "":
+		GinkgoWriter.Printf("LoadBalancer service %q in namespace %q has Hostname %q\n",
+			nsName.Name,
+			namespace,
+			lbService.Status.LoadBalancer.Ingress[0].Hostname,
+		)
+		address = lbService.Status.LoadBalancer.Ingress[0].Hostname
+	default:
+		return "", fmt.Errorf("nginx LoadBalancer service %q in namespace %q has no IP or Hostname in status",
+			nsName.Name,
+			namespace,
+		)
+	}
+
+	return address, nil
 }
 
 func (rm *ResourceManager) waitForLBStatusToBeReady(ctx context.Context, svcNsName types.NamespacedName) error {
@@ -1055,8 +1107,10 @@ func (rm *ResourceManager) GetReadyNginxPodNames(
 func getReadyPodNames(podList core.PodList, opts ...Option) []string {
 	var names []string
 	for _, pod := range podList.Items {
+		GinkgoWriter.Printf("Checking Pod %q for readiness. Current conditions: %v\n", pod.Name, pod.Status.Conditions)
 		for _, cond := range pod.Status.Conditions {
 			if cond.Type == core.PodReady && cond.Status == core.ConditionTrue {
+				GinkgoWriter.Printf("Pod %q is ready\n", pod.Name)
 				names = append(names, pod.Name)
 			}
 		}

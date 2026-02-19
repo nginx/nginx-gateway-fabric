@@ -609,6 +609,7 @@ func TestProcessNginxProxies(t *testing.T) {
 				test.validator,
 				test.gc,
 				test.gws,
+				false,
 			)
 
 			g.Expect(helpers.Diff(test.expResult, result)).To(BeEmpty())
@@ -814,6 +815,7 @@ func TestValidateNginxProxy(t *testing.T) {
 						},
 						Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
 					},
+					ServerTokens: helpers.GetPointer("on"),
 				},
 			},
 			expectErrCount: 0,
@@ -890,6 +892,17 @@ func TestValidateNginxProxy(t *testing.T) {
 			expErrSubstring: "spec.ipFamily",
 			expectErrCount:  1,
 		},
+		{
+			name:      "invalid serverTokens value",
+			validator: createInvalidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer("custom-string"),
+				},
+			},
+			expErrSubstring: "spec.serverTokens",
+			expectErrCount:  1,
+		},
 	}
 
 	for _, test := range tests {
@@ -897,7 +910,7 @@ func TestValidateNginxProxy(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			allErrs := validateNginxProxy(test.validator, test.np)
+			allErrs := validateNginxProxy(test.validator, test.np, false)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
 			if len(allErrs) > 0 {
 				g.Expect(allErrs.ToAggregate().Error()).To(ContainSubstring(test.expErrSubstring))
@@ -1079,13 +1092,24 @@ func TestValidateDNSResolver(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			allErrs := validateNginxProxy(test.validator, test.np)
+			allErrs := validateNginxProxy(test.validator, test.np, false)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
 			if len(allErrs) > 0 {
 				g.Expect(allErrs.ToAggregate().Error()).To(ContainSubstring(test.errorString))
 			}
 		})
 	}
+}
+
+func createTrustedAddresses(count int) []ngfAPIv1alpha2.RewriteClientIPAddress {
+	addresses := make([]ngfAPIv1alpha2.RewriteClientIPAddress, count)
+	for i := range count {
+		addresses[i] = ngfAPIv1alpha2.RewriteClientIPAddress{
+			Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+			Value: "2001:db8:a0b:12f0::1/128",
+		}
+	}
+	return addresses
 }
 
 func TestValidateRewriteClientIP(t *testing.T) {
@@ -1223,40 +1247,18 @@ func TestValidateRewriteClientIP(t *testing.T) {
 			errorString:    "spec.rewriteClientIP: Required value: trustedAddresses field required when mode is set",
 		},
 		{
-			name:      "invalid when trustedAddresses is greater in length than 16",
+			name:      "invalid when trustedAddresses is greater in length than 64",
 			validator: createInvalidValidator(),
 			np: &ngfAPIv1alpha2.NginxProxy{
 				Spec: ngfAPIv1alpha2.NginxProxySpec{
 					RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
-						Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
-						TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-						},
+						Mode:             helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
+						TrustedAddresses: createTrustedAddresses(65),
 					},
 				},
 			},
 			expectErrCount: 1,
-			errorString:    "spec.rewriteClientIP.trustedAddresses: Too many: 21: must have at most 16 items",
+			errorString:    "spec.rewriteClientIP.trustedAddresses: Too many: 65: must have at most 64 items",
 		},
 		{
 			name:      "invalid when mode is not proxyProtocol or XForwardedFor",
@@ -1588,5 +1590,65 @@ func TestValidateNginxProxy_NilCase(t *testing.T) {
 	g := NewWithT(t)
 
 	// Just testing the nil case for coverage reasons. The rest of the function is covered by other tests.
-	g.Expect(buildNginxProxy(nil, &validationfakes.FakeGenericValidator{})).To(BeNil())
+	g.Expect(buildNginxProxy(nil, &validationfakes.FakeGenericValidator{}, false)).To(BeNil())
+}
+
+func TestValidateServerTokens(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		np             *ngfAPIv1alpha2.NginxProxy
+		validator      *validationfakes.FakeGenericValidator
+		name           string
+		errorString    string
+		expectErrCount int
+		plus           bool
+	}{
+		{
+			name:      "valid serverTokens with NGINX OSS",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer(ServerTokenBuild),
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name:      "valid serverTokens with NGINX Plus",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer("test-server"),
+				},
+			},
+			expectErrCount: 0,
+			plus:           true,
+		},
+		{
+			name:      "invalid custom serverTokens with NGINX OSS",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ServerTokens: helpers.GetPointer("custom-string"),
+				},
+			},
+			expectErrCount: 1,
+			errorString: "spec.serverTokens: Invalid value: " +
+				"\"custom-string\": custom string values for serverTokens are only allowed with NGINX Plus." +
+				" For NGINX OSS, allowed values are 'off', 'on', and 'build'.",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			allErrs := validateServerTokens(test.np, test.plus)
+			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
+			if len(allErrs) > 0 {
+				g.Expect(allErrs.ToAggregate().Error()).To(Equal(test.errorString))
+			}
+		})
+	}
 }
