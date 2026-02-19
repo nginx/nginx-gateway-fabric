@@ -181,6 +181,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			case channels.ResponseCh <- struct{}{}:
 			default:
 			}
+			fmt.Println("subscription loop stopped", "uuid", grpcInfo.UUID, "channelID", channels.ID)
 			return grpcStatus.Error(codes.Canceled, context.Cause(ctx).Error())
 		case <-cs.resetConnChan:
 			fmt.Println("received reset connection signal, resetting connection", "uuid",

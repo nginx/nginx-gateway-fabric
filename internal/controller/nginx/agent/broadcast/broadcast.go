@@ -99,6 +99,7 @@ func (b *DeploymentBroadcaster) Send(message NginxAgentMessage) bool {
 
 // CancelSubscription removes a Subscriber from the channel list.
 func (b *DeploymentBroadcaster) CancelSubscription(id string) {
+	fmt.Println("Calling CancelSubscription for subscriber with ID", id)
 	b.unsubCh <- id
 }
 
