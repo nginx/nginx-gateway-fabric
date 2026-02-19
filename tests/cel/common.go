@@ -35,10 +35,19 @@ const (
 
 const (
 	// AuthenticationFilter validation errors.
-	expectedBasicRequiredError           = `for type=Basic, spec.basic must be set`
-	expectedOIDCRequiredError            = `for type=OIDC, spec.oidc must be set`
-	expectedBasicNotAllowedWithOIDCError = `type Basic must not be set when spec.oidc is set`
-	expectedOIDCNotAllowedWithBasicError = `type OIDC must not be set when spec.basic is set`
+	expectedBasicRequiredError           = "type Basic requires spec.basic to be set"
+	expectedBasicOnlyNoJWTError          = "type Basic must not set spec.jwt"
+	expectedBasicOnlyNoOIDCError         = "type Basic must not set spec.oidc"
+	expectedOIDCRequiredError            = "type OIDC requires spec.oidc to be set"
+	expectedOIDCNotAllowedWithBasicError = "type OIDC must not set spec.basic"
+	expectedOIDCNotAllowedWithJWTError   = "type OIDC must not set spec.jwt"
+	expectedJWTRequiredError             = "type JWT requires spec.jwt to be set"
+	expectedJWTOnlyNoBasicError          = "type JWT must not set spec.basic"
+	expectedJWTOnlyNoOIDCError           = "type JWT must not set spec.oidc"
+	expectedJWTFileRequiredError         = "source File requires spec.file to be set"
+	expectedJWTFileOnlyError             = "source File must not set spec.remote"
+	expectedJWTRemoteRequiredError       = "source Remote requires spec.remote to be set"
+	expectedJWTRemoteOnlyError           = "source Remote must not set spec.file"
 
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"
