@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	gotemplate "text/template"
@@ -14,11 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-var (
-	// regexMetacharPattern matches regex metacharacters that need escaping (except * which we handle specially).
-	regexMetacharPattern = regexp.MustCompile(`[.+?^$|\\()[\]{}]`)
-	mapsTemplate         = gotemplate.Must(gotemplate.New("maps").Parse(mapsTemplateText))
-)
+var mapsTemplate = gotemplate.Must(gotemplate.New("maps").Parse(mapsTemplateText))
 
 const (
 	// emptyStringSocket is used when the stream server has an invalid upstream. In this case, we pass the connection
@@ -87,21 +82,6 @@ func buildCorsMaps(servers []dataplane.VirtualServer) []shared.Map {
 	return originMaps
 }
 
-func convertToNginxRegex(input string) string {
-	// First escape all regex metacharacters except * (which we want to convert to .*)
-	// This handles: . + ? ^ $ | \ ( ) [ ] { }
-	// Use double backslashes for proper escaping in Go templates
-	escaped := regexMetacharPattern.ReplaceAllStringFunc(input, func(match string) string {
-		return "\\\\" + match
-	})
-
-	// Then convert * wildcards to .* regex pattern
-	// This must be done after escaping to avoid interfering with other metacharacters
-	escaped = strings.ReplaceAll(escaped, "*", ".*")
-
-	return "~^" + escaped + "$"
-}
-
 func buildCORSAllowCredentialsMapParameters(s []string) []shared.MapParameter {
 	params := make([]shared.MapParameter, 0, len(s))
 
@@ -126,6 +106,10 @@ func buildCORSOriginMapParameters(s []string) []shared.MapParameter {
 	}
 
 	return params
+}
+
+func convertToNginxRegex(input string) string {
+	return "~^" + strings.ReplaceAll(input, "*", ".*") + "$"
 }
 
 func executeStreamMaps(conf dataplane.Configuration) []executeResult {

@@ -285,6 +285,6 @@ func TestGenerate(t *testing.T) {
 	streamCfg := string(files[18].Contents)
 	g.Expect(streamCfg).To(ContainSubstring("listen unix:/var/run/nginx/app.example.com-443.sock"))
 	g.Expect(streamCfg).To(ContainSubstring("listen 443"))
-	g.Expect(streamCfg).To(ContainSubstring("app.example.com unix:/var/run/nginx/app.example.com-443.sock"))
-	g.Expect(streamCfg).To(ContainSubstring("example.com unix:/var/run/nginx/https443.sock"))
+	g.Expect(streamCfg).To(ContainSubstring("\"app.example.com\" unix:/var/run/nginx/app.example.com-443.sock"))
+	g.Expect(streamCfg).To(ContainSubstring("\"example.com\" unix:/var/run/nginx/https443.sock"))
 }
