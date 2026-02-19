@@ -191,17 +191,15 @@ type OIDCAuth struct {
 	// +kubebuilder:validation:MinLength=1
 	ClientID string `json:"clientID"`
 
-	// The Kubernetes secret which contains the OIDC client secret to be used in the
+	// ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
 	// [Authentication Request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest).
+	// This Secret must be of type `nginx.org/oidc` with the value stored under the key "client-secret".
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
-	//
-	// This is an Opaque secret. The client secret should be stored in the key
-	// "client-secret".
-	ClientSecret LocalObjectReference `json:"clientSecret"`
+	ClientSecretRef LocalObjectReference `json:"clientSecretRef"`
 
-	// CACertificateRefs references a secret containing trusted CA certificates
+	// CACertificateRefs references a list of secrets containing trusted CA certificates
 	// in PEM format used to verify the certificates of the OpenID Provider endpoints.
-	// The CA certificates must be stored in a key named `ca.crt`.
+	// The Secrets must be of type `nginx.org/oidc` and must be stored in a key named `ca.crt`.
 	// If not specified, the system CA bundle is used.
 	//
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
@@ -284,6 +282,8 @@ TLS is required in two places:
 - Incoming connections from the browser after the OpenID Provider redirects the user back to NGINX: The AuthenticationFilter must be attached to a route using an HTTPS listener, as the `redirect_uri` callback from the IdP must be served over HTTPS. The Gateway listener's `tls.certificateRefs` provides the TLS certificate for this incoming connection.
 - Outgoing connections from NGINX to the OpenID Provider for token exchange: NGINX connects to the OpenID Provider over TLS for token requests. To verify the IdP's certificate, specify a CA bundle using the `caCertificateRefs` field; if omitted, the system CA bundle is used by default.
 
+All the secrets provided for validating communication to an OpenID Provider must be of a custom type `nginx.org/oidc`
+
 An authenticationFilter with complete OIDC configuration would look like:
 
 ```yaml
@@ -337,7 +337,7 @@ kind: Secret
 metadata:
   name: oidc-client-secret
   namespace: default
-type: Opaque
+type: nginx.org/oidc
 stringData:
   client-secret: "secret-value"
 ---
@@ -347,7 +347,7 @@ kind: Secret
 metadata:
   name: oidc-ca-cert
   namespace: default
-type: Opaque
+type: nginx.org/oidc
 stringData:
   ca.crt: |
     -----BEGIN CERTIFICATE-----
@@ -359,7 +359,7 @@ kind: Secret
 metadata:
   name: oidc-crl
   namespace: default
-type: Opaque
+type: nginx.org/oidc
 stringData:
   ca.crl: |
     -----BEGIN X509 CRL-----

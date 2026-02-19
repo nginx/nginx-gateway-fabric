@@ -37,6 +37,26 @@ func TestAuthenticationFilterBasicRequiredWhenTypeIsBasic(t *testing.T) {
 			},
 			wantErrors: []string{expectedBasicRequiredError},
 		},
+		{
+			name: "Validate: type=Basic with basic and OIDC set should be rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeBasic,
+				Basic: &ngfAPIv1alpha1.BasicAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					Realm: "Restricted Area",
+				},
+				OIDC: &ngfAPIv1alpha1.OIDCAuth{
+					Issuer:   "https://example.com",
+					ClientID: "client-id",
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+				},
+			},
+			wantErrors: []string{expectedBasicNotAllowedWithOIDCError},
+		},
 	}
 
 	for _, tt := range tests {
@@ -72,7 +92,7 @@ func TestAuthenticationFilterOIDCRequiredWhenTypeIsOIDC(t *testing.T) {
 				OIDC: &ngfAPIv1alpha1.OIDCAuth{
 					Issuer:   "https://example.com",
 					ClientID: "client-id",
-					ClientSecret: ngfAPIv1alpha1.LocalObjectReference{
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
 						Name: uniqueResourceName("auth-secret"),
 					},
 				},
@@ -85,6 +105,26 @@ func TestAuthenticationFilterOIDCRequiredWhenTypeIsOIDC(t *testing.T) {
 				OIDC: nil,
 			},
 			wantErrors: []string{expectedOIDCRequiredError},
+		},
+		{
+			name: "Validate: type=OIDC with basic and OIDC set should be rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeOIDC,
+				Basic: &ngfAPIv1alpha1.BasicAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					Realm: "Restricted Area",
+				},
+				OIDC: &ngfAPIv1alpha1.OIDCAuth{
+					Issuer:   "https://example.com",
+					ClientID: "client-id",
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+				},
+			},
+			wantErrors: []string{expectedOIDCNotAllowedWithBasicError},
 		},
 	}
 

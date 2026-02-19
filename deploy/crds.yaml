@@ -77,9 +77,9 @@ spec:
                 properties:
                   caCertificateRefs:
                     description: |-
-                      CACertificateRefs references a secret containing trusted CA certificates
+                      CACertificateRefs references a list of secrets containing trusted CA certificates
                       in PEM format used to verify the certificates of the OpenID Provider endpoints.
-                      The CA certificates must be stored in a key named `ca.crt`.
+                      The Secrets must be of type `nginx.org/oidc` and must be stored in a key named `ca.crt`.
                       If not specified, the system CA bundle is used.
 
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
@@ -96,33 +96,18 @@ spec:
                       type: object
                     maxItems: 8
                     type: array
-                  certificateRevocationList:
-                    description: |-
-                      CertificateRevocationList references a Secret containing a certificate
-                      revocation list in PEM format. The CRL must be stored in a key
-                      named `ca.crl`. This is used to verify that certificates presented
-                      by the OpenID Provider endpoints have not been revoked.
-                    properties:
-                      name:
-                        description: Name is the name of the referenced object.
-                        type: string
-                    required:
-                    - name
-                    type: object
                   clientID:
                     description: |-
                       ClientID is the client identifier registered with the OpenID Provider.
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_id
                     minLength: 1
                     type: string
-                  clientSecret:
+                  clientSecretRef:
                     description: |-
-                      The Kubernetes secret which contains the OIDC client secret to be used in the
+                      ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
                       [Authentication Request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest).
+                      This Secret must be of type `nginx.org/oidc` with the value stored under the key "client-secret".
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
-
-                      This is an Opaque secret. The client secret should be stored in the key
-                      "client-secret".
                     properties:
                       name:
                         description: Name is the name of the referenced object.
@@ -137,6 +122,19 @@ spec:
                       NGINX Default: <issuer>/.well-known/openid-configuration
                     pattern: ^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:[0-9]{1,5})?(/[a-zA-Z0-9._~:/?@!$&'()*+,;=-]*)?$
                     type: string
+                  crlSecretRef:
+                    description: |-
+                      CRLSecretRef references a Secret containing a certificate
+                      revocation list in PEM format. This Secret must be of type `nginx.org/oidc`
+                      with the value stored under the key "ca.crl". This is used to verify that
+                      certificates presented by the OpenID Provider endpoints have not been revoked.
+                    properties:
+                      name:
+                        description: Name is the name of the referenced object.
+                        type: string
+                    required:
+                    - name
+                    type: object
                   extraAuthArgs:
                     additionalProperties:
                       type: string
@@ -197,13 +195,12 @@ spec:
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#pkce
                     type: boolean
                   scopes:
-                    default:
-                    - openid
                     description: |-
                       The OIDC scopes to be used in the Authentication Request.
-                      The "openid" scope is always added to the list of scopes if not already
-                      specified.
+                      By default, the "openid" scope is always added to the list of scopes
+                      if not already specified.
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#scope
+                      NGINX Default: openid
                     items:
                       type: string
                     type: array
@@ -226,7 +223,7 @@ spec:
                     type: object
                 required:
                 - clientID
-                - clientSecret
+                - clientSecretRef
                 - issuer
                 type: object
               type:
@@ -243,6 +240,10 @@ spec:
               rule: '!(!has(self.basic) && self.type == ''Basic'')'
             - message: for type=OIDC, spec.oidc must be set
               rule: '!(!has(self.oidc) && self.type == ''OIDC'')'
+            - message: type Basic must not be set when spec.oidc is set
+              rule: self.type != 'Basic' || !has(self.oidc)
+            - message: type OIDC must not be set when spec.basic is set
+              rule: self.type != 'OIDC' || !has(self.basic)
           status:
             description: Status defines the state of the AuthenticationFilter.
             properties:
