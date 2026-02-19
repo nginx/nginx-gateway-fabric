@@ -18,17 +18,28 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nginx:alpine
+        image: private-registry.nginx.com/nginx-plus/base:alpine
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
         volumeMounts:
         - name: nginx-config
           mountPath: /etc/nginx/nginx.conf
           subPath: nginx.conf
+        - name: nginx-run
+          mountPath: /var/run/nginx
+        - name: nginx-plus-license
+          mountPath: /etc/nginx/license.jwt
+          subPath: license.jwt
       volumes:
       - name: nginx-config
         configMap:
           name: nginx-config
+      - name: nginx-run
+        emptyDir: {}
+      - name: nginx-plus-license
+        secret:
+          secretName: nginx-plus-license
 
 ---
 apiVersion: apps/v1

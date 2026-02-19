@@ -21,6 +21,7 @@ make cleanup
 ## Available Commands
 
 - `make deploy` - Deploy nginx and nginx-hello server to Kubernetes
+- `make deploy-plus LICENSE_FILE=/path/to/license.jwt` - Deploy nginx-plus and nginx-hello server to Kubernetes.
 - `make port-forward` - Port forward nginx pod to localhost:8080
 - `make test` - Test the setup via curl (assuming port-forward is running)
 - `make update` - Update config and restart pods
