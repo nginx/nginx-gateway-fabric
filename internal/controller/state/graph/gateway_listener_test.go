@@ -725,6 +725,12 @@ func TestListenerNamesHaveOverlap(t *testing.T) {
 			expectResult: true,
 			msg:          "one wildcard hostname and one hostname that overlap",
 		},
+		{
+			hostname1:    (*v1.Hostname)(helpers.GetPointer("example.com")),
+			hostname2:    (*v1.Hostname)(helpers.GetPointer("*.example.com")),
+			expectResult: false,
+			msg:          "one wildcard hostname and one hostname that does not overlap",
+		},
 	}
 
 	for _, test := range tests {
@@ -1045,6 +1051,38 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 			},
 			expectedCondition: false,
 		},
+		{
+			name: "overlap between two TLS listeners",
+			gateway: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test-ns",
+				},
+				Spec: v1.GatewaySpec{
+					Listeners: []v1.Listener{
+						{
+							Name:     "listener1",
+							Port:     443,
+							Protocol: v1.HTTPSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("*.example.com"),
+							TLS: &v1.ListenerTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModePassthrough),
+							},
+						},
+						{
+							Name:     "listener2",
+							Port:     443,
+							Protocol: v1.TLSProtocolType,
+							Hostname: helpers.GetPointer[v1.Hostname]("example.com"),
+							TLS: &v1.ListenerTLSConfig{
+								Mode: helpers.GetPointer(v1.TLSModePassthrough),
+							},
+						},
+					},
+				},
+			},
+			expectedCondition: false,
+		},
 	}
 
 	for _, test := range tests {
@@ -1089,6 +1127,76 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 					}
 				}
 			}
+		})
+	}
+}
+
+func TestMatchesWildcard(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		hostname    string
+		wildcard    string
+		expectMatch bool
+	}{
+		// Basic wildcard matching
+		{
+			hostname:    "www.example.com",
+			wildcard:    "*.example.com",
+			expectMatch: true,
+		},
+		// Apex domain should NOT match wildcard
+		{
+			hostname:    "example.com",
+			wildcard:    "*.example.com",
+			expectMatch: false,
+		},
+		// Multi-level subdomains should match
+		{
+			hostname:    "foo.bar.example.com",
+			wildcard:    "*.example.com",
+			expectMatch: true,
+		},
+		// Different domains should NOT match
+		{
+			hostname:    "www.other.com",
+			wildcard:    "*.example.com",
+			expectMatch: false,
+		},
+		// Nested wildcard matching
+		{
+			hostname:    "api.prod.example.com",
+			wildcard:    "*.prod.example.com",
+			expectMatch: true,
+		},
+		// Both wildcards - should match if they overlap
+		{
+			hostname:    "*.api.example.com",
+			wildcard:    "*.example.com",
+			expectMatch: true,
+		},
+		{
+			hostname:    "*.example.com",
+			wildcard:    "*.example.com",
+			expectMatch: true,
+		},
+		// reverse order
+		{
+			hostname:    "*.example.com",
+			wildcard:    "www.example.com",
+			expectMatch: true,
+		},
+		{
+			hostname:    "*.example.com",
+			wildcard:    "example.com",
+			expectMatch: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("hostname: %s, wildcard: %s", test.hostname, test.wildcard), func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(matchesWildcard(test.hostname, test.wildcard)).To(Equal(test.expectMatch))
 		})
 	}
 }
