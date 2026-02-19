@@ -240,7 +240,7 @@ type RewriteClientIP struct {
 	// This field is required if mode is set.
 	//
 	// +optional
-	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:MaxItems=64
 	TrustedAddresses []RewriteClientIPAddress `json:"trustedAddresses,omitempty"`
 }
 

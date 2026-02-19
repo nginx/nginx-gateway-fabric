@@ -430,10 +430,10 @@ func validateRewriteClientIP(npCfg *ngfAPIv1alpha2.NginxProxy) field.ErrorList {
 			}
 		}
 
-		if len(rewriteClientIP.TrustedAddresses) > 16 {
+		if len(rewriteClientIP.TrustedAddresses) > 64 {
 			allErrs = append(
 				allErrs,
-				field.TooMany(trustedAddressesPath, len(rewriteClientIP.TrustedAddresses), 16),
+				field.TooMany(trustedAddressesPath, len(rewriteClientIP.TrustedAddresses), 64),
 			)
 		}
 

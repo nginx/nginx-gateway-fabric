@@ -9012,7 +9012,7 @@ spec:
                       - type
                       - value
                       type: object
-                    maxItems: 16
+                    maxItems: 64
                     type: array
                 type: object
                 x-kubernetes-validations:

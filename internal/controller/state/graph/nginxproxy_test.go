@@ -1101,6 +1101,17 @@ func TestValidateDNSResolver(t *testing.T) {
 	}
 }
 
+func createTrustedAddresses(count int) []ngfAPIv1alpha2.RewriteClientIPAddress {
+	addresses := make([]ngfAPIv1alpha2.RewriteClientIPAddress, count)
+	for i := range count {
+		addresses[i] = ngfAPIv1alpha2.RewriteClientIPAddress{
+			Type:  ngfAPIv1alpha2.RewriteClientIPCIDRAddressType,
+			Value: "2001:db8:a0b:12f0::1/128",
+		}
+	}
+	return addresses
+}
+
 func TestValidateRewriteClientIP(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -1236,40 +1247,18 @@ func TestValidateRewriteClientIP(t *testing.T) {
 			errorString:    "spec.rewriteClientIP: Required value: trustedAddresses field required when mode is set",
 		},
 		{
-			name:      "invalid when trustedAddresses is greater in length than 16",
+			name:      "invalid when trustedAddresses is greater in length than 64",
 			validator: createInvalidValidator(),
 			np: &ngfAPIv1alpha2.NginxProxy{
 				Spec: ngfAPIv1alpha2.NginxProxySpec{
 					RewriteClientIP: &ngfAPIv1alpha2.RewriteClientIP{
-						Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
-						TrustedAddresses: []ngfAPIv1alpha2.RewriteClientIPAddress{
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-							{Type: ngfAPIv1alpha2.RewriteClientIPCIDRAddressType, Value: "2001:db8:a0b:12f0::1/128"},
-						},
+						Mode:             helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
+						TrustedAddresses: createTrustedAddresses(65),
 					},
 				},
 			},
 			expectErrCount: 1,
-			errorString:    "spec.rewriteClientIP.trustedAddresses: Too many: 21: must have at most 16 items",
+			errorString:    "spec.rewriteClientIP.trustedAddresses: Too many: 65: must have at most 64 items",
 		},
 		{
 			name:      "invalid when mode is not proxyProtocol or XForwardedFor",
