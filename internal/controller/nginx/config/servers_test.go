@@ -10,7 +10,6 @@ import (
 	"github.com/onsi/gomega/format"
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -26,13 +25,10 @@ var (
 	alwaysFalseKeepAliveChecker = func(_ string) bool { return false }
 )
 
+//nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestExecuteServers(t *testing.T) {
 	t.Parallel()
 
-	authBasicSecret := v1.SecretObjectReference{
-		Name:      "auth-basic-filter",
-		Namespace: helpers.GetPointer(v1.Namespace("test-ns")),
-	}
 	conf := dataplane.Configuration{
 		HTTPServers: []dataplane.VirtualServer{
 			{
@@ -78,8 +74,8 @@ func TestExecuteServers(t *testing.T) {
 									},
 									AuthenticationFilter: &dataplane.AuthenticationFilter{
 										Basic: &dataplane.AuthBasic{
-											SecretName:      string(authBasicSecret.Name),
-											SecretNamespace: string(*authBasicSecret.Namespace),
+											SecretName:      "auth-basic-filter",
+											SecretNamespace: "test-ns",
 											Realm:           "Restricted",
 											Data:            []byte("user:$apr1$cred"),
 										},
