@@ -415,7 +415,7 @@ func (p *NginxProvisioner) provisionNginx(
 			"namespace", gateway.GetNamespace(),
 			"name", resourceName,
 		)
-		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), minimalObj)
+		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), obj)
 	}
 
 	// if agent configmap was updated, then we'll need to restart the deployment/daemonset
