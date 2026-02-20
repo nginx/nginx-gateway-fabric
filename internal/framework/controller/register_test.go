@@ -15,7 +15,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/controllerfakes"
@@ -35,7 +34,6 @@ func TestRegister(t *testing.T) {
 	getDefaultFakes := func() fakes {
 		scheme := runtime.NewScheme()
 		utilruntime.Must(v1.Install(scheme))
-		utilruntime.Must(v1beta1.Install(scheme))
 
 		indexer := &controllerfakes.FakeFieldIndexer{}
 

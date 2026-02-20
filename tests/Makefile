@@ -13,8 +13,8 @@ NGF_VERSION ?= edge## NGF version to be tested
 PULL_POLICY ?= Never## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
 SUPPORTED_EXTENDED_FEATURES_OPENSHIFT = HTTPRouteQueryParamMatching,HTTPRouteMethodMatching,HTTPRoutePortRedirect,HTTPRouteSchemeRedirect,HTTPRouteHostRewrite,HTTPRoutePathRewrite,GatewayPort8080,GatewayAddressEmpty,HTTPRouteResponseHeaderModification,HTTPRoutePathRedirect,GatewayHTTPListenerIsolation,GatewayInfrastructurePropagation,HTTPRouteRequestMirror,HTTPRouteRequestMultipleMirrors,HTTPRouteRequestPercentageMirror,HTTPRouteBackendProtocolWebSocket,HTTPRouteParentRefPort,HTTPRouteDestinationPortMatching
-STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC
-EXPERIMENTAL_CONFORMANCE_PROFILES = GATEWAY-TLS
+STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS
+EXPERIMENTAL_CONFORMANCE_PROFILES =
 CONFORMANCE_PROFILES = $(STANDARD_CONFORMANCE_PROFILES) # by default we use the standard conformance profiles. If experimental is enabled we override this and add the experimental profiles.
 SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes # Doesn't work on OpenShift due to security restrictions
 SKIP_TESTS =
@@ -23,10 +23,10 @@ INFERENCE_SUPPORTED_FEATURES = GatewayFollowingEPPRouting,EppUnAvailableFailOpen
 INFERENCE_SKIP_TESTS =
 
 # Check if ENABLE_EXPERIMENTAL is true
-ifeq ($(ENABLE_EXPERIMENTAL),true)
-    # If true, add the experimental conformance profiles
-    CONFORMANCE_PROFILES = $(EXPERIMENTAL_CONFORMANCE_PROFILES),$(STANDARD_CONFORMANCE_PROFILES)
-endif
+# ifeq ($(ENABLE_EXPERIMENTAL),true)
+#     # If true, add the experimental conformance profiles
+#     CONFORMANCE_PROFILES = $(EXPERIMENTAL_CONFORMANCE_PROFILES),$(STANDARD_CONFORMANCE_PROFILES)
+# endif
 
 ifneq ($(GINKGO_LABEL),)
 	override GINKGO_FLAGS += --label-filter "$(GINKGO_LABEL)"

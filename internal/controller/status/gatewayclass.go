@@ -21,6 +21,9 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 		// BackendTLSPolicy
 		features.SupportBackendTLSPolicy,
 
+		// TLSRoute
+		features.SupportTLSRoute,
+
 		// Gateway extended
 		features.SupportGatewayAddressEmpty,
 		features.SupportGatewayHTTPListenerIsolation,
@@ -47,7 +50,7 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 
 	// Add experimental features if enabled
 	if experimental {
-		featureNames = append(featureNames, features.SupportTLSRoute, features.SupportUDPRoute)
+		featureNames = append(featureNames, features.SupportUDPRoute)
 	}
 
 	// Sort alphabetically by feature name

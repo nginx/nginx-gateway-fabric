@@ -37,10 +37,10 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportHTTPRouteResponseHeaderModification),
 		gatewayv1.FeatureName(features.SupportHTTPRouteSchemeRedirect),
 		gatewayv1.FeatureName(features.SupportReferenceGrant),
+		gatewayv1.FeatureName(features.SupportTLSRoute),
 	}
 
 	experimentalFeatures := []gatewayv1.FeatureName{
-		gatewayv1.FeatureName(features.SupportTLSRoute),
 		gatewayv1.FeatureName(features.SupportUDPRoute),
 	}
 

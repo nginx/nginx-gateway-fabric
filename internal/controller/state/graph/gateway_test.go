@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -431,7 +430,7 @@ func TestBuildGateway(t *testing.T) {
 	tests := []struct {
 		gateway      map[types.NamespacedName]*v1.Gateway
 		gatewayClass *GatewayClass
-		refGrants    map[types.NamespacedName]*v1beta1.ReferenceGrant
+		refGrants    map[types.NamespacedName]*v1.ReferenceGrant
 		expected     map[types.NamespacedName]*Gateway
 		name         string
 	}{
@@ -546,21 +545,21 @@ func TestBuildGateway(t *testing.T) {
 		{
 			gateway:      createGateway(gatewayCfg{name: "gateway1", listeners: []v1.Listener{crossNamespaceSecretListener}}),
 			gatewayClass: validGC,
-			refGrants: map[types.NamespacedName]*v1beta1.ReferenceGrant{
+			refGrants: map[types.NamespacedName]*v1.ReferenceGrant{
 				{Name: "ref-grant", Namespace: "diff-ns"}: {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "ref-grant",
 						Namespace: "diff-ns",
 					},
-					Spec: v1beta1.ReferenceGrantSpec{
-						From: []v1beta1.ReferenceGrantFrom{
+					Spec: v1.ReferenceGrantSpec{
+						From: []v1.ReferenceGrantFrom{
 							{
 								Group:     v1.GroupName,
 								Kind:      kinds.Gateway,
 								Namespace: "test",
 							},
 						},
-						To: []v1beta1.ReferenceGrantTo{
+						To: []v1.ReferenceGrantTo{
 							{
 								Group: "core",
 								Kind:  "Secret",
@@ -1682,7 +1681,7 @@ func TestBuildGateway(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			resolver := newReferenceGrantResolver(test.refGrants)
-			result := buildGateways(test.gateway, resourceResolver, test.gatewayClass, resolver, nginxProxies, false)
+			result := buildGateways(test.gateway, resourceResolver, test.gatewayClass, resolver, nginxProxies)
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}
@@ -2377,7 +2376,7 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 	expectedGatewayMap := func(
 		secretRef types.NamespacedName,
 		cond []conditions.Condition,
-		valid, experimental bool,
+		valid bool,
 	) map[types.NamespacedName]*Gateway {
 		gwNsName := types.NamespacedName{Namespace: "test", Name: "test-gateway"}
 		gatewayMap := map[types.NamespacedName]*Gateway{
@@ -2402,11 +2401,8 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 				DeploymentName: deploymentName,
 				Conditions:     cond,
 				Valid:          valid,
+				SecretRef:      &secretRef,
 			},
-		}
-
-		if experimental {
-			gatewayMap[gwNsName].SecretRef = &secretRef
 		}
 
 		if valid {
@@ -2418,13 +2414,13 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 
 	tests := []struct {
 		gw           map[types.NamespacedName]*v1.Gateway
-		refGrants    map[types.NamespacedName]*v1beta1.ReferenceGrant
+		refGrants    map[types.NamespacedName]*v1.ReferenceGrant
 		expected     map[types.NamespacedName]*Gateway
 		name         string
 		experimental bool
 	}{
 		{
-			name: "gateway with experimental enabled and tls.backend is not specified",
+			name: "tls.backend is not specified",
 			gw: map[types.NamespacedName]*v1.Gateway{
 				{Namespace: "test", Name: "test-gateway"}: {
 					ObjectMeta: metav1.ObjectMeta{
@@ -2455,20 +2451,7 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 			experimental: false,
 		},
 		{
-			name: "gateway with experimental disabled and tls.backend is specified",
-			gw:   createNewGatewayMap(secretSameNsKey),
-			expected: expectedGatewayMap(
-				secretSameNsKey,
-				conditions.NewGatewayUnsupportedValue(
-					"spec.tls: Forbidden: tls.backend is not supported when experimental features are disabled",
-				),
-				false,
-				false,
-			),
-			experimental: false,
-		},
-		{
-			name: "gateway with experimental enabled, tls.backend is specified but secret reference is invalid",
+			name: "tls.backend is specified but secret reference is invalid",
 			gw:   createNewGatewayMap(invalidSecretNsKey),
 			expected: expectedGatewayMap(
 				invalidSecretNsKey,
@@ -2478,12 +2461,11 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 						"Secret test/invalid-secret does not exist",
 				)},
 				false,
-				true,
 			),
 			experimental: true,
 		},
 		{
-			name: "gateway with experimental enabled, tls.backend is specified but secret is not permitted by reference grant",
+			name: "tls.backend is specified but secret is not permitted by reference grant",
 			gw:   createNewGatewayMap(secretDiffNsKey),
 			expected: expectedGatewayMap(
 				secretDiffNsKey,
@@ -2493,35 +2475,32 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 					),
 				},
 				false,
-				true,
 			),
 			experimental: true,
 		},
 		{
-			name: "gateway with experimental enabled, tls.backend is specified secret in" +
-				"different namespace is permitted by reference grant",
-			gw: createNewGatewayMap(secretDiffNsKey),
+			name: "tls.backend is specified secret in different namespace is permitted by reference grant",
+			gw:   createNewGatewayMap(secretDiffNsKey),
 			expected: expectedGatewayMap(
 				secretDiffNsKey,
 				nil,
 				true,
-				true,
 			),
-			refGrants: map[types.NamespacedName]*v1beta1.ReferenceGrant{
+			refGrants: map[types.NamespacedName]*v1.ReferenceGrant{
 				{Namespace: "diff-ns", Name: "allow-secret-diff-ns"}: {
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "diff-ns",
 						Name:      "allow-secret-diff-ns",
 					},
-					Spec: v1beta1.ReferenceGrantSpec{
-						From: []v1beta1.ReferenceGrantFrom{
+					Spec: v1.ReferenceGrantSpec{
+						From: []v1.ReferenceGrantFrom{
 							{
 								Group:     v1.GroupName,
 								Kind:      kinds.Gateway,
 								Namespace: "test",
 							},
 						},
-						To: []v1beta1.ReferenceGrantTo{
+						To: []v1.ReferenceGrantTo{
 							{
 								Group: "",
 								Kind:  "Secret",
@@ -2544,7 +2523,7 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 			}
 
 			refGrantResolver := newReferenceGrantResolver(test.refGrants)
-			gateways := buildGateways(test.gw, resourceResolver, validGC, refGrantResolver, nil, test.experimental)
+			gateways := buildGateways(test.gw, resourceResolver, validGC, refGrantResolver, nil)
 			g.Expect(helpers.Diff(test.expected, gateways)).To(BeEmpty())
 		})
 	}

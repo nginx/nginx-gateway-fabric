@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -515,20 +514,20 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 		Type: v1.SecretTypeTLS,
 	}
 
-	rgSecretsToGateway := &v1beta1.ReferenceGrant{
+	rgSecretsToGateway := &gatewayv1.ReferenceGrant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "rg-secret-to-gateway",
 			Namespace: "secret-ns",
 		},
-		Spec: v1beta1.ReferenceGrantSpec{
-			From: []v1beta1.ReferenceGrantFrom{
+		Spec: gatewayv1.ReferenceGrantSpec{
+			From: []gatewayv1.ReferenceGrantFrom{
 				{
 					Group:     gatewayv1.GroupName,
 					Kind:      kinds.Gateway,
 					Namespace: gatewayv1.Namespace(testNs),
 				},
 			},
-			To: []v1beta1.ReferenceGrantTo{
+			To: []gatewayv1.ReferenceGrantTo{
 				{
 					Group: "core",
 					Kind:  "Secret",
@@ -683,7 +682,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 				NginxProxies: map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy{
 					client.ObjectKeyFromObject(nginxProxyGlobal): nginxProxyGlobal,
 				},
-				ReferenceGrants: map[types.NamespacedName]*v1beta1.ReferenceGrant{
+				ReferenceGrants: map[types.NamespacedName]*gatewayv1.ReferenceGrant{
 					client.ObjectKeyFromObject(rgSecretsToGateway): rgSecretsToGateway,
 				},
 			},

@@ -431,8 +431,10 @@ func TestGetAndValidateListenerSupportedKinds(t *testing.T) {
 		Kind:  kinds.TLSRoute,
 		Group: helpers.GetPointer[v1.Group](v1.GroupName),
 	}
+
 	tests := []struct {
 		protocol  v1.ProtocolType
+		tls       *v1.ListenerTLSConfig
 		name      string
 		kind      []v1.RouteGroupKind
 		expected  []v1.RouteGroupKind
@@ -541,6 +543,9 @@ func TestGetAndValidateListenerSupportedKinds(t *testing.T) {
 				TLSRouteGroupKind,
 				GRPCRouteGroupKind,
 			},
+			tls: &v1.ListenerTLSConfig{
+				Mode: helpers.GetPointer(v1.TLSModePassthrough),
+			},
 			expectErr: true,
 			name:      "valid and invalid kinds for TLS protocol",
 			expected:  []v1.RouteGroupKind{TLSRouteGroupKind},
@@ -555,6 +560,9 @@ func TestGetAndValidateListenerSupportedKinds(t *testing.T) {
 				},
 				GRPCRouteGroupKind,
 			},
+			tls: &v1.ListenerTLSConfig{
+				Mode: helpers.GetPointer(v1.TLSModePassthrough),
+			},
 			expectErr: true,
 			name:      "invalid kinds for TLS protocol",
 			expected:  []v1.RouteGroupKind{},
@@ -563,6 +571,21 @@ func TestGetAndValidateListenerSupportedKinds(t *testing.T) {
 			protocol: v1.TLSProtocolType,
 			kind: []v1.RouteGroupKind{
 				TLSRouteGroupKind,
+			},
+			tls: &v1.ListenerTLSConfig{
+				Mode: helpers.GetPointer(v1.TLSModeTerminate),
+			},
+			expectErr: true,
+			name:      "invalid mode for TLS protocol",
+			expected:  []v1.RouteGroupKind{},
+		},
+		{
+			protocol: v1.TLSProtocolType,
+			kind: []v1.RouteGroupKind{
+				TLSRouteGroupKind,
+			},
+			tls: &v1.ListenerTLSConfig{
+				Mode: helpers.GetPointer(v1.TLSModePassthrough),
 			},
 			name:     "valid kinds for TLS protocol",
 			expected: []v1.RouteGroupKind{TLSRouteGroupKind},
@@ -582,6 +605,10 @@ func TestGetAndValidateListenerSupportedKinds(t *testing.T) {
 				listener.AllowedRoutes = &v1.AllowedRoutes{
 					Kinds: test.kind,
 				}
+			}
+
+			if test.tls != nil {
+				listener.TLS = test.tls
 			}
 
 			conds, kinds := getAndValidateListenerSupportedKinds(listener)
