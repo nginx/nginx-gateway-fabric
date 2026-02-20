@@ -278,6 +278,13 @@ func (p *NginxProvisioner) provisionNginx(
 				return true, nil
 			},
 		); err != nil {
+			p.cfg.Logger.Error(
+				err,
+				"Failed to CreateOrUpdate nginx resource after retries",
+				"namespace", gateway.GetNamespace(),
+				"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
+			)
+
 			fullErr := errors.Join(err, upsertErr)
 			p.cfg.EventRecorder.Eventf(
 				obj,
@@ -312,12 +319,17 @@ func (p *NginxProvisioner) provisionNginx(
 		}
 
 		if res != controllerutil.OperationResultCreated && res != controllerutil.OperationResultUpdated {
+			p.cfg.Logger.V(1).Info(
+				"nginx resource already up to date with this result: "+string(res),
+				"namespace", gateway.GetNamespace(),
+				"name", fmt.Sprintf("%s (%s)", resourceName, reflect.TypeOf(obj).Elem().Name()),
+			)
 			continue
 		}
 
 		result := cases.Title(language.English, cases.Compact).String(string(res))
 		p.cfg.Logger.V(1).Info(
-			fmt.Sprintf("%s nginx %s", result, obj.GetObjectKind().GroupVersionKind().Kind),
+			fmt.Sprintf("%s nginx %s", result, reflect.TypeOf(obj).Elem().Name()),
 			"namespace", gateway.GetNamespace(),
 			"name", resourceName,
 		)
