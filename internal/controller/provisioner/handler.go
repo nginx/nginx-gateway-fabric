@@ -133,11 +133,15 @@ func (h *eventHandler) getGatewayForManagedResource(obj client.Object) (types.Na
 func (h *eventHandler) handleDeleteEvent(ctx context.Context, e *events.DeleteEvent) error {
 	switch e.Type.(type) {
 	case *gatewayv1.Gateway:
+
 		h.store.markGatewayDeleting(e.NamespacedName)
 
 		if !h.provisioner.isLeader() {
+			fmt.Println("We are not the leader so we set resources to delete for the gateway with NamespacedName",
+				e.NamespacedName)
 			h.provisioner.setResourceToDelete(e.NamespacedName)
 		}
+
 		h.store.deleteGateway(e.NamespacedName)
 		h.store.deleteResourcesForGateway(e.NamespacedName)
 		deploymentNSName := types.NamespacedName{
@@ -282,6 +286,7 @@ func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.D
 		}
 
 		if gateway.Valid && !h.store.isGatewayDeleting(gatewayNsName) {
+			fmt.Println("We are reprovisioning resources")
 			resourceName := controller.CreateNginxResourceName(gateway.Source.GetName(), h.gcName)
 			if err := h.provisioner.reprovisionNginx(
 				ctx,

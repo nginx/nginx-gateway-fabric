@@ -112,13 +112,13 @@ func (el *EventLoop) Start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			// Wait for the completion if a batch is being handled.
-			fmt.Println(
+			el.logger.V(1).Info(
 				"stopping the event loop, waiting for the completion of handling the batch",
 				// "batchID", el.currentBatchID,
 				// "total for next batch ", len(el.nextBatch),
 			)
 			if handling {
-				fmt.Println(
+				el.logger.V(1).Info(
 					"waiting for the completion of handling the batch",
 					// "batchID", el.currentBatchID,
 					// "total for next batch ", len(el.nextBatch),
@@ -130,7 +130,7 @@ func (el *EventLoop) Start(ctx context.Context) error {
 			// Add the event to the current batch.
 			el.nextBatch = append(el.nextBatch, e)
 
-			fmt.Println(
+			el.logger.V(1).Info(
 				"added an event to the next batch",
 				"type", fmt.Sprintf("%T", e),
 				"total", len(el.nextBatch),
@@ -138,7 +138,7 @@ func (el *EventLoop) Start(ctx context.Context) error {
 
 			// If no batch is currently being handled, swap batches and begin handling the batch.
 			if !handling {
-				fmt.Println(
+				el.logger.V(1).Info(
 					"no batch is currently being handled, swapping batches",
 					"batchID", el.currentBatchID,
 					"total for next batch ", len(el.nextBatch),
@@ -148,7 +148,7 @@ func (el *EventLoop) Start(ctx context.Context) error {
 		case <-handlingDone:
 			handling = false
 
-			fmt.Println(
+			el.logger.V(1).Info(
 				"finished handling the batch",
 				"batchID", el.currentBatchID,
 				"total for next batch ", len(el.nextBatch),
@@ -156,7 +156,7 @@ func (el *EventLoop) Start(ctx context.Context) error {
 
 			// If there's at least one event in the next batch, swap batches and begin handling the batch.
 			if len(el.nextBatch) > 0 {
-				fmt.Println(
+				el.logger.V(1).Info(
 					"there are events in the next batch",
 					"batchID", el.currentBatchID,
 					"total for next batch ", len(el.nextBatch),
