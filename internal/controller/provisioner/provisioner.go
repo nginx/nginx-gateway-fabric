@@ -338,7 +338,12 @@ func (p *NginxProvisioner) provisionNginx(
 			true, /* poll immediately */
 			func(ctx context.Context) (bool, error) {
 				// Use minimalObj for CreateOrUpdate but pass both to objectSpecSetter
+
+				fmt.Println("BEFORE CreateOrUpdate labels:", minimalObj.GetLabels())
+
 				res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, minimalObj, objectSpecSetter(minimalObj, obj))
+
+				fmt.Println("AFTER CreateOrUpdate labels:", minimalObj.GetLabels())
 				if upsertErr != nil {
 					if apierrors.IsInvalid(upsertErr) { // log this error at the error level
 						p.cfg.Logger.Error(
@@ -415,7 +420,8 @@ func (p *NginxProvisioner) provisionNginx(
 			"namespace", gateway.GetNamespace(),
 			"name", resourceName,
 		)
-		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), obj)
+		// do we need to use minimalObj or obj?
+		p.store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), minimalObj)
 	}
 
 	// if agent configmap was updated, then we'll need to restart the deployment/daemonset

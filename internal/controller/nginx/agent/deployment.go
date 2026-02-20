@@ -308,12 +308,14 @@ func (d *DeploymentStore) GetOrStore(
 	stopCh chan struct{},
 ) *Deployment {
 	if deployment := d.Get(nsName); deployment != nil {
+		fmt.Println("GetOrStore found existing deployment for key", nsName)
 		return deployment
 	}
 
 	deployment := newDeployment(broadcast.NewDeploymentBroadcaster(ctx, stopCh), gatewayName)
 	d.deployments.Store(nsName, deployment)
 
+	fmt.Println("GetOrStore created new deployment for key", nsName, "with gateway name", gatewayName)
 	return deployment
 }
 
@@ -332,5 +334,6 @@ func (d *DeploymentStore) StoreWithBroadcaster(
 
 // Remove the deployment from the store.
 func (d *DeploymentStore) Remove(nsName types.NamespacedName) {
+	fmt.Println("We are removing deployment with key", nsName, "from the store")
 	d.deployments.Delete(nsName)
 }
