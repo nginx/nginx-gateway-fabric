@@ -632,7 +632,7 @@ func (rm *ResourceManager) GetLBIPAddress(namespace string) (string, error) {
 			if err := rm.List(ctx, &allServiceList); err != nil {
 				GinkgoWriter.Printf("Warning: error getting all services across all namespaces: %v\n", err)
 			} else {
-				GinkgoWriter.Printf("All services across all namespaces:\n")
+				GinkgoWriter.Printf("All services across all namespaces: and current time %v\n", time.Now())
 				for _, svc := range allServiceList.Items {
 					GinkgoWriter.Printf("  Service %q of type %q in namespace %q\n",
 						svc.Name,
