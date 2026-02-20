@@ -25,6 +25,7 @@ var (
 	alwaysFalseKeepAliveChecker = func(_ string) bool { return false }
 )
 
+//nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestExecuteServers(t *testing.T) {
 	t.Parallel()
 
@@ -719,6 +720,7 @@ func TestExecuteForDefaultServers(t *testing.T) {
 	}
 }
 
+//nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestCreateServers(t *testing.T) {
 	t.Parallel()
 	const (
@@ -2014,6 +2016,7 @@ func modifyMatchPairs(matchPairs httpMatchPairs) httpMatchPairs {
 	return modified
 }
 
+//nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestCreateServersConflicts(t *testing.T) {
 	t.Parallel()
 	fooGroup := dataplane.BackendGroup{
@@ -2543,6 +2546,7 @@ func TestCreateLocations_Includes(t *testing.T) {
 	}
 }
 
+//nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestCreateLocations_InferenceBackends(t *testing.T) {
 	t.Parallel()
 
@@ -3049,6 +3053,7 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 	}
 }
 
+//nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestCreateLocationsRootPath(t *testing.T) {
 	t.Parallel()
 	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}
@@ -3240,6 +3245,7 @@ func TestCreateLocationsRootPath(t *testing.T) {
 	}
 }
 
+//nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestCreateLocationsPath(t *testing.T) {
 	t.Parallel()
 	hrNsName := types.NamespacedName{Namespace: "test", Name: "route1"}

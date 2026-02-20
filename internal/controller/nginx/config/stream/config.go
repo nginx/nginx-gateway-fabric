@@ -10,7 +10,7 @@ type Server struct {
 	Listen          string
 	StatusZone      string
 	ProxyPass       string
-	Pass            string
+	Target          string
 	RewriteClientIP shared.RewriteClientIPSettings
 	SSLPreread      bool
 	IsSocket        bool

@@ -80,7 +80,7 @@ func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []str
 		streamServer := stream.Server{
 			Listen:     fmt.Sprint(server.Port),
 			StatusZone: server.Hostname,
-			Pass:       getTLSPassthroughVarName(server.Port),
+			Target:     getTLSPassthroughVarName(server.Port),
 			SSLPreread: true,
 		}
 		streamServers = append(streamServers, streamServer)

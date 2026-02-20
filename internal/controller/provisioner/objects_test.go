@@ -1587,7 +1587,7 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 				"key2": "val2",
 			},
 			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
-				DataplaneKeySecretName: "dataplane-key-secret",
+				DataplaneKeySecretName: "dataplane-key",
 				EndpointHost:           "console.example.com",
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,

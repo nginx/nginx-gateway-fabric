@@ -906,9 +906,9 @@ func TestUsageReportConfig(t *testing.T) {
 		{
 			name: "NGINX Plus enabled with all valid parameters",
 			params: usageReportParams{
-				SecretName:           stringValidatingValue{value: "test-secret"},
-				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
-				CASecretName:         stringValidatingValue{value: "ca-secret"},
+				SecretName:           stringValidatingValue{value: "test"},
+				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl"},
+				CASecretName:         stringValidatingValue{value: "ca"},
 				Endpoint:             stringValidatingValue{value: "example.com"},
 				Resolver:             stringValidatingValue{value: "resolver.com"},
 				SkipVerify:           true,
@@ -916,9 +916,9 @@ func TestUsageReportConfig(t *testing.T) {
 			},
 			expectError: false,
 			expected: config.UsageReportConfig{
-				SecretName:           "test-secret",
-				ClientSSLSecretName:  "client-ssl-secret",
-				CASecretName:         "ca-secret",
+				SecretName:           "test",
+				ClientSSLSecretName:  "client-ssl",
+				CASecretName:         "ca",
 				Endpoint:             "example.com",
 				Resolver:             "resolver.com",
 				SkipVerify:           true,
@@ -929,8 +929,8 @@ func TestUsageReportConfig(t *testing.T) {
 			name: "NGINX Plus enabled with missing secret",
 			params: usageReportParams{
 				SecretName:           stringValidatingValue{value: ""},
-				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
-				CASecretName:         stringValidatingValue{value: "ca-secret"},
+				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl"},
+				CASecretName:         stringValidatingValue{value: "ca"},
 				Endpoint:             stringValidatingValue{value: "example.com"},
 				Resolver:             stringValidatingValue{value: "resolver.com"},
 				SkipVerify:           true,
