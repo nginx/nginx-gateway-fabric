@@ -9,8 +9,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 )
@@ -899,27 +897,6 @@ func TestCreateGatewayPodConfig(t *testing.T) {
 func TestUsageReportConfig(t *testing.T) {
 	t.Parallel()
 
-	testSecret := v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secret",
-			Namespace: "default",
-		},
-	}
-
-	clientSSLSecret := v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "client-ssl-secret",
-			Namespace: "default",
-		},
-	}
-
-	caSecret := v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ca-secret",
-			Namespace: "default",
-		},
-	}
-
 	testCases := []struct {
 		name        string
 		params      usageReportParams
@@ -929,9 +906,9 @@ func TestUsageReportConfig(t *testing.T) {
 		{
 			name: "NGINX Plus enabled with all valid parameters",
 			params: usageReportParams{
-				SecretName:           stringValidatingValue{value: "test-secret"},
-				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl-secret"},
-				CASecretName:         stringValidatingValue{value: "ca-secret"},
+				SecretName:           stringValidatingValue{value: "test"},
+				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl"},
+				CASecretName:         stringValidatingValue{value: "ca"},
 				Endpoint:             stringValidatingValue{value: "example.com"},
 				Resolver:             stringValidatingValue{value: "resolver.com"},
 				SkipVerify:           true,
@@ -939,9 +916,9 @@ func TestUsageReportConfig(t *testing.T) {
 			},
 			expectError: false,
 			expected: config.UsageReportConfig{
-				SecretName:           testSecret.Name,
-				ClientSSLSecretName:  clientSSLSecret.Name,
-				CASecretName:         caSecret.Name,
+				SecretName:           "test",
+				ClientSSLSecretName:  "client-ssl",
+				CASecretName:         "ca",
 				Endpoint:             "example.com",
 				Resolver:             "resolver.com",
 				SkipVerify:           true,
@@ -952,8 +929,8 @@ func TestUsageReportConfig(t *testing.T) {
 			name: "NGINX Plus enabled with missing secret",
 			params: usageReportParams{
 				SecretName:           stringValidatingValue{value: ""},
-				ClientSSLSecretName:  stringValidatingValue{value: clientSSLSecret.Name},
-				CASecretName:         stringValidatingValue{value: caSecret.Name},
+				ClientSSLSecretName:  stringValidatingValue{value: "client-ssl"},
+				CASecretName:         stringValidatingValue{value: "ca"},
 				Endpoint:             stringValidatingValue{value: "example.com"},
 				Resolver:             stringValidatingValue{value: "resolver.com"},
 				SkipVerify:           true,

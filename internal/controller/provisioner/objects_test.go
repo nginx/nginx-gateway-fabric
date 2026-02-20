@@ -1574,14 +1574,6 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "dataplane-key-secret",
-			Namespace: "default",
-		},
-		Data: map[string][]byte{"dataplane.key": []byte("keydata")},
-	}
-
 	fakeClient := createFakeClientWithScheme()
 	provisioner := &NginxProvisioner{
 		k8sClient: fakeClient,
@@ -1595,7 +1587,7 @@ func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 				"key2": "val2",
 			},
 			NginxOneConsoleTelemetryConfig: config.NginxOneConsoleTelemetryConfig{
-				DataplaneKeySecretName: secret.GetName(),
+				DataplaneKeySecretName: "dataplane-key",
 				EndpointHost:           "console.example.com",
 				EndpointPort:           443,
 				EndpointTLSSkipVerify:  false,
