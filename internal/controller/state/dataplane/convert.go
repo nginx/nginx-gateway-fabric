@@ -234,3 +234,45 @@ func convertDNSResolverAddresses(addresses []ngfAPIv1alpha2.DNSResolverAddress) 
 
 	return result
 }
+
+func convertHTTPCORSFilter(filter *v1.HTTPCORSFilter) *HTTPCORSFilter {
+	if filter == nil {
+		return nil
+	}
+
+	result := &HTTPCORSFilter{
+		AllowCredentials: filter.AllowCredentials != nil && *filter.AllowCredentials,
+	}
+
+	if len(filter.AllowOrigins) > 0 {
+		result.AllowOrigins = make([]string, len(filter.AllowOrigins))
+		for i, origin := range filter.AllowOrigins {
+			result.AllowOrigins[i] = string(origin)
+		}
+	}
+
+	if len(filter.AllowMethods) > 0 {
+		result.AllowMethods = make([]string, len(filter.AllowMethods))
+		for i, method := range filter.AllowMethods {
+			result.AllowMethods[i] = string(method)
+		}
+	}
+
+	if len(filter.AllowHeaders) > 0 {
+		result.AllowHeaders = make([]string, len(filter.AllowHeaders))
+		for i, header := range filter.AllowHeaders {
+			result.AllowHeaders[i] = string(header)
+		}
+	}
+
+	if len(filter.ExposeHeaders) > 0 {
+		result.ExposeHeaders = make([]string, len(filter.ExposeHeaders))
+		for i, header := range filter.ExposeHeaders {
+			result.ExposeHeaders[i] = string(header)
+		}
+	}
+
+	result.MaxAge = filter.MaxAge
+
+	return result
+}

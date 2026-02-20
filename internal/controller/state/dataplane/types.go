@@ -221,6 +221,8 @@ type HTTPFilters struct {
 	ResponseHeaderModifiers *HTTPHeaderFilter
 	// AuthenticationFilter holds the AuthenticationFilter for the MatchRule.
 	AuthenticationFilter *AuthenticationFilter
+	// CORSFilter holds the HTTPCORSFilter for the MatchRule.
+	CORSFilter *HTTPCORSFilter
 	// RequestMirrors holds the HTTPRequestMirrorFilters. There could be more than one specified.
 	RequestMirrors []*HTTPRequestMirrorFilter
 	// SnippetsFilters holds all the SnippetsFilters for the MatchRule.
@@ -243,6 +245,22 @@ type Snippet struct {
 	Name string
 	// Contents is the content of the snippet.
 	Contents string
+}
+
+// HTTPCORSFilter represents HTTP CORS configuration.
+type HTTPCORSFilter struct {
+	// AllowOrigins specifies allowed origins.
+	AllowOrigins []string
+	// AllowMethods specifies allowed HTTP methods.
+	AllowMethods []string
+	// AllowHeaders specifies allowed headers.
+	AllowHeaders []string
+	// ExposeHeaders specifies headers to expose.
+	ExposeHeaders []string
+	// AllowCredentials specifies whether credentials are allowed.
+	AllowCredentials bool
+	// MaxAge specifies preflight request cache duration.
+	MaxAge int32
 }
 
 // AuthenticationFilter holds the top level spec for each kind of authentication (e.g. Basic, JWT, etc...).

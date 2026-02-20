@@ -453,6 +453,8 @@ func createLocations(
 		switch {
 		case !needsInternalLocationsForMatches(rule) && !rule.HasInferenceBackends:
 			locs = append(locs, updateExternalLocationsForRule(
+				serverID,
+				pathRuleIdx,
 				rule,
 				extLocations,
 				server.Port,
@@ -461,6 +463,7 @@ func createLocations(
 			)
 		case needsInternalLocationsForMatches(rule):
 			internalLocations, matches := createInternalLocationsForRule(
+				serverID,
 				pathRuleIdx,
 				rule,
 				generator,
@@ -480,6 +483,7 @@ func createLocations(
 			locs = append(locs, internalLocations...)
 		case rule.HasInferenceBackends:
 			locs = append(locs, createInferenceLocationsForRule(
+				serverID,
 				pathRuleIdx,
 				rule,
 				extLocations,
@@ -499,14 +503,19 @@ func createLocations(
 }
 
 func updateExternalLocationsForRule(
+	serverID string,
+	pathRuleIdx int,
 	rule dataplane.PathRule,
 	extLocations []http.Location,
 	port int32,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
 ) []http.Location {
-	for _, r := range rule.MatchRules {
+	for matchRuleIndex, r := range rule.MatchRules {
 		extLocations = updateLocations(
+			serverID,
+			pathRuleIdx,
+			matchRuleIndex,
 			r,
 			rule,
 			extLocations,
@@ -520,6 +529,7 @@ func updateExternalLocationsForRule(
 }
 
 func createInternalLocationsForRule(
+	serverID string,
 	pathRuleIdx int,
 	rule dataplane.PathRule,
 	generator policies.Generator,
@@ -566,6 +576,9 @@ func createInternalLocationsForRule(
 				port,
 				keepAliveCheck,
 				mirrorPercentage,
+				serverID,
+				matchRuleIdx,
+				pathRuleIdx,
 			)
 			internalLocations = append(internalLocations, intLocation)
 		} else {
@@ -616,6 +629,9 @@ func createInternalLocationsForRule(
 					port,
 					keepAliveCheck,
 					mirrorPercentage,
+					serverID,
+					matchRuleIdx,
+					pathRuleIdx,
 				)
 
 				intEPPLocation = initializeInternalInferenceEPPLocation(
@@ -679,6 +695,7 @@ func createInternalLocationsForRule(
 }
 
 func createInferenceLocationsForRule(
+	serverID string,
 	pathRuleIdx int,
 	rule dataplane.PathRule,
 	extLocations []http.Location,
@@ -757,6 +774,9 @@ func createInferenceLocationsForRule(
 				port,
 				keepAliveCheck,
 				mirrorPercentage,
+				serverID,
+				matchRuleIdx,
+				pathRuleIdx,
 			)
 			locs = append(locs, intProxyPassLocation)
 
@@ -1050,6 +1070,9 @@ func updateLocation(
 	listenerPort int32,
 	keepAliveCheck keepAliveChecker,
 	mirrorPercentage *float64,
+	serverID string,
+	matchRuleIndex int,
+	pathRuleIndex int,
 ) http.Location {
 	filters := matchRule.Filters
 	grpc := pathRule.GRPC
@@ -1063,6 +1086,7 @@ func updateLocation(
 	location = updateLocationMirrorRoute(location, pathRule.Path, grpc)
 	location.Includes = append(location.Includes, createIncludesFromLocationSnippetsFilters(filters.SnippetsFilters)...)
 	location = updateLocationAuthenticationFilter(location, filters.AuthenticationFilter)
+	location = updateLocationCORSFilter(location, filters.CORSFilter, serverID, pathRuleIndex, matchRuleIndex)
 
 	if filters.RequestRedirect != nil {
 		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
@@ -1091,6 +1115,24 @@ func updateLocationAuthenticationFilter(
 			}
 		}
 	}
+	return location
+}
+
+func updateLocationCORSFilter(
+	location http.Location,
+	corsFilter *dataplane.HTTPCORSFilter,
+	serverID string,
+	pathRuleIndex int,
+	matchRuleIndex int,
+) http.Location {
+	if corsFilter != nil {
+		corsHeaders := generateCORSHeaders(corsFilter, serverID, pathRuleIndex, matchRuleIndex)
+
+		if len(corsHeaders) > 0 {
+			location.CORSHeaders = corsHeaders
+		}
+	}
+
 	return location
 }
 
@@ -1215,6 +1257,9 @@ func updateLocationProxySettings(
 // updateLocations updates the existing locations with any relevant configurations, like proxy_pass,
 // filters, tls settings, etc.
 func updateLocations(
+	serverID string,
+	pathRuleIdx int,
+	matchRuleIdx int,
 	matchRule dataplane.MatchRule,
 	pathRule dataplane.PathRule,
 	buildLocations []http.Location,
@@ -1232,6 +1277,9 @@ func updateLocations(
 			listenerPort,
 			keepAliveCheck,
 			mirrorPercentage,
+			serverID,
+			matchRuleIdx,
+			pathRuleIdx,
 		)
 	}
 
@@ -1741,4 +1789,72 @@ func deduplicateStrings(content []string) []string {
 	}
 
 	return result
+}
+
+func generateCORSHeaders(
+	corsFilter *dataplane.HTTPCORSFilter,
+	serverID string,
+	pathRuleIndex int,
+	matchRuleIndex int,
+) []http.Header {
+	if corsFilter == nil {
+		return nil
+	}
+
+	headers := make([]http.Header, 0)
+
+	// Access-Control-Allow-Origin
+	if len(corsFilter.AllowOrigins) > 0 {
+		nginxVar := generateCORSAllowedOriginVariableName(serverID, pathRuleIndex, matchRuleIndex)
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Allow-Origin",
+			Value: nginxVar,
+		})
+	}
+
+	// Access-Control-Allow-Methods
+	if len(corsFilter.AllowMethods) > 0 {
+		methods := strings.Join(corsFilter.AllowMethods, ", ")
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Allow-Methods",
+			Value: methods,
+		})
+	}
+
+	// Access-Control-Allow-Headers
+	if len(corsFilter.AllowHeaders) > 0 {
+		allowHeaders := strings.Join(corsFilter.AllowHeaders, ", ")
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Allow-Headers",
+			Value: allowHeaders,
+		})
+	}
+
+	// Access-Control-Expose-Headers
+	if len(corsFilter.ExposeHeaders) > 0 {
+		exposeHeaders := strings.Join(corsFilter.ExposeHeaders, ", ")
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Expose-Headers",
+			Value: exposeHeaders,
+		})
+	}
+
+	// Access-Control-Allow-Credentials
+	if corsFilter.AllowCredentials {
+		nginxVar := generateCORSAllowCredentialsVariableName(serverID, pathRuleIndex, matchRuleIndex)
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Allow-Credentials",
+			Value: nginxVar,
+		})
+	}
+
+	if corsFilter.MaxAge > 0 {
+		// Access-Control-Max-Age
+		headers = append(headers, http.Header{
+			Name:  "Access-Control-Max-Age",
+			Value: fmt.Sprintf("%d", corsFilter.MaxAge),
+		})
+	}
+
+	return headers
 }

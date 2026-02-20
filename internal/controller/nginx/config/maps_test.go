@@ -102,7 +102,11 @@ func TestExecuteMaps(t *testing.T) {
 	maps := string(mapResult[0].data)
 	g.Expect(mapResult[0].dest).To(Equal(httpConfigFile))
 	for expSubStr, expCount := range expSubStrings {
-		g.Expect(expCount).To(Equal(strings.Count(maps, expSubStr)))
+		g.Expect(expCount).To(
+			Equal(strings.Count(maps, expSubStr)),
+			"Expected substring '%s' to appear %d times, but it appeared %d times.",
+			expSubStr, expCount, strings.Count(maps, expSubStr),
+		)
 	}
 }
 
@@ -270,7 +274,11 @@ func TestExecuteStreamMaps(t *testing.T) {
 
 	g.Expect(result.dest).To(Equal(streamConfigFile))
 	for expSubStr, expCount := range expSubStrings {
-		g.Expect(strings.Count(string(result.data), expSubStr)).To(Equal(expCount))
+		g.Expect(strings.Count(string(result.data), expSubStr)).To(
+			Equal(expCount),
+			"Expected substring '%s' to appear %d times, but it appeared %d times.",
+			expSubStr, expCount, strings.Count(string(result.data), expSubStr),
+		)
 	}
 }
 
@@ -591,6 +599,458 @@ func TestBuildInferenceMaps(t *testing.T) {
 			// Verify all expected upstreams are present
 			for expectedUpstream := range tc.expectedConfig {
 				g.Expect(seenUpstreams[expectedUpstream]).To(BeTrue(), "Expected upstream not found: %s", expectedUpstream)
+			}
+		})
+	}
+}
+
+func TestBuildCORSOriginMapParameters(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		origins  []string
+		expected []shared.MapParameter
+	}{
+		{
+			name:     "empty origins",
+			origins:  []string{},
+			expected: []shared.MapParameter{},
+		},
+		{
+			name:    "exact domain",
+			origins: []string{"https://example.com"},
+			expected: []shared.MapParameter{
+				{
+					Value:  "\"~^https://example.com$\"",
+					Result: "$http_origin",
+				},
+			},
+		},
+		{
+			name:    "domain with subdomain",
+			origins: []string{"https://api.example.com"},
+			expected: []shared.MapParameter{
+				{
+					Value:  "\"~^https://api.example.com$\"",
+					Result: "$http_origin",
+				},
+			},
+		},
+		{
+			name:    "wildcard domain",
+			origins: []string{"https://*.example.com"},
+			expected: []shared.MapParameter{
+				{
+					Value: "\"~^https://.*.example.com$\"",
+
+					Result: "$http_origin",
+				},
+			},
+		},
+		{
+			name:    "multiple wildcards",
+			origins: []string{"https://*.*.example.com"},
+			expected: []shared.MapParameter{
+				{
+					Value:  "\"~^https://.*..*.example.com$\"",
+					Result: "$http_origin",
+				},
+			},
+		},
+		{
+			name:    "multiple origins",
+			origins: []string{"https://example.com", "https://*.foo.com"},
+			expected: []shared.MapParameter{
+				{
+					Value:  "\"~^https://example.com$\"",
+					Result: "$http_origin",
+				},
+				{
+					Value:  "\"~^https://.*.foo.com$\"",
+					Result: "$http_origin",
+				},
+			},
+		},
+		{
+			name:    "http and https",
+			origins: []string{"http://example.com", "https://example.com"},
+			expected: []shared.MapParameter{
+				{
+					Value:  "\"~^http://example.com$\"",
+					Result: "$http_origin",
+				},
+				{
+					Value:  "\"~^https://example.com$\"",
+					Result: "$http_origin",
+				},
+			},
+		},
+		{
+			name:    "domain with port",
+			origins: []string{"https://example.com:8080"},
+			expected: []shared.MapParameter{
+				{
+					Value:  "\"~^https://example.com:8080$\"",
+					Result: "$http_origin",
+				},
+			},
+		},
+		{
+			name:    "wildcard with port",
+			origins: []string{"https://*.example.com:8080"},
+			expected: []shared.MapParameter{
+				{
+					Value:  "\"~^https://.*.example.com:8080$\"",
+					Result: "$http_origin",
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildCORSOriginMapParameters(tc.origins)
+
+			g.Expect(result).To(HaveLen(len(tc.expected)))
+			for i, expected := range tc.expected {
+				g.Expect(expected.Value).To(Equal(result[i].Value))
+				g.Expect(expected.Result).To(Equal(result[i].Result))
+			}
+		})
+	}
+}
+
+func TestBuildCorsMaps(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		virtualServers []dataplane.VirtualServer
+		expected       []shared.Map
+	}{
+		{
+			name:           "empty virtual servers",
+			virtualServers: []dataplane.VirtualServer{},
+			expected:       []shared.Map{},
+		},
+		{
+			name: "virtual server with no CORS filter",
+			virtualServers: []dataplane.VirtualServer{
+				{
+					Port: 80,
+					PathRules: []dataplane.PathRule{
+						{
+							Path: "/test",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{},
+		},
+		{
+			name: "virtual server with CORS filter - AllowOrigins only",
+			virtualServers: []dataplane.VirtualServer{
+				{
+					Port: 80,
+					PathRules: []dataplane.PathRule{
+						{
+							Path: "/api",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										CORSFilter: &dataplane.HTTPCORSFilter{
+											AllowOrigins: []string{"example.com", "*.test.com"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allowed_origin_server0_path0_match0",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "\"~^example.com$\"",
+							Result: "$http_origin",
+						},
+						{
+							Value:  "\"~^.*.test.com$\"",
+							Result: "$http_origin",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "virtual server with CORS filter - both AllowOrigins and AllowCredentials",
+			virtualServers: []dataplane.VirtualServer{
+				{
+					Port: 443,
+					PathRules: []dataplane.PathRule{
+						{
+							Path: "/test-path",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										CORSFilter: &dataplane.HTTPCORSFilter{
+											AllowOrigins:     []string{"*.example.com"},
+											AllowCredentials: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allowed_origin_server0_path0_match0",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "\"~^.*.example.com$\"",
+							Result: "$http_origin",
+						},
+					},
+				},
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allow_credentials_server0_path0_match0",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "\"~^.*.example.com$\"",
+							Result: "true",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "virtual server with multiple PathRules and multiple MatchRules",
+			virtualServers: []dataplane.VirtualServer{
+				{
+					Port: 80,
+					PathRules: []dataplane.PathRule{
+						{
+							Path: "/api",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										CORSFilter: &dataplane.HTTPCORSFilter{
+											AllowOrigins: []string{"example.com"},
+										},
+									},
+								},
+								{
+									Filters: dataplane.HTTPFilters{
+										CORSFilter: &dataplane.HTTPCORSFilter{
+											AllowOrigins:     []string{"*.test.com"},
+											AllowCredentials: true,
+										},
+									},
+								},
+							},
+						},
+						{
+							Path: "/docs",
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										CORSFilter: &dataplane.HTTPCORSFilter{
+											AllowOrigins: []string{"docs.example.com"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allowed_origin_server0_path0_match0",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "\"~^example.com$\"",
+							Result: "$http_origin",
+						},
+					},
+				},
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allowed_origin_server0_path0_match1",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "\"~^.*.test.com$\"",
+							Result: "$http_origin",
+						},
+					},
+				},
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allow_credentials_server0_path0_match1",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "\"~^.*.test.com$\"",
+							Result: "true",
+						},
+					},
+				},
+				{
+					Source:   "$http_origin",
+					Variable: "$cors_allowed_origin_server0_path1_match0",
+					Parameters: []shared.MapParameter{
+						{
+							Value:  "\"~^docs.example.com$\"",
+							Result: "$http_origin",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildCorsMaps(test.virtualServers)
+
+			g.Expect(result).To(HaveLen(len(test.expected)))
+			for i, expected := range test.expected {
+				g.Expect(result[i].Source).To(Equal(expected.Source))
+				g.Expect(result[i].Variable).To(Equal(expected.Variable))
+				g.Expect(result[i].Parameters).To(HaveLen(len(expected.Parameters)))
+				for j, param := range expected.Parameters {
+					g.Expect(result[i].Parameters[j].Value).To(Equal(param.Value))
+					g.Expect(result[i].Parameters[j].Result).To(Equal(param.Result))
+				}
+			}
+		})
+	}
+}
+
+func TestConvertToNginxRegex(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple domain",
+			input:    "example.com",
+			expected: "\"~^example.com$\"",
+		},
+		{
+			name:     "subdomain wildcard",
+			input:    "*.example.com",
+			expected: "\"~^.*.example.com$\"",
+		},
+		{
+			name:     "wildcard at end",
+			input:    "example.*",
+			expected: "\"~^example..*$\"",
+		},
+		{
+			name:     "multiple wildcards",
+			input:    "*.example.*",
+			expected: "\"~^.*.example..*$\"",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := convertToNginxRegex(test.input)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestBuildCORSAllowCredentialsMapParameters(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		origins  []string
+		expected []shared.MapParameter
+	}{
+		{
+			name:     "empty origins",
+			origins:  []string{},
+			expected: []shared.MapParameter{},
+		},
+		{
+			name:    "single origin",
+			origins: []string{"example.com"},
+			expected: []shared.MapParameter{
+				{
+					Value:  "\"~^example.com$\"",
+					Result: "true",
+				},
+			},
+		},
+		{
+			name:    "multiple origins",
+			origins: []string{"example.com", "test.com"},
+			expected: []shared.MapParameter{
+				{
+					Value:  "\"~^example.com$\"",
+					Result: "true",
+				},
+				{
+					Value:  "\"~^test.com$\"",
+					Result: "true",
+				},
+			},
+		},
+		{
+			name:    "wildcard origins",
+			origins: []string{"*.example.com", "*.test.com"},
+			expected: []shared.MapParameter{
+				{
+					Value:  "\"~^.*.example.com$\"",
+					Result: "true",
+				},
+				{
+					Value:  "\"~^.*.test.com$\"",
+					Result: "true",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildCORSAllowCredentialsMapParameters(test.origins)
+
+			g.Expect(result).To(HaveLen(len(test.expected)))
+			for i, expected := range test.expected {
+				g.Expect(result[i].Value).To(Equal(expected.Value))
+				g.Expect(result[i].Result).To(Equal(expected.Result))
 			}
 		})
 	}

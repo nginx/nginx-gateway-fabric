@@ -76,9 +76,10 @@ func TestNewGatewayStatusSetter(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		status, newStatus gatewayv1.GatewayStatus
-		expStatusSet      bool
+		name         string
+		status       gatewayv1.GatewayStatus
+		newStatus    gatewayv1.GatewayStatus
+		expStatusSet bool
 	}{
 		{
 			name: "Gateway has no status",

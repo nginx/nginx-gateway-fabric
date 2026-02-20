@@ -1045,6 +1045,7 @@ func getPath(path *v1.HTTPPathMatch) string {
 	return *path.Value
 }
 
+//nolint:gocyclo
 func createHTTPFilters(
 	filters []graph.Filter,
 	ruleIdx int,
@@ -1094,6 +1095,10 @@ func createHTTPFilters(
 						referencedSecrets,
 					)
 				}
+			}
+		case graph.FilterCORS:
+			if result.CORSFilter == nil {
+				result.CORSFilter = convertHTTPCORSFilter(f.CORS)
 			}
 		}
 	}

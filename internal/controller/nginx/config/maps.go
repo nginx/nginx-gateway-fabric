@@ -29,8 +29,13 @@ const (
 )
 
 func executeMaps(conf dataplane.Configuration) []executeResult {
-	maps := buildAddHeaderMaps(append(conf.HTTPServers, conf.SSLServers...))
+	httpAndSSLServers := make([]dataplane.VirtualServer, 0, len(conf.HTTPServers)+len(conf.SSLServers))
+	httpAndSSLServers = append(httpAndSSLServers, conf.HTTPServers...)
+	httpAndSSLServers = append(httpAndSSLServers, conf.SSLServers...)
+
+	maps := buildAddHeaderMaps(httpAndSSLServers)
 	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
+	maps = append(maps, buildCorsMaps(httpAndSSLServers)...)
 
 	result := executeResult{
 		dest: httpConfigFile,
@@ -38,6 +43,73 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	}
 
 	return []executeResult{result}
+}
+
+func buildCorsMaps(servers []dataplane.VirtualServer) []shared.Map {
+	originMaps := make([]shared.Map, 0)
+
+	for serverIndex, s := range servers {
+		serverID := fmt.Sprintf("%d", serverIndex)
+		if s.SSL != nil {
+			serverID = fmt.Sprintf("SSL_%d", serverIndex)
+		}
+
+		for pathRuleIndex, pr := range s.PathRules {
+			for matchRuleIndex, mr := range pr.MatchRules {
+				if mr.Filters.CORSFilter != nil {
+					corsFilter := mr.Filters.CORSFilter
+					if corsFilter.AllowOrigins != nil {
+						nginxVar := generateCORSAllowedOriginVariableName(serverID, pathRuleIndex, matchRuleIndex)
+						originMaps = append(originMaps, shared.Map{
+							Source:     "$http_origin",
+							Variable:   nginxVar,
+							Parameters: buildCORSOriginMapParameters(corsFilter.AllowOrigins),
+						})
+					}
+					if corsFilter.AllowCredentials {
+						nginxVar := generateCORSAllowCredentialsVariableName(serverID, pathRuleIndex, matchRuleIndex)
+						originMaps = append(originMaps, shared.Map{
+							Source:     "$http_origin",
+							Variable:   nginxVar,
+							Parameters: buildCORSAllowCredentialsMapParameters(corsFilter.AllowOrigins),
+						})
+					}
+				}
+			}
+		}
+	}
+
+	return originMaps
+}
+
+func buildCORSAllowCredentialsMapParameters(s []string) []shared.MapParameter {
+	params := make([]shared.MapParameter, 0, len(s))
+
+	for _, origin := range s {
+		params = append(params, shared.MapParameter{
+			Value:  convertToNginxRegex(origin),
+			Result: "true",
+		})
+	}
+
+	return params
+}
+
+func buildCORSOriginMapParameters(s []string) []shared.MapParameter {
+	params := make([]shared.MapParameter, 0, len(s))
+
+	for _, origin := range s {
+		params = append(params, shared.MapParameter{
+			Value:  convertToNginxRegex(origin),
+			Result: "$http_origin",
+		})
+	}
+
+	return params
+}
+
+func convertToNginxRegex(input string) string {
+	return "\"~^" + strings.ReplaceAll(input, "*", ".*") + "$\""
 }
 
 func executeStreamMaps(conf dataplane.Configuration) []executeResult {

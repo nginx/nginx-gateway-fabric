@@ -47,7 +47,12 @@ func supportedFeatures(experimental bool) []gatewayv1.SupportedFeature {
 
 	// Add experimental features if enabled
 	if experimental {
-		featureNames = append(featureNames, features.SupportTLSRoute, features.SupportUDPRoute)
+		featureNames = append(
+			featureNames,
+			features.SupportTLSRoute,
+			features.SupportUDPRoute,
+			features.SupportHTTPRouteCORS,
+		)
 	}
 
 	// Sort alphabetically by feature name

@@ -5223,3 +5223,325 @@ func TestCreateLocations_RegexNonRootShouldNotSuppressDefault404(t *testing.T) {
 	}
 	g.Expect(hasDefault404).To(BeTrue(), "default 404 root location should be present when regex does not cover /")
 }
+
+func TestGenerateCORSHeaders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		corsFilter   *dataplane.HTTPCORSFilter
+		expected     []http.Header
+		name         string
+		pathRule     dataplane.PathRule
+		listenerPort int32
+	}{
+		{
+			name:         "nil corsFilter",
+			corsFilter:   nil,
+			listenerPort: 80,
+			pathRule: dataplane.PathRule{
+				Path:     "/api",
+				PathType: dataplane.PathTypePrefix,
+			},
+			expected: nil,
+		},
+		{
+			name:         "empty corsFilter",
+			corsFilter:   &dataplane.HTTPCORSFilter{},
+			listenerPort: 80,
+			pathRule: dataplane.PathRule{
+				Path:     "/api",
+				PathType: dataplane.PathTypePrefix,
+			},
+			expected: []http.Header{},
+		},
+		{
+			name: "corsFilter with AllowOrigins",
+			corsFilter: &dataplane.HTTPCORSFilter{
+				AllowOrigins: []string{"https://example.com", "*.test.com"},
+			},
+			listenerPort: 80,
+			pathRule: dataplane.PathRule{
+				Path:     "/api",
+				PathType: dataplane.PathTypePrefix,
+			},
+			expected: []http.Header{
+				{
+					Name:  "Access-Control-Allow-Origin",
+					Value: "$cors_allowed_origin_server0_path0_match1",
+				},
+			},
+		},
+		{
+			name: "corsFilter with AllowCredentials",
+			corsFilter: &dataplane.HTTPCORSFilter{
+				AllowCredentials: true,
+				AllowOrigins:     []string{"https://example.com"},
+			},
+			listenerPort: 443,
+			pathRule: dataplane.PathRule{
+				Path:     "/test-path",
+				PathType: dataplane.PathTypeExact,
+			},
+			expected: []http.Header{
+				{
+					Name:  "Access-Control-Allow-Origin",
+					Value: "$cors_allowed_origin_server0_path0_match1",
+				},
+				{
+					Name:  "Access-Control-Allow-Credentials",
+					Value: "$cors_allow_credentials_server0_path0_match1",
+				},
+			},
+		},
+		{
+			name: "corsFilter with all fields",
+			corsFilter: &dataplane.HTTPCORSFilter{
+				AllowOrigins:     []string{"https://example.com"},
+				AllowMethods:     []string{"GET", "POST", "PUT"},
+				AllowHeaders:     []string{"Content-Type", "Authorization"},
+				ExposeHeaders:    []string{"X-Custom-Header"},
+				AllowCredentials: true,
+				MaxAge:           86400,
+			},
+			listenerPort: 8080,
+			pathRule: dataplane.PathRule{
+				Path:     "/complex/path-with-hyphens",
+				PathType: dataplane.PathTypePrefix,
+			},
+			expected: []http.Header{
+				{
+					Name:  "Access-Control-Allow-Origin",
+					Value: "$cors_allowed_origin_server0_path0_match1",
+				},
+				{
+					Name:  "Access-Control-Allow-Methods",
+					Value: "GET, POST, PUT",
+				},
+				{
+					Name:  "Access-Control-Allow-Headers",
+					Value: "Content-Type, Authorization",
+				},
+				{
+					Name:  "Access-Control-Expose-Headers",
+					Value: "X-Custom-Header",
+				},
+				{
+					Name:  "Access-Control-Allow-Credentials",
+					Value: "$cors_allow_credentials_server0_path0_match1",
+				},
+				{
+					Name:  "Access-Control-Max-Age",
+					Value: "86400",
+				},
+			},
+		},
+		{
+			name: "corsFilter with root path",
+			corsFilter: &dataplane.HTTPCORSFilter{
+				AllowOrigins: []string{"*"},
+			},
+			listenerPort: 80,
+			pathRule: dataplane.PathRule{
+				Path:     "/",
+				PathType: dataplane.PathTypePrefix,
+			},
+			expected: []http.Header{
+				{
+					Name:  "Access-Control-Allow-Origin",
+					Value: "$cors_allowed_origin_server0_path0_match1",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := generateCORSHeaders(test.corsFilter, "0", 0, 1)
+
+			if test.expected == nil {
+				g.Expect(result).To(BeNil())
+			} else {
+				g.Expect(result).To(Equal(test.expected))
+			}
+		})
+	}
+}
+
+func TestUpdateLocationCORSFilter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		corsFilter   *dataplane.HTTPCORSFilter
+		name         string
+		pathRule     dataplane.PathRule
+		location     http.Location
+		expected     http.Location
+		listenerPort int32
+	}{
+		{
+			name: "nil corsFilter",
+			location: http.Location{
+				Path: "/api",
+				Type: http.ExternalLocationType,
+			},
+			corsFilter:   nil,
+			listenerPort: 80,
+			pathRule: dataplane.PathRule{
+				Path:     "/api",
+				PathType: dataplane.PathTypePrefix,
+			},
+			expected: http.Location{
+				Path: "/api",
+				Type: http.ExternalLocationType,
+			},
+		},
+		{
+			name: "empty corsFilter",
+			location: http.Location{
+				Path: "/api",
+				Type: http.ExternalLocationType,
+			},
+			corsFilter:   &dataplane.HTTPCORSFilter{},
+			listenerPort: 80,
+			pathRule: dataplane.PathRule{
+				Path:     "/api",
+				PathType: dataplane.PathTypePrefix,
+			},
+			expected: http.Location{
+				Path:        "/api",
+				Type:        http.ExternalLocationType,
+				CORSHeaders: nil,
+			},
+		},
+		{
+			name: "corsFilter with AllowOrigins and credentials",
+			location: http.Location{
+				Path: "/test",
+				Type: http.ExternalLocationType,
+			},
+			corsFilter: &dataplane.HTTPCORSFilter{
+				AllowOrigins:     []string{"https://example.com"},
+				AllowCredentials: true,
+				MaxAge:           3600,
+			},
+			listenerPort: 443,
+			pathRule: dataplane.PathRule{
+				Path:     "/test",
+				PathType: dataplane.PathTypeExact,
+			},
+			expected: http.Location{
+				Path: "/test",
+				Type: http.ExternalLocationType,
+				CORSHeaders: []http.Header{
+					{
+						Name:  "Access-Control-Allow-Origin",
+						Value: "$cors_allowed_origin_server0_path0_match1",
+					},
+					{
+						Name:  "Access-Control-Allow-Credentials",
+						Value: "$cors_allow_credentials_server0_path0_match1",
+					},
+					{
+						Name:  "Access-Control-Max-Age",
+						Value: "3600",
+					},
+				},
+			},
+		},
+		{
+			name: "corsFilter with all headers",
+			location: http.Location{
+				Path: "/complex-path",
+				Type: http.ExternalLocationType,
+			},
+			corsFilter: &dataplane.HTTPCORSFilter{
+				AllowOrigins:     []string{"https://example.com", "*.test.com"},
+				AllowMethods:     []string{"GET", "POST", "DELETE"},
+				AllowHeaders:     []string{"Content-Type", "X-Custom"},
+				ExposeHeaders:    []string{"X-Total-Count"},
+				AllowCredentials: true,
+				MaxAge:           7200,
+			},
+			listenerPort: 8443,
+			pathRule: dataplane.PathRule{
+				Path:     "/complex-path",
+				PathType: dataplane.PathTypePrefix,
+			},
+			expected: http.Location{
+				Path: "/complex-path",
+				Type: http.ExternalLocationType,
+				CORSHeaders: []http.Header{
+					{
+						Name:  "Access-Control-Allow-Origin",
+						Value: "$cors_allowed_origin_server0_path0_match1",
+					},
+					{
+						Name:  "Access-Control-Allow-Methods",
+						Value: "GET, POST, DELETE",
+					},
+					{
+						Name:  "Access-Control-Allow-Headers",
+						Value: "Content-Type, X-Custom",
+					},
+					{
+						Name:  "Access-Control-Expose-Headers",
+						Value: "X-Total-Count",
+					},
+					{
+						Name:  "Access-Control-Allow-Credentials",
+						Value: "$cors_allow_credentials_server0_path0_match1",
+					},
+					{
+						Name:  "Access-Control-Max-Age",
+						Value: "7200",
+					},
+				},
+			},
+		},
+		{
+			name: "corsFilter preserves existing location properties",
+			location: http.Location{
+				Path:        "/api/v1",
+				Type:        http.InternalLocationType,
+				ProxyPass:   "http://backend",
+				Rewrites:    []string{"rewrite1"},
+				MirrorPaths: []string{"/mirror"},
+			},
+			corsFilter: &dataplane.HTTPCORSFilter{
+				AllowOrigins: []string{"*"},
+			},
+			listenerPort: 80,
+			pathRule: dataplane.PathRule{
+				Path:     "/api/v1",
+				PathType: dataplane.PathTypePrefix,
+			},
+			expected: http.Location{
+				Path:        "/api/v1",
+				Type:        http.InternalLocationType,
+				ProxyPass:   "http://backend",
+				Rewrites:    []string{"rewrite1"},
+				MirrorPaths: []string{"/mirror"},
+				CORSHeaders: []http.Header{
+					{
+						Name:  "Access-Control-Allow-Origin",
+						Value: "$cors_allowed_origin_server0_path0_match1",
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := updateLocationCORSFilter(test.location, test.corsFilter, "0", 0, 1)
+
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}

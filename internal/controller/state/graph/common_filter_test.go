@@ -94,6 +94,27 @@ func TestValidateFilter(t *testing.T) {
 		},
 		{
 			filter: Filter{
+				RouteType:  RouteTypeHTTP,
+				FilterType: FilterCORS,
+				CORS: &gatewayv1.HTTPCORSFilter{
+					AllowOrigins: []gatewayv1.CORSOrigin{"https://example.com"},
+					AllowMethods: []gatewayv1.HTTPMethodWithWildcard{"GET", "POST"},
+				},
+			},
+			expectErrCount: 0,
+			name:           "valid HTTP CORS filter",
+		},
+		{
+			filter: Filter{
+				RouteType:  RouteTypeHTTP,
+				FilterType: FilterCORS,
+				CORS:       nil,
+			},
+			expectErrCount: 1,
+			name:           "invalid HTTP CORS filter with nil value",
+		},
+		{
+			filter: Filter{
 				RouteType:             RouteTypeGRPC,
 				FilterType:            FilterRequestHeaderModifier,
 				RequestHeaderModifier: &gatewayv1.HTTPHeaderFilter{},
