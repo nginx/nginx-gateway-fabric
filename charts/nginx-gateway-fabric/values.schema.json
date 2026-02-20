@@ -22,11 +22,33 @@
           "title": "annotations",
           "type": "object"
         },
+        "automountServiceAccountToken": {
+          "default": true,
+          "description": "Automount the service account token for the cert-generator pod.",
+          "title": "automountServiceAccountToken",
+          "type": "boolean"
+        },
         "enable": {
           "default": true,
           "description": "Enable the cert-generator Job. If this is disabled, then cert-manager or some other method must be used to create the required Secrets.",
           "title": "enable",
           "type": "boolean"
+        },
+        "extraVolumeMounts": {
+          "description": "extraVolumeMounts are the additional volume mounts for the cert-generator container.",
+          "items": {
+            "required": []
+          },
+          "title": "extraVolumeMounts",
+          "type": "array"
+        },
+        "extraVolumes": {
+          "description": "extraVolumes for the cert-generator pod. Use in conjunction with\ncertGenerator.extraVolumeMounts to mount additional volumes to the container.",
+          "items": {
+            "required": []
+          },
+          "title": "extraVolumes",
+          "type": "array"
         },
         "nodeSelector": {
           "description": "The nodeSelector of the cert-generator pod.",
@@ -701,6 +723,12 @@
           "required": [],
           "title": "affinity",
           "type": "object"
+        },
+        "automountServiceAccountToken": {
+          "default": true,
+          "description": "Automount the service account token for the NGINX Gateway Fabric control plane pod.",
+          "title": "automountServiceAccountToken",
+          "type": "boolean"
         },
         "autoscaling": {
           "description": "Autoscaling configuration for the NGINX Gateway Fabric control plane.",

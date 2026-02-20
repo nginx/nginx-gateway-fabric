@@ -245,6 +245,9 @@ nginxGateway:
     # the generated NGINX config for HTTPRoute and GRPCRoute resources.
     enable: false
 
+  # -- Automount the service account token for the NGINX Gateway Fabric control plane pod.
+  automountServiceAccountToken: true
+
 # -- The nginx section contains the configuration for all NGINX data plane deployments
 # installed by the NGINX Gateway Fabric control plane.
 nginx:
@@ -728,6 +731,16 @@ certGenerator:
 
   # -- The topology spread constraints for the cert-generator pod.
   topologySpreadConstraints: []
+
+  # -- extraVolumes for the cert-generator pod. Use in conjunction with
+  # certGenerator.extraVolumeMounts to mount additional volumes to the container.
+  extraVolumes: []
+
+  # -- extraVolumeMounts are the additional volume mounts for the cert-generator container.
+  extraVolumeMounts: []
+
+  # -- Automount the service account token for the cert-generator pod.
+  automountServiceAccountToken: true
 
 # -- A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.
 gateways: []
