@@ -48,7 +48,7 @@ kubectl kustomize https://github.com/nginx/nginx-gateway-fabric/config/crd/gatew
 
 ## Requirements
 
-Kubernetes: `>= 1.25.0-0`
+Kubernetes: `>= 1.31.0-0`
 
 ## Installing the Chart
 
