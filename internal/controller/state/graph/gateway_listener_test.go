@@ -1052,7 +1052,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 			expectedCondition: false,
 		},
 		{
-			name: "overlap between two TLS listeners",
+			name: "no overlap between two TLS listeners",
 			gateway: &v1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "gateway",
