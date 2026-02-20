@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -15,29 +16,49 @@ import (
 )
 
 // objectSpecSetter sets the spec of the provided object. This is used when creating or updating the object.
-func objectSpecSetter(object client.Object) controllerutil.MutateFn {
+//
+//nolint:gocyclo // This is the best we can do
+func objectSpecSetter(minimalObject, object client.Object) controllerutil.MutateFn {
 	switch obj := object.(type) {
 	case *appsv1.Deployment:
-		return deploymentSpecSetter(obj, obj.Spec, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*appsv1.Deployment); ok {
+			return deploymentSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
+		}
 	case *autoscalingv2.HorizontalPodAutoscaler:
-		return hpaSpecSetter(obj, obj.Spec, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*autoscalingv2.HorizontalPodAutoscaler); ok {
+			return hpaSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
+		}
 	case *appsv1.DaemonSet:
-		return daemonSetSpecSetter(obj, obj.Spec, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*appsv1.DaemonSet); ok {
+			return daemonSetSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
+		}
 	case *corev1.Service:
-		return serviceSpecSetter(obj, obj.Spec, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*corev1.Service); ok {
+			return serviceSpecSetter(minObj, obj.Spec, obj.ObjectMeta)
+		}
 	case *corev1.ServiceAccount:
-		return serviceAccountSpecSetter(obj, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*corev1.ServiceAccount); ok {
+			return serviceAccountSpecSetter(minObj, obj.ObjectMeta)
+		}
 	case *corev1.ConfigMap:
-		return configMapSpecSetter(obj, obj.Data, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*corev1.ConfigMap); ok {
+			return configMapSpecSetter(minObj, obj.Data, obj.ObjectMeta)
+		}
 	case *corev1.Secret:
-		return secretSpecSetter(obj, obj.Data, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*corev1.Secret); ok {
+			return secretSpecSetter(minObj, obj.Data, obj.ObjectMeta)
+		}
 	case *rbacv1.Role:
-		return roleSpecSetter(obj, obj.Rules, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*rbacv1.Role); ok {
+			return roleSpecSetter(minObj, obj.Rules, obj.ObjectMeta)
+		}
 	case *rbacv1.RoleBinding:
-		return roleBindingSpecSetter(obj, obj.RoleRef, obj.Subjects, obj.ObjectMeta)
+		if minObj, ok := minimalObject.(*rbacv1.RoleBinding); ok {
+			return roleBindingSpecSetter(minObj, obj.RoleRef, obj.Subjects, obj.ObjectMeta)
+		}
 	}
 
-	return nil
+	panic(fmt.Sprintf("type mismatch: minimalObject type %T does not match object type %T", minimalObject, object))
 }
 
 func deploymentSpecSetter(
