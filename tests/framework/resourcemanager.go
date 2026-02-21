@@ -627,8 +627,28 @@ func (rm *ResourceManager) GetLBIPAddress(namespace string) (string, error) {
 				return false, err
 			}
 
+			// Get all services across all namespaces for debugging
+			var allServiceList core.ServiceList
+			if err := rm.List(ctx, &allServiceList); err != nil {
+				GinkgoWriter.Printf("Warning: error getting all services across all namespaces: %v\n", err)
+			} else {
+				GinkgoWriter.Printf("All services across all namespaces: and current time %v\n", time.Now())
+				for _, svc := range allServiceList.Items {
+					GinkgoWriter.Printf("  Service %q of type %q in namespace %q\n",
+						svc.Name,
+						svc.Spec.Type,
+						svc.Namespace,
+					)
+				}
+			}
+
 			var lbServices []core.Service
 			for _, svc := range serviceList.Items {
+				GinkgoWriter.Printf("Found service %q of type %q in namespace %q\n",
+					svc.Name,
+					svc.Spec.Type,
+					namespace,
+				)
 				if svc.Spec.Type == core.ServiceTypeLoadBalancer {
 					lbServices = append(lbServices, svc)
 				}
@@ -703,11 +723,22 @@ func (rm *ResourceManager) waitForLBStatusToBeReady(ctx context.Context, svcNsNa
 		func(ctx context.Context) (bool, error) {
 			var svc core.Service
 			if err := rm.Get(ctx, svcNsName, &svc); err != nil {
+				GinkgoWriter.Printf("Error getting LoadBalancer service %q in namespace %q: %v\n",
+					svcNsName.Name,
+					svcNsName.Namespace,
+					err,
+				)
 				return false, err
 			}
 			if len(svc.Status.LoadBalancer.Ingress) > 0 {
 				return true, nil
 			}
+
+			GinkgoWriter.Printf("LoadBalancer service %q in namespace %q does not have status ready yet, status: %+v\n",
+				svcNsName.Name,
+				svcNsName.Namespace,
+				svc.Status,
+			)
 
 			return false, nil
 		},
@@ -1076,6 +1107,22 @@ func (rm *ResourceManager) GetReadyNginxPodNames(
 				client.HasLabels{"gateway.networking.k8s.io/gateway-name"},
 			); err != nil {
 				return false, fmt.Errorf("error getting list of NGINX Pods: %w", err)
+			}
+
+			// Get all pods in namespace for debugging
+			var allPodList core.PodList
+			if err := rm.List(
+				ctx,
+				&allPodList,
+				client.InNamespace(namespace),
+			); err != nil {
+				GinkgoWriter.Printf("Warning: error getting all pods in namespace %q: %v\n", namespace, err)
+			} else {
+				var allPodNames []string
+				for _, pod := range allPodList.Items {
+					allPodNames = append(allPodNames, pod.Name)
+				}
+				GinkgoWriter.Printf("All pods in namespace %q: %v\n", namespace, allPodNames)
 			}
 
 			nginxPodNames = getReadyPodNames(podList, opts...)

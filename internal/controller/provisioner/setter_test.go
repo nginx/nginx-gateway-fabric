@@ -142,7 +142,7 @@ func TestServiceSpecSetter_PreservesExternalAnnotations(t *testing.T) {
 			}
 
 			// Execute the setter
-			setter := serviceSpecSetter(existingService, desiredSpec, desiredMeta)
+			setter := serviceSpecSetter(existingService, desiredSpec, desiredMeta, metav1.TypeMeta{})
 			err := setter()
 
 			g.Expect(err).ToNot(HaveOccurred())
@@ -303,7 +303,7 @@ func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
 					Template: podTemplate,
 				}
 
-				err := deploymentSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations))()
+				err := deploymentSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations), metav1.TypeMeta{})()
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existing.Annotations).To(Equal(tc.expectedAnnotations))
 				g.Expect(existing.Labels).To(Equal(labels))
@@ -329,7 +329,7 @@ func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {
 					Template: podTemplate,
 				}
 
-				err := daemonSetSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations))()
+				err := daemonSetSpecSetter(existing, spec, makeDesiredMeta(tc.desiredAnnotations), metav1.TypeMeta{})()
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existing.Annotations).To(Equal(tc.expectedAnnotations))
 				g.Expect(existing.Labels).To(Equal(labels))

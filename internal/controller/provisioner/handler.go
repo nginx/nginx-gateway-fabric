@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -132,11 +133,15 @@ func (h *eventHandler) getGatewayForManagedResource(obj client.Object) (types.Na
 func (h *eventHandler) handleDeleteEvent(ctx context.Context, e *events.DeleteEvent) error {
 	switch e.Type.(type) {
 	case *gatewayv1.Gateway:
+
 		h.store.markGatewayDeleting(e.NamespacedName)
 
 		if !h.provisioner.isLeader() {
+			fmt.Println("We are not the leader so we set resources to delete for the gateway with NamespacedName",
+				e.NamespacedName)
 			h.provisioner.setResourceToDelete(e.NamespacedName)
 		}
+
 		h.store.deleteGateway(e.NamespacedName)
 		h.store.deleteResourcesForGateway(e.NamespacedName)
 		deploymentNSName := types.NamespacedName{
@@ -144,6 +149,7 @@ func (h *eventHandler) handleDeleteEvent(ctx context.Context, e *events.DeleteEv
 			Namespace: e.NamespacedName.Namespace,
 		}
 		h.provisioner.cfg.DeploymentStore.Remove(deploymentNSName)
+		fmt.Println("We have deleted the gateway and marked for deletion: " + time.Now().String())
 	case *appsv1.Deployment, *appsv1.DaemonSet, *corev1.Service, *corev1.ServiceAccount,
 		*corev1.ConfigMap, *rbacv1.Role, *rbacv1.RoleBinding, *autoscalingv2.HorizontalPodAutoscaler:
 
@@ -280,6 +286,7 @@ func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.D
 		}
 
 		if gateway.Valid && !h.store.isGatewayDeleting(gatewayNsName) {
+			fmt.Println("We are reprovisioning resources")
 			resourceName := controller.CreateNginxResourceName(gateway.Source.GetName(), h.gcName)
 			if err := h.provisioner.reprovisionNginx(
 				ctx,
