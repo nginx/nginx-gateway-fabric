@@ -723,11 +723,22 @@ func (rm *ResourceManager) waitForLBStatusToBeReady(ctx context.Context, svcNsNa
 		func(ctx context.Context) (bool, error) {
 			var svc core.Service
 			if err := rm.Get(ctx, svcNsName, &svc); err != nil {
+				GinkgoWriter.Printf("Error getting LoadBalancer service %q in namespace %q: %v\n",
+					svcNsName.Name,
+					svcNsName.Namespace,
+					err,
+				)
 				return false, err
 			}
 			if len(svc.Status.LoadBalancer.Ingress) > 0 {
 				return true, nil
 			}
+
+			GinkgoWriter.Printf("LoadBalancer service %q in namespace %q does not have status ready yet, status: %+v\n",
+				svcNsName.Name,
+				svcNsName.Namespace,
+				svc.Status,
+			)
 
 			return false, nil
 		},
