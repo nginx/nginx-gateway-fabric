@@ -8,13 +8,21 @@ FROM nginx:1.29.5-alpine-otel
 
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.7.1
+ARG NGINX_AGENT_BRANCH=refactor-plugin
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
-RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
-    printf "%s\n" "https://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && apk add --no-cache nginx-agent=${NGINX_AGENT_VERSION#v}
+RUN apk add --no-cache git go make \
+    && git clone --branch ${NGINX_AGENT_BRANCH} --depth 1 https://github.com/nginx/agent.git /tmp/agent \
+    && cd /tmp/agent \
+    && make build \
+    && cp /tmp/agent/build/nginx-agent /usr/bin/nginx-agent \
+    && mkdir -p /etc/nginx-agent \
+    && cp /tmp/agent/nginx-agent.conf /etc/nginx-agent/ \
+    && cd / \
+    && rm -rf /tmp/agent \
+    && apk del git go make
 
 RUN apk add --no-cache bash \
     && mkdir -p /usr/lib/nginx/modules \
