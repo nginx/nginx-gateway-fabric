@@ -730,10 +730,10 @@ func GetAllowedRouteLabelSelector(l v1.Listener) *metav1.LabelSelector {
 func matchesWildcard(hostname1, hostname2 string) bool {
 	mw := func(h1, h2 string) bool {
 		if strings.HasPrefix(h1, "*.") {
-			// Remove the "*." from h1
-			h1 = h1[2:]
-			// Check if h2 ends with h1
-			return strings.HasSuffix(h2, h1)
+			// Remove the "*" from h1
+			suffix := h1[1:]
+			// Check if h2 ends with the suffix
+			return strings.HasSuffix(h2, suffix)
 		}
 		return false
 	}
