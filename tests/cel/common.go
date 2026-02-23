@@ -42,6 +42,7 @@ const (
 	expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError = "TargetRef Kind must be: HTTPRoute or GRPCRoute"
 	expectedTargetRefKindServiceError                    = "TargetRefs Kind must be: Service"
 	expectedTargetRefKindGatewayError                    = "TargetRef Kind must be: Gateway"
+	expectedTargetRefAllSameKindError                    = "All TargetRefs must be the same Kind"
 
 	// Group validation errors.
 	expectedTargetRefGroupError     = "TargetRef Group must be gateway.networking.k8s.io"
@@ -71,6 +72,12 @@ const (
 	// HashMethodKey validation error.
 	expectedHashKeyLoadBalancingTypeError = `hashMethodKey is required when loadBalancingMethod ` +
 		`is 'hash' or 'hash consistent'`
+
+	// WAFGatewayBindingPolicy errors.
+	expectedWAFFileNilIfNotFileTypeError       = "destination.file must be nil if the destination.type is not file"
+	expectedWAFFileRequiredIfFileTypeError     = "destination.file must be specified for file destination.type"
+	expectedWAFSyslogNilIfNotSyslogTypeError   = "destination.syslog must be nil if the destination.type is not syslog"
+	expectedWAFSyslogRequiredIfSyslogTypeError = "destination.syslog must be specified for syslog destination.type"
 
 	// Namespace for tests.
 	defaultNamespace = "default"
