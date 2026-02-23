@@ -489,6 +489,24 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationFile(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:       "both file and syslog set with type file is invalid",
+			wantErrors: []string{expectedWAFSyslogNilIfNotSyslogTypeError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				APPolicySource: baseAPPolicySource(),
+				TargetRefs:     []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "test-logconf"},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{
+							Type:   ngfAPIv1alpha1.SecurityLogDestinationTypeFile,
+							File:   &ngfAPIv1alpha1.SecurityLogFile{Path: "/var/log/waf.log"},
+							Syslog: &ngfAPIv1alpha1.SecurityLogSyslog{Server: "syslog.example.com:514"},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -598,6 +616,24 @@ func TestWAFGatewayBindingPolicySecurityLogDestinationSyslog(t *testing.T) {
 						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "test-logconf"},
 						Destination: ngfAPIv1alpha1.SecurityLogDestination{
 							Type: ngfAPIv1alpha1.SecurityLogDestinationTypeSyslog,
+						},
+					},
+				},
+			},
+		},
+		{
+			name:       "both file and syslog set with type syslog is invalid",
+			wantErrors: []string{expectedWAFFileNilIfNotFileTypeError},
+			spec: ngfAPIv1alpha1.WAFGatewayBindingPolicySpec{
+				APPolicySource: baseAPPolicySource(),
+				TargetRefs:     []gatewayv1.LocalPolicyTargetReference{{Kind: gatewayKind, Group: gatewayGroup}},
+				SecurityLogs: []ngfAPIv1alpha1.WAFSecurityLog{
+					{
+						APLogConfSource: ngfAPIv1alpha1.APResourceReference{Name: "test-logconf"},
+						Destination: ngfAPIv1alpha1.SecurityLogDestination{
+							Type:   ngfAPIv1alpha1.SecurityLogDestinationTypeSyslog,
+							File:   &ngfAPIv1alpha1.SecurityLogFile{Path: "/var/log/waf.log"},
+							Syslog: &ngfAPIv1alpha1.SecurityLogSyslog{Server: "syslog.example.com:514"},
 						},
 					},
 				},
