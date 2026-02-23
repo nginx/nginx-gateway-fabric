@@ -15,19 +15,19 @@ fi
 # Optional variables with defaults
 NGINX_PLUS_PREFIX="${NGINX_PLUS_PREFIX:-nginx-gateway-fabric/nginx-plus}"
 TAG="${TAG:-edge}"
-GOARCH="${GOARCH:-amd64}"
+GOARCH=amd64
 NJS_DIR="${NJS_DIR:-internal/controller/nginx/modules/src}"
 NGINX_CONF_DIR="${NGINX_CONF_DIR:-internal/controller/nginx/conf}"
 BUILD_AGENT="${BUILD_AGENT:-local}"
-APP_PROTECT_VERSION="${APP_PROTECT_VERSION:-5.591.0-r1}"
+APP_PROTECT_VERSION="${APP_PROTECT_VERSION:-36.5.603.0-r1}"
 
 DOCKERFILE="${ROOT_DIR}/build/Dockerfile.nginxplus"
 DOCKERFILE_TMP="${ROOT_DIR}/build/Dockerfile.nginxplus.nap-dev"
 
-cleanup() {
-    rm -f "${DOCKERFILE_TMP}"
-}
-trap cleanup EXIT
+# cleanup() {
+#     rm -f "${DOCKERFILE_TMP}"
+# }
+# trap cleanup EXIT
 
 echo "Creating temporary Dockerfile with NAP dev repo..."
 
@@ -47,7 +47,7 @@ cat "${DOCKERFILE}" | awk -v repo_url="${NAP_WAF_REPO_URL}" -v app_protect_versi
     next
 }
 /apk add --no-cache app-protect-module-plus/ {
-    gsub(/apk add --no-cache app-protect-module-plus/, "apk add --no-cache --allow-untrusted app-protect-module-plus")
+    gsub(/apk add --no-cache app-protect-module-plus~=/, "apk add --no-cache --allow-untrusted app-protect-module-plus=")
 }
 { print }
 ' >"${DOCKERFILE_TMP}"

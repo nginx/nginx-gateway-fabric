@@ -1,0 +1,17 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: waf-enabled-proxy
+spec:
+  waf: "enabled"
+  kubernetes:
+    deployment:
+      wafContainers:
+        enforcer:
+          image:
+            repository: eu.gcr.io/f5-gcs-7899-ptg-ingrss-ctlr/dev/nginx-gateway-fabric/nap/waf-enforcer
+            tag: v11.625.0
+        configManager:
+          image:
+            repository: eu.gcr.io/f5-gcs-7899-ptg-ingrss-ctlr/dev/nginx-gateway-fabric/nap/config-mgr
+            tag: v11.625.0
