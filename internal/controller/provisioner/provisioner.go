@@ -339,11 +339,8 @@ func (p *NginxProvisioner) provisionNginx(
 			func(ctx context.Context) (bool, error) {
 				// Use minimalObj for CreateOrUpdate but pass both to objectSpecSetter
 
-				fmt.Println("BEFORE CreateOrUpdate labels:", minimalObj.GetLabels())
-
 				res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, minimalObj, objectSpecSetter(minimalObj, obj))
 
-				fmt.Println("AFTER CreateOrUpdate labels:", minimalObj.GetLabels())
 				if upsertErr != nil {
 					if apierrors.IsInvalid(upsertErr) { // log this error at the error level
 						p.cfg.Logger.Error(
