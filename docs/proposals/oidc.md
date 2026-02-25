@@ -132,13 +132,12 @@ const (
 //
 //nolint:lll
 type OIDCAuth struct {
-	// CertificateRevocationList references a Secret containing a certificate
-	// revocation list in PEM format. The CRL must be stored in a key
-	// named `ca.crl`. This is used to verify that certificates presented
-	// by the OpenID Provider endpoints have not been revoked.
+	// CRLSecretRef references a Secret containing a certificate
+	// revocation list in PEM format. The referenced Secret must contain an entry with the key "ca.crl".
+	// This is used to verify that certificates presented by the OpenID Provider endpoints have not been revoked.
 	//
 	// +optional
-	CertificateRevocationList *LocalObjectReference `json:"certificateRevocationList,omitempty"`
+	CRLSecretRef *LocalObjectReference `json:"crlSecretRef,omitempty"`
 
 	// ConfigURL sets a custom URL to retrieve the OpenID Provider metadata.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#config_url
@@ -193,13 +192,14 @@ type OIDCAuth struct {
 
 	// ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
 	// [Authentication Request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest).
-	// This Secret must be of type `nginx.org/oidc` with the value stored under the key "client-secret".
+	// The referenced Secret must contain an entry with the key "client-secret".
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
 	ClientSecretRef LocalObjectReference `json:"clientSecretRef"`
 
 	// CACertificateRefs references a list of secrets containing trusted CA certificates
 	// in PEM format used to verify the certificates of the OpenID Provider endpoints.
-	// The Secrets must be of type `nginx.org/oidc` and must be stored in a key named `ca.crt`.
+	// The referenced secrets must contain an entry with the key "ca.crt".
+  // Only one secret can be referenced currently.
 	// If not specified, the system CA bundle is used.
 	//
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
@@ -282,7 +282,7 @@ TLS is required in two places:
 - Incoming connections from the browser after the OpenID Provider redirects the user back to NGINX: The AuthenticationFilter must be attached to a route using an HTTPS listener, as the `redirect_uri` callback from the IdP must be served over HTTPS. The Gateway listener's `tls.certificateRefs` provides the TLS certificate for this incoming connection.
 - Outgoing connections from NGINX to the OpenID Provider for token exchange: NGINX connects to the OpenID Provider over TLS for token requests. To verify the IdP's certificate, specify a CA bundle using the `caCertificateRefs` field; if omitted, the system CA bundle is used by default.
 
-All the secrets provided for validating communication to an OpenID Provider must be of a custom type `nginx.org/oidc`
+Each Secret reference expects a specific key to be present. For OIDC authentication, the required keys are `client-secret`, `ca.crt`, and `ca.crl`. Users have flexibility in how they organize these: either consolidate all three keys in a single Secret, or use separate Secrets for each key.
 
 An authenticationFilter with complete OIDC configuration would look like:
 
@@ -337,7 +337,7 @@ kind: Secret
 metadata:
   name: oidc-client-secret
   namespace: default
-type: nginx.org/oidc
+type: Opaque
 stringData:
   client-secret: "secret-value"
 ---
@@ -347,7 +347,7 @@ kind: Secret
 metadata:
   name: oidc-ca-cert
   namespace: default
-type: nginx.org/oidc
+type: Opaque
 stringData:
   ca.crt: |
     -----BEGIN CERTIFICATE-----
@@ -359,7 +359,7 @@ kind: Secret
 metadata:
   name: oidc-crl
   namespace: default
-type: nginx.org/oidc
+type: Opaque
 stringData:
   ca.crl: |
     -----BEGIN X509 CRL-----

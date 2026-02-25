@@ -79,7 +79,8 @@ spec:
                     description: |-
                       CACertificateRefs references a list of secrets containing trusted CA certificates
                       in PEM format used to verify the certificates of the OpenID Provider endpoints.
-                      The Secrets must be of type `nginx.org/oidc` and must be stored in a key named `ca.crt`.
+                      The referenced secrets must contain an entry with the key "ca.crt".
+                      Only one secret can be referenced currently.
                       If not specified, the system CA bundle is used.
 
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
@@ -94,7 +95,7 @@ spec:
                       required:
                       - name
                       type: object
-                    maxItems: 8
+                    maxItems: 1
                     type: array
                   clientID:
                     description: |-
@@ -106,7 +107,7 @@ spec:
                     description: |-
                       ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
                       [Authentication Request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest).
-                      This Secret must be of type `nginx.org/oidc` with the value stored under the key "client-secret".
+                      The referenced Secret must contain an entry with the key "client-secret".
                       Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
                     properties:
                       name:
@@ -125,9 +126,8 @@ spec:
                   crlSecretRef:
                     description: |-
                       CRLSecretRef references a Secret containing a certificate
-                      revocation list in PEM format. This Secret must be of type `nginx.org/oidc`
-                      with the value stored under the key "ca.crl". This is used to verify that
-                      certificates presented by the OpenID Provider endpoints have not been revoked.
+                      revocation list in PEM format. The referenced Secret must contain an entry with the key "ca.crl".
+                      This is used to verify that certificates presented by the OpenID Provider endpoints have not been revoked.
                     properties:
                       name:
                         description: Name is the name of the referenced object.

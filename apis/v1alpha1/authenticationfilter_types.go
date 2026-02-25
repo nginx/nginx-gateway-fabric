@@ -84,9 +84,8 @@ type BasicAuth struct {
 //nolint:lll
 type OIDCAuth struct {
 	// CRLSecretRef references a Secret containing a certificate
-	// revocation list in PEM format. This Secret must be of type `nginx.org/oidc`
-	// with the value stored under the key "ca.crl". This is used to verify that
-	// certificates presented by the OpenID Provider endpoints have not been revoked.
+	// revocation list in PEM format. The referenced Secret must contain an entry with the key "ca.crl".
+	// This is used to verify that certificates presented by the OpenID Provider endpoints have not been revoked.
 	//
 	// +optional
 	CRLSecretRef *LocalObjectReference `json:"crlSecretRef,omitempty"`
@@ -143,20 +142,21 @@ type OIDCAuth struct {
 
 	// ClientSecretRef references a Kubernetes secret which contains the OIDC client secret to be used in the
 	// [Authentication Request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest).
-	// This Secret must be of type `nginx.org/oidc` with the value stored under the key "client-secret".
+	// The referenced Secret must contain an entry with the key "client-secret".
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#client_secret
 	ClientSecretRef LocalObjectReference `json:"clientSecretRef"`
 
 	// CACertificateRefs references a list of secrets containing trusted CA certificates
 	// in PEM format used to verify the certificates of the OpenID Provider endpoints.
-	// The Secrets must be of type `nginx.org/oidc` and must be stored in a key named `ca.crt`.
+	// The referenced secrets must contain an entry with the key "ca.crt".
+	// Only one secret can be referenced currently.
 	// If not specified, the system CA bundle is used.
 	//
 	// Directive: https://nginx.org/en/docs/http/ngx_http_oidc_module.html#ssl_trusted_certificate
 	// NGINX Default: system CA bundle
 	//
 	// +optional
-	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:MaxItems=1
 	CACertificateRefs []LocalObjectReference `json:"caCertificateRefs,omitempty"`
 
 	// The OIDC scopes to be used in the Authentication Request.
