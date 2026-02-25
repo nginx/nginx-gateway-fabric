@@ -1236,7 +1236,7 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 					Status: "False",
 					Reason: "TargetConflict",
 					Message: "Policy cannot be applied to target \"test/hr-coffee\" since another Route " +
-						"\"test/hr2\" shares a hostname:port/path combination with this target",
+						"\"test/hr2\" shares a namespace/gateway-name:hostname:port/path combination with this target",
 				},
 			},
 		},
@@ -1285,16 +1285,34 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 					Status: "False",
 					Reason: "TargetConflict",
 					Message: "Policy cannot be applied to target \"test/hr-coffee\" since another Route " +
-						"\"test/hr-coffee-latte\" shares a hostname:port/path combination with this target",
+						"\"test/hr-coffee-latte\" shares a namespace/gateway-name:hostname:port/path combination with this target",
 				},
 				{
 					Type:   "Accepted",
 					Status: "False",
 					Reason: "TargetConflict",
 					Message: "Policy cannot be applied to target \"test/hr-coffee-tea\" since another Route " +
-						"\"test/hr-coffee-latte\" shares a hostname:port/path combination with this target",
+						"\"test/hr-coffee-latte\" shares a namespace/gateway-name:hostname:port/path combination with this target",
 				},
 			},
+		},
+		{
+			name:      "multiple routes with multiple gateways, no overlap",
+			validator: &policiesfakes.FakeValidator{},
+			policies: map[PolicyKey]policies.Policy{
+				pol1Key: pol1,
+			},
+			routes: map[RouteKey]*L7Route{
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee"},
+				}: createTestRouteWithMultipleGateways("hr", []string{"private-gateway", "public-gateway"}, "/coffee"),
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-tea"},
+				}: createTestRouteWithMultipleGateways("hr-tea", []string{"private-gateway", "public-gateway"}, "/tea"),
+			},
+			valid: true,
 		},
 	}
 
@@ -1303,6 +1321,24 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			Source: &v1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "gw",
+					Namespace: testNs,
+				},
+			},
+			Valid: true,
+		},
+		{Namespace: testNs, Name: "private-gateway"}: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "private-gateway",
+					Namespace: testNs,
+				},
+			},
+			Valid: true,
+		},
+		{Namespace: testNs, Name: "public-gateway"}: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "public-gateway",
 					Namespace: testNs,
 				},
 			},
@@ -1618,12 +1654,56 @@ func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 		},
 		ParentRefs: []ParentRef{
 			{
+				Gateway: &ParentRefGateway{
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "gw"},
+				},
 				Attachment: &ParentRefAttachmentStatus{
 					AcceptedHostnames: map[string][]string{"listener-1": {"foo.example.com"}},
 					ListenerPort:      80,
 				},
 			},
 		},
+	}
+
+	return route
+}
+
+func createTestRouteWithMultipleGateways(name string, gatewayNames []string, path string) *L7Route {
+	routeMatches := []v1.HTTPRouteMatch{
+		{
+			Path: &v1.HTTPPathMatch{
+				Type:  helpers.GetPointer(v1.PathMatchExact),
+				Value: helpers.GetPointer(path),
+			},
+		},
+	}
+
+	parentRefs := make([]ParentRef, 0, len(gatewayNames))
+	for _, gwName := range gatewayNames {
+		parentRefs = append(parentRefs, ParentRef{
+			Gateway: &ParentRefGateway{
+				NamespacedName: types.NamespacedName{Namespace: testNs, Name: gwName},
+			},
+			Attachment: &ParentRefAttachmentStatus{
+				AcceptedHostnames: map[string][]string{"listener-1": {"foo.example.com"}},
+				ListenerPort:      80,
+			},
+		})
+	}
+
+	route := &L7Route{
+		Source: &v1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: testNs,
+			},
+		},
+		Spec: L7RouteSpec{
+			Rules: []RouteRule{
+				{Matches: routeMatches},
+			},
+		},
+		ParentRefs: parentRefs,
 	}
 
 	return route
